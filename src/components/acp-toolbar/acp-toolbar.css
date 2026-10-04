@@ -1,0 +1,19 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  height: var(--toolbar-height);
+  padding: 0 var(--space-2);
+  background: var(--md-surface-container-high);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.acp-toolbar__name {
+  overflow: hidden;
+  padding-inline: var(--space-2);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-title);
+  color: var(--md-on-surface);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

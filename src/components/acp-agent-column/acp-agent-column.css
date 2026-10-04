@@ -1,0 +1,15 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  background: var(--md-surface-container);
+}
+.acp-agent-column__chat {
+  flex: 1;
+  min-height: 0;
+}
+.acp-agent-column__welcome {
+  flex: 1;
+  min-height: 0;
+}

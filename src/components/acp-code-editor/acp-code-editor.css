@@ -1,0 +1,84 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  background: var(--md-surface);
+}
+:host([hidden]) {
+  display: none;
+}
+/* The strip scrolls instead of md-tabs, so wheel handling and scrollIntoView have a scroller we own.
+   Scrollbar hidden; wheel, trackpad and the active-tab reveal still scroll it. */
+.acp-code-editor__tab-strip {
+  flex: none;
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+.acp-code-editor__tabs {
+  width: max-content;
+  min-width: 100%;
+}
+.acp-code-editor__tab {
+  flex: 0 0 auto;
+  --md-tab-label-size: 0.8rem;
+}
+.acp-code-editor__tab::part(tab) {
+  height: 2.2rem;
+}
+.acp-code-editor__tab-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.acp-code-editor__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-right: -8px;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: color-mix(in oklch, var(--md-on-surface) 12%, transparent);
+    outline: none;
+  }
+}
+.acp-code-editor__file-icon {
+  font-size: 14px;
+}
+.acp-code-editor__close-icon {
+  font-size: 16px;
+}
+.acp-code-editor__panel {
+  flex: 1;
+  min-height: 0;
+
+  &[active] {
+    display: flex;
+    flex-direction: column;
+  }
+}
+.acp-code-editor__editor {
+  flex: 1;
+  min-height: 0;
+}
+.acp-code-editor__editor::part(container) {
+  border-radius: 0;
+}
+.acp-code-editor__error {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--md-on-surface-variant);
+  white-space: pre-wrap;
+}

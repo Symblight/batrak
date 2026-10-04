@@ -1,0 +1,58 @@
+:host {
+  display: block;
+  box-sizing: border-box;
+  width: var(--nav-rail-width);
+  height: 100%;
+  background: var(--md-surface);
+  border-left: 1px solid var(--md-outline-variant);
+}
+.acp-nav-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  box-sizing: border-box;
+  height: 100%;
+  padding-block: var(--space-2);
+}
+.acp-nav-rail__spacer {
+  flex: 1;
+}
+.acp-nav-rail__item {
+  position: relative;
+  display: flex;
+}
+/* MD3 icon button XS: 32px square, 8px radius, 20px icon. */
+.acp-nav-rail__button {
+  --md-icon-button-border-radius: 8px;
+  --md-icon-button-font-size: 20px;
+
+  &[selected] {
+    --md-icon-button-background-color: var(--md-secondary-container);
+    --md-icon-button-foreground-color: var(--md-on-secondary-container);
+  }
+}
+.acp-nav-rail__button::part(button) {
+  /* 5px + the library's 1px transparent border = 6px around the 20px icon. */
+  padding: 5px;
+}
+/* Flat, not nested: `&` can't stand for a pseudo-element. */
+.acp-nav-rail__button::part(button):focus-visible {
+  outline: 3px solid var(--md-secondary);
+  outline-offset: 2px;
+}
+.acp-nav-rail__icon {
+  font-size: 20px;
+}
+.acp-nav-rail__badge {
+  position: absolute;
+  top: 4px;
+  right: 5px;
+  border-radius: 50%;
+  /* Cut-out ring in the colour behind the dot. */
+  box-shadow: 0 0 0 1.5px var(--md-surface);
+  pointer-events: none;
+}
+.acp-nav-rail__badge_on-selected {
+  box-shadow: 0 0 0 1.5px var(--md-secondary-container);
+}

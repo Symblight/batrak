@@ -1,0 +1,15 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  background: var(--md-surface-container);
+}
+.acp-file-tree__tree {
+  flex: 1;
+  min-height: 0;
+  --tvx-tree-view-color-on-surface: var(--md-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--md-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--md-outline-variant);
+  --tvx-tree-view-color-primary: var(--md-primary);
+}

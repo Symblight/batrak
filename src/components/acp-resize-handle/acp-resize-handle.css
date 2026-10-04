@@ -1,0 +1,35 @@
+:host {
+  --acp-resize-handle-hit-width: 8px;
+  --acp-resize-handle-line-color: var(--md-outline-variant);
+  --acp-resize-handle-active-color: var(--md-primary);
+
+  position: relative;
+  display: block;
+  flex: none;
+  box-sizing: border-box;
+  width: var(--acp-resize-handle-hit-width);
+  cursor: col-resize;
+  touch-action: none;
+  outline: none;
+}
+.acp-resize-handle__line {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 50%;
+  width: 1px;
+  transform: translateX(-50%);
+  background: var(--acp-resize-handle-line-color);
+  transition:
+    width 0.15s,
+    background-color 0.15s;
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+:host(:hover) .acp-resize-handle__line,
+:host(:focus-visible) .acp-resize-handle__line,
+:host([dragging]) .acp-resize-handle__line {
+  width: 3px;
+  background: var(--acp-resize-handle-active-color);
+}

@@ -1,0 +1,40 @@
+:host {
+  display: flex;
+  height: 100%;
+  min-width: 0;
+}
+.acp-editor-column__code {
+  flex: 1;
+  min-width: 0;
+}
+.acp-editor-column__resizer {
+  /* Overlap both neighbours by half the hit area, so the divider takes no layout width. */
+  z-index: 1;
+  margin-inline: -4px;
+}
+.acp-editor-column__side {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  background: var(--md-surface-container);
+}
+.acp-editor-column__side_with-code {
+  flex: 0 0 var(--file-tree-width);
+  width: var(--file-tree-width);
+}
+.acp-editor-column__title {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-title);
+  color: var(--md-on-surface-variant);
+}
+.acp-editor-column__pane {
+  flex: 1;
+  min-height: 0;
+
+  &[hidden] {
+    display: none;
+  }
+}

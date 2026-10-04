@@ -1,0 +1,207 @@
+:host {
+  --_acp-search-panel-hit: color-mix(in srgb, var(--md-primary) 22%, transparent);
+
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  color: var(--md-on-surface);
+}
+
+@media (prefers-color-scheme: dark) {
+  :host {
+    --_acp-search-panel-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
+  }
+}
+
+.acp-search-panel__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+}
+
+/* Dense MD3 outlined field: 40px (8 + 24 + 8), placeholder instead of a floating label. */
+.acp-search-panel__field {
+  --md-text-field-top-space: 8px;
+  --md-text-field-bottom-space: 8px;
+  --md-text-field-inline-start-space: var(--space-3);
+  --md-text-field-inline-end-space: var(--space-3);
+  --md-text-field-font-size: 14px;
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--md-on-surface);
+  --md-text-field-border-color: var(--md-outline);
+  --md-text-field-primary-color: var(--md-primary);
+  --md-outlined-text-field-shape: 4px;
+
+  caret-color: var(--md-primary);
+}
+.acp-search-panel__field_query {
+  --md-text-field-font-family: var(--font-family-mono);
+  --md-text-field-font-size: 13px;
+  --md-text-field-inline-end-space: 0;
+  --md-text-field-trailing-space: 4px;
+}
+/* The library's focused outline is 3px; MD3 asks for 2px. */
+.acp-search-panel__field:focus-within::part(indicator) {
+  border-width: 2px;
+}
+.acp-search-panel__field::part(input)::placeholder {
+  color: var(--md-on-surface-variant);
+}
+
+.acp-search-panel__options {
+  display: flex;
+}
+/* 28px icon toggle: 20px icon + 3px padding + the library's 1px transparent border. */
+.acp-search-panel__option {
+  --md-icon-button-font-size: 20px;
+
+  &[selected] {
+    --md-icon-button-background-color: var(--md-secondary-container);
+    --md-icon-button-foreground-color: var(--md-on-secondary-container);
+  }
+}
+.acp-search-panel__option::part(button) {
+  padding: 3px;
+}
+.acp-search-panel__option::part(button):focus-visible {
+  outline: 2px solid var(--md-secondary);
+  outline-offset: 1px;
+}
+.acp-search-panel__option-icon {
+  font-size: 20px;
+}
+
+.acp-search-panel__summary {
+  padding: var(--space-3) var(--space-4) 6px;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 16px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.acp-search-panel__summary_error {
+  color: var(--md-error);
+}
+
+.acp-search-panel__results {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: 0 4px var(--space-3);
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline-variant) transparent;
+}
+.acp-search-panel__matches {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acp-search-panel__file-header,
+.acp-search-panel__match {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-width: 0;
+  padding: 0 var(--space-2) 0 4px;
+  border: none;
+  border-radius: 9999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--md-secondary);
+    outline-offset: -2px;
+  }
+}
+.acp-search-panel__file-header {
+  gap: 6px;
+  height: 32px;
+  margin-top: 2px;
+}
+.acp-search-panel__match {
+  gap: 10px;
+  height: 28px;
+}
+
+.acp-search-panel__chevron {
+  flex: none;
+  color: var(--md-on-surface-variant);
+  font-size: 20px;
+}
+.acp-search-panel__file-icon {
+  flex: none;
+  font-size: 14px;
+}
+.acp-search-panel__file-name {
+  flex: none;
+  color: var(--md-on-surface);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.acp-search-panel__file-dir {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-on-surface-variant);
+  font-size: 12px;
+  line-height: 16px;
+}
+.acp-search-panel__count {
+  flex: none;
+  min-width: 22px;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 7px;
+  border-radius: 9999px;
+  background: var(--md-surface-container-highest);
+  color: var(--md-on-surface-variant);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.acp-search-panel__line {
+  flex: none;
+  /* Lines up the text past the file row's chevron. */
+  width: calc(4ch + 22px);
+  color: var(--md-on-surface-variant);
+  font-family: var(--font-family-mono);
+  font-size: 12px;
+  line-height: 20px;
+  text-align: right;
+}
+.acp-search-panel__text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--md-on-surface);
+  font-family: var(--font-family-mono);
+  font-size: 13px;
+  line-height: 20px;
+}
+.acp-search-panel__hit {
+  border-radius: 2px;
+  background: var(--_acp-search-panel-hit);
+  color: inherit;
+}

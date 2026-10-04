@@ -1,0 +1,70 @@
+@import "@symblight/wc-material/theme/theme.css";
+
+:root {
+  color-scheme: light dark;
+
+  /* App colour roles — mapped onto wc-material MD3 system tokens,
+     which services/theme.js regenerates for the OS light/dark scheme */
+  --md-primary: var(--md-sys-color-primary);
+  --md-on-primary: var(--md-sys-color-on-primary);
+  --md-secondary: var(--md-sys-color-secondary);
+  --md-secondary-container: var(--md-sys-color-secondary-container);
+  --md-on-secondary-container: var(--md-sys-color-on-secondary-container);
+  --md-tertiary: var(--md-sys-color-tertiary);
+  --md-error: var(--md-sys-color-error);
+  --md-surface: var(--md-sys-color-surface);
+  --md-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+  --md-surface-container-low: var(--md-sys-color-surface-container-low);
+  --md-surface-container: color-mix(
+    in oklch,
+    var(--md-sys-color-surface-container-low),
+    var(--md-sys-color-surface-container-high)
+  );
+  --md-surface-container-high: var(--md-sys-color-surface-container-high);
+  --md-surface-container-highest: var(--md-sys-color-surface-container-highest);
+  --md-on-surface: var(--md-sys-color-on-surface);
+  --md-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --md-outline: var(--md-sys-color-outline);
+  --md-outline-variant: var(--md-sys-color-outline-variant);
+
+  /* Agent accent */
+  --terminal-accent: #00855f;
+
+  /* Layout */
+  --toolbar-height: 40px;
+  --nav-rail-width: 48px;
+  /* Default column widths: shares of the window beside the nav rail (resized widths are stored in px) */
+  --session-column-width: calc((100vw - var(--nav-rail-width)) * 0.2);
+  --file-tree-width: calc((100vw - var(--nav-rail-width)) * 0.2);
+  --agent-column-width: calc((100vw - var(--nav-rail-width)) * 0.6);
+
+  /* Spacing */
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+
+  /* Typography */
+  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-family-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-size-title: 14px;
+  --font-weight-title: 600;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --terminal-accent: #4cdbae;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font-family: var(--font-family);
+}

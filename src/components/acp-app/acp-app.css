@@ -1,0 +1,35 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+}
+.acp-app__toolbar {
+  flex: 0 0 auto;
+}
+.acp-app__columns {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.acp-app__session {
+  flex: 0 0 var(--session-column-width);
+  width: var(--session-column-width);
+}
+.acp-app__agent {
+  flex: 0 0 var(--agent-column-width);
+  width: var(--agent-column-width);
+}
+.acp-app__resizer {
+  /* Overlap both neighbours by half the hit area, so the divider takes no layout width. */
+  z-index: 1;
+  margin-inline: -4px;
+}
+.acp-app__editor {
+  flex: 1;
+  min-width: 0;
+}
+.acp-app__rail {
+  flex: none;
+}

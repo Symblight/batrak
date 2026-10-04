@@ -1,0 +1,352 @@
+import { LitElement, html, nothing } from 'lit';
+import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import '@symblight/wc-material/text-field';
+import '@symblight/wc-material/icon-button';
+import '@symblight/wc-material/icon';
+import caseIcon from '@material-design-icons/svg/outlined/text_fields.svg?raw';
+import wordIcon from '@material-design-icons/svg/outlined/abc.svg?raw';
+import regexIcon from '@material-design-icons/svg/outlined/emergency.svg?raw';
+import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
+import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
+import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
+import { fileIconFor } from '../../models/file-icons.js';
+import { cancelSearch, findInFiles } from '../../services/ipc.js';
+import { projectController } from '../../services/project-controller.js';
+import { StoreController } from '../../controllers/store/StoreController.js';
+import { $rootId } from '../../stores/workspace.js';
+import styles from './acp-search-panel.css?inline';
+
+/** @typedef {import('../../models/types.js').LineMatch} LineMatch */
+/** @typedef {import('../../models/types.js').SearchEvent} SearchEvent */
+/** @typedef {{ path: string, matches: LineMatch[] }} FileResult */
+
+/** Typing pause before a search starts. */
+const DEBOUNCE_MS = 250;
+/** Must match `workspace::search::MAX_MATCHES`. */
+const MAX_MATCHES = 2000;
+
+/**
+ * Splits a line into plain and highlighted parts.
+ * @param {string} text
+ * @param {[number, number][]} ranges UTF-16 `[start, end)`, ascending.
+ */
+function highlight(text, ranges) {
+  const parts = [];
+  let at = 0;
+  for (const [start, end] of ranges) {
+    if (start < at) continue;
+    parts.push(text.slice(at, start));
+    parts.push(html`<mark class="acp-search-panel__hit">${text.slice(start, end)}</mark>`);
+    at = end;
+  }
+  parts.push(text.slice(at));
+  return parts;
+}
+
+/**
+ * @tag acp-search-panel
+ * @summary Find in Files over the workspace snapshot, results streamed in by file.
+ * @fires acp-file-open `{ path, line }` when a match is clicked
+ */
+export class AcpSearchPanel extends LitElement {
+  static properties = {
+    /** Hidden panels cancel their search. */
+    active: { type: Boolean },
+    query: { state: true },
+    caseSensitive: { state: true },
+    wholeWord: { state: true },
+    regex: { state: true },
+    include: { state: true },
+    exclude: { state: true },
+    results: { state: true },
+    collapsed: { state: true },
+    searching: { state: true },
+    limitHit: { state: true },
+    error: { state: true },
+  };
+
+  static styles = styles;
+
+  /** Id of the current search; events of older ones are dropped. */
+  #generation = 0;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #debounce = undefined;
+  /** @type {FileResult[]} Results received since the last render. */
+  #incoming = [];
+  #frame = 0;
+  /** Re-runs the search in a newly opened folder. */
+  #rootId = new StoreController(this, { store: $rootId, onChange: () => this.#schedule(0) });
+
+  constructor() {
+    super();
+    this.active = false;
+    this.query = '';
+    this.caseSensitive = false;
+    this.wholeWord = false;
+    this.regex = false;
+    this.include = '';
+    this.exclude = '';
+    /** @type {FileResult[]} */
+    this.results = [];
+    /** @type {Set<string>} Paths of collapsed file groups. */
+    this.collapsed = new Set();
+    this.searching = false;
+    this.limitHit = false;
+    this.error = '';
+  }
+
+  disconnectedCallback() {
+    this.#cancel();
+    super.disconnectedCallback();
+  }
+
+  /** Focuses the query input and selects its text. */
+  focusInput() {
+    const field = this.renderRoot.querySelector('md-text-field');
+    if (!field) return;
+    field.focus();
+    if (field.inputOrTextArea instanceof HTMLInputElement) field.inputOrTextArea.select();
+  }
+
+  /** @param {import('lit').PropertyValues} changed */
+  willUpdate(changed) {
+    if (!changed.has('active') || changed.get('active') === undefined) return;
+    // Closing the panel stops the search; reopening runs it again.
+    if (this.active) this.#schedule(0);
+    else this.#cancel();
+  }
+
+  /**
+   * (Re)starts the search after `delay` ms.
+   * @param {number} delay
+   */
+  #schedule(delay) {
+    clearTimeout(this.#debounce);
+    this.#debounce = setTimeout(() => this.#search(), delay);
+  }
+
+  /** Stops the running search; its late events are ignored. */
+  #cancel() {
+    clearTimeout(this.#debounce);
+    this.#generation++;
+    this.searching = false;
+    if (projectController.rootId) cancelSearch(projectController.rootId).catch(() => {});
+  }
+
+  /** Starts a search for the current inputs, replacing any previous results. */
+  async #search() {
+    const generation = ++this.#generation;
+    const rootId = projectController.rootId;
+    this.results = [];
+    this.#incoming = [];
+    this.collapsed = new Set();
+    this.limitHit = false;
+    this.error = '';
+    if (!this.active || rootId === null || this.query === '') {
+      this.searching = false;
+      if (rootId !== null) cancelSearch(rootId).catch(() => {});
+      return;
+    }
+    this.searching = true;
+    const options = {
+      query: this.query,
+      caseSensitive: this.caseSensitive,
+      wholeWord: this.wholeWord,
+      regex: this.regex,
+      include: this.include,
+      exclude: this.exclude,
+    };
+    try {
+      await findInFiles(rootId, options, (event) => {
+        if (generation === this.#generation) this.#onEvent(event);
+      });
+    } catch (err) {
+      if (generation === this.#generation) {
+        this.searching = false;
+        this.error = String(err);
+      }
+    }
+  }
+
+  /** @param {SearchEvent} event */
+  #onEvent(event) {
+    if (event.kind === 'file') {
+      // Batch messages into one render per frame.
+      this.#incoming.push({ path: event.path, matches: event.matches });
+      this.#frame ||= requestAnimationFrame(() => {
+        this.#frame = 0;
+        this.results = [...this.results, ...this.#incoming];
+        this.#incoming = [];
+      });
+    } else if (event.kind === 'done') {
+      this.searching = false;
+      this.limitHit = event.limitHit;
+    } else {
+      this.searching = false;
+      this.error = event.message;
+    }
+  }
+
+  /**
+   * @param {'caseSensitive' | 'wholeWord' | 'regex'} option
+   */
+  #toggle(option) {
+    this[option] = !this[option];
+    this.#schedule(0);
+  }
+
+  /**
+   * @param {'query' | 'include' | 'exclude'} field
+   * @param {Event} e
+   */
+  #onInput(field, e) {
+    // Retargeted to <md-text-field>, whose `value` its inner input already updated.
+    this[field] = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
+    this.#schedule(DEBOUNCE_MS);
+  }
+
+  /** @param {KeyboardEvent} e */
+  #onKeydown(e) {
+    if (e.key === 'Enter') this.#schedule(0);
+  }
+
+  /** @param {string} path */
+  #toggleFile(path) {
+    const collapsed = new Set(this.collapsed);
+    if (!collapsed.delete(path)) collapsed.add(path);
+    this.collapsed = collapsed;
+  }
+
+  /**
+   * @param {string} rel
+   * @param {number} line
+   */
+  #open(rel, line) {
+    this.dispatchEvent(
+      new CustomEvent('acp-file-open', {
+        detail: { path: projectController.absPath(rel), line },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+  }
+
+  /** Match/file counts, the limit notice, or the error. */
+  #renderSummary() {
+    if (this.error) return html`<div class="acp-search-panel__summary acp-search-panel__summary_error">${this.error}</div>`;
+    if (!this.query) return nothing;
+    const count = this.results.reduce((n, r) => n + r.matches.reduce((m, l) => m + l.ranges.length, 0), 0);
+    const files = this.results.length;
+    const text = this.searching
+      ? `Searching… ${count} results in ${files} files`
+      : count === 0
+        ? 'No results'
+        : `${count} results in ${files} files`;
+    return html`<div class="acp-search-panel__summary" role="status">
+      ${text}${this.limitHit ? ` — showing the first ${MAX_MATCHES}` : ''}
+    </div>`;
+  }
+
+  /** @param {FileResult} result */
+  #renderFile(result) {
+    const slash = result.path.lastIndexOf('/');
+    const name = result.path.slice(slash + 1);
+    const dir = slash > 0 ? result.path.slice(0, slash) : '';
+    const collapsed = this.collapsed.has(result.path);
+    const count = result.matches.reduce((n, l) => n + l.ranges.length, 0);
+    return html`<li>
+      <button
+        class="acp-search-panel__file-header"
+        aria-expanded=${!collapsed}
+        title=${result.path}
+        @click=${() => this.#toggleFile(result.path)}
+      >
+        <md-icon class="acp-search-panel__chevron">${unsafeSVG(collapsed ? collapsedIcon : expandIcon)}</md-icon>
+        <md-icon class="acp-search-panel__file-icon">${unsafeSVG(fileIconFor(name) ?? fileIcon)}</md-icon>
+        <span class="acp-search-panel__file-name">${name}</span>
+        <span class="acp-search-panel__file-dir">${dir}</span>
+        <span class="acp-search-panel__count">${count}</span>
+      </button>
+      ${collapsed
+        ? nothing
+        : html`<ul class="acp-search-panel__matches">
+            ${result.matches.map(
+              (m) => html`<li>
+                <button class="acp-search-panel__match" @click=${() => this.#open(result.path, m.line)}>
+                  <span class="acp-search-panel__line">${m.line}</span>
+                  <span class="acp-search-panel__text">${highlight(m.text, m.ranges)}</span>
+                </button>
+              </li>`,
+            )}
+          </ul>`}
+    </li>`;
+  }
+
+  /**
+   * Icon toggle inside the query field.
+   * @param {'caseSensitive' | 'wholeWord' | 'regex'} option
+   * @param {string} icon SVG markup.
+   * @param {string} label
+   */
+  #renderOption(option, icon, label) {
+    return html`<md-icon-button
+      class="acp-search-panel__option"
+      toggle
+      ?selected=${this[option]}
+      title=${label}
+      aria-label=${label}
+      aria-pressed=${this[option] ? 'true' : 'false'}
+      @click=${() => this.#toggle(option)}
+    >
+      <md-icon class="acp-search-panel__option-icon">${unsafeSVG(icon)}</md-icon>
+    </md-icon-button>`;
+  }
+
+  /**
+   * @param {'include' | 'exclude'} field
+   * @param {string} placeholder
+   */
+  #renderFilter(field, placeholder) {
+    return html`<md-text-field
+      class="acp-search-panel__field"
+      variant="outlined"
+      placeholder=${placeholder}
+      aria-label=${placeholder}
+      spellcheck="false"
+      .value=${this[field]}
+      @input=${(/** @type {Event} */ e) => this.#onInput(field, e)}
+      @keydown=${this.#onKeydown}
+    ></md-text-field>`;
+  }
+
+  render() {
+    return html`
+      <div class="acp-search-panel__fields">
+        <md-text-field
+          class="acp-search-panel__field acp-search-panel__field_query"
+          variant="outlined"
+          placeholder="Search"
+          aria-label="Search"
+          spellcheck="false"
+          .value=${this.query}
+          @input=${(/** @type {Event} */ e) => this.#onInput('query', e)}
+          @keydown=${this.#onKeydown}
+        >
+          <div slot="trailing" class="acp-search-panel__options">
+            ${this.#renderOption('caseSensitive', caseIcon, 'Match case')}
+            ${this.#renderOption('wholeWord', wordIcon, 'Match whole word')}
+            ${this.#renderOption('regex', regexIcon, 'Use regular expression')}
+          </div>
+        </md-text-field>
+        ${this.#renderFilter('include', 'Files to include (src, *.js)')}
+        ${this.#renderFilter('exclude', 'Files to exclude')}
+      </div>
+      ${this.#renderSummary()}
+      <ul class="acp-search-panel__results">
+        ${this.results.map((r) => this.#renderFile(r))}
+      </ul>
+    `;
+  }
+}
+
+customElements.define('acp-search-panel', AcpSearchPanel);
