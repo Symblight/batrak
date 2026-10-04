@@ -119,7 +119,7 @@ export function cancelSearch(rootId) {
 }
 
 /**
- * Shows a path in the OS file manager.
+ * Shows a folder in the OS file manager; rejects anything that isn't a folder.
  * @param {string} path Absolute.
  * @returns {Promise<void>}
  */

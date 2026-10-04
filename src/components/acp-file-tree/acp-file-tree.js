@@ -1,12 +1,13 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
+import '@symblight/wc-material/progress-circular';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
 import { listDir } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { $rootId } from '../../stores/workspace.js';
+import { $openingPath, $rootId } from '../../stores/workspace.js';
 import styles from './acp-file-tree.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
@@ -42,6 +43,7 @@ export class AcpFileTree extends LitElement {
   };
   /** A new root lists different files; also fires on connect, before the tree exists. */
   #rootId = new StoreController(this, { store: $rootId, onChange: () => this.#tree?.loading.reload() });
+  #openingPath = new StoreController(this, { store: $openingPath });
   #onFsChange = (/** @type {Event} */ e) => {
     const { dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
     for (const dir of dirs) {
@@ -107,10 +109,18 @@ export class AcpFileTree extends LitElement {
   }
 
   render() {
+    const opening = this.#openingPath.value !== null;
+    // Hidden rather than removed while a project opens, so `#rootId` can still reload it.
     return html`
-      <tvx-tree-view 
-          compact
+      ${opening
+        ? html`<div class="acp-file-tree__loading">
+            <md-progress-circular class="acp-file-tree__spinner" aria-label="Opening project"></md-progress-circular>
+          </div>`
+        : nothing}
+      <tvx-tree-view
+        compact
         class="acp-file-tree__tree"
+        ?hidden=${opening}
         .dataSource=${this.#dataSource}
         .renderItemLeading=${this.#renderLeading}
         .renderItemLabel=${this.#renderLabel}

@@ -5,11 +5,21 @@
   height: 100%;
   background: var(--md-surface-container);
 }
-.acp-agent-column__chat {
-  flex: 1;
-  min-height: 0;
-}
+.acp-agent-column__chat,
 .acp-agent-column__welcome {
   flex: 1;
   min-height: 0;
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-agent-column__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.acp-agent-column__spinner {
+  font-size: 40px;
 }

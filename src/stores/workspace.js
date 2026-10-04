@@ -1,4 +1,4 @@
-import { computed } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import { isRecord, persistentStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').Workspace} Workspace */
@@ -15,6 +15,12 @@ export const $workspace = persistentStore('brama:workspace', /** @type {Workspac
   serialize: (workspace) => workspace && { path: workspace.path, name: workspace.name },
   listen: false,
 });
+
+/**
+ * Folder being scanned to become `$workspace`, `null` when none is. Written by `projectController`;
+ * the previous workspace stays in `$workspace` meanwhile.
+ */
+export const $openingPath = atom(/** @type {string | null} */ (null));
 
 /** Notifies only when the backend root changes, not on every `$workspace` write. */
 export const $rootId = computed($workspace, (workspace) => workspace?.rootId ?? null);

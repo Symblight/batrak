@@ -15,7 +15,7 @@ import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
 import { $activeSessionId, $sessions } from '../../stores/sessions.js';
-import { $workspace } from '../../stores/workspace.js';
+import { $openingPath, $workspace } from '../../stores/workspace.js';
 import { getHomeDir } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
@@ -51,7 +51,7 @@ export class AcpSessionColumn extends LitElement {
   static properties = {
     home: { state: true },
     menuProject: { state: true },
-    activating: { state: true },
+    failures: { state: true },
   };
 
   static styles = styles;
@@ -61,6 +61,7 @@ export class AcpSessionColumn extends LitElement {
   #sessions = new StoreController(this, { store: $sessions });
   #activeSession = new StoreController(this, { store: $activeSessionId });
   #workspace = new StoreController(this, { store: $workspace });
+  #openingPath = new StoreController(this, { store: $openingPath });
 
   constructor() {
     super();
@@ -68,8 +69,8 @@ export class AcpSessionColumn extends LitElement {
     this.home = null;
     /** @type {Project | null} The project the context menu is open for. */
     this.menuProject = null;
-    /** @type {string | null} Id of the project being scanned after a click. */
-    this.activating = null;
+    /** @type {Record<string, string>} Why a project's folder couldn't be opened, by project id. */
+    this.failures = {};
   }
 
   connectedCallback() {
@@ -140,11 +141,21 @@ export class AcpSessionColumn extends LitElement {
     if (value === 'new-session') this.#newSession(project.id);
     else if (value === 'reveal')
       projectController.reveal(project.path).catch((err) => console.error('Brama: reveal failed', err));
-    else if (value === 'remove') projectController.remove(project.id);
+    else if (value === 'remove') {
+      projectController.remove(project.id);
+      this.#clearFailure(project.id);
+    }
   }
 
   #onMenuClosed() {
     this.menuProject = null;
+  }
+
+  /** @param {string} id */
+  #clearFailure(id) {
+    if (!(id in this.failures)) return;
+    const { [id]: _cleared, ...rest } = this.failures;
+    this.failures = rest;
   }
 
   /**
@@ -152,13 +163,12 @@ export class AcpSessionColumn extends LitElement {
    * @param {string} id
    */
   async #activate(id) {
-    this.activating = id;
     try {
       await projectController.activate(id);
+      this.#clearFailure(id);
     } catch (err) {
       console.error('Brama: opening project failed', err);
-    } finally {
-      if (this.activating === id) this.activating = null;
+      this.failures = { ...this.failures, [id]: String(err) };
     }
   }
 
@@ -199,12 +209,13 @@ export class AcpSessionColumn extends LitElement {
    */
   #renderProject(project, sessions) {
     const expanded = !this.#collapsed.value.includes(project.id);
+    const failure = this.failures[project.id];
     return html`
       <div
         class=${classMap({
           'acp-session-column__project': true,
           'acp-session-column__project_menu-open': this.menuProject?.id === project.id,
-          'acp-session-column__project_loading': this.activating === project.id,
+          'acp-session-column__project_loading': this.#openingPath.value === project.id,
         })}
         role="treeitem"
         tabindex="0"
@@ -238,6 +249,9 @@ export class AcpSessionColumn extends LitElement {
           <md-icon class="acp-session-column__add-icon">${unsafeSVG(addIcon)}</md-icon>
         </md-icon-button>
       </div>
+      ${failure !== undefined
+        ? html`<div class="acp-session-column__error" role="alert">Couldn't open the folder: ${failure}</div>`
+        : nothing}
       ${expanded
         ? sessions.length > 0
           ? html`<div class="acp-session-column__sessions" role="group">

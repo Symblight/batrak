@@ -50,10 +50,12 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   keeps an atom as JSON in `localStorage` under a `brama:` key. `parse` validates what was stored (`null`
   → `initial`), `serialize` drops runtime-only fields (`Workspace.rootId`). `listen: false` for per-window
   state (folder, tabs); leave it on for shared preferences (column widths, later theme) so all windows
-  stay in sync through `storage` events.
+  stay in sync through `storage` events. Per-window state keyed by something (tabs by project) uses
+  `persistentMapStore(prefix, parse)` instead: one item per key, written only through `setKey()`, so two
+  windows never overwrite each other's other entries — never `set()` it.
 - Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$workspace` (`brama:workspace`, reopened
-  on launch by `projectController.restore()`), `$editorTabs` (`brama:editor:tabs`; only files inside the
-  workspace — `projectController` calls `closeTabsOutside()` when a folder opens or fails to reopen),
+  on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
+  active project's entry is `$editorTabs`, which shows only files inside it),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only) and `$collapsedProjects` (`brama:projects:collapsed`). Typedefs for each are in
   `src/models/types.js`.

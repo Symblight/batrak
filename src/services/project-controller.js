@@ -1,9 +1,10 @@
 import { closeWorkspace, noteFileOpened, onWorkspaceChanged, openWorkspace, pickFolder, revealPath } from './ipc.js';
-import { $rootId, $workspace } from '../stores/workspace.js';
+import { $openingPath, $rootId, $workspace } from '../stores/workspace.js';
 import { removeProjectTabs } from '../stores/editor.js';
 import { $projects, addProject, removeProject } from '../stores/projects.js';
 
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../models/types.js').OpenedRoot} OpenedRoot */
 
 /**
  * Opens project folders; the active one lives in `$workspace` (subscribe to it, or to `$rootId`, for
@@ -13,6 +14,8 @@ import { $projects, addProject, removeProject } from '../stores/projects.js';
 export class ProjectController extends EventTarget {
   /** Id of the latest `#openFolder()` call; an older one that finishes later is discarded. */
   #generation = 0;
+  /** @type {{ path: string, done: Promise<void> } | null} The latest `#openFolder()` call, until it settles. */
+  #pending = null;
 
   constructor() {
     super();
@@ -63,6 +66,8 @@ export class ProjectController extends EventTarget {
    */
   async activate(path) {
     if (path === this.path && this.rootId !== null) return;
+    // A second click while it is scanning waits for that scan instead of starting another.
+    if (this.#pending?.path === path) return this.#pending.done;
     await this.#openFolder(path);
   }
 
@@ -81,10 +86,34 @@ export class ProjectController extends EventTarget {
   /**
    * Opens a folder in the backend and makes it the workspace, then closes the previous root.
    * @param {string} path
+   * @returns {Promise<void>}
    */
-  async #openFolder(path) {
+  #openFolder(path) {
     const generation = ++this.#generation;
-    const opened = await openWorkspace(path);
+    const done = this.#switchTo(path, generation);
+    this.#setPending({ path, done });
+    return done;
+  }
+
+  /** @param {{ path: string, done: Promise<void> } | null} pending Mirrored into `$openingPath`. */
+  #setPending(pending) {
+    this.#pending = pending;
+    $openingPath.set(pending?.path ?? null);
+  }
+
+  /**
+   * @param {string} path
+   * @param {number} generation Of the `#openFolder()` call; the result is dropped once it is stale.
+   */
+  async #switchTo(path, generation) {
+    /** @type {OpenedRoot} */
+    let opened;
+    try {
+      opened = await openWorkspace(path);
+    } catch (err) {
+      if (generation === this.#generation) this.#setPending(null);
+      throw err;
+    }
     if (generation !== this.#generation) {
       closeWorkspace(opened.rootId).catch(() => {});
       return;
@@ -93,6 +122,7 @@ export class ProjectController extends EventTarget {
     const name = opened.path.split(/[\\/]/).filter(Boolean).pop() ?? opened.path;
     addProject(opened.path, name);
     $workspace.set({ path: opened.path, name, rootId: opened.rootId });
+    this.#setPending(null);
     // After the switch, so the old view never reads from a closed root.
     if (previous) closeWorkspace(previous).catch(() => {});
   }
@@ -106,18 +136,27 @@ export class ProjectController extends EventTarget {
     const projects = $projects.get();
     const index = projects.findIndex((p) => p.id === id);
     const next = projects[index + 1] ?? projects[index - 1];
+    const active = this.path === id;
+    // An open of this project still in flight would list it again when it lands; drop it.
+    if (active || this.#pending?.path === id) this.#cancelPending();
     removeProject(id);
-    removeProjectTabs(id);
-    if (this.path !== id) return;
-    this.#generation++; // drop a reopen still in flight
-    if (next) {
-      this.#openFolder(next.path).catch((err) => {
-        console.error('Brama: opening project failed', err);
-        this.#close();
-      });
-    } else {
-      this.#close();
+    if (!active) {
+      removeProjectTabs(id);
+      return;
     }
+    // Leave the removed project before forgetting its tabs, so nothing can write them back while
+    // the next one is scanned.
+    this.#close();
+    removeProjectTabs(id);
+    if (next) {
+      this.#openFolder(next.path).catch((err) => console.error('Brama: opening project failed', err));
+    }
+  }
+
+  /** Makes an `#openFolder()` call still in flight discard its result. */
+  #cancelPending() {
+    this.#generation++;
+    this.#setPending(null);
   }
 
   /** Closes the active workspace's backend root. */

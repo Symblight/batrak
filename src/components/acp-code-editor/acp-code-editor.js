@@ -82,13 +82,15 @@ export class AcpCodeEditor extends LitElement {
   #loads = new Map();
   #loadCount = 0;
   /**
-   * The backend reads only inside an opened root, so tabs load once it's open, and reload when it changes.
+   * The backend reads only inside an opened root, so tabs opened without one load once it opens. Only
+   * those: on a project switch `#syncTabs` already loads the new project's tabs, in either order.
    * Declared before `#editorTabs`: on connect it runs first, while `tabs` is still empty.
    */
   #rootId = new StoreController(this, {
     store: $rootId,
     onChange: (rootId) => {
-      if (rootId !== null) for (const tab of this.tabs) this.#load(tab.path);
+      if (rootId === null) return;
+      for (const tab of this.tabs) if (!tab.loaded && !this.#loads.has(tab.path)) this.#load(tab.path);
     },
   });
   #editorTabs = new StoreController(this, { store: $editorTabs, onChange: (tabs, old) => this.#syncTabs(tabs, old) });

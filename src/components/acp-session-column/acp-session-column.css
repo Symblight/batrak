@@ -65,7 +65,6 @@
 }
 .acp-session-column__project_loading {
   opacity: 0.6;
-  cursor: progress;
 }
 .acp-session-column__chevron {
   flex: none;
@@ -192,6 +191,13 @@
   font-size: 12px;
   line-height: 20px;
   color: var(--md-on-surface-variant);
+}
+.acp-session-column__error {
+  padding: 4px 12px 6px 30px;
+  font-size: 12px;
+  line-height: 16px;
+  overflow-wrap: anywhere;
+  color: var(--md-error);
 }
 .acp-session-column__empty-icon {
   font-size: 16px;

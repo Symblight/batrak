@@ -12,4 +12,17 @@
   --tvx-tree-view-color-on-surface-variant: var(--md-on-surface-variant);
   --tvx-tree-view-color-outline-variant: var(--md-outline-variant);
   --tvx-tree-view-color-primary: var(--md-primary);
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-file-tree__loading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.acp-file-tree__spinner {
+  font-size: 32px;
 }

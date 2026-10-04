@@ -1,4 +1,4 @@
-import { persistentAtom } from '@nanostores/persistent';
+import { persistentAtom, persistentMap } from '@nanostores/persistent';
 
 /**
  * @template T
@@ -27,6 +27,30 @@ export function persistentStore(key, initial, { parse, serialize = (value) => va
         return parse(JSON.parse(raw)) ?? initial;
       } catch {
         return initial;
+      }
+    },
+  });
+}
+
+/**
+ * Map kept in `localStorage` as one JSON item per key, `prefix` + key. Only `setKey()` writes, and it
+ * writes just that key, so windows sharing the prefix never overwrite each other's other entries.
+ * Per window: other windows' writes are picked up on the next mount only.
+ * @template T
+ * @param {string} prefix Prefixed `brama:`, ending in `:`.
+ * @param {(raw: unknown) => T | null} parse Validates one entry; `null` drops it.
+ * @returns {import('nanostores').MapStore<Record<string, T | undefined>>}
+ */
+export function persistentMapStore(prefix, parse) {
+  return persistentMap(prefix, /** @type {Record<string, T | undefined>} */ ({}), {
+    listen: false,
+    encode: (/** @type {T | undefined} */ value) => JSON.stringify(value),
+    // An entry decoded to `undefined` reads as missing.
+    decode: (/** @type {string} */ raw) => {
+      try {
+        return parse(JSON.parse(raw)) ?? undefined;
+      } catch {
+        return undefined;
       }
     },
   });
