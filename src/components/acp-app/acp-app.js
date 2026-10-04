@@ -1,6 +1,7 @@
 import { LitElement, html } from 'lit';
 import { sessionController } from '../../services/session-controller.js';
 import { projectController } from '../../services/project-controller.js';
+import { gitController } from '../../services/git-controller.js';
 import { $activePath } from '../../stores/editor.js';
 import { $columnWidths } from '../../stores/layout.js';
 import '../acp-toolbar/acp-toolbar.js';
@@ -57,6 +58,7 @@ export class AcpApp extends LitElement {
     super.connectedCallback();
     window.addEventListener('keydown', this.#onKeydown);
     sessionController.init().catch((err) => console.error('Brama: init failed', err));
+    gitController.start();
     projectController.restore().catch((err) => console.error('Brama: reopening folder failed', err));
   }
 

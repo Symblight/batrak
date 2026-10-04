@@ -23,6 +23,8 @@ pub fn run() {
             commands::workspace::note_file_opened,
             commands::workspace::find_in_files,
             commands::workspace::cancel_search,
+            commands::git::git_status,
+            commands::git::git_file_at_head,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brama");

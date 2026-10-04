@@ -178,7 +178,7 @@ export class AcpChat extends LitElement {
         @chx-messages-change=${this.#onMessagesChange}
       >
         <chx-message-list slot="message-list"></chx-message-list>
-        <chx-message-composer slot="message-composer" placeholder="Write your prompt...">
+        <chx-message-composer  slot="message-composer" placeholder="Write your prompt...">
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
             <md-icon class="acp-chat__attach-icon">${unsafeSVG(addIcon)}</md-icon>
           </md-icon-button>

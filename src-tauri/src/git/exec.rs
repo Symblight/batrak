@@ -1,0 +1,238 @@
+//! The one place that runs the `git` binary: closed stdin, pipes drained on their own threads,
+//! a timeout, a cap on captured output, and an environment the parent can't leak into.
+
+use std::ffi::OsStr;
+use std::io::{self, Read, Write};
+use std::path::{Path, PathBuf};
+use std::process::{Child, Command, ExitStatus, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
+const REMOTE_TIMEOUT: Duration = Duration::from_secs(120);
+/// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
+pub const MAX_OUTPUT: usize = 32 * 1024 * 1024;
+const MAX_STDERR: usize = 64 * 1024;
+/// Start of the error for output over the cap; see `is_too_large`.
+const TOO_LARGE: &str = "git output exceeded the limit";
+
+/// Whether `run`/`run_with` failed because the output was over its cap.
+pub fn is_too_large(err: &str) -> bool {
+    err.starts_with(TOO_LARGE)
+}
+
+/// Inherited variables that would point git at another repository or index than `cwd`'s.
+const SCRUBBED_ENV: &[&str] = &[
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_ALTERNATE_OBJECT_DIRECTORIES",
+    "GIT_COMMON_DIR",
+    "GIT_NAMESPACE",
+    "GIT_CONFIG_PARAMETERS",
+];
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// A user-requested local operation.
+    Local,
+    /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
+    /// or it races the user's own git.
+    Background,
+    /// Talks to a remote: a longer timeout.
+    Remote,
+}
+
+#[derive(Debug, Default)]
+pub struct Options<'a> {
+    /// Written to git's stdin (then closed); without it stdin is null.
+    pub input: Option<&'a [u8]>,
+    /// Extra variables, applied after scrubbing (e.g. a temporary `GIT_INDEX_FILE`).
+    pub env: &'a [(&'a str, &'a OsStr)],
+    /// Cap on captured stdout; `MAX_OUTPUT` when `None`.
+    pub max_output: Option<usize>,
+}
+
+#[derive(Debug)]
+pub struct Output {
+    pub status: ExitStatus,
+    pub stdout: Vec<u8>,
+    pub stderr: String,
+}
+
+impl Output {
+    pub fn success(&self) -> bool {
+        self.status.success()
+    }
+
+    pub fn stdout_str(&self) -> Result<&str, String> {
+        std::str::from_utf8(&self.stdout).map_err(|_| "git printed non-UTF-8 output".to_owned())
+    }
+}
+
+/// Runs git and returns stdout; a non-zero exit is an error carrying git's message.
+pub fn run(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode) -> Result<Vec<u8>, String> {
+    let out = run_with(git, cwd, args, mode, &Options::default())?;
+    if out.success() {
+        Ok(out.stdout)
+    } else {
+        Err(failure_message(&out))
+    }
+}
+
+/// Runs git and returns its output whatever the exit code, for commands whose exit code is data
+/// (`diff --exit-code`, `apply --3way` with conflicts).
+pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Options) -> Result<Output, String> {
+    let mut command = Command::new(git);
+    // Paths with non-ASCII names print as-is instead of octal-escaped.
+    command.args(["-c", "core.quotepath=off"]).args(args).current_dir(cwd);
+    for key in SCRUBBED_ENV {
+        command.env_remove(key);
+    }
+    // Never block on a credential prompt nobody can answer; parse English output.
+    command.env("GIT_TERMINAL_PROMPT", "0").env("LC_ALL", "C");
+    if mode == Mode::Background {
+        command.env("GIT_OPTIONAL_LOCKS", "0");
+    }
+    for (key, value) in opts.env {
+        command.env(key, value);
+    }
+    command
+        .stdin(if opts.input.is_some() { Stdio::piped() } else { Stdio::null() })
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    no_window(&mut command);
+
+    let mut child = command.spawn().map_err(|e| format!("failed to run git: {e}"))?;
+    let writer = opts.input.map(|input| {
+        let mut stdin = child.stdin.take().expect("stdin is piped");
+        let input = input.to_vec();
+        // A broken pipe means git stopped reading; its exit status tells why.
+        thread::spawn(move || drop(stdin.write_all(&input)))
+    });
+    let max_output = opts.max_output.unwrap_or(MAX_OUTPUT);
+    let stdout = child.stdout.take().expect("stdout is piped");
+    let stderr = child.stderr.take().expect("stderr is piped");
+    let stdout = thread::spawn(move || read_capped(stdout, max_output));
+    let stderr = thread::spawn(move || read_capped(stderr, MAX_STDERR));
+
+    let timeout = if mode == Mode::Remote { REMOTE_TIMEOUT } else { LOCAL_TIMEOUT };
+    let status = wait_with_timeout(&mut child, timeout);
+    if let Some(writer) = writer {
+        let _ = writer.join();
+    }
+    let (stdout, truncated) = stdout.join().unwrap_or_default();
+    let (stderr, _) = stderr.join().unwrap_or_default();
+    let status = status?;
+    if truncated {
+        return Err(format!("{TOO_LARGE} ({max_output} bytes)"));
+    }
+    Ok(Output { status, stdout, stderr: String::from_utf8_lossy(&stderr).trim().to_owned() })
+}
+
+/// git's own message for a failed call, or its exit status when it printed nothing.
+pub fn failure_message(out: &Output) -> String {
+    if out.stderr.is_empty() {
+        format!("git exited with {}", out.status)
+    } else {
+        out.stderr.clone()
+    }
+}
+
+/// Reads up to `cap` bytes, then drains the rest so the writer never blocks on a full pipe.
+fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
+    let mut bytes = Vec::new();
+    let mut pipe = pipe;
+    if (&mut pipe).take(cap as u64 + 1).read_to_end(&mut bytes).is_err() {
+        return (bytes, false);
+    }
+    let truncated = bytes.len() > cap;
+    if truncated {
+        bytes.truncate(cap);
+        let _ = io::copy(&mut pipe, &mut io::sink());
+    }
+    (bytes, truncated)
+}
+
+fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus, String> {
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => return Ok(status),
+            Ok(None) if started.elapsed() > timeout => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("git timed out after {}s", timeout.as_secs()));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(5)),
+            Err(e) => {
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err(format!("failed to wait for git: {e}"));
+            }
+        }
+    }
+}
+
+#[cfg(windows)]
+fn no_window(command: &mut Command) {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    command.creation_flags(CREATE_NO_WINDOW);
+}
+
+#[cfg(not(windows))]
+fn no_window(_command: &mut Command) {}
+
+/// `OsStr` arguments from anything path- or string-like, for `run` call sites.
+pub fn args<'a>(parts: &'a [&'a dyn AsRef<OsStr>]) -> Vec<&'a OsStr> {
+    parts.iter().map(|p| p.as_ref()).collect()
+}
+
+/// Canonical form of a path git printed, so it compares with our roots (`/private/var` vs `/var`).
+pub fn canonical(path: &Path) -> PathBuf {
+    dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::git::test_repo::{git_bin, TestRepo};
+
+    #[test]
+    fn caps_output_and_still_lets_git_exit() {
+        let repo = TestRepo::new("cap");
+        repo.write("big.txt", &"x".repeat(4096));
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "big"]);
+        let opts = Options { max_output: Some(1024), ..Default::default() };
+        let err = run_with(&git_bin(), &repo.path, &args(&[&"show", &"HEAD:big.txt"]), Mode::Local, &opts)
+            .unwrap_err();
+        assert!(is_too_large(&err), "{err}");
+    }
+
+    #[test]
+    fn non_zero_exit_carries_git_message() {
+        let repo = TestRepo::new("fail");
+        let err = run(&git_bin(), &repo.path, &args(&[&"rev-parse", &"no-such-ref"]), Mode::Local).unwrap_err();
+        assert!(err.contains("no-such-ref"), "{err}");
+    }
+
+    #[test]
+    fn scrubbed_variables_include_repository_redirects() {
+        // Setting them process-wide would leak into tests running in parallel, so check the list.
+        for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
+            assert!(SCRUBBED_ENV.contains(&key), "{key}");
+        }
+    }
+
+    #[test]
+    fn input_reaches_stdin() {
+        let repo = TestRepo::new("stdin");
+        let opts = Options { input: Some(b"hello"), ..Default::default() };
+        let out =
+            run_with(&git_bin(), &repo.path, &args(&[&"hash-object", &"--stdin"]), Mode::Local, &opts).unwrap();
+        assert_eq!(out.stdout_str().unwrap().trim(), "b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0");
+    }
+}

@@ -97,6 +97,44 @@
  * @property {string[]} added
  * @property {string[]} removed
  * @property {string[]} modified
+ * @property {boolean} git The repository's HEAD, index or refs changed.
+ */
+
+/**
+ * Branch of the root's repository; mirrors `git::repo::RepoState`.
+ * @typedef {Object} GitRepoState
+ * @property {string | null} branch `null` when detached.
+ * @property {string | null} sha `null` before the first commit.
+ * @property {boolean} detached
+ * @property {string | null} upstream
+ * @property {number} ahead
+ * @property {number} behind
+ */
+
+/** @typedef {'modified' | 'added' | 'deleted' | 'renamed' | 'typeChanged' | 'untracked' | 'conflicted'} GitFileKind */
+
+/**
+ * A changed file; mirrors `git::repo::FileStatus`.
+ * @typedef {Object} GitFileStatus
+ * @property {string} path Relative to the root; an untracked directory ends in `/`, `''` is the whole root.
+ * @property {GitFileKind} kind
+ * @property {boolean} staged
+ * @property {boolean} unstaged
+ * @property {string | null} origPath Rename source.
+ */
+
+/**
+ * @typedef {Object} GitStatus
+ * @property {GitRepoState} repo
+ * @property {GitFileStatus[]} files
+ */
+
+/**
+ * Git state of the active root (`$git`).
+ * @typedef {Object} GitView
+ * @property {GitRepoState | null} repo `null` outside a repository or before the first status.
+ * @property {GitFileStatus[]} files
+ * @property {string | null} error Why status failed, e.g. "git not found".
  */
 
 /**

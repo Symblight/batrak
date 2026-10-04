@@ -10,6 +10,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').QuickOpenResult} QuickOpenResult */
 /** @typedef {import('../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
+/** @typedef {import('../models/types.js').GitStatus} GitStatus */
 
 /** The only module that knows Rust command names. */
 
@@ -116,6 +117,25 @@ export function findInFiles(rootId, options, onEvent) {
  */
 export function cancelSearch(rootId) {
   return invoke('cancel_search', { rootId });
+}
+
+/**
+ * Branch and changed files of the root's repository.
+ * @param {string} rootId
+ * @returns {Promise<GitStatus | null>} `null` when the root isn't in a repository.
+ */
+export function gitStatus(rootId) {
+  return invoke('git_status', { rootId });
+}
+
+/**
+ * A file's text at HEAD, the editor's diff baseline.
+ * @param {string} rootId
+ * @param {string} path Relative.
+ * @returns {Promise<string | null>} `null` when not committed, binary, too large or not in a repository.
+ */
+export function gitFileAtHead(rootId, path) {
+  return invoke('git_file_at_head', { rootId, path });
 }
 
 /**

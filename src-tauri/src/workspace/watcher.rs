@@ -60,7 +60,8 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
             }
             for path in &event.paths {
                 let Some(rel) = snapshot.rel(path) else { continue };
-                if rel == ".git" || rel.starts_with(".git/") {
+                if let Some(inner) = rel.strip_prefix(".git/").or((rel == ".git").then_some("")) {
+                    changes.git |= is_repo_state(inner);
                     continue;
                 }
                 if path.file_name().is_some_and(|n| IGNORE_FILES.iter().any(|f| n == *f)) {
@@ -90,12 +91,30 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
     changes
 }
 
+/// Whether a path inside `.git` (`""` for the directory itself, which FSEvents sometimes
+/// reports alone) holds state that branch or status depend on. Lock files, objects and logs
+/// don't: a write lands as a rename onto the real name, which matches here.
+fn is_repo_state(inner: &str) -> bool {
+    matches!(inner, "" | "HEAD" | "index" | "packed-refs" | "MERGE_HEAD" | "REBASE_HEAD" | "CHERRY_PICK_HEAD")
+        || (inner.starts_with("refs/") && !inner.ends_with(".lock"))
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
     use std::sync::mpsc;
 
     use super::*;
+
+    #[test]
+    fn repo_state_paths() {
+        for yes in ["", "HEAD", "index", "packed-refs", "refs/heads/main", "refs/remotes/origin/main", "MERGE_HEAD"] {
+            assert!(is_repo_state(yes), "{yes}");
+        }
+        for no in ["index.lock", "refs/heads/main.lock", "objects/ab/cdef", "logs/HEAD", "COMMIT_EDITMSG", "FETCH_HEAD"] {
+            assert!(!is_repo_state(no), "{no}");
+        }
+    }
     use crate::workspace::Workspaces;
 
     /// Waits for a batch that satisfies `pred`, skipping unrelated ones.
@@ -139,6 +158,11 @@ mod tests {
         fs::remove_file(dir.join("src/renamed.rs")).unwrap();
         wait_for(&rx, |c| c.removed.contains(&"src/renamed.rs".to_owned()));
         assert!(!has("src/renamed.rs"));
+
+        fs::create_dir_all(dir.join(".git/refs/heads")).unwrap();
+        fs::write(dir.join(".git/refs/heads/main"), "0000\n").unwrap();
+        let git = wait_for(&rx, |c| c.git);
+        assert!(git.added.is_empty() && git.dirs.is_empty(), ".git stays out of the tree");
 
         workspaces.close(&root.id);
         fs::remove_dir_all(dir).unwrap();

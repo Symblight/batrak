@@ -60,6 +60,24 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   from the app only) and `$collapsedProjects` (`brama:projects:collapsed`). Typedefs for each are in
   `src/models/types.js`.
 
+### Git
+
+`src-tauri/src/git/` drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential
+helpers apply.
+
+- Every call goes through `exec::run` / `run_with`: closed stdin, pipes drained on threads, a
+  timeout, capped output, scrubbed `GIT_DIR`-style variables, `LC_ALL=C`. Use `Mode::Background`
+  for refreshes the user didn't ask for (sets `GIT_OPTIONAL_LOCKS=0`, so they never take
+  `index.lock`). The executable comes from `binary::git()`.
+- Anything that changes a repository runs inside `lock::with_mutation`, keyed by the common git
+  dir, so a checkout and its worktrees are serialized together.
+- Commands take root-relative paths only after `workspace::checked_rel()`.
+- `worktree` and `apply` (Apply Locally / Check Out Branch) are tested but not exposed yet; sessions
+  use them. A dirty worktree is never removed.
+- Frontend: `gitController` (`services/git-controller.js`) writes `$git` (`stores/git.js`) for the
+  active root, refreshing after `fs-change` (debounced), on root change and on window focus.
+  `$gitHead` changes only when HEAD moves; the editor reloads its diff baselines on it.
+
 ### Column resizing
 
 `ColumnResizeController` (`src/controllers/resize/`) + `<acp-resize-handle>`, built on Pragmatic drag and

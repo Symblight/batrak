@@ -10,11 +10,12 @@ import { allPreset } from '@symblight/code-editor/presets';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
-import { readFile } from '../../services/ipc.js';
+import { gitFileAtHead, readFile } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $editorTabs, activateTab, closeTab, openTab } from '../../stores/editor.js';
 import { $rootId } from '../../stores/workspace.js';
+import { $gitHead } from '../../stores/git.js';
 import styles from './acp-code-editor.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
@@ -27,6 +28,7 @@ import styles from './acp-code-editor.css?inline';
  * @property {string} content
  * @property {string} error
  * @property {boolean} loaded Whether `content` has been read yet.
+ * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
  */
 
 /**
@@ -94,6 +96,18 @@ export class AcpCodeEditor extends LitElement {
     },
   });
   #editorTabs = new StoreController(this, { store: $editorTabs, onChange: (tabs, old) => this.#syncTabs(tabs, old) });
+  /** @type {Map<string, number>} Latest baseline read per open file, like `#loads`. */
+  #baselineLoads = new Map();
+  /**
+   * A commit or checkout moves HEAD: every open file's baseline is stale. Not when HEAD first
+   * becomes known (`old` null, e.g. a root just opened): `#load` read the baselines already.
+   */
+  #gitHead = new StoreController(this, {
+    store: $gitHead,
+    onChange: (_head, old) => {
+      if (old != null) for (const tab of this.tabs) this.#loadBaseline(tab.path);
+    },
+  });
   #onFsChange = (/** @type {Event} */ e) => {
     const { modified, added, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
     for (const tab of this.tabs) {
@@ -162,8 +176,12 @@ export class AcpCodeEditor extends LitElement {
    */
   #syncTabs({ paths, active }, old) {
     const known = new Map(this.tabs.map((t) => [t.path, t]));
-    this.tabs = paths.map((path) => known.get(path) ?? { path, content: '', error: '', loaded: false });
-    for (const path of known.keys()) if (!paths.includes(path)) this.#loads.delete(path);
+    this.tabs = paths.map((path) => known.get(path) ?? { path, content: '', error: '', loaded: false, baseline: null });
+    for (const path of known.keys()) {
+      if (paths.includes(path)) continue;
+      this.#loads.delete(path);
+      this.#baselineLoads.delete(path);
+    }
     if (this.#rootId.value !== null) for (const path of paths) if (!known.has(path)) this.#load(path);
     if (active !== old?.active) this.#activeChanged = true;
   }
@@ -188,6 +206,7 @@ export class AcpCodeEditor extends LitElement {
   async #load(path) {
     const id = ++this.#loadCount;
     this.#loads.set(path, id);
+    this.#loadBaseline(path);
     /** @type {Partial<EditorTab>} */
     let changes;
     try {
@@ -198,6 +217,24 @@ export class AcpCodeEditor extends LitElement {
     if (this.#loads.get(path) !== id) return; // closed, or read again, meanwhile
     this.#patch(path, { ...changes, loaded: true });
     if (path === this.#activePath) this.#revealPendingLine();
+  }
+
+  /**
+   * Reads a file's text at HEAD into its tab; no baseline (no diff marks) on any failure.
+   * @param {string} path
+   */
+  async #loadBaseline(path) {
+    const id = ++this.#loadCount;
+    this.#baselineLoads.set(path, id);
+    const rootId = this.#rootId.value;
+    const rel = projectController.relPath(path);
+    /** @type {string | null} */
+    let baseline = null;
+    if (rootId !== null && rel !== null) {
+      baseline = await gitFileAtHead(rootId, rel).catch(() => null);
+    }
+    if (this.#baselineLoads.get(path) !== id) return; // closed, or read again, meanwhile
+    if (this.#find(path)?.baseline !== baseline) this.#patch(path, { baseline });
   }
 
   /** Puts the caret on `#pendingLine` in the active tab's editor, once. */
@@ -292,7 +329,9 @@ export class AcpCodeEditor extends LitElement {
             .plugins=${editorPlugins}
             filename=${tab.path}
             .value=${tab.content}
+            .baseline=${tab.baseline}
           >
+            <cdx-diff slot="diff" kind="baseline"></cdx-diff>
             <cdx-footer slot="footer" path=${projectController.relPath(tab.path) ?? tab.path}></cdx-footer>
           </cdx-code-editor>`}
     </md-tab-panel>`;

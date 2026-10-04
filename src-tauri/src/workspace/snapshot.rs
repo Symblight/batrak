@@ -34,11 +34,14 @@ pub struct Changes {
     pub added: Vec<String>,
     pub removed: Vec<String>,
     pub modified: Vec<String>,
+    /// The repository's state (HEAD, index, refs) changed: branch or status may differ even
+    /// with no file in the tree touched, e.g. after a commit.
+    pub git: bool,
 }
 
 impl Changes {
     pub fn is_empty(&self) -> bool {
-        self.dirs.is_empty() && self.added.is_empty() && self.removed.is_empty() && self.modified.is_empty()
+        self.dirs.is_empty() && self.added.is_empty() && self.removed.is_empty() && self.modified.is_empty() && !self.git
     }
 }
 
