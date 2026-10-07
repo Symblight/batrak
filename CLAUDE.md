@@ -75,6 +75,15 @@ Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops wh
 `projectController` ignores) or when its root closes. The editor reads only the active tab; other
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
+**Open projects:** `projectController` keeps the backend roots (snapshot + watcher) of the last
+`KEEP_OPEN` (3) active projects; activating one of them only switches `$workspace`, no scan. Older
+ones are closed and scanned again when activated. Only the active root's changes reach the frontend
+(`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
+root (`gitController`'s stores and commit picks, the Changes tab's expanded files, the file tree's
+expanded folders) save their state on switch and restore it, re-checking what may have changed. A
+root belongs to the window that opened it: `Workspaces::close_group` closes a window's roots when it
+is destroyed, and `close_window_workspaces` when its page loads again (before any open).
+
 ### Git
 
 `src-tauri/src/git/` drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential

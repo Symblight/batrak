@@ -1,9 +1,20 @@
 import { gitHead, gitStatus } from './ipc.js';
 import { projectController } from './project-controller.js';
-import { $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../stores/git.js';
+import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../stores/git.js';
 import { $rootId } from '../stores/workspace.js';
 
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../models/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../models/types.js').GitRepoView} GitRepoView */
+
+/**
+ * Git state of an open root that isn't active, shown again (and checked) when it is.
+ * @typedef {Object} SavedGitState
+ * @property {GitRepoView} repo
+ * @property {GitChangesView} changes
+ * @property {number | null} version
+ * @property {ReadonlySet<string>} selection Files picked for its next commit.
+ */
 
 /** File changes come in bursts (a build, a checkout): wait for a pause before asking git. */
 const REFRESH_DELAY_MS = 300;
@@ -71,6 +82,10 @@ export class GitController {
   #version = null;
   /** The next read scans even if the backend sees no change (the Refresh button). */
   #force = false;
+  /** @type {string | null} Root the stores describe. */
+  #rootId = null;
+  /** @type {Map<string, SavedGitState>} Other open roots' state, by root id; dropped once a root closes. */
+  #saved = new Map();
   #head = new SerialTask(() => this.#readHead());
   #changes = new SerialTask(() => this.#readChanges());
 
@@ -87,17 +102,40 @@ export class GitController {
   /** Starts following the active root; idempotent. */
   start() {
     if (this.#unsubscribe) return;
-    this.#unsubscribe = $rootId.subscribe(() => {
-      // Never show the previous root's branch or files while the new one loads.
-      $gitRepo.set(NO_REPO);
-      setCommitSelection([]);
-      this.#version = null;
-      $gitChanges.set(this.#watchers ? { ...NO_CHANGES, loading: true } : NO_CHANGES);
-      this.#head.schedule(0);
-      if (this.#watchers) this.#changes.schedule(0);
-    });
+    this.#unsubscribe = $rootId.subscribe((rootId) => this.#switchRoot(rootId));
     projectController.addEventListener('fs-change', this.#onFsChange);
     window.addEventListener('focus', this.#onFocus);
+  }
+
+  /**
+   * Keeps the outgoing root's state while its root stays open, and shows the incoming one's, if
+   * kept, until it is checked; never the previous root's branch or files.
+   * @param {string | null} rootId
+   */
+  #switchRoot(rootId) {
+    const previous = this.#rootId;
+    this.#rootId = rootId;
+    if (previous !== null && previous !== rootId && projectController.isOpen(previous)) {
+      this.#saved.set(previous, {
+        repo: $gitRepo.get(),
+        changes: { ...$gitChanges.get(), loading: false },
+        version: this.#version,
+        selection: $commitSelection.get(),
+      });
+    }
+    for (const id of this.#saved.keys()) {
+      if (!projectController.isOpen(id)) this.#saved.delete(id);
+    }
+    const saved = rootId === null ? undefined : this.#saved.get(rootId);
+    if (rootId !== null) this.#saved.delete(rootId);
+    // Through NO_REPO, so `$gitHead` views see a new root (old head `null`), not a HEAD move.
+    $gitRepo.set(NO_REPO);
+    if (saved) $gitRepo.set(saved.repo);
+    setCommitSelection(saved?.selection ?? []);
+    this.#version = saved?.version ?? null;
+    $gitChanges.set({ ...(saved?.changes ?? NO_CHANGES), loading: this.#watchers > 0 });
+    this.#head.schedule(0);
+    if (this.#watchers) this.#changes.schedule(0);
   }
 
   stop() {

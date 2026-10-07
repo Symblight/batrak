@@ -66,6 +66,14 @@ export function closeWorkspace(rootId) {
 }
 
 /**
+ * Closes every root this window opened, e.g. ones a previous load of the page kept open.
+ * @returns {Promise<void>}
+ */
+export function closeWindowWorkspaces() {
+  return invoke('close_window_workspaces');
+}
+
+/**
  * Children of a directory from the snapshot.
  * @param {string} rootId
  * @param {string} path Relative; `''` for the root.

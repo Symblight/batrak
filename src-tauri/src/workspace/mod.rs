@@ -57,6 +57,8 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 pub struct Root {
     pub id: String,
     pub path: PathBuf,
+    /// The window that opened it; its roots close with it.
+    group: String,
     pub snapshot: RwLock<Snapshot>,
     watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
     /// Most recent first, at most `quick_open::RECENT_CAPACITY`.
@@ -140,7 +142,7 @@ impl Workspaces {
     /// [`SUPERSEDED`]. Blocking: call off the main thread.
     pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
         let cancel = self.begin_open(group);
-        let result = self.open_with(path, &cancel, move |root, changes| {
+        let result = self.open_with(path, group, &cancel, move |root, changes| {
             let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
         });
         self.end_open(group, &cancel);
@@ -167,6 +169,7 @@ impl Workspaces {
     fn open_with(
         &self,
         path: &Path,
+        group: &str,
         cancel: &AtomicBool,
         on_change: impl Fn(&Root, Changes) + Send + 'static,
     ) -> Result<Arc<Root>, String> {
@@ -182,6 +185,7 @@ impl Workspaces {
             id: id.clone(),
             snapshot: RwLock::new(snapshot),
             path,
+            group: group.to_owned(),
             watcher: Mutex::new(None),
             recent: Mutex::new(VecDeque::new()),
             quick_open_generation: AtomicU64::new(0),
@@ -203,6 +207,16 @@ impl Workspaces {
             root.cancel_search();
             // Dropping the debouncer stops its thread.
             lock(&root.watcher).take();
+        }
+    }
+
+    /// Closes every root a window opened: when it closes, or when its page loads again and the
+    /// frontend no longer knows them.
+    pub fn close_group(&self, group: &str) {
+        let ids: Vec<String> =
+            lock(&self.roots).values().filter(|root| root.group == group).map(|root| root.id.clone()).collect();
+        for id in ids {
+            self.close(&id);
         }
     }
 
@@ -242,7 +256,7 @@ mod tests {
         let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
         std::fs::create_dir_all(base.join("src")).unwrap();
         let workspaces = Workspaces::default();
-        let err = workspaces.open_with(&base, &AtomicBool::new(true), |_, _| {}).err();
+        let err = workspaces.open_with(&base, "main", &AtomicBool::new(true), |_, _| {}).err();
         assert_eq!(err.as_deref(), Some(SUPERSEDED));
         assert!(!workspaces.contains(&dunce::canonicalize(&base).unwrap().join("src")));
         std::fs::remove_dir_all(&base).unwrap();
@@ -265,7 +279,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
         let workspaces = Workspaces::default();
-        let opened = workspaces.open_with(&root, &AtomicBool::new(false), |_, _| {}).unwrap();
+        let opened = workspaces.open_with(&root, "main", &AtomicBool::new(false), |_, _| {}).unwrap();
 
         assert!(workspaces.contains(&opened.path.join("src/main.rs")));
         assert!(!workspaces.contains(&opened.path.with_file_name("proj-other").join("x")));
@@ -273,6 +287,25 @@ mod tests {
 
         workspaces.close(&opened.id);
         assert!(!workspaces.contains(&opened.path.join("src/main.rs")));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn closing_a_window_closes_only_its_roots() {
+        let base = std::env::temp_dir().join(format!("brama-group-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("a")).unwrap();
+        std::fs::create_dir_all(base.join("b")).unwrap();
+        let workspaces = Workspaces::default();
+        let open = |dir: &str, group: &str| {
+            workspaces.open_with(&base.join(dir), group, &AtomicBool::new(false), |_, _| {}).unwrap()
+        };
+        let (a1, b1, a2) = (open("a", "main"), open("b", "main"), open("a", "second"));
+
+        workspaces.close_group("main");
+        assert!(workspaces.get(&a1.id).is_err() && workspaces.get(&b1.id).is_err());
+        assert!(a1.closed.load(Ordering::Relaxed), "its watcher rescans stop too");
+        assert!(workspaces.get(&a2.id).is_ok(), "another window's root stays open");
+        workspaces.close_group("second");
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

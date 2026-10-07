@@ -50,6 +50,14 @@ pub async fn close_workspace(workspaces: State<'_, Workspaces>, root_id: String)
     Ok(())
 }
 
+/// Closes every root this window opened. Called when its page starts, so roots kept open by the
+/// page before a reload don't outlive it.
+#[tauri::command]
+pub async fn close_window_workspaces(window: Window, workspaces: State<'_, Workspaces>) -> Result<(), String> {
+    workspaces.close_group(window.label());
+    Ok(())
+}
+
 /// Children of a directory (`""` = the root). Ignored directories are read on first request.
 #[tauri::command]
 pub async fn list_dir(workspaces: State<'_, Workspaces>, root_id: String, path: String) -> Result<Vec<Entry>, String> {

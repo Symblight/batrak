@@ -5,11 +5,18 @@ mod session;
 mod storage;
 mod workspace;
 
+use tauri::Manager;
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(workspace::Workspaces::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Destroyed = event {
+                window.state::<workspace::Workspaces>().close_group(window.label());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
             commands::sessions::list_sessions,
             commands::sessions::get_active_session,
@@ -19,6 +26,7 @@ pub fn run() {
             commands::fs::reveal_path,
             commands::workspace::open_workspace,
             commands::workspace::close_workspace,
+            commands::workspace::close_window_workspaces,
             commands::workspace::list_dir,
             commands::workspace::quick_open,
             commands::workspace::note_file_opened,

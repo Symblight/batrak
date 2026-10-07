@@ -24,6 +24,7 @@ import { gitController } from '../../services/git-controller.js';
 import { gitFileAtHead, readFile } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { $commitSelection, $gitChanges, $gitHead, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
+import { $rootId } from '../../stores/workspace.js';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
 import styles from './acp-changes-review.css?inline';
 
@@ -150,6 +151,11 @@ export class AcpChangesReview extends LitElement {
   });
   /** @type {Set<string>} Expanded files whose diff must be read again, once the status is current. */
   #staleDiffs = new Set();
+  /** @type {string | null} Root whose files are expanded and diffed. */
+  #shownRoot = null;
+  /** @type {Map<string, ReadonlySet<string>>} Expanded files of the other open roots, by root id. */
+  #expandedByRoot = new Map();
+  #rootId = new StoreController(this, { store: $rootId, onChange: (rootId) => this.#switchRoot(rootId) });
   #onFsChange = (/** @type {Event} */ e) => {
     const { added, modified, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
     for (const id of [...added, ...modified, ...removed]) {
@@ -247,6 +253,30 @@ export class AcpChangesReview extends LitElement {
         }
       }
     }
+    if (loaded && !loading) this.#flushStaleDiffs();
+  }
+
+  /**
+   * Another project: its own expanded files come back, but no diff is carried over — paths repeat
+   * across projects, and the files may have changed while it was inactive.
+   * @param {string | null} rootId
+   */
+  #switchRoot(rootId) {
+    const previous = this.#shownRoot;
+    if (previous === rootId) return;
+    this.#shownRoot = rootId;
+    if (previous !== null && projectController.isOpen(previous)) this.#expandedByRoot.set(previous, this.expanded);
+    for (const id of this.#expandedByRoot.keys()) {
+      if (!projectController.isOpen(id)) this.#expandedByRoot.delete(id);
+    }
+    const saved = rootId === null ? undefined : this.#expandedByRoot.get(rootId);
+    if (rootId !== null) this.#expandedByRoot.delete(rootId);
+    this.expanded = new Set(saved);
+    this.diffs = new Map();
+    this.#loads.clear(); // reads still in flight belong to the other project
+    this.#staleDiffs.clear();
+    this.#pendingScroll = null;
+    const { loaded, loading } = this.#changes.value;
     if (loaded && !loading) this.#flushStaleDiffs();
   }
 

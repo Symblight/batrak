@@ -151,7 +151,7 @@ mod tests {
         let (tx, rx) = mpsc::channel();
         let workspaces = Workspaces::default();
         let root = workspaces
-            .open_with(&dir, &std::sync::atomic::AtomicBool::new(false), move |_, changes| tx.send(changes).unwrap())
+            .open_with(&dir, "main", &std::sync::atomic::AtomicBool::new(false), move |_, changes| tx.send(changes).unwrap())
             .unwrap();
         let has = |path: &str| root.read().files().any(|e| e.path == path);
 

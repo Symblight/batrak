@@ -1,4 +1,12 @@
-import { closeWorkspace, noteFileOpened, onWorkspaceChanged, openWorkspace, pickFolder, revealPath } from './ipc.js';
+import {
+  closeWindowWorkspaces,
+  closeWorkspace,
+  noteFileOpened,
+  onWorkspaceChanged,
+  openWorkspace,
+  pickFolder,
+  revealPath,
+} from './ipc.js';
 import { $openingPath, $rootId, $workspace } from '../stores/workspace.js';
 import { removeProjectTabs } from '../stores/editor.js';
 import { $projects, addProject, removeProject } from '../stores/projects.js';
@@ -7,13 +15,28 @@ import { $projects, addProject, removeProject } from '../stores/projects.js';
 /** @typedef {import('../models/types.js').OpenedRoot} OpenedRoot */
 
 /**
+ * Projects whose backend root (snapshot + watcher) stays open, the active one included. Switching to
+ * one of them needs no scan: its watcher kept the snapshot current.
+ */
+const KEEP_OPEN = 3;
+
+/**
  * Opens project folders; the active one lives in `$workspace` (subscribe to it, or to `$rootId`, for
- * changes). Only the active project has a backend root (scan + watcher): activating another one closes
- * the current root and scans the new folder afresh, so nothing is watched for inactive projects. Emits 'fs-change' (CustomEvent<WorkspaceChanges>) when files of the current root change on disk.
+ * changes). The last `KEEP_OPEN` active projects keep their backend root (scan + watcher), so
+ * switching back to one is instant; an older one is closed and scanned afresh when activated again.
+ * Emits 'fs-change' (CustomEvent<WorkspaceChanges>) when files of the active root change on disk;
+ * the other open roots' changes only reach their snapshots and git caches.
  */
 export class ProjectController extends EventTarget {
   /** Id of the latest `#openFolder()` call; an older one that finishes later is discarded. */
   #generation = 0;
+  /**
+   * @type {Map<string, { rootId: string, name: string }>} Open roots by project path, least recently
+   * active first; the active project is last.
+   */
+  #roots = new Map();
+  /** Roots this window's previous page load left open are closed before anything opens. */
+  #ready = closeWindowWorkspaces().catch((err) => console.error('Brama: closing stale roots failed', err));
   /** @type {{ path: string, done: Promise<void> } | null} The latest `#openFolder()` call, until it settles. */
   #pending = null;
 
@@ -61,11 +84,26 @@ export class ProjectController extends EventTarget {
   }
 
   /**
-   * Makes a project the active workspace, scanning and watching it from scratch.
+   * @param {string} rootId
+   * @returns {boolean} Whether a backend root is still open (active or kept for switching back).
+   */
+  isOpen(rootId) {
+    return [...this.#roots.values()].some((root) => root.rootId === rootId);
+  }
+
+  /**
+   * Makes a project the active workspace: at once when its root is still open, else by scanning it.
    * @param {string} path Canonical absolute path (a project id).
    */
   async activate(path) {
     if (path === this.path && this.rootId !== null) return;
+    const open = this.#roots.get(path);
+    if (open) {
+      // A scan of another project still running is kept for later (see `#switchTo`).
+      this.#cancelPending();
+      this.#show(path, open.name, open.rootId);
+      return;
+    }
     // A second click while it is scanning waits for that scan instead of starting another.
     if (this.#pending?.path === path) return this.#pending.done;
     await this.#openFolder(path);
@@ -106,6 +144,7 @@ export class ProjectController extends EventTarget {
    * @param {number} generation Of the `#openFolder()` call; the result is dropped once it is stale.
    */
   async #switchTo(path, generation) {
+    await this.#ready;
     /** @type {OpenedRoot} */
     let opened;
     try {
@@ -116,17 +155,52 @@ export class ProjectController extends EventTarget {
       this.#setPending(null);
       throw err;
     }
+    const name = opened.path.split(/[\\/]/).filter(Boolean).pop() ?? opened.path;
     if (generation !== this.#generation) {
-      closeWorkspace(opened.rootId).catch(() => {});
+      // Another project became active meanwhile: keep the scan for switching here later, unless
+      // the project was removed or is open already.
+      const listed = $projects.get().some((p) => p.id === opened.path);
+      if (!listed || this.#roots.has(opened.path)) {
+        closeWorkspace(opened.rootId).catch(() => {});
+        return;
+      }
+      this.#roots = new Map([[opened.path, { rootId: opened.rootId, name }], ...this.#roots]);
+      this.#evict();
       return;
     }
-    const previous = this.rootId;
-    const name = opened.path.split(/[\\/]/).filter(Boolean).pop() ?? opened.path;
     addProject(opened.path, name);
-    $workspace.set({ path: opened.path, name, rootId: opened.rootId });
+    this.#show(opened.path, name, opened.rootId);
     this.#setPending(null);
-    // After the switch, so the old view never reads from a closed root.
-    if (previous) closeWorkspace(previous).catch(() => {});
+  }
+
+  /**
+   * Makes an open root the active workspace.
+   * @param {string} path
+   * @param {string} name
+   * @param {string} rootId
+   */
+  #show(path, name, rootId) {
+    this.#roots.delete(path);
+    this.#roots.set(path, { rootId, name });
+    // Before the switch: the oldest is never the one still shown, as `KEEP_OPEN` is at least 2.
+    this.#evict();
+    $workspace.set({ path, name, rootId });
+  }
+
+  /** Closes the least recently active roots beyond `KEEP_OPEN`. */
+  #evict() {
+    for (const path of this.#roots.keys()) {
+      if (this.#roots.size <= KEEP_OPEN) break;
+      this.#closeRoot(path);
+    }
+  }
+
+  /** @param {string} path Closes that project's root, if open. */
+  #closeRoot(path) {
+    const root = this.#roots.get(path);
+    if (!root) return;
+    this.#roots.delete(path);
+    closeWorkspace(root.rootId).catch(() => {});
   }
 
   /**
@@ -143,6 +217,7 @@ export class ProjectController extends EventTarget {
     if (active || this.#pending?.path === id) this.#cancelPending();
     removeProject(id);
     if (!active) {
+      this.#closeRoot(id);
       removeProjectTabs(id);
       return;
     }
@@ -150,9 +225,7 @@ export class ProjectController extends EventTarget {
     // the next one is scanned.
     this.#close();
     removeProjectTabs(id);
-    if (next) {
-      this.#openFolder(next.path).catch((err) => console.error('Brama: opening project failed', err));
-    }
+    if (next) this.activate(next.path).catch((err) => console.error('Brama: opening project failed', err));
   }
 
   /** Makes an `#openFolder()` call still in flight discard its result. */
@@ -161,10 +234,11 @@ export class ProjectController extends EventTarget {
     this.#setPending(null);
   }
 
-  /** Closes the active workspace's backend root. */
+  /** Leaves the active workspace and closes its backend root. */
   #close() {
-    if (this.rootId) closeWorkspace(this.rootId).catch(() => {});
+    const path = this.path;
     $workspace.set(null);
+    if (path) this.#closeRoot(path);
   }
 
   /**
