@@ -30,6 +30,12 @@
   /* Agent accent */
   --terminal-accent: #00855f;
 
+  /* Diff colours: MD3 has no "added"/"removed" roles. Shared by the Changes panel and editor diffs. */
+  --vcs-add: #1b7a3d;
+  --diff-add-fg: #0a5c2c;
+  --diff-del-fg: #93211a;
+  --search-hit: color-mix(in srgb, var(--md-primary) 22%, transparent);
+
   /* Layout */
   --toolbar-height: 40px;
   --nav-rail-width: 48px;
@@ -50,10 +56,13 @@
   --font-weight-title: 600;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --terminal-accent: #4cdbae;
-  }
+/* Set by services/theme.js from the Appearance setting, which may differ from the OS scheme. */
+:root[data-theme='dark'] {
+  --terminal-accent: #4cdbae;
+  --vcs-add: #81c995;
+  --diff-add-fg: #a8dab5;
+  --diff-del-fg: #f2b8b5;
+  --search-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
 }
 
 [hidden] {

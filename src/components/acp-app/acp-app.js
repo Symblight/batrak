@@ -7,14 +7,14 @@ import { $columnWidths } from '../../stores/layout.js';
 import '../acp-toolbar/acp-toolbar.js';
 import '../acp-session-column/acp-session-column.js';
 import '../acp-agent-column/acp-agent-column.js';
-import '../acp-editor-column/acp-editor-column.js';
+import '../acp-main-column/acp-main-column.js';
 import '../acp-nav-rail/acp-nav-rail.js';
 import '../acp-quick-open/acp-quick-open.js';
 import '../acp-resize-handle/acp-resize-handle.js';
 import { ColumnResizeController } from '../../controllers/resize/ColumnResizeController.js';
 import styles from './acp-app.css?inline';
 
-/** @typedef {import('../acp-editor-column/acp-editor-column.js').SideView} SideView */
+/** @typedef {import('../acp-main-column/acp-main-column.js').SideView} SideView */
 
 /**
  * @tag acp-app
@@ -68,20 +68,29 @@ export class AcpApp extends LitElement {
   }
 
   /** Rendered unconditionally, so present after the first render. */
-  get #editor() {
-    return /** @type {HTMLElementTagNameMap['acp-editor-column']} */ (
-      this.renderRoot.querySelector('acp-editor-column')
+  get #main() {
+    return /** @type {HTMLElementTagNameMap['acp-main-column']} */ (
+      this.renderRoot.querySelector('acp-main-column')
     );
   }
 
   #showFiles() {
     this.sideView = 'files';
-    this.#editor.showFiles();
+    this.#main.showFiles();
   }
 
   #showSearch() {
     this.sideView = 'search';
-    this.#editor.showSearch();
+    this.#main.showSearch();
+  }
+
+  #showChanges() {
+    this.sideView = 'changes';
+    this.#main.showChanges();
+  }
+
+  #showSettings() {
+    this.#main.openSettings();
   }
 
   /** Opens Quick Open; `:` (Go to line) needs a file open in the editor. */
@@ -96,12 +105,12 @@ export class AcpApp extends LitElement {
   /** @param {Event} e */
   #onPaletteFileOpen(e) {
     e.stopPropagation();
-    this.#editor.openFile(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
+    this.#main.openFile(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
   }
 
   /** @param {Event} e */
   #onPaletteGoToLine(e) {
-    this.#editor.goToLine(/** @type {CustomEvent<{ line: number }>} */ (e).detail.line);
+    this.#main.goToLine(/** @type {CustomEvent<{ line: number }>} */ (e).detail.line);
   }
 
   /**
@@ -129,12 +138,14 @@ export class AcpApp extends LitElement {
         ${this.#renderResizer('session', 'Resize sessions column')}
         <acp-agent-column class="acp-app__agent"></acp-agent-column>
         ${this.#renderResizer('agent', 'Resize agent column')}
-        <acp-editor-column class="acp-app__editor"></acp-editor-column>
+        <acp-main-column class="acp-app__main"></acp-main-column>
         <acp-nav-rail
           class="acp-app__rail"
           .selected=${this.sideView}
           @acp-show-files=${this.#showFiles}
           @acp-find-in-files=${this.#showSearch}
+          @acp-show-changes=${this.#showChanges}
+          @acp-show-settings=${this.#showSettings}
         ></acp-nav-rail>
       </div>
       <acp-quick-open

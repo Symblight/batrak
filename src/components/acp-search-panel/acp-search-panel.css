@@ -1,17 +1,9 @@
 :host {
-  --_acp-search-panel-hit: color-mix(in srgb, var(--md-primary) 22%, transparent);
-
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
   color: var(--md-on-surface);
-}
-
-@media (prefers-color-scheme: dark) {
-  :host {
-    --_acp-search-panel-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
-  }
 }
 
 .acp-search-panel__fields {
@@ -202,6 +194,6 @@
 }
 .acp-search-panel__hit {
   border-radius: 2px;
-  background: var(--_acp-search-panel-hit);
+  background: var(--search-hit);
   color: inherit;
 }

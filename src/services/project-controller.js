@@ -111,7 +111,9 @@ export class ProjectController extends EventTarget {
     try {
       opened = await openWorkspace(path);
     } catch (err) {
-      if (generation === this.#generation) this.#setPending(null);
+      // A newer open from this window cancels the older scan in the backend; that's not a failure.
+      if (generation !== this.#generation) return;
+      this.#setPending(null);
       throw err;
     }
     if (generation !== this.#generation) {

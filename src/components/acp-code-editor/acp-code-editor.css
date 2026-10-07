@@ -73,6 +73,11 @@
   flex: 1;
   min-height: 0;
 }
+/* A view tab's content (Settings), sized like the editor. */
+.acp-code-editor__view {
+  flex: 1;
+  min-height: 0;
+}
 .acp-code-editor__editor::part(container) {
   border-radius: 0;
 }

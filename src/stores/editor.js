@@ -3,13 +3,36 @@ import { isRecord, persistentMapStore } from './persistent.js';
 import { $workspace } from './workspace.js';
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../models/types.js').TabKind} TabKind */
+
+/** Id of the Settings tab. */
+export const SETTINGS_TAB_ID = 'view:settings';
+/** Id of the Changes tab: every changed file, each expanding into its diff. */
+export const CHANGES_TAB_ID = 'view:changes';
+
+/** Key in `$projectTabs` of the tabs open while no project is: only tabs that show no file. */
+const NO_PROJECT = '';
 
 /**
- * @param {string} path Absolute.
- * @param {string | null} root Absolute folder; `null` contains nothing.
+ * @param {string} id A tab id from `$editorTabs`.
+ * @returns {{ kind: TabKind, path: string }} What the tab shows, and its file (absolute; `''` for a
+ *   view, like Settings).
  */
-function isInside(path, root) {
-  return root !== null && path.startsWith(`${root}/`);
+export function parseTabId(id) {
+  if (id === SETTINGS_TAB_ID) return { kind: 'settings', path: '' };
+  if (id === CHANGES_TAB_ID) return { kind: 'changes', path: '' };
+  return { kind: 'file', path: id };
+}
+
+/**
+ * Whether a tab may be open in a project: a file tab only inside its folder, a view anywhere.
+ * @param {string} id Tab id.
+ * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
+ */
+function belongsTo(id, root) {
+  const { kind, path } = parseTabId(id);
+  if (kind !== 'file') return true;
+  return root !== NO_PROJECT && path.startsWith(`${root}/`);
 }
 
 /**
@@ -78,22 +101,25 @@ try {
  */
 export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
 
-/** Tabs of the active project (`$workspace`), only files inside it; none while no project is open. */
+/**
+ * Tabs of the active project (`$workspace`), only files inside it; while no project is open, the
+ * tabs that show no file (Settings).
+ */
 export const $editorTabs = computed([$projectTabs, $workspace], (projects, workspace) => {
-  const tabs = workspace && projects[workspace.path];
+  const root = workspace?.path ?? NO_PROJECT;
+  const tabs = projects[root];
   if (!tabs) return NO_TABS;
-  return tabs.paths.every((path) => isInside(path, workspace.path))
+  return tabs.paths.every((id) => belongsTo(id, root))
     ? tabs
     : tabsOf(
-        tabs.paths.filter((path) => isInside(path, workspace.path)),
+        tabs.paths.filter((id) => belongsTo(id, root)),
         tabs.active,
       );
 });
 
-/** @param {EditorTabs} tabs Replaces the active project's tabs; no-op without one. */
+/** @param {EditorTabs} tabs Replaces the tabs of the active project, or of no project. */
 function setTabs(tabs) {
-  const root = $workspace.get()?.path;
-  if (root) $projectTabs.setKey(root, tabs);
+  $projectTabs.setKey($workspace.get()?.path ?? NO_PROJECT, tabs);
 }
 
 /**
@@ -105,12 +131,12 @@ export function removeProjectTabs(root) {
   if (root in $projectTabs.get()) $projectTabs.setKey(root, undefined);
 }
 
-/** Notifies only when the active file changes, not when other tabs open or close. */
+/** Id of the active tab; notifies only when it changes, not when other tabs open or close. */
 export const $activePath = computed($editorTabs, (tabs) => tabs.active);
 
 /**
- * Opens a file in a tab (appended to the strip) or switches to its tab.
- * @param {string} path Absolute.
+ * Opens a tab (appended to the strip) or switches to it.
+ * @param {string} path Tab id: a file's absolute path, or a view's id.
  */
 export function openTab(path) {
   const { paths, active } = $editorTabs.get();
@@ -123,7 +149,7 @@ export function openTab(path) {
 
 /**
  * Closes a tab, activating a neighbour if it was the active one.
- * @param {string} path
+ * @param {string} path Tab id.
  */
 export function closeTab(path) {
   const { paths, active } = $editorTabs.get();
@@ -133,7 +159,17 @@ export function closeTab(path) {
   setTabs({ paths: rest, active: active === path ? (rest[Math.min(index, rest.length - 1)] ?? null) : active });
 }
 
-/** @param {string} path An open tab. */
+/** Opens the Settings tab, or switches to it. */
+export function openSettings() {
+  openTab(SETTINGS_TAB_ID);
+}
+
+/** Opens the Changes tab, or switches to it. */
+export function openChanges() {
+  openTab(CHANGES_TAB_ID);
+}
+
+/** @param {string} path Id of an open tab. */
 export function activateTab(path) {
   const tabs = $editorTabs.get();
   if (tabs.active !== path && tabs.paths.includes(path)) setTabs({ ...tabs, active: path });

@@ -82,8 +82,9 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
     }
 
     if full_rescan {
-        // Scan without holding the lock, so the tree and Quick Open keep answering.
-        let fresh = Snapshot::scan(&root.path);
+        // Scan without holding the lock, so the tree and Quick Open keep answering. A root closed
+        // meanwhile stops the scan: nobody will read the result.
+        let Some(fresh) = Snapshot::scan_until(&root.path, &root.closed) else { return changes };
         root.write().replace_with(fresh, &mut changes);
     } else if !dirs.is_empty() {
         root.write().reconcile(dirs, &mut changes);
@@ -137,7 +138,9 @@ mod tests {
         fs::write(dir.join(".gitignore"), "*.log\n").unwrap();
         let (tx, rx) = mpsc::channel();
         let workspaces = Workspaces::default();
-        let root = workspaces.open_with(&dir, move |_, changes| tx.send(changes).unwrap()).unwrap();
+        let root = workspaces
+            .open_with(&dir, &std::sync::atomic::AtomicBool::new(false), move |_, changes| tx.send(changes).unwrap())
+            .unwrap();
         let has = |path: &str| root.read().files().any(|e| e.path == path);
 
         fs::write(dir.join("src/new.rs"), "").unwrap();

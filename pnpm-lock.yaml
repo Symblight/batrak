@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+overrides:
+  '@symblight/wc-material': ^0.4.0
+
 patchedDependencies:
   '@atlaskit/pragmatic-drag-and-drop@4.0.0':
     hash: e4e79f9277f55891e214132a528a8f58e37227be2a29969e3fb66c5d8aef916c
@@ -38,8 +41,8 @@ importers:
         specifier: github:Symblight/rich-components#path:/packages/tree-view
         version: git+https://git@github.com:Symblight/rich-components.git#ef5012855135d2dc26167a11aad0eca862b20c54&path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
       '@symblight/wc-material':
-        specifier: ^0.3.9
-        version: 0.3.9(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
+        specifier: ^0.4.0
+        version: 0.4.0(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
       '@tauri-apps/api':
         specifier: ^2.0.0
         version: 2.12.1
@@ -602,8 +605,8 @@ packages:
     peerDependencies:
       lit: '>=3.0.0'
 
-  '@symblight/wc-material@0.3.9':
-    resolution: {integrity: sha512-mIsXy6+27HB0eBLVvM8UklUvfK3bCJvD2kti5PaSGdcL2iorhDiceXgafy3sLItIdB2h0YATIZh69K5oXoII7A==}
+  '@symblight/wc-material@0.4.0':
+    resolution: {integrity: sha512-sZe2JyvNA/iKS3nvpdHcOIonPfCwyqQ0x5SsCCcEwfGI7qrrOujdXRwwdqWMEXBYaJBTiPXosjoahHVonJ1/MA==}
     peerDependencies:
       '@open-wc/form-control': ^1.0.0
       '@open-wc/form-helpers': ^1.0.0
@@ -1637,7 +1640,7 @@ snapshots:
       '@lit-labs/observers': 2.1.0
       '@lit/context': 1.1.6
       '@open-wc/form-control': 1.0.0
-      '@symblight/wc-material': 0.3.9(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
+      '@symblight/wc-material': 0.4.0(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
       '@tanstack/lit-virtual': 3.14.2(lit@3.3.3)
       lit: 3.3.3
       prosemirror-commands: 1.7.2
@@ -1666,7 +1669,7 @@ snapshots:
       '@lezer/common': 1.5.3
       '@lezer/highlight': 1.2.5
       '@replit/codemirror-indentation-markers': 6.5.3(@codemirror/language@6.12.4)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)
-      '@symblight/wc-material': 0.3.9(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
+      '@symblight/wc-material': 0.4.0(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
       lit: 3.3.3
     transitivePeerDependencies:
       - '@open-wc/form-control'
@@ -1683,7 +1686,7 @@ snapshots:
       '@atlaskit/pragmatic-drag-and-drop': 3.1.0
       '@atlaskit/pragmatic-drag-and-drop-hitbox': 2.2.2
       '@lit/context': 1.1.6
-      '@symblight/wc-material': 0.3.9(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
+      '@symblight/wc-material': 0.4.0(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)
       '@tanstack/lit-virtual': 3.14.2(lit@3.3.3)
       lit: 3.3.3
     transitivePeerDependencies:
@@ -1691,7 +1694,7 @@ snapshots:
       - '@open-wc/form-helpers'
       - rollup
 
-  '@symblight/wc-material@0.3.9(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)':
+  '@symblight/wc-material@0.4.0(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.64.0)':
     dependencies:
       '@floating-ui/dom': 1.8.0
       '@lit-labs/observers': 2.1.0

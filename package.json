@@ -19,7 +19,7 @@
     "@symblight/code-editor": "github:Symblight/rich-components#path:/packages/code-editor",
     "@symblight/md-colors": "^0.1.1",
     "@symblight/tree-view": "github:Symblight/rich-components#path:/packages/tree-view",
-    "@symblight/wc-material": "^0.3.9",
+    "@symblight/wc-material": "^0.4.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "lit": "^3.2.0",
@@ -32,6 +32,9 @@
     "vite": "^5.4.0"
   },
   "pnpm": {
+    "overrides": {
+      "@symblight/wc-material": "^0.4.0"
+    },
     "onlyBuiltDependencies": [
       "@symblight/tree-view",
       "esbuild",

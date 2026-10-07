@@ -8,8 +8,6 @@ import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import folderFilledIcon from '@material-design-icons/svg/filled/folder.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import searchFilledIcon from '@material-design-icons/svg/filled/search.svg?raw';
-import commitIcon from '@material-design-icons/svg/outlined/commit.svg?raw';
-import commitFilledIcon from '@material-design-icons/svg/filled/commit.svg?raw';
 import assignmentIcon from '@material-design-icons/svg/outlined/assignment.svg?raw';
 import assignmentFilledIcon from '@material-design-icons/svg/filled/assignment.svg?raw';
 import historyIcon from '@material-design-icons/svg/outlined/history.svg?raw';
@@ -17,7 +15,6 @@ import historyFilledIcon from '@material-design-icons/svg/filled/history.svg?raw
 import notificationsIcon from '@material-design-icons/svg/outlined/notifications.svg?raw';
 import notificationsFilledIcon from '@material-design-icons/svg/filled/notifications.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
-import settingsFilledIcon from '@material-design-icons/svg/filled/settings.svg?raw';
 import styles from './acp-nav-rail.css?inline';
 
 /**
@@ -42,15 +39,21 @@ const TOP_ITEMS = [
     shortcut: '⌘⇧F',
     event: 'acp-find-in-files',
   },
-  { name: 'commit', label: 'Commit', icon: commitIcon, selectedIcon: commitFilledIcon },
-  { name: 'changes', label: 'Changes', icon: assignmentIcon, selectedIcon: assignmentFilledIcon },
+  {
+    name: 'changes',
+    label: 'Changes',
+    icon: assignmentIcon,
+    selectedIcon: assignmentFilledIcon,
+    event: 'acp-show-changes',
+  },
   { name: 'checkpoints', label: 'Checkpoints', icon: historyIcon, selectedIcon: historyFilledIcon },
 ];
 
 /** @type {NavRailItem[]} */
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
-  { name: 'settings', label: 'Settings', icon: settingsIcon, selectedIcon: settingsFilledIcon },
+  // Opens a tab in the main column rather than a side pane, so not a toggle.
+  { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
 ];
 
 /**
@@ -58,6 +61,8 @@ const BOTTOM_ITEMS = [
  * @summary Narrow icon-only rail of panel toggles (top) and notifications/settings (bottom).
  * @fires acp-show-files
  * @fires acp-find-in-files
+ * @fires acp-show-changes
+ * @fires acp-show-settings
  */
 export class AcpNavRail extends LitElement {
   static properties = {

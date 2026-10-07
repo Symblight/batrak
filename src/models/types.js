@@ -78,15 +78,39 @@
  */
 
 /**
+ * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff).
+ * @typedef {'file' | 'settings' | 'changes'} TabKind
+ */
+
+/**
  * Open editor tabs.
  * @typedef {Object} EditorTabs
- * @property {string[]} paths Absolute, in tab strip order.
- * @property {string | null} active
+ * @property {string[]} paths Tab ids in strip order: a file's absolute path, or a view's id
+ *   (`SETTINGS_TAB_ID`, `CHANGES_TAB_ID`); see `parseTabId()` in `stores/editor.js`.
+ * @property {string | null} active Tab id.
  */
 
 /**
  * Column width in px by `acp-resize-handle` name (unique app-wide); a missing column uses its CSS default.
  * @typedef {Record<string, number>} ColumnWidths
+ */
+
+/** @typedef {'light' | 'dark' | 'system'} Appearance */
+
+/**
+ * An installed font family; mirrors `commands::fonts::FontFamily`.
+ * @typedef {Object} FontFamily
+ * @property {string} family
+ * @property {boolean} monospace Any face of it is fixed-pitch.
+ */
+
+/**
+ * App preferences, shared by every window.
+ * @typedef {Object} Settings
+ * @property {Appearance} appearance `system` follows the OS.
+ * @property {string} accent Seed colour of the MD3 palette, `#RRGGBB`.
+ * @property {string | null} editorFont Code editor font family; `null` keeps the editor's own stack.
+ * @property {number} editorFontSize Code editor font size in px; the line height follows it.
  */
 
 /**
@@ -116,11 +140,13 @@
 /**
  * A changed file; mirrors `git::repo::FileStatus`.
  * @typedef {Object} GitFileStatus
- * @property {string} path Relative to the root; an untracked directory ends in `/`, `''` is the whole root.
+ * @property {string} path A file, relative to the root; untracked folders are listed file by file.
  * @property {GitFileKind} kind
  * @property {boolean} staged
  * @property {boolean} unstaged
  * @property {string | null} origPath Rename source.
+ * @property {number | null} added Lines added against HEAD; `null` when unknown (binary, too large).
+ * @property {number | null} removed Lines removed against HEAD.
  */
 
 /**
@@ -130,11 +156,19 @@
  */
 
 /**
- * Git state of the active root (`$git`).
- * @typedef {Object} GitView
- * @property {GitRepoState | null} repo `null` outside a repository or before the first status.
+ * Branch of the active root (`$gitRepo`), kept current while a project is open.
+ * @typedef {Object} GitRepoView
+ * @property {GitRepoState | null} repo `null` outside a repository or until first read.
+ * @property {string | null} error Why it couldn't be read, e.g. "git not found".
+ */
+
+/**
+ * Changed files of the active root (`$gitChanges`), computed only while the Changes panel is open.
+ * @typedef {Object} GitChangesView
  * @property {GitFileStatus[]} files
- * @property {string | null} error Why status failed, e.g. "git not found".
+ * @property {boolean} loaded A status has arrived since the panel opened.
+ * @property {boolean} loading
+ * @property {string | null} error
  */
 
 /**

@@ -1,0 +1,260 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+}
+
+/* Toolbar: collapse all, all-files checkbox, summary, totals; view, navigation, revert, review */
+.acp-changes-review__toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) 10px;
+  min-height: 52px;
+  box-sizing: border-box;
+  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
+  background: var(--md-surface-container-low);
+  border-bottom: 1px solid var(--md-outline-variant);
+}
+.acp-changes-review__tool {
+  --md-icon-button-font-size: 20px;
+  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+}
+.acp-changes-review__tool::part(button) {
+  padding: 5px;
+}
+.acp-changes-review__tool-icon {
+  font-size: 20px;
+}
+.acp-changes-review__all {
+  flex: none;
+}
+.acp-changes-review__summary {
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+.acp-changes-review__spacer {
+  flex: 1;
+}
+.acp-changes-review__tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.acp-changes-review__view-mode {
+  --md-button-font-size: 13px;
+  --md-button-foreground-color: var(--md-on-surface-variant);
+  --md-button-block-start-space: 6px;
+  --md-button-block-end-space: 6px;
+}
+.acp-changes-review__divider {
+  width: 1px;
+  height: 20px;
+  margin: 0 6px;
+  background: var(--md-outline-variant);
+}
+/* Split button: two tonal halves, full outer corners, 4px inner ones, 2px apart. */
+.acp-changes-review__review {
+  display: inline-flex;
+  gap: 2px;
+  margin-left: var(--space-2);
+}
+.acp-changes-review__review-main {
+  --md-button-font-size: 13px;
+  --md-button-block-start-space: 6px;
+  --md-button-block-end-space: 6px;
+  --md-button-border-start-end-radius: 4px;
+  --md-button-border-end-end-radius: 4px;
+}
+.acp-changes-review__review-menu {
+  --md-icon-button-font-size: 18px;
+  --md-icon-button-background-color: var(--md-secondary-container);
+  --md-icon-button-foreground-color: var(--md-on-secondary-container);
+  --md-icon-button-border-start-start-radius: 4px;
+  --md-icon-button-border-end-start-radius: 4px;
+}
+.acp-changes-review__review-menu::part(button) {
+  padding: 6px;
+}
+.acp-changes-review__review-icon {
+  font-size: 18px;
+}
+
+/* Files */
+.acp-changes-review__list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow: auto;
+  padding: 6px 6px var(--space-2);
+}
+.acp-changes-review__row {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  height: 36px;
+  box-sizing: border-box;
+  padding: 0 4px 0 6px;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  scroll-margin-top: 6px;
+
+  &:hover {
+    background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--md-primary);
+    outline-offset: -2px;
+  }
+}
+/* The expanded file's header: sits in the card, square below. */
+.acp-changes-review__row_header,
+.acp-changes-review__row_header:hover {
+  height: 40px;
+  border-radius: 11px 11px 0 0;
+  background: var(--md-surface-container);
+}
+.acp-changes-review__chevron {
+  flex: none;
+  font-size: 20px;
+  color: var(--md-on-surface-variant);
+}
+.acp-changes-review__pick {
+  flex: none;
+}
+.acp-changes-review__badge {
+  flex: none;
+  min-width: 18px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--md-surface-container-highest);
+  font: 500 9px/16px var(--font-family-mono);
+  letter-spacing: 0.2px;
+  text-align: center;
+  color: var(--md-on-surface-variant);
+}
+.acp-changes-review__name {
+  flex: none;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--md-on-surface);
+}
+.acp-changes-review__name_deleted {
+  text-decoration: line-through;
+  color: var(--md-on-surface-variant);
+}
+.acp-changes-review__dir,
+.acp-changes-review__renamed {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: 12px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acp-changes-review__dir {
+  color: var(--md-on-surface-variant);
+}
+.acp-changes-review__renamed {
+  text-decoration: line-through;
+  color: color-mix(in srgb, var(--md-on-surface-variant) 70%, transparent);
+}
+.acp-changes-review__counts {
+  flex: none;
+  display: inline-flex;
+  gap: 6px;
+  font: 500 11.5px/16px var(--font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+.acp-changes-review__added {
+  color: var(--diff-add-fg);
+}
+.acp-changes-review__removed {
+  color: var(--diff-del-fg);
+}
+.acp-changes-review__actions {
+  flex: none;
+  display: flex;
+}
+.acp-changes-review__action {
+  --md-icon-button-font-size: 20px;
+  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+}
+.acp-changes-review__action::part(button) {
+  padding: 5px;
+}
+.acp-changes-review__action-icon {
+  font-size: 20px;
+}
+
+/* Expanded file: header row and diff in an outlined card */
+.acp-changes-review__card {
+  flex: none;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 12px;
+  background: var(--md-surface-container-lowest);
+}
+.acp-changes-review__diff {
+  border-top: 1px solid var(--md-outline-variant);
+  border-radius: 0 0 11px 11px;
+  overflow: hidden;
+}
+.acp-changes-review__editor {
+  --cdx-content-border-radius: 0;
+  --cdx-content-min-height: 0;
+}
+.acp-changes-review__diff-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: var(--space-3);
+  font-size: 12px;
+  color: var(--md-on-surface-variant);
+}
+
+/* Loading, empty, not a repository, error */
+.acp-changes-review__state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 24px;
+  font-size: 12px;
+  line-height: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--md-on-surface-variant);
+}
+.acp-changes-review__state-icon {
+  margin-bottom: 4px;
+  font-size: 28px;
+  color: var(--vcs-add);
+}
+.acp-changes-review__state-title {
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  color: var(--md-on-surface);
+}
+.acp-changes-review__spinner {
+  font-size: 32px;
+}

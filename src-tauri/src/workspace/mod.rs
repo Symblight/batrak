@@ -64,6 +64,8 @@ pub struct Root {
     quick_open_generation: AtomicU64,
     /// Cancel flag of the running Find in Files, replaced on every new search.
     search_cancel: Mutex<Arc<AtomicBool>>,
+    /// Set by `Workspaces::close`; stops a watcher rescan still running for a closed root.
+    pub closed: AtomicBool,
 }
 
 impl Root {
@@ -104,25 +106,53 @@ impl Root {
     }
 }
 
+/// Error of an open whose scan was cancelled by a newer open in the same group.
+pub const SUPERSEDED: &str = "superseded by a newer open";
+
 /// All opened roots, by id. Cheap to clone.
 #[derive(Clone, Default)]
 pub struct Workspaces {
     roots: Arc<Mutex<HashMap<String, Arc<Root>>>>,
     next_id: Arc<AtomicU64>,
+    /// Cancel flag of the scan in progress per group (a window): a newer open stops the older scan
+    /// instead of letting both saturate the disk.
+    opening: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
 impl Workspaces {
     /// Scans `path` and starts watching it; changes go to the frontend as [`CHANGED_EVENT`].
-    /// Blocking: call off the main thread.
-    pub fn open(&self, app: AppHandle, path: &Path) -> Result<Arc<Root>, String> {
-        self.open_with(path, move |root, changes| {
+    /// A later open in the same `group` cancels this one's scan, which then fails with
+    /// [`SUPERSEDED`]. Blocking: call off the main thread.
+    pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
+        let cancel = self.begin_open(group);
+        let result = self.open_with(path, &cancel, move |root, changes| {
             let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
-        })
+        });
+        self.end_open(group, &cancel);
+        result
+    }
+
+    /// Cancels the scan in progress in `group`, if any, and returns the flag of a new one.
+    fn begin_open(&self, group: &str) -> Arc<AtomicBool> {
+        let cancel = Arc::new(AtomicBool::new(false));
+        if let Some(previous) = lock(&self.opening).insert(group.to_owned(), Arc::clone(&cancel)) {
+            previous.store(true, Ordering::Relaxed);
+        }
+        cancel
+    }
+
+    /// Forgets `cancel` once its open is done, unless a newer open already replaced it.
+    fn end_open(&self, group: &str, cancel: &Arc<AtomicBool>) {
+        let mut opening = lock(&self.opening);
+        if opening.get(group).is_some_and(|current| Arc::ptr_eq(current, cancel)) {
+            opening.remove(group);
+        }
     }
 
     fn open_with(
         &self,
         path: &Path,
+        cancel: &AtomicBool,
         on_change: impl Fn(&Root, Changes) + Send + 'static,
     ) -> Result<Arc<Root>, String> {
         // FSEvents reports canonical paths (e.g. /private/var), so the root must be canonical too.
@@ -131,15 +161,17 @@ impl Workspaces {
         if !path.is_dir() {
             return Err(format!("{}: not a directory", path.display()));
         }
+        let snapshot = Snapshot::scan_until(&path, cancel).ok_or(SUPERSEDED)?;
         let id = format!("root-{}", self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
         let root = Arc::new(Root {
             id: id.clone(),
-            snapshot: RwLock::new(Snapshot::scan(&path)),
+            snapshot: RwLock::new(snapshot),
             path,
             watcher: Mutex::new(None),
             recent: Mutex::new(VecDeque::new()),
             quick_open_generation: AtomicU64::new(0),
             search_cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
+            closed: AtomicBool::new(false),
         });
         // Started after the scan: a change in between is picked up by the next event in that folder.
         let watcher = watcher::start(&root, on_change)?;
@@ -150,6 +182,7 @@ impl Workspaces {
 
     pub fn close(&self, id: &str) {
         if let Some(root) = lock(&self.roots).remove(id) {
+            root.closed.store(true, Ordering::Relaxed);
             root.cancel_search();
             // Dropping the debouncer stops its thread.
             lock(&root.watcher).take();
@@ -172,6 +205,33 @@ mod tests {
     use super::*;
 
     #[test]
+    fn a_newer_open_cancels_the_older_scan_in_its_group_only() {
+        let workspaces = Workspaces::default();
+        let first = workspaces.begin_open("main");
+        let other_window = workspaces.begin_open("second");
+        let second = workspaces.begin_open("main");
+        assert!(first.load(Ordering::Relaxed), "older scan in the same window is cancelled");
+        assert!(!second.load(Ordering::Relaxed));
+        assert!(!other_window.load(Ordering::Relaxed), "another window's scan keeps going");
+
+        workspaces.end_open("main", &first); // late finish of the cancelled open
+        assert!(lock(&workspaces.opening).contains_key("main"), "doesn't forget the newer one");
+        workspaces.end_open("main", &second);
+        assert!(!lock(&workspaces.opening).contains_key("main"));
+    }
+
+    #[test]
+    fn a_cancelled_open_fails_as_superseded_and_registers_nothing() {
+        let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("src")).unwrap();
+        let workspaces = Workspaces::default();
+        let err = workspaces.open_with(&base, &AtomicBool::new(true), |_, _| {}).err();
+        assert_eq!(err.as_deref(), Some(SUPERSEDED));
+        assert!(!workspaces.contains(&dunce::canonicalize(&base).unwrap().join("src")));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
     fn checked_rel_rejects_paths_leaving_the_root() {
         for ok in ["a.txt", "src/main.rs", ".gitignore", "a/.git-keep", "dir with space/ф.txt"] {
             assert_eq!(checked_rel(ok), Ok(ok), "{ok}");
@@ -188,7 +248,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
         let workspaces = Workspaces::default();
-        let opened = workspaces.open_with(&root, |_, _| {}).unwrap();
+        let opened = workspaces.open_with(&root, &AtomicBool::new(false), |_, _| {}).unwrap();
 
         assert!(workspaces.contains(&opened.path.join("src/main.rs")));
         assert!(!workspaces.contains(&opened.path.with_file_name("proj-other").join("x")));

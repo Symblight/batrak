@@ -49,16 +49,31 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 - **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent.js`)
   keeps an atom as JSON in `localStorage` under a `brama:` key. `parse` validates what was stored (`null`
   → `initial`), `serialize` drops runtime-only fields (`Workspace.rootId`). `listen: false` for per-window
-  state (folder, tabs); leave it on for shared preferences (column widths, later theme) so all windows
+  state (folder, tabs); leave it on for shared preferences (column widths, settings) so all windows
   stay in sync through `storage` events. Per-window state keyed by something (tabs by project) uses
   `persistentMapStore(prefix, parse)` instead: one item per key, written only through `setKey()`, so two
   windows never overwrite each other's other entries — never `set()` it.
 - Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$workspace` (`brama:workspace`, reopened
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
-  active project's entry is `$editorTabs`, which shows only files inside it),
+  active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
+  or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
+  click in the Changes side pane opens, expands and scrolls to); `parseTabId()` tells them apart. Everything in `<acp-main-column>` opens as such a
+  tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
-  from the app only) and `$collapsedProjects` (`brama:projects:collapsed`). Typedefs for each are in
+  from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
+  shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
+  `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on
+  `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/models/types.js`.
+
+### Background work
+
+Commands are `async` and push disk/process work to `spawn_blocking`; nothing blocks the IPC thread.
+Work that can be superseded must be cancellable, not just have its result dropped: Quick Open and
+Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops when a newer
+`open_workspace` from the same window starts (it then fails with `workspace::SUPERSEDED`, which
+`projectController` ignores) or when its root closes. The editor reads only the active tab; other
+tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
 ### Git
 
@@ -68,15 +83,22 @@ helpers apply.
 - Every call goes through `exec::run` / `run_with`: closed stdin, pipes drained on threads, a
   timeout, capped output, scrubbed `GIT_DIR`-style variables, `LC_ALL=C`. Use `Mode::Background`
   for refreshes the user didn't ask for (sets `GIT_OPTIONAL_LOCKS=0`, so they never take
-  `index.lock`). The executable comes from `binary::git()`.
+  `index.lock`). The executable comes from `binary::git()`. At most 4 git processes run app-wide
+  (`exec::MAX_CONCURRENT`); more callers wait for a slot.
 - Anything that changes a repository runs inside `lock::with_mutation`, keyed by the common git
   dir, so a checkout and its worktrees are serialized together.
 - Commands take root-relative paths only after `workspace::checked_rel()`.
 - `worktree` and `apply` (Apply Locally / Check Out Branch) are tested but not exposed yet; sessions
   use them. A dirty worktree is never removed.
-- Frontend: `gitController` (`services/git-controller.js`) writes `$git` (`stores/git.js`) for the
-  active root, refreshing after `fs-change` (debounced), on root change and on window focus.
-  `$gitHead` changes only when HEAD moves; the editor reloads its diff baselines on it.
+- Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
+  `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
+  root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
+  scans the working tree) is computed **only on demand**: `gitController.watchChanges()` starts it and
+  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-changes-panel>`
+  watches while it is the active side pane, `<acp-changes-review>` while its tab is active. The files picked
+  for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
+  only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor
+  reloads its diff baselines on it.
 
 ### Column resizing
 
@@ -153,11 +175,11 @@ full rules — load them when writing or reviewing component CSS or structure.
 - **Element** = a node in the component's own `render()`: `block__element`. Flat — no element-of-element
   (`a__b__c` means you found a new block).
 - **Modifier** = `block__element_modifier` / `block_modifier` with a **single** underscore
-  (`acp-editor-column__side_with-code`, `acp-quick-open__item_selected`) — never `--modifier`. Host
+  (`acp-main-column__side_with-code`, `acp-quick-open__item_selected`) — never `--modifier`. Host
   state/variant is a reflected attribute styled as `:host([attr])`. Content/data attributes are not modifiers.
 - A **nested custom element is its own block**, never the parent's element. To place or size it, mix a
   parent element class onto it (`<md-icon class="acp-code-editor__close-icon">`,
-  `<acp-file-tree class="acp-editor-column__pane">`). A block sets no external geometry (margins, position).
+  `<acp-file-tree class="acp-main-column__pane">`). A block sets no external geometry (margins, position).
 - **No** tag selectors, `*`, `#id`, descendant combinators between entities, resets, or `!important`.
   Outer-tree rules already beat a child's `:host` rules, so a parent hides a child with
   `.parent__pane[hidden] { display: none; }` — no `!important`.

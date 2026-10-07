@@ -5,6 +5,7 @@ use std::ffi::OsStr;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -19,6 +20,38 @@ const TOO_LARGE: &str = "git output exceeded the limit";
 /// Whether `run`/`run_with` failed because the output was over its cap.
 pub fn is_too_large(err: &str) -> bool {
     err.starts_with(TOO_LARGE)
+}
+
+/// git processes alive at once, app-wide; more callers wait. Each one also costs two or three
+/// pipe threads, and a burst (every restored tab asking for its baseline) must not fork dozens.
+const MAX_CONCURRENT: usize = 4;
+
+struct Permits {
+    used: Mutex<usize>,
+    freed: Condvar,
+}
+
+static PERMITS: Permits = Permits { used: Mutex::new(0), freed: Condvar::new() };
+
+/// A slot for one git process, given back on drop.
+struct Permit;
+
+impl Permit {
+    fn acquire() -> Permit {
+        let mut used = PERMITS.used.lock().unwrap_or_else(PoisonError::into_inner);
+        while *used >= MAX_CONCURRENT {
+            used = PERMITS.freed.wait(used).unwrap_or_else(PoisonError::into_inner);
+        }
+        *used += 1;
+        Permit
+    }
+}
+
+impl Drop for Permit {
+    fn drop(&mut self) {
+        *PERMITS.used.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
+        PERMITS.freed.notify_one();
+    }
 }
 
 /// Inherited variables that would point git at another repository or index than `cwd`'s.
@@ -104,6 +137,8 @@ pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Opti
         .stderr(Stdio::piped());
     no_window(&mut command);
 
+    // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
+    let _permit = Permit::acquire();
     let mut child = command.spawn().map_err(|e| format!("failed to run git: {e}"))?;
     let writer = opts.input.map(|input| {
         let mut stdin = child.stdin.take().expect("stdin is piped");
@@ -225,6 +260,33 @@ mod tests {
         for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
             assert!(SCRUBBED_ENV.contains(&key), "{key}");
         }
+    }
+
+    #[test]
+    fn at_most_max_concurrent_processes_at_once() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use std::sync::Arc;
+
+        let active = Arc::new(AtomicUsize::new(0));
+        let peak = Arc::new(AtomicUsize::new(0));
+        let handles: Vec<_> = (0..MAX_CONCURRENT * 3)
+            .map(|_| {
+                let (active, peak) = (Arc::clone(&active), Arc::clone(&peak));
+                thread::spawn(move || {
+                    let _permit = Permit::acquire();
+                    let now = active.fetch_add(1, Ordering::SeqCst) + 1;
+                    peak.fetch_max(now, Ordering::SeqCst);
+                    thread::sleep(Duration::from_millis(20));
+                    active.fetch_sub(1, Ordering::SeqCst);
+                })
+            })
+            .collect();
+        for handle in handles {
+            handle.join().unwrap();
+        }
+        // Other tests may hold permits too, so the peak here can only be lower.
+        assert!(peak.load(Ordering::SeqCst) <= MAX_CONCURRENT);
+        assert!(peak.load(Ordering::SeqCst) >= 1);
     }
 
     #[test]

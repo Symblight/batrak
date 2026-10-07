@@ -1,10 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { $git } from '../../stores/git.js';
+import { $gitRepo } from '../../stores/git.js';
 import { $workspace } from '../../stores/workspace.js';
 import styles from './acp-toolbar.css?inline';
 
-/** @typedef {import('../../models/types.js').GitView} GitView */
+/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
 
 /**
  * @tag acp-toolbar
@@ -14,9 +14,9 @@ export class AcpToolbar extends LitElement {
   static styles = styles;
 
   #workspace = new StoreController(this, { store: $workspace });
-  #git = new StoreController(this, { store: $git });
+  #gitRepo = new StoreController(this, { store: $gitRepo });
 
-  /** @param {GitView} git */
+  /** @param {GitRepoView} git */
   #renderBranch({ repo, error }) {
     if (error) {
       return html`<span class="acp-toolbar__git-error" title=${error}>Git unavailable</span>`;
@@ -40,7 +40,7 @@ export class AcpToolbar extends LitElement {
   render() {
     const workspace = this.#workspace.value;
     return html`<span class="acp-toolbar__name" title=${workspace?.path ?? ''}>${workspace?.name ?? ''}</span>
-      ${workspace ? this.#renderBranch(this.#git.value) : nothing}`;
+      ${workspace ? this.#renderBranch(this.#gitRepo.value) : nothing}`;
   }
 }
 

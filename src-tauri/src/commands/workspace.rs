@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use serde::Serialize;
 use tauri::ipc::Channel;
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, State, Window};
 
 use crate::workspace::quick_open::QuickOpenItem;
 use crate::workspace::search::{self, SearchEvent, SearchOptions};
@@ -29,15 +29,18 @@ pub struct QuickOpenResult {
     pub cancelled: bool,
 }
 
-/// Scans a folder and starts watching it.
+/// Scans a folder and starts watching it. A newer open from the same window cancels this one's
+/// scan; it then fails with `workspace::SUPERSEDED`.
 #[tauri::command]
 pub async fn open_workspace(
     app: AppHandle,
+    window: Window,
     workspaces: State<'_, Workspaces>,
     path: String,
 ) -> Result<OpenedRoot, String> {
     let workspaces = workspaces.inner().clone();
-    let root = blocking(move || workspaces.open(app, &PathBuf::from(path))).await??;
+    let group = window.label().to_owned();
+    let root = blocking(move || workspaces.open(app, &PathBuf::from(path), &group)).await??;
     Ok(OpenedRoot { root_id: root.id.clone(), path: root.path.to_string_lossy().into_owned() })
 }
 

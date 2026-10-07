@@ -11,6 +11,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
 /** @typedef {import('../models/types.js').GitStatus} GitStatus */
+/** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
+/** @typedef {import('../models/types.js').FontFamily} FontFamily */
 
 /** The only module that knows Rust command names. */
 
@@ -30,6 +32,11 @@ export function getActiveSession() {
  */
 export function setActiveSession(id) {
   return invoke('set_active_session', { id });
+}
+
+/** @returns {Promise<FontFamily[]>} Every installed font family. */
+export function listFonts() {
+  return invoke('list_fonts');
 }
 
 /**
@@ -120,12 +127,30 @@ export function cancelSearch(rootId) {
 }
 
 /**
- * Branch and changed files of the root's repository.
+ * Branch and upstream of the root's repository; cheap, no file scan.
+ * @param {string} rootId
+ * @returns {Promise<GitRepoState | null>} `null` when the root isn't in a repository.
+ */
+export function gitHead(rootId) {
+  return invoke('git_head', { rootId });
+}
+
+/**
+ * Branch and changed files of the root's repository; scans the working tree.
  * @param {string} rootId
  * @returns {Promise<GitStatus | null>} `null` when the root isn't in a repository.
  */
 export function gitStatus(rootId) {
   return invoke('git_status', { rootId });
+}
+
+/**
+ * Message of the last commit, which Amend starts from.
+ * @param {string} rootId
+ * @returns {Promise<string | null>} `null` before the first commit.
+ */
+export function gitLastCommitMessage(rootId) {
+  return invoke('git_last_commit_message', { rootId });
 }
 
 /**

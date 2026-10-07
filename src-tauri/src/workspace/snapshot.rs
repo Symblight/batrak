@@ -7,6 +7,7 @@
 use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::UNIX_EPOCH;
 
@@ -57,16 +58,23 @@ type Listing = (String, Vec<Entry>);
 
 impl Snapshot {
     /// Scans the whole root. Blocking; runs the walk on all cores.
+    #[cfg(test)]
     pub fn scan(root: &Path) -> Snapshot {
+        Self::scan_until(root, &NEVER).expect("a scan that is never cancelled completes")
+    }
+
+    /// Scans the whole root, stopping early with `None` once `cancel` turns true. Blocking; runs
+    /// the walk on all cores.
+    pub fn scan_until(root: &Path, cancel: &AtomicBool) -> Option<Snapshot> {
         let mut snapshot = Snapshot {
             root: root.to_path_buf(),
             entries: HashMap::new(),
             children: HashMap::new(),
         };
-        for listing in scan_subtree(root, "") {
+        for listing in scan_subtree(root, "", cancel)? {
             snapshot.apply_listing(listing);
         }
-        snapshot
+        Some(snapshot)
     }
 
     pub fn abs(&self, rel: &str) -> PathBuf {
@@ -209,7 +217,7 @@ impl Snapshot {
         self.children.entry(parent_of(&path).to_owned()).or_default().insert(path.clone());
         self.entries.insert(path.clone(), entry);
         if scan {
-            for listing in scan_subtree(&self.root, &path) {
+            for listing in scan_subtree(&self.root, &path, &NEVER).unwrap_or_default() {
                 self.apply_listing(listing);
             }
         }
@@ -304,9 +312,13 @@ fn read_children(abs: &Path, rel: &str, not_ignored: &HashSet<String>) -> std::i
     Ok(entries)
 }
 
+/// Cancel flag of scans nobody cancels.
+static NEVER: AtomicBool = AtomicBool::new(false);
+
 /// Parallel scan of a non-ignored directory: one listing per non-ignored directory in it,
-/// with ignored children marked but not descended into.
-fn scan_subtree(root: &Path, rel: &str) -> Vec<Listing> {
+/// with ignored children marked but not descended into. `None` when `cancel` turned true
+/// midway; both the walk and the per-directory reads check it.
+fn scan_subtree(root: &Path, rel: &str, cancel: &AtomicBool) -> Option<Vec<Listing>> {
     let start = if rel.is_empty() { root.to_path_buf() } else { root.join(rel) };
     // Every path the walker keeps, grouped by parent; each thread buffers locally.
     let kept: Arc<Mutex<Vec<(PathBuf, bool)>>> = Arc::default();
@@ -324,6 +336,9 @@ fn scan_subtree(root: &Path, rel: &str) -> Vec<Listing> {
     walker(&start).build_parallel().run(|| {
         let mut buffer = Buffer { items: Vec::new(), out: Arc::clone(&kept) };
         Box::new(move |result| {
+            if cancel.load(Ordering::Relaxed) {
+                return WalkState::Quit;
+            }
             if let Ok(entry) = result {
                 let is_dir = entry.file_type().is_some_and(|t| t.is_dir());
                 buffer.items.push((entry.into_path(), is_dir));
@@ -332,6 +347,9 @@ fn scan_subtree(root: &Path, rel: &str) -> Vec<Listing> {
         })
     });
 
+    if cancel.load(Ordering::Relaxed) {
+        return None;
+    }
     let kept = std::mem::take(&mut *kept.lock().unwrap_or_else(PoisonError::into_inner));
     let mut kept_names: HashMap<PathBuf, HashSet<String>> = HashMap::new();
     let mut dirs = Vec::new();
@@ -348,7 +366,9 @@ fn scan_subtree(root: &Path, rel: &str) -> Vec<Listing> {
     }
 
     let empty = HashSet::new();
-    dirs.iter()
+    let listings = dirs
+        .iter()
+        .take_while(|_| !cancel.load(Ordering::Relaxed))
         .filter_map(|dir| {
             let rel_dir = dir.strip_prefix(root).ok()?;
             let rel_dir: Vec<_> = rel_dir.components().map(|c| c.as_os_str().to_string_lossy()).collect();
@@ -356,7 +376,8 @@ fn scan_subtree(root: &Path, rel: &str) -> Vec<Listing> {
             let names = kept_names.get(dir).unwrap_or(&empty);
             read_children(dir, &rel_dir, names).ok().map(|entries| (rel_dir, entries))
         })
-        .collect()
+        .collect();
+    (!cancel.load(Ordering::Relaxed)).then_some(listings)
 }
 
 #[cfg(test)]

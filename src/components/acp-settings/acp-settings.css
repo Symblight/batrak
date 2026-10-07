@@ -1,0 +1,214 @@
+:host {
+  display: flex;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  width: 100%;
+  justify-content: center;
+}
+
+/* A side-panel-width column at the tab's start, as in the design. */
+.acp-settings__panel {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  width: min(100%, 360px);
+  min-height: 0;
+  border-inline: 1px solid var(--md-outline-variant);
+  background: var(--md-surface-container-low);
+}
+.acp-settings__body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 4px var(--space-4) var(--space-4);
+}
+.acp-settings__footer {
+  flex: none;
+  display: flex;
+  align-items: center;
+  height: 44px;
+  padding-inline: var(--space-4);
+  border-top: 1px solid var(--md-outline-variant);
+}
+
+.acp-settings__group {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-block: var(--space-2);
+}
+.acp-settings__group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 32px;
+}
+.acp-settings__group-title {
+  margin: 0;
+  font: 500 11px/16px var(--font-family);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--md-primary);
+}
+.acp-settings__reset {
+  --md-button-block-start-space: 4px;
+  --md-button-block-end-space: 4px;
+  --md-button-inline-start-space: var(--space-3);
+  --md-button-inline-end-space: var(--space-3);
+  --md-button-font-size: 13px;
+  margin-inline-end: calc(-1 * var(--space-2));
+}
+.acp-settings__divider {
+  height: 1px;
+  margin: var(--space-2) 0;
+  border: none;
+  background: var(--md-outline-variant);
+}
+
+.acp-settings__field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.acp-settings__label {
+  font: 500 13px/20px var(--font-family);
+  color: var(--md-on-surface);
+}
+.acp-settings__hint {
+  font: 400 12px/16px var(--font-family);
+  color: var(--md-on-surface-variant);
+}
+
+/* Dense MD3 segmented button: 32px instead of 40px for the narrow column. */
+.acp-settings__segments {
+  --md-segmented-button-group-height: 32px;
+  --md-segmented-button-label-text-size: 13px;
+  --md-segmented-button-icon-size: 18px;
+}
+.acp-settings__segment-icon {
+  font-size: 18px;
+}
+
+/* Dense MD3 outlined field, shared by every field here: 40px (8 + 24 + 8). Text starts 16px in, where
+   the library puts the floating label; every field has a trailing control (button, stepper, arrow), so
+   the end space is the trailing slot's alone. md-select's own md-text-field (part `text-field`) sets
+   these on its :host, which beats inheriting them, so they go on that part too. */
+.acp-settings__input,
+.acp-settings__input::part(text-field) {
+  --md-text-field-top-space: 8px;
+  --md-text-field-bottom-space: 8px;
+  --md-text-field-inline-start-space: var(--space-4);
+  --md-text-field-inline-end-space: 0;
+  --md-text-field-leading-space: var(--space-3);
+  --md-text-field-trailing-space: 4px;
+  --md-text-field-font-size: 14px;
+  --md-text-field-label-size: 14px;
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--md-on-surface);
+  --md-text-field-border-color: var(--md-outline);
+  --md-text-field-primary-color: var(--md-primary);
+  --md-outlined-text-field-shape: 4px;
+
+  caret-color: var(--md-primary);
+}
+/* The Font field shows its value in that font. */
+.acp-settings__input_font::part(text-field) {
+  --md-text-field-font-family: var(--_acp-settings-font, var(--font-family));
+}
+/* Read by the inline style firstUpdated() puts on md-select's own md-menu. */
+.acp-settings__input_font {
+  --_acp-settings-menu-max-height: 320px;
+}
+/* Compact menu rows: 32px instead of 48px, regular-weight 13px labels. */
+.acp-settings__option {
+  --md-menu-item-min-block-size: 32px;
+  --md-menu-item-padding-block: 6px;
+  --md-menu-item-padding-inline: var(--space-3);
+  --md-menu-item-label-text-size: 13px;
+  --md-menu-item-label-text-line-height: 20px;
+  --md-menu-item-label-text-weight: 400;
+}
+/* The library's focused outline is 3px; MD3 asks for 2px. */
+.acp-settings__input:focus-within::part(indicator) {
+  border-width: 2px;
+}
+
+.acp-settings__swatch {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--md-on-surface) 20%, transparent);
+  cursor: pointer;
+  appearance: none;
+
+  &::-webkit-color-swatch-wrapper {
+    padding: 0;
+  }
+  &::-webkit-color-swatch {
+    border: none;
+    border-radius: 50%;
+  }
+  &:focus-visible {
+    outline: 2px solid var(--md-secondary);
+    outline-offset: 2px;
+  }
+}
+.acp-settings__stepper {
+  display: flex;
+  gap: 2px;
+}
+/* 28px icon button: 18px icon + 4px padding + the library's 1px transparent border. */
+.acp-settings__icon-button {
+  --md-icon-button-font-size: 18px;
+}
+.acp-settings__icon-button::part(button) {
+  padding: 4px;
+}
+.acp-settings__icon {
+  font-size: 18px;
+}
+
+/* Two lines of code in the chosen editor font; size and line height set inline. */
+.acp-settings__preview {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  overflow: hidden;
+  border: 1px solid var(--md-outline-variant);
+  border-radius: 8px;
+  background: var(--md-surface-container-lowest);
+  color: var(--md-on-surface);
+  font-family: var(--_acp-settings-preview-font, var(--font-family-mono));
+  white-space: nowrap;
+}
+.acp-settings__line-number {
+  color: var(--md-on-surface-variant);
+  text-align: right;
+}
+.acp-settings__keyword {
+  color: var(--md-tertiary);
+}
+.acp-settings__string {
+  color: var(--md-primary);
+}
+
+/* Disabled until settings.json exists: MD3 disabled content is on-surface at 38%. */
+.acp-settings__link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font: 500 13px/20px var(--font-family);
+  color: color-mix(in srgb, var(--md-on-surface) 38%, transparent);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  cursor: default;
+}

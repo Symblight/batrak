@@ -1,19 +1,23 @@
 import { generateTheme } from '@symblight/md-colors/client';
-
-/** Seed colour the whole MD3 palette is derived from. */
-const SOURCE_COLOR = '#4355b9';
+import { $accent, $appearance } from '../stores/settings.js';
 
 const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
 
-/** Generates the palette for the current OS scheme. */
+/** Generates the MD3 palette from the accent for the chosen scheme. */
 function apply() {
-  const scheme = darkQuery.matches ? 'dark' : 'light';
-  generateTheme({ sourceColor: SOURCE_COLOR, scheme });
-  document.documentElement.dataset.theme = scheme;
+  const appearance = $appearance.get();
+  const scheme = appearance === 'system' ? (darkQuery.matches ? 'dark' : 'light') : appearance;
+  generateTheme({ sourceColor: $accent.get(), scheme });
+  const root = document.documentElement;
+  root.dataset.theme = scheme;
+  // Native controls and scrollbars follow the chosen scheme, not the OS one.
+  root.style.colorScheme = scheme;
 }
 
-/** Applies the MD3 palette for the current OS scheme and follows OS changes. */
-export function syncThemeWithOS() {
-  apply();
+/** Applies the palette from `$settings` and regenerates it when they or the OS scheme change. */
+export function syncTheme() {
+  $appearance.listen(apply);
+  $accent.listen(apply);
   darkQuery.addEventListener('change', apply);
+  apply();
 }
