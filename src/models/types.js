@@ -156,6 +156,14 @@
  */
 
 /**
+ * Reply of `git_status`; mirrors `git::cache::StatusReply`.
+ * @typedef {Object} GitStatusReply
+ * @property {number} version Changes whenever the status does; passed back as `since`.
+ * @property {boolean} unchanged The `since` version is still current: `status` is left out.
+ * @property {GitStatus | null} status `null` outside a repository, or when `unchanged`.
+ */
+
+/**
  * Branch of the active root (`$gitRepo`), kept current while a project is open.
  * @typedef {Object} GitRepoView
  * @property {GitRepoState | null} repo `null` outside a repository or until first read.
@@ -163,11 +171,12 @@
  */
 
 /**
- * Changed files of the active root (`$gitChanges`), computed only while the Changes panel is open.
+ * Changed files of the active root (`$gitChanges`). Kept when the Changes views close; checked
+ * (cheaply, unless something changed) whenever one is shown again.
  * @typedef {Object} GitChangesView
- * @property {GitFileStatus[]} files
- * @property {boolean} loaded A status has arrived since the panel opened.
- * @property {boolean} loading
+ * @property {GitFileStatus[]} files A new array only when the status changed.
+ * @property {boolean} loaded A status of this root has arrived.
+ * @property {boolean} loading A check is in flight.
  * @property {string | null} error
  */
 

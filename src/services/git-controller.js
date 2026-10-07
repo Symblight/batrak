@@ -55,8 +55,10 @@ class SerialTask {
 /**
  * Git state of the active root. The branch (`$gitRepo`) is cheap and kept current while a project
  * is open: on root change, repository changes and window focus (a root inside a larger repository
- * or a worktree has its `.git` outside the watched folder). Changed files (`$gitChanges`) need a
- * working-tree scan, so they are computed only while someone watches them — the Changes panel.
+ * or a worktree has its `.git` outside the watched folder). Changed files (`$gitChanges`) are kept
+ * current only while someone watches them (the Changes pane or tab); when the last one stops they
+ * stay in memory, and showing a view again only asks the backend whether its version is still
+ * current, which costs no scan when nothing changed.
  */
 export class GitController {
   /** @type {(() => void) | null} */
@@ -65,6 +67,10 @@ export class GitController {
   #watchers = 0;
   /** Bumped when watching stops, so a scan still running then doesn't write its result. */
   #changesGeneration = 0;
+  /** @type {number | null} Backend version of the files in `$gitChanges`; `null` when it has none of this root. */
+  #version = null;
+  /** The next read scans even if the backend sees no change (the Refresh button). */
+  #force = false;
   #head = new SerialTask(() => this.#readHead());
   #changes = new SerialTask(() => this.#readChanges());
 
@@ -85,11 +91,10 @@ export class GitController {
       // Never show the previous root's branch or files while the new one loads.
       $gitRepo.set(NO_REPO);
       setCommitSelection([]);
+      this.#version = null;
+      $gitChanges.set(this.#watchers ? { ...NO_CHANGES, loading: true } : NO_CHANGES);
       this.#head.schedule(0);
-      if (this.#watchers) {
-        $gitChanges.set({ ...NO_CHANGES, loading: true });
-        this.#changes.schedule(0);
-      }
+      if (this.#watchers) this.#changes.schedule(0);
     });
     projectController.addEventListener('fs-change', this.#onFsChange);
     window.addEventListener('focus', this.#onFocus);
@@ -105,14 +110,12 @@ export class GitController {
   }
 
   /**
-   * Computes the changed files now and keeps them current until the returned function is called.
-   * @returns {() => void} Stops watching; calling it again does nothing.
+   * Brings the changed files up to date now (the last ones stay shown meanwhile) and keeps them
+   * current until the returned function is called.
+   * @returns {() => void} Stops watching; the files stay in `$gitChanges`. Calling it again does nothing.
    */
   watchChanges() {
-    if (this.#watchers++ === 0) {
-      $gitChanges.set({ ...NO_CHANGES, loading: true });
-      this.#changes.schedule(0);
-    }
+    if (this.#watchers++ === 0) this.#changes.schedule(0);
     let watching = true;
     return () => {
       if (!watching) return;
@@ -120,13 +123,16 @@ export class GitController {
       if (--this.#watchers > 0) return;
       this.#changes.cancel();
       this.#changesGeneration++;
-      $gitChanges.set(NO_CHANGES);
+      const changes = $gitChanges.get();
+      if (changes.loading) $gitChanges.set({ ...changes, loading: false });
     };
   }
 
-  /** Re-reads the changed files now, if anything is watching them. */
+  /** Scans the changed files again now, even if nothing seems changed, if anything is watching them. */
   refreshChanges() {
-    if (this.#watchers) this.#changes.schedule(0);
+    if (!this.#watchers) return;
+    this.#force = true;
+    this.#changes.schedule(0);
   }
 
   async #readHead() {
@@ -152,15 +158,27 @@ export class GitController {
       $gitChanges.set({ ...NO_CHANGES, loaded: true });
       return;
     }
+    const force = this.#force;
+    this.#force = false;
     $gitChanges.set({ ...$gitChanges.get(), loading: true });
     try {
-      const status = await gitStatus(rootId);
+      const reply = await gitStatus(rootId, this.#version, force);
       if (!current()) return;
-      $gitChanges.set({ files: status?.files ?? [], loaded: true, loading: false, error: null });
-      // The scan read the branch too: no need for a separate head read.
-      $gitRepo.set({ repo: status?.repo ?? null, error: null });
+      const changes = $gitChanges.get();
+      if (reply.unchanged && changes.loaded && !changes.error) {
+        // Same files: keep the array, so views don't rebuild or re-read their diffs.
+        $gitChanges.set({ ...changes, loading: false });
+        return;
+      }
+      this.#version = reply.version;
+      // The scan read the branch too: no need for a separate head read. Before the files, so views
+      // hear of a HEAD move before they settle on the new status.
+      $gitRepo.set({ repo: reply.status?.repo ?? null, error: null });
+      $gitChanges.set({ files: reply.status?.files ?? [], loaded: true, loading: false, error: null });
     } catch (err) {
-      if (current()) $gitChanges.set({ files: [], loaded: true, loading: false, error: String(err) });
+      if (!current()) return;
+      this.#version = null;
+      $gitChanges.set({ files: [], loaded: true, loading: false, error: String(err) });
     }
   }
 }

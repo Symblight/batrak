@@ -23,11 +23,13 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { gitController } from '../../services/git-controller.js';
 import { gitFileAtHead, readFile } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
-import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
+import { $commitSelection, $gitChanges, $gitHead, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
 import styles from './acp-changes-review.css?inline';
 
 /** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /**
  * A changed file as a row.
@@ -90,6 +92,24 @@ function relativePath(from, to) {
   return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
 }
 
+/**
+ * Whether two status entries of one file describe the same change.
+ * @param {GitFileStatus | undefined} a
+ * @param {GitFileStatus | undefined} b
+ */
+function sameStatus(a, b) {
+  return (
+    a !== undefined &&
+    b !== undefined &&
+    a.kind === b.kind &&
+    a.staged === b.staged &&
+    a.unstaged === b.unstaged &&
+    a.origPath === b.origPath &&
+    a.added === b.added &&
+    a.removed === b.removed
+  );
+}
+
 /** @param {GitFileStatus[]} files */
 function toRows(files) {
   return files
@@ -103,7 +123,7 @@ function toRows(files) {
 
 /**
  * @tag acp-changes-review
- * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD; computed only while active.
+ * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD; kept current while active.
  * @fires acp-file-open `{ path }` Edit was pressed on a file.
  */
 export class AcpChangesReview extends LitElement {
@@ -116,7 +136,26 @@ export class AcpChangesReview extends LitElement {
 
   static styles = styles;
 
-  #changes = new StoreController(this, { store: $gitChanges, onChange: () => this.#onChanges() });
+  #changes = new StoreController(this, { store: $gitChanges, onChange: (changes, old) => this.#onChanges(changes, old) });
+  /**
+   * HEAD moved: every diff's baseline is stale; read again with the status refresh that follows.
+   * Not when HEAD first becomes known.
+   */
+  #gitHead = new StoreController(this, {
+    store: $gitHead,
+    onChange: (_head, old) => {
+      if (old == null) return;
+      for (const id of this.expanded) this.#staleDiffs.add(id);
+    },
+  });
+  /** @type {Set<string>} Expanded files whose diff must be read again, once the status is current. */
+  #staleDiffs = new Set();
+  #onFsChange = (/** @type {Event} */ e) => {
+    const { added, modified, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+    for (const id of [...added, ...modified, ...removed]) {
+      if (this.expanded.has(id)) this.#staleDiffs.add(id);
+    }
+  };
   #repo = new StoreController(this, { store: $gitRepo });
   #selection = new StoreController(this, { store: $commitSelection });
   /** @type {(() => void) | null} Stops watching; set while active and connected. */
@@ -143,10 +182,12 @@ export class AcpChangesReview extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
+    projectController.addEventListener('fs-change', this.#onFsChange);
     if (this.active) this.#watch();
   }
 
   disconnectedCallback() {
+    projectController.removeEventListener('fs-change', this.#onFsChange);
     this.#stopWatching();
     super.disconnectedCallback();
   }
@@ -186,16 +227,36 @@ export class AcpChangesReview extends LitElement {
     this.#unwatch = null;
   }
 
-  /** New status: rows follow it, and the open diffs are read again since their files may have changed. */
-  #onChanges() {
-    const { files, loaded } = this.#changes.value;
-    this.#rows = toRows(files);
-    if (!loaded) return;
-    const ids = new Set(this.#rows.map((row) => row.id));
-    if (this.#pendingScroll !== null && !ids.has(this.#pendingScroll)) this.#pendingScroll = null;
-    const expanded = [...this.expanded].filter((id) => ids.has(id));
-    if (expanded.length !== this.expanded.size) this.expanded = new Set(expanded);
-    for (const id of expanded) this.#loadDiff(id);
+  /**
+   * New status: rows follow it, and a diff is read again only when its file changed (on disk, in
+   * the status, or HEAD moved). A check that found nothing new keeps the same `files` array.
+   * @param {GitChangesView} changes
+   * @param {GitChangesView | undefined} old
+   */
+  #onChanges({ files, loaded, loading }, old) {
+    if (files !== old?.files) {
+      const previous = new Map(this.#rows.map((row) => [row.id, row.file]));
+      this.#rows = toRows(files);
+      if (loaded) {
+        const ids = new Set(this.#rows.map((row) => row.id));
+        if (this.#pendingScroll !== null && !ids.has(this.#pendingScroll)) this.#pendingScroll = null;
+        const expanded = [...this.expanded].filter((id) => ids.has(id));
+        if (expanded.length !== this.expanded.size) this.expanded = new Set(expanded);
+        for (const row of this.#rows) {
+          if (this.expanded.has(row.id) && !sameStatus(previous.get(row.id), row.file)) this.#staleDiffs.add(row.id);
+        }
+      }
+    }
+    if (loaded && !loading) this.#flushStaleDiffs();
+  }
+
+  /** Reads the stale diffs again, and those of expanded files never read. */
+  #flushStaleDiffs() {
+    for (const row of this.#rows) {
+      if (!this.expanded.has(row.id)) continue;
+      if (this.#staleDiffs.has(row.id) || !this.diffs.has(row.id)) this.#loadDiff(row.id);
+    }
+    this.#staleDiffs.clear();
   }
 
   /** @param {string} id */
@@ -222,6 +283,7 @@ export class AcpChangesReview extends LitElement {
    * @param {string} id
    */
   async #loadDiff(id) {
+    this.#staleDiffs.delete(id);
     const load = ++this.#loadCount;
     this.#loads.set(id, load);
     const previous = this.diffs.get(id);

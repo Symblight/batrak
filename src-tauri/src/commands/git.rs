@@ -2,6 +2,7 @@
 
 use tauri::State;
 
+use crate::git::cache::StatusReply;
 use crate::git::{binary, blob, repo};
 use crate::workspace::{checked_rel, Workspaces};
 
@@ -12,15 +13,21 @@ use super::blocking;
 #[tauri::command]
 pub async fn git_head(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Option<repo::RepoState>, String> {
     let root = workspaces.get(&root_id)?;
-    blocking(move || repo::head(binary::git()?, &root.path)).await?
+    blocking(move || root.git.head(binary::git()?, &root.path, root.epoch())).await?
 }
 
-/// Branch and changed files of the root's repository (scans the working tree, so only on demand);
-/// `null` when the root isn't in one. Fails with "git not found" when git isn't installed.
+/// Branch and changed files of the root's repository. Scans the working tree only when something
+/// changed since the last scan (or with `force`); `unchanged` when the caller's `since` version is
+/// still current. Fails with "git not found" when git isn't installed.
 #[tauri::command]
-pub async fn git_status(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Option<repo::Status>, String> {
+pub async fn git_status(
+    workspaces: State<'_, Workspaces>,
+    root_id: String,
+    since: Option<u64>,
+    force: bool,
+) -> Result<StatusReply, String> {
     let root = workspaces.get(&root_id)?;
-    blocking(move || repo::status(binary::git()?, &root.path)).await?
+    blocking(move || root.git.status(binary::git()?, &root.path, root.epoch(), since, force)).await?
 }
 
 /// Text of a file at HEAD, the editor's diff baseline; `null` when it has none (not committed,

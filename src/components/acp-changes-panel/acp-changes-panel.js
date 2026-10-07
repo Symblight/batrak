@@ -97,7 +97,7 @@ function buildGroups(files) {
 
 /**
  * @tag acp-changes-panel
- * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit; computed only while active.
+ * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit; kept current while active.
  * @fires acp-diff-open `{ path }` A changed file's name was clicked: show its diff in the Changes tab.
  * @fires acp-commit `{ paths, message, amend }` Commit was pressed; `paths` are root-relative.
  */
@@ -110,7 +110,12 @@ export class AcpChangesPanel extends LitElement {
 
   static styles = styles;
 
-  #changes = new StoreController(this, { store: $gitChanges, onChange: () => this.#rebuild() });
+  #changes = new StoreController(this, {
+    store: $gitChanges,
+    onChange: (changes, old) => {
+      if (changes.files !== old?.files || changes.loaded !== old?.loaded) this.#rebuild();
+    },
+  });
   #repo = new StoreController(this, { store: $gitRepo });
   /** Picked in this panel or the Changes tab: the tree follows either. */
   #selection = new StoreController(this, {

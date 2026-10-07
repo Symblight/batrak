@@ -19,6 +19,7 @@ use notify_debouncer_full::{Debouncer, NoCache};
 use serde::Serialize;
 use tauri::{AppHandle, Emitter};
 
+use crate::git::cache::GitCache;
 use snapshot::{Changes, Snapshot};
 
 /// Tauri event carrying [`ChangedPayload`] after the watcher patched a snapshot.
@@ -66,6 +67,11 @@ pub struct Root {
     search_cancel: Mutex<Arc<AtomicBool>>,
     /// Set by `Workspaces::close`; stops a watcher rescan still running for a closed root.
     pub closed: AtomicBool,
+    /// Bumped by the watcher after every batch that changed something (or lost events): a cached
+    /// result computed at an older epoch may be out of date.
+    change_epoch: AtomicU64,
+    /// Branch and status, validated against `change_epoch` before reuse.
+    pub git: GitCache,
 }
 
 impl Root {
@@ -75,6 +81,15 @@ impl Root {
 
     pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, Snapshot> {
         self.snapshot.write().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Read before computing anything cached against it, so a change meanwhile invalidates the result.
+    pub fn epoch(&self) -> u64 {
+        self.change_epoch.load(Ordering::SeqCst)
+    }
+
+    fn bump_epoch(&self) {
+        self.change_epoch.fetch_add(1, Ordering::SeqCst);
     }
 
     pub fn note_opened(&self, rel: String) {
@@ -172,6 +187,8 @@ impl Workspaces {
             quick_open_generation: AtomicU64::new(0),
             search_cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
             closed: AtomicBool::new(false),
+            change_epoch: AtomicU64::new(0),
+            git: GitCache::default(),
         });
         // Started after the scan: a change in between is picked up by the next event in that folder.
         let watcher = watcher::start(&root, on_change)?;

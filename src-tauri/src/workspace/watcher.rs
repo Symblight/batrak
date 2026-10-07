@@ -62,6 +62,8 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
                 let Some(rel) = snapshot.rel(path) else { continue };
                 if let Some(inner) = rel.strip_prefix(".git/").or((rel == ".git").then_some("")) {
                     changes.git |= is_repo_state(inner);
+                    // Ignore rules for the whole tree, like a `.gitignore` at the root.
+                    full_rescan |= inner == "info/exclude";
                     continue;
                 }
                 if path.file_name().is_some_and(|n| IGNORE_FILES.iter().any(|f| n == *f)) {
@@ -89,14 +91,24 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
     } else if !dirs.is_empty() {
         root.write().reconcile(dirs, &mut changes);
     }
+    // After the disk changed, before anyone hears of it: a result cached at an older epoch may
+    // predate this batch. Changes inside ignored folders (a build's output) leave it alone, as git
+    // ignores them too. Lost events (`full_rescan`) may have hidden anything.
+    if full_rescan || !changes.is_empty() {
+        root.bump_epoch();
+    }
     changes
 }
 
 /// Whether a path inside `.git` (`""` for the directory itself, which FSEvents sometimes
-/// reports alone) holds state that branch or status depend on. Lock files, objects and logs
-/// don't: a write lands as a rename onto the real name, which matches here.
+/// reports alone) holds state that branch or status depend on (`info/exclude`: which files are
+/// untracked). Lock files, objects and logs don't: a write lands as a rename onto the real name,
+/// which matches here.
 fn is_repo_state(inner: &str) -> bool {
-    matches!(inner, "" | "HEAD" | "index" | "packed-refs" | "MERGE_HEAD" | "REBASE_HEAD" | "CHERRY_PICK_HEAD")
+    matches!(
+        inner,
+        "" | "HEAD" | "index" | "packed-refs" | "MERGE_HEAD" | "REBASE_HEAD" | "CHERRY_PICK_HEAD" | "info/exclude"
+    )
         || (inner.starts_with("refs/") && !inner.ends_with(".lock"))
 }
 
@@ -109,7 +121,7 @@ mod tests {
 
     #[test]
     fn repo_state_paths() {
-        for yes in ["", "HEAD", "index", "packed-refs", "refs/heads/main", "refs/remotes/origin/main", "MERGE_HEAD"] {
+        for yes in ["", "HEAD", "index", "packed-refs", "refs/heads/main", "refs/remotes/origin/main", "MERGE_HEAD", "info/exclude"] {
             assert!(is_repo_state(yes), "{yes}");
         }
         for no in ["index.lock", "refs/heads/main.lock", "objects/ab/cdef", "logs/HEAD", "COMMIT_EDITMSG", "FETCH_HEAD"] {

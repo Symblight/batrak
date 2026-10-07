@@ -95,10 +95,19 @@ helpers apply.
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
   scans the working tree) is computed **only on demand**: `gitController.watchChanges()` starts it and
   keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-changes-panel>`
-  watches while it is the active side pane, `<acp-changes-review>` while its tab is active. The files picked
+  watches while it is the active side pane, `<acp-changes-review>` while its tab is active. Stopping
+  keeps the files in the store; the spinner shows only for a root's first status. The files picked
   for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor
   reloads its diff baselines on it.
+- **Cached git state** (`git/cache.rs`, one `GitCache` per `Root`): `git_head` / `git_status` reuse the
+  last answer while the root's change epoch (bumped by the watcher after every batch that changed
+  something) and a fingerprint of the repository files (mtime/size of `HEAD`, `index`, the HEAD ref,
+  the upstream ref, `packed-refs`, `config`, `FETCH_HEAD`, `info/exclude` — covers a git dir outside the
+  root) are
+  unchanged. `git_status` takes the caller's `since` version and replies `unchanged` without the
+  files; the frontend then keeps the same `files` array, so views neither rebuild nor re-read diffs.
+  Refresh passes `force`. Changes inside ignored folders don't bump the epoch.
 
 ### Column resizing
 

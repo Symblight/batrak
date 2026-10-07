@@ -1,7 +1,7 @@
 //! Branch and working-tree status of the repository a root belongs to.
 
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -57,12 +57,45 @@ pub struct Status {
     pub files: Vec<FileStatus>,
 }
 
+/// Where a root sits in its repository; fixed for the root's lifetime, so resolved once.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RepoInfo {
+    /// Path of the root inside its repository: `""` at the top, else ending in `/`.
+    pub prefix: String,
+    /// Holds `HEAD` and `index` (`.git/worktrees/<name>` for a linked worktree).
+    pub git_dir: PathBuf,
+    /// Holds refs and config, shared by a repository's worktrees.
+    pub common_dir: PathBuf,
+}
+
+/// The repository `root` belongs to; `None` outside one.
+pub fn info(git: &Path, root: &Path) -> Result<Option<RepoInfo>, String> {
+    let args = exec::args(&[&"rev-parse", &"--show-prefix", &"--absolute-git-dir", &"--git-common-dir"]);
+    let out = exec::run_with(git, root, &args, Mode::Background, &Default::default())?;
+    if !out.success() {
+        return if out.stderr.contains("not a git repository") { Ok(None) } else { Err(exec::failure_message(&out)) };
+    }
+    let text = out.stdout_str()?;
+    let mut lines = text.split('\n');
+    let (Some(prefix), Some(git_dir), Some(common_dir)) = (lines.next(), lines.next(), lines.next()) else {
+        return Err(format!("unexpected git rev-parse output: {text:?}"));
+    };
+    // `--git-common-dir` may be relative to `root`; joining keeps an absolute one as it is.
+    Ok(Some(RepoInfo { prefix: prefix.to_owned(), git_dir: git_dir.into(), common_dir: root.join(common_dir) }))
+}
+
 /// Branch, HEAD and upstream of the repository `root` belongs to, without scanning the working
 /// tree (cheap enough to refresh on every HEAD change); `None` outside a repository.
+#[cfg(test)]
 pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
-    if prefix(git, root)?.is_none() {
+    if info(git, root)?.is_none() {
         return Ok(None);
     }
+    head_in(git, root).map(Some)
+}
+
+/// [`head`] for a `root` known to be in a repository.
+pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
     // Each of these exits non-zero for a legitimate "none": detached HEAD, no commits, no upstream.
     let optional = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Option<String>, String> {
         let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
@@ -80,7 +113,7 @@ pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
             (state.ahead, state.behind) = parse_track(track);
         }
     }
-    Ok(Some(state))
+    Ok(state)
 }
 
 /// Full message of the last commit, for amending it; `None` before the first commit.
@@ -103,42 +136,46 @@ fn parse_track(track: &str) -> (u32, u32) {
 }
 
 /// Status of the files under `root`; `None` when `root` is not inside a git repository.
+#[cfg(test)]
 pub fn status(git: &Path, root: &Path) -> Result<Option<Status>, String> {
-    let Some(prefix) = prefix(git, root)? else { return Ok(None) };
-    let out = exec::run(
-        git,
-        root,
-        &exec::args(&[
-            &"status",
-            &"--porcelain=v2",
-            &"-z",
-            &"--branch",
-            // Every untracked file rather than one entry per new folder: the lists show files only.
-            // Ignored files still stay out.
-            &"--untracked-files=all",
-            &"--",
-            &".",
-        ]),
-        Mode::Background,
-    )?;
-    let text = std::str::from_utf8(&out).map_err(|_| "git status printed non-UTF-8 paths".to_owned())?;
-    let mut status = parse(text, &prefix);
-    add_line_counts(git, root, &mut status)?;
-    Ok(Some(status))
+    let Some(info) = info(git, root)? else { return Ok(None) };
+    status_in(git, root, &info.prefix).map(Some)
 }
 
-/// Path of `root` inside its repository (`""` at the top, else ending in `/`);
-/// `None` outside a repository.
-fn prefix(git: &Path, root: &Path) -> Result<Option<String>, String> {
-    let out = exec::run_with(git, root, &exec::args(&[&"rev-parse", &"--show-prefix"]), Mode::Background, &Default::default())?;
-    if out.success() {
-        return Ok(Some(out.stdout_str()?.trim_end_matches('\n').to_owned()));
-    }
-    if out.stderr.contains("not a git repository") {
-        Ok(None)
-    } else {
-        Err(exec::failure_message(&out))
-    }
+/// [`status`] for a `root` known to be in a repository at `prefix` (see [`RepoInfo::prefix`]).
+pub fn status_in(git: &Path, root: &Path, prefix: &str) -> Result<Status, String> {
+    // The line counts don't depend on the status: read them alongside it. Before the first commit
+    // `diff HEAD` fails, and its result is not used.
+    let (out, numstat) = std::thread::scope(|scope| {
+        let numstat = scope.spawn(|| {
+            // `--relative`: paths relative to `root` and only those under it, like the status entries.
+            let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"--no-renames"]);
+            exec::run(git, root, &args, Mode::Background)
+        });
+        let out = exec::run(
+            git,
+            root,
+            &exec::args(&[
+                &"status",
+                &"--porcelain=v2",
+                &"-z",
+                &"--branch",
+                // Every untracked file rather than one entry per new folder: the lists show files only.
+                // Ignored files still stay out.
+                &"--untracked-files=all",
+                &"--",
+                &".",
+            ]),
+            Mode::Background,
+        );
+        (out, numstat.join().unwrap_or_else(|_| Err("git diff panicked".to_owned())))
+    });
+    let out = out?;
+    let text = std::str::from_utf8(&out).map_err(|_| "git status printed non-UTF-8 paths".to_owned())?;
+    let mut status = parse(text, prefix);
+    let counts = if status.repo.sha.is_some() { parse_numstat(&String::from_utf8_lossy(&numstat?)) } else { HashMap::new() };
+    add_line_counts(root, &mut status, &counts);
+    Ok(status)
 }
 
 fn parse(text: &str, prefix: &str) -> Status {
@@ -190,20 +227,9 @@ fn parse(text: &str, prefix: &str) -> Status {
 /// Untracked files larger than this get no line count.
 const MAX_COUNTED_FILE: u64 = 1024 * 1024;
 
-/// Fills `added`/`removed`: tracked files from `git diff --numstat` against HEAD (index and working
+/// Fills `added`/`removed`: tracked files from `counts` (`git diff HEAD --numstat`, index and working
 /// tree together), untracked files by counting their lines.
-fn add_line_counts(git: &Path, root: &Path, status: &mut Status) -> Result<(), String> {
-    let mut counts: HashMap<String, (Option<u32>, Option<u32>)> = HashMap::new();
-    if status.repo.sha.is_some() {
-        // `--relative`: paths relative to `root` and only those under it, like the status entries.
-        let out = exec::run(
-            git,
-            root,
-            &exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"--no-renames"]),
-            Mode::Background,
-        )?;
-        counts = parse_numstat(&String::from_utf8_lossy(&out));
-    }
+fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (Option<u32>, Option<u32>)>) {
     for file in &mut status.files {
         let counted = match file.kind {
             FileKind::Untracked => count_lines(&root.join(&file.path)).map(|n| (Some(n), Some(0))),
@@ -217,7 +243,6 @@ fn add_line_counts(git: &Path, root: &Path, status: &mut Status) -> Result<(), S
             (file.added, file.removed) = (added, removed);
         }
     }
-    Ok(())
 }
 
 /// `added\tremoved\tpath\0` records; a binary file has `-` for both counts.

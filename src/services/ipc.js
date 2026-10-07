@@ -10,7 +10,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').QuickOpenResult} QuickOpenResult */
 /** @typedef {import('../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
-/** @typedef {import('../models/types.js').GitStatus} GitStatus */
+/** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
 
@@ -136,12 +136,15 @@ export function gitHead(rootId) {
 }
 
 /**
- * Branch and changed files of the root's repository; scans the working tree.
+ * Branch and changed files of the root's repository; the working tree is scanned again only when
+ * something changed since the backend's last scan.
  * @param {string} rootId
- * @returns {Promise<GitStatus | null>} `null` when the root isn't in a repository.
+ * @param {number | null} since Version of the status the caller has; an unchanged one isn't sent again.
+ * @param {boolean} [force] Scan even when nothing seems changed (the Refresh button).
+ * @returns {Promise<GitStatusReply>}
  */
-export function gitStatus(rootId) {
-  return invoke('git_status', { rootId });
+export function gitStatus(rootId, since, force = false) {
+  return invoke('git_status', { rootId, since, force });
 }
 
 /**
