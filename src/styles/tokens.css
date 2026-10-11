@@ -12,6 +12,11 @@
   --md-on-secondary-container: var(--md-sys-color-on-secondary-container);
   --md-tertiary: var(--md-sys-color-tertiary);
   --md-error: var(--md-sys-color-error);
+  --md-error-container: var(--md-sys-color-error-container);
+  --md-on-error-container: var(--md-sys-color-on-error-container);
+  --md-inverse-surface: var(--md-sys-color-inverse-surface);
+  --md-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+  --md-inverse-primary: var(--md-sys-color-inverse-primary);
   --md-surface: var(--md-sys-color-surface);
   --md-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
   --md-surface-container-low: var(--md-sys-color-surface-container-low);
@@ -27,6 +32,10 @@
   --md-outline: var(--md-sys-color-outline);
   --md-outline-variant: var(--md-sys-color-outline-variant);
 
+  /* Backgrounds: the window behind the columns, and the columns on it (MD3 panes) */
+  --app-background: var(--md-surface-container);
+  --column-background: var(--md-surface);
+
   /* Agent accent */
   --terminal-accent: #00855f;
 
@@ -35,6 +44,8 @@
   --diff-add-fg: #0a5c2c;
   --diff-del-fg: #93211a;
   --search-hit: color-mix(in srgb, var(--md-primary) 22%, transparent);
+  /* Warning icon on a snackbar (inverse surface: dark in the light theme). MD3 has no warning role. */
+  --notice-warn: #ffb951;
 
   /* Layout */
   --toolbar-height: 40px;
@@ -43,6 +54,10 @@
   --session-column-width: calc((100vw - var(--nav-rail-width)) * 0.2);
   --file-tree-width: calc((100vw - var(--nav-rail-width)) * 0.2);
   --agent-column-width: calc((100vw - var(--nav-rail-width)) * 0.6);
+  --column-gap: var(--space-2);
+
+  /* Shape — wc-material MD3 corner scale */
+  --shape-corner-medium: var(--md-sys-shape-corner-medium);
 
   /* Spacing */
   --space-2: 8px;
@@ -63,6 +78,7 @@
   --diff-add-fg: #a8dab5;
   --diff-del-fg: #f2b8b5;
   --search-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
+  --notice-warn: #8a5300;
 }
 
 [hidden] {
@@ -73,7 +89,7 @@ html,
 body {
   margin: 0;
   height: 100%;
-  background: var(--md-surface);
+  background: var(--app-background);
   color: var(--md-on-surface);
   font-family: var(--font-family);
 }

@@ -3,8 +3,9 @@
   box-sizing: border-box;
   width: var(--nav-rail-width);
   height: 100%;
-  background: var(--md-surface);
-  border-left: 1px solid var(--md-outline-variant);
+  background: var(--column-background);
+  border-radius: var(--shape-corner-medium);
+  overflow: hidden;
 }
 .acp-nav-rail {
   display: flex;

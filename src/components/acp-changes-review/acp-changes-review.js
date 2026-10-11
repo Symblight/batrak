@@ -53,6 +53,9 @@ import styles from './acp-changes-review.css?inline';
 /** Disabled controls of features that don't exist yet say so on hover. */
 const NOT_YET = 'Not available yet';
 
+/** Unchanged stretches of a diff fold into an "N unchanged lines" bar; one object, so the editor never sees a change. */
+const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
+
 /** Monospace badge of a file's type; no language colours, the badge only names the type. */
 const TYPE_BADGES = /** @type {Record<string, string>} */ ({
   js: 'JS',
@@ -480,9 +483,10 @@ export class AcpChangesReview extends LitElement {
       .plugins=${editorPlugins}
       filename=${row.file.path}
       .value=${diff.content}
-      .baseline=${diff.baseline}
+      .reviewBase=${diff.baseline}
     >
-      <cdx-diff slot="diff" kind="baseline" expanded></cdx-diff>
+      <!-- Review, not baseline: only it folds unchanged lines. Its Accept/Reject are hidden in CSS. -->
+      <cdx-diff slot="diff" kind="review" no-review-bar .collapseUnchanged=${COLLAPSE_UNCHANGED}></cdx-diff>
       <cdx-comments slot="comments" mode="single" .author=${commentAuthor}></cdx-comments>
       <cdx-comments-bar slot="comments-bar"></cdx-comments-bar>
     </cdx-code-editor>`;

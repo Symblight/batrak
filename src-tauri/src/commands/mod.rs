@@ -1,5 +1,6 @@
 //! Thin IPC layer: Tauri commands exposed to the frontend.
 
+pub mod about;
 pub mod fonts;
 pub mod fs;
 pub mod git;

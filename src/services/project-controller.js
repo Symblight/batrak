@@ -10,6 +10,7 @@ import {
 import { $openingPath, $rootId, $workspace } from '../stores/workspace.js';
 import { removeProjectTabs } from '../stores/editor.js';
 import { $projects, addProject, removeProject } from '../stores/projects.js';
+import { reportError } from './notices.js';
 
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('../models/types.js').OpenedRoot} OpenedRoot */
@@ -36,7 +37,7 @@ export class ProjectController extends EventTarget {
    */
   #roots = new Map();
   /** Roots this window's previous page load left open are closed before anything opens. */
-  #ready = closeWindowWorkspaces().catch((err) => console.error('Brama: closing stale roots failed', err));
+  #ready = closeWindowWorkspaces().catch((err) => reportError('Closing previous projects failed', err));
   /** @type {{ path: string, done: Promise<void> } | null} The latest `#openFolder()` call, until it settles. */
   #pending = null;
 
@@ -45,7 +46,7 @@ export class ProjectController extends EventTarget {
     onWorkspaceChanged((changes) => {
       if (changes.rootId !== this.rootId) return;
       this.dispatchEvent(new CustomEvent('fs-change', { detail: changes }));
-    }).catch((err) => console.error('Brama: workspace events unavailable', err));
+    }).catch((err) => reportError('File watching unavailable', err));
   }
 
   /** @returns {string | null} Canonical absolute path of the opened folder. */
@@ -225,7 +226,7 @@ export class ProjectController extends EventTarget {
     // the next one is scanned.
     this.#close();
     removeProjectTabs(id);
-    if (next) this.activate(next.path).catch((err) => console.error('Brama: opening project failed', err));
+    if (next) this.activate(next.path).catch((err) => reportError('Opening project failed', err));
   }
 
   /** Makes an `#openFolder()` call still in flight discard its result. */

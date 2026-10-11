@@ -1,4 +1,5 @@
 import { writeLog } from './ipc.js';
+import { notify } from '../stores/notices.js';
 
 /** @typedef {import('../models/types.js').LogLevel} LogLevel */
 
@@ -23,13 +24,19 @@ function describe(error) {
   return String(error);
 }
 
-/** Logs uncaught errors and unhandled promise rejections; the release build has no console to show them. */
+/**
+ * Logs uncaught errors and unhandled promise rejections, and shows them in a snackbar; the release
+ * build has no console to show them.
+ */
 export function logUncaughtErrors() {
   window.addEventListener('error', (e) => {
     const stack = e.error instanceof Error ? describe(e.error) : e.message;
     log('error', `uncaught ${stack} (${e.filename}:${e.lineno}:${e.colno})`);
+    // Errors without an Error object are browser notices, e.g. "ResizeObserver loop completed".
+    if (e.error instanceof Error) notify('error', e.error.message);
   });
   window.addEventListener('unhandledrejection', (e) => {
     log('error', `unhandled rejection ${describe(e.reason)}`);
+    notify('error', e.reason instanceof Error ? e.reason.message : String(e.reason));
   });
 }

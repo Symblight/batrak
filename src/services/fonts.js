@@ -1,5 +1,6 @@
 import { listFonts } from './ipc.js';
 import { $systemFonts } from '../stores/fonts.js';
+import { reportError } from './notices.js';
 
 /** @type {Promise<void> | null} */
 let loading = null;
@@ -10,7 +11,7 @@ export function loadSystemFonts() {
     .then((fonts) => $systemFonts.set(fonts.sort((a, b) => a.family.localeCompare(b.family))))
     .catch((err) => {
       loading = null;
-      console.error('Brama: listing fonts failed', err);
+      reportError('Listing fonts failed', err);
     });
   return loading;
 }

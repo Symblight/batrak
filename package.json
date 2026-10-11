@@ -4,45 +4,39 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
+    "dev": "rsbuild dev",
+    "build": "rsbuild build",
+    "preview": "rsbuild preview",
     "tauri": "tauri",
     "typecheck": "tsc -p jsconfig.json"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
     "@codemirror/view": "6.43.13",
     "@material-design-icons/svg": "^0.14.15",
     "@nanostores/persistent": "^1.3.5",
     "@symblight/chat": "github:Symblight/rich-components#path:/packages/chat",
     "@symblight/code-editor": "github:Symblight/rich-components#path:/packages/code-editor",
-    "@symblight/md-colors": "^0.1.1",
+    "@symblight/md-colors": "^0.2.0",
     "@symblight/tree-view": "github:Symblight/rich-components#path:/packages/tree-view",
-    "@symblight/wc-material": "^0.4.0",
+    "@symblight/wc-material": "^0.4.2",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "lit": "^3.2.0",
     "nanostores": "^1.5.4"
   },
   "devDependencies": {
+    "@rsbuild/core": "^2.2.12",
     "@tauri-apps/cli": "^2.0.0",
-    "rollup-plugin-postcss-lit": "^2.2.0",
-    "typescript": "^7.0.2",
-    "vite": "^5.4.0"
+    "typescript": "^7.0.2"
   },
   "pnpm": {
     "overrides": {
-      "@symblight/wc-material": "^0.4.0"
+      "@symblight/wc-material": "^0.4.2"
     },
     "onlyBuiltDependencies": [
       "@symblight/tree-view",
-      "esbuild",
       "@symblight/code-editor",
       "@symblight/chat"
-    ],
-    "patchedDependencies": {
-      "@atlaskit/pragmatic-drag-and-drop@4.0.0": "patches/@atlaskit__pragmatic-drag-and-drop@4.0.0.patch"
-    }
+    ]
   }
 }

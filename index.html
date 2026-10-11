@@ -3,11 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>Brama</title>
   </head>
   <body>
-    <acp-app></acp-app>
-    <script type="module" src="/src/main.js"></script>
+    <!-- Splash: <acp-app>'s shadow root has no slot, so the logo disappears once the app renders. -->
+    <acp-app>
+      <img
+        src="/favicon.svg"
+        alt=""
+        width="96"
+        height="96"
+        style="position: fixed; inset: 0; margin: auto"
+      />
+    </acp-app>
   </body>
 </html>

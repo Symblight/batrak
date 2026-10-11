@@ -97,6 +97,11 @@ impl Snapshot {
         self.entries.values().filter(|e| !e.is_dir && !e.ignored)
     }
 
+    /// `files()` plus the folders (not ignored, not the root), for `@` mentions.
+    pub fn files_and_dirs(&self) -> impl Iterator<Item = &Entry> {
+        self.entries.values().filter(|e| !e.ignored && !e.path.is_empty())
+    }
+
     pub fn get(&self, rel: &str) -> Option<&Entry> {
         self.entries.get(rel)
     }

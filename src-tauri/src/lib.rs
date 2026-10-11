@@ -2,6 +2,7 @@ mod acp;
 mod commands;
 mod git;
 mod logging;
+mod menu;
 mod session;
 mod storage;
 mod workspace;
@@ -14,10 +15,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(workspace::Workspaces::default())
+        .on_menu_event(menu::on_event)
         .setup(|app| {
+            #[cfg(target_os = "macos")]
+            app.set_menu(menu::build(app.handle())?)?;
             let dir = app.path().app_log_dir()?;
             // The app still works without its log; the dev terminal shows why there is none.
-            match logging::init(&dir) {
+            match logging::init(&dir, Some(app.handle().clone())) {
                 Ok(()) => tracing::info!(
                     version = %app.package_info().version,
                     os = std::env::consts::OS,
@@ -38,6 +42,7 @@ pub fn run() {
             commands::sessions::list_sessions,
             commands::sessions::get_active_session,
             commands::sessions::set_active_session,
+            commands::about::about,
             commands::fonts::list_fonts,
             commands::fs::read_file,
             commands::fs::reveal_path,

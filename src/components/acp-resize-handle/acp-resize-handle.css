@@ -10,6 +10,8 @@
   width: var(--acp-resize-handle-hit-width);
   cursor: col-resize;
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   outline: none;
 }
 .acp-resize-handle__line {

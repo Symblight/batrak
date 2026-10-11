@@ -14,6 +14,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../models/types.js').LogLevel} LogLevel */
+/** @typedef {import('../models/types.js').AboutInfo} AboutInfo */
+/** @typedef {import('../models/types.js').NoticeLevel} NoticeLevel */
 
 /** The only module that knows Rust command names. */
 
@@ -33,6 +35,11 @@ export function getActiveSession() {
  */
 export function setActiveSession(id) {
   return invoke('set_active_session', { id });
+}
+
+/** @returns {Promise<AboutInfo>} Versions of the app and what it runs on. */
+export function getAbout() {
+  return invoke('about');
 }
 
 /** @returns {Promise<FontFamily[]>} Every installed font family. */
@@ -94,13 +101,34 @@ export function onWorkspaceChanged(callback) {
 }
 
 /**
+ * Clicks on the app's own menu bar items (macOS), sent to the focused window.
+ * @param {(id: 'about' | 'settings') => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onMenuAction(callback) {
+  return listen('menu://action', (event) => callback(/** @type {'about' | 'settings'} */ (event.payload)));
+}
+
+/**
+ * The backend's own warnings and errors (panics included), sent to every window as they are logged.
+ * @param {(notice: { level: NoticeLevel, message: string }) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onBackendNotice(callback) {
+  return listen('app://notice', (event) =>
+    callback(/** @type {{ level: NoticeLevel, message: string }} */ (event.payload)),
+  );
+}
+
+/**
  * Fuzzy file search. A newer call cancels a running one (`cancelled: true`).
  * @param {string} rootId
  * @param {string} query
+ * @param {boolean} [dirs] Search folders too.
  * @returns {Promise<QuickOpenResult>}
  */
-export function quickOpen(rootId, query) {
-  return invoke('quick_open', { rootId, query });
+export function quickOpen(rootId, query, dirs = false) {
+  return invoke('quick_open', { rootId, query, dirs });
 }
 
 /**
@@ -184,7 +212,6 @@ export function revealPath(path) {
   return invoke('reveal_path', { path });
 }
 
-/** @returns {Promise<string>} The user's home folder. */
 /**
  * Appends a line to the app log, target `frontend`.
  * @param {LogLevel} level
@@ -195,6 +222,7 @@ export function writeLog(level, message) {
   return invoke('write_log', { level, message });
 }
 
+/** @returns {Promise<string>} The user's home folder. */
 export function getHomeDir() {
   return homeDir();
 }

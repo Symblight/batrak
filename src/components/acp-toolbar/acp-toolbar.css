@@ -5,8 +5,7 @@
   box-sizing: border-box;
   height: var(--toolbar-height);
   padding: 0 var(--space-2);
-  background: var(--md-surface-container-high);
-  border-bottom: 1px solid var(--md-outline-variant);
+  background: var(--app-background);
 }
 .acp-toolbar__name {
   overflow: hidden;
@@ -33,4 +32,35 @@
 }
 .acp-toolbar__git-error {
   color: var(--md-error);
+}
+.acp-toolbar__spacer {
+  flex: 1;
+}
+/* MD3 icon button XS: 32px square, 8px radius, 20px icon. */
+.acp-toolbar__toggle {
+  --md-icon-button-border-radius: 8px;
+  --md-icon-button-font-size: 20px;
+  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+
+  flex: none;
+
+  &[selected] {
+    --md-icon-button-background-color: var(--md-secondary-container);
+    --md-icon-button-foreground-color: var(--md-on-secondary-container);
+  }
+}
+.acp-toolbar__toggle::part(button) {
+  /* 5px + the library's 1px transparent border = 6px around the 20px icon. */
+  padding: 5px;
+}
+.acp-toolbar__toggle::part(button):focus-visible {
+  outline: 3px solid var(--md-secondary);
+  outline-offset: 2px;
+}
+.acp-toolbar__toggle-icon {
+  font-size: 20px;
+}
+/* `view_sidebar` has its panel on the right; mirrored for a column on the left. */
+.acp-toolbar__toggle-icon_start {
+  transform: scaleX(-1);
 }

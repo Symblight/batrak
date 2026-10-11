@@ -22,7 +22,7 @@ import { $editorTabs, activateTab, closeTab, openTab, parseTabId } from '../../s
 import { $rootId } from '../../stores/workspace.js';
 import { $gitHead } from '../../stores/git.js';
 import { $editorFont, $editorFontSize, lineHeightFor } from '../../stores/settings.js';
-import styles from './acp-code-editor.css?inline';
+import styles from './acp-tab-view.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('../../models/types.js').EditorTabs} EditorTabs */
@@ -47,10 +47,10 @@ function basename(path) {
 }
 
 /**
- * @tag acp-code-editor
+ * @tag acp-tab-view
  * @summary The main column's tabs (`$editorTabs`): files in read-only editors, and views (Settings, Changes).
  */
-export class AcpCodeEditor extends LitElement {
+export class AcpTabView extends LitElement {
   static properties = {
     tabs: { state: true },
   };
@@ -272,7 +272,7 @@ export class AcpCodeEditor extends LitElement {
     this.#pendingLine = null;
     await this.updateComplete;
     const editor = this.renderRoot
-      .querySelector('.acp-code-editor__panel[active]')
+      .querySelector('.acp-tab-view__panel[active]')
       ?.querySelector('cdx-code-editor');
     if (!editor) return;
     await editor.updateComplete;
@@ -337,20 +337,20 @@ export class AcpCodeEditor extends LitElement {
   #renderTab(tab) {
     const { title, icon, tooltip } = this.#describe(tab);
     const id = `tab-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
-    return html`<md-tab id=${id} class="acp-code-editor__tab" value=${tab.id}>
+    return html`<md-tab id=${id} class="acp-tab-view__tab" value=${tab.id}>
       <md-tooltip for=${id}>${tooltip}</md-tooltip>
-      <span class="acp-code-editor__tab-label">
-        <md-icon class="acp-code-editor__file-icon">${unsafeSVG(icon)}</md-icon>
+      <span class="acp-tab-view__tab-label">
+        <md-icon class="acp-tab-view__file-icon">${unsafeSVG(icon)}</md-icon>
         ${title}
         <span
-          class="acp-code-editor__close"
+          class="acp-tab-view__close"
           role="button"
           tabindex="0"
           aria-label="Close ${title}"
           title="Close"
           @click=${(/** @type {Event} */ e) => this.#onCloseClick(e, tab.id)}
           @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onCloseKey(e, tab.id)}
-          ><md-icon class="acp-code-editor__close-icon">${unsafeSVG(closeIcon)}</md-icon></span
+          ><md-icon class="acp-tab-view__close-icon">${unsafeSVG(closeIcon)}</md-icon></span
         >
       </span>
     </md-tab>`;
@@ -369,17 +369,17 @@ export class AcpCodeEditor extends LitElement {
 
   /** @param {EditorTab} tab */
   #renderContent(tab) {
-    if (tab.kind === 'settings') return html`<acp-settings class="acp-code-editor__view"></acp-settings>`;
+    if (tab.kind === 'settings') return html`<acp-settings class="acp-tab-view__view"></acp-settings>`;
     if (tab.kind === 'changes') {
       return html`<acp-changes-review
-        class="acp-code-editor__view"
+        class="acp-tab-view__view"
         .active=${tab.id === this.#activeId}
       ></acp-changes-review>`;
     }
     return tab.error
-        ? html`<pre class="acp-code-editor__error">${tab.error}</pre>`
+        ? html`<pre class="acp-tab-view__error">${tab.error}</pre>`
         : html`<cdx-code-editor
-            class="acp-code-editor__editor"
+            class="acp-tab-view__editor"
             style=${this.#editorStyle()}
             read-only
             .plugins=${editorPlugins}
@@ -396,15 +396,15 @@ export class AcpCodeEditor extends LitElement {
 
   /** @param {EditorTab} tab */
   #renderPanel(tab) {
-    return html`<md-tab-panel class="acp-code-editor__panel" value=${tab.id} ?active=${tab.id === this.#activeId}>
+    return html`<md-tab-panel class="acp-tab-view__panel" value=${tab.id} ?active=${tab.id === this.#activeId}>
       ${this.#renderContent(tab)}
     </md-tab-panel>`;
   }
 
   render() {
     return html`
-      <div class="acp-code-editor__tab-strip" @wheel=${this.#onStripWheel}>
-        <md-tabs class="acp-code-editor__tabs" variant="secondary" .value=${this.#activeId ?? ''} @change=${this.#onTabChange}>
+      <div class="acp-tab-view__tab-strip" @wheel=${this.#onStripWheel}>
+        <md-tabs class="acp-tab-view__tabs" variant="secondary" .value=${this.#activeId ?? ''} @change=${this.#onTabChange}>
           ${repeat(this.tabs, (t) => t.id, (t) => this.#renderTab(t))}
         </md-tabs>
       </div>
@@ -413,4 +413,4 @@ export class AcpCodeEditor extends LitElement {
   }
 }
 
-customElements.define('acp-code-editor', AcpCodeEditor);
+customElements.define('acp-tab-view', AcpTabView);

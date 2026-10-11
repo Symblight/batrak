@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
 import '@symblight/wc-material/progress-circular';
+import '@symblight/wc-material/tooltip';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
 import { listDir } from '../../services/ipc.js';
@@ -21,6 +22,14 @@ import styles from './acp-file-tree.css?inline';
  */
 function toItem(e) {
   return { id: e.path, label: e.name, isDir: e.isDir, ignored: e.ignored };
+}
+
+/**
+ * Tooltip of a row's icon and label: its project-relative path.
+ * @param {TreeItem} item
+ */
+function tooltipFor(item) {
+  return item.ignored ? `${item.id} (ignored)` : item.id;
 }
 
 /**
@@ -108,13 +117,16 @@ export class AcpFileTree extends LitElement {
 
   /**
    * Leading icon of a row: folder icon from the tree-view package, language logo from simple-icons, else a Material file icon.
+   * Rendered in the tree's shadow root, so each anchor and its tooltip stay in one template.
    * @param {TreeItem} item
    * @param {{ expanded: boolean }} state
    */
   #renderLeading(item, { expanded }) {
-    return item.isDir
-      ? html`<tvx-tree-directory-icon ?expanded=${expanded}></tvx-tree-directory-icon>`
-      : html`<md-icon style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
+    const id = `acp-file-tree-icon:${item.id}`;
+    const icon = item.isDir
+      ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
+      : html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
+    return html`${icon}<md-tooltip for=${id}>${tooltipFor(item)}</md-tooltip>`;
   }
 
   /**
@@ -122,9 +134,13 @@ export class AcpFileTree extends LitElement {
    * @param {TreeItem} item
    */
   #renderLabel(item) {
-    return item.ignored
-      ? html`<span style="color: var(--md-on-surface-variant); opacity: 0.6">${item.label}</span>`
-      : item.label;
+    const id = `acp-file-tree-label:${item.id}`;
+    return html`<span
+        id=${id}
+        style=${item.ignored ? 'color: var(--md-on-surface-variant); opacity: 0.6' : ''}
+        >${item.label}</span
+      >
+      <md-tooltip for=${id}>${tooltipFor(item)}</md-tooltip>`;
   }
 
   /** @param {Event} e */
@@ -158,6 +174,7 @@ export class AcpFileTree extends LitElement {
         : nothing}
       <tvx-tree-view
         compact
+        expansion-trigger="icon"
         class="acp-file-tree__tree"
         ?hidden=${opening}
         .dataSource=${this.#dataSource}

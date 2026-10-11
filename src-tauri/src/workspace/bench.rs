@@ -23,7 +23,7 @@ fn bench() {
     let query = "drvnetethintel";
     for end in 1..=query.len() {
         let t = Instant::now();
-        let items = quick_open::search(&snapshot, &[], &query[..end], || false).unwrap();
+        let items = quick_open::search(&snapshot, &[], &query[..end], false, || false).unwrap();
         println!("quick open {:>14}: {:>8.2?} {:>3} hits, top: {:?}", &query[..end], t.elapsed(), items.len(), items.first().map(|i| &i.path));
     }
 

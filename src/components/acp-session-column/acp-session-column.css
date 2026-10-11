@@ -6,8 +6,10 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--md-surface-container-low);
+  background: var(--column-background);
   color: var(--md-on-surface);
+  border-radius: var(--shape-corner-medium);
+  overflow: hidden;
 }
 .acp-session-column__title {
   flex: none;

@@ -1,5 +1,5 @@
-// Not `/// <reference types="vite/client" />` — its own `*?inline` ambient declaration (typed
-// `string`) wins over the `*.css?inline` one below, though postcss-lit turns these into a Lit
+// Not `/// <reference types="@rsbuild/core/types" />` — its `*?inline` declaration (typed `string`)
+// would collide with the `*.css?inline` one below, which `scripts/lit-css-loader.cjs` turns into a Lit
 // CSSResult at build time. Declaring only what the app needs avoids the collision.
 declare module '*.css?inline' {
   import { CSSResultGroup } from 'lit';
@@ -17,4 +17,8 @@ declare module '@symblight/md-colors/client' {
     sourceColor: string;
     scheme?: 'light' | 'dark';
   }): void;
+}
+
+interface ImportMeta {
+  readonly env: { readonly DEV: boolean };
 }

@@ -7,6 +7,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/text-field';
+import '@symblight/wc-material/tooltip';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
@@ -302,12 +303,14 @@ export class AcpChangesPanel extends LitElement {
   #renderLeading = (node) => {
     if (!node.file) return nothing;
     const { letter, label, color } = STATUS[node.file.kind];
+    const id = `acp-changes-panel-status:${node.id}`;
     return html`<span
-      style="width: 14px; text-align: center; font: 500 11px/16px var(--font-family-mono); color: ${color}"
-      title=${label}
-      aria-label=${label}
-      >${letter}</span
-    >`;
+        id=${id}
+        style="width: 14px; text-align: center; font: 500 11px/16px var(--font-family-mono); color: ${color}"
+        aria-label=${label}
+        >${letter}</span
+      >
+      <md-tooltip for=${id}>${label}</md-tooltip>`;
   };
 
   /**
@@ -330,23 +333,25 @@ export class AcpChangesPanel extends LitElement {
       </span>`;
     }
     const deleted = node.file.kind === 'deleted';
+    const id = `acp-changes-panel-label:${node.id}`;
     return html`<span
-      style="display: flex; align-items: baseline; gap: 6px; min-width: 0"
-      title=${node.file.origPath ? `${node.file.origPath} → ${node.id}` : node.id}
-      @click=${() => this.#open(node)}
-    >
-      <span
-        style="flex: none; font-size: 13px; line-height: 20px;
-          color: ${deleted ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};
-          ${deleted ? 'text-decoration: line-through;' : ''}"
-        >${node.label}</span
+        id=${id}
+        style="display: flex; align-items: baseline; gap: 6px; min-width: 0"
+        @click=${() => this.#open(node)}
       >
-      <span
-        style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-          font-size: 11.5px; line-height: 16px; color: var(--md-on-surface-variant)"
-        >${node.dir}</span
-      >
-    </span>`;
+        <span
+          style="flex: none; font-size: 13px; line-height: 20px;
+            color: ${deleted ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};
+            ${deleted ? 'text-decoration: line-through;' : ''}"
+          >${node.label}</span
+        >
+        <span
+          style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+            font-size: 11.5px; line-height: 16px; color: var(--md-on-surface-variant)"
+          >${node.dir}</span
+        >
+      </span>
+      <md-tooltip for=${id}>${node.file.origPath ? `${node.file.origPath} → ${node.id}` : node.id}</md-tooltip>`;
   };
 
   /** @param {ChangeNode} node */
@@ -389,6 +394,7 @@ export class AcpChangesPanel extends LitElement {
       class="acp-changes-panel__tree"
       compact
       checkbox-selection
+      expansion-trigger="icon"
       aria-label="Changed files"
       .items=${this.#nodes}
       .renderItemLeading=${this.#renderLeading}

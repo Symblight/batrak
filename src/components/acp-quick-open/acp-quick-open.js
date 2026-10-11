@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { quickOpen } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import styles from './acp-quick-open.css?inline';
+import { reportError } from '../../services/notices.js';
 
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 
@@ -118,7 +119,7 @@ export class AcpQuickOpen extends LitElement {
       this.files = result.items;
       this.selected = 0;
     } catch (err) {
-      console.error('Brama: quick_open failed', err);
+      reportError('File search failed', err);
     }
   }
 

@@ -3,7 +3,9 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--md-surface-container);
+  background: var(--column-background);
+  border-radius: var(--shape-corner-medium);
+  overflow: hidden;
 }
 .acp-agent-column__chat,
 .acp-agent-column__welcome {

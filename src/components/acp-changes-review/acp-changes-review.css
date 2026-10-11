@@ -3,7 +3,7 @@
   flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
-  background: var(--md-surface);
+  background: var(--column-background);
   color: var(--md-on-surface);
 }
 
@@ -218,6 +218,10 @@
 .acp-changes-review__editor {
   --cdx-content-border-radius: 0;
   --cdx-content-min-height: 0;
+}
+.acp-changes-review__editor::part(chunk-action-accept),
+.acp-changes-review__editor::part(chunk-action-reject) {
+  display: none;
 }
 .acp-changes-review__diff-state {
   display: flex;

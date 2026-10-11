@@ -4,7 +4,7 @@
   box-sizing: border-box;
   height: 100%;
   min-height: 0;
-  background: var(--md-surface-container);
+  background: var(--column-background);
   color: var(--md-on-surface);
 }
 
@@ -100,7 +100,7 @@
   width: 100%;
   --md-text-field-font-size: 13px;
   --md-text-field-line-height: 20px;
-  --md-text-field-background-color: var(--md-surface-container);
+  --md-text-field-background-color: var(--column-background);
 }
 .acp-changes-panel__actions {
   display: flex;

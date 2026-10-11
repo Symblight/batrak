@@ -1,6 +1,7 @@
 import { StoreController } from '../store/StoreController.js';
 
 /** @typedef {import('../../components/acp-resize-handle/acp-resize-handle.js').ResizeEventDetail} ResizeEventDetail */
+/** @typedef {import('../../components/acp-resize-handle/acp-resize-handle.js').ResizeMeasure} ResizeMeasure */
 /** @typedef {import('../../models/types.js').ColumnWidths} ColumnWidths */
 
 /**
@@ -11,6 +12,9 @@ import { StoreController } from '../store/StoreController.js';
  *   the default width.
  * @property {number} min px
  * @property {number} max px
+ * @property {string} [partner] The column across the handle, when it's resizable too: it gets the
+ *   opposite width change, so it keeps the size the drag leaves it. Without one the neighbor is a
+ *   flex column that takes up the slack by itself.
  */
 
 /**
@@ -62,7 +66,7 @@ export class ColumnResizeController {
   #widths = {};
   /** @type {Record<string, number>} */
   #defaults = {};
-  /** @type {{ name: string, startWidth: number } | null} */
+  /** @type {{ name: string, measure: ResizeMeasure | undefined, startWidth: number } | null} */
   #drag = null;
 
   /**
@@ -121,38 +125,68 @@ export class ColumnResizeController {
     this.#applyStored(this.#config.store.get());
   };
 
-  /** @param {ColumnWidths} stored Skips a column being dragged; the drag's end stores its width anyway. */
+  /** @param {ColumnWidths} stored Skips the columns being dragged; the drag's end stores them anyway. */
   #applyStored = (stored) => {
+    const drag = this.#drag;
+    const dragged = drag ? [drag.name, this.#config.columns[drag.name].partner] : [];
     for (const name of Object.keys(this.#config.columns)) {
-      if (name !== this.#drag?.name) this.#apply(name, stored[name] ?? this.#defaults[name]);
+      if (!dragged.includes(name)) this.#apply(name, stored[name] ?? this.#defaults[name]);
     }
   };
 
   /** @param {Event} e */
   #onEvent = (e) => {
-    const { name, delta = 0 } = /** @type {CustomEvent<ResizeEventDetail>} */ (e).detail;
+    const { name, delta = 0, measure } = /** @type {CustomEvent<ResizeEventDetail>} */ (e).detail;
     if (!(name in this.#config.columns)) return; // another host's column: let it bubble on
     e.stopPropagation();
     switch (e.type) {
       case 'acp-resize-start':
-        this.#drag = { name, startWidth: this.width(name) };
+        this.#drag = { name, measure, startWidth: measure?.width ?? this.width(name) };
         break;
       case 'acp-resize':
-        if (this.#drag?.name === name) this.#apply(name, this.#drag.startWidth + delta);
+        if (this.#drag?.name === name) this.#resize(name, this.#drag.startWidth, this.#drag.measure, delta);
         break;
       case 'acp-resize-end':
         this.#drag = null;
-        this.#commit(name, this.width(name));
+        this.#commitPair(name);
         break;
       case 'acp-resize-step':
-        this.#apply(name, this.width(name) + delta);
-        this.#commit(name, this.width(name));
+        this.#resize(name, measure?.width ?? this.width(name), measure, delta);
+        this.#commitPair(name);
         break;
       case 'acp-resize-reset':
-        this.#commit(name, undefined);
+        this.#commit({ [name]: undefined });
         break;
     }
   };
+
+  /**
+   * Moves width between the column and its neighbor across the handle only: the change stops where
+   * either side reaches its limit, so no other column has to give or take any.
+   * @param {string} name
+   * @param {number} startWidth px
+   * @param {ResizeMeasure | undefined} measure Without it (no neighbor), only the column's range applies.
+   * @param {number} delta px, positive widens the column.
+   */
+  #resize(name, startWidth, measure, delta) {
+    const { min, max, partner } = this.#config.columns[name];
+    let lo = min - startWidth;
+    let hi = max - startWidth;
+    if (measure) {
+      const partnerColumn = partner ? this.#config.columns[partner] : undefined;
+      hi = Math.min(hi, measure.neighborWidth - Math.max(measure.neighborMin, partnerColumn?.min ?? 0));
+      if (partnerColumn) lo = Math.max(lo, measure.neighborWidth - partnerColumn.max);
+    }
+    const d = Math.max(Math.min(lo, 0), Math.min(Math.max(hi, 0), delta));
+    this.#apply(name, startWidth + d);
+    if (partner && measure) this.#apply(partner, measure.neighborWidth - d);
+  }
+
+  /** @param {string} name Stores the column and its partner. */
+  #commitPair(name) {
+    const { partner } = this.#config.columns[name];
+    this.#commit(partner ? { [name]: this.width(name), [partner]: this.width(partner) } : { [name]: this.width(name) });
+  }
 
   /**
    * @param {string} name
@@ -168,12 +202,16 @@ export class ColumnResizeController {
   }
 
   /**
-   * Stores a column's width; `undefined` drops it, back to the CSS default. Applied via `#applyStored`.
-   * @param {string} name
-   * @param {number | undefined} width
+   * Stores column widths; `undefined` drops one, back to its CSS default. Applied via `#applyStored`.
+   * @param {Record<string, number | undefined>} widths
    */
-  #commit(name, width) {
-    const { [name]: _, ...rest } = this.#config.store.get();
-    this.#config.store.set(width === undefined ? rest : { ...rest, [name]: width });
+  #commit(widths) {
+    /** @type {ColumnWidths} */
+    const next = { ...this.#config.store.get() };
+    for (const [name, width] of Object.entries(widths)) {
+      if (width === undefined) delete next[name];
+      else next[name] = width;
+    }
+    this.#config.store.set(next);
   }
 }

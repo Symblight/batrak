@@ -2,10 +2,12 @@
   display: flex;
   box-sizing: border-box;
   min-height: 0;
-  background: var(--md-surface);
+  background: var(--column-background);
   color: var(--md-on-surface);
   width: 100%;
   justify-content: center;
+
+  padding: 16px;
 }
 
 /* A side-panel-width column at the tab's start, as in the design. */
@@ -15,9 +17,11 @@
   box-sizing: border-box;
   width: min(100%, 360px);
   min-height: 0;
-  border-inline: 1px solid var(--md-outline-variant);
   background: var(--md-surface-container-low);
+  border-radius: var(--shape-corner-medium);
+  overflow: hidden;
 }
+
 .acp-settings__body {
   flex: 1;
   min-height: 0;

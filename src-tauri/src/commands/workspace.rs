@@ -80,9 +80,10 @@ pub async fn quick_open(
     workspaces: State<'_, Workspaces>,
     root_id: String,
     query: String,
+    dirs: Option<bool>,
 ) -> Result<QuickOpenResult, String> {
     let root = workspaces.get(&root_id)?;
-    let items = blocking(move || root.quick_open(&query)).await?;
+    let items = blocking(move || root.quick_open(&query, dirs.unwrap_or(false))).await?;
     Ok(QuickOpenResult { cancelled: items.is_none(), items: items.unwrap_or_default() })
 }
 

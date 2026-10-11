@@ -102,11 +102,11 @@ impl Root {
         recent.truncate(quick_open::RECENT_CAPACITY);
     }
 
-    pub fn quick_open(&self, query: &str) -> Option<Vec<quick_open::QuickOpenItem>> {
+    pub fn quick_open(&self, query: &str, dirs: bool) -> Option<Vec<quick_open::QuickOpenItem>> {
         let generation = self.quick_open_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let recent: Vec<String> = lock(&self.recent).iter().cloned().collect();
         let snapshot = self.read();
-        quick_open::search(&snapshot, &recent, query, || {
+        quick_open::search(&snapshot, &recent, query, dirs, || {
             self.quick_open_generation.load(Ordering::Relaxed) != generation
         })
     }

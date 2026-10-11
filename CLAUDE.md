@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Commands
 
 ```bash
-pnpm dev             # Vite dev server (port 1420)
+pnpm dev             # Rsbuild dev server (port 1420; full reload, no HMR)
 pnpm build           # Build to dist/
 pnpm tauri dev       # Run the desktop app (Tauri, src-tauri/)
 pnpm typecheck       # tsc over the JSDoc types (no emit); must stay clean
@@ -53,7 +53,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   stay in sync through `storage` events. Per-window state keyed by something (tabs by project) uses
   `persistentMapStore(prefix, parse)` instead: one item per key, written only through `setKey()`, so two
   windows never overwrite each other's other entries — never `set()` it.
-- Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$workspace` (`brama:workspace`, reopened
+- Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$hiddenColumns`
+  (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$workspace` (`brama:workspace`, reopened
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
@@ -84,7 +85,6 @@ expanded folders) save their state on switch and restore it, re-checking what ma
 root belongs to the window that opened it: `Workspaces::close_group` closes a window's roots when it
 is destroyed, and `close_window_workspaces` when its page loads again (before any open).
 
-### Git
 ### Logging
 
 `tracing` everywhere in Rust (`tracing::info!` / `warn!` / `debug!`, never `println!`), set up in
@@ -97,6 +97,15 @@ calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at
 what a user did or what took noticeable time (a scan), `warn` for failures, and `debug` for every
 git call; never log file contents.
 
+**Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices.js`:
+`notify(level, message)`, the same message counts up instead of stacking, at most 4, info 5s / warn
+8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
+sends every `brama_lib` warn/error and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
+says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
+with no inline error goes through `reportError(what, err)` (`services/notices.js`: logs + snackbar);
+uncaught errors and rejections show one too.
+
+### Git
 
 `src-tauri/src/git/` drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential
 helpers apply.
@@ -132,10 +141,11 @@ helpers apply.
 
 ### Column resizing
 
-`ColumnResizeController` (`src/controllers/resize/`) + `<acp-resize-handle>`, built on Pragmatic drag and
-drop (`@atlaskit/pragmatic-drag-and-drop`).
+`ColumnResizeController` (`src/controllers/resize/`) + `<acp-resize-handle>`, dragged with pointer events
+and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads `event.target` at
+`document`, which shadow DOM retargets to the outermost host, so it never finds a handle in a shadow root).
 
-- The handle is the draggable; it fires `acp-resize-start` / `acp-resize` / `acp-resize-end` (drag),
+- The handle fires `acp-resize-start` / `acp-resize` / `acp-resize-end` (drag),
   `acp-resize-step` (arrow keys) and `acp-resize-reset` (double-click), detail `{ name, delta }`, with
   `delta > 0` always meaning "wider" (`edge="start"` flips the pointer direction).
 - A host owns its columns: `new ColumnResizeController(this, { store: $columnWidths, columns: { name: {
@@ -146,14 +156,15 @@ drop (`@atlaskit/pragmatic-drag-and-drop`).
   `controller.column(name)` onto the handle's `value`/`min`/`max`.
 - The parent places the handle with a mix class (`z-index: 1; margin-inline: -4px`); the handle draws
   the divider line, so adjacent columns have no border on that side.
-- **Shadow DOM patch:** Pragmatic's element adapter looks draggables up by `event.target` at `document`,
-  which is retargeted to `<acp-app>` for anything in a shadow root. `patches/@atlaskit__pragmatic-drag-and-drop@4.0.0.patch`
-  (pnpm `patchedDependencies`) makes it search `event.composedPath()`. Re-create it when upgrading the
-  package (`pnpm patch @atlaskit/pragmatic-drag-and-drop`); without it no drag ever starts.
-- **Tauri `dragDropEnabled: false`** (window in `src-tauri/tauri.conf.json`) is required: with Tauri's
-  native file-drop handler on, wry swallows `draggingUpdated`, so the page gets no `dragover` while the
-  button is held and the column only jumps on release. Need native file drops later? Handle them as
-  HTML5 `drop` events in the page instead of re-enabling it.
+- A press becomes a drag after 3px of travel, so a click or the double-click reset stores nothing.
+- A drag only moves width between the two columns beside the handle (splitter): on `-start` / `-step`
+  the handle measures both rendered widths and the neighbor's CSS `min-width` (`ResizeMeasure`), and the
+  change stops where either side hits its limit. A neighbor that's a resizable column too is its
+  `partner` (`session` → `agent`) and gets the opposite width; otherwise it's a flex column that takes
+  the slack itself.
+- **Tauri `dragDropEnabled: false`** (window in `src-tauri/tauri.conf.json`): resizing no longer needs it,
+  but any HTML5 drag-and-drop in the page does — with Tauri's native file-drop handler on, wry swallows
+  `draggingUpdated`, so the page gets no `dragover` while the button is held.
 
 ## Code conventions
 
@@ -184,9 +195,9 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 ## Styling conventions
 
 - **CSS lives in a `.css` file next to its component**, imported with `?inline` and assigned directly:
-  `import styles from './acp-toolbar.css?inline';` → `static styles = styles;`. `rollup-plugin-postcss-lit`
-  (`vite.config.js`) turns the import into a Lit `CSSResult`; `src/env.d.ts` types `*.css?inline` as
-  `CSSResultGroup` (it deliberately doesn't reference `vite/client`, whose `*?inline` → `string`
+  `import styles from './acp-toolbar.css?inline';` → `static styles = styles;`. `scripts/lit-css-loader.cjs`
+  (wired in `rsbuild.config.js`) turns the import into a Lit `CSSResult`; `src/env.d.ts` types `*.css?inline` as
+  `CSSResultGroup` (it deliberately doesn't reference `@rsbuild/core/types`, whose `*?inline` → `string`
   declaration would win). Never write `css\`…\`` blocks inside component JS.
 - SVG icons (`@material-design-icons/svg`) are imported with `?raw` and rendered via `unsafeSVG()`,
   inside `<md-icon>` — size it with `font-size` on a class, don't style `svg` directly.
@@ -201,21 +212,21 @@ and `bem-lit-blocks` (block/element/modifier decisions, file structure) in `.cla
 full rules — load them when writing or reviewing component CSS or structure.
 
 - **Block = the custom element** (the host, `:host`). Classes are named after the tag:
-  `acp-code-editor`, `acp-code-editor__tab`, `acp-code-editor__close-icon`.
+  `acp-tab-view`, `acp-tab-view__tab`, `acp-tab-view__close-icon`.
 - **Element** = a node in the component's own `render()`: `block__element`. Flat — no element-of-element
   (`a__b__c` means you found a new block).
 - **Modifier** = `block__element_modifier` / `block_modifier` with a **single** underscore
-  (`acp-main-column__side_with-code`, `acp-quick-open__item_selected`) — never `--modifier`. Host
+  (`acp-app__files_with-code`, `acp-quick-open__item_selected`) — never `--modifier`. Host
   state/variant is a reflected attribute styled as `:host([attr])`. Content/data attributes are not modifiers.
 - A **nested custom element is its own block**, never the parent's element. To place or size it, mix a
-  parent element class onto it (`<md-icon class="acp-code-editor__close-icon">`,
-  `<acp-file-tree class="acp-main-column__pane">`). A block sets no external geometry (margins, position).
+  parent element class onto it (`<md-icon class="acp-tab-view__close-icon">`,
+  `<acp-file-tree class="acp-file-column__pane">`). A block sets no external geometry (margins, position).
 - **No** tag selectors, `*`, `#id`, descendant combinators between entities, resets, or `!important`.
   Outer-tree rules already beat a child's `:host` rules, so a parent hides a child with
   `.parent__pane[hidden] { display: none; }` — no `!important`.
 - **Native CSS nesting** only via `&`, for one node's own states: `&:hover`, `&::placeholder`,
   `&[active]`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
-  creates a descendant combinator — don't. The `safari15` build target down-compiles nesting.
+  creates a descendant combinator — don't. The `safari >= 15` build target (Lightning CSS) down-compiles nesting.
 - Component custom properties are namespaced `--acp-<component>-*` (public) / `--_acp-<component>-*`
   (internal). Theme third-party elements through their own documented properties
   (`--tvx-tree-view-*`, `--cdx-status-bar-*`, `--md-tab-*`).
@@ -227,9 +238,9 @@ under the tag name:
 
 ```
 src/components/
-├── acp-code-editor/
-│   ├── acp-code-editor.js
-│   └── acp-code-editor.css
+├── acp-tab-view/
+│   ├── acp-tab-view.js
+│   └── acp-tab-view.css
 └── acp-toolbar/
     ├── acp-toolbar.js
     └── acp-toolbar.css

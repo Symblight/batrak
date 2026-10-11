@@ -3,14 +3,15 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--md-surface);
+  padding: var(--space-2);
+  background: var(--column-background);
 }
 :host([hidden]) {
   display: none;
 }
 /* The strip scrolls instead of md-tabs, so wheel handling and scrollIntoView have a scroller we own.
    Scrollbar hidden; wheel, trackpad and the active-tab reveal still scroll it. */
-.acp-code-editor__tab-strip {
+.acp-tab-view__tab-strip {
   flex: none;
   overflow-x: auto;
   overflow-y: hidden;
@@ -21,23 +22,23 @@
     display: none;
   }
 }
-.acp-code-editor__tabs {
+.acp-tab-view__tabs {
   width: max-content;
   min-width: 100%;
 }
-.acp-code-editor__tab {
+.acp-tab-view__tab {
   flex: 0 0 auto;
   --md-tab-label-size: 0.8rem;
 }
-.acp-code-editor__tab::part(tab) {
+.acp-tab-view__tab::part(tab) {
   height: 2.2rem;
 }
-.acp-code-editor__tab-label {
+.acp-tab-view__tab-label {
   display: inline-flex;
   align-items: center;
   gap: 4px;
 }
-.acp-code-editor__close {
+.acp-tab-view__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -54,13 +55,13 @@
     outline: none;
   }
 }
-.acp-code-editor__file-icon {
+.acp-tab-view__file-icon {
   font-size: 14px;
 }
-.acp-code-editor__close-icon {
+.acp-tab-view__close-icon {
   font-size: 16px;
 }
-.acp-code-editor__panel {
+.acp-tab-view__panel {
   flex: 1;
   min-height: 0;
 
@@ -69,19 +70,19 @@
     flex-direction: column;
   }
 }
-.acp-code-editor__editor {
+.acp-tab-view__editor {
   flex: 1;
   min-height: 0;
 }
 /* A view tab's content (Settings), sized like the editor. */
-.acp-code-editor__view {
+.acp-tab-view__view {
   flex: 1;
   min-height: 0;
 }
-.acp-code-editor__editor::part(container) {
+.acp-tab-view__editor::part(container) {
   border-radius: 0;
 }
-.acp-code-editor__error {
+.acp-tab-view__error {
   margin: 0;
   padding: var(--space-4);
   color: var(--md-on-surface-variant);

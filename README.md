@@ -2,7 +2,7 @@
 
 Lightweight agent-first client for working with AI coding agents. The main object is a **session**: agent + isolated workspace + change history. The code editor is secondary (view and small edits).
 
-Stack: Tauri 2 (Rust) + Lit 3 + Vite, plain JavaScript with JSDoc types (`jsconfig.json`: `checkJs`, `strict`).
+Stack: Tauri 2 (Rust) + Lit 3 + Rsbuild, plain JavaScript with JSDoc types (`jsconfig.json`: `checkJs`, `strict`).
 
 > `acp-*` is the prefix of this app's Lit components; the Rust module `acp` is the future host for the Agent Client Protocol.
 

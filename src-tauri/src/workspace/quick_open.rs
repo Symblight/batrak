@@ -1,10 +1,10 @@
-//! Quick Open: fuzzy file search over the snapshot, fzf-style scoring via `nucleo-matcher`.
+//! Quick Open: fuzzy file (and, for `@` mentions, folder) search over the snapshot, fzf-style scoring via `nucleo-matcher`.
 
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
 use serde::Serialize;
 
-use super::snapshot::Snapshot;
+use super::snapshot::{Entry, Snapshot};
 
 pub const MAX_RESULTS: usize = 100;
 /// How many recently opened files get a boost.
@@ -22,6 +22,7 @@ const CANCEL_CHECK_EVERY: usize = 2048;
 pub struct QuickOpenItem {
     pub path: String,
     pub name: String,
+    pub is_dir: bool,
     /// Indices of matched characters in `path` (Unicode scalar values, not bytes), ascending.
     pub indices: Vec<u32>,
 }
@@ -29,26 +30,47 @@ pub struct QuickOpenItem {
 struct Scored<'a> {
     path: &'a str,
     name: &'a str,
+    is_dir: bool,
     score: u32,
     name_matched: bool,
 }
 
 /// Returns `None` when `is_cancelled` turns true midway (a newer query arrived).
-/// `recent` is most-recent-first.
+/// `recent` is most-recent-first. `dirs` adds folders to the candidates.
 pub fn search(
     snapshot: &Snapshot,
     recent: &[String],
     query: &str,
+    dirs: bool,
     is_cancelled: impl Fn() -> bool,
 ) -> Option<Vec<QuickOpenItem>> {
     let query = query.trim();
     if query.is_empty() {
-        // No query: recently opened files that still exist.
-        let items = recent
+        // No query: recently opened files that still exist, then (with `dirs`) the shallowest folders.
+        let mut items: Vec<QuickOpenItem> = recent
             .iter()
             .filter_map(|path| snapshot.get(path).filter(|e| !e.is_dir && !e.ignored))
-            .map(|e| QuickOpenItem { path: e.path.clone(), name: e.name.clone(), indices: Vec::new() })
+            .map(|e| QuickOpenItem { path: e.path.clone(), name: e.name.clone(), is_dir: false, indices: Vec::new() })
             .collect();
+        if dirs {
+            let mut folders: Vec<&Entry> = snapshot.files_and_dirs().filter(|e| e.is_dir).collect();
+            let by_depth = |a: &&Entry, b: &&Entry| {
+                let depth = |e: &Entry| e.path.matches('/').count();
+                depth(a).cmp(&depth(b)).then_with(|| a.path.cmp(&b.path))
+            };
+            let room = MAX_RESULTS.saturating_sub(items.len());
+            if folders.len() > room && room > 0 {
+                folders.select_nth_unstable_by(room, by_depth);
+            }
+            folders.truncate(room);
+            folders.sort_unstable_by(by_depth);
+            items.extend(folders.into_iter().map(|e| QuickOpenItem {
+                path: e.path.clone(),
+                name: e.name.clone(),
+                is_dir: true,
+                indices: Vec::new(),
+            }));
+        }
         return Some(items);
     }
 
@@ -57,7 +79,9 @@ pub fn search(
     let mut buf = Vec::new();
     let mut scored = Vec::new();
 
-    for (i, entry) in snapshot.files().enumerate() {
+    let candidates: Box<dyn Iterator<Item = &Entry>> =
+        if dirs { Box::new(snapshot.files_and_dirs()) } else { Box::new(snapshot.files()) };
+    for (i, entry) in candidates.enumerate() {
         if i % CANCEL_CHECK_EVERY == 0 && is_cancelled() {
             return None;
         }
@@ -72,6 +96,7 @@ pub fn search(
         scored.push(Scored {
             path: &entry.path,
             name: &entry.name,
+            is_dir: entry.is_dir,
             score: path_score + name_score.unwrap_or(0) * NAME_WEIGHT + recent_boost,
             name_matched: name_score.is_some(),
         });
@@ -103,7 +128,7 @@ pub fn search(
             }
             indices.sort_unstable();
             indices.dedup();
-            QuickOpenItem { path: s.path.to_owned(), name: s.name.to_owned(), indices }
+            QuickOpenItem { path: s.path.to_owned(), name: s.name.to_owned(), is_dir: s.is_dir, indices }
         })
         .collect();
     Some(items)

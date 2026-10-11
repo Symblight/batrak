@@ -17,6 +17,19 @@
  */
 
 /**
+ * @typedef {'error' | 'warn' | 'info'} NoticeLevel
+ */
+
+/**
+ * Snackbar in the bottom-end corner (`$notices`).
+ * @typedef {Object} Notice
+ * @property {number} id
+ * @property {NoticeLevel} level
+ * @property {string} message
+ * @property {number} count Times the same message came in while shown.
+ */
+
+/**
  * `waiting`: blocked on the user, e.g. a permission request.
  * @typedef {'working' | 'waiting' | 'idle' | 'error'} SessionStatus
  */
@@ -100,6 +113,11 @@
  * @typedef {Record<string, number>} ColumnWidths
  */
 
+/**
+ * Names of the columns hidden from the toolbar (`session`, `side`), as in `ColumnWidths`.
+ * @typedef {string[]} HiddenColumns
+ */
+
 /** @typedef {'light' | 'dark' | 'system'} Appearance */
 
 /**
@@ -107,6 +125,15 @@
  * @typedef {Object} FontFamily
  * @property {string} family
  * @property {boolean} monospace Any face of it is fixed-pitch.
+ */
+
+/**
+ * About Brama; mirrors `commands::about::AboutInfo`.
+ * @typedef {Object} AboutInfo
+ * @property {string} version
+ * @property {string} os Name and version, e.g. `macOS 26.1`.
+ * @property {string} arch
+ * @property {string | null} logDir
  */
 
 /**
@@ -189,6 +216,7 @@
  * @typedef {Object} QuickOpenItem
  * @property {string} path Relative.
  * @property {string} name
+ * @property {boolean} isDir
  * @property {number[]} indices Matched characters in `path` (code points), ascending.
  */
 

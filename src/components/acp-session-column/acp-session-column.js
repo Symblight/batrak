@@ -20,6 +20,7 @@ import { getHomeDir } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import styles from './acp-session-column.css?inline';
+import { reportError } from '../../services/notices.js';
 
 /** @typedef {import('../../models/types.js').Project} Project */
 /** @typedef {import('../../models/types.js').Session} Session */
@@ -140,7 +141,7 @@ export class AcpSessionColumn extends LitElement {
     if (!project) return;
     if (value === 'new-session') this.#newSession(project.id);
     else if (value === 'reveal')
-      projectController.reveal(project.path).catch((err) => console.error('Brama: reveal failed', err));
+      projectController.reveal(project.path).catch((err) => reportError('Revealing folder failed', err));
     else if (value === 'remove') {
       projectController.remove(project.id);
       this.#clearFailure(project.id);
@@ -167,7 +168,7 @@ export class AcpSessionColumn extends LitElement {
       await projectController.activate(id);
       this.#clearFailure(id);
     } catch (err) {
-      console.error('Brama: opening project failed', err);
+      reportError('Opening project failed', err);
       this.failures = { ...this.failures, [id]: String(err) };
     }
   }
@@ -186,13 +187,13 @@ export class AcpSessionColumn extends LitElement {
   }
 
   #openProject() {
-    projectController.open().catch((err) => console.error('Brama: open folder failed', err));
+    projectController.open().catch((err) => reportError('Opening folder failed', err));
   }
 
   /** @param {Session} session */
   #select(session) {
     this.#activate(session.projectId);
-    sessionController.select(session.id).catch((err) => console.error('Brama: selecting session failed', err));
+    sessionController.select(session.id).catch((err) => reportError('Selecting session failed', err));
   }
 
   /** @param {Event} e */

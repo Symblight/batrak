@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--md-surface);
+  background: var(--app-background);
   color: var(--md-on-surface);
 }
 .acp-app__toolbar {
@@ -11,25 +11,69 @@
 .acp-app__columns {
   display: flex;
   flex: 1;
+  gap: var(--column-gap);
   min-height: 0;
+  padding: 0 var(--column-gap) var(--column-gap);
 }
 .acp-app__session {
-  flex: 0 0 var(--session-column-width);
+  /* Session and file columns shrink, down to their resize minimums, to fit the main column's
+     minimum only once the agent column (its far larger shrink factor) is at its own; a drag
+     starts from the rendered width. */
+  flex: 0 1 var(--session-column-width);
   width: var(--session-column-width);
+  min-width: 180px;
+  max-width: 524px;
+
+  &[hidden] {
+    display: none;
+  }
 }
 .acp-app__agent {
-  flex: 0 0 var(--agent-column-width);
+  flex: 0 1000 var(--agent-column-width);
   width: var(--agent-column-width);
+  min-width: 280px;
 }
-.acp-app__resizer {
-  /* Overlap both neighbours by half the hit area, so the divider takes no layout width. */
-  z-index: 1;
-  margin-inline: -4px;
-}
-.acp-app__main {
+.acp-app__agent_fill {
   flex: 1;
   min-width: 0;
 }
+.acp-app__resizer {
+  /* Pull in by the gaps on both sides, so the handle fills the one gap between its columns. */
+  --acp-resize-handle-line-color: transparent;
+
+  z-index: 1;
+  margin-inline: calc((var(--column-gap) + var(--acp-resize-handle-hit-width)) / -2);
+}
+.acp-app__main {
+  flex: 1;
+  min-width: 400px;
+
+  &[hidden] {
+    display: none;
+  }
+}
+/* Fills the space while no tab is open; beside the tabs it keeps its own width. */
+.acp-app__files {
+  flex: 1;
+  min-width: 0;
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-app__files_with-code {
+  flex: 0 1 var(--file-tree-width);
+  width: var(--file-tree-width);
+  min-width: 200px;
+  max-width: 524px;
+}
 .acp-app__rail {
   flex: none;
+}
+.acp-app__snackbars {
+  position: fixed;
+  z-index: 10;
+  inset-block-end: var(--space-4);
+  inset-inline-end: calc(var(--nav-rail-width) + var(--space-4));
+  width: min(440px, calc(100vw - var(--nav-rail-width) - 2 * var(--space-4)));
 }

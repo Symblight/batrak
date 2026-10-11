@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  background: var(--column-background);
+  border-radius: var(--shape-corner-medium);
+  overflow: hidden;
+}
+.acp-file-column__title {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-title);
+  color: var(--md-on-surface-variant);
+}
+.acp-file-column__pane {
+  flex: 1;
+  min-height: 0;
+
+  &[hidden] {
+    display: none;
+  }
+}
