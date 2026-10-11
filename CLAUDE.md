@@ -85,6 +85,18 @@ root belongs to the window that opened it: `Workspaces::close_group` closes a wi
 is destroyed, and `close_window_workspaces` when its page loads again (before any open).
 
 ### Git
+### Logging
+
+`tracing` everywhere in Rust (`tracing::info!` / `warn!` / `debug!`, never `println!`), set up in
+`src-tauri/src/logging.rs`: daily files `brama.<date>.log` in the app log dir (macOS:
+`~/Library/Logs/dev.brama.app`, last 7 kept), plus stderr in dev builds. Default level is
+`brama_lib=debug` in dev, `brama_lib=info` in release; `BRAMA_LOG` overrides it (an `EnvFilter`
+directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
+`services/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
+calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at `info` for
+what a user did or what took noticeable time (a scan), `warn` for failures, and `debug` for every
+git call; never log file contents.
+
 
 `src-tauri/src/git/` drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential
 helpers apply.

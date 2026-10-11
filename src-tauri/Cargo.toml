@@ -31,6 +31,10 @@ globset = "0.4"
 dunce = "1"
 # Settings > Font: installed font families (the webview has no font enumeration API)
 fontdb = "0.24"
+# Logs: daily files in the app log dir (plus stderr in dev), panics included
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 # Future dependencies:
 # rusqlite = { version = "0.32", features = ["bundled"] }

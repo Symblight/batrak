@@ -12,6 +12,11 @@
  */
 
 /**
+ * Level of a frontend line in the app log (`write_log`).
+ * @typedef {'error' | 'warn' | 'info' | 'debug'} LogLevel
+ */
+
+/**
  * `waiting`: blocked on the user, e.g. a permission request.
  * @typedef {'working' | 'waiting' | 'idle' | 'error'} SessionStatus
  */

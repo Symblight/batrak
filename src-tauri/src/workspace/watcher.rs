@@ -32,7 +32,13 @@ pub fn start(
         None,
         move |result: DebounceEventResult| {
             let Some(root) = weak.upgrade() else { return };
-            let Ok(events) = result else { return };
+            let events = match result {
+                Ok(events) => events,
+                Err(errors) => {
+                    tracing::warn!(path = %root.path.display(), ?errors, "watcher errors");
+                    return;
+                }
+            };
             let changes = apply(&root, &events);
             if !changes.is_empty() {
                 on_change(&root, changes);

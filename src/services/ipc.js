@@ -13,6 +13,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
+/** @typedef {import('../models/types.js').LogLevel} LogLevel */
 
 /** The only module that knows Rust command names. */
 
@@ -184,6 +185,16 @@ export function revealPath(path) {
 }
 
 /** @returns {Promise<string>} The user's home folder. */
+/**
+ * Appends a line to the app log, target `frontend`.
+ * @param {LogLevel} level
+ * @param {string} message
+ * @returns {Promise<void>}
+ */
+export function writeLog(level, message) {
+  return invoke('write_log', { level, message });
+}
+
 export function getHomeDir() {
   return homeDir();
 }

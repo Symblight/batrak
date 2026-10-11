@@ -2,6 +2,7 @@
 //! a timeout, a cap on captured output, and an environment the parent can't leak into.
 
 use std::ffi::OsStr;
+use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -117,6 +118,33 @@ pub fn run(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode) -> Result<Vec<u8
 /// Runs git and returns its output whatever the exit code, for commands whose exit code is data
 /// (`diff --exit-code`, `apply --3way` with conflicts).
 pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Options) -> Result<Output, String> {
+    let started = Instant::now();
+    let result = spawn_and_wait(git, cwd, args, mode, opts);
+    // `elapsed` includes the wait for a permit: it's how long the caller was blocked.
+    let elapsed = started.elapsed();
+    match &result {
+        Ok(out) => tracing::debug!(cwd = %cwd.display(), args = %Args(args), status = %out.status, ?elapsed, "git"),
+        Err(e) => tracing::warn!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {e}"),
+    }
+    result
+}
+
+/// Arguments joined by spaces, for the log.
+struct Args<'a>(&'a [&'a OsStr]);
+
+impl fmt::Display for Args<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        for (i, arg) in self.0.iter().enumerate() {
+            if i > 0 {
+                f.write_str(" ")?;
+            }
+            f.write_str(&arg.to_string_lossy())?;
+        }
+        Ok(())
+    }
+}
+
+fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Options) -> Result<Output, String> {
     let mut command = Command::new(git);
     // Paths with non-ASCII names print as-is instead of octal-escaped.
     command.args(["-c", "core.quotepath=off"]).args(args).current_dir(cwd);

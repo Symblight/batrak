@@ -13,6 +13,7 @@ use std::collections::{HashMap, VecDeque};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
+use std::time::Instant;
 
 use notify_debouncer_full::notify::RecommendedWatcher;
 use notify_debouncer_full::{Debouncer, NoCache};
@@ -179,7 +180,17 @@ impl Workspaces {
         if !path.is_dir() {
             return Err(format!("{}: not a directory", path.display()));
         }
-        let snapshot = Snapshot::scan_until(&path, cancel).ok_or(SUPERSEDED)?;
+        let started = Instant::now();
+        let Some(snapshot) = Snapshot::scan_until(&path, cancel) else {
+            tracing::debug!(path = %path.display(), "scan superseded");
+            return Err(SUPERSEDED.to_owned());
+        };
+        tracing::info!(
+            path = %path.display(),
+            files = snapshot.files().count(),
+            elapsed = ?started.elapsed(),
+            "scanned root"
+        );
         let id = format!("root-{}", self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
         let root = Arc::new(Root {
             id: id.clone(),
