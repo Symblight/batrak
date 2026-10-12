@@ -9,6 +9,7 @@ import {
 } from './ipc.js';
 import { $openingPath, $rootId, $workspace } from '../stores/workspace.js';
 import { removeProjectTabs } from '../stores/editor.js';
+import { removeProjectExpandedFolders } from '../stores/file-tree.js';
 import { $projects, addProject, removeProject } from '../stores/projects.js';
 import { reportError } from './notices.js';
 
@@ -220,12 +221,14 @@ export class ProjectController extends EventTarget {
     if (!active) {
       this.#closeRoot(id);
       removeProjectTabs(id);
+      removeProjectExpandedFolders(id);
       return;
     }
-    // Leave the removed project before forgetting its tabs, so nothing can write them back while
+    // Leave the removed project before forgetting its tabs and folders, so nothing can write them back while
     // the next one is scanned.
     this.#close();
     removeProjectTabs(id);
+    removeProjectExpandedFolders(id);
     if (next) this.activate(next.path).catch((err) => reportError('Opening project failed', err));
   }
 

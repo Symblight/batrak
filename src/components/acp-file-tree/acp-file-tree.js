@@ -9,7 +9,7 @@ import { listDir } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $openingPath, $rootId } from '../../stores/workspace.js';
-import { $projects } from '../../stores/projects.js';
+import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
 import styles from './acp-file-tree.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
@@ -33,8 +33,18 @@ function tooltipFor(item) {
 }
 
 /**
+ * @param {string} path Root-relative.
+ * @returns {string} Its folder, `''` at the root.
+ */
+function parentOf(path) {
+  const slash = path.lastIndexOf('/');
+  return slash === -1 ? '' : path.slice(0, slash);
+}
+
+/**
  * @tag acp-file-tree
- * @summary Lazy file tree of the opened project, reloaded where the file watcher reports changes.
+ * @summary Lazy file tree of the opened project, reloaded where the file watcher reports changes; its
+ *   expanded folders are `$expandedFolders`.
  * @fires acp-file-open `{ path }`
  */
 export class AcpFileTree extends LitElement {
@@ -46,19 +56,31 @@ export class AcpFileTree extends LitElement {
     getTreeItems: async (parent) => {
       const rootId = this.#rootId.value;
       if (rootId === null) return [];
-      return (await listDir(rootId, parent?.id ?? '')).map(toItem);
+      const items = await listDir(rootId, parent?.id ?? '');
+      // A branch still loading when the project switched would land in the new project's folder of
+      // the same name: fail it, so the tree drops it.
+      if (this.#rootId.value !== rootId) {
+        // While it was in flight, the new project's folder of that id was skipped as loading; load
+        // it once the tree has cleared the flag (it reloads only a folder that is expanded).
+        if (parent) queueMicrotask(() => this.#tree?.loading.reload(parent.id));
+        throw new DOMException('The project changed', 'AbortError');
+      }
+      return items.map(toItem);
     },
     /** @param {TreeItem} item */
     getChildrenCount: (item) => (item.isDir ? undefined : 0),
   };
   /** A new root lists different files; also fires on connect, before the tree exists. */
   #rootId = new StoreController(this, { store: $rootId, onChange: () => this.#switchProject() });
-  /** @type {string | null} Project the tree lists. */
-  #project = null;
-  /** @type {Map<string, Set<PropertyKey>>} Expanded folders of the other projects, by project path. */
-  #expandedByProject = new Map();
-  /** @type {Set<PropertyKey> | null} Folders to expand again as their parents load, after a switch. */
-  #restoring = null;
+  /** The tree mirrors the store: expansions by the user are written there, then applied from it. */
+  #expanded = new StoreController(this, {
+    store: $expandedFolders,
+    onChange: (paths) => this.#applyExpansion(paths),
+  });
+  /** @type {string | null} Root whose top-level folders the tree lists; `null` until they load. */
+  #listedRoot = null;
+  /** Set while the tree is changed from the store, so its `tvx-expansion-change` isn't written back. */
+  #applying = false;
   #openingPath = new StoreController(this, { store: $openingPath });
   #onFsChange = (/** @type {Event} */ e) => {
     const { dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
@@ -68,36 +90,75 @@ export class AcpFileTree extends LitElement {
     }
   };
 
-  /** Lists the active project, with the folders expanded that were when it was last shown. */
+  /** Lists the active project; its folders expand from the store as their parents load. */
   #switchProject() {
+    this.#listedRoot = null;
     const tree = this.#tree;
-    if (tree && this.#project !== null) this.#expandedByProject.set(this.#project, tree.expansion.get());
-    this.#project = projectController.path;
-    const projects = new Set($projects.get().map((p) => p.id));
-    for (const path of this.#expandedByProject.keys()) {
-      if (!projects.has(path)) this.#expandedByProject.delete(path);
-    }
-    const saved = this.#project === null ? undefined : this.#expandedByProject.get(this.#project);
-    this.#restoring = saved?.size ? new Set(saved) : null;
+    if (!tree) return;
     // Ids are relative paths, so the previous project's `src` must not stay expanded here.
-    tree?.expansion.set([]);
-    tree?.loading.reload();
+    this.#applyExpansion([], { force: true });
+    tree.loading.reload();
   }
 
   /**
-   * Expands the remembered folders among the children just loaded; each expansion loads its
-   * children in turn, so nested folders open level by level.
+   * Expands exactly `paths` among the loaded folders; the tree skips the others, which expand when
+   * `#onChildrenLoaded` applies the store again.
+   * @param {string[]} paths
+   * @param {{ force?: boolean }} [options] Apply even while the tree lists another root.
+   */
+  #applyExpansion(paths, { force = false } = {}) {
+    const tree = this.#tree;
+    if (!tree || (!force && this.#listedRoot !== this.#rootId.value)) return;
+    this.#applying = true;
+    try {
+      tree.expansion.set(paths);
+    } finally {
+      this.#applying = false;
+    }
+  }
+
+  /**
+   * The user expanded or collapsed a folder. The tree only knows loaded folders, so the stored ones
+   * it doesn't know (under a folder not loaded yet) are kept.
    * @param {Event} e
    */
-  #onChildrenLoaded(e) {
-    const restoring = this.#restoring;
-    if (!restoring) return;
-    const { items } = /** @type {CustomEvent<{ items: TreeItem[] }>} */ (e).detail;
-    for (const item of items) {
-      if (!restoring.delete(item.id)) continue;
-      this.#tree?.expansion.expand(item.id);
+  #onExpansionChange(e) {
+    const tree = this.#tree;
+    if (this.#applying || !tree || this.#listedRoot !== this.#rootId.value) return;
+    const { expandedItems } = /** @type {CustomEvent<{ expandedItems: Set<PropertyKey> }>} */ (e).detail;
+    const next = new Set(/** @type {string[]} */ ([...expandedItems].filter((id) => typeof id === 'string')));
+    for (const path of this.#expanded.value) {
+      if (tree.nodes.getItem(path) === null) next.add(path);
     }
-    if (restoring.size === 0) this.#restoring = null;
+    setExpandedFolders([...next]);
+  }
+
+  /**
+   * Expands the stored folders among the children just loaded (each loads its children in turn, so
+   * nested folders open level by level), and forgets stored folders that are gone from this level.
+   * @param {Event} e
+   */
+  async #onChildrenLoaded(e) {
+    const { id, items } = /** @type {CustomEvent<{ id: string | null, items: TreeItem[] }>} */ (e).detail;
+    const rootId = this.#rootId.value;
+    // On launch the tree lists before `restore()` opens the root; that empty listing would read as
+    // every stored folder being gone.
+    if (rootId === null) return;
+    if (id === null) this.#listedRoot = rootId;
+    const parent = id ?? '';
+    const present = new Set(items.map((item) => item.id));
+    const stored = this.#expanded.value;
+    const gone = stored.filter((path) => parentOf(path) === parent && !present.has(path));
+    if (gone.length) {
+      setExpandedFolders(stored.filter((path) => !gone.some((g) => path === g || path.startsWith(`${g}/`))));
+    }
+    // A branch's children are in the tree's model when this fires; top-level items only after its
+    // next render (`willUpdate`), and it skips ids it doesn't know yet.
+    if (id === null) {
+      await this.#tree?.updateComplete;
+      if (this.#rootId.value !== rootId) return;
+    }
+    this.#applyExpansion(this.#expanded.value);
   }
 
   /** @returns {HTMLElementTagNameMap['tvx-tree-view'] | null | undefined} */
@@ -182,6 +243,7 @@ export class AcpFileTree extends LitElement {
         .renderItemLabel=${this.#renderLabel}
         @tvx-selection-change=${this.#onSelectionChange}
         @tvx-children-loaded=${this.#onChildrenLoaded}
+        @tvx-expansion-change=${this.#onExpansionChange}
       ></tvx-tree-view>
     `;
   }

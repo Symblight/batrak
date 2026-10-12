@@ -60,6 +60,9 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
   click in the Changes side pane opens, expands and scrolls to); `parseTabId()` tells them apart. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
+  `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
+  active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
+  writes the user's expand/collapse there and expands stored folders as their parents load),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
   shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
