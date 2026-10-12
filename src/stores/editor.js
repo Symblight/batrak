@@ -38,14 +38,21 @@ function belongsTo(id, root) {
 /**
  * @param {string[]} paths
  * @param {string | null} active
- * @returns {EditorTabs} `active` kept if still among `paths`, else the first tab.
+ * @param {string[]} [pinned]
+ * @returns {EditorTabs} `active` kept if still among `paths`, else the first tab; pinned tabs that are
+ *   open, moved to the front.
  */
-function tabsOf(paths, active) {
-  return { paths, active: active !== null && paths.includes(active) ? active : (paths[0] ?? null) };
+function tabsOf(paths, active, pinned = []) {
+  const pins = pinned.filter((id) => paths.includes(id));
+  return {
+    paths: pins.length ? [...pins, ...paths.filter((id) => !pins.includes(id))] : paths,
+    active: active !== null && paths.includes(active) ? active : (paths[0] ?? null),
+    pinned: pins,
+  };
 }
 
 /** @type {EditorTabs} */
-const NO_TABS = { paths: [], active: null };
+const NO_TABS = { paths: [], active: null, pinned: [] };
 
 /**
  * @param {unknown} raw
@@ -54,7 +61,8 @@ const NO_TABS = { paths: [], active: null };
 function parseTabs(raw) {
   if (!isRecord(raw) || !Array.isArray(raw.paths)) return null;
   const paths = [...new Set(raw.paths)].filter((path) => typeof path === 'string');
-  return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null);
+  const pinned = Array.isArray(raw.pinned) ? raw.pinned.filter((id) => typeof id === 'string') : [];
+  return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null, pinned);
 }
 
 const TABS_PREFIX = 'brama:editor:tabs:';
@@ -114,6 +122,7 @@ export const $editorTabs = computed([$projectTabs, $workspace], (projects, works
     : tabsOf(
         tabs.paths.filter((id) => belongsTo(id, root)),
         tabs.active,
+        tabs.pinned,
       );
 });
 
@@ -139,11 +148,11 @@ export const $activePath = computed($editorTabs, (tabs) => tabs.active);
  * @param {string} path Tab id: a file's absolute path, or a view's id.
  */
 export function openTab(path) {
-  const { paths, active } = $editorTabs.get();
-  if (paths.includes(path)) {
-    if (active !== path) setTabs({ paths, active: path });
+  const tabs = $editorTabs.get();
+  if (tabs.paths.includes(path)) {
+    if (tabs.active !== path) setTabs({ ...tabs, active: path });
   } else {
-    setTabs({ paths: [...paths, path], active: path });
+    setTabs({ ...tabs, paths: [...tabs.paths, path], active: path });
   }
 }
 
@@ -152,11 +161,75 @@ export function openTab(path) {
  * @param {string} path Tab id.
  */
 export function closeTab(path) {
-  const { paths, active } = $editorTabs.get();
+  const { paths, active, pinned } = $editorTabs.get();
   const index = paths.indexOf(path);
   if (index === -1) return;
   const rest = paths.filter((p) => p !== path);
-  setTabs({ paths: rest, active: active === path ? (rest[Math.min(index, rest.length - 1)] ?? null) : active });
+  setTabs({
+    paths: rest,
+    active: active === path ? (rest[Math.min(index, rest.length - 1)] ?? null) : active,
+    pinned: pinned.filter((p) => p !== path),
+  });
+}
+
+/**
+ * Closes every tab but `path` and the pinned ones, and activates `path`.
+ * @param {string} path Tab id.
+ */
+export function closeOtherTabs(path) {
+  const { paths, pinned } = $editorTabs.get();
+  if (!paths.includes(path)) return;
+  setTabs({ paths: paths.filter((p) => p === path || pinned.includes(p)), active: path, pinned });
+}
+
+/**
+ * Closes the tabs after `path` but the pinned ones; activates `path` if the active tab was among them.
+ * @param {string} path Tab id.
+ */
+export function closeTabsToRight(path) {
+  const { paths, active, pinned } = $editorTabs.get();
+  const index = paths.indexOf(path);
+  if (index === -1) return;
+  const kept = paths.filter((p, i) => i <= index || pinned.includes(p));
+  setTabs({ paths: kept, active: active !== null && kept.includes(active) ? active : path, pinned });
+}
+
+/** Closes every tab but the pinned ones. */
+export function closeAllTabs() {
+  const { active, pinned } = $editorTabs.get();
+  setTabs(tabsOf(pinned, active, pinned));
+}
+
+/**
+ * Moves a tab within the strip; pinned tabs stay in front of the others.
+ * @param {string} path Tab id.
+ * @param {number} index In the strip without it.
+ */
+export function moveTab(path, index) {
+  const { paths, active, pinned } = $editorTabs.get();
+  if (!paths.includes(path)) return;
+  const next = paths.filter((p) => p !== path);
+  next.splice(index, 0, path);
+  setTabs(
+    tabsOf(
+      next,
+      active,
+      next.filter((p) => pinned.includes(p)),
+    ),
+  );
+}
+
+/**
+ * Pins a tab (moved to the end of the pinned ones) or unpins it (moved just after them).
+ * @param {string} path Tab id.
+ * @param {boolean} pin
+ */
+export function setTabPinned(path, pin) {
+  const { paths, active, pinned } = $editorTabs.get();
+  if (!paths.includes(path) || pinned.includes(path) === pin) return;
+  const pins = pin ? [...pinned, path] : pinned.filter((p) => p !== path);
+  const rest = paths.filter((p) => p !== path && !pins.includes(p));
+  setTabs({ paths: [...pins, ...(pin ? [] : [path]), ...rest], active, pinned: pins });
 }
 
 /** Opens the Settings tab, or switches to it. */

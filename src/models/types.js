@@ -106,6 +106,8 @@
  * @property {string[]} paths Tab ids in strip order: a file's absolute path, or a view's id
  *   (`SETTINGS_TAB_ID`, `CHANGES_TAB_ID`); see `parseTabId()` in `stores/editor.js`.
  * @property {string | null} active Tab id.
+ * @property {string[]} pinned Pinned tab ids, the first tabs of `paths` in the same order. Close Others
+ *   and Close All leave them open.
  */
 
 /**

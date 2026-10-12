@@ -13,6 +13,7 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
 import { $activeSessionId, $sessions } from '../../stores/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace.js';
@@ -51,7 +52,6 @@ function age(iso) {
 export class AcpSessionColumn extends LitElement {
   static properties = {
     home: { state: true },
-    menuProject: { state: true },
     failures: { state: true },
   };
 
@@ -63,13 +63,16 @@ export class AcpSessionColumn extends LitElement {
   #activeSession = new StoreController(this, { store: $activeSessionId });
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
+  /** @type {ContextMenuController<Project>} */
+  #menu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('md-menu'),
+    onSelect: (value, project) => this.#onMenuSelect(value, project),
+  });
 
   constructor() {
     super();
     /** @type {string | null} Shown as `~` in project paths. */
     this.home = null;
-    /** @type {Project | null} The project the context menu is open for. */
-    this.menuProject = null;
     /** @type {Record<string, string>} Why a project's folder couldn't be opened, by project id. */
     this.failures = {};
   }
@@ -79,10 +82,6 @@ export class AcpSessionColumn extends LitElement {
     getHomeDir()
       .then((home) => (this.home = home.replace(/[\\/]+$/, '')))
       .catch(() => {});
-  }
-
-  get #menu() {
-    return /** @type {HTMLElementTagNameMap['md-menu']} */ (this.renderRoot.querySelector('md-menu'));
   }
 
   /** @param {string} path */
@@ -99,25 +98,6 @@ export class AcpSessionColumn extends LitElement {
   }
 
   /**
-   * @param {Project} project
-   * @param {number} x Viewport coordinates.
-   * @param {number} y
-   */
-  #openMenu(project, x, y) {
-    this.menuProject = project;
-    this.#menu.openAtPoint(x, y);
-  }
-
-  /**
-   * @param {Project} project
-   * @param {MouseEvent} e
-   */
-  #onProjectContextMenu(project, e) {
-    e.preventDefault();
-    this.#openMenu(project, e.clientX, e.clientY);
-  }
-
-  /**
    * Enter/Space toggle, arrows expand/collapse, ContextMenu or Shift+F10 opens the menu.
    * @param {Project} project
    * @param {KeyboardEvent} e
@@ -127,18 +107,15 @@ export class AcpSessionColumn extends LitElement {
     if (e.key === 'Enter' || e.key === ' ') this.#onProjectClick(project);
     else if (e.key === 'ArrowRight') toggleProject(project.id, true);
     else if (e.key === 'ArrowLeft') toggleProject(project.id, false);
-    else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
-      const rect = /** @type {HTMLElement} */ (e.currentTarget).getBoundingClientRect();
-      this.#openMenu(project, rect.left + 24, rect.bottom);
-    } else return;
+    else if (!this.#menu.onKeydown(project, e)) return;
     e.preventDefault();
   }
 
-  /** @param {Event} e */
-  #onMenuSelect(e) {
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    const project = this.menuProject;
-    if (!project) return;
+  /**
+   * @param {string} value The chosen item's.
+   * @param {Project} project The project the menu was opened on.
+   */
+  #onMenuSelect(value, project) {
     if (value === 'new-session') this.#newSession(project.id);
     else if (value === 'reveal')
       projectController.reveal(project.path).catch((err) => reportError('Revealing folder failed', err));
@@ -146,10 +123,6 @@ export class AcpSessionColumn extends LitElement {
       projectController.remove(project.id);
       this.#clearFailure(project.id);
     }
-  }
-
-  #onMenuClosed() {
-    this.menuProject = null;
   }
 
   /** @param {string} id */
@@ -215,7 +188,7 @@ export class AcpSessionColumn extends LitElement {
       <div
         class=${classMap({
           'acp-session-column__project': true,
-          'acp-session-column__project_menu-open': this.menuProject?.id === project.id,
+          'acp-session-column__project_menu-open': this.#menu.target?.id === project.id,
           'acp-session-column__project_loading': this.#openingPath.value === project.id,
         })}
         role="treeitem"
@@ -224,7 +197,7 @@ export class AcpSessionColumn extends LitElement {
         title=${project.path}
         @click=${() => this.#onProjectClick(project)}
         @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onProjectKeydown(project, e)}
-        @contextmenu=${(/** @type {MouseEvent} */ e) => this.#onProjectContextMenu(project, e)}
+        @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(project, e)}
       >
         <md-icon class="acp-session-column__chevron">${unsafeSVG(expanded ? expandMoreIcon : chevronRightIcon)}</md-icon>
         <span
@@ -291,9 +264,9 @@ export class AcpSessionColumn extends LitElement {
   #renderMenu() {
     return html`<md-menu
       class="acp-session-column__menu"
-      aria-label=${this.menuProject?.name ?? 'Project'}
-      @select=${this.#onMenuSelect}
-      @closed=${this.#onMenuClosed}
+      aria-label=${this.#menu.target?.name ?? 'Project'}
+      @select=${this.#menu.onSelect}
+      @closed=${this.#menu.onClosed}
     >
       <md-menu-item class="acp-session-column__menu-item" value="new-session">
         <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(addIcon)}</md-icon>

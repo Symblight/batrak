@@ -1,12 +1,16 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/code-editor';
 import '@symblight/wc-material/tabs';
 import '@symblight/wc-material/icon';
+import '@symblight/wc-material/menu';
+import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import '@symblight/wc-material/tooltip';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
+import pushPinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
@@ -18,7 +22,21 @@ import '../acp-changes-review/acp-changes-review.js';
 import { gitFileAtHead, readFile } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { $editorTabs, activateTab, closeTab, openTab, parseTabId } from '../../stores/editor.js';
+import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
+import { SortableController } from '../../controllers/sortable/SortableController.js';
+import { reportError } from '../../services/notices.js';
+import {
+  $editorTabs,
+  activateTab,
+  closeAllTabs,
+  closeOtherTabs,
+  closeTabsToRight,
+  closeTab,
+  moveTab,
+  openTab,
+  parseTabId,
+  setTabPinned,
+} from '../../stores/editor.js';
 import { $rootId } from '../../stores/workspace.js';
 import { $gitHead } from '../../stores/git.js';
 import { $editorFont, $editorFontSize, lineHeightFor } from '../../stores/settings.js';
@@ -97,6 +115,20 @@ export class AcpTabView extends LitElement {
   });
   #editorFont = new StoreController(this, { store: $editorFont });
   #editorFontSize = new StoreController(this, { store: $editorFontSize });
+  /** @type {ContextMenuController<EditorTab>} */
+  #menu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('md-menu'),
+    onSelect: (value, tab) => this.#onMenuSelect(value, tab),
+  });
+  /** Tabs are dragged within their group: pinned among pinned, the others among the others. */
+  #sortable = new SortableController(this, {
+    selector: '.acp-tab-view__tab',
+    getId: (element) => element.getAttribute('value'),
+    axis: 'horizontal',
+    container: '.acp-tab-view__tab-strip',
+    group: (id) => (this.#isPinned(id) ? 'pinned' : 'tabs'),
+    onReorder: moveTab,
+  });
   #onFsChange = (/** @type {Event} */ e) => {
     const { modified, added, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
     for (const tab of this.tabs) {
@@ -301,12 +333,14 @@ export class AcpTabView extends LitElement {
   }
 
   /**
+   * The tab's button: closes it, or unpins it when pinned.
    * @param {Event} e
    * @param {string} id
    */
   #onCloseClick(e, id) {
     e.stopPropagation(); // don't let the tab activate itself
-    this.close(id);
+    if (this.#isPinned(id)) setTabPinned(id, false);
+    else this.close(id);
   }
 
   /**
@@ -317,6 +351,33 @@ export class AcpTabView extends LitElement {
     if (e.key !== 'Enter' && e.key !== ' ') return;
     e.preventDefault();
     this.#onCloseClick(e, id);
+  }
+
+  /**
+   * @param {string} value The chosen item's.
+   * @param {EditorTab} tab The tab the menu was opened on.
+   */
+  #onMenuSelect(value, tab) {
+    if (value === 'close') this.close(tab.id);
+    else if (value === 'close-others') {
+      if (this.#activeId !== tab.id) this.#pendingLine = null;
+      closeOtherTabs(tab.id);
+    } else if (value === 'close-right') {
+      const { paths, active } = this.#editorTabs.value;
+      if (active !== null && paths.indexOf(active) > paths.indexOf(tab.id)) this.#pendingLine = null;
+      closeTabsToRight(tab.id);
+    } else if (value === 'close-all') {
+      this.#pendingLine = null;
+      closeAllTabs();
+    } else if (value === 'pin' || value === 'unpin') setTabPinned(tab.id, value === 'pin');
+    else if (value === 'copy-path') {
+      navigator.clipboard.writeText(tab.path).catch((err) => reportError('Copying the path failed', err));
+    }
+  }
+
+  /** @param {string} id */
+  #isPinned(id) {
+    return this.#editorTabs.value.pinned.includes(id);
   }
 
   /**
@@ -336,8 +397,21 @@ export class AcpTabView extends LitElement {
   /** @param {EditorTab} tab */
   #renderTab(tab) {
     const { title, icon, tooltip } = this.#describe(tab);
+    const pinned = this.#isPinned(tab.id);
     const id = `tab-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
-    return html`<md-tab id=${id} class="acp-tab-view__tab" value=${tab.id}>
+    const dragging = this.#sortable.dragging;
+    return html`<md-tab
+      id=${id}
+      class=${classMap({
+        'acp-tab-view__tab': true,
+        'acp-tab-view__tab_sorting': dragging !== null,
+        'acp-tab-view__tab_dragging': dragging === tab.id,
+      })}
+      style=${styleMap({ '--_acp-tab-view-shift': `${this.#sortable.offsetOf(tab.id)}px` })}
+      value=${tab.id}
+      @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(tab, e)}
+      @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(tab, e)}
+    >
       <md-tooltip for=${id}>${tooltip}</md-tooltip>
       <span class="acp-tab-view__tab-label">
         <md-icon class="acp-tab-view__file-icon">${unsafeSVG(icon)}</md-icon>
@@ -346,14 +420,44 @@ export class AcpTabView extends LitElement {
           class="acp-tab-view__close"
           role="button"
           tabindex="0"
-          aria-label="Close ${title}"
-          title="Close"
+          aria-label="${pinned ? 'Unpin' : 'Close'} ${title}"
+          title=${pinned ? 'Unpin' : 'Close'}
           @click=${(/** @type {Event} */ e) => this.#onCloseClick(e, tab.id)}
           @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onCloseKey(e, tab.id)}
-          ><md-icon class="acp-tab-view__close-icon">${unsafeSVG(closeIcon)}</md-icon></span
+          ><md-icon class="acp-tab-view__close-icon">${unsafeSVG(pinned ? pushPinIcon : closeIcon)}</md-icon></span
         >
       </span>
     </md-tab>`;
+  }
+
+  #renderMenu() {
+    const tab = this.#menu.target;
+    const { paths, pinned: pins } = this.#editorTabs.value;
+    const pinned = tab !== null && pins.includes(tab.id);
+    // Only the actions that would do something: the close ones never close pinned tabs.
+    const closable = paths.filter((id) => !pins.includes(id));
+    const index = tab ? paths.indexOf(tab.id) : -1;
+    /**
+     * @param {boolean} shown
+     * @param {string} value
+     * @param {string} label
+     */
+    const item = (shown, value, label) =>
+      shown ? html`<md-menu-item class="acp-tab-view__menu-item" value=${value}>${label}</md-menu-item>` : nothing;
+    return html`<md-menu
+      class="acp-tab-view__menu"
+      aria-label=${tab ? this.#describe(tab).title : 'Tab'}
+      @select=${this.#menu.onSelect}
+      @closed=${this.#menu.onClosed}
+    >
+      ${item(true, 'close', 'Close')}
+      ${item(closable.some((id) => id !== tab?.id), 'close-others', 'Close Other Tabs')}
+      ${item(closable.some((id) => paths.indexOf(id) > index), 'close-right', 'Close Tabs to the Right')}
+      ${item(closable.length > 0, 'close-all', 'Close All Tabs')}
+      <md-hr></md-hr>
+      ${item(true, pinned ? 'unpin' : 'pin', pinned ? 'Unpin Tab' : 'Pin Tab')}
+      ${item(tab?.kind === 'file', 'copy-path', 'Copy Path')}
+    </md-menu>`;
   }
 
   /** Font settings for file tabs only; views keep the library defaults. */
@@ -409,6 +513,7 @@ export class AcpTabView extends LitElement {
         </md-tabs>
       </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
+      ${this.#renderMenu()}
     `;
   }
 }

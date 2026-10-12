@@ -58,7 +58,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
-  click in the Changes side pane opens, expands and scrolls to); `parseTabId()` tells them apart. Everything in `<acp-main-column>` opens as such a
+  click in the Changes side pane opens, expands and scrolls to); `parseTabId()` tells them apart. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
   active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
@@ -141,6 +141,22 @@ helpers apply.
   unchanged. `git_status` takes the caller's `since` version and replies `unchanged` without the
   files; the frontend then keeps the same `files` array, so views neither rebuild nor re-read diffs.
   Refresh passes `force`. Changes inside ignored folders don't bump the epoch.
+
+### Drag and drop
+
+Reordering uses Pragmatic drag and drop through `SortableController` (`src/controllers/sortable/`):
+`new SortableController(this, { selector, getId, axis, container, group?, onReorder })` registers the
+items `selector` matches in the host's render root after every render; a drag over `container` reorders.
+While dragging, the host hides the dragged item (`dragging`) and translates each item by `offsetOf(id)`,
+animated only while dragging, so the others slide aside and open the slot it would land in; the slot
+comes from the pointer against the items' midpoints measured when the drag starts (live rects move
+mid-slide and make the slot flicker), corrected for the container's scroll since. Tabs use it (`moveTab()`; `group` keeps
+pinned tabs among pinned). The library reads
+`event.target` at `document` and uses `closest()`, which shadow DOM stops at the outermost host, so
+it is patched (`patches/@atlaskit__pragmatic-drag-and-drop@4.0.0.patch`: draggables and drop targets
+are found on the composed path, lookups continue through shadow hosts, and the element under the
+pointer is looked up inside shadow roots). `container` auto-scrolls along `axis` near its edges
+(`-auto-scroll`, patched the same way). Re-check both patches when upgrading.
 
 ### Column resizing
 

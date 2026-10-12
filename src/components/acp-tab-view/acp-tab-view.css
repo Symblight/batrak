@@ -28,10 +28,24 @@
 }
 .acp-tab-view__tab {
   flex: 0 0 auto;
+  translate: var(--_acp-tab-view-shift, 0) 0;
   --md-tab-label-size: 0.8rem;
 }
 .acp-tab-view__tab::part(tab) {
   height: 2.2rem;
+}
+/* Drag and drop: the tabs slide aside to open an empty slot where the dragged one would land. Only
+   while sorting: on drop the reorder takes over their offsets in the same frame, without animating. */
+.acp-tab-view__tab_sorting {
+  transition: translate 180ms cubic-bezier(0.2, 0, 0, 1);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+/* Its slot stays empty; the native drag preview follows the pointer. */
+.acp-tab-view__tab_dragging {
+  opacity: 0;
 }
 .acp-tab-view__tab-label {
   display: inline-flex;
@@ -87,4 +101,18 @@
   padding: var(--space-4);
   color: var(--md-on-surface-variant);
   white-space: pre-wrap;
+}
+
+/* Tab context menu: MD3 menu at compact density, like the chat's pickers */
+.acp-tab-view__menu {
+  --md-menu-min-width: 10rem;
+  --md-menu-shape: var(--md-sys-shape-corner-medium, 0.75rem);
+}
+.acp-tab-view__menu-item {
+  --md-menu-item-min-block-size: 1.75rem;
+  --md-menu-item-padding-block: 0.125rem;
+  --md-menu-item-padding-inline: 0.5rem;
+  --md-menu-item-label-text-size: 0.8125rem;
+  --md-menu-item-label-text-weight: 400;
+  margin-inline: 0.25rem;
 }

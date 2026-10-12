@@ -1,0 +1,335 @@
+diff --git a/dist/cjs/adapter/element-adapter.js b/dist/cjs/adapter/element-adapter.js
+index 7dc9954cfb9d03b27c5fddfe1e16fbcd607cf6ed..33986e2c69c006cd2365e89148c5704ed60327b8 100644
+--- a/dist/cjs/adapter/element-adapter.js
++++ b/dist/cjs/adapter/element-adapter.js
+@@ -70,7 +70,11 @@ var adapter = (0, _makeAdapter.makeAdapter)({
+ 
+         // the closest parent that is a draggable element will be marked as
+         // the `event.target` for the event
+-        var target = event.target;
++        // Patched for shadow DOM: at `document`, `event.target` is retargeted to the outermost host,
++        // so find the registered draggable on the composed path instead.
++        var target = event.composedPath().find(function (node) {
++          return node instanceof HTMLElement && draggableRegistry.has(node);
++        }) || event.target;
+ 
+         // this source is only for elements
+         // Note: only HTMLElements can have the "draggable" attribute
+diff --git a/dist/cjs/honey-pot-fix/get-element-from-point-without-honey-pot.js b/dist/cjs/honey-pot-fix/get-element-from-point-without-honey-pot.js
+index 619c6100da94fed44807f76b03d5356fba965a9f..78d009b7138ec3ef5b6fa2f6b41d3e995990f8b8 100644
+--- a/dist/cjs/honey-pot-fix/get-element-from-point-without-honey-pot.js
++++ b/dist/cjs/honey-pot-fix/get-element-from-point-without-honey-pot.js
+@@ -17,7 +17,17 @@ function getElementFromPointWithoutHoneypot(client) {
+     return null;
+   }
+   if ((0, _isHoneyPotElement.isHoneyPotElement)(top)) {
+-    return second !== null && second !== void 0 ? second : null;
++    return second ? deepElementFromPoint(second, client) : null;
+   }
+-  return top;
++  return deepElementFromPoint(top, client);
++}
++// Patched for shadow DOM: `document.elementsFromPoint()` stops at the outermost shadow host; descend
++// into open shadow roots to the element actually under the point.
++function deepElementFromPoint(element, client) {
++  while (element && element.shadowRoot) {
++    var inner = element.shadowRoot.elementFromPoint(client.x, client.y);
++    if (!inner || inner === element) break;
++    element = inner;
++  }
++  return element;
+ }
+diff --git a/dist/cjs/ledger/lifecycle-manager.js b/dist/cjs/ledger/lifecycle-manager.js
+index 5f1a61cc97f91e6e457dcd7d73b10ff8f5223e13..c39952edd31bb9e5efcc3577d87164a2d6b93b3d 100644
+--- a/dist/cjs/ledger/lifecycle-manager.js
++++ b/dist/cjs/ledger/lifecycle-manager.js
+@@ -95,7 +95,7 @@ function start(_ref2) {
+     var target = (0, _isHoneyPotElement.isHoneyPotElement)(event.target) ? (0, _getElementFromPointWithoutHoneyPot.getElementFromPointWithoutHoneypot)({
+       x: input.clientX,
+       y: input.clientY
+-    }) : event.target;
++    }) : event.composedPath()[0] || event.target; // patched for shadow DOM
+     var nextDropTargets = getDropTargetsOver({
+       target: target,
+       input: input,
+@@ -330,7 +330,7 @@ function getStartLocation(_ref4) {
+   var dropTargets = getDropTargetsOver({
+     input: input,
+     source: dragType.payload,
+-    target: event.target,
++    target: event.composedPath()[0] || event.target, // patched for shadow DOM
+     current: []
+   });
+   return {
+diff --git a/dist/cjs/make-adapter/make-drop-target.js b/dist/cjs/make-adapter/make-drop-target.js
+index fa9732aaf1eec6e0f1d6c5ecf78bf97b626bd0da..00e0628733f1f26df36e350001266fa5d6bdf664 100644
+--- a/dist/cjs/make-adapter/make-drop-target.js
++++ b/dist/cjs/make-adapter/make-drop-target.js
+@@ -83,7 +83,7 @@ function makeDropTarget(_ref) {
+       // so we can exit.
+       return result;
+     }
+-    var closest = target.closest(dropTargetSelector);
++    var closest = composedClosest(target, dropTargetSelector);
+ 
+     // Cannot find anything else
+     if (closest == null) {
+@@ -107,7 +107,7 @@ function makeDropTarget(_ref) {
+     if (args.canDrop && !args.canDrop(feedback)) {
+       return getActualDropTargets({
+         source: source,
+-        target: args.element.parentElement,
++        target: composedParent(args.element),
+         input: input,
+         result: result
+       });
+@@ -126,7 +126,7 @@ function makeDropTarget(_ref) {
+     };
+     return getActualDropTargets({
+       source: source,
+-      target: args.element.parentElement,
++      target: composedParent(args.element),
+       input: input,
+       // Using bubble ordering. Same ordering as `event.getPath()`
+       result: [].concat((0, _toConsumableArray2.default)(result), [record])
+@@ -319,3 +319,16 @@ function makeDropTarget(_ref) {
+     dispatchEvent: dispatchEvent
+   };
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}
+\ No newline at end of file
+diff --git a/dist/es2019/adapter/element-adapter.js b/dist/es2019/adapter/element-adapter.js
+index 2e2ee68cd05f390559667315d5760b35d2315d26..6132987717b897ac926a884ed5ee348358ac1195 100644
+--- a/dist/es2019/adapter/element-adapter.js
++++ b/dist/es2019/adapter/element-adapter.js
+@@ -70,7 +70,11 @@ const adapter = makeAdapter({
+ 
+         // the closest parent that is a draggable element will be marked as
+         // the `event.target` for the event
+-        const target = event.target;
++        // Patched for shadow DOM: at `document`, `event.target` is retargeted to the outermost host,
++        // so find the registered draggable on the composed path instead.
++        const target = event.composedPath().find(function (node) {
++          return node instanceof HTMLElement && draggableRegistry.has(node);
++        }) || event.target;
+ 
+         // this source is only for elements
+         // Note: only HTMLElements can have the "draggable" attribute
+diff --git a/dist/es2019/honey-pot-fix/get-element-from-point-without-honey-pot.js b/dist/es2019/honey-pot-fix/get-element-from-point-without-honey-pot.js
+index 7f9ca6f1526befa6c9aeff56d778c777022f598b..4bb9ceeead006174ac6b8c6b155a1c52a1dda48b 100644
+--- a/dist/es2019/honey-pot-fix/get-element-from-point-without-honey-pot.js
++++ b/dist/es2019/honey-pot-fix/get-element-from-point-without-honey-pot.js
+@@ -6,7 +6,17 @@ export function getElementFromPointWithoutHoneypot(client) {
+     return null;
+   }
+   if (isHoneyPotElement(top)) {
+-    return second !== null && second !== void 0 ? second : null;
++    return second ? deepElementFromPoint(second, client) : null;
+   }
+-  return top;
++  return deepElementFromPoint(top, client);
++}
++// Patched for shadow DOM: `document.elementsFromPoint()` stops at the outermost shadow host; descend
++// into open shadow roots to the element actually under the point.
++function deepElementFromPoint(element, client) {
++  while (element && element.shadowRoot) {
++    var inner = element.shadowRoot.elementFromPoint(client.x, client.y);
++    if (!inner || inner === element) break;
++    element = inner;
++  }
++  return element;
+ }
+diff --git a/dist/es2019/ledger/lifecycle-manager.js b/dist/es2019/ledger/lifecycle-manager.js
+index e1810f6fb9ab627f0026b559c8cea6b93b890c2e..1bce5c6074361cb4f64f537839353c4da2d32486 100644
+--- a/dist/es2019/ledger/lifecycle-manager.js
++++ b/dist/es2019/ledger/lifecycle-manager.js
+@@ -89,7 +89,7 @@ function start({
+     const target = isHoneyPotElement(event.target) ? getElementFromPointWithoutHoneypot({
+       x: input.clientX,
+       y: input.clientY
+-    }) : event.target;
++    }) : event.composedPath()[0] || event.target; // patched for shadow DOM
+     const nextDropTargets = getDropTargetsOver({
+       target,
+       input,
+@@ -326,7 +326,7 @@ function getStartLocation({
+   const dropTargets = getDropTargetsOver({
+     input,
+     source: dragType.payload,
+-    target: event.target,
++    target: event.composedPath()[0] || event.target, // patched for shadow DOM
+     current: []
+   });
+   return {
+diff --git a/dist/es2019/make-adapter/make-drop-target.js b/dist/es2019/make-adapter/make-drop-target.js
+index 0c0edfee3a1fae29110b111c179f2e9d1e89a370..62879b9bb13a697adbe24d4ca0abbb69939f2ab6 100644
+--- a/dist/es2019/make-adapter/make-drop-target.js
++++ b/dist/es2019/make-adapter/make-drop-target.js
+@@ -72,7 +72,7 @@ export function makeDropTarget({
+       // so we can exit.
+       return result;
+     }
+-    const closest = target.closest(dropTargetSelector);
++    const closest = composedClosest(target, dropTargetSelector);
+ 
+     // Cannot find anything else
+     if (closest == null) {
+@@ -96,7 +96,7 @@ export function makeDropTarget({
+     if (args.canDrop && !args.canDrop(feedback)) {
+       return getActualDropTargets({
+         source,
+-        target: args.element.parentElement,
++        target: composedParent(args.element),
+         input,
+         result
+       });
+@@ -115,7 +115,7 @@ export function makeDropTarget({
+     };
+     return getActualDropTargets({
+       source,
+-      target: args.element.parentElement,
++      target: composedParent(args.element),
+       input,
+       // Using bubble ordering. Same ordering as `event.getPath()`
+       result: [...result, record]
+@@ -286,3 +286,16 @@ export function makeDropTarget({
+     dispatchEvent
+   };
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}
+\ No newline at end of file
+diff --git a/dist/esm/adapter/element-adapter.js b/dist/esm/adapter/element-adapter.js
+index f10fab7f92ce6b7d0729ad895f7bea1717dcf4eb..75f8c132786c3f713bcd9e21cd72ffa0ecd3c7e0 100644
+--- a/dist/esm/adapter/element-adapter.js
++++ b/dist/esm/adapter/element-adapter.js
+@@ -63,7 +63,11 @@ var adapter = makeAdapter({
+ 
+         // the closest parent that is a draggable element will be marked as
+         // the `event.target` for the event
+-        var target = event.target;
++        // Patched for shadow DOM: at `document`, `event.target` is retargeted to the outermost host,
++        // so find the registered draggable on the composed path instead.
++        var target = event.composedPath().find(function (node) {
++          return node instanceof HTMLElement && draggableRegistry.has(node);
++        }) || event.target;
+ 
+         // this source is only for elements
+         // Note: only HTMLElements can have the "draggable" attribute
+diff --git a/dist/esm/honey-pot-fix/get-element-from-point-without-honey-pot.js b/dist/esm/honey-pot-fix/get-element-from-point-without-honey-pot.js
+index 5632b228e61e33a4347cc8f748e3fc34662cd67a..4bf388835214408b4368665a96a8d3169a252074 100644
+--- a/dist/esm/honey-pot-fix/get-element-from-point-without-honey-pot.js
++++ b/dist/esm/honey-pot-fix/get-element-from-point-without-honey-pot.js
+@@ -10,7 +10,17 @@ export function getElementFromPointWithoutHoneypot(client) {
+     return null;
+   }
+   if (isHoneyPotElement(top)) {
+-    return second !== null && second !== void 0 ? second : null;
++    return second ? deepElementFromPoint(second, client) : null;
+   }
+-  return top;
++  return deepElementFromPoint(top, client);
++}
++// Patched for shadow DOM: `document.elementsFromPoint()` stops at the outermost shadow host; descend
++// into open shadow roots to the element actually under the point.
++function deepElementFromPoint(element, client) {
++  while (element && element.shadowRoot) {
++    var inner = element.shadowRoot.elementFromPoint(client.x, client.y);
++    if (!inner || inner === element) break;
++    element = inner;
++  }
++  return element;
+ }
+diff --git a/dist/esm/ledger/lifecycle-manager.js b/dist/esm/ledger/lifecycle-manager.js
+index ee8f1213d89c206a3da5d6101f45fcacf3c09318..7ebbf5a04377f4b9c90c55b352da22a64377fcef 100644
+--- a/dist/esm/ledger/lifecycle-manager.js
++++ b/dist/esm/ledger/lifecycle-manager.js
+@@ -88,7 +88,7 @@ function start(_ref2) {
+     var target = isHoneyPotElement(event.target) ? getElementFromPointWithoutHoneypot({
+       x: input.clientX,
+       y: input.clientY
+-    }) : event.target;
++    }) : event.composedPath()[0] || event.target; // patched for shadow DOM
+     var nextDropTargets = getDropTargetsOver({
+       target: target,
+       input: input,
+@@ -323,7 +323,7 @@ function getStartLocation(_ref4) {
+   var dropTargets = getDropTargetsOver({
+     input: input,
+     source: dragType.payload,
+-    target: event.target,
++    target: event.composedPath()[0] || event.target, // patched for shadow DOM
+     current: []
+   });
+   return {
+diff --git a/dist/esm/make-adapter/make-drop-target.js b/dist/esm/make-adapter/make-drop-target.js
+index ff54d8d38df991d27901b719170e2a640215ebb5..4706f6b9001c203d44dda46a8f82c99428bd30cd 100644
+--- a/dist/esm/make-adapter/make-drop-target.js
++++ b/dist/esm/make-adapter/make-drop-target.js
+@@ -76,7 +76,7 @@ export function makeDropTarget(_ref) {
+       // so we can exit.
+       return result;
+     }
+-    var closest = target.closest(dropTargetSelector);
++    var closest = composedClosest(target, dropTargetSelector);
+ 
+     // Cannot find anything else
+     if (closest == null) {
+@@ -100,7 +100,7 @@ export function makeDropTarget(_ref) {
+     if (args.canDrop && !args.canDrop(feedback)) {
+       return getActualDropTargets({
+         source: source,
+-        target: args.element.parentElement,
++        target: composedParent(args.element),
+         input: input,
+         result: result
+       });
+@@ -119,7 +119,7 @@ export function makeDropTarget(_ref) {
+     };
+     return getActualDropTargets({
+       source: source,
+-      target: args.element.parentElement,
++      target: composedParent(args.element),
+       input: input,
+       // Using bubble ordering. Same ordering as `event.getPath()`
+       result: [].concat(_toConsumableArray(result), [record])
+@@ -312,3 +312,16 @@ export function makeDropTarget(_ref) {
+     dispatchEvent: dispatchEvent
+   };
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}

@@ -1,0 +1,117 @@
+diff --git a/dist/cjs/over-element/try-scroll.js b/dist/cjs/over-element/try-scroll.js
+index af8eb63593502c482e9cba2f4c149c029ca27c2a..34a12f5702c6060da9ba3890176288b9d1729a75 100644
+--- a/dist/cjs/over-element/try-scroll.js
++++ b/dist/cjs/over-element/try-scroll.js
+@@ -35,7 +35,7 @@ function tryScrollElements(_ref) {
+   if (!target) {
+     return available;
+   }
+-  var element = target.closest(_dataAttributes.selector);
++  var element = composedClosest(target, _dataAttributes.selector);
+ 
+   // cannot find any more scroll containers
+   if (!element) {
+@@ -51,7 +51,7 @@ function tryScrollElements(_ref) {
+   function continueSearchUp() {
+     var _element$parentElemen;
+     return tryScrollElements({
+-      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : element.parentElement) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
++      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : composedParent(element)) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
+       findEntry: findEntry,
+       source: source,
+       timeSinceLastFrame: timeSinceLastFrame,
+@@ -199,3 +199,16 @@ function tryScroll(_ref3) {
+     available: remainder
+   });
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}
+diff --git a/dist/es2019/over-element/try-scroll.js b/dist/es2019/over-element/try-scroll.js
+index 508f92f0a6c0b6b25c2464788cb8e5b1bbc3ade6..0a8cd30dae59a49a484eed069be48a167ab6c223 100644
+--- a/dist/es2019/over-element/try-scroll.js
++++ b/dist/es2019/over-element/try-scroll.js
+@@ -26,7 +26,7 @@ function tryScrollElements({
+   if (!target) {
+     return available;
+   }
+-  const element = target.closest(selector);
++  const element = composedClosest(target, selector);
+ 
+   // cannot find any more scroll containers
+   if (!element) {
+@@ -42,7 +42,7 @@ function tryScrollElements({
+   function continueSearchUp() {
+     var _element$parentElemen;
+     return tryScrollElements({
+-      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : element.parentElement) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
++      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : composedParent(element)) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
+       findEntry,
+       source,
+       timeSinceLastFrame,
+@@ -181,3 +181,16 @@ export function tryScroll({
+     available: remainder
+   });
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}
+diff --git a/dist/esm/over-element/try-scroll.js b/dist/esm/over-element/try-scroll.js
+index a2a163f665833c3d3f15f122f47c01c7e63564a5..3b9fb603983bbbd8f0a0ab3ee705dcec4f3cfe9a 100644
+--- a/dist/esm/over-element/try-scroll.js
++++ b/dist/esm/over-element/try-scroll.js
+@@ -29,7 +29,7 @@ function tryScrollElements(_ref) {
+   if (!target) {
+     return available;
+   }
+-  var element = target.closest(selector);
++  var element = composedClosest(target, selector);
+ 
+   // cannot find any more scroll containers
+   if (!element) {
+@@ -45,7 +45,7 @@ function tryScrollElements(_ref) {
+   function continueSearchUp() {
+     var _element$parentElemen;
+     return tryScrollElements({
+-      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : element.parentElement) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
++      target: (_element$parentElemen = element === null || element === void 0 ? void 0 : composedParent(element)) !== null && _element$parentElemen !== void 0 ? _element$parentElemen : null,
+       findEntry: findEntry,
+       source: source,
+       timeSinceLastFrame: timeSinceLastFrame,
+@@ -193,3 +193,16 @@ export function tryScroll(_ref3) {
+     available: remainder
+   });
+ }
++// Patched for shadow DOM: `closest()` and `parentElement` stop at a shadow root; continue at its host.
++function composedClosest(element, selector) {
++  for (var node = element; node; ) {
++    var found = node.closest(selector);
++    if (found) return found;
++    var root = node.getRootNode();
++    node = root instanceof ShadowRoot ? root.host : null;
++  }
++  return null;
++}
++function composedParent(element) {
++  return element.parentElement || (element.parentNode instanceof ShadowRoot ? element.parentNode.host : null);
++}
