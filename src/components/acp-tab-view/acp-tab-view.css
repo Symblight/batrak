@@ -3,7 +3,6 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  padding: var(--space-2);
   background: var(--column-background);
 }
 :host([hidden]) {
@@ -13,6 +12,7 @@
    Scrollbar hidden; wheel, trackpad and the active-tab reveal still scroll it. */
 .acp-tab-view__tab-strip {
   flex: none;
+  padding: var(--space-2) var(--space-2) 0;
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
@@ -87,11 +87,21 @@
 .acp-tab-view__editor {
   flex: 1;
   min-height: 0;
+  box-sizing: border-box;
+  padding-inline: var(--space-2);
+  --cdx-content-background-color: var(--column-background);
+  --cdx-status-bar-background-color: var(--column-background);
+  --cdx-content-border-color: transparent;
+  --cdx-content-focus-border-color: transparent;
+  --cdx-status-bar-border-color: transparent;
+  --cdx-line-padding-inline: 0.375rem;
 }
 /* A view tab's content (Settings), sized like the editor. */
 .acp-tab-view__view {
   flex: 1;
   min-height: 0;
+  box-sizing: border-box;
+  padding: var(--space-2);
 }
 .acp-tab-view__editor::part(container) {
   border-radius: 0;

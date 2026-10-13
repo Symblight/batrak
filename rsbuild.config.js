@@ -5,7 +5,9 @@ export default defineConfig({
   source: { entry: { index: './src/main.js' } },
   html: { template: './index.html' },
   server: { port: 1420, strictPort: true },
-  dev: { hmr: false, liveReload: true },
+  // Lazy compilation (on by default) rebuilds when a dynamic import is first requested — every
+  // CodeMirror language — and without HMR that rebuild reloads the page.
+  dev: { hmr: false, liveReload: true, lazyCompilation: false },
   output: {
     distPath: { root: 'dist' },
     overrideBrowserslist: ['safari >= 15'],

@@ -13,12 +13,10 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-2) 10px;
-  min-height: 52px;
+  gap: 6px;
+  min-height: 48px;
   box-sizing: border-box;
-  padding: var(--space-2) var(--space-3) var(--space-2) var(--space-2);
-  background: var(--md-surface-container-low);
-  border-bottom: 1px solid var(--md-outline-variant);
+  padding: 10px var(--space-3) 6px var(--space-2);
 }
 .acp-changes-review__tool {
   --md-icon-button-font-size: 20px;
@@ -52,12 +50,6 @@
   --md-button-foreground-color: var(--md-on-surface-variant);
   --md-button-block-start-space: 6px;
   --md-button-block-end-space: 6px;
-}
-.acp-changes-review__divider {
-  width: 1px;
-  height: 20px;
-  margin: 0 6px;
-  background: var(--md-outline-variant);
 }
 /* Split button: two tonal halves, full outer corners, 4px inner ones, 2px apart. */
 .acp-changes-review__review {
@@ -94,7 +86,7 @@
   flex-direction: column;
   gap: 2px;
   overflow: auto;
-  padding: 6px 6px var(--space-2);
+  padding: 0 var(--space-2) var(--space-3);
 }
 .acp-changes-review__row {
   flex: none;
@@ -102,10 +94,10 @@
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
-  height: 36px;
+  height: 40px;
   box-sizing: border-box;
-  padding: 0 4px 0 6px;
-  border-radius: 8px;
+  padding: 0 4px 0 var(--space-2);
+  border-radius: 9999px;
   cursor: pointer;
   outline: none;
   scroll-margin-top: 6px;
@@ -118,12 +110,11 @@
     outline-offset: -2px;
   }
 }
-/* The expanded file's header: sits in the card, square below. */
+/* The expanded file's header: sits in the card on its surface, square below. */
 .acp-changes-review__row_header,
 .acp-changes-review__row_header:hover {
-  height: 40px;
   border-radius: 11px 11px 0 0;
-  background: var(--md-surface-container);
+  background: transparent;
 }
 .acp-changes-review__chevron {
   flex: none;
@@ -203,12 +194,13 @@
   font-size: 20px;
 }
 
-/* Expanded file: header row and diff in an outlined card */
+/* Expanded file: header row and diff in an outlined card, on the column's surface */
 .acp-changes-review__card {
   flex: none;
+  margin-block: 4px;
   border: 1px solid var(--md-outline-variant);
   border-radius: 12px;
-  background: var(--md-surface-container-lowest);
+  background: var(--column-background);
 }
 .acp-changes-review__diff {
   border-top: 1px solid var(--md-outline-variant);
@@ -218,6 +210,8 @@
 .acp-changes-review__editor {
   --cdx-content-border-radius: 0;
   --cdx-content-min-height: 0;
+  --cdx-content-background-color: var(--column-background);
+  --cdx-line-padding-inline: 0.375rem;
 }
 .acp-changes-review__editor::part(chunk-action-accept),
 .acp-changes-review__editor::part(chunk-action-reject) {

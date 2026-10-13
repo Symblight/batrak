@@ -27,9 +27,6 @@
   align-self: flex-start;
   margin: 0 var(--space-4) var(--space-2);
 }
-.acp-session-column__new-icon {
-  font-size: 18px;
-}
 .acp-session-column__list {
   flex: 1;
   min-height: 0;

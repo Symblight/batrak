@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import '@symblight/wc-material/button';
+import '@symblight/wc-material/fab';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
@@ -289,10 +289,9 @@ export class AcpSessionColumn extends LitElement {
     const sessions = this.#sessions.value;
     return html`
       <h2 class="acp-session-column__title">Projects</h2>
-      <md-button class="acp-session-column__new" variant="tonal" @click=${this.#openProject}>
-        <md-icon slot="icon" class="acp-session-column__new-icon">${unsafeSVG(addIcon)}</md-icon>
-        New
-      </md-button>
+      <md-fab class="acp-session-column__new" variant="primary" size="s" label="New" @click=${this.#openProject}>
+        <md-icon slot="icon">${unsafeSVG(addIcon)}</md-icon>
+      </md-fab>
       <div class="acp-session-column__list" role="tree" aria-label="Projects">
         ${repeat(
           projects,

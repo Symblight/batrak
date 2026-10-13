@@ -539,7 +539,6 @@ export class AcpChangesReview extends LitElement {
           Unified
           <md-icon slot="icon" class="acp-changes-review__tool-icon">${unsafeSVG(arrowDropDownIcon)}</md-icon>
         </md-button>
-        <span class="acp-changes-review__divider"></span>
         <md-icon-button class="acp-changes-review__tool" aria-label="Next change" title=${NOT_YET} disabled>
           <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(arrowDownwardIcon)}</md-icon>
         </md-icon-button>
