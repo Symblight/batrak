@@ -198,6 +198,13 @@
  */
 
 /**
+ * Reply of `git_commit`; mirrors `git::commit::Committed`.
+ * @typedef {Object} GitCommitted
+ * @property {string} sha Abbreviated.
+ * @property {string} summary First line of the message.
+ */
+
+/**
  * Branch of the active root (`$gitRepo`), kept current while a project is open.
  * @typedef {Object} GitRepoView
  * @property {GitRepoState | null} repo `null` outside a repository or until first read.

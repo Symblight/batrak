@@ -12,6 +12,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
 /** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
+/** @typedef {import('../models/types.js').GitCommitted} GitCommitted */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../models/types.js').LogLevel} LogLevel */
 /** @typedef {import('../models/types.js').AboutInfo} AboutInfo */
@@ -191,6 +192,18 @@ export function gitStatus(rootId, since, force = false) {
  */
 export function gitLastCommitMessage(rootId) {
   return invoke('git_last_commit_message', { rootId });
+}
+
+/**
+ * Commits files as they are in the working tree, whatever is staged; the user's hooks run.
+ * @param {string} rootId
+ * @param {string[]} paths Relative; both sides of a rename. Empty with `amend` rewords the last commit.
+ * @param {string} message
+ * @param {boolean} amend Replace the last commit.
+ * @returns {Promise<GitCommitted>}
+ */
+export function gitCommit(rootId, paths, message, amend) {
+  return invoke('git_commit', { rootId, paths, message, amend });
 }
 
 /**

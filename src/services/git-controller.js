@@ -1,4 +1,4 @@
-import { gitHead, gitStatus } from './ipc.js';
+import { gitCommit, gitHead, gitStatus } from './ipc.js';
 import { projectController } from './project-controller.js';
 import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../stores/git.js';
 import { $rootId } from '../stores/workspace.js';
@@ -6,6 +6,7 @@ import { $rootId } from '../stores/workspace.js';
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('../models/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../models/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../models/types.js').GitCommitted} GitCommitted */
 
 /**
  * Git state of an open root that isn't active, shown again (and checked) when it is.
@@ -171,6 +172,26 @@ export class GitController {
     if (!this.#watchers) return;
     this.#force = true;
     this.#changes.schedule(0);
+  }
+
+  /**
+   * Commits files of the active root, then reads the branch and changed files again at once (the
+   * watcher would, after its delay).
+   * @param {string[]} paths Root-relative; both sides of a rename.
+   * @param {string} message
+   * @param {boolean} amend
+   * @returns {Promise<GitCommitted>} Fails with git's message, e.g. a hook's output.
+   */
+  async commit(paths, message, amend) {
+    const rootId = $rootId.get();
+    if (rootId === null) throw new Error('No project is open');
+    try {
+      return await gitCommit(rootId, paths, message, amend);
+    } finally {
+      // A failing hook may have changed files too.
+      this.#head.schedule(0);
+      this.refreshChanges();
+    }
   }
 
   async #readHead() {

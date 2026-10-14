@@ -14,8 +14,10 @@ import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { gitController } from '../../services/git-controller.js';
 import { gitLastCommitMessage } from '../../services/ipc.js';
+import { log } from '../../services/logger.js';
 import { projectController } from '../../services/project-controller.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git.js';
+import { notify } from '../../stores/notices.js';
 import styles from './acp-changes-panel.css?inline';
 
 /** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
@@ -100,13 +102,13 @@ function buildGroups(files) {
  * @tag acp-changes-panel
  * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit; kept current while active.
  * @fires acp-diff-open `{ path }` A changed file's name was clicked: show its diff in the Changes tab.
- * @fires acp-commit `{ paths, message, amend }` Commit was pressed; `paths` are root-relative.
  */
 export class AcpChangesPanel extends LitElement {
   static properties = {
     active: { type: Boolean },
     message: { state: true },
     amend: { state: true },
+    committing: { state: true },
   };
 
   static styles = styles;
@@ -153,6 +155,8 @@ export class AcpChangesPanel extends LitElement {
     this.message = '';
     /** @type {boolean} */
     this.amend = false;
+    /** @type {boolean} A commit is running: the form is locked. */
+    this.committing = false;
   }
 
   connectedCallback() {
@@ -278,7 +282,8 @@ export class AcpChangesPanel extends LitElement {
     );
   }
 
-  #commit() {
+  async #commit() {
+    if (this.committing) return;
     /** @type {string[]} */
     const paths = [];
     for (const id of this.#included) {
@@ -287,13 +292,21 @@ export class AcpChangesPanel extends LitElement {
       paths.push(file.path);
       if (file.origPath) paths.push(file.origPath);
     }
-    this.dispatchEvent(
-      new CustomEvent('acp-commit', {
-        detail: { paths, message: this.message.trim(), amend: this.amend },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    const amend = this.amend;
+    this.committing = true;
+    try {
+      const { sha, summary } = await gitController.commit(paths, this.message.trim(), amend);
+      notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
+      this.message = '';
+      this.#draft = '';
+      this.amend = false;
+    } catch (err) {
+      // Not `reportError`: a hook's output may quote file contents, which stay out of the log.
+      log('warn', `${amend ? 'amend' : 'commit'} failed`);
+      notify('error', `Commit failed: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      this.committing = false;
+    }
   }
 
   /**
@@ -409,12 +422,14 @@ export class AcpChangesPanel extends LitElement {
     const total = this.#leaves.size;
     const included = this.#included.length;
     const summary = total === 0 ? 'No changed files' : `${total} ${total === 1 ? 'file' : 'files'} · ${included} selected`;
-    const label = this.amend
-      ? 'Amend commit'
-      : included > 0
-        ? `Commit ${included} ${included === 1 ? 'file' : 'files'}`
-        : 'Commit';
-    const canCommit = this.message.trim() !== '' && (included > 0 || this.amend);
+    const label = this.committing
+      ? 'Committing…'
+      : this.amend
+        ? 'Amend commit'
+        : included > 0
+          ? `Commit ${included} ${included === 1 ? 'file' : 'files'}`
+          : 'Commit';
+    const canCommit = !this.committing && this.message.trim() !== '' && (included > 0 || this.amend);
     return html`
       <div class="acp-changes-panel__tools">
         <md-checkbox
@@ -443,15 +458,20 @@ export class AcpChangesPanel extends LitElement {
           variant="outlined"
           multiline
           label="Commit message"
+          ?disabled=${this.committing}
           .value=${this.message}
           @input=${this.#onMessageInput}
         ></md-text-field>
         <div class="acp-changes-panel__actions">
           <label class="acp-changes-panel__amend">
-            <md-checkbox .checked=${this.amend} @change=${this.#onAmendChange}></md-checkbox>
+            <md-checkbox
+              .checked=${this.amend}
+              ?disabled=${this.committing}
+              @change=${this.#onAmendChange}
+            ></md-checkbox>
             Amend
           </label>
-          <span class="acp-changes-panel__spacer"></span>
+          <span class="acp-changes-panel__actions-spacer"></span>
           <md-button class="acp-changes-panel__commit" variant="filled" ?disabled=${!canCommit} @click=${this.#commit}>
             <md-icon slot="icon" class="acp-changes-panel__commit-icon">${unsafeSVG(checkIcon)}</md-icon>
             ${label}

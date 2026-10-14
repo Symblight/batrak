@@ -54,6 +54,35 @@ const gutterPlugin = defineCdxPlugin({
   ],
 });
 /**
+ * Indent guides start where the code does, clear of the diff sign. The guide plugin draws them from
+ * 2px into the line (CodeMirror's default padding); ours, `--cdx-line-padding-inline`, is wider and
+ * holds the sign. The library draws an added line's sign on the same `::before` as the guides, so
+ * they crossed it and were spaced in the sign's smaller font: the sign moves to `::after`. Selectors
+ * go through `.cm-content` to outrank the library's and the plugin's themes.
+ */
+const indentGuidePlugin = defineCdxPlugin({
+  id: 'acp-indent-guides',
+  extensions: [
+    EditorView.theme({
+      '.cm-content .cm-indent-markers::before': { left: 'var(--cdx-line-padding-inline, 2px)' },
+      '&.cm-merge-b .cm-content .cm-changedLine::before, .cm-content .cdx-line-added::before': {
+        content: '""',
+        left: 'var(--cdx-line-padding-inline, 2px)',
+        font: 'inherit',
+      },
+      '&.cm-merge-b .cm-content .cm-changedLine::after, .cm-content .cdx-line-added::after': {
+        content: '"+"',
+        position: 'absolute',
+        insetInlineStart: '2px',
+        font: '500 0.75rem/inherit var(--cdx-content-font-family)',
+        color: 'var(--cdx-diff-added-sign-color)',
+        userSelect: 'none',
+        pointerEvents: 'none',
+      },
+    }),
+  ],
+});
+/**
  * Byline of line comments typed in the app. Comments aren't sent or stored anywhere yet: each editor
  * keeps its own until it closes.
  * @type {import('@symblight/code-editor').CdxCommentAuthor}
@@ -61,4 +90,4 @@ const gutterPlugin = defineCdxPlugin({
 export const commentAuthor = { id: 'me', name: 'You' };
 
 /** Plugins of every read-only code view: the tabs here and the diffs in the Changes tab. */
-export const editorPlugins = [...allPreset, scrollbarPlugin, gutterPlugin];
+export const editorPlugins = [...allPreset, scrollbarPlugin, gutterPlugin, indentGuidePlugin];
