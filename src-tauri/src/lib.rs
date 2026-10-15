@@ -59,6 +59,7 @@ pub fn run() {
             commands::git::git_status,
             commands::git::git_file_at_head,
             commands::git::git_last_commit_message,
+            commands::git::git_commit,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Brama");

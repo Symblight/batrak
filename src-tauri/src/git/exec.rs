@@ -12,6 +12,10 @@ use std::time::{Duration, Instant};
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
 const REMOTE_TIMEOUT: Duration = Duration::from_secs(120);
+/// A pre-commit hook may run a test suite.
+const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
+/// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
+const TERM_GRACE: Duration = Duration::from_secs(3);
 /// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
 pub const MAX_OUTPUT: usize = 32 * 1024 * 1024;
 const MAX_STDERR: usize = 64 * 1024;
@@ -74,8 +78,13 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Talks to a remote: a longer timeout.
+    /// Talks to a remote: a longer timeout. No fetch or push yet.
+    #[allow(dead_code)]
     Remote,
+    /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
+    /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
+    /// hook keeps running.
+    Hooks,
 }
 
 #[derive(Debug, Default)]
@@ -164,6 +173,11 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     no_window(&mut command);
+    #[cfg(unix)]
+    if mode == Mode::Hooks {
+        use std::os::unix::process::CommandExt;
+        command.process_group(0);
+    }
 
     // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
     let _permit = Permit::acquire();
@@ -180,8 +194,12 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let stdout = thread::spawn(move || read_capped(stdout, max_output));
     let stderr = thread::spawn(move || read_capped(stderr, MAX_STDERR));
 
-    let timeout = if mode == Mode::Remote { REMOTE_TIMEOUT } else { LOCAL_TIMEOUT };
-    let status = wait_with_timeout(&mut child, timeout);
+    let timeout = match mode {
+        Mode::Local | Mode::Background => LOCAL_TIMEOUT,
+        Mode::Remote => REMOTE_TIMEOUT,
+        Mode::Hooks => HOOKS_TIMEOUT,
+    };
+    let status = wait_with_timeout(&mut child, timeout, mode == Mode::Hooks);
     if let Some(writer) = writer {
         let _ = writer.join();
     }
@@ -218,13 +236,18 @@ fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
     (bytes, truncated)
 }
 
-fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus, String> {
+/// `group`: the child leads its own process group (`Mode::Hooks`), stopped as a whole on timeout.
+fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
             Ok(None) if started.elapsed() > timeout => {
-                let _ = child.kill();
+                if group {
+                    stop_group(child);
+                } else {
+                    let _ = child.kill();
+                }
                 let _ = child.wait();
                 return Err(format!("git timed out after {}s", timeout.as_secs()));
             }
@@ -235,6 +258,53 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration) -> Result<ExitStatus,
                 return Err(format!("failed to wait for git: {e}"));
             }
         }
+    }
+}
+
+/// SIGTERM to the child's process group: git's signal handler removes its lock files, and hooks
+/// it started stop too (they also hold our output pipes open). SIGKILL if it outlives the grace.
+#[cfg(unix)]
+fn stop_group(child: &mut Child) {
+    let Ok(pid) = libc::pid_t::try_from(child.id()) else {
+        let _ = child.kill();
+        return;
+    };
+    // SAFETY: plain syscalls on a process group we created; a stale id at worst fails with ESRCH.
+    unsafe { libc::kill(-pid, libc::SIGTERM) };
+    let started = Instant::now();
+    while started.elapsed() < TERM_GRACE {
+        if matches!(child.try_wait(), Ok(Some(_))) {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    // Hooks that ignored SIGTERM, and git itself if it did.
+    unsafe { libc::kill(-pid, libc::SIGKILL) };
+}
+
+/// Windows has no process groups to signal here: the git process alone is killed.
+#[cfg(not(unix))]
+fn stop_group(child: &mut Child) {
+    let _ = child.kill();
+}
+
+/// A path in the temp directory for a file git reads or writes (a temporary index, a commit
+/// message); removed on drop.
+pub struct TempFile {
+    pub path: PathBuf,
+}
+
+impl TempFile {
+    pub fn new(kind: &str) -> TempFile {
+        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        TempFile { path: std::env::temp_dir().join(format!("brama-{kind}-{}-{n}", std::process::id())) }
+    }
+}
+
+impl Drop for TempFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
     }
 }
 
@@ -261,6 +331,28 @@ pub fn canonical(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(unix)]
+    #[test]
+    fn stopping_a_group_stops_the_children_too() {
+        use std::io::BufRead;
+        use std::os::unix::process::CommandExt;
+        // Like a hook: a child of the process we wait on, holding its output pipe.
+        let mut child = Command::new("sh")
+            .args(["-c", "sleep 60 & echo $!; wait"])
+            .stdout(Stdio::piped())
+            .process_group(0)
+            .spawn()
+            .unwrap();
+        let mut line = String::new();
+        io::BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
+        let sleeper: libc::pid_t = line.trim().parse().unwrap();
+        stop_group(&mut child);
+        child.wait().unwrap();
+        thread::sleep(Duration::from_millis(100));
+        // SAFETY: signal 0 only checks that the process exists.
+        assert_ne!(unsafe { libc::kill(sleeper, 0) }, 0, "the hook's child is gone");
+    }
     use crate::git::test_repo::{git_bin, TestRepo};
 
     #[test]
