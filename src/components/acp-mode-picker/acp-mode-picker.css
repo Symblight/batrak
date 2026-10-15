@@ -1,0 +1,64 @@
+:host {
+  display: inline-flex;
+}
+
+/* Assist-chip sized: 28dp, the color says how much the agent may do. */
+.acp-mode-picker__button {
+  --md-button-font-size: 12.5px;
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: 6px;
+  --md-button-block-end-space: 6px;
+  --md-button-inline-start-space: 8px;
+  --md-button-inline-end-space: 4px;
+  --md-button-border-radius: var(--shape-corner-medium);
+}
+.acp-mode-picker__button_neutral {
+  --md-button-foreground-color: var(--md-on-surface-variant);
+  --md-button-border-color: var(--md-outline-variant);
+}
+.acp-mode-picker__button_plan {
+  --md-button-background-color: var(--md-secondary-container);
+  --md-button-foreground-color: var(--md-on-secondary-container);
+}
+.acp-mode-picker__button_agent {
+  --md-button-background-color: var(--md-tertiary-container);
+  --md-button-foreground-color: var(--md-on-tertiary-container);
+}
+.acp-mode-picker__button_full {
+  --md-button-background-color: var(--md-error-container);
+  --md-button-foreground-color: var(--md-on-error-container);
+}
+
+.acp-mode-picker__label {
+  white-space: nowrap;
+}
+
+.acp-mode-picker__arrow {
+  font-size: 16px;
+  vertical-align: middle;
+}
+
+.acp-mode-picker__menu {
+  --md-menu-min-width: 15rem;
+  --md-menu-selected-container-color: var(--md-tertiary-container);
+  --md-menu-selected-label-color: var(--md-on-tertiary-container);
+}
+
+.acp-mode-picker__item {
+  --md-menu-item-min-block-size: 2.25rem;
+  --md-menu-item-label-text-size: 0.875rem;
+  --md-menu-item-supporting-text-size: 0.75rem;
+  --md-menu-item-supporting-text-line-height: 1rem;
+  --md-menu-item-leading-icon-size: 1.25rem;
+}
+.acp-mode-picker__item_danger {
+  --md-menu-item-label-text-color: var(--md-error);
+  --md-menu-item-leading-icon-color: var(--md-error);
+}
+
+/* A narrow composer shows the mode's icon only. */
+@container (width < 28rem) {
+  .acp-mode-picker__label {
+    display: none;
+  }
+}

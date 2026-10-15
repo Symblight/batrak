@@ -543,30 +543,6 @@ export class AcpChangesReview extends LitElement {
       <span class="acp-changes-review__summary">${picked}/${total} files selected</span>
       ${this.#renderCounts(added, removed)}
       <span class="acp-changes-review__spacer"></span>
-      <span class="acp-changes-review__tools">
-        <md-button class="acp-changes-review__view-mode" variant="text" title=${NOT_YET} disabled>
-          Unified
-          <md-icon slot="icon" class="acp-changes-review__tool-icon">${unsafeSVG(arrowDropDownIcon)}</md-icon>
-        </md-button>
-        <md-icon-button class="acp-changes-review__tool" aria-label="Next change" title=${NOT_YET} disabled>
-          <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(arrowDownwardIcon)}</md-icon>
-        </md-icon-button>
-        <md-icon-button class="acp-changes-review__tool" aria-label="Previous change" title=${NOT_YET} disabled>
-          <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(arrowUpwardIcon)}</md-icon>
-        </md-icon-button>
-        <md-icon-button class="acp-changes-review__tool" aria-label="Revert all" title=${NOT_YET} disabled>
-          <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(undoIcon)}</md-icon>
-        </md-icon-button>
-        <span class="acp-changes-review__review">
-          <md-button class="acp-changes-review__review-main" variant="tonal" title=${NOT_YET} disabled>
-            <md-icon slot="icon" class="acp-changes-review__review-icon">${unsafeSVG(terminalIcon)}</md-icon>
-            Review with agent
-          </md-button>
-          <md-icon-button class="acp-changes-review__review-menu" aria-label="Choose agent" title=${NOT_YET} disabled>
-            <md-icon class="acp-changes-review__review-icon">${unsafeSVG(keyboardArrowDownIcon)}</md-icon>
-          </md-icon-button>
-        </span>
-      </span>
     </header>`;
   }
 

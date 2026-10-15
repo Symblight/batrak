@@ -2,9 +2,7 @@ import { LitElement, html } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import { buildChipElement, chipPartRule, createSplitOnSendHandler } from '@symblight/chat';
 import { ChxCommandPicker } from '@symblight/chat/composer';
-import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/menu';
 import '@symblight/wc-material/icon';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
@@ -17,6 +15,11 @@ import styles from './acp-chat.css?inline';
 import { reportError } from '../../services/notices.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
+import { startComposerSession } from '../../stores/composer.js';
+import '../acp-agent-picker/acp-agent-picker.js';
+import '../acp-context-meter/acp-context-meter.js';
+import '../acp-mode-picker/acp-mode-picker.js';
+import '../acp-run-target/acp-run-target.js';
 
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
@@ -227,30 +230,12 @@ function buildEntryItem(entry) {
   return item;
 }
 
-/** @type {{ id: string, label: string }[]} */
-const MODELS = [
-  { id: 'claude-opus-5-5', label: 'Opus 5.5' },
-  { id: 'claude-sonnet-5-5', label: 'Sonnet 5.5' },
-  { id: 'claude-haiku-4-5', label: 'Haiku 4.5' },
-];
-
 /**
  * @tag acp-chat
- * @summary Agent chat: message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips and a model picker.
- * @fires acp-model-change `{ model }`
+ * @summary Agent chat: message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
  */
 export class AcpChat extends LitElement {
-  static properties = {
-    model: {},
-  };
-
   static styles = styles;
-
-  constructor() {
-    super();
-    /** @type {string} Model id, one of `MODELS`. */
-    this.model = MODELS[0].id;
-  }
 
   /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
   #chatInserts = new StoreController(this, {
@@ -430,12 +415,9 @@ export class AcpChat extends LitElement {
     setChip(buildChipElement({ templateId: COMMAND_CHIP_TEMPLATE, label: `/${value}`, icon: null, data: {} }));
   }
 
-  /** @param {Event} e */
-  #onModelSelect(e) {
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    if (value === this.model) return;
-    this.model = value;
-    this.dispatchEvent(new CustomEvent('acp-model-change', { detail: { model: value }, bubbles: true, composed: true }));
+  /** The first message starts the session: the agent and where it runs are fixed from then on. */
+  #onSendMessage() {
+    startComposerSession();
   }
 
   /** `/` filter over the agent's commands. */
@@ -453,13 +435,13 @@ export class AcpChat extends LitElement {
   };
 
   render() {
-    const current = MODELS.find((m) => m.id === this.model) ?? MODELS[0];
     return html`
       <chx-chat
         class="acp-chat__chat"
         .userId=${'me'}
         .partElements=${this.#partElements}
         @chx-messages-change=${this.#onMessagesChange}
+        @chx-send-message=${this.#onSendMessage}
       >
         <chx-message-list
           slot="message-list"
@@ -470,10 +452,18 @@ export class AcpChat extends LitElement {
           <chx-streaming-indicator slot="streaming"></chx-streaming-indicator>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
-        <chx-message-composer  slot="message-composer" placeholder="Write your prompt...">
+        <chx-message-composer
+          slot="message-composer"
+          class="acp-chat__composer"
+          placeholder="Describe a task, @ to mention, / for commands"
+          layout="stacked"
+          send-button="always"
+          busy-action="stop"
+        >
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
             <md-icon class="acp-chat__attach-icon">${unsafeSVG(addIcon)}</md-icon>
           </md-icon-button>
+          <acp-agent-picker slot="leading" class="acp-chat__agent-picker"></acp-agent-picker>
           <chx-attachments slot="attachments"></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
           <chx-command-picker
@@ -492,16 +482,11 @@ export class AcpChat extends LitElement {
             @chx-command-query=${this.#onCommandQuery}
             @chx-command-picked=${this.#onCommandPicked}
           ></chx-command-picker>
-          <md-button id="acp-chat-model" slot="actions" variant="text" aria-haspopup="menu">
-            ${current.label}
-          </md-button>
+          <acp-mode-picker slot="actions"></acp-mode-picker>
+          <acp-context-meter slot="actions"></acp-context-meter>
+          <acp-run-target slot="footer" class="acp-chat__run-target"></acp-run-target>
         </chx-message-composer>
       </chx-chat>
-      <md-menu for="acp-chat-model" placement="top-end" @select=${this.#onModelSelect}>
-        ${MODELS.map(
-          (m) => html`<md-menu-item value=${m.id} ?selected=${m.id === this.model}>${m.label}</md-menu-item>`,
-        )}
-      </md-menu>
     `;
   }
 }

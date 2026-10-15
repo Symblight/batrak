@@ -6,7 +6,30 @@
 .acp-chat__chat {
   flex: 1;
   min-height: 0;
+  box-sizing: border-box;
+  padding-block-end: var(--space-3);
 }
 .acp-chat__attach-icon {
   font-size: 20px;
+}
+/* Agent composer: an outlined field on a tray that holds where the session runs. */
+.acp-chat__composer {
+  --chx-message-composer-background: var(--md-surface-container-high);
+  --chx-message-composer-footer-padding: 2px var(--space-1);
+  --chx-message-composer-footer-min-height: 28px;
+}
+.acp-chat__composer::part(textbox) {
+  --chx-textbox-background-color: var(--md-surface-container-lowest);
+  --chx-textbox-outline-color: var(--md-outline-variant);
+  --chx-textbox-focus-outline-color: var(--md-primary);
+}
+/* No hover tint on the field: keep its own background. */
+.acp-chat__composer::part(textbox-box):hover {
+  background-color: var(--md-surface-container-lowest);
+}
+.acp-chat__agent-picker {
+  min-width: 0;
+}
+.acp-chat__run-target {
+  flex: 1;
 }

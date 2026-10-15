@@ -9,6 +9,18 @@ import { $workspace } from './workspace.js';
 export const SETTINGS_TAB_ID = 'view:settings';
 /** Id of the Changes tab: every changed file, each expanding into its diff. */
 export const CHANGES_TAB_ID = 'view:changes';
+/** Id of the Terminal tab. */
+export const TERMINAL_TAB_ID = 'view:terminal';
+/** Id of the Browser tab. */
+export const BROWSER_TAB_ID = 'view:browser';
+
+/** @type {Map<string, Exclude<TabKind, 'file'>>} View tabs by id; any other id is a file's path. */
+const VIEW_TABS = new Map([
+  [SETTINGS_TAB_ID, 'settings'],
+  [CHANGES_TAB_ID, 'changes'],
+  [TERMINAL_TAB_ID, 'terminal'],
+  [BROWSER_TAB_ID, 'browser'],
+]);
 
 /** Key in `$projectTabs` of the tabs open while no project is: only tabs that show no file. */
 const NO_PROJECT = '';
@@ -19,9 +31,8 @@ const NO_PROJECT = '';
  *   view, like Settings).
  */
 export function parseTabId(id) {
-  if (id === SETTINGS_TAB_ID) return { kind: 'settings', path: '' };
-  if (id === CHANGES_TAB_ID) return { kind: 'changes', path: '' };
-  return { kind: 'file', path: id };
+  const view = VIEW_TABS.get(id);
+  return view ? { kind: view, path: '' } : { kind: 'file', path: id };
 }
 
 /**
@@ -240,6 +251,16 @@ export function openSettings() {
 /** Opens the Changes tab, or switches to it. */
 export function openChanges() {
   openTab(CHANGES_TAB_ID);
+}
+
+/** Opens the Terminal tab, or switches to it. */
+export function openTerminal() {
+  openTab(TERMINAL_TAB_ID);
+}
+
+/** Opens the Browser tab, or switches to it. */
+export function openBrowser() {
+  openTab(BROWSER_TAB_ID);
 }
 
 /** @param {string} path Id of an open tab. */

@@ -96,15 +96,22 @@
  */
 
 /**
- * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff).
- * @typedef {'file' | 'settings' | 'changes'} TabKind
+ * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff;
+ * Terminal; Browser).
+ * @typedef {'file' | 'settings' | 'changes' | 'terminal' | 'browser'} TabKind
+ */
+
+/**
+ * Which view renders a tab's content: a file's by its extension (`code` for any other), a view tab's
+ * by its kind. Picked by `TabContentController`.
+ * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'changes' | 'terminal' | 'browser'} ContentKind
  */
 
 /**
  * Open editor tabs.
  * @typedef {Object} EditorTabs
  * @property {string[]} paths Tab ids in strip order: a file's absolute path, or a view's id
- *   (`SETTINGS_TAB_ID`, `CHANGES_TAB_ID`); see `parseTabId()` in `stores/editor.js`.
+ *   (`SETTINGS_TAB_ID`, `CHANGES_TAB_ID`, `TERMINAL_TAB_ID`, `BROWSER_TAB_ID`); see `parseTabId()` in `stores/editor.js`.
  * @property {string | null} active Tab id.
  * @property {string[]} pinned Pinned tab ids, the first tabs of `paths` in the same order. Close Others
  *   and Close All leave them open.
@@ -294,6 +301,74 @@
  * @typedef {Object} CommentFocus
  * @property {string} path Absolute.
  * @property {string} threadId
+ */
+
+/**
+ * What `<acp-confirm-dialog>` asks.
+ * @typedef {Object} ConfirmOptions
+ * @property {string} headline
+ * @property {string} message
+ * @property {string} [detail] Secondary line under the message.
+ * @property {string} [confirmLabel] Defaults to `OK`.
+ * @property {boolean} [destructive] Colors the confirm action as an error.
+ */
+
+/**
+ * An agent the composer can start a session with; Brama's list, not ACP's.
+ * @typedef {Object} AgentInfo
+ * @property {string} id
+ * @property {string} name
+ * @property {string} glyph One or two letters for its badge.
+ */
+
+/**
+ * One value of an ACP session config option.
+ * @typedef {Object} ConfigOptionValue
+ * @property {string} value
+ * @property {string} name
+ * @property {string} [description]
+ */
+
+/**
+ * An ACP session config option (`configOptions` of `session/new`, `config_option_update`), kept in
+ * the agent's order. The composer finds its controls by `category`.
+ * @typedef {Object} ConfigOption
+ * @property {string} id
+ * @property {string} name
+ * @property {string} [description]
+ * @property {'model' | 'thought_level' | 'mode' | string} [category]
+ * @property {'select'} type
+ * @property {string} currentValue
+ * @property {ConfigOptionValue[]} options
+ */
+
+/**
+ * The context window as ACP's last `usage_update` reported it.
+ * @typedef {Object} ContextUsage
+ * @property {number} used Tokens.
+ * @property {number} size Tokens.
+ * @property {{ amount: number, currency: string }} [cost] The session's so far.
+ */
+
+/**
+ * @typedef {'local' | 'worktree' | 'docker'} RunTargetKind
+ */
+
+/**
+ * Where a session runs: picked before it starts, fixed after.
+ * @typedef {Object} RunTarget
+ * @property {RunTargetKind} kind
+ * @property {string | null} branch `null`: the project's current branch.
+ */
+
+/**
+ * The agent composer's state for the chat (`$composer`).
+ * @typedef {Object} ComposerState
+ * @property {string} agentId
+ * @property {ConfigOption[]} configOptions
+ * @property {ContextUsage | null} usage `null` until the agent reports one.
+ * @property {RunTarget} runTarget
+ * @property {boolean} started After the first message: the agent and run target are fixed.
  */
 
 export {};

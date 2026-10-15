@@ -14,13 +14,19 @@ import pushPinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
+import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import { fileIconFor } from '../../models/file-icons.js';
 import { fontStack } from '../../models/editor-fonts.js';
 import '../acp-settings/acp-settings.js';
 import '../acp-changes-review/acp-changes-review.js';
+import '../acp-image-preview/acp-image-preview.js';
+import '../acp-terminal/acp-terminal.js';
+import '../acp-browser/acp-browser.js';
 import { gitFileAtHead, readFile } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -53,11 +59,12 @@ import styles from './acp-tab-view.css?inline';
  * @typedef {Object} EditorTab
  * @property {string} id Its id in `$editorTabs`.
  * @property {TabKind} kind
- * @property {string} path The file, absolute; `''` for a view (Settings, Changes).
+ * @property {string} path The file, absolute; `''` for a view (Settings, Changes, Terminal, Browser).
  * @property {string} content
  * @property {string} error
- * @property {boolean} loaded Whether `content` and `baseline` are current. Only the active tab is read;
- *   the others are read, or re-read after a change on disk, when they become active.
+ * @property {boolean} loaded Whether `content` and `baseline` are current. Only the active tab is read
+ *   (and only when its view shows text, `readsText()`); the others are read, or re-read after a change
+ *   on disk, when they become active.
  * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
  */
 
@@ -68,7 +75,7 @@ function basename(path) {
 
 /**
  * @tag acp-tab-view
- * @summary The main column's tabs (`$editorTabs`): files in read-only editors, and views (Settings, Changes).
+ * @summary The main column's tabs (`$editorTabs`): files in the view their kind needs, and views.
  */
 export class AcpTabView extends LitElement {
   static properties = {
@@ -109,7 +116,7 @@ export class AcpTabView extends LitElement {
     onChange: (_head, old) => {
       if (old == null) return;
       for (const tab of this.tabs) {
-        if (tab.kind !== 'file') continue;
+        if (!this.#content.readsText(tab)) continue;
         if (tab.id === this.#activeId) this.#loadBaseline(tab.id);
         else if (tab.loaded) this.#patch(tab.id, { loaded: false });
       }
@@ -119,6 +126,20 @@ export class AcpTabView extends LitElement {
   #editorFontSize = new StoreController(this, { store: $editorFontSize });
   #comments = new EditorCommentsController(this, { pathOf: (file) => file });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
+  /** @type {TabContentController<EditorTab>} */
+  #content = new TabContentController({
+    views: {
+      code: (tab) => this.#renderText(tab, () => this.#renderCode(tab)),
+      // The editor until the rendered preview exists: it keeps the diff gutter, comments and selection actions.
+      markdown: (tab) => this.#renderText(tab, () => this.#renderCode(tab)),
+      image: (tab) => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path}></acp-image-preview>`,
+      settings: () => html`<acp-settings class="acp-tab-view__view"></acp-settings>`,
+      changes: (tab) =>
+        html`<acp-changes-review class="acp-tab-view__view" .active=${tab.id === this.#activeId}></acp-changes-review>`,
+      terminal: () => html`<acp-terminal class="acp-tab-view__view"></acp-terminal>`,
+      browser: () => html`<acp-browser class="acp-tab-view__view"></acp-browser>`,
+    },
+  });
   /** @type {ContextMenuController<EditorTab>} */
   #menu = new ContextMenuController(this, {
     menu: () => this.renderRoot.querySelector('md-menu'),
@@ -140,6 +161,7 @@ export class AcpTabView extends LitElement {
       if (rel === null) continue;
       // Read-only for now, so there are no local edits to protect: just reload.
       if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
+      else if (!this.#content.readsText(tab)) continue;
       else if (modified.includes(rel) || added.includes(rel)) {
         if (tab.id === this.#activeId) this.#load(tab.id);
         else if (tab.loaded) this.#patch(tab.id, { loaded: false });
@@ -218,8 +240,8 @@ export class AcpTabView extends LitElement {
       const existing = known.get(id);
       if (existing) return existing;
       const target = parseTabId(id);
-      // A view has nothing to read.
-      return { id, ...target, content: '', error: '', loaded: target.kind !== 'file', baseline: null };
+      // A view, or a file shown other than as text (an image), has nothing to read.
+      return { id, ...target, content: '', error: '', loaded: !this.#content.readsText(target), baseline: null };
     });
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
@@ -394,6 +416,8 @@ export class AcpTabView extends LitElement {
     if (tab.kind === 'changes') {
       return { title: 'Changes', icon: differenceIcon, tooltip: 'Changed files and their diffs against HEAD' };
     }
+    if (tab.kind === 'terminal') return { title: 'Terminal', icon: terminalIcon, tooltip: 'Terminal' };
+    if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
     const name = basename(tab.path);
     return { title: name, icon: fileIconFor(name) ?? fileIcon, tooltip: tab.path };
   }
@@ -475,42 +499,42 @@ export class AcpTabView extends LitElement {
     });
   }
 
+  /**
+   * A file's text in its view, or the read error in place of it.
+   * @param {EditorTab} tab
+   * @param {() => unknown} view
+   */
+  #renderText(tab, view) {
+    return tab.error ? html`<pre class="acp-tab-view__error">${tab.error}</pre>` : view();
+  }
+
   /** @param {EditorTab} tab */
-  #renderContent(tab) {
-    if (tab.kind === 'settings') return html`<acp-settings class="acp-tab-view__view"></acp-settings>`;
-    if (tab.kind === 'changes') {
-      return html`<acp-changes-review
-        class="acp-tab-view__view"
-        .active=${tab.id === this.#activeId}
-      ></acp-changes-review>`;
-    }
-    return tab.error
-        ? html`<pre class="acp-tab-view__error">${tab.error}</pre>`
-        : html`<cdx-code-editor
-            class="acp-tab-view__editor"
-            style=${this.#editorStyle()}
-            read-only
-            .plugins=${editorPlugins}
-            filename=${tab.path}
-            .value=${tab.content}
-            .baseline=${tab.baseline}
-          >
-            <cdx-diff slot="diff" kind="baseline"></cdx-diff>
-            <cdx-comments
-              slot="comments"
-              mode="single"
-              .noResolve=${true}
-              .author=${commentAuthor}
-              .comments=${this.#comments.threadsOf(tab.path)}
-            ></cdx-comments>
-            <cdx-footer slot="footer" path=${projectController.relPath(tab.path) ?? tab.path}></cdx-footer>
-          </cdx-code-editor>`;
+  #renderCode(tab) {
+    return html`<cdx-code-editor
+        class="acp-tab-view__editor"
+        style=${this.#editorStyle()}
+        read-only
+        .plugins=${editorPlugins}
+        filename=${tab.path}
+        .value=${tab.content}
+        .baseline=${tab.baseline}
+      >
+        <cdx-diff slot="diff" kind="baseline"></cdx-diff>
+        <cdx-comments
+          slot="comments"
+          mode="single"
+          .noResolve=${true}
+          .author=${commentAuthor}
+          .comments=${this.#comments.threadsOf(tab.path)}
+        ></cdx-comments>
+        <cdx-footer slot="footer" path=${projectController.relPath(tab.path) ?? tab.path}></cdx-footer>
+      </cdx-code-editor>`;
   }
 
   /** @param {EditorTab} tab */
   #renderPanel(tab) {
     return html`<md-tab-panel class="acp-tab-view__panel" value=${tab.id} ?active=${tab.id === this.#activeId}>
-      ${this.#renderContent(tab)}
+      ${this.#content.render(tab)}
     </md-tab-panel>`;
   }
 

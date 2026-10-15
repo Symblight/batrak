@@ -1,0 +1,68 @@
+:host {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--md-on-surface-variant);
+  font-size: 12.5px;
+  line-height: 16px;
+}
+
+.acp-run-target__button {
+  --md-button-font-size: 12.5px;
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: 4px;
+  --md-button-block-end-space: 4px;
+  --md-button-foreground-color: var(--md-on-surface-variant);
+  /* The text variant sets its inline padding (12px) on these, not on the public tokens. */
+  --_btn-container-space-left: 8px;
+  --_btn-container-space-right: 4px;
+}
+
+.acp-run-target__arrow {
+  font-size: 16px;
+  vertical-align: middle;
+}
+
+.acp-run-target__fixed {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  padding-inline: var(--space-1);
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.acp-run-target__icon {
+  font-size: 16px;
+}
+
+.acp-run-target__note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  margin-inline-start: auto;
+  padding-inline-end: var(--space-1);
+  font-size: 12px;
+  color: var(--md-error);
+}
+
+.acp-run-target__note-icon {
+  font-size: 16px;
+}
+
+.acp-run-target__menu {
+  --md-menu-min-width: 13rem;
+  --md-menu-selected-container-color: var(--md-tertiary-container);
+  --md-menu-selected-label-color: var(--md-on-tertiary-container);
+}
+
+.acp-run-target__item {
+  --md-menu-item-min-block-size: 2.25rem;
+  --md-menu-item-label-text-size: 0.875rem;
+  --md-menu-item-supporting-text-size: 0.75rem;
+  --md-menu-item-supporting-text-line-height: 1rem;
+  --md-menu-item-leading-icon-size: 1.25rem;
+}
