@@ -15,6 +15,8 @@ import { quickOpen } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
 import styles from './acp-chat.css?inline';
 import { reportError } from '../../services/notices.js';
+import { StoreController } from '../../controllers/store/StoreController.js';
+import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
@@ -22,6 +24,23 @@ import { reportError } from '../../services/notices.js';
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+
+/**
+ * The composer's ProseMirror document, as far as code goes in: `line+`, each line text and chips.
+ * `chx-textbox` and its editor aren't exported by `@symblight/chat`, so typed here.
+ * @typedef {{ content: { size: number }, childCount: number, child: (index: number) => PmNode }} PmNode
+ * @typedef {Object} PmSchema
+ * @property {{ line: PmNodeType, chip: PmNodeType }} nodes
+ * @property {(text: string) => PmNode} text
+ * @typedef {{ create: (attrs: object | null, content?: PmNode[]) => PmNode }} PmNodeType
+ * @typedef {{ doc: PmNode, insert: (pos: number, nodes: PmNode[]) => PmTransaction,
+ *   replaceWith: (from: number, to: number, nodes: PmNode[]) => PmTransaction }} PmTransaction
+ * @typedef {{ state: { schema: PmSchema, selection: { from: number, to: number }, tr: PmTransaction },
+ *   dispatch: (tr: PmTransaction) => void }} PmView
+ * @typedef {HTMLElement & { updateComplete: Promise<boolean>, focus: () => void, focusEnd: () => void,
+ *   editor?: { view: PmView } }} ComposerTextbox
+ */
 
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 
@@ -74,6 +93,37 @@ const COMMAND_CHIP_TEMPLATE = 'acp-chat-command-chip';
  * which finds its template by `document.getElementById`: one inside this shadow root (like the
  * pickers' own) is never found, and the chip falls back to a bare span that sends as plain text.
  */
+/**
+ * A file chip naming lines of code: `src/app.js:12`, or `src/app.js:12-23` for several. The label is
+ * what the agent reads.
+ * @param {PmSchema} schema
+ * @param {ChatInsert} insert
+ */
+function codeChip(schema, { path, fromLine, toLine }) {
+  const rel = projectController.relPath(path) ?? path;
+  const name = rel.slice(rel.lastIndexOf('/') + 1);
+  const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
+  return schema.nodes.chip.create({
+    templateId: FILE_CHIP_TEMPLATE,
+    label: `${rel}:${lines}`,
+    icon: fileIconFor(name) ?? fileIcon,
+    data: { path: rel, lines },
+  });
+}
+
+/**
+ * A comment's composer lines: its chip, then the comment; the comment's further lines follow as plain lines.
+ * @param {PmSchema} schema
+ * @param {ChatInsert} insert
+ */
+function commentLines(schema, insert) {
+  const [first, ...rest] = insert.body.split('\n');
+  return [
+    schema.nodes.line.create(null, [codeChip(schema, insert), schema.text(` ${first}`)]),
+    ...rest.map((text) => schema.nodes.line.create(null, text ? [schema.text(text)] : [])),
+  ];
+}
+
 function ensureChipTemplates() {
   if (document.getElementById(FILE_CHIP_TEMPLATE)) return;
   const file = document.createElement('template');
@@ -202,9 +252,46 @@ export class AcpChat extends LitElement {
     this.model = MODELS[0].id;
   }
 
+  /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
+  #chatInserts = new StoreController(this, {
+    store: $chatInserts,
+    onChange: (inserts) => {
+      if (inserts.length) this.#insertCode();
+    },
+  });
+
   connectedCallback() {
     super.connectedCallback();
     ensureChipTemplates();
+  }
+
+  /**
+   * Takes `$chatInserts` into the composer: a selection's chip at the caret, a comment as its own line
+   * after the draft (replacing an empty one).
+   */
+  async #insertCode() {
+    await this.updateComplete;
+    const composer = /** @type {import('lit').LitElement | null} */ (this.renderRoot.querySelector('chx-message-composer'));
+    await composer?.updateComplete;
+    const textbox = /** @type {ComposerTextbox | null} */ (composer?.renderRoot.querySelector('chx-textbox') ?? null);
+    await textbox?.updateComplete;
+    const view = textbox?.editor?.view;
+    if (!textbox || !view) return; // they wait in the store
+    const inserts = takeChatInserts();
+    if (!inserts.length) return;
+    const { schema, selection } = view.state;
+    let tr = view.state.tr;
+    const chips = inserts.filter((i) => !i.body).flatMap((i) => [codeChip(schema, i), schema.text(' ')]);
+    if (chips.length) tr = tr.replaceWith(selection.from, selection.to, chips);
+    const lines = inserts.filter((i) => i.body).flatMap((i) => commentLines(schema, i));
+    if (lines.length) {
+      const { doc } = tr;
+      const empty = doc.childCount === 1 && doc.child(0).content.size === 0;
+      tr = empty ? tr.replaceWith(0, doc.content.size, lines) : tr.insert(doc.content.size, lines);
+    }
+    view.dispatch(tr);
+    if (lines.length) textbox.focusEnd();
+    else textbox.focus(); // the caret stays after the chips
   }
 
   async firstUpdated() {

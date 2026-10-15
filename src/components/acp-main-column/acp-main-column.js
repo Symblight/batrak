@@ -1,7 +1,16 @@
 import { LitElement, html } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { projectController } from '../../services/project-controller.js';
-import { $activePath, openChanges as openChangesTab, openSettings as openSettingsTab } from '../../stores/editor.js';
+import { StoreController } from '../../controllers/store/StoreController.js';
+import {
+  $activePath,
+  CHANGES_TAB_ID,
+  openChanges as openChangesTab,
+  openSettings as openSettingsTab,
+} from '../../stores/editor.js';
+import { $commentFocus } from '../../stores/comments.js';
 import '../acp-tab-view/acp-tab-view.js';
+import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
 /**
@@ -10,6 +19,17 @@ import styles from './acp-main-column.css?inline';
  */
 export class AcpMainColumn extends LitElement {
   static styles = styles;
+
+  /** A comment to reveal: show its file; the editor that shows it then reveals it. */
+  #commentFocus = new StoreController(this, {
+    store: $commentFocus,
+    onChange: (focus) => {
+      if (focus) this.#showFile(focus.path);
+    },
+  });
+
+  /** The bar sits lower in the Changes tab, which has no footer. */
+  #activePath = new StoreController(this, { store: $activePath });
 
   #onFileOpen = (/** @type {Event} */ e) => {
     const { path, line } = /** @type {CustomEvent<{ path: string, line?: number }>} */ (e).detail;
@@ -52,6 +72,16 @@ export class AcpMainColumn extends LitElement {
     this.#tabView.revealChange(path);
   }
 
+  /**
+   * Shows a file where its comment is: its diff in the Changes tab (the bar there lists only changed
+   * files), else its tab.
+   * @param {string} path Absolute.
+   */
+  #showFile(path) {
+    if ($activePath.get() === CHANGES_TAB_ID) this.showChange(path);
+    else this.openFile(path);
+  }
+
   /** Opens the Settings tab, or switches to it. */
   openSettings() {
     openSettingsTab();
@@ -67,7 +97,13 @@ export class AcpMainColumn extends LitElement {
   }
 
   render() {
-    return html`<acp-tab-view class="acp-main-column__tabs"></acp-tab-view>`;
+    return html`<acp-tab-view class="acp-main-column__tabs"></acp-tab-view>
+      <acp-comment-bar
+        class=${classMap({
+          'acp-main-column__comment-bar': true,
+          'acp-main-column__comment-bar_changes': this.#activePath.value === CHANGES_TAB_ID,
+        })}
+      ></acp-comment-bar>`;
   }
 }
 

@@ -86,7 +86,8 @@
   flex-direction: column;
   gap: 2px;
   overflow: auto;
-  padding: 0 var(--space-2) var(--space-3);
+  /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
+  padding: 0 var(--space-2) 72px;
 }
 .acp-changes-review__row {
   flex: none;

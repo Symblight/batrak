@@ -83,8 +83,7 @@ const indentGuidePlugin = defineCdxPlugin({
   ],
 });
 /**
- * Byline of line comments typed in the app. Comments aren't sent or stored anywhere yet: each editor
- * keeps its own until it closes.
+ * Byline of line comments typed in the app: notes for the agent, kept in `$comments` until sent.
  * @type {import('@symblight/code-editor').CdxCommentAuthor}
  */
 export const commentAuthor = { id: 'me', name: 'You' };

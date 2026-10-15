@@ -15,6 +15,8 @@ import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
+import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
+import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { fileIconFor } from '../../models/file-icons.js';
 import { fontStack } from '../../models/editor-fonts.js';
 import '../acp-settings/acp-settings.js';
@@ -115,6 +117,8 @@ export class AcpTabView extends LitElement {
   });
   #editorFont = new StoreController(this, { store: $editorFont });
   #editorFontSize = new StoreController(this, { store: $editorFontSize });
+  #comments = new EditorCommentsController(this, { pathOf: (file) => file });
+  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
   /** @type {ContextMenuController<EditorTab>} */
   #menu = new ContextMenuController(this, {
     menu: () => this.renderRoot.querySelector('md-menu'),
@@ -492,8 +496,13 @@ export class AcpTabView extends LitElement {
             .baseline=${tab.baseline}
           >
             <cdx-diff slot="diff" kind="baseline"></cdx-diff>
-            <cdx-comments slot="comments" mode="single" .author=${commentAuthor}></cdx-comments>
-            <cdx-comments-bar slot="comments-bar"></cdx-comments-bar>
+            <cdx-comments
+              slot="comments"
+              mode="single"
+              .noResolve=${true}
+              .author=${commentAuthor}
+              .comments=${this.#comments.threadsOf(tab.path)}
+            ></cdx-comments>
             <cdx-footer slot="footer" path=${projectController.relPath(tab.path) ?? tab.path}></cdx-footer>
           </cdx-code-editor>`;
   }
@@ -514,6 +523,7 @@ export class AcpTabView extends LitElement {
       </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
       ${this.#renderMenu()}
+      ${this.#selectionActions.render()}
     `;
   }
 }

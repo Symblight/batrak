@@ -70,6 +70,24 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/models/types.js`.
 
+**Agent comments:** line comments typed in any `cdx-code-editor` live in `$comments` (`stores/comments.js`,
+by absolute path, in memory). Every editor's `<cdx-comments>` is controlled through
+`EditorCommentsController` (`src/controllers/comments/`): `.comments=${this.#comments.threadsOf(path)}`,
+and its submit / edit / delete events become store actions, so one file shown twice (a tab and the
+Changes tab) stays in sync. `<acp-comment-bar>` (over `<acp-main-column>`) steps through
+`$tabComments` (the active tab's file, or every changed file in Changes) by setting `$commentFocus`: the main column shows the file,
+the visible editor of it reveals the thread. Send to agent (`sendToChat()`) clears the comments from the code and hands them to the chat
+(`addToChat()`, `stores/chat.js`); `<acp-chat>` takes `$chatInserts` into its composer: a comment as its
+own line (file chip `path:line` or `path:from-to`, then the text), a selection as a chip at the caret.
+`SelectionActionsController` (`src/controllers/selection-actions/`) shows `<acp-selection-actions>`
+(Add to chat / Comment) under the caret of a settled selection in the host's own editors: a manual
+`popover` toolbar (top layer), placed by `FloatingController` (`src/controllers/floating/`, Floating UI
+`computePosition` + `autoUpdate` against a virtual caret element), so it follows scrolling and hides
+while the caret is out of view. Alt+F10 focuses it, arrows move between actions, Escape closes it,
+and it closes when focus leaves both it and the editor (focus inside it returns to the editor). Editor
+events are composed, so a host also hears its children's editors (the tab view hears the Changes
+review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor-events.js`).
+
 ### Background work
 
 Commands are `async` and push disk/process work to `spawn_blocking`; nothing blocks the IPC thread.
@@ -121,6 +139,14 @@ helpers apply.
 - Anything that changes a repository runs inside `lock::with_mutation`, keyed by the common git
   dir, so a checkout and its worktrees are serialized together.
 - Commands take root-relative paths only after `workspace::checked_rel()`.
+- Commit (`git/commit.rs`, `git_commit`): the files picked in Changes go in as they are in the
+  working tree (`commit --only`, untracked ones staged first and unstaged again if it fails, both
+  sides of a rename); whatever else is staged stays staged and out. Amend with no files rewords
+  only. During a merge, cherry-pick or revert (no partial commits) the picks are staged and the
+  whole index committed. Paths go through stdin (`--pathspec-from-file`, `update-index --stdin`),
+  never argv; never pass an empty pathspec file (git then commits the whole index). Hooks and
+  filters run under `Mode::Hooks`: 10 min timeout, own process group, stopped with SIGTERM first
+  so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
 - `worktree` and `apply` (Apply Locally / Check Out Branch) are tested but not exposed yet; sessions
   use them. A dirty worktree is never removed.
 - Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.

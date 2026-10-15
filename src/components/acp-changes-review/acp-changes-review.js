@@ -26,6 +26,8 @@ import { projectController } from '../../services/project-controller.js';
 import { $commitSelection, $gitChanges, $gitHead, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
 import { $rootId } from '../../stores/workspace.js';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
+import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
+import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './acp-changes-review.css?inline';
 
 /** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
@@ -167,6 +169,8 @@ export class AcpChangesReview extends LitElement {
   };
   #repo = new StoreController(this, { store: $gitRepo });
   #selection = new StoreController(this, { store: $commitSelection });
+  #comments = new EditorCommentsController(this, { pathOf: (file) => projectController.absPath(file) });
+  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => projectController.absPath(file) });
   /** @type {(() => void) | null} Stops watching; set while active and connected. */
   #unwatch = null;
   /** @type {ChangeRow[]} */
@@ -487,8 +491,13 @@ export class AcpChangesReview extends LitElement {
     >
       <!-- Review, not baseline: only it folds unchanged lines. Its Accept/Reject are hidden in CSS. -->
       <cdx-diff slot="diff" kind="review" no-review-bar .collapseUnchanged=${COLLAPSE_UNCHANGED}></cdx-diff>
-      <cdx-comments slot="comments" mode="single" .author=${commentAuthor}></cdx-comments>
-      <cdx-comments-bar slot="comments-bar"></cdx-comments-bar>
+      <cdx-comments
+        slot="comments"
+        mode="single"
+        .noResolve=${true}
+        .author=${commentAuthor}
+        .comments=${this.#comments.threadsOf(projectController.absPath(row.id))}
+      ></cdx-comments>
     </cdx-code-editor>`;
   }
 
@@ -591,7 +600,7 @@ export class AcpChangesReview extends LitElement {
   }
 
   render() {
-    return html`${this.#renderToolbar()}${this.#renderBody()}`;
+    return html`${this.#renderToolbar()}${this.#renderBody()}${this.#selectionActions.render()}`;
   }
 }
 
