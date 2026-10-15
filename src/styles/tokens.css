@@ -54,12 +54,14 @@
   --session-column-width: calc((100vw - var(--nav-rail-width)) * 0.2);
   --file-tree-width: calc((100vw - var(--nav-rail-width)) * 0.2);
   --agent-column-width: calc((100vw - var(--nav-rail-width)) * 0.6);
-  --column-gap: var(--space-2);
+  --column-gap: var(--space-1);
 
   /* Shape — wc-material MD3 corner scale */
   --shape-corner-medium: var(--md-sys-shape-corner-medium);
+  --shape-corner-full: var(--md-sys-shape-corner-full);
 
   /* Spacing */
+  --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;

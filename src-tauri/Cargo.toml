@@ -36,6 +36,10 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
+# Stopping a timed-out commit's process group (git and its hooks)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Future dependencies:
 # rusqlite = { version = "0.32", features = ["bundled"] }
 # git2 = "0.19"

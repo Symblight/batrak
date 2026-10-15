@@ -1,12 +1,9 @@
 //! Bringing a worktree's work back to the main checkout: as a patch ("Apply Locally") or by
 //! checking its branch out there ("Check Out Branch").
 
-use std::ffi::OsString;
-use std::fs;
-use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::path::Path;
 
-use super::exec::{self, Mode, Options};
+use super::exec::{self, Mode, Options, TempFile};
 use super::lock::with_mutation;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -22,7 +19,7 @@ pub enum ApplyOutcome {
 /// Patch from `base` to the worktree's current files, uncommitted and untracked ones included
 /// (ignored files are not). Built in a temporary index, so the worktree's own index is untouched.
 pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
-    let index = TempIndex::new();
+    let index = TempFile::new("index");
     let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", index.path.as_os_str())];
     let opts = Options { env: &env, ..Default::default() };
     let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Vec<u8>, String> {
@@ -88,25 +85,6 @@ pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path
 }
 
 /// A scratch index file, deleted on drop.
-struct TempIndex {
-    path: PathBuf,
-}
-
-impl TempIndex {
-    fn new() -> TempIndex {
-        static NEXT: AtomicU64 = AtomicU64::new(0);
-        let name: OsString =
-            format!("brama-index-{}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed)).into();
-        TempIndex { path: std::env::temp_dir().join(name) }
-    }
-}
-
-impl Drop for TempIndex {
-    fn drop(&mut self) {
-        let _ = fs::remove_file(&self.path);
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,0 +1,59 @@
+/* A manual popover in the top layer, anchored to the selection; its controller (Floating UI) writes
+   `left` / `top`. The popover UA styles (centred, bordered, filled box) are reset. */
+:host {
+  position: fixed;
+  inset: auto;
+  top: 0;
+  left: 0;
+  width: max-content;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  overflow: visible;
+  color: inherit;
+  font-family: var(--font-family);
+  animation: acp-selection-actions-enter 120ms ease-out;
+}
+
+/* MD3 connected button group: no container of its own, tonal buttons 2dp apart, full outer corners,
+   8dp inner ones. */
+.acp-selection-actions__group {
+  display: flex;
+  gap: 2px;
+}
+
+.acp-selection-actions__action {
+  --md-button-font-size: 13px;
+  --md-button-block-start-space: 7px;
+  --md-button-block-end-space: 7px;
+  --md-button-inline-start-space: 12px;
+  --md-button-inline-end-space: 12px;
+  --md-button-foreground-color: var(--md-on-surface);
+  --md-button-border-radius: var(--shape-corner-full);
+  --_acp-selection-actions-inner-corner: 8px;
+}
+.acp-selection-actions__action_leading {
+  --md-button-border-start-end-radius: var(--_acp-selection-actions-inner-corner);
+  --md-button-border-end-end-radius: var(--_acp-selection-actions-inner-corner);
+}
+.acp-selection-actions__action_trailing {
+  --md-button-border-start-start-radius: var(--_acp-selection-actions-inner-corner);
+  --md-button-border-end-start-radius: var(--_acp-selection-actions-inner-corner);
+}
+.acp-selection-actions__icon {
+  font-size: 20px;
+}
+
+@keyframes acp-selection-actions-enter {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host {
+    animation: none;
+  }
+}
