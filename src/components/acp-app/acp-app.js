@@ -183,8 +183,8 @@ export class AcpApp extends LitElement {
     const hidden = this.#hiddenColumns.value;
     const sessionHidden = hidden.includes('session');
     const filesHidden = hidden.includes('side');
-    // With neither tabs nor files beside it, the agent column takes the space.
-    const agentFills = !hasCode && filesHidden;
+    // With no tabs beside it, the agent column takes the space.
+    const agentFills = !hasCode;
     return html`
       <acp-toolbar class="acp-app__toolbar"></acp-toolbar>
       <div class="acp-app__columns">
@@ -193,9 +193,9 @@ export class AcpApp extends LitElement {
         <acp-agent-column class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"></acp-agent-column>
         ${agentFills ? nothing : this.#renderResizer('agent', 'Resize agent column')}
         <acp-main-column class="acp-app__main" ?hidden=${!hasCode}></acp-main-column>
-        ${hasCode && !filesHidden ? this.#renderResizer('side', 'Resize file column', 'start') : nothing}
+        ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
         <acp-file-column
-          class="acp-app__files ${hasCode ? 'acp-app__files_with-code' : ''}"
+          class="acp-app__files"
           ?hidden=${filesHidden}
           @acp-file-open=${this.#onFileOpen}
           @acp-diff-open=${this.#onDiffOpen}
