@@ -179,6 +179,9 @@ export class AcpFileTree extends LitElement {
   /**
    * Leading icon of a row: folder icon from the tree-view package, language logo from simple-icons, else a Material file icon.
    * Rendered in the tree's shadow root, so each anchor and its tooltip stay in one template.
+   * Tooltips get `width: max-content`: wc-material's fixed tooltip otherwise shrinks to the space right of
+   * its `left`, so near the window's edge each reposition resizes it and re-fires Floating UI's
+   * ResizeObserver ("ResizeObserver loop completed with undelivered notifications").
    * @param {TreeItem} item
    * @param {{ expanded: boolean }} state
    */
@@ -187,7 +190,7 @@ export class AcpFileTree extends LitElement {
     const icon = item.isDir
       ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
       : html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
-    return html`${icon}<md-tooltip for=${id}>${tooltipFor(item)}</md-tooltip>`;
+    return html`${icon}<md-tooltip for=${id} style="width: max-content">${tooltipFor(item)}</md-tooltip>`;
   }
 
   /**
@@ -201,7 +204,7 @@ export class AcpFileTree extends LitElement {
         style=${item.ignored ? 'color: var(--md-on-surface-variant); opacity: 0.6' : ''}
         >${item.label}</span
       >
-      <md-tooltip for=${id}>${tooltipFor(item)}</md-tooltip>`;
+      <md-tooltip for=${id} style="width: max-content">${tooltipFor(item)}</md-tooltip>`;
   }
 
   /** @param {Event} e */

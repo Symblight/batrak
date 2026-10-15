@@ -11,7 +11,10 @@
   --md-secondary-container: var(--md-sys-color-secondary-container);
   --md-on-secondary-container: var(--md-sys-color-on-secondary-container);
   --md-tertiary: var(--md-sys-color-tertiary);
+  --md-tertiary-container: var(--md-sys-color-tertiary-container);
+  --md-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
   --md-error: var(--md-sys-color-error);
+  --md-on-error: var(--md-sys-color-on-error);
   --md-error-container: var(--md-sys-color-error-container);
   --md-on-error-container: var(--md-sys-color-on-error-container);
   --md-inverse-surface: var(--md-sys-color-inverse-surface);

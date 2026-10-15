@@ -5,7 +5,7 @@ import { gitController } from '../../services/git-controller.js';
 import { onMenuAction } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
 import { reportError } from '../../services/notices.js';
-import { $activePath } from '../../stores/editor.js';
+import { $activePath, openBrowser, openTerminal } from '../../stores/editor.js';
 import { $columnWidths, $hiddenColumns, showColumn } from '../../stores/layout.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
@@ -183,8 +183,8 @@ export class AcpApp extends LitElement {
     const hidden = this.#hiddenColumns.value;
     const sessionHidden = hidden.includes('session');
     const filesHidden = hidden.includes('side');
-    // With neither tabs nor files beside it, the agent column takes the space.
-    const agentFills = !hasCode && filesHidden;
+    // With no tabs beside it, the agent column takes the space.
+    const agentFills = !hasCode;
     return html`
       <acp-toolbar class="acp-app__toolbar"></acp-toolbar>
       <div class="acp-app__columns">
@@ -193,9 +193,9 @@ export class AcpApp extends LitElement {
         <acp-agent-column class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"></acp-agent-column>
         ${agentFills ? nothing : this.#renderResizer('agent', 'Resize agent column')}
         <acp-main-column class="acp-app__main" ?hidden=${!hasCode}></acp-main-column>
-        ${hasCode && !filesHidden ? this.#renderResizer('side', 'Resize file column', 'start') : nothing}
+        ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
         <acp-file-column
-          class="acp-app__files ${hasCode ? 'acp-app__files_with-code' : ''}"
+          class="acp-app__files"
           ?hidden=${filesHidden}
           @acp-file-open=${this.#onFileOpen}
           @acp-diff-open=${this.#onDiffOpen}
@@ -206,6 +206,8 @@ export class AcpApp extends LitElement {
           @acp-show-files=${this.#showFiles}
           @acp-find-in-files=${this.#showSearch}
           @acp-show-changes=${this.#showChanges}
+          @acp-show-terminal=${openTerminal}
+          @acp-show-browser=${openBrowser}
           @acp-show-settings=${this.#showSettings}
         ></acp-nav-rail>
       </div>

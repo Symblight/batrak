@@ -364,7 +364,8 @@ export class AcpChangesPanel extends LitElement {
           >${node.dir}</span
         >
       </span>
-      <md-tooltip for=${id}>${node.file.origPath ? `${node.file.origPath} → ${node.id}` : node.id}</md-tooltip>`;
+      <!-- width: max-content keeps the tooltip's width independent of its position (see acp-file-tree) -->
+      <md-tooltip for=${id} style="width: max-content">${node.file.origPath ? `${node.file.origPath} → ${node.id}` : node.id}</md-tooltip>`;
   };
 
   /** @param {ChangeNode} node */

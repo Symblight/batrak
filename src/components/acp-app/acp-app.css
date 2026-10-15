@@ -52,20 +52,15 @@
     display: none;
   }
 }
-/* Fills the space while no tab is open; beside the tabs it keeps its own width. */
 .acp-app__files {
-  flex: 1;
-  min-width: 0;
-
-  &[hidden] {
-    display: none;
-  }
-}
-.acp-app__files_with-code {
   flex: 0 1 var(--file-tree-width);
   width: var(--file-tree-width);
   min-width: 200px;
   max-width: 524px;
+
+  &[hidden] {
+    display: none;
+  }
 }
 .acp-app__rail {
   flex: none;

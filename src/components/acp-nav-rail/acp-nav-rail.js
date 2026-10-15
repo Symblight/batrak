@@ -15,6 +15,8 @@ import historyFilledIcon from '@material-design-icons/svg/filled/history.svg?raw
 import notificationsIcon from '@material-design-icons/svg/outlined/notifications.svg?raw';
 import notificationsFilledIcon from '@material-design-icons/svg/filled/notifications.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import styles from './acp-nav-rail.css?inline';
 
 /**
@@ -52,7 +54,9 @@ const TOP_ITEMS = [
 /** @type {NavRailItem[]} */
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
-  // Opens a tab in the main column rather than a side pane, so not a toggle.
+  // These open a tab in the main column rather than a side pane, so not toggles.
+  { name: 'terminal', label: 'Terminal', icon: terminalIcon, event: 'acp-show-terminal' },
+  { name: 'browser', label: 'Browser', icon: languageIcon, event: 'acp-show-browser' },
   { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
 ];
 
@@ -62,6 +66,8 @@ const BOTTOM_ITEMS = [
  * @fires acp-show-files
  * @fires acp-find-in-files
  * @fires acp-show-changes
+ * @fires acp-show-terminal
+ * @fires acp-show-browser
  * @fires acp-show-settings
  */
 export class AcpNavRail extends LitElement {

@@ -3,6 +3,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/fab';
+import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
@@ -119,10 +120,27 @@ export class AcpSessionColumn extends LitElement {
     if (value === 'new-session') this.#newSession(project.id);
     else if (value === 'reveal')
       projectController.reveal(project.path).catch((err) => reportError('Revealing folder failed', err));
-    else if (value === 'remove') {
-      projectController.remove(project.id);
-      this.#clearFailure(project.id);
-    }
+    else if (value === 'remove') this.#remove(project);
+  }
+
+  /**
+   * Asks first; the folder on disk stays either way.
+   * @param {Project} project
+   */
+  async #remove(project) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    const confirmed = await dialog.confirm({
+      headline: 'Remove project?',
+      message: `${project.name} will be removed from Brama.`,
+      detail: 'The folder on disk stays.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (!confirmed) return;
+    projectController.remove(project.id);
+    this.#clearFailure(project.id);
   }
 
   /** @param {string} id */
@@ -304,6 +322,7 @@ export class AcpSessionColumn extends LitElement {
         )}
       </div>
       ${this.#renderMenu()}
+      <acp-confirm-dialog></acp-confirm-dialog>
     `;
   }
 }

@@ -1,0 +1,87 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+}
+
+.acp-agent-picker__button {
+  min-width: 0;
+  --md-button-font-size: 13px;
+  --md-button-block-start-space: 6px;
+  --md-button-block-end-space: 6px;
+  --md-button-foreground-color: var(--md-on-surface);
+}
+
+.acp-agent-picker__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.acp-agent-picker__model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acp-agent-picker__level {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 400;
+  color: var(--md-on-surface-variant);
+}
+
+.acp-agent-picker__level-icon {
+  font-size: 16px;
+}
+
+.acp-agent-picker__arrow {
+  font-size: 18px;
+  margin-inline-start: -2px;
+  color: var(--md-on-surface-variant);
+}
+
+/* The agent's badge, in the button's icon slot and in menu items' leading slot. */
+.acp-agent-picker__glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  min-width: 20px;
+  height: 20px;
+  padding-inline: 3px;
+  border-radius: 6px;
+  background: var(--md-surface-container-highest);
+  color: var(--md-on-surface);
+  font-size: 10.5px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+.acp-agent-picker__menu {
+  --md-menu-min-width: 13rem;
+  --md-menu-selected-container-color: var(--md-tertiary-container);
+  --md-menu-selected-label-color: var(--md-on-tertiary-container);
+}
+
+.acp-agent-picker__item {
+  --md-menu-item-min-block-size: 2.25rem;
+  --md-menu-item-label-text-size: 0.875rem;
+  --md-menu-item-supporting-text-size: 0.75rem;
+  --md-menu-item-supporting-text-line-height: 1rem;
+  --md-menu-item-leading-icon-size: 1.25rem;
+  --md-menu-item-trailing-icon-size: 1.125rem;
+}
+
+.acp-agent-picker__lock {
+  font-size: 18px;
+}
+
+/* A narrow composer keeps the model only; the agent and level stay in the menu and the tooltip. */
+@container (width < 28rem) {
+  .acp-agent-picker__agent,
+  .acp-agent-picker__level {
+    display: none;
+  }
+}

@@ -58,7 +58,11 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
-  click in the Changes side pane opens, expands and scrolls to); `parseTabId()` tells them apart. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
+  click in the Changes side pane opens, expands and scrolls to; `TERMINAL_TAB_ID`, `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
+  `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
+  (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its
+  kind) and renders it with the host's view for that kind; only `readsText()` tabs are read from disk.
+  Markdown, image, terminal and browser views are mocks for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
   active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
