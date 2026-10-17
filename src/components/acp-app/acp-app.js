@@ -6,7 +6,7 @@ import { gitController } from '../../services/git-controller.js';
 import { onMenuAction } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
 import { reportError } from '../../services/notices.js';
-import { $activePath, openBrowser, openTerminal } from '../../stores/editor.js';
+import { $activePath } from '../../stores/editor.js';
 import { $columnWidths, $hiddenColumns, showColumn } from '../../stores/layout.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
@@ -208,8 +208,6 @@ export class AcpApp extends LitElement {
           @acp-show-files=${this.#showFiles}
           @acp-find-in-files=${this.#showSearch}
           @acp-show-changes=${this.#showChanges}
-          @acp-show-terminal=${openTerminal}
-          @acp-show-browser=${openBrowser}
           @acp-show-settings=${this.#showSettings}
         ></acp-nav-rail>
       </div>

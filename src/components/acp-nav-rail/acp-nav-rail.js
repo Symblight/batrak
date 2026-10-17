@@ -10,13 +10,9 @@ import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import searchFilledIcon from '@material-design-icons/svg/filled/search.svg?raw';
 import assignmentIcon from '@material-design-icons/svg/outlined/assignment.svg?raw';
 import assignmentFilledIcon from '@material-design-icons/svg/filled/assignment.svg?raw';
-import historyIcon from '@material-design-icons/svg/outlined/history.svg?raw';
-import historyFilledIcon from '@material-design-icons/svg/filled/history.svg?raw';
 import notificationsIcon from '@material-design-icons/svg/outlined/notifications.svg?raw';
 import notificationsFilledIcon from '@material-design-icons/svg/filled/notifications.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
-import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import styles from './acp-nav-rail.css?inline';
 
 /**
@@ -48,15 +44,11 @@ const TOP_ITEMS = [
     selectedIcon: assignmentFilledIcon,
     event: 'acp-show-changes',
   },
-  { name: 'checkpoints', label: 'Checkpoints', icon: historyIcon, selectedIcon: historyFilledIcon },
 ];
 
 /** @type {NavRailItem[]} */
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
-  // These open a tab in the main column rather than a side pane, so not toggles.
-  { name: 'terminal', label: 'Terminal', icon: terminalIcon, event: 'acp-show-terminal' },
-  { name: 'browser', label: 'Browser', icon: languageIcon, event: 'acp-show-browser' },
   { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
 ];
 
@@ -66,8 +58,6 @@ const BOTTOM_ITEMS = [
  * @fires acp-show-files
  * @fires acp-find-in-files
  * @fires acp-show-changes
- * @fires acp-show-terminal
- * @fires acp-show-browser
  * @fires acp-show-settings
  */
 export class AcpNavRail extends LitElement {
