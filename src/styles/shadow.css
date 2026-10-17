@@ -46,3 +46,8 @@ md-menu-item {
 
   margin-inline: 0.25rem;
 }
+
+/* The agent's replies read as a document, not a bubble; your own messages keep theirs. */
+chx-message {
+  --chx-message-background-color: transparent;
+}

@@ -4,9 +4,6 @@
   min-height: 0;
 }
 .acp-chat__chat {
-  /* The agent's replies read as a document, not a bubble; your own messages keep theirs. */
-  --chx-message-background-color: transparent;
-
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
