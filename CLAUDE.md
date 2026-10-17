@@ -295,6 +295,14 @@ test that reproduces it.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets` and `pnpm typecheck`
   pass. Say which behavior was verified by a test, which by running the app, and which not at all.
 
+## Commits
+
+One commit per small task. When a task is done and the checks above pass, don't stop at the report:
+ask me whether to commit it, showing the files it touches and the proposed message (imperative,
+sentence case, no trailing period, like `Run agent sessions over ACP`; a body only when the why isn't
+obvious). Commit only after I say yes, only that task's files, never `git add -A` over unrelated
+changes. Don't push unless asked.
+
 ## Code conventions
 
 - Private class members use native `#field` / `#method()` / `get #x()`, never the `_field` naming
