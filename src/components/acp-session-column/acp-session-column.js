@@ -13,10 +13,6 @@ import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
-import stopIcon from '@material-design-icons/svg/outlined/stop_circle.svg?raw';
-import restartIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
-import logIcon from '@material-design-icons/svg/outlined/article.svg?raw';
-import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
@@ -54,12 +50,13 @@ function age(iso) {
 
 /**
  * @tag acp-session-column
- * @summary Projects, each expanding into its agent sessions with their status; "+ New" opens a folder, "+" and a context menu per project, and one per session (stop, restart, log, remove).
+ * @summary Projects, each expanding into its agent sessions with their status; "+ New" opens a folder, "+" and a context menu per project, and one per session (rename, log, remove).
  */
 export class AcpSessionColumn extends LitElement {
   static properties = {
     home: { state: true },
     failures: { state: true },
+    renaming: { state: true },
   };
 
   static styles = styles;
@@ -87,6 +84,8 @@ export class AcpSessionColumn extends LitElement {
     this.home = null;
     /** @type {Record<string, string>} Why a project's folder couldn't be opened, by project id. */
     this.failures = {};
+    /** @type {string | null} The session whose title is being edited in its row. */
+    this.renaming = null;
   }
 
   connectedCallback() {
@@ -216,10 +215,52 @@ export class AcpSessionColumn extends LitElement {
    * @param {Session} session
    */
   #onSessionMenuSelect(value, session) {
-    if (value === 'stop') sessionController.stop(session.id);
-    else if (value === 'restart') sessionController.restart(session.id);
+    if (value === 'rename') this.#startRename(session);
     else if (value === 'log') sessionController.openLog(session.id);
     else if (value === 'remove') this.#removeSession(session);
+  }
+
+  /**
+   * Swaps the row's title for a text field, focused with its text selected.
+   * @param {Session} session
+   */
+  async #startRename(session) {
+    this.renaming = session.id;
+    await this.updateComplete;
+    // After the closing menu has given focus back.
+    requestAnimationFrame(() => {
+      const input = /** @type {HTMLInputElement | null} */ (
+        this.renderRoot.querySelector('.acp-session-column__rename')
+      );
+      input?.focus();
+      input?.select();
+    });
+  }
+
+  /**
+   * Enter or leaving the field saves the title, Escape keeps the old one.
+   * @param {Session} session
+   * @param {HTMLInputElement} input
+   * @param {boolean} save
+   */
+  #endRename(session, input, save) {
+    if (this.renaming !== session.id) return;
+    this.renaming = null;
+    if (save) sessionController.rename(session.id, input.value);
+  }
+
+  /**
+   * @param {Session} session
+   * @param {KeyboardEvent} e
+   */
+  #onRenameKeydown(session, e) {
+    e.stopPropagation();
+    const input = /** @type {HTMLInputElement} */ (e.currentTarget);
+    if (e.key === 'Enter') this.#endRename(session, input, true);
+    else if (e.key === 'Escape') this.#endRename(session, input, false);
+    else return;
+    e.preventDefault();
+    /** @type {HTMLElement | null} */ (input.closest('.acp-session-column__session'))?.focus();
   }
 
   /**
@@ -322,7 +363,17 @@ export class AcpSessionColumn extends LitElement {
         role="img"
         aria-label=${session.status}
       ></span>
-      <span class="acp-session-column__session-title">${session.title}</span>
+      ${this.renaming === session.id
+        ? html`<input
+            class="acp-session-column__rename"
+            aria-label="Session title"
+            .value=${session.title}
+            @click=${(/** @type {Event} */ e) => e.stopPropagation()}
+            @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onRenameKeydown(session, e)}
+            @blur=${(/** @type {FocusEvent} */ e) =>
+              this.#endRename(session, /** @type {HTMLInputElement} */ (e.currentTarget), true)}
+          />`
+        : html`<span class="acp-session-column__session-title">${session.title}</span>`}
       <span class="acp-session-column__session-age">${age(session.createdAt)}</span>
     </div>`;
   }
@@ -352,30 +403,16 @@ export class AcpSessionColumn extends LitElement {
 
   #renderSessionMenu() {
     const session = this.#sessionMenu.target;
-    const running = session !== null && RUNNING.has(session.status);
     return html`<md-menu
       class="acp-session-column__session-menu"
       aria-label=${session?.title ?? 'Session'}
       @select=${this.#sessionMenu.onSelect}
       @closed=${this.#sessionMenu.onClosed}
     >
-      <md-menu-item class="acp-session-column__menu-item" value="stop" ?disabled=${!running}>
-        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(stopIcon)}</md-icon>
-        Stop agent
-      </md-menu-item>
-      <md-menu-item class="acp-session-column__menu-item" value="restart">
-        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(restartIcon)}</md-icon>
-        ${running ? 'Restart agent' : 'Start agent'}
-      </md-menu-item>
-      <md-menu-item class="acp-session-column__menu-item" value="log">
-        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(logIcon)}</md-icon>
-        Open agent log
-      </md-menu-item>
+      <md-menu-item class="acp-session-column__menu-item" value="rename">Rename</md-menu-item>
+      <md-menu-item class="acp-session-column__menu-item" value="log">Open agent log</md-menu-item>
       <md-hr></md-hr>
-      <md-menu-item class="acp-session-column__menu-item" value="remove">
-        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(deleteIcon)}</md-icon>
-        Remove session
-      </md-menu-item>
+      <md-menu-item class="acp-session-column__menu-item" value="remove">Remove session</md-menu-item>
     </md-menu>`;
   }
 

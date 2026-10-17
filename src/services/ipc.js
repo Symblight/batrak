@@ -121,6 +121,16 @@ export function sessionStop(sessionId) {
 }
 
 /**
+ * Sets the title a session is listed by (trimmed; an empty one is refused).
+ * @param {string} sessionId
+ * @param {string} title
+ * @returns {Promise<Session>} The session as it is then.
+ */
+export function sessionRename(sessionId, title) {
+  return invoke('session_rename', { sessionId, title });
+}
+
+/**
  * Removes a session for good: stops its agent and deletes its conversation and log. The project's
  * files stay as they are.
  * @param {string} sessionId

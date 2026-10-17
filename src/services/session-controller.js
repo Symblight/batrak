@@ -7,6 +7,7 @@ import {
   sessionOpen,
   sessionOpenLog,
   sessionRemove,
+  sessionRename,
   sessionRespondPermission,
   sessionRestart,
   sessionSetConfigOption,
@@ -169,6 +170,22 @@ export class SessionController {
   restart(id) {
     setSessionNotice(id, { kind: 'progress', message: 'Starting agent…' });
     sessionRestart(id).catch((err) => reportError('Restarting the agent failed', err));
+  }
+
+  /**
+   * Gives a session a new title; a blank or unchanged one is ignored.
+   * @param {string} id
+   * @param {string} title
+   */
+  async rename(id, title) {
+    const session = $sessions.get().find((s) => s.id === id);
+    const trimmed = title.trim();
+    if (!session || trimmed === '' || trimmed === session.title) return;
+    try {
+      upsertSession(await sessionRename(id, trimmed));
+    } catch (err) {
+      reportError('Renaming the session failed', err);
+    }
   }
 
   /**

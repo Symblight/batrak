@@ -57,6 +57,7 @@ pub fn run() {
             commands::sessions::session_stop,
             commands::sessions::session_restart,
             commands::sessions::session_remove,
+            commands::sessions::session_rename,
             commands::sessions::session_open_log,
             commands::sessions::session_history,
             commands::sessions::session_set_config_option,

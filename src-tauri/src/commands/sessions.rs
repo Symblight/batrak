@@ -103,6 +103,12 @@ pub async fn session_remove(sessions: State<'_, Sessions>, session_id: String) -
     sessions.remove(&session_id).await
 }
 
+/// Sets the title the session is listed by; returns the session as it is then.
+#[tauri::command]
+pub async fn session_rename(sessions: State<'_, Sessions>, session_id: String, title: String) -> Result<Session, String> {
+    sessions.rename(&session_id, &title)
+}
+
 #[tauri::command]
 pub async fn session_restart(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
     sessions.restart(&session_id).await

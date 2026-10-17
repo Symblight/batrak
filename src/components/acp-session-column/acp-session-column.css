@@ -188,6 +188,22 @@
   line-height: 20px;
   color: var(--_acp-session-column-title-color, var(--md-on-surface));
 }
+.acp-session-column__rename {
+  flex: 1;
+  min-width: 0;
+  height: 22px;
+  box-sizing: border-box;
+  margin: 0 0 0 -4px;
+  padding: 0 4px;
+  border: 1px solid var(--md-primary);
+  border-radius: 4px;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  font: inherit;
+  font-size: 13px;
+  line-height: 20px;
+  outline: none;
+}
 .acp-session-column__session-age {
   flex: none;
   font-size: 11px;

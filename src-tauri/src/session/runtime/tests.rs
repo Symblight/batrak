@@ -463,6 +463,23 @@ async fn config_options_arrive_at_start_and_follow_a_change() {
 }
 
 #[tokio::test]
+async fn a_renamed_session_keeps_its_title_after_a_restart() {
+    let f = fixture("rename", FakeAgentOptions::default());
+    let (_, events) = f.create("n", "fake").unwrap();
+    events.wait_status("idle").await;
+
+    let renamed = f.sessions.rename("n", "  Fix the parser \n").unwrap();
+    assert_eq!(renamed.title, "Fix the parser", "trimmed");
+    assert_eq!(f.sessions.list()[0].title, "Fix the parser");
+    assert!(f.sessions.rename("n", "   ").is_err(), "an empty title is refused");
+    assert!(f.sessions.rename("missing", "x").is_err());
+
+    f.sessions.shutdown();
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    assert_eq!(reopened.list()[0].title, "Fix the parser");
+}
+
+#[tokio::test]
 async fn removing_a_session_stops_its_agent_and_forgets_it() {
     let f = fixture("remove", FakeAgentOptions::default());
     let (_, events) = f.create("gone", "fake").unwrap();

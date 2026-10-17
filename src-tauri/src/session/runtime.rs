@@ -376,6 +376,22 @@ impl Sessions {
         Ok(())
     }
 
+    /// Sets the title the session is listed by (trimmed, not empty).
+    pub fn rename(&self, id: &str, title: &str) -> Result<Session, String> {
+        let title = title.trim();
+        if title.is_empty() {
+            return Err("a session's title can't be empty".into());
+        }
+        let state = self.get(id)?;
+        let session = {
+            let mut record = lock(&state.record);
+            record.title = title.to_owned();
+            Session::from(&*record)
+        };
+        self.inner.persist();
+        Ok(session)
+    }
+
     /// Asks an agent for its config options (models, thought levels, modes) without a session:
     /// it starts in a scratch folder in app data, answers `initialize` and `session/new` (no prompt,
     /// so no model call), and is stopped. For the pickers before the agent's first session.
