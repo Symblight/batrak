@@ -18,6 +18,11 @@ import { reportError } from '../../services/notices.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
+import {
+  COMMAND_CHIP_TEMPLATE,
+  ChatPartsController,
+  FILE_CHIP_TEMPLATE,
+} from '../../controllers/chat-parts/ChatPartsController.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
@@ -25,16 +30,9 @@ import '../acp-context-meter/acp-context-meter.js';
 import '../acp-mode-picker/acp-mode-picker.js';
 import '../acp-run-target/acp-run-target.js';
 import '../acp-session-banner/acp-session-banner.js';
-import { AcpMarkdown } from '../acp-markdown/acp-markdown.js';
 
-/** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
-/** @typedef {import('@symblight/chat/composer').ChxCodeBlock} ChxCodeBlock */
-/** @typedef {import('@symblight/chat/agent').ChxThought} ChxThought */
-/** @typedef {import('@symblight/chat/agent').ChxPlan} ChxPlan */
-/** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
-/** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
 
@@ -77,15 +75,6 @@ function buildMenuItem(value, headline, supportingText) {
   return item;
 }
 
-/** Chip template ids: file chips carry the path in `data-path`, folder chips also `data-kind="folder"`. */
-const FILE_CHIP_TEMPLATE = 'acp-chat-file-chip';
-const COMMAND_CHIP_TEMPLATE = 'acp-chat-command-chip';
-
-/**
- * Adds the chip templates to `document` once. The composer draws every chip with `buildChipElement`,
- * which finds its template by `document.getElementById`: one inside this shadow root (like the
- * pickers' own) is never found, and the chip falls back to a bare span that sends as plain text.
- */
 /**
  * A file chip naming lines of code: `src/app.js:12`, or `src/app.js:12-23` for several. The label is
  * what the agent reads.
@@ -115,17 +104,6 @@ function commentLines(schema, insert) {
     schema.nodes.line.create(null, [codeChip(schema, insert), schema.text(` ${first}`)]),
     ...rest.map((text) => schema.nodes.line.create(null, text ? [schema.text(text)] : [])),
   ];
-}
-
-function ensureChipTemplates() {
-  if (document.getElementById(FILE_CHIP_TEMPLATE)) return;
-  const file = document.createElement('template');
-  file.id = FILE_CHIP_TEMPLATE;
-  file.innerHTML = `<chx-chip data-template-id="${FILE_CHIP_TEMPLATE}"><md-icon slot="icon"></md-icon></chx-chip>`;
-  const command = document.createElement('template');
-  command.id = COMMAND_CHIP_TEMPLATE;
-  command.innerHTML = `<chx-chip data-template-id="${COMMAND_CHIP_TEMPLATE}"></chx-chip>`;
-  document.body.append(file, command);
 }
 
 /**
@@ -194,11 +172,15 @@ function buildEntryItem(entry) {
 /**
  * @tag acp-chat
  * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
+ * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
+ * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
 export class AcpChat extends LitElement {
   static styles = styles;
 
   #session = new ChatSessionController(this, { chat: () => this.renderRoot.querySelector('chx-chat') });
+
+  #parts = new ChatPartsController(this, { attachments: () => this.#attachments });
 
   /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
   #chatInserts = new StoreController(this, {
@@ -207,11 +189,6 @@ export class AcpChat extends LitElement {
       if (inserts.length) this.#insertCode();
     },
   });
-
-  connectedCallback() {
-    super.connectedCallback();
-    ensureChipTemplates();
-  }
 
   /**
    * Takes `$chatInserts` into the composer: a selection's chip at the caret, a comment as its own line
@@ -241,69 +218,6 @@ export class AcpChat extends LitElement {
     if (lines.length) textbox.focusEnd();
     else textbox.focus(); // the caret stays after the chips
   }
-
-  /** @type {PartElements} */
-  #partElements = {
-    chip: (part) => buildChipElement(/** @type {Parameters<typeof buildChipElement>[0]} */ (part)),
-    code: (part, previous) => {
-      const block = /** @type {ChxCodeBlock} */ (previous ?? document.createElement('chx-code-block'));
-      block.code = part.text ?? '';
-      block.lang = /** @type {{ lang?: string }} */ (part).lang ?? '';
-      block.copyable = true;
-      return block;
-    },
-    longText: (part, previous) => {
-      const details = previous ?? document.createElement('details');
-      const summary = document.createElement('summary');
-      summary.textContent = `${/** @type {{ lines?: number }} */ (part).lines ?? 0} lines`;
-      const pre = document.createElement('pre');
-      pre.textContent = part.text ?? '';
-      details.replaceChildren(summary, pre);
-      return details;
-    },
-    // The agent's text is Markdown; your own stays as typed.
-    text: (part, previous, message) => {
-      if (message.own) {
-        const span = previous?.localName === 'span' ? previous : document.createElement('span');
-        if (part.html) span.innerHTML = part.html;
-        else span.textContent = part.text ?? '';
-        return span;
-      }
-      const markdown = previous instanceof AcpMarkdown ? previous : new AcpMarkdown();
-      markdown.text = part.text ?? '';
-      markdown.streaming = part.state === 'streaming';
-      return markdown;
-    },
-    thought: (part, previous) => {
-      const thought = /** @type {ChxThought} */ (previous ?? document.createElement('chx-thought'));
-      thought.text = part.text ?? '';
-      thought.streaming = part.state === 'streaming';
-      return thought;
-    },
-    plan: (part, previous) => {
-      const plan = /** @type {ChxPlan} */ (previous ?? document.createElement('chx-plan'));
-      plan.entries = part.entries ?? [];
-      return plan;
-    },
-    tool_call: (part, previous) => {
-      const call = /** @type {ChxToolCall} */ (previous ?? document.createElement('chx-tool-call'));
-      call.toolCallId = String(part.data?.toolCallId ?? '');
-      call.label = part.label ?? '';
-      call.kind = part.kind ?? 'other';
-      call.status = part.status ?? 'pending';
-      call.locations = part.locations ?? [];
-      call.error = part.error ?? '';
-      return call;
-    },
-    attachment: (part, previous) => {
-      const file = /** @type {File} */ (part.attachment);
-      if (previous && /** @type {HTMLElement & { file?: File }} */ (previous).file === file) return previous;
-      const card = this.#attachments.buildAttachment(file, 'message');
-      // An empty `actions` slot drops the remove button: a sent card is immutable.
-      card.append(Object.assign(document.createElement('span'), { slot: 'actions' }));
-      return card;
-    },
-  };
 
   /** Rendered unconditionally, so present after the first render. */
   get #attachments() {
@@ -427,7 +341,7 @@ export class AcpChat extends LitElement {
         .userId=${USER_ID}
         .activeConversationId=${this.#session.conversationId}
         .adapter=${acpAdapter}
-        .partElements=${this.#partElements}
+        .partElements=${this.#parts.partElements}
         @chx-messages-change=${this.#onMessagesChange}
       >
         <chx-message-list

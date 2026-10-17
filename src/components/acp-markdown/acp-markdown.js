@@ -73,7 +73,7 @@ const CLASS_OF = {
 
 /**
  * @tag acp-markdown
- * @summary Markdown (an agent's reply) rendered safely: sanitized HTML, fenced code in `<chx-code-block>`, links opened in the browser; re-rendered at most once a frame while it streams.
+ * @summary Markdown (an agent's reply) rendered safely: sanitized HTML, fenced code in `<chx-code-block>`, web links opened in the browser (others left to the host); re-rendered at most once a frame while it streams.
  */
 export class AcpMarkdown extends LitElement {
   static properties = {
@@ -82,6 +82,9 @@ export class AcpMarkdown extends LitElement {
   };
 
   static styles = styles;
+
+  /** @type {((body: HTMLElement) => void) | null} Rewrites the rendered body before it's styled (file refs into chips). */
+  decorate = null;
 
   /** Pending repaint; text streaming in many deltas a frame is parsed once. */
   #frame = 0;
@@ -117,6 +120,7 @@ export class AcpMarkdown extends LitElement {
     const parsed = /** @type {string} */ (markdown.parse(this.text));
     body.innerHTML = DOMPurify.sanitize(parsed, SANITIZE);
     for (const pre of body.querySelectorAll('pre')) this.#toCodeBlock(pre);
+    this.decorate?.(body);
     for (const element of body.querySelectorAll('*')) {
       const name = CLASS_OF[element.tagName];
       if (name) element.className = name;

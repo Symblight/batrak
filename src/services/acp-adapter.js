@@ -412,7 +412,7 @@ function lineRange(lines) {
 }
 
 /**
- * The prompt of a sent message: its text with chips written inline (`@path`, `path:12-23`), then a
+ * The prompt of a sent message: its text with chips written inline (`@path`, `@folder/`, `path:12-23`), then a
  * resource for each file chip (a mention, or the lines it names).
  * @param {ChxMessage} message
  * @returns {PromptInput[]}
@@ -435,7 +435,8 @@ export function promptOf(message) {
         text += `${path}:${part.data?.lines}`;
         resources.push({ type: 'selection', path, fromLine: range[0], toLine: range[1] });
       } else if (path) {
-        text += `@${path}`;
+        // A folder ends in a slash, so the agent (and a restored message) can tell it from a file.
+        text += part.data?.kind === 'folder' ? `@${path}/` : `@${path}`;
         resources.push({ type: 'mention', path });
       } else {
         text += part.label ?? '';

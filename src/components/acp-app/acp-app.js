@@ -151,6 +151,37 @@ export class AcpApp extends LitElement {
     this.#main.openFile(path, line);
   }
 
+  /**
+   * A file named in the chat: its tab, and its row in the file tree.
+   * @param {Event} e
+   */
+  #onChatFileOpen(e) {
+    const { path, line } = /** @type {CustomEvent<{ path: string, line?: number | null }>} */ (e).detail;
+    this.#main.openFile(path, line);
+    this.#revealInTree(path);
+  }
+
+  /**
+   * A folder named in the chat: only its row in the file tree, expanded to show what's in it.
+   * @param {Event} e
+   */
+  #onChatFileReveal(e) {
+    this.#revealInTree(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path, { expand: true });
+  }
+
+  /**
+   * @param {string} path Absolute; outside the project there's no row to show.
+   * @param {{ expand?: boolean }} [options] Expand a folder itself too.
+   */
+  async #revealInTree(path, options) {
+    const rel = projectController.relPath(path);
+    if (rel === null) return;
+    this.sideView = 'files';
+    showColumn('side');
+    await this.updateComplete;
+    this.#files.reveal(rel, options);
+  }
+
   /** @param {Event} e */
   #onDiffOpen(e) {
     this.#main.showChange(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
@@ -192,7 +223,11 @@ export class AcpApp extends LitElement {
       <div class="acp-app__columns">
         <acp-session-column class="acp-app__session" ?hidden=${sessionHidden}></acp-session-column>
         ${sessionHidden ? nothing : this.#renderResizer('session', 'Resize sessions column')}
-        <acp-agent-column class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"></acp-agent-column>
+        <acp-agent-column
+          class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"
+          @acp-file-open=${this.#onChatFileOpen}
+          @acp-file-reveal=${this.#onChatFileReveal}
+        ></acp-agent-column>
         ${agentFills ? nothing : this.#renderResizer('agent', 'Resize agent column')}
         <acp-main-column class="acp-app__main" ?hidden=${!hasCode}></acp-main-column>
         ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}

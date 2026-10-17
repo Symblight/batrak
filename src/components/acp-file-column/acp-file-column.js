@@ -38,6 +38,17 @@ export class AcpFileColumn extends LitElement {
     this.renderRoot.querySelector('acp-search-panel')?.focusInput();
   }
 
+  /**
+   * Switches to Files and selects a file or folder there.
+   * @param {string} rel Root-relative.
+   * @param {{ expand?: boolean }} [options] Expand the folder itself too.
+   */
+  async reveal(rel, options) {
+    this.sideView = 'files';
+    await this.updateComplete;
+    this.renderRoot.querySelector('acp-file-tree')?.reveal(rel, options);
+  }
+
   /** Switches to Changes, which computes them while shown. */
   showChanges() {
     this.sideView = 'changes';

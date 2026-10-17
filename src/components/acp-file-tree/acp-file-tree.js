@@ -81,6 +81,12 @@ export class AcpFileTree extends LitElement {
   #listedRoot = null;
   /** Set while the tree is changed from the store, so its `tvx-expansion-change` isn't written back. */
   #applying = false;
+  /** @type {string | null} Root-relative path `reveal()` selects once its folder has loaded. */
+  #pendingReveal = null;
+  /** @type {Set<string>} Folders listed in this project (`''`: the root), where a missing row is really gone. */
+  #listedFolders = new Set();
+  /** Set while `reveal()` selects a row, so the selection doesn't open it. */
+  #revealing = false;
   #openingPath = new StoreController(this, { store: $openingPath });
   #onFsChange = (/** @type {Event} */ e) => {
     const { dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
@@ -93,6 +99,8 @@ export class AcpFileTree extends LitElement {
   /** Lists the active project; its folders expand from the store as their parents load. */
   #switchProject() {
     this.#listedRoot = null;
+    this.#pendingReveal = null;
+    this.#listedFolders.clear();
     const tree = this.#tree;
     if (!tree) return;
     // Ids are relative paths, so the previous project's `src` must not stay expanded here.
@@ -158,7 +166,49 @@ export class AcpFileTree extends LitElement {
       await this.#tree?.updateComplete;
       if (this.#rootId.value !== rootId) return;
     }
+    this.#listedFolders.add(parent);
     this.#applyExpansion(this.#expanded.value);
+    this.#selectPending();
+  }
+
+  /**
+   * Selects a file or folder and scrolls to it, expanding the folders it's in. Folders not loaded
+   * yet load first.
+   * @param {string} rel Root-relative.
+   * @param {{ expand?: boolean }} [options] Expand the folder itself too, showing its children.
+   */
+  reveal(rel, { expand = false } = {}) {
+    const folders = expand ? [rel] : [];
+    for (let dir = parentOf(rel); dir; dir = parentOf(dir)) folders.push(dir);
+    const stored = this.#expanded.value;
+    const collapsed = folders.filter((dir) => !stored.includes(dir));
+    this.#pendingReveal = rel;
+    if (collapsed.length) setExpandedFolders([...stored, ...collapsed]);
+    this.#selectPending();
+  }
+
+  async #selectPending() {
+    const rel = this.#pendingReveal;
+    const tree = this.#tree;
+    if (rel === null || !tree) return;
+    if (tree.nodes.getItem(rel) === null) {
+      // It, or a folder it's in, is missing from a listing: it would never load, only appear later.
+      for (let path = rel; path; path = parentOf(path)) {
+        if (this.#listedFolders.has(parentOf(path)) && tree.nodes.getItem(path) === null) {
+          this.#pendingReveal = null;
+          return;
+        }
+      }
+      return;
+    }
+    this.#pendingReveal = null;
+    this.#revealing = true;
+    try {
+      tree.selection.set([rel]);
+    } finally {
+      this.#revealing = false;
+    }
+    await tree.navigation.reveal(rel, { align: 'center' });
   }
 
   /** @returns {HTMLElementTagNameMap['tvx-tree-view'] | null | undefined} */
@@ -209,6 +259,7 @@ export class AcpFileTree extends LitElement {
 
   /** @param {Event} e */
   #onSelectionChange(e) {
+    if (this.#revealing) return;
     const { selectedItems } = /** @type {CustomEvent<{ selectedItems: Set<string> }>} */ (e).detail;
     for (const id of selectedItems) {
       const item = /** @type {TreeItem | null} */ (this.#tree?.nodes.getItem(id));

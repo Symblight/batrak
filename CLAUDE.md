@@ -142,6 +142,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>`; `$agentList`
   (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`).
+  `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
+  (`models/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
+  and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
+  `acp-file-open` (`<acp-app>` opens the tab and selects the file in the tree, expanding its folders);
+  a folder's (a folder chip, or a ref the project lists as a folder, like `@.brama`) fires
+  `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
