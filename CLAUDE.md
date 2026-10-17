@@ -9,6 +9,9 @@ pnpm dev             # Rsbuild dev server (port 1420; full reload, no HMR)
 pnpm build           # Build to dist/
 pnpm tauri dev       # Run the desktop app (Tauri, src-tauri/)
 pnpm typecheck       # tsc over the JSDoc types (no emit); must stay clean
+cd src-tauri && cargo test --lib      # backend tests; must pass
+cd src-tauri && cargo clippy --all-targets   # no warnings
+cd src-tauri && cargo test --lib real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
 ```
 
 ## Architecture
@@ -74,6 +77,19 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/models/types.js`.
 
+**Sessions:** `stores/sessions.js` holds `$sessions` (listed), `$draftSessions` (id → project id: a
+"New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
+conversation id; `$activeSession` is `null` for a draft. `sessionController` keeps the active session in
+the opened project (`showProject()`: the project's last shown session, its newest, or a new draft),
+`create()`s drafts and `start()`s one on its first message. The composer's state is per session
+(`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
+(messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
+(`src/controllers/chat-session/`): `activeConversationId`, the draft's first send (put back into
+the composer when the backend refuses the session), and each session's unsent composer text and files.
+Statuses come from the backend's session events. A draft shows only the composer, centered; the message
+list appears with the first message. Replies come over ACP (see "Agents over ACP"); messages live only
+in the chat element, and an agent with `session/load` replays them when it starts again.
+
 **Agent comments:** line comments typed in any `cdx-code-editor` live in `$comments` (`stores/comments.js`,
 by absolute path, in memory). Every editor's `<cdx-comments>` is controlled through
 `EditorCommentsController` (`src/controllers/comments/`): `.comments=${this.#comments.threadsOf(path)}`,
@@ -91,6 +107,54 @@ while the caret is out of view. Alt+F10 focuses it, arrows move between actions,
 and it closes when focus leaves both it and the editor (focus inside it returns to the editor). Editor
 events are composed, so a host also hears its children's editors (the tab view hears the Changes
 review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor-events.js`).
+
+### Agents over ACP
+
+- **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
+  `workspace.json`, `.gitignore` with `local/`), never overwriting. Agents merge by id: built-in
+  (`claude` → `npx -y @agentclientprotocol/claude-agent-acp`) < `<config dir>/brama/agents.json` <
+  `.brama/agents.json` (`"disabled": true` hides one). An invalid file keeps its last valid version
+  and is reported as `file:line:col`. The watcher flags `.brama/agents.json` (`Changes.config`) →
+  reload → `agents://changed`; `.brama/local/` is never in the snapshot. `env` values take
+  `${env:NAME}` (login-shell env) and `${keychain:name}` (service `brama`), resolved only at spawn:
+  secrets never reach logs, IPC or files. The project's file is the repository's, so it can't make
+  the app run anything on its own: an agent whose `command` / `args` / `env` it sets, or any start
+  while it lists `mcpServers`, needs the user's trust in that exact `LaunchConfig` for that project
+  (`agents_trust`, kept in `<app data>/trusted-agents.json`; a changed launch needs trust again).
+  Untrusted, a start fails with an `untrusted` event (the banner's Trust and start) and a probe
+  is refused. `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
+- **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
+  data; all `stopped` after a restart). The agent starts on the first message; at most one active
+  `local` session per project. Mode logic sits behind `SessionEnv` (`session/env/`, `local` only);
+  every agent path goes through `to_host_path` + `confine` (no `..`, no symlink out, nothing in
+  `.git`); writes are atomic. `HOOK(git)` comments in `run_turn` mark the checkpoint points.
+  `Sessions::remove` (session row menu → Remove session) stops the agent, unlists the session,
+  deletes `sessions/<id>/` (transcript, log) and calls `SessionEnv::discard` (a no-op for `local`).
+- **ACP host** (`src-tauri/src/acp/`): the only module using `agent-client-protocol` (pinned). One
+  process per session in its own process group (stopped as a group; `process::stop_all` on app
+  exit), stderr → `<app data>/sessions/<id>/agent.log`. Dispatch-loop callbacks never wait:
+  permission responders are parked until the user answers. Tests run `acp/fake_agent.rs`
+  in-process; `real_claude_agent_end_to_end` (ignored) runs the real agent.
+- **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
+  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/acp-adapter.js`), which
+  maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
+  or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
+  notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>`; `$agentList`
+  (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
+  `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`).
+- **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
+  `config_option_update` and every `session/set_config_option` answer, reach the page as
+  `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
+  through `session/set_mode`). `applyAgentOptions()` (`stores/composer.js`) replaces the session's
+  options and caches them per agent (`brama:agents:config-options`), so a new session shows the real
+  models before it starts. An agent with nothing cached is probed once per launch
+  (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
+  `session/new`, no prompt, stopped). A pick goes through `sessionController.setConfigOption()`: shown at once,
+  sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts.
+- **History**: each session's conversation is appended to `sessions/<id>/transcript.jsonl` (prompts,
+  the turn's updates, turn ends; not `usage_update`, not a `session/load` replay); `session_history`
+  returns it and `restoreHistory()` rebuilds the chat the first time a session is shown after a
+  reload. Context usage comes from `usage_update` (`setUsage()`).
 
 ### Background work
 
@@ -215,6 +279,22 @@ and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads 
   but any HTML5 drag-and-drop in the page does — with Tauri's native file-drop handler on, wry swallows
   `draggingUpdated`, so the page gets no `dragover` while the button is held.
 
+## Tests first
+
+Work test-driven: before changing behavior, write a test that fails for the missing or broken
+behavior, see it fail, then make it pass, then clean up with the tests green. A bug fix starts with a
+test that reproduces it.
+
+- **Backend:** tests live next to the code (`#[cfg(test)] mod tests`, or `<module>/tests.rs` when
+  long). Agent behavior is tested against the in-process fake agent (`acp/fake_agent.rs`; extend
+  its scripts rather than mocking `Connection`), files against temp folders, git against
+  `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
+- **Frontend:** there is no test runner yet. Keep logic that needs tests out of components, in plain
+  functions (`stores/`, `models/`, `services/acp-adapter.js`), so it can get tests once a runner is
+  added; until then `pnpm typecheck` and the app are the check, and say so when reporting.
+- Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets` and `pnpm typecheck`
+  pass. Say which behavior was verified by a test, which by running the app, and which not at all.
+
 ## Code conventions
 
 - Private class members use native `#field` / `#method()` / `get #x()`, never the `_field` naming
@@ -250,6 +330,12 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   declaration would win). Never write `css\`…\`` blocks inside component JS.
 - SVG icons (`@material-design-icons/svg`) are imported with `?raw` and rendered via `unsafeSVG()`,
   inside `<md-icon>` — size it with `font-size` on a class, don't style `svg` directly.
+- **Shared shadow styles:** `src/styles/shadow.css` is the first stylesheet of every shadow root,
+  the libraries' included (`src/styles/shadow-styles.js` hooks Lit's `finalizeStyles`; imported
+  first in `main.js`). It holds what must match app-wide: thin scrollbars and menu density
+  (`md-menu` / `md-menu-item` row height and padding; type sizes stay the library's). It's the one
+  place tag selectors are allowed, because it must reach menus inside third-party shadow roots. A
+  component sets only what differs (e.g. a menu's `--md-menu-min-width`), never menu density.
 - Colors come from the app tokens in `src/styles/tokens.css` (`--md-surface`, `--md-on-surface-variant`,
   `--md-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--space-*`. No raw hex.
 

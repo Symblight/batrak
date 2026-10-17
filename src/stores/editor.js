@@ -1,6 +1,7 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentMapStore } from './persistent.js';
 import { $workspace } from './workspace.js';
+import { isUserAgentsFile } from '../models/agents-file.js';
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../models/types.js').TabKind} TabKind */
@@ -36,13 +37,14 @@ export function parseTabId(id) {
 }
 
 /**
- * Whether a tab may be open in a project: a file tab only inside its folder, a view anywhere.
+ * Whether a tab may be open in a project: a file tab only inside its folder (the user's agents.json
+ * anywhere), a view anywhere.
  * @param {string} id Tab id.
  * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
  */
 function belongsTo(id, root) {
   const { kind, path } = parseTabId(id);
-  if (kind !== 'file') return true;
+  if (kind !== 'file' || isUserAgentsFile(path)) return true;
   return root !== NO_PROJECT && path.startsWith(`${root}/`);
 }
 

@@ -11,7 +11,9 @@ import handIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import shieldIcon from '@material-design-icons/svg/outlined/shield.svg?raw';
 import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { $composer, configOf, setConfigOption } from '../../stores/composer.js';
+import { $composer, configOf } from '../../stores/composer.js';
+import { $activeSessionId } from '../../stores/sessions.js';
+import { sessionController } from '../../services/session-controller.js';
 import styles from './acp-mode-picker.css?inline';
 
 /** @typedef {import('../../models/types.js').ConfigOptionValue} ConfigOptionValue */
@@ -27,6 +29,11 @@ const KNOWN_MODES = {
   ask: { icon: handIcon, risk: 'neutral' },
   agent: { icon: boltIcon, risk: 'agent' },
   full: { icon: warningIcon, risk: 'full' },
+  // Claude Code's
+  default: { icon: handIcon, risk: 'neutral' },
+  acceptEdits: { icon: boltIcon, risk: 'agent' },
+  auto: { icon: boltIcon, risk: 'agent' },
+  bypassPermissions: { icon: warningIcon, risk: 'full' },
 };
 
 /** @param {string} value */
@@ -63,7 +70,8 @@ export class AcpModePicker extends LitElement {
     if (e.target !== e.currentTarget) return;
     const mode = configOf(this.#composer.value.configOptions, 'mode');
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    if (mode && value !== mode.currentValue) setConfigOption(mode.id, value);
+    const id = $activeSessionId.get();
+    if (mode && id !== null && value !== mode.currentValue) sessionController.setConfigOption(id, mode.id, value);
   };
 
   render() {
@@ -81,7 +89,7 @@ export class AcpModePicker extends LitElement {
         variant=${risk === 'neutral' ? 'outlined' : 'tonal'}
         title="${mode.name}: ${current.name}"
       >
-        <md-icon slot="icon">${unsafeSVG(icon)}</md-icon>
+        <md-icon slot="icon" class="acp-mode-picker__icon">${unsafeSVG(icon)}</md-icon>
         <span class="acp-mode-picker__label">${current.name}</span>
         <md-icon class="acp-mode-picker__arrow">${unsafeSVG(arrowIcon)}</md-icon>
       </md-button>

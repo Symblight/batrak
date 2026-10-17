@@ -13,6 +13,10 @@ import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
+import stopIcon from '@material-design-icons/svg/outlined/stop_circle.svg?raw';
+import restartIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
+import logIcon from '@material-design-icons/svg/outlined/article.svg?raw';
+import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
@@ -26,6 +30,9 @@ import { reportError } from '../../services/notices.js';
 
 /** @typedef {import('../../models/types.js').Project} Project */
 /** @typedef {import('../../models/types.js').Session} Session */
+
+/** Statuses in which a session holds (or is getting) an agent process. */
+const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'waiting']);
 
 const REVEAL_LABEL = /Mac/.test(navigator.userAgent)
   ? 'Show in Finder'
@@ -47,8 +54,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-column
- * @summary Projects, each expanding into its agent sessions; "+ New" opens a folder, "+" and a context menu per project.
- * @fires acp-session-new `{ projectId }`
+ * @summary Projects, each expanding into its agent sessions with their status; "+ New" opens a folder, "+" and a context menu per project, and one per session (stop, restart, log, remove).
  */
 export class AcpSessionColumn extends LitElement {
   static properties = {
@@ -66,8 +72,13 @@ export class AcpSessionColumn extends LitElement {
   #openingPath = new StoreController(this, { store: $openingPath });
   /** @type {ContextMenuController<Project>} */
   #menu = new ContextMenuController(this, {
-    menu: () => this.renderRoot.querySelector('md-menu'),
+    menu: () => this.renderRoot.querySelector('.acp-session-column__menu'),
     onSelect: (value, project) => this.#onMenuSelect(value, project),
+  });
+  /** @type {ContextMenuController<Session>} */
+  #sessionMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-session-column__session-menu'),
+    onSelect: (value, session) => this.#onSessionMenuSelect(value, session),
   });
 
   constructor() {
@@ -93,9 +104,14 @@ export class AcpSessionColumn extends LitElement {
       : path;
   }
 
-  /** @param {string} projectId */
+  /**
+   * Opens the project with an empty draft session in the chat.
+   * @param {string} projectId
+   */
   #newSession(projectId) {
-    this.dispatchEvent(new CustomEvent('acp-session-new', { detail: { projectId }, bubbles: true, composed: true }));
+    sessionController.create(projectId);
+    toggleProject(projectId, true);
+    this.#activate(projectId);
   }
 
   /**
@@ -196,6 +212,35 @@ export class AcpSessionColumn extends LitElement {
   }
 
   /**
+   * @param {string} value
+   * @param {Session} session
+   */
+  #onSessionMenuSelect(value, session) {
+    if (value === 'stop') sessionController.stop(session.id);
+    else if (value === 'restart') sessionController.restart(session.id);
+    else if (value === 'log') sessionController.openLog(session.id);
+    else if (value === 'remove') this.#removeSession(session);
+  }
+
+  /**
+   * Asks first; the project's files stay either way.
+   * @param {Session} session
+   */
+  async #removeSession(session) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    const confirmed = await dialog.confirm({
+      headline: 'Remove session?',
+      message: `"${session.title}" and its conversation will be deleted${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
+      detail: 'Files the agent changed in the project stay as they are.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (confirmed) await sessionController.remove(session.id);
+  }
+
+  /**
    * @param {Project} project
    * @param {Session[]} sessions Of this project.
    */
@@ -267,7 +312,10 @@ export class AcpSessionColumn extends LitElement {
       tabindex="0"
       aria-selected=${selected ? 'true' : 'false'}
       @click=${() => this.#select(session)}
-      @keydown=${this.#onSessionKeydown}
+      @keydown=${(/** @type {KeyboardEvent} */ e) => {
+        if (!this.#sessionMenu.onKeydown(session, e)) this.#onSessionKeydown(e);
+      }}
+      @contextmenu=${(/** @type {MouseEvent} */ e) => this.#sessionMenu.onContextMenu(session, e)}
     >
       <span
         class="acp-session-column__status acp-session-column__status_${session.status}"
@@ -302,6 +350,35 @@ export class AcpSessionColumn extends LitElement {
     </md-menu>`;
   }
 
+  #renderSessionMenu() {
+    const session = this.#sessionMenu.target;
+    const running = session !== null && RUNNING.has(session.status);
+    return html`<md-menu
+      class="acp-session-column__session-menu"
+      aria-label=${session?.title ?? 'Session'}
+      @select=${this.#sessionMenu.onSelect}
+      @closed=${this.#sessionMenu.onClosed}
+    >
+      <md-menu-item class="acp-session-column__menu-item" value="stop" ?disabled=${!running}>
+        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(stopIcon)}</md-icon>
+        Stop agent
+      </md-menu-item>
+      <md-menu-item class="acp-session-column__menu-item" value="restart">
+        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(restartIcon)}</md-icon>
+        ${running ? 'Restart agent' : 'Start agent'}
+      </md-menu-item>
+      <md-menu-item class="acp-session-column__menu-item" value="log">
+        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(logIcon)}</md-icon>
+        Open agent log
+      </md-menu-item>
+      <md-hr></md-hr>
+      <md-menu-item class="acp-session-column__menu-item" value="remove">
+        <md-icon slot="leading" class="acp-session-column__menu-icon">${unsafeSVG(deleteIcon)}</md-icon>
+        Remove session
+      </md-menu-item>
+    </md-menu>`;
+  }
+
   render() {
     const projects = this.#projects.value;
     const sessions = this.#sessions.value;
@@ -321,7 +398,7 @@ export class AcpSessionColumn extends LitElement {
             ),
         )}
       </div>
-      ${this.#renderMenu()}
+      ${this.#renderMenu()} ${this.#renderSessionMenu()}
       <acp-confirm-dialog></acp-confirm-dialog>
     `;
   }

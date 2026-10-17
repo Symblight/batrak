@@ -91,7 +91,7 @@
 }
 
 /* A narrow composer shows the ring only. */
-@container (width < 28rem) {
+@container acp-composer (width <= 440px) {
   .acp-context-meter__percent {
     display: none;
   }

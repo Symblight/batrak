@@ -27,7 +27,9 @@ import '../acp-changes-review/acp-changes-review.js';
 import '../acp-image-preview/acp-image-preview.js';
 import '../acp-terminal/acp-terminal.js';
 import '../acp-browser/acp-browser.js';
-import { gitFileAtHead, readFile } from '../../services/ipc.js';
+import '../acp-confirm-dialog/acp-confirm-dialog.js';
+import { gitFileAtHead, readFile, writeFile } from '../../services/ipc.js';
+import { isAgentsFile, isUserAgentsFile } from '../../models/agents-file.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
@@ -66,6 +68,8 @@ import styles from './acp-tab-view.css?inline';
  *   (and only when its view shows text, `readsText()`); the others are read, or re-read after a change
  *   on disk, when they become active.
  * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
+ * @property {string | null} draft Unsaved edits (only editable files, `isAgentsFile()`); `null` when
+ *   the editor shows what's on disk. A change on disk doesn't replace it.
  */
 
 /** @param {string} path */
@@ -75,7 +79,7 @@ function basename(path) {
 
 /**
  * @tag acp-tab-view
- * @summary The main column's tabs (`$editorTabs`): files in the view their kind needs, and views.
+ * @summary The main column's tabs (`$editorTabs`): files in the view their kind needs, and views; agents.json files are editable (Mod+S saves).
  */
 export class AcpTabView extends LitElement {
   static properties = {
@@ -161,7 +165,7 @@ export class AcpTabView extends LitElement {
       if (rel === null) continue;
       // Read-only for now, so there are no local edits to protect: just reload.
       if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
-      else if (!this.#content.readsText(tab)) continue;
+      else if (!this.#content.readsText(tab) || tab.draft !== null) continue; // keep unsaved edits
       else if (modified.includes(rel) || added.includes(rel)) {
         if (tab.id === this.#activeId) this.#load(tab.id);
         else if (tab.loaded) this.#patch(tab.id, { loaded: false });
@@ -224,9 +228,68 @@ export class AcpTabView extends LitElement {
    * Closes a tab, activating a neighbour if it was the active one.
    * @param {string} id
    */
-  close(id) {
+  async close(id) {
+    if (!(await this.#confirmDiscard([id]))) return;
     if (id === this.#activeId) this.#pendingLine = null;
     closeTab(id);
+  }
+
+  /**
+   * Asks before closing tabs with unsaved edits; `true` when there are none, or the user discards them.
+   * @param {string[]} ids Tabs about to close.
+   */
+  async #confirmDiscard(ids) {
+    const dirty = this.tabs.filter((t) => ids.includes(t.id) && t.draft !== null);
+    if (!dirty.length) return true;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    return dialog.confirm({
+      headline: 'Discard unsaved changes?',
+      message: dirty.map((t) => basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
+      detail: 'Press ⌘S / Ctrl+S in the editor to save.',
+      confirmLabel: 'Discard',
+      destructive: true,
+    });
+  }
+
+  /**
+   * An edit in an editable file: kept as the tab's draft until saved.
+   * @param {string} id
+   * @param {Event} e
+   */
+  #onEdit(id, e) {
+    const tab = this.#find(id);
+    if (!tab) return;
+    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    const draft = value === tab.content ? null : value;
+    if (draft !== tab.draft) this.#patch(id, { draft });
+  }
+
+  /**
+   * Mod+S in an editable file's editor saves it.
+   * @param {string} id
+   * @param {KeyboardEvent} e
+   */
+  #onEditorKeydown(id, e) {
+    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 's') return;
+    e.preventDefault();
+    this.#save(id);
+  }
+
+  /** @param {string} id */
+  async #save(id) {
+    const tab = this.#find(id);
+    if (!tab || tab.draft === null) return;
+    const content = tab.draft;
+    try {
+      await writeFile(tab.path, content);
+      // Edits typed while saving stay a draft.
+      const now = this.#find(id);
+      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft });
+    } catch (err) {
+      reportError(`Saving ${basename(tab.path)} failed`, err);
+    }
   }
 
   /**
@@ -241,7 +304,7 @@ export class AcpTabView extends LitElement {
       if (existing) return existing;
       const target = parseTabId(id);
       // A view, or a file shown other than as text (an image), has nothing to read.
-      return { id, ...target, content: '', error: '', loaded: !this.#content.readsText(target), baseline: null };
+      return { id, ...target, content: '', error: '', loaded: !this.#content.readsText(target), baseline: null, draft: null };
     });
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
@@ -258,8 +321,10 @@ export class AcpTabView extends LitElement {
    * @param {string | null} id
    */
   #ensureLoaded(id) {
-    if (id === null || this.#rootId.value === null || this.#reading.has(id)) return;
+    if (id === null || this.#reading.has(id)) return;
     const tab = this.#find(id);
+    // The user's agents.json lies outside every root: it reads with no project open.
+    if (this.#rootId.value === null && !(tab && isUserAgentsFile(tab.path))) return;
     if (tab && !tab.loaded) this.#load(id);
   }
 
@@ -384,21 +449,36 @@ export class AcpTabView extends LitElement {
    * @param {EditorTab} tab The tab the menu was opened on.
    */
   #onMenuSelect(value, tab) {
+    const { paths, active, pinned } = this.#editorTabs.value;
+    const closable = paths.filter((id) => !pinned.includes(id));
     if (value === 'close') this.close(tab.id);
     else if (value === 'close-others') {
-      if (this.#activeId !== tab.id) this.#pendingLine = null;
-      closeOtherTabs(tab.id);
+      this.#closeAfterConfirm(closable.filter((id) => id !== tab.id), () => {
+        if (this.#activeId !== tab.id) this.#pendingLine = null;
+        closeOtherTabs(tab.id);
+      });
     } else if (value === 'close-right') {
-      const { paths, active } = this.#editorTabs.value;
-      if (active !== null && paths.indexOf(active) > paths.indexOf(tab.id)) this.#pendingLine = null;
-      closeTabsToRight(tab.id);
+      this.#closeAfterConfirm(closable.filter((id) => paths.indexOf(id) > paths.indexOf(tab.id)), () => {
+        if (active !== null && paths.indexOf(active) > paths.indexOf(tab.id)) this.#pendingLine = null;
+        closeTabsToRight(tab.id);
+      });
     } else if (value === 'close-all') {
-      this.#pendingLine = null;
-      closeAllTabs();
+      this.#closeAfterConfirm(closable, () => {
+        this.#pendingLine = null;
+        closeAllTabs();
+      });
     } else if (value === 'pin' || value === 'unpin') setTabPinned(tab.id, value === 'pin');
     else if (value === 'copy-path') {
       navigator.clipboard.writeText(tab.path).catch((err) => reportError('Copying the path failed', err));
     }
+  }
+
+  /**
+   * @param {string[]} ids The tabs `close` closes.
+   * @param {() => void} close
+   */
+  async #closeAfterConfirm(ids, close) {
+    if (await this.#confirmDiscard(ids)) close();
   }
 
   /** @param {string} id */
@@ -444,6 +524,7 @@ export class AcpTabView extends LitElement {
       <span class="acp-tab-view__tab-label">
         <md-icon class="acp-tab-view__file-icon">${unsafeSVG(icon)}</md-icon>
         ${title}
+        ${tab.draft !== null ? html`<span class="acp-tab-view__unsaved" title="Unsaved changes">●</span>` : nothing}
         <span
           class="acp-tab-view__close"
           role="button"
@@ -510,14 +591,17 @@ export class AcpTabView extends LitElement {
 
   /** @param {EditorTab} tab */
   #renderCode(tab) {
+    const editable = isAgentsFile(tab.path);
     return html`<cdx-code-editor
         class="acp-tab-view__editor"
         style=${this.#editorStyle()}
-        read-only
+        .readOnly=${!editable}
         .plugins=${editorPlugins}
         filename=${tab.path}
-        .value=${tab.content}
+        .value=${tab.draft ?? tab.content}
         .baseline=${tab.baseline}
+        @cdx-change=${editable ? (/** @type {Event} */ e) => this.#onEdit(tab.id, e) : nothing}
+        @keydown=${editable ? (/** @type {KeyboardEvent} */ e) => this.#onEditorKeydown(tab.id, e) : nothing}
       >
         <cdx-diff slot="diff" kind="baseline"></cdx-diff>
         <cdx-comments
@@ -548,6 +632,7 @@ export class AcpTabView extends LitElement {
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
       ${this.#renderMenu()}
       ${this.#selectionActions.render()}
+      <acp-confirm-dialog></acp-confirm-dialog>
     `;
   }
 }

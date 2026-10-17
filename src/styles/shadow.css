@@ -1,0 +1,48 @@
+/*
+ * The first stylesheet of every shadow root in the app, ours and the libraries' alike
+ * (`shadow-styles.js`): what must look the same everywhere. A component's own styles come after
+ * it and may refine it.
+ *
+ * Tag selectors on purpose: these reach elements inside third-party shadow roots (the menu in
+ * `md-select`, `chx-command-picker`'s), where no class of ours can. An outer-tree rule also beats
+ * the element's own `:host` defaults, which inherited custom properties don't.
+ */
+
+/* Thin scrollbars, colored like dividers. */
+:host,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--md-outline-variant) transparent;
+}
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track,
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--md-outline-variant);
+    border-radius: 3px;
+  }
+}
+
+/* Every menu and context menu: compact rows, the library's type sizes. */
+md-menu {
+  --md-menu-min-width: 11rem;
+  --md-menu-shape: var(--md-sys-shape-corner-medium, 0.75rem);
+  --md-menu-group-label-line-height: 1.75rem;
+  --md-menu-selected-container-color: var(--md-tertiary-container);
+  --md-menu-selected-label-color: var(--md-on-tertiary-container);
+}
+md-menu-item {
+  --md-menu-item-min-block-size: 2rem;
+  --md-menu-item-padding-block: 0.25rem;
+  --md-menu-item-padding-inline: 0.625rem;
+  --md-menu-item-supporting-text-line-height: 1rem;
+  --md-menu-item-label-text-weight: 400;
+
+  margin-inline: 0.25rem;
+}

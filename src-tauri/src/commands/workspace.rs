@@ -40,7 +40,15 @@ pub async fn open_workspace(
 ) -> Result<OpenedRoot, String> {
     let workspaces = workspaces.inner().clone();
     let group = window.label().to_owned();
-    let root = blocking(move || workspaces.open(app, &PathBuf::from(path), &group)).await??;
+    let root = blocking(move || {
+        let root = workspaces.open(app, &PathBuf::from(path), &group)?;
+        // A read-only folder still opens; it just has no project config.
+        if let Err(e) = crate::config::ensure_project_dir(&root.path) {
+            tracing::info!("no .brama folder: {e}");
+        }
+        Ok::<_, String>(root)
+    })
+    .await??;
     Ok(OpenedRoot { root_id: root.id.clone(), path: root.path.to_string_lossy().into_owned() })
 }
 

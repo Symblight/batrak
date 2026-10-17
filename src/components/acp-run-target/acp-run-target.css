@@ -53,16 +53,13 @@
   font-size: 16px;
 }
 
-.acp-run-target__menu {
-  --md-menu-min-width: 13rem;
-  --md-menu-selected-container-color: var(--md-tertiary-container);
-  --md-menu-selected-label-color: var(--md-on-tertiary-container);
+/* The full-access note is the mode menu's description too; a narrow composer drops it. */
+@container acp-composer (width <= 500px) {
+  .acp-run-target__note {
+    display: none;
+  }
 }
 
-.acp-run-target__item {
-  --md-menu-item-min-block-size: 2.25rem;
-  --md-menu-item-label-text-size: 0.875rem;
-  --md-menu-item-supporting-text-size: 0.75rem;
-  --md-menu-item-supporting-text-line-height: 1rem;
-  --md-menu-item-leading-icon-size: 1.25rem;
+.acp-run-target__menu {
+  --md-menu-min-width: 13rem;
 }
