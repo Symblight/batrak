@@ -1,0 +1,770 @@
+//! Sessions against the in-process fake agent: lifecycle, turns, permissions, cancel, file
+//! confinement, crash and restart, persistence.
+
+use std::sync::atomic::AtomicUsize;
+use std::time::Instant;
+
+use super::*;
+use crate::acp::fake_agent::{self, FakeAgentOptions, FakeAgentState};
+
+struct FakeLauncher {
+    options: FakeAgentOptions,
+    launches: AtomicUsize,
+    agents: Mutex<Vec<Arc<FakeAgentState>>>,
+    /// The environment the last launch got.
+    env: Mutex<Vec<(String, String)>>,
+}
+
+impl Launcher for FakeLauncher {
+    fn launch(&self, _env: &dyn SessionEnv, _agent: &AgentConfig, process_env: &[(String, String)], _stderr: File)
+        -> Result<Launched, String> {
+        self.launches.fetch_add(1, Ordering::SeqCst);
+        *lock(&self.env) = process_env.to_vec();
+        let (writer, reader, state) = fake_agent::start(self.options.clone());
+        lock(&self.agents).push(state);
+        Ok(Launched { process: None, writer: Box::new(writer), reader: Box::new(reader) })
+    }
+}
+
+struct Secrets;
+
+impl SecretStore for Secrets {
+    fn get(&self, name: &str) -> Result<String, String> {
+        match name {
+            "token" => Ok("s3cret-value".to_owned()),
+            _ => Err(format!("no keychain item \"{name}\"")),
+        }
+    }
+}
+
+#[derive(Default, Debug)]
+struct Recorder {
+    events: Mutex<Vec<Envelope>>,
+}
+
+impl EventSink for Recorder {
+    fn send(&self, envelope: &Envelope) -> bool {
+        lock(&self.events).push(envelope.clone());
+        true
+    }
+}
+
+impl Recorder {
+    /// Waits until an event matches, returning it; fails after 5s.
+    async fn wait_for(&self, what: &str, pred: impl Fn(&Envelope) -> bool) -> Envelope {
+        let started = Instant::now();
+        loop {
+            if let Some(found) = lock(&self.events).iter().find(|e| pred(e)) {
+                return found.clone();
+            }
+            assert!(started.elapsed() < Duration::from_secs(5), "no {what} in {:#?}", lock(&self.events));
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+
+    async fn wait_status(&self, status: &str) -> Envelope {
+        self.wait_for(status, |e| e.kind == "status" && e.payload["status"] == status).await
+    }
+
+    async fn wait_turn_end(&self) -> String {
+        let end = self.wait_for("turn-end", |e| e.kind == "turn-end").await;
+        end.payload["stopReason"].as_str().unwrap_or_default().to_owned()
+    }
+
+    fn clear(&self) {
+        lock(&self.events).clear();
+    }
+
+    fn texts(&self) -> Vec<String> {
+        lock(&self.events)
+            .iter()
+            .filter(|e| e.kind == "update")
+            .filter_map(|e| e.payload["content"]["text"].as_str().map(str::to_owned))
+            .collect()
+    }
+}
+
+struct Fixture {
+    dir: PathBuf,
+    project: PathBuf,
+    sessions: Sessions,
+    launcher: Arc<FakeLauncher>,
+}
+
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
+    static NEXT: AtomicUsize = AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, Ordering::SeqCst);
+    let dir = std::env::temp_dir().join(format!("brama-sessions-{name}-{}-{n}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let project = dir.join("project");
+    std::fs::create_dir_all(project.join(".git")).unwrap();
+    std::fs::write(project.join(".git/config"), "[core]\n").unwrap();
+    std::fs::write(project.join("a.txt"), "one\ntwo\nthree\n").unwrap();
+    crate::config::ensure_project_dir(&project).unwrap();
+    // The user's own agents: the project's file needs trust to run anything.
+    std::fs::create_dir_all(dir.join("config")).unwrap();
+    std::fs::write(
+        dir.join("config/agents.json"),
+        r#"{"version":1,"agents":{"fake":{"name":"Fake","command":"fake-agent","env":{"TOKEN":"${keychain:token}"}},
+            "locked":{"name":"Locked","command":"x","env":{"KEY":"${keychain:missing}"}}}}"#,
+    )
+    .unwrap();
+    let project = dunce::canonicalize(project).unwrap();
+    let launcher = Arc::new(FakeLauncher {
+        options,
+        launches: AtomicUsize::new(0),
+        agents: Mutex::default(),
+        env: Mutex::default(),
+    });
+    let sessions = Sessions::new(options_for(&dir, &launcher));
+    Fixture { dir, project, sessions, launcher }
+}
+
+fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
+    SessionsOptions {
+        data_dir: dir.join("data"),
+        configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json"))),
+        secrets: Arc::new(Secrets),
+        base_env: Arc::new(|| {
+            HashMap::from([
+                ("PATH".to_owned(), "/usr/bin:/bin".to_owned()),
+                ("GIT_INDEX_FILE".to_owned(), "/x/index".to_owned()),
+            ])
+        }),
+        launcher: Arc::clone(launcher) as Arc<dyn Launcher>,
+        initialize_timeout: Duration::from_secs(5),
+    }
+}
+
+impl Fixture {
+    fn create(&self, id: &str, agent: &str) -> Result<(Session, Arc<Recorder>), String> {
+        let recorder = Arc::new(Recorder::default());
+        let req = CreateSession {
+            session_id: id.to_owned(),
+            project_path: self.project.to_string_lossy().into_owned(),
+            agent_id: agent.to_owned(),
+            mode: Mode::Local,
+            title: format!("Session {id}"),
+            model: None,
+        };
+        let session = self.sessions.create(req, "main", Arc::clone(&recorder) as Arc<dyn EventSink>)?;
+        Ok((session, recorder))
+    }
+
+    fn path(&self, rel: &str) -> String {
+        self.project.join(rel).to_string_lossy().into_owned()
+    }
+}
+
+fn text(s: &str) -> Vec<PromptInput> {
+    vec![PromptInput::Text { text: s.to_owned() }]
+}
+
+#[tokio::test]
+async fn a_turn_streams_updates_in_order_between_turn_start_and_turn_end() {
+    let f = fixture("turn", FakeAgentOptions::default());
+    let (session, events) = f.create("s1", "fake").unwrap();
+    assert_eq!(session.status, SessionStatus::Preparing);
+    events.wait_status("starting").await;
+    events.wait_status("idle").await;
+
+    f.sessions.send_prompt("s1", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    events.wait_for("idle after the turn", |e| e.kind == "status" && e.payload["status"] == "idle" && e.seq > 4).await;
+
+    let all = lock(&events.events).clone();
+    let kinds: Vec<_> = all.iter().map(|e| e.kind).collect();
+    let start = kinds.iter().position(|k| *k == "turn-start").unwrap();
+    let end = kinds.iter().position(|k| *k == "turn-end").unwrap();
+    assert!(start < end);
+    assert_eq!(events.texts(), ["Hello", ", world"]);
+    assert!(all.windows(2).all(|w| w[0].seq < w[1].seq), "seq is monotonic");
+    assert!(all.iter().all(|e| e.session_id == "s1"));
+
+    // The agent got the login env without git redirects, plus its resolved secret.
+    let env: HashMap<_, _> = lock(&f.launcher.env).iter().cloned().collect();
+    assert_eq!(env.get("TOKEN").map(String::as_str), Some("s3cret-value"));
+    assert!(!env.contains_key("GIT_INDEX_FILE"));
+    // …and the secret went nowhere else.
+    let stored = std::fs::read_to_string(f.dir.join("data/sessions.json")).unwrap();
+    let log = std::fs::read_to_string(f.sessions.log_path("s1").unwrap()).unwrap_or_default();
+    let sent = serde_json::to_string(&all).unwrap();
+    for place in [&stored, &log, &sent] {
+        assert!(!place.contains("s3cret-value"));
+    }
+}
+
+#[tokio::test]
+async fn a_second_local_session_in_the_same_project_is_refused() {
+    let f = fixture("slot", FakeAgentOptions::default());
+    let (_, events) = f.create("first", "fake").unwrap();
+    events.wait_status("idle").await;
+    let err = f.create("second", "fake").unwrap_err();
+    assert!(err.contains("already running in this project (\"Session first\")"), "{err}");
+    assert!(f.sessions.list().iter().all(|s| s.id != "second"));
+
+    f.sessions.stop("first").await.unwrap();
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+    // The stopped one can't come back while the other runs.
+    f.sessions.send_prompt("first", text("hello")).unwrap();
+    let refused = events.wait_for("refusal", |e| e.kind == "error").await;
+    assert!(refused.payload["message"].as_str().unwrap().contains("already running"));
+}
+
+#[tokio::test]
+async fn permission_allow_then_cancel_with_a_pending_one() {
+    let f = fixture("permission", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+
+    f.sessions.send_prompt("p", text("permission")).unwrap();
+    let request = events.wait_for("permission request", |e| e.kind == "permission-request").await;
+    events.wait_status("waiting").await;
+    assert_eq!(request.payload["options"][1]["optionId"], "deny");
+    let id = request.payload["requestId"].as_str().unwrap().to_owned();
+    f.sessions.respond_permission("p", &id, Some("allow".to_owned())).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts(), ["chose allow"]);
+
+    events.clear();
+    f.sessions.send_prompt("p", text("permission")).unwrap();
+    events.wait_for("permission request", |e| e.kind == "permission-request").await;
+    f.sessions.cancel("p").unwrap();
+    assert_eq!(events.wait_turn_end().await, "cancelled");
+    assert_eq!(lock(&f.launcher.agents)[0].cancel_count.load(Ordering::SeqCst), 1);
+    events.clear();
+    f.sessions.send_prompt("p", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn", "the next turn runs");
+}
+
+#[tokio::test]
+async fn a_second_prompt_during_a_turn_is_refused_and_cancel_stops_it() {
+    let f = fixture("busy", FakeAgentOptions::default());
+    let (_, events) = f.create("b", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("b", text("slow")).unwrap();
+    assert!(f.sessions.send_prompt("b", text("hello")).unwrap_err().contains("still working"));
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+    f.sessions.cancel("b").unwrap();
+    assert_eq!(events.wait_turn_end().await, "cancelled");
+}
+
+#[tokio::test]
+async fn agent_file_access_is_confined_to_the_project() {
+    let f = fixture("fs", FakeAgentOptions::default());
+    let (_, events) = f.create("fs", "fake").unwrap();
+    events.wait_status("idle").await;
+    let outside = f.dir.join("outside.txt");
+    std::fs::write(&outside, "secret").unwrap();
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(&outside, f.project.join("link.txt")).unwrap();
+
+    let mut replies = Vec::new();
+    for prompt in [
+        format!("read {}", f.path("a.txt")),
+        format!("write {} new text", f.path("dir/new.txt")),
+        format!("read {}", f.path("../outside.txt")),
+        format!("read {}", f.path("link.txt")),
+        format!("write {} x", f.path(".git/config")),
+        format!("write {} x", outside.display()),
+        format!("read {}", f.path("missing.txt")),
+    ] {
+        events.clear();
+        f.sessions.send_prompt("fs", text(&prompt)).unwrap();
+        events.wait_turn_end().await;
+        replies.push(events.texts().join(""));
+    }
+    assert_eq!(replies[0], "read:one\ntwo\nthree\n");
+    assert_eq!(replies[1], "written");
+    assert_eq!(std::fs::read_to_string(f.project.join("dir/new.txt")).unwrap(), "new text");
+    assert!(replies[2].starts_with("error:") && replies[2].contains(".."), "{}", replies[2]);
+    if cfg!(unix) {
+        assert!(replies[3].contains("outside the session"), "{}", replies[3]);
+    }
+    assert!(replies[4].contains(".git"), "{}", replies[4]);
+    assert!(replies[5].contains("outside the session"), "{}", replies[5]);
+    assert!(replies[6].starts_with("error:"), "{}", replies[6]);
+    assert_eq!(std::fs::read_to_string(&outside).unwrap(), "secret");
+    assert_eq!(std::fs::read_to_string(f.project.join(".git/config")).unwrap(), "[core]\n");
+}
+
+#[tokio::test]
+async fn a_crash_mid_turn_is_an_error_and_restart_brings_the_agent_back() {
+    let f = fixture("crash", FakeAgentOptions::default());
+    let (_, events) = f.create("c", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("c", text("crash")).unwrap();
+    events.wait_for("turn error", |e| e.kind == "error" && e.payload["turn"] == true).await;
+    let status = events.wait_status("error").await;
+    assert!(status.payload["message"].as_str().unwrap().starts_with("The agent stopped"));
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Error);
+    assert_eq!(events.texts(), ["about to crash"], "the transcript so far was delivered");
+
+    events.clear();
+    f.sessions.restart("c").await.unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
+    f.sessions.send_prompt("c", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+}
+
+#[tokio::test]
+async fn stop_ends_a_running_turn_as_cancelled_and_frees_the_slot() {
+    let f = fixture("stop", FakeAgentOptions::default());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("s", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+    f.sessions.stop("s").await.unwrap();
+    assert_eq!(events.wait_turn_end().await, "cancelled");
+    events.wait_status("stopped").await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(!lock(&events.events).iter().any(|e| e.kind == "error"), "a requested stop is no error");
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Stopped);
+}
+
+#[tokio::test]
+async fn a_missing_secret_fails_the_start_naming_the_variable() {
+    let f = fixture("secret", FakeAgentOptions::default());
+    let (_, events) = f.create("x", "locked").unwrap();
+    let status = events.wait_status("error").await;
+    assert_eq!(status.payload["message"], "Locked: env KEY: no keychain item \"missing\"");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0);
+    assert!(f.create("y", "fake").is_ok(), "a failed session holds no slot");
+}
+
+#[tokio::test]
+async fn unknown_agents_and_unsupported_modes_are_refused() {
+    let f = fixture("refuse", FakeAgentOptions::default());
+    assert!(f.create("u", "nope").unwrap_err().contains("Unknown agent"));
+    let req = CreateSession {
+        session_id: "w".to_owned(),
+        project_path: f.project.to_string_lossy().into_owned(),
+        agent_id: "fake".to_owned(),
+        mode: Mode::Worktree,
+        title: "w".to_owned(),
+        model: None,
+    };
+    let sink: Arc<dyn EventSink> = Arc::new(Recorder::default());
+    assert!(f.sessions.create(req, "main", sink).unwrap_err().contains("not available yet"));
+}
+
+#[tokio::test]
+async fn sessions_come_back_after_a_restart_and_load_their_acp_session() {
+    let options = FakeAgentOptions { load_session: true, ..Default::default() };
+    let f = fixture("reload", options);
+    let (_, events) = f.create("r", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.shutdown();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let listed = reopened.list();
+    assert_eq!(listed.len(), 1);
+    assert_eq!((listed[0].id.as_str(), listed[0].status), ("r", SessionStatus::Stopped));
+    let events = Arc::new(Recorder::default());
+    reopened.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    reopened.send_prompt("r", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    let agent = Arc::clone(&lock(&f.launcher.agents)[1]);
+    assert_eq!(agent.loads.load(Ordering::SeqCst), 1, "session/load was used");
+    assert_eq!(events.texts(), ["earlier question", "earlier answer", "Hello", ", world"]);
+    let idle = events.wait_status("idle").await;
+    assert!(idle.payload["message"].is_null(), "history restored: no banner");
+    reopened.shutdown();
+}
+
+#[tokio::test]
+async fn without_load_support_a_reopened_session_says_history_was_not_restored() {
+    let f = fixture("noload", FakeAgentOptions::default());
+    let (_, events) = f.create("n", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.shutdown();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let events = Arc::new(Recorder::default());
+    reopened.attach("n", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    reopened.send_prompt("n", text("hello")).unwrap();
+    let idle = events.wait_status("idle").await;
+    assert_eq!(idle.payload["message"], "Agent history not restored");
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    reopened.shutdown();
+}
+
+#[tokio::test]
+async fn the_conversation_is_recorded_and_survives_a_restart() {
+    let options = FakeAgentOptions { load_session: true, ..Default::default() };
+    let f = fixture("history", options);
+    let (_, events) = f.create("h", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("h", text("hello")).unwrap();
+    events.wait_turn_end().await;
+    f.sessions.shutdown();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let summary = |sessions: &Sessions| -> Vec<String> {
+        sessions
+            .history("h")
+            .unwrap()
+            .iter()
+            .map(|e| match e["kind"].as_str().unwrap() {
+                "prompt" => format!("prompt:{}", e["prompt"][0]["text"].as_str().unwrap()),
+                "update" => format!("update:{}", e["update"]["content"]["text"].as_str().unwrap_or("")),
+                kind => format!("{kind}:{}", e["stopReason"].as_str().unwrap()),
+            })
+            .collect()
+    };
+    let first_turn = ["prompt:hello", "update:Hello", "update:, world", "turn-end:end_turn"];
+    assert_eq!(summary(&reopened), first_turn);
+
+    // The agent replays its history while starting (`session/load`): not recorded twice.
+    let events = Arc::new(Recorder::default());
+    reopened.attach("h", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    reopened.send_prompt("h", text("hello")).unwrap();
+    events.wait_turn_end().await;
+    assert!(events.texts().contains(&"earlier question".to_owned()), "the replay did happen");
+    assert_eq!(summary(&reopened), [&first_turn[..], &first_turn[..]].concat());
+    reopened.shutdown();
+}
+
+#[tokio::test]
+async fn config_options_arrive_at_start_and_follow_a_change() {
+    let f = fixture("options", FakeAgentOptions::default());
+    assert!(f.create("o", "fake").is_ok());
+    let events = {
+        let recorder = Arc::new(Recorder::default());
+        f.sessions.attach("o", "main", Arc::clone(&recorder) as Arc<dyn EventSink>).unwrap();
+        recorder
+    };
+    let first = events.wait_for("options", |e| e.kind == "config-options").await;
+    let ids = |e: &Envelope| -> Vec<String> {
+        e.payload["configOptions"].as_array().unwrap().iter().map(|o| o["id"].as_str().unwrap().to_owned()).collect()
+    };
+    assert_eq!(ids(&first), ["model", "effort"]);
+    assert_eq!(first.payload["configOptions"][0]["category"], "model");
+    assert_eq!(first.payload["configOptions"][1]["category"], "thought_level");
+
+    events.clear();
+    f.sessions.set_config_option("o", "model", "fast").await.unwrap();
+    let after = events.wait_for("options after set", |e| e.kind == "config-options").await;
+    assert_eq!(after.payload["configOptions"][0]["currentValue"], "fast");
+    assert_eq!(ids(&after), ["model"], "the fast model has no effort option");
+    assert_eq!(*lock(&lock(&f.launcher.agents)[0].model), "fast");
+
+    assert!(f.sessions.set_config_option("o", "model", "huge").await.is_err(), "the agent's refusal comes back");
+    f.sessions.stop("o").await.unwrap();
+    assert!(f.sessions.set_config_option("o", "model", "smart").await.unwrap_err().contains("isn't running"));
+}
+
+#[tokio::test]
+async fn removing_a_session_stops_its_agent_and_forgets_it() {
+    let f = fixture("remove", FakeAgentOptions::default());
+    let (_, events) = f.create("gone", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("gone", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+    let session_dir = f.dir.join("data/sessions/gone");
+    assert!(session_dir.join("transcript.jsonl").exists());
+
+    f.sessions.remove("gone").await.unwrap();
+    assert!(f.sessions.list().is_empty());
+    assert!(f.sessions.history("gone").is_err(), "unknown now");
+    assert!(!session_dir.exists(), "its transcript and log are deleted");
+    assert_eq!(events.wait_turn_end().await, "cancelled", "the running turn ends");
+    assert!(f.project.join("a.txt").exists(), "the project is untouched");
+    assert!(f.sessions.remove("gone").await.is_err());
+
+    // Its slot in the project is free, and it doesn't come back after a restart.
+    let (_, other) = f.create("other", "fake").unwrap();
+    other.wait_status("idle").await;
+    f.sessions.shutdown();
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let ids: Vec<_> = reopened.list().into_iter().map(|s| s.id).collect();
+    assert_eq!(ids, ["other"]);
+}
+
+#[tokio::test]
+async fn probing_an_agent_returns_its_options_and_leaves_nothing_behind() {
+    let f = fixture("probe", FakeAgentOptions::default());
+    let options = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap();
+    let ids: Vec<_> = options.iter().map(|o| o["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, ["model", "effort"]);
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+    assert!(f.sessions.list().is_empty(), "no session is listed");
+    assert!(f.create("s", "fake").is_ok(), "no local slot is taken");
+    assert!(f.sessions.probe_options(Some(&f.project), "nope").await.unwrap_err().contains("Unknown agent"));
+    let failed = f.sessions.probe_options(Some(&f.project), "locked").await.unwrap_err();
+    assert!(failed.contains("no keychain item"), "{failed}");
+}
+
+#[tokio::test]
+async fn an_agent_the_project_defines_runs_only_once_trusted() {
+    let f = fixture("trust", FakeAgentOptions::default());
+    std::fs::write(
+        f.project.join(".brama/agents.json"),
+        r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent","args":["--acp"]}}}"#,
+    )
+    .unwrap();
+    let (_, events) = f.create("t", "repo").unwrap();
+    let untrusted = events.wait_for("untrusted", |e| e.kind == "untrusted").await;
+    assert_eq!(untrusted.payload["launch"]["command"], "./agent");
+    let message = untrusted.payload["message"].as_str().unwrap();
+    assert!(message.contains("./agent --acp"), "{message}");
+    events.wait_status("error").await;
+    let probe = f.sessions.probe_options(Some(&f.project), "repo").await.unwrap_err();
+    assert!(probe.contains("trust"), "{probe}");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "nothing ran");
+
+    let launch: crate::config::LaunchConfig = serde_json::from_value(untrusted.payload["launch"].clone()).unwrap();
+    f.sessions.inner.opts.configs.trust(&f.project, &launch).unwrap();
+    events.clear();
+    f.sessions.restart("t").await.unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+}
+
+#[tokio::test]
+async fn the_agent_cannot_rewrite_the_projects_agents_json() {
+    let f = fixture("agents-json", FakeAgentOptions::default());
+    let (_, events) = f.create("c", "fake").unwrap();
+    events.wait_status("idle").await;
+    let file = f.project.join(".brama/agents.json");
+    let before = std::fs::read_to_string(&file).unwrap();
+    f.sessions.send_prompt("c", text(&format!("write {} x", f.path(".brama/agents.json")))).unwrap();
+    events.wait_turn_end().await;
+    let reply = events.texts().join("");
+    assert!(reply.starts_with("error:") && reply.contains("agents.json"), "{reply}");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), before);
+}
+
+#[tokio::test]
+async fn a_message_sent_while_the_first_start_fails_does_not_start_the_agent_again() {
+    let f = fixture("once", FakeAgentOptions { require_auth: true, ..Default::default() });
+    let (_, events) = f.create("o", "fake").unwrap();
+    f.sessions.send_prompt("o", text("hello")).unwrap();
+    let failed = events.wait_for("turn error", |e| e.kind == "error" && e.payload["turn"] == true).await;
+    assert!(failed.payload["message"].as_str().unwrap().contains("Sign in"), "{failed:?}");
+    events.wait_for("start error", |e| e.kind == "error" && e.payload["turn"].is_null()).await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+
+    // The user's next message tries again.
+    events.clear();
+    f.sessions.send_prompt("o", text("again")).unwrap();
+    events.wait_for("turn error", |e| e.kind == "error" && e.payload["turn"] == true).await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn session_ids_are_names_not_paths() {
+    let f = fixture("ids", FakeAgentOptions::default());
+    for bad in ["../x", "/tmp/x", "", "a/b", "..", "a\\b", &"x".repeat(65)] {
+        let err = f.create(bad, "fake").unwrap_err();
+        assert!(err.contains("invalid session id"), "{bad:?}: {err}");
+    }
+    assert!(f.sessions.list().is_empty());
+}
+
+#[test]
+fn reads_lines_without_loading_more_than_the_limit() {
+    let dir = std::env::temp_dir().join(format!("brama-read-lines-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let small = dir.join("small.txt");
+    std::fs::write(&small, "a\nb\nc").unwrap();
+    assert_eq!(read_lines(&small, Some(2), Some(1), 100).unwrap(), "b\n");
+    assert_eq!(read_lines(&small, Some(2), None, 100).unwrap(), "b\nc");
+    assert_eq!(read_lines(&small, None, Some(1), 100).unwrap(), "a\n");
+    assert_eq!(read_lines(&small, None, None, 100).unwrap(), "a\nb\nc");
+    assert!(read_lines(&small, None, None, 3).unwrap_err().contains("too large"), "a whole file over the limit");
+    assert_eq!(read_lines(&small, Some(3), Some(1), 3).unwrap(), "c", "a part of it is fine");
+
+    let long = dir.join("long.txt");
+    std::fs::write(&long, format!("{}\nshort\n", "x".repeat(50))).unwrap();
+    assert_eq!(read_lines(&long, Some(2), None, 10).unwrap(), "short\n", "a long line skipped is never loaded");
+    assert!(read_lines(&long, Some(1), Some(1), 10).unwrap_err().contains("too large"), "nor is a part over the limit");
+    std::fs::write(&long, [0xff, 0xfe, b'\n']).unwrap();
+    assert!(read_lines(&long, Some(1), Some(1), 10).is_err(), "not UTF-8");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn prompt_blocks_map_mentions_and_selections_and_refuse_escapes() {
+    let dir = std::env::temp_dir().join(format!("brama-blocks-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(dir.join("src/my file.rs"), "l1\nl2\nl3\nl4\n").unwrap();
+    let root = dunce::canonicalize(&dir).unwrap();
+    let env = env::LocalEnv::new(root.clone());
+    let blocks = prompt_blocks(
+        &env,
+        vec![
+            PromptInput::Text { text: "look".to_owned() },
+            PromptInput::Mention { path: "src/my file.rs".to_owned() },
+            PromptInput::Selection { path: "src/my file.rs".to_owned(), from_line: 2, to_line: 3 },
+        ],
+    )
+    .unwrap();
+    let uri = format!("file://{}/src/my%20file.rs", root.display());
+    assert_eq!(
+        blocks,
+        vec![
+            PromptBlock::Text("look".to_owned()),
+            PromptBlock::Mention { name: "my file.rs".to_owned(), uri: uri.clone() },
+            PromptBlock::Selection { uri: format!("{uri}#L2-3"), text: "l2\nl3\n".to_owned() },
+        ]
+    );
+    for bad in ["../x", "/etc/passwd", ".git/config", "missing.rs"] {
+        assert!(prompt_blocks(&env, vec![PromptInput::Mention { path: bad.to_owned() }]).is_err(), "{bad}");
+    }
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn prompt_input_from_the_page() {
+    let parsed: Vec<PromptInput> = serde_json::from_str(
+        r#"[{"type":"text","text":"hi"},{"type":"mention","path":"a.rs"},{"type":"selection","path":"a.rs","fromLine":1,"toLine":2}]"#,
+    )
+    .unwrap();
+    assert_eq!(parsed[2], PromptInput::Selection { path: "a.rs".to_owned(), from_line: 1, to_line: 2 });
+}
+
+/// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, the
+/// built-in config): needs network, Node and a signed-in Claude Code. Run with
+/// `cargo test --lib real_claude -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn real_claude_agent_end_to_end() {
+    let dir = std::env::temp_dir().join(format!("brama-real-claude-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let project = dir.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+    crate::config::ensure_project_dir(&project).unwrap();
+    let project = dunce::canonicalize(project).unwrap();
+    let mut opts = SessionsOptions::for_app(dir.join("data"), AgentConfigs::new(None, None));
+    opts.initialize_timeout = Duration::from_secs(180);
+    let sessions = Sessions::new(opts);
+    let probed = sessions.probe_options(Some(&project), "claude").await.unwrap();
+    let categories: Vec<_> = probed.iter().map(|o| o["category"].as_str().unwrap_or("-")).collect();
+    eprintln!("probed categories: {categories:?}");
+    assert!(categories.contains(&"model") && categories.contains(&"thought_level"));
+    let events = Arc::new(Recorder::default());
+    let req = CreateSession {
+        session_id: "real".to_owned(),
+        project_path: project.to_string_lossy().into_owned(),
+        agent_id: "claude".to_owned(),
+        mode: Mode::Local,
+        title: "real".to_owned(),
+        model: None,
+    };
+    sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    let wait = |what: &'static str, secs: u64, pred: Box<dyn Fn(&Envelope) -> bool + Send>| {
+        let events = Arc::clone(&events);
+        async move {
+            let started = Instant::now();
+            loop {
+                if let Some(found) = lock(&events.events).iter().find(|e| pred(e)) {
+                    return found.clone();
+                }
+                if let Some(err) = lock(&events.events).iter().find(|e| e.kind == "error") {
+                    panic!("{what}: {:?}", err.payload);
+                }
+                assert!(started.elapsed() < Duration::from_secs(secs), "no {what}");
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        }
+    };
+    wait("idle", 240, Box::new(|e| e.kind == "status" && e.payload["status"] == "idle")).await;
+    let pid = {
+        let state = sessions.get("real").unwrap();
+        let live = state.live.lock().await;
+        live.as_ref().and_then(|l| l.process.as_ref()).and_then(AgentProcess::pid).unwrap()
+    };
+    eprintln!("agent ready, pid {pid}");
+    let options = wait("config-options", 10, Box::new(|e| e.kind == "config-options")).await;
+    eprintln!("config options: {}", serde_json::to_string_pretty(&options.payload).unwrap());
+    // Pick another value of the model option and see the agent take it.
+    let model = options.payload["configOptions"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["category"] == "model")
+        .cloned();
+    if let Some(model) = model {
+        let current = model["currentValue"].clone();
+        let other = model["options"].as_array().unwrap().iter().map(|v| v["value"].clone()).find(|v| *v != current).unwrap();
+        events.clear();
+        sessions.set_config_option("real", model["id"].as_str().unwrap(), other.as_str().unwrap()).await.unwrap();
+        let after = wait("config-options after set", 30, Box::new(|e| e.kind == "config-options")).await;
+        let now = after.payload["configOptions"].as_array().unwrap().iter().find(|o| o["id"] == model["id"]).unwrap()["currentValue"].clone();
+        eprintln!("model {current} -> {now}");
+        assert_eq!(now, other);
+    }
+
+    // 1. A plain turn streams text and ends with end_turn.
+    sessions.send_prompt("real", text("Reply with exactly the single word: pong")).unwrap();
+    let end = wait("turn-end 1", 120, Box::new(|e| e.kind == "turn-end")).await;
+    eprintln!("turn 1: {:?} text {:?}", end.payload, events.texts().join(""));
+    assert_eq!(end.payload["stopReason"], "end_turn");
+    assert!(events.texts().join("").to_lowercase().contains("pong"));
+
+    // 2. A write asks for permission; allowing it writes through fs/write_text_file (or the agent's own tool).
+    events.clear();
+    sessions
+        .send_prompt("real", text("Create a file named hello.txt in the current directory containing exactly: hi"))
+        .unwrap();
+    let ask = wait(
+        "permission or turn-end",
+        180,
+        Box::new(|e| e.kind == "permission-request" || e.kind == "turn-end"),
+    )
+    .await;
+    if ask.kind == "permission-request" {
+        eprintln!("permission: {}", ask.payload);
+        let allow = ask.payload["options"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|o| o["kind"] == "allow_once" || o["kind"] == "allow_always")
+            .unwrap()["optionId"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        sessions.respond_permission("real", ask.payload["requestId"].as_str().unwrap(), Some(allow)).unwrap();
+    }
+    let end = wait("turn-end 2", 180, Box::new(|e| e.kind == "turn-end")).await;
+    eprintln!("turn 2: {:?}", end.payload);
+    let kinds: Vec<String> = lock(&events.events)
+        .iter()
+        .filter(|e| e.kind == "update")
+        .map(|e| e.payload["sessionUpdate"].as_str().unwrap_or_default().to_owned())
+        .collect();
+    eprintln!("update kinds: {kinds:?}");
+    assert_eq!(std::fs::read_to_string(project.join("hello.txt")).unwrap().trim(), "hi");
+
+    // 3. Cancel stops a turn.
+    events.clear();
+    sessions
+        .send_prompt("real", text("Count slowly from 1 to 300, one number per line, with a short comment on each."))
+        .unwrap();
+    wait("first chunk", 120, Box::new(|e| e.kind == "update")).await;
+    sessions.cancel("real").unwrap();
+    let end = wait("turn-end 3", 60, Box::new(|e| e.kind == "turn-end")).await;
+    eprintln!("turn 3: {:?}", end.payload);
+    assert_eq!(end.payload["stopReason"], "cancelled");
+
+    // 4. Stop leaves no process of the agent's group behind.
+    sessions.stop("real").await.unwrap();
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    // SAFETY: signal 0 only checks whether any process of the group exists.
+    #[cfg(unix)]
+    assert_ne!(unsafe { libc::kill(-(pid as i32), 0) }, 0, "the agent's process group is gone");
+    let log = std::fs::read_to_string(sessions.log_path("real").unwrap()).unwrap_or_default();
+    eprintln!("log tail: {}", log.lines().rev().take(5).collect::<Vec<_>>().join(" | "));
+    let _ = std::fs::remove_dir_all(dir);
+}

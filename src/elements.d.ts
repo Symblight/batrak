@@ -11,6 +11,7 @@ import type { AcpConfirmDialog } from './components/acp-confirm-dialog/acp-confi
 import type { AcpCommentBar } from './components/acp-comment-bar/acp-comment-bar.js';
 import type { AcpChat } from './components/acp-chat/acp-chat.js';
 import type { AcpImagePreview } from './components/acp-image-preview/acp-image-preview.js';
+import type { AcpMarkdown } from './components/acp-markdown/acp-markdown.js';
 import type { AcpMarkdownPreview } from './components/acp-markdown-preview/acp-markdown-preview.js';
 import type { AcpTabView } from './components/acp-tab-view/acp-tab-view.js';
 import type { AcpMainColumn } from './components/acp-main-column/acp-main-column.js';
@@ -25,6 +26,7 @@ import type { AcpSelectionActions } from './components/acp-selection-actions/acp
 import type { AcpSearchPanel } from './components/acp-search-panel/acp-search-panel.js';
 import type { AcpSettings } from './components/acp-settings/acp-settings.js';
 import type { AcpSnackbars } from './components/acp-snackbars/acp-snackbars.js';
+import type { AcpSessionBanner } from './components/acp-session-banner/acp-session-banner.js';
 import type { AcpSessionColumn } from './components/acp-session-column/acp-session-column.js';
 import type { AcpTerminal } from './components/acp-terminal/acp-terminal.js';
 import type { AcpToolbar } from './components/acp-toolbar/acp-toolbar.js';
@@ -45,6 +47,7 @@ declare global {
     'acp-confirm-dialog': AcpConfirmDialog;
     'acp-context-meter': AcpContextMeter;
     'acp-image-preview': AcpImagePreview;
+    'acp-markdown': AcpMarkdown;
     'acp-markdown-preview': AcpMarkdownPreview;
     'acp-tab-view': AcpTabView;
     'acp-main-column': AcpMainColumn;
@@ -57,6 +60,7 @@ declare global {
     'acp-run-target': AcpRunTarget;
     'acp-search-panel': AcpSearchPanel;
     'acp-selection-actions': AcpSelectionActions;
+    'acp-session-banner': AcpSessionBanner;
     'acp-session-column': AcpSessionColumn;
     'acp-settings': AcpSettings;
     'acp-snackbars': AcpSnackbars;

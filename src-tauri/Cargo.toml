@@ -35,6 +35,14 @@ fontdb = "0.24"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+# ACP host: the official SDK (pinned: its API changes between majors), driven over the agent's
+# stdio by tokio (futures I/O through tokio-util's compat layer)
+agent-client-protocol = "=3.3.0"
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+futures = "0.3"
+# `${keychain:name}` in agents.json env values
+keyring = "4.2"
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]
@@ -44,9 +52,7 @@ libc = "0.2"
 # rusqlite = { version = "0.32", features = ["bundled"] }
 # git2 = "0.19"
 # similar = "2"
-# tokio = { version = "1", features = ["full"] }
 # portable-pty = "0.8"
-# agent-client-protocol = "0"
 
 # Optimize dependencies in dev builds: fuzzy matching, regex and directory walking are
 # 10x slower unoptimized, which makes Quick Open lag in `tauri dev`. Our own crate stays debug.

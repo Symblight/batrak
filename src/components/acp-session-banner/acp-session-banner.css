@@ -1,0 +1,14 @@
+:host {
+  display: block;
+}
+
+.acp-session-banner__banner[hidden] {
+  display: none;
+}
+
+.acp-session-banner__action {
+  --md-button-font-size: 12.5px;
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: 4px;
+  --md-button-block-end-space: 4px;
+}

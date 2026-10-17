@@ -24,7 +24,9 @@
     "@symblight/wc-material": "^0.5.0",
     "@tauri-apps/api": "^2.0.0",
     "@tauri-apps/plugin-dialog": "^2.8.1",
+    "dompurify": "3.4.16",
     "lit": "^3.2.0",
+    "marked": "18.0.14",
     "nanostores": "^1.5.4"
   },
   "devDependencies": {

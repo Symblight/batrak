@@ -10,9 +10,17 @@
  */
 
 /**
+ * The context menu showing, app-wide: a right-click doesn't light-dismiss menus, so opening one
+ * (another host's, or another menu of the same host) closes the one that's open.
+ * @type {HTMLElementTagNameMap['md-menu'] | null}
+ */
+let shown = null;
+
+/**
  * A context menu shared by many targets (one `md-menu` per host): opens it at the pointer or under a
  * focused target, remembers which target it is open for (`target`, re-rendering the host) and hands
- * the chosen item's `value` to `onSelect`. The host binds `onContextMenu` / `onKeydown` on each target
+ * the chosen item's `value` to `onSelect`. Only one context menu shows at a time, app-wide.
+ * The host binds `onContextMenu` / `onKeydown` on each target
  * and `onSelect` / `onClosed` on the menu.
  * @template T
  * @implements {ReactiveController}
@@ -58,6 +66,8 @@ export class ContextMenuController {
     await this.#host.updateComplete;
     // A right-click doesn't light-dismiss the menu, and `openAtPoint()` on an open menu doesn't move
     // it: hide it first so it shows again at the new point.
+    if (shown && shown !== menu && shown.open) shown.open = false;
+    shown = menu;
     if (menu.open) {
       menu.open = false;
       await menu.updateComplete;

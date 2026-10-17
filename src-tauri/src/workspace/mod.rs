@@ -55,6 +55,17 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// `.brama/agents.json` changed on disk: the project's agent list is re-read, and windows hear
+/// of it when it differs.
+fn agents_changed(app: &AppHandle, project: &Path) {
+    use tauri::Manager;
+    let Some(configs) = app.try_state::<crate::config::AgentConfigs>() else { return };
+    if configs.reload(project) {
+        let payload = serde_json::json!({ "projectPath": project.to_string_lossy() });
+        let _ = app.emit(crate::config::AGENTS_CHANGED_EVENT, payload);
+    }
+}
+
 pub struct Root {
     pub id: String,
     pub path: PathBuf,
@@ -144,6 +155,9 @@ impl Workspaces {
     pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
         let cancel = self.begin_open(group);
         let result = self.open_with(path, group, &cancel, move |root, changes| {
+            if changes.config {
+                agents_changed(&app, &root.path);
+            }
             let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
         });
         self.end_open(group, &cancel);

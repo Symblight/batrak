@@ -66,6 +66,10 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
             }
             for path in &event.paths {
                 let Some(rel) = snapshot.rel(path) else { continue };
+                if crate::config::is_local_path(&rel) {
+                    continue;
+                }
+                changes.config |= crate::config::is_agents_path(&rel);
                 if let Some(inner) = rel.strip_prefix(".git/").or((rel == ".git").then_some("")) {
                     changes.git |= is_repo_state(inner);
                     // Ignore rules for the whole tree, like a `.gitignore` at the root.

@@ -126,15 +126,6 @@
 .acp-settings__input_font {
   --_acp-settings-menu-max-height: 320px;
 }
-/* Compact menu rows: 32px instead of 48px, regular-weight 13px labels. */
-.acp-settings__option {
-  --md-menu-item-min-block-size: 32px;
-  --md-menu-item-padding-block: 6px;
-  --md-menu-item-padding-inline: var(--space-3);
-  --md-menu-item-label-text-size: 13px;
-  --md-menu-item-label-text-line-height: 20px;
-  --md-menu-item-label-text-weight: 400;
-}
 /* The library's focused outline is 3px; MD3 asks for 2px. */
 .acp-settings__input:focus-within::part(indicator) {
   border-width: 2px;

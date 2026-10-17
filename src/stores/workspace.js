@@ -24,3 +24,6 @@ export const $openingPath = atom(/** @type {string | null} */ (null));
 
 /** Notifies only when the backend root changes, not on every `$workspace` write. */
 export const $rootId = computed($workspace, (workspace) => workspace?.rootId ?? null);
+
+/** Notifies only when the opened folder changes. */
+export const $workspacePath = computed($workspace, (workspace) => workspace?.path ?? null);

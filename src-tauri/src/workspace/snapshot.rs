@@ -38,11 +38,19 @@ pub struct Changes {
     /// The repository's state (HEAD, index, refs) changed: branch or status may differ even
     /// with no file in the tree touched, e.g. after a commit.
     pub git: bool,
+    /// `.brama/agents.json` may have changed: the agent list is re-read. Not sent.
+    #[serde(skip)]
+    pub config: bool,
 }
 
 impl Changes {
     pub fn is_empty(&self) -> bool {
-        self.dirs.is_empty() && self.added.is_empty() && self.removed.is_empty() && self.modified.is_empty() && !self.git
+        self.dirs.is_empty()
+            && self.added.is_empty()
+            && self.removed.is_empty()
+            && self.modified.is_empty()
+            && !self.git
+            && !self.config
     }
 }
 
@@ -274,8 +282,14 @@ fn walker(dir: &Path) -> WalkBuilder {
         .git_exclude(true)
         .require_git(false)
         .follow_links(false)
-        .filter_entry(|e| e.file_name() != ".git");
+        .filter_entry(|e| e.file_name() != ".git" && !is_brama_local(e.path()));
     builder
+}
+
+/// `.brama/local/`: per-user app state, never part of the tree or a search.
+fn is_brama_local(path: &Path) -> bool {
+    path.file_name().is_some_and(|n| n == crate::config::LOCAL_DIR)
+        && path.parent().and_then(Path::file_name).is_some_and(|n| n == crate::config::DIR)
 }
 
 /// Names of a directory's direct children that the ignore rules keep.
@@ -296,7 +310,7 @@ fn read_children(abs: &Path, rel: &str, not_ignored: &HashSet<String>) -> std::i
     for item in fs::read_dir(abs)? {
         let Ok(item) = item else { continue };
         let name = item.file_name().to_string_lossy().into_owned();
-        if name == ".git" {
+        if name == ".git" || is_brama_local(&abs.join(&name)) {
             continue;
         }
         let Ok(meta) = item.metadata() else { continue };
@@ -420,6 +434,24 @@ mod tests {
         let files: Vec<_> = snap.files().map(|e| e.path.as_str()).collect();
         assert!(files.contains(&"src/main.rs"));
         assert!(!files.contains(&"debug.log"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn brama_local_is_left_out() {
+        let root = temp_root("brama-local");
+        crate::config::ensure_project_dir(&root).unwrap();
+        fs::create_dir_all(root.join(".brama/local/state")).unwrap();
+        fs::write(root.join(".brama/local/state/x.json"), "{}").unwrap();
+        let mut snap = Snapshot::scan(&root);
+        let brama: Vec<_> = snap.list_dir(".brama").unwrap().into_iter().map(|e| e.name).collect();
+        assert!(brama.contains(&"agents.json".to_owned()));
+        assert!(!brama.contains(&"local".to_owned()), "{brama:?}");
+        assert!(snap.files().all(|e| !e.path.starts_with(".brama/local")));
+
+        let mut changes = Changes::default();
+        snap.reconcile(BTreeSet::from([".brama".to_owned()]), &mut changes);
+        assert!(!changes.added.iter().any(|p| p.starts_with(".brama/local")), "{changes:?}");
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -30,8 +30,9 @@
  */
 
 /**
- * `waiting`: blocked on the user, e.g. a permission request.
- * @typedef {'working' | 'waiting' | 'idle' | 'error'} SessionStatus
+ * Mirrors `SessionStatus` in src-tauri/src/session/mod.rs. `waiting`: blocked on the user (a
+ * permission request); `stopped`: no agent process, the next message starts one.
+ * @typedef {'preparing' | 'starting' | 'idle' | 'working' | 'waiting' | 'stopped' | 'error'} SessionStatus
  */
 
 /**
@@ -42,9 +43,113 @@
  * @property {SessionStatus} status
  * @property {string} agentId
  * @property {string | null} model
+ * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
  * @property {string | null} worktreePath
  * @property {string | null} baseCommit
  * @property {string} createdAt
+ */
+
+/**
+ * ACP content block, as far as the chat reads it.
+ * @typedef {{ type: 'text', text: string } | { type: string, text?: string, uri?: string, name?: string }} AcpContent
+ */
+
+/**
+ * An ACP `SessionUpdate` as the agent sent it; `sessionUpdate` names its kind (`agent_message_chunk`,
+ * `agent_thought_chunk`, `user_message_chunk`, `tool_call`, `tool_call_update`, `plan`, …). Only the
+ * fields the chat reads are typed.
+ * @typedef {Object} AcpSessionUpdate
+ * @property {string} sessionUpdate
+ * @property {AcpContent} [content] Message, thought and user chunks.
+ * @property {string} [toolCallId]
+ * @property {string | null} [title]
+ * @property {string | null} [kind]
+ * @property {'pending' | 'in_progress' | 'completed' | 'failed' | null} [status]
+ * @property {{ path: string, line?: number | null }[] | null} [locations]
+ * @property {{ content: string, priority?: string, status?: 'pending' | 'in_progress' | 'completed' }[]} [entries] `plan`.
+ * @property {number} [used] `usage_update`: tokens in context.
+ * @property {number} [size] `usage_update`: the context window, tokens.
+ * @property {{ amount: number, currency: string } | null} [cost] `usage_update`: the session's so far.
+ */
+
+/**
+ * An ACP `SessionConfigOption` as the agent sent it (`config-options` events); see
+ * `normalizeOptions()` for what the composer keeps.
+ * @typedef {{ id: string, name: string, type: string, category?: string, currentValue?: unknown,
+ *   options?: unknown[] }} AcpConfigOption
+ */
+
+/**
+ * ACP `PermissionOption`.
+ * @typedef {{ optionId: string, name: string, kind: string }} AcpPermissionOption
+ */
+
+/**
+ * A session event from the backend's channel; `seq` is monotonic per session. `turn-end` carries
+ * ACP's `stopReason` (`end_turn`, `cancelled`, …); an `error` with `turn` ended the running turn.
+ * @typedef {{ sessionId: string, seq: number } & (
+ *   { kind: 'update', payload: AcpSessionUpdate }
+ *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
+ *   | { kind: 'permission-request',
+ *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }
+ *   | { kind: 'turn-start', payload: Record<string, never> }
+ *   | { kind: 'turn-end', payload: { stopReason: string } }
+ *   | { kind: 'error', payload: { message: string, turn?: boolean } }
+ *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
+ *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
+ * )} SessionEnvelope
+ */
+
+/**
+ * What a session start runs, as the user trusts it (`agents_trust`): the agent's command line and
+ * env templates, and the MCP servers it's told to start.
+ * @typedef {Object} LaunchConfig
+ * @property {string} agentId
+ * @property {string} command
+ * @property {string[]} args
+ * @property {Record<string, string>} env
+ * @property {unknown[]} mcpServers
+ */
+
+/**
+ * One line of a session's recorded conversation (`session_history`), oldest first.
+ * @typedef {{ kind: 'prompt', prompt: PromptInput[], at: string }
+ *   | { kind: 'update', update: AcpSessionUpdate }
+ *   | { kind: 'turn-end', stopReason: string, message?: string }} TranscriptEntry
+ */
+
+/**
+ * One piece of a prompt for `session_send_prompt`; paths are relative to the project.
+ * @typedef {{ type: 'text', text: string }
+ *   | { type: 'mention', path: string }
+ *   | { type: 'selection', path: string, fromLine: number, toLine: number }} PromptInput
+ */
+
+/**
+ * An agent's `session/request_permission`, waiting for the user's answer.
+ * @typedef {Object} PermissionRequest
+ * @property {string} requestId
+ * @property {string | null} toolCallId
+ * @property {string} title What the agent wants to do.
+ * @property {AcpPermissionOption[]} options
+ */
+
+/**
+ * What the chat says about a session above its composer: the agent starting, an error (with
+ * Restart and Open log), the agent stopped (with Resume), a project-chosen agent waiting for
+ * trust (with Trust and start), or information until dismissed.
+ * @typedef {Object} SessionNotice
+ * @property {'progress' | 'error' | 'stopped' | 'untrusted' | 'info'} kind
+ * @property {string} message
+ * @property {LaunchConfig} [launch] What `untrusted` asks to trust.
+ */
+
+/**
+ * `agents_list`: the agents configured for a project, no command or environment.
+ * @typedef {Object} AgentList
+ * @property {{ id: string, name: string }[]} agents
+ * @property {string | null} defaultAgent
+ * @property {string[]} errors Files that don't parse (`file:line:column: message`); their last valid version is used.
  */
 
 /**
@@ -365,7 +470,9 @@
  * The agent composer's state for the chat (`$composer`).
  * @typedef {Object} ComposerState
  * @property {string} agentId
- * @property {ConfigOption[]} configOptions
+ * @property {ConfigOption[]} configOptions The agent's, as it last reported them (shown with `chosen` applied).
+ * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
+ *   (picked before it started, or on their way), by config option id.
  * @property {ContextUsage | null} usage `null` until the agent reports one.
  * @property {RunTarget} runTarget
  * @property {boolean} started After the first message: the agent and run target are fixed.

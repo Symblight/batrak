@@ -163,6 +163,16 @@
 .acp-session-column__status_error {
   background: var(--md-error);
 }
+/* Getting the agent up: an outline in the working color. */
+.acp-session-column__status_preparing,
+.acp-session-column__status_starting {
+  border: 1.5px solid var(--md-primary);
+}
+/* No agent process: a dimmed outline. */
+.acp-session-column__status_stopped {
+  border: 1.5px solid currentColor;
+  opacity: 0.4;
+}
 /* currentColor: follows the row, so it stays visible on the selected row too. */
 .acp-session-column__status_idle {
   border: 1.5px solid currentColor;
@@ -203,15 +213,10 @@
   vertical-align: -3px;
 }
 
-/* Context menu: MD3 menu at compact density */
-.acp-session-column__menu {
-  --md-menu-min-width: 200px;
-}
-.acp-session-column__menu-item {
-  --md-menu-item-min-block-size: 32px;
-  --md-menu-item-padding-block: 6px;
-  --md-menu-item-label-text-size: 13px;
-  --md-menu-item-label-text-weight: 400;
+/* Menu density comes from src/styles/shadow.css. */
+.acp-session-column__menu,
+.acp-session-column__session-menu {
+  --md-menu-min-width: 12.5rem;
 }
 .acp-session-column__menu-icon {
   font-size: 18px;

@@ -4,6 +4,9 @@
   min-height: 0;
 }
 .acp-chat__chat {
+  /* The agent's replies read as a document, not a bubble; your own messages keep theirs. */
+  --chx-message-background-color: transparent;
+
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
@@ -14,6 +17,8 @@
 }
 /* Agent composer: an outlined field on a tray that holds where the session runs. */
 .acp-chat__composer {
+  /* The pickers in its bar compress by the composer's width, not the window's (`@container acp-composer`). */
+  container: acp-composer / inline-size;
   --chx-message-composer-background: var(--md-surface-container-high);
   --chx-message-composer-footer-padding: 2px var(--space-1);
   --chx-message-composer-footer-min-height: 28px;
@@ -27,9 +32,40 @@
 .acp-chat__composer::part(textbox-box):hover {
   background-color: var(--md-surface-container-lowest);
 }
+/* A grid item keeps its min-content width; let the leading actions shrink so the model name can ellipsize. */
+.acp-chat__composer::part(textbox-leading) {
+  min-width: 0;
+}
 .acp-chat__agent-picker {
   min-width: 0;
 }
 .acp-chat__run-target {
   flex: 1;
+}
+/* A session with no message yet: only the composer, centered. */
+.acp-chat__chat_empty {
+  justify-content: center;
+}
+/* Compact scrollbar, like the editor's (`models/editor-plugins.js`): WebKit (Tauri on macOS) lacks
+   `scrollbar-color` and gets the pseudo-elements. Separate rules: a selector the engine rejects drops only its own. */
+@supports (scrollbar-color: auto) {
+  .acp-chat__message-list::part(scroller) {
+    scrollbar-width: thin;
+    scrollbar-color: var(--md-outline-variant) transparent;
+  }
+}
+@supports not (scrollbar-color: auto) {
+  .acp-chat__message-list::part(scroller)::-webkit-scrollbar {
+    width: 6px;
+  }
+  .acp-chat__message-list::part(scroller)::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .acp-chat__message-list::part(scroller)::-webkit-scrollbar-thumb {
+    background: var(--md-outline-variant);
+    border-radius: 3px;
+  }
+}
+.acp-chat__message-list[hidden] {
+  display: none;
 }

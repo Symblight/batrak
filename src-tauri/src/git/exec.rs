@@ -60,7 +60,7 @@ impl Drop for Permit {
 }
 
 /// Inherited variables that would point git at another repository or index than `cwd`'s.
-const SCRUBBED_ENV: &[&str] = &[
+pub const SCRUBBED_ENV: &[&str] = &[
     "GIT_DIR",
     "GIT_WORK_TREE",
     "GIT_INDEX_FILE",

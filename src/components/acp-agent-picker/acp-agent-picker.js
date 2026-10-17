@@ -9,15 +9,16 @@ import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import {
+  $agents,
   $composer,
-  AGENTS,
   agentInfo,
   configOf,
   currentName,
   selectAgent,
-  setConfigOption,
 } from '../../stores/composer.js';
-import { SETTINGS_TAB_ID, openTab } from '../../stores/editor.js';
+import { $activeSessionId } from '../../stores/sessions.js';
+import { sessionController } from '../../services/session-controller.js';
+import { agentConfig } from '../../services/agent-config.js';
 import styles from './acp-agent-picker.css?inline';
 
 /** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
@@ -31,6 +32,7 @@ export class AcpAgentPicker extends LitElement {
   static styles = styles;
 
   #composer = new StoreController(this, { store: $composer });
+  #agents = new StoreController(this, { store: $agents });
 
   /**
    * One menu group per config option the agent sends, except the permission mode (its own chip).
@@ -73,16 +75,18 @@ export class AcpAgentPicker extends LitElement {
     const { agentId, configOptions } = this.#composer.value;
     return html`
       <md-menu-group label="Agent">
-        ${AGENTS.map((agent) => {
+        ${this.#agents.value.map((agent) => {
           const current = agent.id === agentId;
           const options = current ? configOptions : agent.configOptions;
           return html`
             <md-menu-item class="acp-agent-picker__item" value=${agent.id} ?selected=${current}>
               ${this.#renderGlyph(agent)} ${agent.name}
-              <span slot="supporting-text">${currentName(configOf(options, 'model'))}</span>
-              <md-menu slot="submenu" class="acp-agent-picker__menu" aria-label=${agent.name}>
-                ${this.#renderConfigGroups(agent.id, options, current)}
-              </md-menu>
+              <span slot="supporting-text">${currentName(configOf(options, 'model')) ?? 'No models reported yet'}</span>
+              ${options.some((o) => o.category !== 'mode')
+                ? html`<md-menu slot="submenu" class="acp-agent-picker__menu" aria-label=${agent.name}>
+                    ${this.#renderConfigGroups(agent.id, options, current)}
+                  </md-menu>`
+                : nothing}
             </md-menu-item>
           `;
         })}
@@ -121,13 +125,19 @@ export class AcpAgentPicker extends LitElement {
     this.#handled.add(detail);
     const { item } = detail;
     if (item.dataset.action === 'add-agent') {
-      openTab(SETTINGS_TAB_ID);
+      agentConfig.openFile();
       return;
     }
     const { agent, config } = item.dataset;
-    if (!agent || !config) return;
+    if (!agent || !config) {
+      // An agent row with no options to pick from yet: picking the row picks the agent.
+      const value = item.getAttribute('value');
+      if (value) selectAgent(value);
+      return;
+    }
     selectAgent(agent);
-    setConfigOption(config, /** @type {string} */ (item.getAttribute('value')));
+    const id = $activeSessionId.get();
+    if (id !== null) sessionController.setConfigOption(id, config, /** @type {string} */ (item.getAttribute('value')));
   };
 
   render() {
@@ -140,7 +150,7 @@ export class AcpAgentPicker extends LitElement {
       <md-button id="acp-agent-picker-button" class="acp-agent-picker__button" variant="text" title=${title}>
         ${this.#renderGlyph(agent, 'icon')}
         <span class="acp-agent-picker__label">
-          <span class="acp-agent-picker__agent">${agent.name} ·</span>
+          <span class="acp-agent-picker__agent">${agent.name}${model ? ' ·' : ''}</span>
           <span class="acp-agent-picker__model">${model}</span>
           ${level
             ? html`<span class="acp-agent-picker__level">

@@ -1,6 +1,8 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import { buildChipElement, chipPartRule, createSplitOnSendHandler } from '@symblight/chat';
+import { buildChipElement, createSplitOnSendHandler } from '@symblight/chat';
+import '@symblight/chat/agent';
 import { ChxCommandPicker } from '@symblight/chat/composer';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
@@ -15,15 +17,22 @@ import styles from './acp-chat.css?inline';
 import { reportError } from '../../services/notices.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
-import { startComposerSession } from '../../stores/composer.js';
+import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
+import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
+import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
 import '../acp-context-meter/acp-context-meter.js';
 import '../acp-mode-picker/acp-mode-picker.js';
 import '../acp-run-target/acp-run-target.js';
+import '../acp-session-banner/acp-session-banner.js';
+import { AcpMarkdown } from '../acp-markdown/acp-markdown.js';
 
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('@symblight/chat/composer').ChxCodeBlock} ChxCodeBlock */
+/** @typedef {import('@symblight/chat/agent').ChxThought} ChxThought */
+/** @typedef {import('@symblight/chat/agent').ChxPlan} ChxPlan */
+/** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
@@ -47,27 +56,8 @@ import '../acp-run-target/acp-run-target.js';
 
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 
-/** Matches the paste chip `chx-paste-long-text` serializes; code pastes carry `data-lang`. */
-const codePartRule = {
-  type: 'code',
-  selector: 'span[data-paste-lines][data-lang]',
-  toPart: (/** @type {HTMLElement} */ element) => ({
-    text: element.textContent ?? '',
-    lang: element.dataset.lang ?? '',
-  }),
-};
-
-const longTextPartRule = {
-  type: 'longText',
-  selector: 'span[data-paste-lines]:not([data-lang])',
-  toPart: (/** @type {HTMLElement} */ element) => ({
-    text: element.textContent ?? '',
-    lines: Number(element.dataset.pasteLines) || 0,
-  }),
-};
-
 // Sends arrive as one flat html part; re-split them so chips and pastes keep their own renderers.
-const splitOnSend = createSplitOnSendHandler([chipPartRule, codePartRule, longTextPartRule]);
+const splitOnSend = createSplitOnSendHandler(MESSAGE_PART_RULES);
 
 /**
  * @param {string} value
@@ -152,38 +142,9 @@ function highlight(text, hits, offset) {
   return fragment;
 }
 
-/**
- * Compact sizes for the pickers' menus. Set inline: `md-menu` / `md-menu-item` declare their own
- * defaults on `:host`, so inherited values lose, and both live in the picker's shadow root.
- */
-const COMPACT_MENU = {
-  '--md-menu-min-width': '10rem',
-  '--md-menu-shape': 'var(--md-sys-shape-corner-medium, 0.75rem)',
-};
-const COMPACT_ITEM = {
-  '--md-menu-item-min-block-size': '1.75rem',
-  '--md-menu-item-padding-block': '0.125rem',
-  '--md-menu-item-padding-inline': '0.5rem',
-  '--md-menu-item-leading-icon-size': '1rem',
-  '--md-menu-item-trailing-icon-size': '1rem',
-  '--md-menu-item-label-text-size': '0.8125rem',
-  '--md-menu-item-label-text-weight': '400',
-  '--md-menu-item-trailing-text-size': '0.75rem',
-  'margin-inline': '0.25rem',
-};
-
-/**
- * @param {HTMLElement} element
- * @param {Record<string, string>} properties
- */
-function setStyles(element, properties) {
-  for (const [name, value] of Object.entries(properties)) element.style.setProperty(name, value);
-  return element;
-}
-
-/** @returns {HTMLElement} */
+/** A picker's option; its density comes from src/styles/shadow.css, like every menu's. */
 function createMenuItem() {
-  return setStyles(document.createElement('md-menu-item'), COMPACT_ITEM);
+  return document.createElement('md-menu-item');
 }
 
 /**
@@ -232,10 +193,12 @@ function buildEntryItem(entry) {
 
 /**
  * @tag acp-chat
- * @summary Agent chat: message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
+ * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
  */
 export class AcpChat extends LitElement {
   static styles = styles;
+
+  #session = new ChatSessionController(this, { chat: () => this.renderRoot.querySelector('chx-chat') });
 
   /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
   #chatInserts = new StoreController(this, {
@@ -279,13 +242,6 @@ export class AcpChat extends LitElement {
     else textbox.focus(); // the caret stays after the chips
   }
 
-  async firstUpdated() {
-    for (const picker of /** @type {NodeListOf<ChxCommandPicker>} */ (this.renderRoot.querySelectorAll('chx-command-picker'))) {
-      await picker.updateComplete;
-      setStyles(picker.menuElement, COMPACT_MENU);
-    }
-  }
-
   /** @type {PartElements} */
   #partElements = {
     chip: (part) => buildChipElement(/** @type {Parameters<typeof buildChipElement>[0]} */ (part)),
@@ -304,6 +260,40 @@ export class AcpChat extends LitElement {
       pre.textContent = part.text ?? '';
       details.replaceChildren(summary, pre);
       return details;
+    },
+    // The agent's text is Markdown; your own stays as typed.
+    text: (part, previous, message) => {
+      if (message.own) {
+        const span = previous?.localName === 'span' ? previous : document.createElement('span');
+        if (part.html) span.innerHTML = part.html;
+        else span.textContent = part.text ?? '';
+        return span;
+      }
+      const markdown = previous instanceof AcpMarkdown ? previous : new AcpMarkdown();
+      markdown.text = part.text ?? '';
+      markdown.streaming = part.state === 'streaming';
+      return markdown;
+    },
+    thought: (part, previous) => {
+      const thought = /** @type {ChxThought} */ (previous ?? document.createElement('chx-thought'));
+      thought.text = part.text ?? '';
+      thought.streaming = part.state === 'streaming';
+      return thought;
+    },
+    plan: (part, previous) => {
+      const plan = /** @type {ChxPlan} */ (previous ?? document.createElement('chx-plan'));
+      plan.entries = part.entries ?? [];
+      return plan;
+    },
+    tool_call: (part, previous) => {
+      const call = /** @type {ChxToolCall} */ (previous ?? document.createElement('chx-tool-call'));
+      call.toolCallId = String(part.data?.toolCallId ?? '');
+      call.label = part.label ?? '';
+      call.kind = part.kind ?? 'other';
+      call.status = part.status ?? 'pending';
+      call.locations = part.locations ?? [];
+      call.error = part.error ?? '';
+      return call;
     },
     attachment: (part, previous) => {
       const file = /** @type {File} */ (part.attachment);
@@ -415,11 +405,6 @@ export class AcpChat extends LitElement {
     setChip(buildChipElement({ templateId: COMMAND_CHIP_TEMPLATE, label: `/${value}`, icon: null, data: {} }));
   }
 
-  /** The first message starts the session: the agent and where it runs are fixed from then on. */
-  #onSendMessage() {
-    startComposerSession();
-  }
-
   /** `/` filter over the agent's commands. */
   #onCommandQuery = (/** @type {Event} */ e) => {
     const picker = /** @type {ChxCommandPicker} */ (e.target);
@@ -435,16 +420,20 @@ export class AcpChat extends LitElement {
   };
 
   render() {
+    const empty = this.#session.empty;
     return html`
       <chx-chat
-        class="acp-chat__chat"
-        .userId=${'me'}
+        class=${classMap({ 'acp-chat__chat': true, 'acp-chat__chat_empty': empty })}
+        .userId=${USER_ID}
+        .activeConversationId=${this.#session.conversationId}
+        .adapter=${acpAdapter}
         .partElements=${this.#partElements}
         @chx-messages-change=${this.#onMessagesChange}
-        @chx-send-message=${this.#onSendMessage}
       >
         <chx-message-list
           slot="message-list"
+          class="acp-chat__message-list"
+          ?hidden=${empty}
           scroll-behavior="smooth"
           content-align="start"
           scroll-mode="pin-top"
@@ -452,6 +441,7 @@ export class AcpChat extends LitElement {
           <chx-streaming-indicator slot="streaming"></chx-streaming-indicator>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
+        <acp-session-banner slot="input-banner" class="acp-chat__banner"></acp-session-banner>
         <chx-message-composer
           slot="message-composer"
           class="acp-chat__composer"
@@ -484,7 +474,8 @@ export class AcpChat extends LitElement {
           ></chx-command-picker>
           <acp-mode-picker slot="actions"></acp-mode-picker>
           <acp-context-meter slot="actions"></acp-context-meter>
-          <acp-run-target slot="footer" class="acp-chat__run-target"></acp-run-target>
+          <!-- Where the session runs is picked before the first message; the footer goes with it. -->
+          ${empty ? html`<acp-run-target slot="footer" class="acp-chat__run-target"></acp-run-target>` : nothing}
         </chx-message-composer>
       </chx-chat>
     `;

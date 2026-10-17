@@ -1,4 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
+import { agentConfig } from '../../services/agent-config.js';
 import { sessionController } from '../../services/session-controller.js';
 import { projectController } from '../../services/project-controller.js';
 import { gitController } from '../../services/git-controller.js';
@@ -76,6 +77,7 @@ export class AcpApp extends LitElement {
     window.addEventListener('keydown', this.#onKeydown);
     this.#menuListener = onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => log('warn', `menu bar not connected: ${err}`));
+    agentConfig.start();
     sessionController.init().catch((err) => reportError('Loading sessions failed', err));
     gitController.start();
     projectController.restore().catch((err) => reportError('Reopening folder failed', err));
