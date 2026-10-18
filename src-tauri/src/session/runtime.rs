@@ -110,6 +110,9 @@ pub struct CreateSession {
     pub title: String,
     #[serde(default)]
     pub model: Option<String>,
+    /// `worktree`: the branch or commit to start from; `None` for the project's HEAD.
+    #[serde(default)]
+    pub base_branch: Option<String>,
 }
 
 /// A prompt piece from the page. Paths are relative to the session's folder; the backend maps and
@@ -226,6 +229,7 @@ impl Sessions {
     }
 
     /// Creates a session and starts its agent in the background; progress arrives on `sink`.
+    /// Blocking: placing a worktree session asks git.
     pub fn create(&self, req: CreateSession, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
         // It names the session's folder in app data, which Remove deletes.
         let valid_id = (1..=64).contains(&req.session_id.len())
@@ -237,22 +241,29 @@ impl Sessions {
         if !project.is_dir() {
             return Err(format!("{}: not a folder", project.display()));
         }
-        let env = env::for_mode(req.mode, &project)?;
         let merged = self.inner.opts.configs.merged(Some(&project));
         if merged.agent(&req.agent_id).is_none() {
             return Err(format!("Unknown agent \"{}\": add it to .brama/agents.json", req.agent_id));
         }
+        if lock(&self.inner.sessions).contains_key(&req.session_id) {
+            return Err(format!("session {} exists already", req.session_id));
+        }
+        let placed =
+            env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?;
         let record = SessionRecord {
             session_id: req.session_id.clone(),
             acp_session_id: None,
             agent_id: req.agent_id,
             mode: req.mode,
-            agent_cwd: env.agent_cwd().to_path_buf(),
+            agent_cwd: placed.agent_cwd,
             project_path: project,
             title: req.title,
             status: SessionStatus::Preparing,
             created_at: iso_now(),
             model: req.model,
+            worktree_path: placed.worktree_path,
+            branch: placed.branch,
+            base_commit: placed.base_commit,
         };
         let state = {
             let mut sessions = lock(&self.inner.sessions);
@@ -266,7 +277,8 @@ impl Sessions {
             state
         };
         self.inner.persist();
-        tracing::info!(session = %state.id, agent = %state.record().agent_id, mode = ?req.mode, "session created");
+        let record = state.record();
+        tracing::info!(session = %state.id, agent = %record.agent_id, mode = ?req.mode, branch = ?record.branch, "session created");
         let inner = Arc::clone(&self.inner);
         let starting = Arc::clone(&state);
         let attempts = state.start_attempts.load(Ordering::SeqCst);
@@ -442,7 +454,8 @@ impl Sessions {
 
     /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's no
     /// longer listed, and its transcript and log are deleted. Its folder is discarded by its
-    /// environment, which for `local` keeps the project as it is.
+    /// environment: `local` keeps the project as it is, `worktree` keeps a worktree with
+    /// uncommitted changes and a branch with commits.
     pub async fn remove(&self, id: &str) -> Result<(), String> {
         let state = self.get(id)?;
         self.inner.stop(&state).await;
@@ -454,10 +467,8 @@ impl Sessions {
         let record = state.record();
         let dir = self.inner.data_dir().join("sessions").join(id);
         tokio::task::spawn_blocking(move || {
-            if let Ok(env) = env::for_mode(record.mode, &record.project_path) {
-                if let Err(e) = env.discard() {
-                    tracing::warn!(session = %record.session_id, "discarding the session's folder failed: {e}");
-                }
+            if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
+                tracing::warn!(session = %record.session_id, "discarding the session's folder failed: {e}");
             }
             match std::fs::remove_dir_all(&dir) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
@@ -695,7 +706,7 @@ impl Inner {
     ) -> Result<(StartedAgent, Arc<dyn SessionEnv>), StartFailure> {
         let record = state.record();
         self.set_status(&state, SessionStatus::Preparing, None);
-        let env: Arc<dyn SessionEnv> = Arc::from(env::for_mode(record.mode, &record.project_path)?);
+        let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(&record)?);
         let preparing = Arc::clone(&env);
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&cancel);

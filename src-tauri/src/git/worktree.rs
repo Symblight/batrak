@@ -29,16 +29,27 @@ pub enum BranchCleanup {
 
 /// Creates `path` as a worktree of the repository at `repo` on a new `branch` starting at `base`.
 pub fn add(git: &Path, repo: &Path, path: &Path, branch: &str, base: &str) -> Result<(), String> {
+    check_out(git, repo, path, &[&"-b", &branch, &path, &base])
+}
+
+/// Creates `path` as a worktree of the repository at `repo` on its existing `branch` (a session's
+/// folder that was deleted).
+pub fn attach(git: &Path, repo: &Path, path: &Path, branch: &str) -> Result<(), String> {
+    check_out(git, repo, path, &[&path, &branch])
+}
+
+/// `git worktree add` with `rest`. A checkout of a large tree, LFS filters and a `post-checkout`
+/// hook can take long: `Mode::Hooks`, not the 10 s of `Mode::Local`.
+fn check_out(git: &Path, repo: &Path, path: &Path, rest: &[&dyn AsRef<std::ffi::OsStr>]) -> Result<(), String> {
     if path.exists() {
         return Err(format!("{}: already exists", path.display()));
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
-    with_mutation(git, repo, || {
-        exec::run(git, repo, &exec::args(&[&"worktree", &"add", &"-b", &branch, &path, &base]), Mode::Local)
-            .map(drop)
-    })
+    let mut args: Vec<&dyn AsRef<std::ffi::OsStr>> = vec![&"worktree", &"add"];
+    args.extend_from_slice(rest);
+    with_mutation(git, repo, || exec::run(git, repo, &exec::args(&args), Mode::Hooks).map(drop))
 }
 
 /// Every worktree of the repository at `repo`, the main checkout first.
@@ -164,6 +175,26 @@ mod tests {
         std::fs::remove_file(path.join("new.txt")).unwrap();
         remove(&git, &repo.path, &path, Some("brama/s"), BranchCleanup::Delete).unwrap();
         assert!(repo.git(&["branch", "--list", "brama/s"]).is_empty(), "deleted");
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn attach_checks_an_existing_branch_out_again() {
+        let repo = TestRepo::with_commit("wt-attach");
+        let parent = temp_dir("wt-attach-home");
+        let path = parent.join("s");
+        let git = git_bin();
+        add(&git, &repo.path, &path, "brama/attach", "main").unwrap();
+        std::fs::write(path.join("work.txt"), "kept").unwrap();
+        run_in(&path, &["add", "."]);
+        run_in(&path, &["commit", "-qm", "agent"]);
+        std::fs::remove_dir_all(&path).unwrap();
+        prune(&git, &repo.path).unwrap();
+
+        attach(&git, &repo.path, &path, "brama/attach").unwrap();
+        assert_eq!(std::fs::read_to_string(path.join("work.txt")).unwrap(), "kept");
+        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "brama/attach");
+        assert!(attach(&git, &repo.path, &path, "brama/attach").unwrap_err().contains("already exists"));
         std::fs::remove_dir_all(parent).unwrap();
     }
 

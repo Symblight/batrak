@@ -38,7 +38,8 @@ pub fn get_active_session() -> Option<String> {
 pub fn set_active_session(_id: String) {}
 
 /// A draft's first message: creates the session under the draft's id and starts its workspace
-/// and agent in the background. Refused when a local session already runs in the project.
+/// and agent in the background. Refused when a local session already runs in the project, or a
+/// worktree one has no repository or `base_branch` to start from.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn session_create(
@@ -50,10 +51,13 @@ pub async fn session_create(
     mode: Mode,
     title: String,
     model: Option<String>,
+    base_branch: Option<String>,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
-    let request = CreateSession { session_id, project_path, agent_id, mode, title, model };
-    sessions.create(request, window.label(), sink(channel))
+    let request = CreateSession { session_id, project_path, agent_id, mode, title, model, base_branch };
+    let sessions = sessions.inner().clone();
+    let label = window.label().to_owned();
+    blocking(move || sessions.create(request, &label, sink(channel))).await?
 }
 
 /// Sends a listed session's events to this window from now on, starting with its status.

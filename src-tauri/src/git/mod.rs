@@ -15,4 +15,4 @@ pub mod repo;
 pub mod worktree;
 
 #[cfg(test)]
-mod test_repo;
+pub(crate) mod test_repo;

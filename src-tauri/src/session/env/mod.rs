@@ -1,11 +1,13 @@
 //! Where a session's agent runs. All mode-specific logic lives behind [`SessionEnv`]: the agent's
-//! working directory, how its process starts, and how its paths map to the host. Only `local`
-//! exists today; `worktree` (own git worktree + branch) and `docker` come later. The mode is
-//! picked when a session is created and never changes: `session/load` needs the same cwd.
+//! working directory, how its process starts, and how its paths map to the host. `local` and
+//! `worktree` (own git worktree + branch) exist; `docker` comes later. The mode is picked when a
+//! session is created and never changes: `session/load` needs the same cwd.
 
 mod local;
+mod worktree;
 
 pub use local::LocalEnv;
+pub use worktree::WorktreeEnv;
 
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
@@ -13,6 +15,7 @@ use std::sync::atomic::AtomicBool;
 
 use serde::{Deserialize, Serialize};
 
+use super::SessionRecord;
 use crate::acp::process::{AgentCommand, AgentPipes, AgentProcess};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -20,7 +23,7 @@ use crate::acp::process::{AgentCommand, AgentPipes, AgentProcess};
 pub enum Mode {
     /// The agent works in the project directory itself.
     Local,
-    /// Own git worktree and branch in app data. Not implemented yet.
+    /// Own git worktree and branch in app data.
     Worktree,
     /// Inside a container. Not implemented yet.
     Docker,
@@ -55,12 +58,46 @@ pub trait SessionEnv: Send + Sync {
     fn discard(&self) -> Result<(), String>;
 }
 
-/// Builds the environment for a mode. `project` is canonical.
-pub fn for_mode(mode: Mode, project: &Path) -> Result<Box<dyn SessionEnv>, String> {
+/// Where a new session runs, fixed for its life and kept in its record.
+#[derive(Debug, Clone)]
+pub struct Placement {
+    pub agent_cwd: PathBuf,
+    pub worktree_path: Option<PathBuf>,
+    pub branch: Option<String>,
+    pub base_commit: Option<String>,
+}
+
+/// Places a new session of `mode` in the canonical `project`: refuses one that can't run there
+/// (`worktree` outside a repository, or with no commit to start from). `data_dir` is app data.
+/// Blocking.
+pub fn place(mode: Mode, project: &Path, data_dir: &Path, session_id: &str, title: &str, base: Option<&str>)
+    -> Result<Placement, String> {
     match mode {
-        Mode::Local => Ok(Box::new(LocalEnv::new(project.to_path_buf()))),
-        Mode::Worktree => Err("Worktree sessions are not available yet; use Local".to_owned()),
-        Mode::Docker => Err("Docker sessions are not available yet; use Local".to_owned()),
+        Mode::Local => {
+            Ok(Placement { agent_cwd: project.to_path_buf(), worktree_path: None, branch: None, base_commit: None })
+        }
+        Mode::Worktree => worktree::place(project, &data_dir.join("worktrees"), session_id, title, base),
+        Mode::Docker => Err("Docker sessions are not available yet; use Local or Worktree".to_owned()),
+    }
+}
+
+/// Builds the environment of a placed session.
+pub fn for_session(record: &SessionRecord) -> Result<Box<dyn SessionEnv>, String> {
+    match record.mode {
+        Mode::Local => Ok(Box::new(LocalEnv::new(record.project_path.clone()))),
+        Mode::Worktree => {
+            let (Some(root), Some(branch), Some(base)) = (&record.worktree_path, &record.branch, &record.base_commit) else {
+                return Err(format!("session {}: its worktree is missing from its record", record.session_id));
+            };
+            Ok(Box::new(WorktreeEnv::new(
+                record.project_path.clone(),
+                root.clone(),
+                record.agent_cwd.clone(),
+                branch.clone(),
+                base.clone(),
+            )))
+        }
+        Mode::Docker => Err("Docker sessions are not available yet; use Local or Worktree".to_owned()),
     }
 }
 

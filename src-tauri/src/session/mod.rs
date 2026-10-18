@@ -1,6 +1,6 @@
 //! Agent sessions: agent + workspace + history. A session's agent process and ACP session start
-//! with its first message, run in a [`env::SessionEnv`] (today `local` only), and stream to the
-//! frontend through per-window channels.
+//! with its first message, run in a [`env::SessionEnv`] (`local`, or a `worktree` of their own),
+//! and stream to the frontend through per-window channels.
 
 pub mod env;
 mod runtime;
@@ -57,6 +57,14 @@ pub struct SessionRecord {
     pub created_at: String,
     #[serde(default)]
     pub model: Option<String>,
+    /// `worktree` only: the worktree's root (`agent_cwd` is the project's folder in it), its
+    /// branch, and the commit it started from.
+    #[serde(default)]
+    pub worktree_path: Option<PathBuf>,
+    #[serde(default)]
+    pub branch: Option<String>,
+    #[serde(default)]
+    pub base_commit: Option<String>,
 }
 
 /// A session as the frontend lists it; mirrors `Session` in `src/models/types.js`.
@@ -71,6 +79,7 @@ pub struct Session {
     pub model: Option<String>,
     pub mode: Mode,
     pub worktree_path: Option<String>,
+    pub branch: Option<String>,
     pub base_commit: Option<String>,
     pub created_at: String,
 }
@@ -85,8 +94,9 @@ impl From<&SessionRecord> for Session {
             agent_id: r.agent_id.clone(),
             model: r.model.clone(),
             mode: r.mode,
-            worktree_path: None,
-            base_commit: None,
+            worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
+            branch: r.branch.clone(),
+            base_commit: r.base_commit.clone(),
             created_at: r.created_at.clone(),
         }
     }

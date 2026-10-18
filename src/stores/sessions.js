@@ -93,6 +93,7 @@ export function startSession(id, fields) {
     projectId,
     status: 'preparing',
     worktreePath: null,
+    branch: null,
     baseCommit: null,
     createdAt: new Date().toISOString(),
     ...fields,

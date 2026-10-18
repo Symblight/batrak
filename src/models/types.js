@@ -44,8 +44,9 @@
  * @property {string} agentId
  * @property {string | null} model
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
- * @property {string | null} worktreePath
- * @property {string | null} baseCommit
+ * @property {string | null} worktreePath `worktree` only: its root.
+ * @property {string | null} branch `worktree` only: the session's own branch.
+ * @property {string | null} baseCommit `worktree` only: the commit it started from.
  * @property {string} createdAt
  */
 

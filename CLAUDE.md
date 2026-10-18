@@ -160,11 +160,18 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   is refused. `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message; at most one active
-  `local` session per project. Mode logic sits behind `SessionEnv` (`session/env/`, `local` only);
-  every agent path goes through `to_host_path` + `confine` (no `..`, no symlink out, nothing in
-  `.git`); writes are atomic. `HOOK(git)` comments in `run_turn` mark the checkpoint points.
-  `Sessions::remove` (session row menu → Remove session) stops the agent, unlists the session,
-  deletes `sessions/<id>/` (transcript, log) and calls `SessionEnv::discard` (a no-op for `local`).
+  `local` session per project. Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
+  `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
+  builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
+  branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`
+  (again from the branch if the folder was deleted); its cwd is the project's folder in it. No
+  repository, no commit or an unknown base refuses the create. Every agent path goes through
+  `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
+  `HOOK(git)` comments in `run_turn` mark the checkpoint points. `Sessions::remove` (session row
+  menu → Remove session) stops the agent, unlists the session, deletes `sessions/<id>/`
+  (transcript, log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` removes a
+  clean worktree, deletes its branch only when it has no commits past the base, and keeps a dirty
+  worktree (a warning).
 - **ACP host** (`src-tauri/src/acp/`): the only module using `agent-client-protocol` (pinned). One
   process per session in its own process group (stopped as a group; `process::stop_all` on app
   exit), stderr → `<app data>/sessions/<id>/agent.log`. Dispatch-loop callbacks never wait:
@@ -256,8 +263,9 @@ helpers apply.
   never argv; never pass an empty pathspec file (git then commits the whole index). Hooks and
   filters run under `Mode::Hooks`: 10 min timeout, own process group, stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
-- `worktree` and `apply` (Apply Locally / Check Out Branch) are tested but not exposed yet; sessions
-  use them. A dirty worktree is never removed.
+- `worktree` backs worktree sessions (`add` / `attach` check out under `Mode::Hooks`: a big
+  tree, LFS or a `post-checkout` hook outlast 10 s). `apply` (Apply Locally / Check Out Branch) is
+  tested but not exposed yet. A dirty worktree is never removed.
 - Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`

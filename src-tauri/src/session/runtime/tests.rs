@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use super::*;
 use crate::acp::fake_agent::{self, FakeAgentOptions, FakeAgentState};
+use crate::git::test_repo::run_in;
 
 struct FakeLauncher {
     options: FakeAgentOptions,
@@ -126,6 +127,16 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
     Fixture { dir, project, sessions, launcher }
 }
 
+/// A fixture whose project is a real repository: `a.txt` and `.brama/` committed on `main`.
+fn git_fixture(name: &str) -> Fixture {
+    let f = fixture(name, FakeAgentOptions::default());
+    std::fs::remove_dir_all(f.project.join(".git")).unwrap();
+    for args in [&["init", "-q", "-b", "main"][..], &["add", "."], &["commit", "-qm", "init"]] {
+        run_in(&f.project, args);
+    }
+    f
+}
+
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
         data_dir: dir.join("data"),
@@ -144,17 +155,30 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
 
 impl Fixture {
     fn create(&self, id: &str, agent: &str) -> Result<(Session, Arc<Recorder>), String> {
+        self.create_in(id, agent, Mode::Local, None)
+    }
+
+    fn create_in(&self, id: &str, agent: &str, mode: Mode, base: Option<&str>) -> Result<(Session, Arc<Recorder>), String> {
         let recorder = Arc::new(Recorder::default());
         let req = CreateSession {
             session_id: id.to_owned(),
             project_path: self.project.to_string_lossy().into_owned(),
             agent_id: agent.to_owned(),
-            mode: Mode::Local,
+            mode,
             title: format!("Session {id}"),
             model: None,
+            base_branch: base.map(str::to_owned),
         };
         let session = self.sessions.create(req, "main", Arc::clone(&recorder) as Arc<dyn EventSink>)?;
         Ok((session, recorder))
+    }
+
+    /// The fake agent's answer to one prompt.
+    async fn ask(&self, id: &str, events: &Recorder, prompt: &str) -> String {
+        events.clear();
+        self.sessions.send_prompt(id, text(prompt)).unwrap();
+        events.wait_turn_end().await;
+        events.texts().join("")
     }
 
     fn path(&self, rel: &str) -> String {
@@ -344,16 +368,160 @@ async fn a_missing_secret_fails_the_start_naming_the_variable() {
 async fn unknown_agents_and_unsupported_modes_are_refused() {
     let f = fixture("refuse", FakeAgentOptions::default());
     assert!(f.create("u", "nope").unwrap_err().contains("Unknown agent"));
-    let req = CreateSession {
-        session_id: "w".to_owned(),
-        project_path: f.project.to_string_lossy().into_owned(),
-        agent_id: "fake".to_owned(),
-        mode: Mode::Worktree,
-        title: "w".to_owned(),
-        model: None,
-    };
-    let sink: Arc<dyn EventSink> = Arc::new(Recorder::default());
-    assert!(f.sessions.create(req, "main", sink).unwrap_err().contains("not available yet"));
+    assert!(f.create_in("d", "fake", Mode::Docker, None).unwrap_err().contains("not available yet"));
+}
+
+#[tokio::test]
+async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
+    let f = git_fixture("wt");
+    let head = run_in(&f.project, &["rev-parse", "HEAD"]).trim().to_owned();
+    let (one, events) = f.create_in("w1", "fake", Mode::Worktree, None).unwrap();
+    let (two, other) = f.create_in("w2", "fake", Mode::Worktree, None).unwrap();
+    let (_, local) = f.create("l", "fake").unwrap();
+    for recorder in [&events, &other, &local] {
+        recorder.wait_status("idle").await;
+    }
+
+    assert_eq!(one.mode, Mode::Worktree);
+    assert_eq!(one.base_commit.as_deref(), Some(head.as_str()));
+    let branch = one.branch.clone().unwrap();
+    assert!(branch.starts_with("brama/session-w1"), "{branch}");
+    assert_ne!(two.branch, one.branch);
+    let wt = PathBuf::from(one.worktree_path.clone().unwrap());
+    assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
+    assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), branch);
+    assert_eq!(run_in(&wt, &["rev-parse", "HEAD"]).trim(), head);
+
+    // The agent works in its own copy; the project and the other session don't see it.
+    let file = wt.join("a.txt");
+    assert_eq!(f.ask("w1", &events, &format!("write {} mine", file.display())).await, "written");
+    assert_eq!(std::fs::read_to_string(&file).unwrap(), "mine");
+    assert_eq!(std::fs::read_to_string(f.project.join("a.txt")).unwrap(), "one\ntwo\nthree\n");
+    let two_file = PathBuf::from(two.worktree_path.unwrap()).join("a.txt");
+    assert_eq!(std::fs::read_to_string(two_file).unwrap(), "one\ntwo\nthree\n");
+    let reply = f.ask("w1", &events, &format!("read {}", f.path("a.txt"))).await;
+    assert!(reply.contains("outside the session"), "{reply}");
+    let listed = f.sessions.list().into_iter().find(|s| s.id == "w1").unwrap();
+    assert_eq!(listed.worktree_path, one.worktree_path);
+}
+
+#[tokio::test]
+async fn a_worktree_session_starts_from_the_chosen_branch() {
+    let f = git_fixture("wt-base");
+    run_in(&f.project, &["switch", "-qc", "feature"]);
+    std::fs::write(f.project.join("a.txt"), "feature\n").unwrap();
+    run_in(&f.project, &["commit", "-qam", "feature"]);
+    let feature = run_in(&f.project, &["rev-parse", "HEAD"]).trim().to_owned();
+    run_in(&f.project, &["switch", "-q", "main"]);
+
+    let (session, events) = f.create_in("b", "fake", Mode::Worktree, Some("feature")).unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(session.base_commit.as_deref(), Some(feature.as_str()));
+    let wt = PathBuf::from(session.worktree_path.unwrap());
+    assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "feature\n");
+    assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), "main", "the checkout stays");
+}
+
+#[tokio::test]
+async fn worktree_sessions_need_a_repository_with_a_commit_and_a_real_base() {
+    let plain = fixture("wt-plain", FakeAgentOptions::default());
+    std::fs::remove_dir_all(plain.project.join(".git")).unwrap();
+    let err = plain.create_in("p", "fake", Mode::Worktree, None).unwrap_err();
+    assert!(err.contains("git repository"), "{err}");
+
+    let unborn = fixture("wt-unborn", FakeAgentOptions::default());
+    std::fs::remove_dir_all(unborn.project.join(".git")).unwrap();
+    run_in(&unborn.project, &["init", "-q", "-b", "main"]);
+    let err = unborn.create_in("u", "fake", Mode::Worktree, None).unwrap_err();
+    assert!(err.contains("no commit"), "{err}");
+
+    let f = git_fixture("wt-nobase");
+    let err = f.create_in("n", "fake", Mode::Worktree, Some("nope")).unwrap_err();
+    assert!(err.contains("nope"), "{err}");
+    let err = f.create_in("o", "fake", Mode::Worktree, Some("--output=x")).unwrap_err();
+    assert!(err.contains("--output=x"), "{err}");
+    assert!(!f.project.join("x").exists(), "a base is never an option");
+    for sessions in [&plain.sessions, &unborn.sessions, &f.sessions] {
+        assert!(sessions.list().is_empty(), "nothing listed");
+    }
+}
+
+#[tokio::test]
+async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree() {
+    let mut f = git_fixture("wt-sub");
+    let app = f.project.join("app");
+    std::fs::create_dir_all(&app).unwrap();
+    std::fs::write(app.join("main.rs"), "fn main() {}\n").unwrap();
+    run_in(&f.project, &["add", "."]);
+    run_in(&f.project, &["commit", "-qm", "app"]);
+    f.project = app;
+
+    let (session, events) = f.create_in("s", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(session.worktree_path.unwrap());
+    assert_eq!(session.project_id, f.project.to_string_lossy());
+    let reply = f.ask("s", &events, &format!("read {}", wt.join("app/main.rs").display())).await;
+    assert_eq!(reply, "read:fn main() {}\n");
+    let reply = f.ask("s", &events, &format!("read {}", wt.join("a.txt").display())).await;
+    assert!(reply.contains("outside the session"), "only the project's folder: {reply}");
+}
+
+#[tokio::test]
+async fn a_worktree_session_comes_back_after_a_restart_even_without_its_folder() {
+    let f = git_fixture("wt-restart");
+    let (session, events) = f.create_in("r", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(session.worktree_path.clone().unwrap());
+    std::fs::write(wt.join("work.txt"), "agent work\n").unwrap();
+    run_in(&wt, &["add", "."]);
+    run_in(&wt, &["commit", "-qm", "agent"]);
+
+    f.sessions.shutdown();
+    std::fs::remove_dir_all(&wt).unwrap();
+    let sessions = Sessions::new(options_for(&f.dir, &f.launcher));
+    let listed = sessions.list().into_iter().find(|s| s.id == "r").unwrap();
+    assert_eq!(listed.branch, session.branch);
+    assert_eq!(listed.base_commit, session.base_commit);
+    let events = Arc::new(Recorder::default());
+    sessions.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    sessions.send_prompt("r", text(&format!("read {}", wt.join("work.txt").display()))).unwrap();
+    events.wait_turn_end().await;
+    assert_eq!(events.texts().join(""), "read:agent work\n", "checked out again from its branch");
+    assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), session.branch.unwrap());
+}
+
+#[tokio::test]
+async fn removing_a_worktree_session_deletes_a_clean_worktree_and_keeps_work() {
+    let f = git_fixture("wt-remove");
+    let branches = || run_in(&f.project, &["branch", "--format=%(refname:short)"]);
+
+    // Nothing done: the folder and the branch go.
+    let (unused, events) = f.create_in("u", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    f.sessions.remove("u").await.unwrap();
+    assert!(!Path::new(&unused.worktree_path.unwrap()).exists());
+    assert!(!branches().contains(&unused.branch.unwrap()));
+
+    // Committed work: the folder goes, the branch with the commits stays.
+    let (committed, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(committed.worktree_path.unwrap());
+    std::fs::write(wt.join("x.txt"), "x").unwrap();
+    run_in(&wt, &["add", "."]);
+    run_in(&wt, &["commit", "-qm", "agent"]);
+    f.sessions.remove("c").await.unwrap();
+    assert!(!wt.exists());
+    assert!(branches().contains(&committed.branch.unwrap()));
+
+    // Uncommitted work is never deleted.
+    let (dirty, events) = f.create_in("d", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(dirty.worktree_path.unwrap());
+    std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
+    f.sessions.remove("d").await.unwrap();
+    assert!(f.sessions.list().is_empty());
+    assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "unsaved");
+    assert!(branches().contains(&dirty.branch.unwrap()));
 }
 
 #[tokio::test]
@@ -678,6 +846,7 @@ async fn real_claude_agent_end_to_end() {
         mode: Mode::Local,
         title: "real".to_owned(),
         model: None,
+        base_branch: None,
     };
     sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     let wait = |what: &'static str, secs: u64, pred: Box<dyn Fn(&Envelope) -> bool + Send>| {
