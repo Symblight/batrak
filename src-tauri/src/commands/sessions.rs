@@ -118,6 +118,12 @@ pub async fn session_restart(sessions: State<'_, Sessions>, session_id: String) 
     sessions.restart(&session_id).await
 }
 
+/// Starts a stopped session's agent; `false` when it stays stopped (see `Sessions::resume`).
+#[tauri::command]
+pub async fn session_resume(sessions: State<'_, Sessions>, session_id: String) -> Result<bool, String> {
+    sessions.resume(&session_id).await
+}
+
 /// Sets the agent's model, thought level or mode (`session/set_config_option`); the options as they
 /// are then arrive as a `config-options` event.
 #[tauri::command]

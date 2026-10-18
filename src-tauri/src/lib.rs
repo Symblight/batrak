@@ -63,6 +63,7 @@ pub fn run() {
             commands::sessions::session_apply_locally,
             commands::sessions::session_check_out_branch,
             commands::sessions::session_restart,
+            commands::sessions::session_resume,
             commands::sessions::session_remove,
             commands::sessions::session_rename,
             commands::sessions::session_open_log,

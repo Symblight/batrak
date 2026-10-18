@@ -510,6 +510,46 @@ impl Sessions {
         Ok(())
     }
 
+    /// Starts a stopped session's agent, continuing its ACP session where the agent supports
+    /// `session/load`; a running or starting one is left as it is. `false`, quietly, when it
+    /// can't start where it is: another local session runs in the project, or the project has its
+    /// worktree's branch checked out (Restart then says why).
+    pub async fn resume(&self, id: &str) -> Result<bool, String> {
+        let state = self.get(id)?;
+        let record = state.record();
+        if record.status != SessionStatus::Stopped {
+            return Ok(record.status.is_active());
+        }
+        let env = env::for_session(&record)?;
+        let held = tokio::task::spawn_blocking(move || env.held_elsewhere()).await.map_err(|e| e.to_string())??;
+        if held {
+            return Ok(false);
+        }
+        {
+            // Claimed under the sessions lock, so a second resume, or one of another local session
+            // of the project, sees it starting.
+            // `check_slot` locks every record, this one too: not held across it.
+            let sessions = lock(&self.inner.sessions);
+            let current = state.record();
+            if current.status != SessionStatus::Stopped {
+                return Ok(current.status.is_active());
+            }
+            if self.inner.check_slot(&sessions, &current).is_err() {
+                return Ok(false);
+            }
+            lock(&state.record).status = SessionStatus::Preparing;
+        }
+        self.inner.set_status(&state, SessionStatus::Preparing, None);
+        let inner = Arc::clone(&self.inner);
+        let attempts = state.start_attempts.load(Ordering::SeqCst);
+        tokio::spawn(async move {
+            if let Err(e) = inner.ensure_started(&state, attempts).await {
+                state.emit("error", json!({ "message": e }));
+            }
+        });
+        Ok(true)
+    }
+
     /// The session's conversation as recorded (see `transcript`), oldest first. Blocking.
     pub fn history(&self, id: &str) -> Result<Vec<Value>, String> {
         self.get(id)?;

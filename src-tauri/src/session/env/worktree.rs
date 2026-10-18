@@ -136,6 +136,11 @@ impl SessionEnv for WorktreeEnv {
         }
     }
 
+    fn held_elsewhere(&self) -> Result<bool, String> {
+        let git = binary::git()?;
+        Ok(!self.on_branch(git) && self.checked_out_elsewhere(git)?)
+    }
+
     fn agent_cwd(&self) -> &Path {
         &self.dir
     }

@@ -341,6 +341,61 @@ async fn a_crash_mid_turn_is_an_error_and_restart_brings_the_agent_back() {
 }
 
 #[tokio::test]
+async fn resume_starts_a_stopped_agent_once_without_reporting_it_stopped() {
+    let options = FakeAgentOptions { load_session: true, ..Default::default() };
+    let f = fixture("resume", options);
+    let (_, events) = f.create("r", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("r").await.unwrap();
+    events.wait_status("stopped").await;
+
+    events.clear();
+    assert!(f.sessions.resume("r").await.unwrap());
+    assert!(f.sessions.resume("r").await.unwrap(), "a second resume while it starts is a no-op");
+    events.wait_status("idle").await;
+    assert!(f.sessions.resume("r").await.unwrap(), "a running agent stays as it is");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
+    let agent = Arc::clone(&lock(&f.launcher.agents)[1]);
+    assert_eq!(agent.loads.load(Ordering::SeqCst), 1, "it continues its ACP session");
+    let events = lock(&events.events).clone();
+    assert!(!events.iter().any(|e| e.kind == "error" || (e.kind == "status" && e.payload["status"] == "stopped")), "{events:#?}");
+}
+
+#[tokio::test]
+async fn resume_leaves_a_local_session_stopped_while_another_runs_in_the_project() {
+    let f = fixture("resume-slot", FakeAgentOptions::default());
+    let (_, first) = f.create("first", "fake").unwrap();
+    first.wait_status("idle").await;
+    f.sessions.stop("first").await.unwrap();
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+
+    first.clear();
+    assert!(!f.sessions.resume("first").await.unwrap());
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(lock(&first.events).is_empty(), "quietly: {:#?}", lock(&first.events));
+    let listed = f.sessions.list().into_iter().find(|s| s.id == "first").unwrap();
+    assert_eq!(listed.status, SessionStatus::Stopped);
+}
+
+#[tokio::test]
+async fn resume_leaves_a_worktree_session_stopped_while_the_project_has_its_branch() {
+    let f = git_fixture("resume-wt");
+    let (_, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    f.sessions.check_out_branch("c").await.unwrap();
+
+    events.clear();
+    assert!(!f.sessions.resume("c").await.unwrap());
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert!(lock(&events.events).is_empty(), "quietly: {:#?}", lock(&events.events));
+    run_in(&f.project, &["switch", "-q", "main"]);
+    assert!(f.sessions.resume("c").await.unwrap());
+    events.wait_status("idle").await;
+}
+
+#[tokio::test]
 async fn stop_ends_a_running_turn_as_cancelled_and_frees_the_slot() {
     let f = fixture("stop", FakeAgentOptions::default());
     let (_, events) = f.create("s", "fake").unwrap();

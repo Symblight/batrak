@@ -93,3 +93,28 @@
 .acp-markdown__checkbox {
   margin-inline-end: var(--space-1);
 }
+
+/* A caret after the text while it streams. */
+.acp-markdown__paragraph:last-child,
+.acp-markdown__heading:last-child {
+  :host([streaming]) &::after {
+    content: '';
+    display: inline-block;
+    width: 2px;
+    height: 1.1em;
+    margin-inline-start: 1px;
+    vertical-align: -0.18em;
+    background: currentColor;
+    animation: acp-markdown-blink 1s steps(1) infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    :host([streaming]) &::after {
+      animation: none;
+    }
+  }
+}
+@keyframes acp-markdown-blink {
+  50% {
+    opacity: 0;
+  }
+}

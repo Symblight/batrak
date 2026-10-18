@@ -44,6 +44,11 @@ pub trait SessionEnv: Send + Sync {
     /// Gets the directory ready (a worktree checkout, a container). Blocking; stops early once
     /// `cancel` turns true.
     fn prepare(&self, cancel: &AtomicBool) -> Result<(), String>;
+    /// Whether `prepare` would refuse because the user took the session's place over (the project
+    /// has a worktree's branch checked out). Blocking.
+    fn held_elsewhere(&self) -> Result<bool, String> {
+        Ok(false)
+    }
     /// The agent's working directory, as the agent sees it (ACP `cwd`).
     fn agent_cwd(&self) -> &Path;
     /// The same directory on the host.

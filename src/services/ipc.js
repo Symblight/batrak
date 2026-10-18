@@ -164,6 +164,16 @@ export function sessionRestart(sessionId) {
 }
 
 /**
+ * Starts a stopped session's agent, continuing its ACP session where the agent supports it.
+ * @param {string} sessionId
+ * @returns {Promise<boolean>} `false` when it stays stopped: another local session runs in the
+ *   project, or the project has its worktree's branch checked out.
+ */
+export function sessionResume(sessionId) {
+  return invoke('session_resume', { sessionId });
+}
+
+/**
  * Sets the agent's model, thought level or mode; the options as they are then arrive as a
  * `config-options` session event. Rejects when the agent isn't running or refuses the value.
  * @param {string} sessionId

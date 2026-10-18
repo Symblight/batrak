@@ -12,6 +12,7 @@ import {
   sessionRename,
   sessionRespondPermission,
   sessionRestart,
+  sessionResume,
   sessionSetConfigOption,
   sessionStop,
   setActiveSession,
@@ -45,16 +46,22 @@ import {
 import { $sessionNotices, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
 import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
+/** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
+const IDLE_STOP_MS = 10 * 60_000;
+
 /**
  * Loads sessions from the backend into `$sessions` / `$activeSessionId` and opens each one's event
  * channel, keeps the active session in the opened project, creates a draft's backend session on its
- * first message, and runs the session actions (permissions, stop, restart, log).
+ * first message, resumes a shown session's stopped agent and stops hidden idle ones, and runs the
+ * session actions (permissions, stop, restart, log).
  */
 export class SessionController {
   /** @type {Set<string>} Listed sessions whose recorded conversation was asked for. */
   #historyLoaded = new Set();
   /** Sequence of workspace.json reads; only the latest answer is kept. */
   #settingsLoad = 0;
+  /** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
+  #idleStops = new Map();
 
   /** @returns {Promise<void>} */
   async init() {
@@ -63,9 +70,18 @@ export class SessionController {
     for (const session of sessions) {
       sessionOpen(session.id, handleSessionEvent).catch((err) => reportError(`Opening "${session.title}" failed`, err));
     }
-    // A session's conversation comes back the first time it's shown, not all at launch.
+    // A session's conversation comes back the first time it's shown, not all at launch. Showing a
+    // session resumes its stopped agent; the one it replaces is stopped once idle for a while.
+    /** @type {string | null} */
+    let shown = null;
     $activeSessionId.subscribe((id) => {
-      if (id !== null && sessions.some((s) => s.id === id)) this.#loadHistory(id);
+      if (shown !== null) this.#stopWhenIdle(shown);
+      shown = id;
+      if (id === null) return;
+      clearTimeout(this.#idleStops.get(id));
+      this.#idleStops.delete(id);
+      if (sessions.some((s) => s.id === id)) this.#loadHistory(id);
+      this.#resume(id);
     });
     const active = await getActiveSession();
     if (active !== null && projectOf(active) !== null) selectSession(active);
@@ -89,6 +105,32 @@ export class SessionController {
     } catch (err) {
       reportError('Reading .brama/workspace.json failed', err);
     }
+  }
+
+  /**
+   * Starts a stopped session's agent; one that can't start where it is (see `sessionResume`) keeps
+   * its stopped banner, whose Resume says why.
+   * @param {string} id
+   */
+  #resume(id) {
+    if ($sessions.get().find((s) => s.id === id)?.status !== 'stopped') return;
+    sessionResume(id).catch((err) => reportError('Starting the agent failed', err));
+  }
+
+  /**
+   * Stops a hidden session's agent after `IDLE_STOP_MS`, or later if it's busy then.
+   * @param {string} id
+   */
+  #stopWhenIdle(id) {
+    clearTimeout(this.#idleStops.get(id));
+    const timer = setTimeout(() => {
+      this.#idleStops.delete(id);
+      if ($activeSessionId.get() === id) return;
+      const status = $sessions.get().find((s) => s.id === id)?.status;
+      if (status === 'idle') this.stop(id);
+      else if (status !== undefined && status !== 'stopped' && status !== 'error') this.#stopWhenIdle(id);
+    }, IDLE_STOP_MS);
+    this.#idleStops.set(id, timer);
   }
 
   /**
@@ -259,6 +301,8 @@ export class SessionController {
       reportError('Removing the session failed', err);
       return;
     }
+    clearTimeout(this.#idleStops.get(id));
+    this.#idleStops.delete(id);
     forgetSession(id);
     forgetComposer(id);
     this.#historyLoaded.delete(id);

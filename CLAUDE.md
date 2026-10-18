@@ -113,7 +113,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 "New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
 conversation id; `$activeSession` is `null` for a draft. `sessionController` keeps the active session in
 the opened project (`showProject()`: the project's last shown session, its newest, or a new draft),
-`create()`s drafts and `start()`s one on its first message. The composer's state is per session
+`create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
+agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
 (messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
 (`src/controllers/chat-session/`, on `<acp-agent-column>`, reaching the chat through `<acp-chat>`'s
@@ -163,7 +164,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   Untrusted, a start fails with an `untrusted` event (the banner's Trust and start) and a probe
   is refused. `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
-  data; all `stopped` after a restart). The agent starts on the first message; at most one active
+  data; all `stopped` after a restart). The agent starts on the first message, or when its session is
+  shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while another local
+  session holds the project or the project has its worktree's branch); at most one active
   `local` session per project. Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
   `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
   builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
@@ -193,7 +196,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>`; `$agentList`
   (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
-  width (`chx-message:not([own])` in `shadow.css`). A thought is `<acp-part-thinking>`: ACP never
+  width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in
+  while their row is busy (`chx-message-row[aria-busy='true']` in `shadow.css`, CSS only: history and
+  rows scrolled back don't replay; opacity and transform only, so row heights hold). A thought is `<acp-part-thinking>`: ACP never
   ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live
   one timed in `data` (`startedAt`, `endedAt`); the last part of a cancelled reply shows as stopped.
   It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
@@ -210,13 +215,14 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   icon, no diff gutter, re-read when its turn ends (nothing watches a worktree); its folder refs
   reveal the project's same folder. A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
-  Session row menu → Review changes opens the session's own Changes tab (`view:session-changes:<id>`,
-  `models/tab-ids.js`; kept while it's a worktree session of the project): `SessionChangesController`
+  A session's own Changes tab (`view:session-changes:<id>`, `models/tab-ids.js`, opened by
+  `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no
+  longer offers it, so nothing in the UI opens it now): `SessionChangesController`
   (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,
   `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
   each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
-  `base` shows them without commit picks, with Apply locally and Check out branch (also in the
-  row menu, through `sessionController`).
+  `base` shows them without commit picks, with Apply locally and Check out branch (through
+  `sessionController`).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
