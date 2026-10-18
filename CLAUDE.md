@@ -146,7 +146,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
 ### Agents over ACP
 
 - **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
-  `workspace.json`, `.gitignore` with `local/`), never overwriting. Agents merge by id: built-in
+  `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`'s
+  `defaultMode` (`local` / `worktree`, anything else `local`) is the run target a new session's
+  composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
+  base from `git_branches` (local branches, sessions' `brama/…` left out). Agents merge by id: built-in
   (`claude` → `npx -y @agentclientprotocol/claude-agent-acp`) < `<config dir>/brama/agents.json` <
   `.brama/agents.json` (`"disabled": true` hides one). An invalid file keeps its last valid version
   and is reported as `file:line:col`. The watcher flags `.brama/agents.json` (`Changes.config`) →

@@ -21,7 +21,8 @@ pub const AGENTS_FILE: &str = "agents.json";
 pub const LOCAL_DIR: &str = "local";
 
 const DEFAULT_AGENTS: &str = "{\n  \"version\": 1,\n  \"agents\": {}\n}\n";
-const DEFAULT_WORKSPACE: &str = "{\n  \"version\": 1,\n  \"defaultMode\": \"worktree\"\n}\n";
+const DEFAULT_WORKSPACE: &str = "{\n  \"version\": 1,\n  \"defaultMode\": \"local\"\n}\n";
+const WORKSPACE_FILE: &str = "workspace.json";
 const DEFAULT_GITIGNORE: &str = "local/\n";
 
 /// Creates `.brama/` with default files when they're missing; never overwrites one.
@@ -29,7 +30,7 @@ pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
     let dir = project.join(DIR);
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for (name, content) in
-        [(AGENTS_FILE, DEFAULT_AGENTS), ("workspace.json", DEFAULT_WORKSPACE), (".gitignore", DEFAULT_GITIGNORE)]
+        [(AGENTS_FILE, DEFAULT_AGENTS), (WORKSPACE_FILE, DEFAULT_WORKSPACE), (".gitignore", DEFAULT_GITIGNORE)]
     {
         let path = dir.join(name);
         match fs::OpenOptions::new().write(true).create_new(true).open(&path) {
@@ -41,6 +42,43 @@ pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// `.brama/workspace.json`: how the project's sessions start.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceSettings {
+    /// Run target a new session starts with: `local` or `worktree`.
+    pub default_mode: String,
+}
+
+/// The project's workspace.json; a missing, invalid or unknown setting is the default (`local`).
+/// Blocking.
+pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct File {
+        version: u32,
+        default_mode: Option<String>,
+    }
+    let path = project.join(DIR).join(WORKSPACE_FILE);
+    let parsed = match fs::read_to_string(&path) {
+        Ok(text) => serde_json::from_str::<File>(&text).map_err(|e| format!("{}:{}:{}: {e}", path.display(), e.line(), e.column())),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(File { version: 1, default_mode: None }),
+        Err(e) => Err(format!("{}: {e}", path.display())),
+    };
+    let default_mode = match parsed {
+        Ok(File { version: 1, default_mode }) => default_mode.filter(|m| m == "local" || m == "worktree"),
+        Ok(File { version, .. }) => {
+            tracing::info!("{}: unsupported version {version} (expected 1)", path.display());
+            None
+        }
+        Err(e) => {
+            tracing::info!("{e}");
+            None
+        }
+    };
+    WorkspaceSettings { default_mode: default_mode.unwrap_or_else(|| "local".to_owned()) }
 }
 
 /// One agent as configured. `env` values are templates (`${env:NAME}`, `${keychain:name}`),
@@ -475,12 +513,28 @@ mod tests {
     }
 
     #[test]
+    fn workspace_settings_fall_back_to_local() {
+        let project = temp_project("workspace-settings");
+        assert_eq!(workspace_settings(&project).default_mode, "local", "no file");
+        ensure_project_dir(&project).unwrap();
+        assert_eq!(workspace_settings(&project).default_mode, "local", "the default file");
+        let file = project.join(".brama/workspace.json");
+        fs::write(&file, r#"{"version":1,"defaultMode":"worktree"}"#).unwrap();
+        assert_eq!(workspace_settings(&project).default_mode, "worktree");
+        for invalid in [r#"{"version":1,"defaultMode":"cloud"}"#, "{ not json", r#"{"version":2,"defaultMode":"worktree"}"#] {
+            fs::write(&file, invalid).unwrap();
+            assert_eq!(workspace_settings(&project).default_mode, "local", "{invalid}");
+        }
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
     fn creates_defaults_once_and_never_overwrites() {
         let project = temp_project("defaults");
         ensure_project_dir(&project).unwrap();
         let agents = project.join(".brama/agents.json");
         assert_eq!(fs::read_to_string(&agents).unwrap(), DEFAULT_AGENTS);
-        assert!(fs::read_to_string(project.join(".brama/workspace.json")).unwrap().contains("\"defaultMode\": \"worktree\""));
+        assert!(fs::read_to_string(project.join(".brama/workspace.json")).unwrap().contains("\"defaultMode\": \"local\""));
         assert_eq!(fs::read_to_string(project.join(".brama/.gitignore")).unwrap(), "local/\n");
 
         fs::write(&agents, "{\"version\":1,\"agents\":{\"x\":{\"command\":\"x\"}}}").unwrap();

@@ -1,6 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { $activeSessionId } from './sessions.js';
 import { $agentList } from './agents.js';
+import { $workspaceSettings } from './workspace.js';
 import { isRecord, persistentStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
@@ -58,9 +59,6 @@ export function normalizeOptions(options) {
   });
 }
 
-/** Mock branch list for the run-target menu; the project's current branch is added to it. */
-export const MOCK_BRANCHES = ['main', 'feature/composer-v2', 'fix/session-jump'];
-
 /**
  * One or two letters for an agent's badge.
  * @param {string} name
@@ -99,7 +97,7 @@ function freshState(agentId) {
     configOptions: agentOf(agentId).configOptions.map((o) => ({ ...o })),
     chosen: {},
     usage: null,
-    runTarget: { kind: 'local', branch: null },
+    runTarget: { kind: $workspaceSettings.get().defaultMode, branch: null },
     started: false,
   };
 }
@@ -118,7 +116,7 @@ const $composers = atom(/** @type {Readonly<Record<string, ComposerState>>} */ (
 
 /** The active session's composer: agent, its ACP config options, context usage, where it runs. */
 export const $composer = computed(
-  [$composers, $activeSessionId, $newSessionAgentId, $agents],
+  [$composers, $activeSessionId, $newSessionAgentId, $agents, $workspaceSettings],
   (composers, id, agentId) => (id === null ? undefined : composers[id]) ?? freshState(agentId),
 );
 

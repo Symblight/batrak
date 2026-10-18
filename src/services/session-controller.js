@@ -13,6 +13,7 @@ import {
   sessionSetConfigOption,
   sessionStop,
   setActiveSession,
+  workspaceSettings,
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
 import { reportError } from './notices.js';
@@ -38,7 +39,7 @@ import {
   upsertSession,
 } from '../stores/sessions.js';
 import { $sessionNotices, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
-import { $workspacePath } from '../stores/workspace.js';
+import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
 /**
  * Loads sessions from the backend into `$sessions` / `$activeSessionId` and opens each one's event
@@ -48,6 +49,8 @@ import { $workspacePath } from '../stores/workspace.js';
 export class SessionController {
   /** @type {Set<string>} Listed sessions whose recorded conversation was asked for. */
   #historyLoaded = new Set();
+  /** Sequence of workspace.json reads; only the latest answer is kept. */
+  #settingsLoad = 0;
 
   /** @returns {Promise<void>} */
   async init() {
@@ -63,8 +66,25 @@ export class SessionController {
     const active = await getActiveSession();
     if (active !== null && projectOf(active) !== null) selectSession(active);
     $workspacePath.subscribe((path) => {
+      this.#loadSettings(path);
       if (path !== null) showProject(path);
     });
+  }
+
+  /**
+   * Reads the project's workspace.json: the run target its new sessions start with.
+   * @param {string | null} path
+   */
+  async #loadSettings(path) {
+    const load = ++this.#settingsLoad;
+    setWorkspaceSettings(null);
+    if (path === null) return;
+    try {
+      const settings = await workspaceSettings(path);
+      if (load === this.#settingsLoad) setWorkspaceSettings(settings);
+    } catch (err) {
+      reportError('Reading .brama/workspace.json failed', err);
+    }
   }
 
   /**
@@ -101,7 +121,8 @@ export class SessionController {
   /**
    * A draft's first message: it's listed at once, and the backend creates it (workspace, agent)
    * meanwhile; the send waits for that. Refused (e.g. a local session already runs in the
-   * project), it's a draft again with the reason above its composer.
+   * project, or a worktree one's base is gone), it's a draft again with the reason above its
+   * composer.
    * @param {string} id
    * @param {string} title
    */
@@ -111,10 +132,12 @@ export class SessionController {
     const { agentId, configOptions, runTarget } = composerOf(id);
     const model = configOf(configOptions, 'model')?.currentValue ?? null;
     const mode = runTarget.kind;
+    const baseBranch = mode === 'worktree' ? runTarget.branch : null;
     startSession(id, { title, agentId, model, mode });
     startComposer(id);
     setSessionNotice(id, null);
-    const created = sessionCreate({ sessionId: id, projectPath, agentId, mode, title, model }, handleSessionEvent).then(
+    const request = { sessionId: id, projectPath, agentId, mode, title, model, baseBranch };
+    const created = sessionCreate(request, handleSessionEvent).then(
       (session) => upsertSession(session),
       (err) => {
         revertToDraft(id);

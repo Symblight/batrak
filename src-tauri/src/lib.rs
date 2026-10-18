@@ -62,6 +62,7 @@ pub fn run() {
             commands::sessions::session_history,
             commands::sessions::session_set_config_option,
             commands::agents::agents_list,
+            commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
             commands::agents::agents_trust,
@@ -84,6 +85,7 @@ pub fn run() {
             commands::git::git_status,
             commands::git::git_file_at_head,
             commands::git::git_last_commit_message,
+            commands::git::git_branches,
             commands::git::git_commit,
         ])
         .build(tauri::generate_context!())

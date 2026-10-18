@@ -202,6 +202,12 @@
  */
 
 /**
+ * The open project's `.brama/workspace.json`.
+ * @typedef {Object} WorkspaceSettings
+ * @property {'local' | 'worktree'} defaultMode The run target a new session starts with.
+ */
+
+/**
  * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff;
  * Terminal; Browser).
  * @typedef {'file' | 'settings' | 'changes' | 'terminal' | 'browser'} TabKind

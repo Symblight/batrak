@@ -7,16 +7,16 @@ import { ChatSessionController } from '../../controllers/chat-session/ChatSessio
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
-import { openUrl, quickOpen } from '../../services/ipc.js';
+import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
-import { $agents, $composer, MOCK_BRANCHES, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
+import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeSessionId } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
-import { $openingPath, $workspace } from '../../stores/workspace.js';
+import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
@@ -32,6 +32,7 @@ import styles from './acp-agent-column.css?inline';
 export class AcpAgentColumn extends LitElement {
   static properties = {
     fileOptions: { state: true },
+    branches: { state: true },
   };
 
   static styles = styles;
@@ -41,6 +42,7 @@ export class AcpAgentColumn extends LitElement {
   #composer = new StoreController(this, { store: $composer });
   #agents = new StoreController(this, { store: $agents });
   #gitRepo = new StoreController(this, { store: $gitRepo });
+  #rootId = new StoreController(this, { store: $rootId });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
 
@@ -64,6 +66,8 @@ export class AcpAgentColumn extends LitElement {
     super();
     /** @type {QuickOpenItem[]} */
     this.fileOptions = [];
+    /** @type {{ rootId: string, names: string[] } | null} The run target's branches, of the root they're from. */
+    this.branches = null;
   }
 
   /** @returns {AcpChat | null} */
@@ -102,6 +106,17 @@ export class AcpAgentColumn extends LitElement {
       this.fileOptions = items;
     } catch (err) {
       reportError('File search failed', err);
+    }
+  }
+
+  async #onBranchesQuery() {
+    const rootId = $rootId.get();
+    if (rootId === null) return;
+    try {
+      const names = await gitBranches(rootId);
+      if (rootId === $rootId.get()) this.branches = { rootId, names };
+    } catch (err) {
+      reportError('Listing branches failed', err);
     }
   }
 
@@ -174,7 +189,7 @@ export class AcpAgentColumn extends LitElement {
             .composer=${composer}
             .agents=${this.#agents.value}
             .agent=${agentInfo(composer.agentId)}
-            .branches=${MOCK_BRANCHES}
+            .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}
             .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
             .permission=${hasSession ? this.#permission.value : null}
             .notice=${hasSession ? this.#notice.value : null}
@@ -185,6 +200,7 @@ export class AcpAgentColumn extends LitElement {
             @acp-agent-select=${this.#onAgentSelect}
             @acp-config-option=${this.#onConfigOption}
             @acp-run-target-change=${this.#onRunTargetChange}
+            @acp-branches-query=${this.#onBranchesQuery}
             @acp-link-open=${this.#onLinkOpen}
           ></acp-chat>`
         : html`<acp-welcome

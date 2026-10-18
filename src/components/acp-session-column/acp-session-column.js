@@ -13,6 +13,7 @@ import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
+import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
@@ -50,7 +51,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-column
- * @summary Projects, each expanding into its agent sessions with their status; "+ New" opens a folder, "+" and a context menu per project, and one per session (rename, log, remove).
+ * @summary Projects, each expanding into its agent sessions with their status (and a worktree session's branch); "+ New" opens a folder, "+" and a context menu per project, and one per session (rename, log, stop, remove).
  */
 export class AcpSessionColumn extends LitElement {
   static properties = {
@@ -217,6 +218,7 @@ export class AcpSessionColumn extends LitElement {
   #onSessionMenuSelect(value, session) {
     if (value === 'rename') this.#startRename(session);
     else if (value === 'log') sessionController.openLog(session.id);
+    else if (value === 'stop') sessionController.stop(session.id);
     else if (value === 'remove') this.#removeSession(session);
   }
 
@@ -274,7 +276,10 @@ export class AcpSessionColumn extends LitElement {
     const confirmed = await dialog.confirm({
       headline: 'Remove session?',
       message: `"${session.title}" and its conversation will be deleted${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
-      detail: 'Files the agent changed in the project stay as they are.',
+      detail:
+        session.mode === 'worktree'
+          ? `Its worktree is deleted unless it has uncommitted changes; branch ${session.branch} is kept if it has commits.`
+          : 'Files the agent changed in the project stay as they are.',
       confirmLabel: 'Remove',
       destructive: true,
     });
@@ -374,6 +379,11 @@ export class AcpSessionColumn extends LitElement {
               this.#endRename(session, /** @type {HTMLInputElement} */ (e.currentTarget), true)}
           />`
         : html`<span class="acp-session-column__session-title">${session.title}</span>`}
+      ${session.branch
+        ? html`<md-icon class="acp-session-column__branch-icon" title=${`Worktree on ${session.branch}`} aria-label="Worktree"
+            >${unsafeSVG(branchIcon)}</md-icon
+          >`
+        : nothing}
       <span class="acp-session-column__session-age">${age(session.createdAt)}</span>
     </div>`;
   }
@@ -411,6 +421,9 @@ export class AcpSessionColumn extends LitElement {
     >
       <md-menu-item class="acp-session-column__menu-item" value="rename">Rename</md-menu-item>
       <md-menu-item class="acp-session-column__menu-item" value="log">Open agent log</md-menu-item>
+      ${session && RUNNING.has(session.status)
+        ? html`<md-menu-item class="acp-session-column__menu-item" value="stop">Stop agent</md-menu-item>`
+        : nothing}
       <md-hr></md-hr>
       <md-menu-item class="acp-session-column__menu-item" value="remove">Remove session</md-menu-item>
     </md-menu>`;

@@ -16,17 +16,18 @@ import styles from './acp-run-target.css?inline';
 /** @typedef {import('../../models/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../models/types.js').ComposerState} ComposerState */
 
-/** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string }[]} */
+/** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string, disabled?: boolean }[]} */
 const KINDS = [
   { kind: 'local', label: 'Local', description: 'Runs directly in this workspace', icon: computerIcon },
   { kind: 'worktree', label: 'New worktree', description: 'A separate working copy and branch', icon: branchIcon },
-  { kind: 'docker', label: 'Docker', description: 'Isolated container', icon: containerIcon },
+  { kind: 'docker', label: 'Docker', description: 'Isolated container (not available yet)', icon: containerIcon, disabled: true },
 ];
 
 /**
  * @tag acp-run-target
- * @summary The composer's footer: where the session runs (Local / Worktree / Docker) and on which branch; read-only once it started.
+ * @summary The composer's footer: where the session runs (Local / Worktree / Docker) and, for a worktree, the branch it starts from; read-only once it started.
  * @fires acp-run-target-change `{ patch }` A `Partial<RunTarget>`.
+ * @fires acp-branches-query `{}` when the branch menu opens; answered through `branches`.
  */
 export class AcpRunTarget extends LitElement {
   static properties = {
@@ -41,7 +42,7 @@ export class AcpRunTarget extends LitElement {
     super();
     /** @type {ComposerState | null} The active session's. */
     this.composer = null;
-    /** @type {readonly string[]} Branches to pick from; the current one is added. */
+    /** @type {readonly string[]} Branches a worktree can start from; the current one is added. */
     this.branches = [];
     /** @type {string | null} The project's checked-out branch. */
     this.currentBranch = null;
@@ -59,6 +60,10 @@ export class AcpRunTarget extends LitElement {
     this.#change({ kind: /** @type {RunTargetKind} */ (value) });
   };
 
+  #onBranchesQuery = () => {
+    this.dispatchEvent(new CustomEvent('acp-branches-query', { detail: {}, bubbles: true, composed: true }));
+  };
+
   #onBranchSelect = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
@@ -69,7 +74,13 @@ export class AcpRunTarget extends LitElement {
   #renderBranchMenu(branch) {
     const names = this.branches.includes(branch) ? this.branches : [branch, ...this.branches];
     return html`
-      <md-button id="acp-run-target-branch" class="acp-run-target__button" variant="text" title="Branch">
+      <md-button
+        id="acp-run-target-branch"
+        class="acp-run-target__button"
+        variant="text"
+        title="Branch the worktree starts from"
+        @click=${this.#onBranchesQuery}
+      >
         <md-icon slot="icon" class="acp-run-target__icon">${unsafeSVG(branchIcon)}</md-icon>
         ${branch}
         <md-icon class="acp-run-target__arrow">${unsafeSVG(arrowIcon)}</md-icon>
@@ -81,7 +92,7 @@ export class AcpRunTarget extends LitElement {
         focus-on-open="selected"
         @select=${this.#onBranchSelect}
       >
-        <md-menu-group label="Branch">
+        <md-menu-group label="Start from">
           ${names.map(
             (name) => html`
               <md-menu-item class="acp-run-target__item" value=${name} ?selected=${name === branch}>${name}</md-menu-item>
@@ -135,7 +146,12 @@ export class AcpRunTarget extends LitElement {
       >
         ${KINDS.map(
           (k) => html`
-            <md-menu-item class="acp-run-target__item" value=${k.kind} ?selected=${k.kind === kind.kind}>
+            <md-menu-item
+              class="acp-run-target__item"
+              value=${k.kind}
+              ?selected=${k.kind === kind.kind}
+              ?disabled=${k.disabled ?? false}
+            >
               <md-icon slot="leading">${unsafeSVG(k.icon)}</md-icon>
               ${k.label}
               <span slot="supporting-text">${k.description}</span>
@@ -143,7 +159,7 @@ export class AcpRunTarget extends LitElement {
           `,
         )}
       </md-menu>
-      ${branch ? this.#renderBranchMenu(branch) : nothing} ${note}
+      ${kind.kind === 'worktree' ? this.#renderBranchMenu(branch ?? 'HEAD') : nothing} ${note}
     `;
   }
 }

@@ -43,6 +43,13 @@ pub async fn git_file_at_head(
     blocking(move || blob::file_at_head(binary::git()?, &root.path, &path)).await?
 }
 
+/// Local branches a worktree session can start from, most recently committed first.
+#[tauri::command]
+pub async fn git_branches(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Vec<String>, String> {
+    let root = workspaces.get(&root_id)?;
+    blocking(move || repo::branches(binary::git()?, &root.path)).await?
+}
+
 /// Message of the last commit, which Amend starts from; `null` before the first commit.
 #[tauri::command]
 pub async fn git_last_commit_message(

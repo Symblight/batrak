@@ -207,6 +207,10 @@
   line-height: 20px;
   outline: none;
 }
+.acp-session-column__branch-icon {
+  flex: none;
+  font-size: var(--icon-size-xs);
+}
 .acp-session-column__session-age {
   flex: none;
   font-size: var(--font-size-xs);

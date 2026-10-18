@@ -22,6 +22,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').PromptInput} PromptInput */
 /** @typedef {import('../models/types.js').TranscriptEntry} TranscriptEntry */
 /** @typedef {import('../models/types.js').RunTargetKind} RunTargetKind */
+/** @typedef {import('../models/types.js').WorkspaceSettings} WorkspaceSettings */
 
 /** The only module that knows Rust command names. */
 
@@ -45,7 +46,8 @@ export function setActiveSession(id) {
 
 /**
  * A draft's first message: creates the session (under the draft's id) and starts its agent in the
- * background. Rejects when a local session already runs in the project.
+ * background. Rejects when a local session already runs in the project, or a worktree one has no
+ * repository or base to start from.
  * @param {Object} session
  * @param {string} session.sessionId
  * @param {string} session.projectPath
@@ -53,11 +55,21 @@ export function setActiveSession(id) {
  * @param {RunTargetKind} session.mode
  * @param {string} session.title
  * @param {string | null} session.model
+ * @param {string | null} session.baseBranch `worktree`: the branch to start from; `null` for HEAD.
  * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
  * @returns {Promise<Session>}
  */
-export function sessionCreate({ sessionId, projectPath, agentId, mode, title, model }, onEvent) {
-  return invoke('session_create', { sessionId, projectPath, agentId, mode, title, model, channel: channelOf(onEvent) });
+export function sessionCreate({ sessionId, projectPath, agentId, mode, title, model, baseBranch }, onEvent) {
+  return invoke('session_create', {
+    sessionId,
+    projectPath,
+    agentId,
+    mode,
+    title,
+    model,
+    baseBranch,
+    channel: channelOf(onEvent),
+  });
 }
 
 /**
@@ -177,6 +189,15 @@ export function sessionHistory(sessionId) {
  */
 export function sessionOpenLog(sessionId) {
   return invoke('session_open_log', { sessionId });
+}
+
+/**
+ * The project's `.brama/workspace.json` settings; missing or invalid ones are the defaults.
+ * @param {string} projectPath
+ * @returns {Promise<WorkspaceSettings>}
+ */
+export function workspaceSettings(projectPath) {
+  return invoke('workspace_settings', { projectPath });
 }
 
 /**
@@ -387,6 +408,16 @@ export function gitHead(rootId) {
  */
 export function gitStatus(rootId, since, force = false) {
   return invoke('git_status', { rootId, since, force });
+}
+
+/**
+ * Local branches a worktree session can start from, most recently committed first (the sessions'
+ * own `brama/…` left out).
+ * @param {string} rootId
+ * @returns {Promise<string[]>}
+ */
+export function gitBranches(rootId) {
+  return invoke('git_branches', { rootId });
 }
 
 /**

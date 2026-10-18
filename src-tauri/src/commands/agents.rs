@@ -19,6 +19,16 @@ pub async fn agents_list(configs: State<'_, AgentConfigs>, project_path: Option<
     .await?
 }
 
+/// The project's `.brama/workspace.json` settings (how its sessions start).
+#[tauri::command]
+pub async fn workspace_settings(project_path: String) -> Result<crate::config::WorkspaceSettings, String> {
+    blocking(move || {
+        let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
+        Ok(crate::config::workspace_settings(&project))
+    })
+    .await?
+}
+
 /// The agents.json "Add ACP agent…" opens: the project's `.brama/agents.json`, or the user's
 /// without a project; created with the defaults when missing. Absolute path.
 #[tauri::command]

@@ -116,6 +116,21 @@ pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
     Ok(state)
 }
 
+/// Local branches a session can start from, most recently committed first; the sessions' own
+/// (`brama/…`) are left out. Empty outside a repository or before the first commit.
+pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
+    if info(git, root)?.is_none() {
+        return Ok(Vec::new());
+    }
+    let args = exec::args(&[&"for-each-ref", &"--sort=-committerdate", &"--format=%(refname:short)", &"refs/heads/"]);
+    let out = exec::run(git, root, &args, Mode::Background)?;
+    Ok(String::from_utf8_lossy(&out)
+        .lines()
+        .filter(|name| !name.is_empty() && !name.starts_with("brama/"))
+        .map(str::to_owned)
+        .collect())
+}
+
 /// Full message of the last commit, for amending it; `None` before the first commit.
 pub fn last_commit_message(git: &Path, root: &Path) -> Result<Option<String>, String> {
     let out = exec::run_with(git, root, &exec::args(&[&"log", &"-1", &"--format=%B"]), Mode::Background, &Default::default())?;
@@ -466,6 +481,22 @@ mod tests {
         fresh.git(&["add", "."]);
         let s = status_of(&fresh.path);
         assert_eq!((file(&s, "a.txt").added, file(&s, "a.txt").removed), (Some(2), Some(0)));
+    }
+
+    #[test]
+    fn branches_to_start_a_session_from_leave_out_session_branches() {
+        let git = git_bin();
+        let dir = temp_dir("branches-none");
+        assert!(branches(&git, &dir).unwrap().is_empty(), "outside a repository");
+        assert!(branches(&git, &TestRepo::new("branches-empty").path).unwrap().is_empty(), "before the first commit");
+        let repo = TestRepo::with_commit("branches");
+        for branch in ["feature/x", "brama/session-1234"] {
+            repo.git(&["branch", branch]);
+        }
+        let mut names = branches(&git, &repo.path).unwrap();
+        names.sort();
+        assert_eq!(names, ["feature/x", "main"]);
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

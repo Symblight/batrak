@@ -2,6 +2,7 @@ import { atom, computed } from 'nanostores';
 import { isRecord, persistentStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').Workspace} Workspace */
+/** @typedef {import('../models/types.js').WorkspaceSettings} WorkspaceSettings */
 
 /**
  * The opened folder, reopened on launch by `projectController.restore()`. Per window: `rootId` is
@@ -27,3 +28,14 @@ export const $rootId = computed($workspace, (workspace) => workspace?.rootId ?? 
 
 /** Notifies only when the opened folder changes. */
 export const $workspacePath = computed($workspace, (workspace) => workspace?.path ?? null);
+
+/** @type {WorkspaceSettings} */
+const DEFAULT_SETTINGS = { defaultMode: 'local' };
+
+/** The opened folder's `.brama/workspace.json`, read when it opens; the defaults until then. */
+export const $workspaceSettings = atom(DEFAULT_SETTINGS);
+
+/** @param {WorkspaceSettings | null} settings `null`: the defaults. */
+export function setWorkspaceSettings(settings) {
+  $workspaceSettings.set(settings ?? DEFAULT_SETTINGS);
+}
