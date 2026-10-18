@@ -4,9 +4,9 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/progress-linear';
 import { FloatingController } from '../../controllers/floating/FloatingController.js';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $composer } from '../../stores/composer.js';
 import styles from './acp-context-meter.css?inline';
+
+/** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
 
 /** @param {number} tokens */
 function formatTokens(tokens) {
@@ -21,6 +21,7 @@ function formatTokens(tokens) {
 export class AcpContextMeter extends LitElement {
   static properties = {
     open: { type: Boolean, reflect: true },
+    usage: { attribute: false },
   };
 
   static styles = styles;
@@ -29,9 +30,9 @@ export class AcpContextMeter extends LitElement {
     super();
     /** @type {boolean} The details popover is showing. */
     this.open = false;
+    /** @type {ContextUsage | null} `null` until the agent reports it. */
+    this.usage = null;
   }
-
-  #composer = new StoreController(this, { store: $composer });
 
   /** When light dismiss last closed the popover: the press on the button that caused it mustn't reopen it. */
   #closedAt = 0;
@@ -64,7 +65,7 @@ export class AcpContextMeter extends LitElement {
   };
 
   render() {
-    const { usage } = this.#composer.value;
+    const usage = this.usage;
     if (!usage) return nothing;
     const share = usage.size > 0 ? Math.min(1, usage.used / usage.size) : 0;
     const percent = Math.round(share * 100);

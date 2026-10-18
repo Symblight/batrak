@@ -3,26 +3,195 @@ import '@symblight/wc-material/progress-circular';
 import '../acp-chat/acp-chat.js';
 import '../acp-welcome/acp-welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
+import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
+import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
+import { agentConfig } from '../../services/agent-config.js';
+import { openUrl, quickOpen } from '../../services/ipc.js';
+import { reportError } from '../../services/notices.js';
+import { projectController } from '../../services/project-controller.js';
+import { sessionController } from '../../services/session-controller.js';
+import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
+import { $agents, $composer, MOCK_BRANCHES, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
+import { $gitRepo } from '../../stores/git.js';
+import { $activeSessionId } from '../../stores/sessions.js';
+import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
 import { $openingPath, $workspace } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
+
+/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types.js').RunTarget} RunTarget */
+/** @typedef {import('../acp-session-banner/acp-session-banner.js').SessionAction} SessionAction */
 
 /**
  * @tag acp-agent-column
  * @summary Agent chat for the opened project; the welcome screen until one is opened, a spinner while one opens.
+ * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
+ * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
 export class AcpAgentColumn extends LitElement {
+  static properties = {
+    fileOptions: { state: true },
+  };
+
   static styles = styles;
 
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
+  #composer = new StoreController(this, { store: $composer });
+  #agents = new StoreController(this, { store: $agents });
+  #gitRepo = new StoreController(this, { store: $gitRepo });
+  #permission = new StoreController(this, { store: $activePermission });
+  #notice = new StoreController(this, { store: $activeNotice });
+
+  /** @type {ChatSessionController} */
+  #session = new ChatSessionController(this, { chat: () => this.#chat?.chat ?? null });
+  /** @type {ChatPartsController} */
+  #parts = new ChatPartsController(this, { attachments: () => /** @type {AcpChat} */ (this.#chat).attachments });
+
+  /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
+  #chatInserts = new StoreController(this, {
+    store: $chatInserts,
+    onChange: (inserts) => {
+      if (inserts.length) this.#insertCode();
+    },
+  });
+
+  /** Sequence of `@` queries; only the latest answer is shown. */
+  #fileQueryId = 0;
+
+  constructor() {
+    super();
+    /** @type {QuickOpenItem[]} */
+    this.fileOptions = [];
+  }
+
+  /** @returns {AcpChat | null} */
+  get #chat() {
+    return this.renderRoot?.querySelector('acp-chat') ?? null;
+  }
+
+  /** Done once the chat has rendered what this update gave it too (`ChatSessionController` reads it). */
+  async getUpdateComplete() {
+    const result = await super.getUpdateComplete();
+    await this.#chat?.updateComplete;
+    return result;
+  }
+
+  /** Takes `$chatInserts` into the composer once it is up; until then they wait in the store. */
+  async #insertCode() {
+    await this.updateComplete;
+    const chat = this.#chat;
+    if (!chat || !(await chat.composerReady())) return;
+    chat.insertCode(takeChatInserts());
+  }
+
+  /** @param {Event} e */
+  async #onFileQuery(e) {
+    const { query } = /** @type {CustomEvent<{ query: string | null }>} */ (e).detail;
+    const id = ++this.#fileQueryId;
+    const rootId = projectController.rootId;
+    if (query === null) return;
+    if (rootId === null) {
+      this.fileOptions = [];
+      return;
+    }
+    try {
+      const { items, cancelled } = await quickOpen(rootId, query, true);
+      if (id !== this.#fileQueryId || cancelled) return;
+      this.fileOptions = items;
+    } catch (err) {
+      reportError('File search failed', err);
+    }
+  }
+
+  /** @param {Event} e */
+  #onPermissionRespond(e) {
+    const { requestId, optionId } = /** @type {CustomEvent<{ requestId: string, optionId: string }>} */ (e).detail;
+    const id = $activeSessionId.get();
+    if (id !== null) sessionController.respondPermission(id, requestId, optionId);
+  }
+
+  /** @param {Event} e */
+  #onSessionAction(e) {
+    const { action } = /** @type {CustomEvent<{ action: SessionAction }>} */ (e).detail;
+    const id = $activeSessionId.get();
+    if (id === null) return;
+    if (action === 'open-log') sessionController.openLog(id);
+    else if (action === 'restart') sessionController.restart(id);
+    else if (action === 'trust-and-start') sessionController.trustAndStart(id);
+    else sessionController.dismissNotice(id);
+  }
+
+  /** @param {Event} e */
+  #onAgentSelect(e) {
+    selectAgent(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
+  }
+
+  /** A model, level or mode; a model or level of another agent switches to that agent first. */
+  #onConfigOption = (/** @type {Event} */ e) => {
+    const { agentId, configId, value } = /** @type {CustomEvent<{ agentId?: string, configId: string, value: string }>} */ (
+      e
+    ).detail;
+    if (agentId) selectAgent(agentId);
+    const id = $activeSessionId.get();
+    if (id !== null) sessionController.setConfigOption(id, configId, value);
+  };
+
+  /** @param {Event} e */
+  #onRunTargetChange(e) {
+    setRunTarget(/** @type {CustomEvent<{ patch: Partial<RunTarget> }>} */ (e).detail.patch);
+  }
+
+  /** @param {Event} e */
+  #onLinkOpen(e) {
+    const { url } = /** @type {CustomEvent<{ url: string }>} */ (e).detail;
+    openUrl(url).catch((err) => reportError('Opening the link failed', err));
+  }
+
+  #onOpenLocal() {
+    projectController.open().catch((err) => reportError('Opening folder failed', err));
+  }
 
   render() {
     const opening = this.#openingPath.value !== null;
+    const workspace = this.#workspace.value;
+    const composer = this.#composer.value;
+    const hasSession = $activeSessionId.get() !== null;
     // Hidden rather than removed while a project opens, so the chat keeps its state.
     return html`
-      ${this.#workspace.value !== null
-        ? html`<acp-chat class="acp-agent-column__chat" ?hidden=${opening}></acp-chat>`
-        : html`<acp-welcome class="acp-agent-column__welcome" ?hidden=${opening}></acp-welcome>`}
+      ${workspace !== null
+        ? html`<acp-chat
+            class="acp-agent-column__chat"
+            ?hidden=${opening}
+            .conversationId=${this.#session.conversationId}
+            ?empty=${this.#session.empty}
+            .adapter=${acpAdapter}
+            .userId=${USER_ID}
+            .partElements=${this.#parts.partElements}
+            .root=${workspace.path}
+            .fileOptions=${this.fileOptions}
+            .composer=${composer}
+            .agents=${this.#agents.value}
+            .agent=${agentInfo(composer.agentId)}
+            .branches=${MOCK_BRANCHES}
+            .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
+            .permission=${hasSession ? this.#permission.value : null}
+            .notice=${hasSession ? this.#notice.value : null}
+            @acp-chat-file-query=${this.#onFileQuery}
+            @acp-permission-respond=${this.#onPermissionRespond}
+            @acp-session-action=${this.#onSessionAction}
+            @acp-agents-file-open=${() => agentConfig.openFile()}
+            @acp-agent-select=${this.#onAgentSelect}
+            @acp-config-option=${this.#onConfigOption}
+            @acp-run-target-change=${this.#onRunTargetChange}
+            @acp-link-open=${this.#onLinkOpen}
+          ></acp-chat>`
+        : html`<acp-welcome
+            class="acp-agent-column__welcome"
+            ?hidden=${opening}
+            @acp-open-local=${this.#onOpenLocal}
+          ></acp-welcome>`}
       ${opening
         ? html`<div class="acp-agent-column__loading">
             <md-progress-circular class="acp-agent-column__spinner" aria-label="Opening project"></md-progress-circular>
@@ -31,5 +200,7 @@ export class AcpAgentColumn extends LitElement {
     `;
   }
 }
+
+/** @typedef {import('../acp-chat/acp-chat.js').AcpChat} AcpChat */
 
 customElements.define('acp-agent-column', AcpAgentColumn);

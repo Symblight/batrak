@@ -2,8 +2,6 @@ import { LitElement, html } from 'lit';
 import { Marked } from 'marked';
 import DOMPurify from 'dompurify';
 import '@symblight/chat/composer';
-import { openUrl } from '../../services/ipc.js';
-import { reportError } from '../../services/notices.js';
 import styles from './acp-markdown.css?inline';
 
 /** @typedef {import('@symblight/chat/composer').ChxCodeBlock} ChxCodeBlock */
@@ -74,6 +72,7 @@ const CLASS_OF = {
 /**
  * @tag acp-markdown
  * @summary Markdown (an agent's reply) rendered safely: sanitized HTML, fenced code in `<chx-code-block>`, web links opened in the browser (others left to the host); re-rendered at most once a frame while it streams.
+ * @fires acp-link-open `{ url }` A web or mail link, for the browser.
  */
 export class AcpMarkdown extends LitElement {
   static properties = {
@@ -146,7 +145,8 @@ export class AcpMarkdown extends LitElement {
     e.preventDefault();
     // The scheme as written; the URL as the browser parsed it (quotes and spaces percent-encoded).
     const href = link.getAttribute('href') ?? '';
-    if (/^(https?:|mailto:)/i.test(href)) openUrl(link.href).catch((err) => reportError('Opening the link failed', err));
+    if (!/^(https?:|mailto:)/i.test(href)) return;
+    this.dispatchEvent(new CustomEvent('acp-link-open', { detail: { url: link.href }, bubbles: true, composed: true }));
   };
 
   render() {

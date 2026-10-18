@@ -3,12 +3,11 @@ import { $activeSessionId } from './sessions.js';
 import { $agentList } from './agents.js';
 import { isRecord, persistentStore } from './persistent.js';
 
-/** @typedef {import('../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
 /** @typedef {import('../models/types.js').ComposerState} ComposerState */
 /** @typedef {import('../models/types.js').RunTarget} RunTarget */
 
-/** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent */
+/** @typedef {import('../models/types.js').CatalogAgent} CatalogAgent */
 /** @typedef {import('../models/types.js').AcpConfigOption} AcpConfigOption */
 
 /**
@@ -145,23 +144,6 @@ function updateComposer(id, update) {
 function updateActive(update) {
   const id = $activeSessionId.get();
   if (id !== null) updateComposer(id, update);
-}
-
-/**
- * The first option of a category, in the agent's order.
- * @param {readonly ConfigOption[]} options
- * @param {string} category
- */
-export function configOf(options, category) {
-  return options.find((o) => o.category === category) ?? null;
-}
-
-/**
- * @param {ConfigOption | null} option
- * @returns {string | null} The current value's name.
- */
-export function currentName(option) {
-  return option?.options.find((v) => v.value === option.currentValue)?.name ?? null;
 }
 
 /** @param {string} agentId */

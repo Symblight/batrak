@@ -9,12 +9,12 @@ import containerIcon from '@material-design-icons/svg/outlined/inventory_2.svg?r
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $composer, MOCK_BRANCHES, configOf, setRunTarget } from '../../stores/composer.js';
-import { $gitRepo } from '../../stores/git.js';
+import { configOf } from '../../models/config-options.js';
 import styles from './acp-run-target.css?inline';
 
 /** @typedef {import('../../models/types.js').RunTargetKind} RunTargetKind */
+/** @typedef {import('../../models/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
 
 /** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string }[]} */
 const KINDS = [
@@ -26,29 +26,48 @@ const KINDS = [
 /**
  * @tag acp-run-target
  * @summary The composer's footer: where the session runs (Local / Worktree / Docker) and on which branch; read-only once it started.
+ * @fires acp-run-target-change `{ patch }` A `Partial<RunTarget>`.
  */
 export class AcpRunTarget extends LitElement {
+  static properties = {
+    composer: { attribute: false },
+    branches: { attribute: false },
+    currentBranch: { attribute: false },
+  };
+
   static styles = styles;
 
-  #composer = new StoreController(this, { store: $composer });
-  #gitRepo = new StoreController(this, { store: $gitRepo });
+  constructor() {
+    super();
+    /** @type {ComposerState | null} The active session's. */
+    this.composer = null;
+    /** @type {readonly string[]} Branches to pick from; the current one is added. */
+    this.branches = [];
+    /** @type {string | null} The project's checked-out branch. */
+    this.currentBranch = null;
+  }
+
+  /** @param {Partial<RunTarget>} patch */
+  #change(patch) {
+    this.dispatchEvent(new CustomEvent('acp-run-target-change', { detail: { patch }, bubbles: true, composed: true }));
+  }
 
   // Picks reach these twice: from the item, then re-dispatched by its menu.
   #onKindSelect = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    setRunTarget({ kind: /** @type {RunTargetKind} */ (value) });
+    this.#change({ kind: /** @type {RunTargetKind} */ (value) });
   };
 
   #onBranchSelect = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    setRunTarget({ branch: value === this.#gitRepo.value.repo?.branch ? null : value });
+    this.#change({ branch: value === this.currentBranch ? null : value });
   };
 
   /** @param {string} branch */
   #renderBranchMenu(branch) {
-    const names = MOCK_BRANCHES.includes(branch) ? MOCK_BRANCHES : [branch, ...MOCK_BRANCHES];
+    const names = this.branches.includes(branch) ? this.branches : [branch, ...this.branches];
     return html`
       <md-button id="acp-run-target-branch" class="acp-run-target__button" variant="text" title="Branch">
         <md-icon slot="icon" class="acp-run-target__icon">${unsafeSVG(branchIcon)}</md-icon>
@@ -74,10 +93,11 @@ export class AcpRunTarget extends LitElement {
   }
 
   render() {
-    const { runTarget, started, configOptions } = this.#composer.value;
+    if (!this.composer) return nothing;
+    const { runTarget, started, configOptions } = this.composer;
     const kind = KINDS.find((k) => k.kind === runTarget.kind) ?? KINDS[0];
     const label = kind.kind === 'worktree' && started ? 'Worktree' : kind.label;
-    const branch = runTarget.branch ?? this.#gitRepo.value.repo?.branch ?? null;
+    const branch = runTarget.branch ?? this.currentBranch;
     const fullAccess = configOf(configOptions, 'mode')?.currentValue === 'full';
     const note = fullAccess
       ? html`<span class="acp-run-target__note">

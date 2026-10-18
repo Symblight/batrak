@@ -7,32 +7,47 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import {
-  $agents,
-  $composer,
-  agentInfo,
-  configOf,
-  currentName,
-  selectAgent,
-} from '../../stores/composer.js';
-import { $activeSessionId } from '../../stores/sessions.js';
-import { sessionController } from '../../services/session-controller.js';
-import { agentConfig } from '../../services/agent-config.js';
+import { configOf, currentName } from '../../models/config-options.js';
 import styles from './acp-agent-picker.css?inline';
 
 /** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../../models/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
 
 /**
  * @tag acp-agent-picker
  * @summary The composer's agent · model · thinking button and its menu; the agent is fixed once the session started.
+ * @fires acp-agent-select `{ agentId }`
+ * @fires acp-config-option `{ agentId, configId, value }` A model or level, of that agent (picked first).
+ * @fires acp-agents-file-open `null`
  */
 export class AcpAgentPicker extends LitElement {
+  static properties = {
+    composer: { attribute: false },
+    agents: { attribute: false },
+    agent: { attribute: false },
+  };
+
   static styles = styles;
 
-  #composer = new StoreController(this, { store: $composer });
-  #agents = new StoreController(this, { store: $agents });
+  constructor() {
+    super();
+    /** @type {ComposerState | null} The active session's. */
+    this.composer = null;
+    /** @type {readonly CatalogAgent[]} Every agent the project can run. */
+    this.agents = [];
+    /** @type {AgentInfo | null} The composer's agent. */
+    this.agent = null;
+  }
+
+  /**
+   * @param {string} type
+   * @param {object | null} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
 
   /**
    * One menu group per config option the agent sends, except the permission mode (its own chip).
@@ -71,11 +86,11 @@ export class AcpAgentPicker extends LitElement {
     return html`<span class="acp-agent-picker__glyph" slot=${slot}>${agent.glyph}</span>`;
   }
 
-  #renderAgentsMenu() {
-    const { agentId, configOptions } = this.#composer.value;
+  /** @param {ComposerState} composer */
+  #renderAgentsMenu({ agentId, configOptions }) {
     return html`
       <md-menu-group label="Agent">
-        ${this.#agents.value.map((agent) => {
+        ${this.agents.map((agent) => {
           const current = agent.id === agentId;
           const options = current ? configOptions : agent.configOptions;
           return html`
@@ -100,9 +115,11 @@ export class AcpAgentPicker extends LitElement {
     `;
   }
 
-  #renderSessionMenu() {
-    const { agentId, configOptions } = this.#composer.value;
-    const agent = agentInfo(agentId);
+  /**
+   * @param {ComposerState} composer
+   * @param {AgentInfo} agent
+   */
+  #renderSessionMenu({ agentId, configOptions }, agent) {
     return html`
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" disabled>
@@ -125,24 +142,24 @@ export class AcpAgentPicker extends LitElement {
     this.#handled.add(detail);
     const { item } = detail;
     if (item.dataset.action === 'add-agent') {
-      agentConfig.openFile();
+      this.#emit('acp-agents-file-open', null);
       return;
     }
     const { agent, config } = item.dataset;
     if (!agent || !config) {
       // An agent row with no options to pick from yet: picking the row picks the agent.
       const value = item.getAttribute('value');
-      if (value) selectAgent(value);
+      if (value) this.#emit('acp-agent-select', { agentId: value });
       return;
     }
-    selectAgent(agent);
-    const id = $activeSessionId.get();
-    if (id !== null) sessionController.setConfigOption(id, config, /** @type {string} */ (item.getAttribute('value')));
+    this.#emit('acp-config-option', { agentId: agent, configId: config, value: item.getAttribute('value') ?? '' });
   };
 
   render() {
-    const { agentId, configOptions, started } = this.#composer.value;
-    const agent = agentInfo(agentId);
+    const composer = this.composer;
+    const agent = this.agent;
+    if (!composer || !agent) return nothing;
+    const { configOptions, started } = composer;
     const model = currentName(configOf(configOptions, 'model'));
     const level = currentName(configOf(configOptions, 'thought_level'));
     const title = [agent.name, model, level].filter(Boolean).join(' · ');
@@ -167,7 +184,7 @@ export class AcpAgentPicker extends LitElement {
         focus-on-open="selected"
         @select=${this.#onSelect}
       >
-        ${started ? this.#renderSessionMenu() : this.#renderAgentsMenu()}
+        ${started ? this.#renderSessionMenu(composer, agent) : this.#renderAgentsMenu(composer)}
       </md-menu>
     `;
   }

@@ -10,13 +10,11 @@ import checklistIcon from '@material-design-icons/svg/outlined/checklist.svg?raw
 import handIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import shieldIcon from '@material-design-icons/svg/outlined/shield.svg?raw';
 import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $composer, configOf } from '../../stores/composer.js';
-import { $activeSessionId } from '../../stores/sessions.js';
-import { sessionController } from '../../services/session-controller.js';
+import { configOf } from '../../models/config-options.js';
 import styles from './acp-mode-picker.css?inline';
 
 /** @typedef {import('../../models/types.js').ConfigOptionValue} ConfigOptionValue */
+/** @typedef {import('../../models/types.js').ConfigOption} ConfigOption */
 
 /**
  * How risky a mode is decides its chip's color; the agent names the modes, Brama knows a few ids.
@@ -44,11 +42,20 @@ function lookOf(value) {
 /**
  * @tag acp-mode-picker
  * @summary The composer's permission-mode chip (ACP config option of category `mode`) and its menu; absent when the agent has none.
+ * @fires acp-config-option `{ configId, value }`
  */
 export class AcpModePicker extends LitElement {
+  static properties = {
+    options: { attribute: false },
+  };
+
   static styles = styles;
 
-  #composer = new StoreController(this, { store: $composer });
+  constructor() {
+    super();
+    /** @type {readonly ConfigOption[]} The session's config options. */
+    this.options = [];
+  }
 
   /** @param {ConfigOptionValue} value */
   #renderItem(value, selected = false) {
@@ -68,14 +75,15 @@ export class AcpModePicker extends LitElement {
 
   #onSelect = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
-    const mode = configOf(this.#composer.value.configOptions, 'mode');
+    const mode = configOf(this.options, 'mode');
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    const id = $activeSessionId.get();
-    if (mode && id !== null && value !== mode.currentValue) sessionController.setConfigOption(id, mode.id, value);
+    if (!mode || value === mode.currentValue) return;
+    const detail = { configId: mode.id, value };
+    this.dispatchEvent(new CustomEvent('acp-config-option', { detail, bubbles: true, composed: true }));
   };
 
   render() {
-    const mode = configOf(this.#composer.value.configOptions, 'mode');
+    const mode = configOf(this.options, 'mode');
     if (!mode) return nothing;
     const current = mode.options.find((v) => v.value === mode.currentValue) ?? mode.options[0];
     const { icon, risk } = lookOf(current.value);

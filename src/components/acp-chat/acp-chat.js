@@ -11,19 +11,9 @@ import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
-import { quickOpen } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
+import { relPath } from '../../models/paths.js';
 import styles from './acp-chat.css?inline';
-import { reportError } from '../../services/notices.js';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
-import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
-import {
-  COMMAND_CHIP_TEMPLATE,
-  ChatPartsController,
-  FILE_CHIP_TEMPLATE,
-} from '../../controllers/chat-parts/ChatPartsController.js';
-import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
+import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
 import '../acp-context-meter/acp-context-meter.js';
@@ -35,6 +25,12 @@ import '../acp-session-banner/acp-session-banner.js';
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 
 /**
  * The composer's ProseMirror document, as far as code goes in: `line+`, each line text and chips.
@@ -80,9 +76,10 @@ function buildMenuItem(value, headline, supportingText) {
  * what the agent reads.
  * @param {PmSchema} schema
  * @param {ChatInsert} insert
+ * @param {string | null} root The project's path; the chip names a file inside it relative to it.
  */
-function codeChip(schema, { path, fromLine, toLine }) {
-  const rel = projectController.relPath(path) ?? path;
+function codeChip(schema, { path, fromLine, toLine }, root) {
+  const rel = relPath(root, path) ?? path;
   const name = rel.slice(rel.lastIndexOf('/') + 1);
   const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
   return schema.nodes.chip.create({
@@ -97,11 +94,12 @@ function codeChip(schema, { path, fromLine, toLine }) {
  * A comment's composer lines: its chip, then the comment; the comment's further lines follow as plain lines.
  * @param {PmSchema} schema
  * @param {ChatInsert} insert
+ * @param {string | null} root
  */
-function commentLines(schema, insert) {
+function commentLines(schema, insert, root) {
   const [first, ...rest] = insert.body.split('\n');
   return [
-    schema.nodes.line.create(null, [codeChip(schema, insert), schema.text(` ${first}`)]),
+    schema.nodes.line.create(null, [codeChip(schema, insert, root), schema.text(` ${first}`)]),
     ...rest.map((text) => schema.nodes.line.create(null, text ? [schema.text(text)] : [])),
   ];
 }
@@ -172,43 +170,105 @@ function buildEntryItem(entry) {
 /**
  * @tag acp-chat
  * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
- * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
- * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
+ * @fires acp-chat-file-query `{ query }` Files and folders for `@` to search for; `null` drops the search.
  */
 export class AcpChat extends LitElement {
+  static properties = {
+    /** `<chx-chat>`'s `activeConversationId`: the active session's id. */
+    conversationId: { attribute: false },
+    /** The active session is a draft with no message yet: only the composer shows. */
+    empty: { type: Boolean },
+    adapter: { attribute: false },
+    userId: { attribute: false },
+    partElements: { attribute: false },
+    /** The project's path. */
+    root: { attribute: false },
+    /** Matches for the last `acp-chat-file-query`. */
+    fileOptions: { attribute: false },
+    composer: { attribute: false },
+    agents: { attribute: false },
+    agent: { attribute: false },
+    branches: { attribute: false },
+    currentBranch: { attribute: false },
+    permission: { attribute: false },
+    notice: { attribute: false },
+  };
+
   static styles = styles;
 
-  #session = new ChatSessionController(this, { chat: () => this.renderRoot.querySelector('chx-chat') });
+  constructor() {
+    super();
+    /** @type {string | undefined} */
+    this.conversationId = undefined;
+    this.empty = false;
+    /** @type {ChxChat['adapter']} */
+    this.adapter = undefined;
+    /** @type {string} */
+    this.userId = '';
+    /** @type {ChxChat['partElements']} */
+    this.partElements = undefined;
+    /** @type {string | null} */
+    this.root = null;
+    /** @type {readonly QuickOpenItem[]} */
+    this.fileOptions = [];
+    /** @type {ComposerState | null} */
+    this.composer = null;
+    /** @type {readonly CatalogAgent[]} */
+    this.agents = [];
+    /** @type {AgentInfo | null} */
+    this.agent = null;
+    /** @type {readonly string[]} */
+    this.branches = [];
+    /** @type {string | null} */
+    this.currentBranch = null;
+    /** @type {PermissionRequest | null} */
+    this.permission = null;
+    /** @type {SessionNotice | null} */
+    this.notice = null;
+  }
 
-  #parts = new ChatPartsController(this, { attachments: () => this.#attachments });
+  /** The `<chx-chat>` holding every session's conversation; present after the first render. */
+  get chat() {
+    return this.renderRoot?.querySelector('chx-chat') ?? null;
+  }
 
-  /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
-  #chatInserts = new StoreController(this, {
-    store: $chatInserts,
-    onChange: (inserts) => {
-      if (inserts.length) this.#insertCode();
-    },
-  });
+  /** The composer's attachments; present after the first render. */
+  get attachments() {
+    return this.#attachments;
+  }
 
-  /**
-   * Takes `$chatInserts` into the composer: a selection's chip at the caret, a comment as its own line
-   * after the draft (replacing an empty one).
-   */
-  async #insertCode() {
+  /** @returns {Promise<ComposerTextbox | null>} The composer's textbox once its editor is up. */
+  async #textbox() {
     await this.updateComplete;
     const composer = /** @type {import('lit').LitElement | null} */ (this.renderRoot.querySelector('chx-message-composer'));
     await composer?.updateComplete;
     const textbox = /** @type {ComposerTextbox | null} */ (composer?.renderRoot.querySelector('chx-textbox') ?? null);
     await textbox?.updateComplete;
+    return textbox?.editor?.view ? textbox : null;
+  }
+
+  /** Whether code can go into the composer now (`insertCode()`). */
+  async composerReady() {
+    return (await this.#textbox()) !== null;
+  }
+
+  /**
+   * Code sent from the editors into the composer: a selection's chip at the caret, a comment as its
+   * own line after the draft (replacing an empty one). Call once `composerReady()`.
+   * @param {readonly ChatInsert[]} inserts
+   */
+  insertCode(inserts) {
+    const textbox = /** @type {ComposerTextbox | null} */ (
+      /** @type {import('lit').LitElement | null} */ (this.renderRoot.querySelector('chx-message-composer'))
+        ?.renderRoot.querySelector('chx-textbox') ?? null
+    );
     const view = textbox?.editor?.view;
-    if (!textbox || !view) return; // they wait in the store
-    const inserts = takeChatInserts();
-    if (!inserts.length) return;
+    if (!textbox || !view || !inserts.length) return;
     const { schema, selection } = view.state;
     let tr = view.state.tr;
-    const chips = inserts.filter((i) => !i.body).flatMap((i) => [codeChip(schema, i), schema.text(' ')]);
+    const chips = inserts.filter((i) => !i.body).flatMap((i) => [codeChip(schema, i, this.root), schema.text(' ')]);
     if (chips.length) tr = tr.replaceWith(selection.from, selection.to, chips);
-    const lines = inserts.filter((i) => i.body).flatMap((i) => commentLines(schema, i));
+    const lines = inserts.filter((i) => i.body).flatMap((i) => commentLines(schema, i, this.root));
     if (lines.length) {
       const { doc } = tr;
       const empty = doc.childCount === 1 && doc.child(0).content.size === 0;
@@ -229,8 +289,6 @@ export class AcpChat extends LitElement {
     splitOnSend(/** @type {Parameters<typeof splitOnSend>[0]} */ (e));
   }
 
-  /** Sequence of `@` queries; only the latest answer is shown. */
-  #fileQueryId = 0;
   /** The `@` query being typed, `null` when none is. */
   #fileQuery = /** @type {string | null} */ (null);
   /** Whether "Files and Folders" was picked for this `@`: then the query searches. */
@@ -246,36 +304,43 @@ export class AcpChat extends LitElement {
     this.#showFileOptions(picker);
   };
 
+  /** Whether the `@` menu shows search results, rather than nothing or "Files and Folders". */
+  get #searching() {
+    return this.#fileQuery !== null && (this.#browsing || this.#fileQuery !== '');
+  }
+
   /** @param {ChxCommandPicker} picker */
-  async #showFileOptions(picker) {
-    const id = ++this.#fileQueryId;
+  #showFileOptions(picker) {
     const query = this.#fileQuery;
-    const rootId = projectController.rootId;
-    if (query === null) {
+    if (!this.#searching) {
+      this.#emit('acp-chat-file-query', { query: null });
       picker.clearOptions();
-      return;
-    }
-    if (!this.#browsing && query === '') {
+      if (query === null) return;
       const options = document.createDocumentFragment();
       options.append(buildBrowseItem());
-      picker.clearOptions();
       picker.addOptions(options);
       return;
     }
-    if (rootId === null) {
-      picker.clearOptions();
-      return;
-    }
-    try {
-      const { items, cancelled } = await quickOpen(rootId, query, true);
-      if (id !== this.#fileQueryId || cancelled) return;
-      picker.clearOptions();
-      const options = document.createDocumentFragment();
-      for (const item of items.slice(0, 50)) options.append(buildEntryItem(item));
-      picker.addOptions(options);
-    } catch (err) {
-      reportError('File search failed', err);
-    }
+    this.#emit('acp-chat-file-query', { query });
+  }
+
+  /** @param {Map<string, unknown>} changed */
+  updated(changed) {
+    if (!changed.has('fileOptions') || !this.#searching) return;
+    const picker = /** @type {ChxCommandPicker | null} */ (this.renderRoot.querySelector('#acp-chat-files'));
+    if (!picker) return;
+    picker.clearOptions();
+    const options = document.createDocumentFragment();
+    for (const item of this.fileOptions.slice(0, 50)) options.append(buildEntryItem(item));
+    picker.addOptions(options);
+  }
+
+  /**
+   * @param {string} type
+   * @param {object} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   /**
@@ -334,14 +399,14 @@ export class AcpChat extends LitElement {
   };
 
   render() {
-    const empty = this.#session.empty;
+    const empty = this.empty;
     return html`
       <chx-chat
         class=${classMap({ 'acp-chat__chat': true, 'acp-chat__chat_empty': empty })}
-        .userId=${USER_ID}
-        .activeConversationId=${this.#session.conversationId}
-        .adapter=${acpAdapter}
-        .partElements=${this.#parts.partElements}
+        .userId=${this.userId}
+        .activeConversationId=${this.conversationId}
+        .adapter=${this.adapter}
+        .partElements=${this.partElements}
         @chx-messages-change=${this.#onMessagesChange}
       >
         <chx-message-list
@@ -355,7 +420,12 @@ export class AcpChat extends LitElement {
           <chx-streaming-indicator slot="streaming"></chx-streaming-indicator>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
-        <acp-session-banner slot="input-banner" class="acp-chat__banner"></acp-session-banner>
+        <acp-session-banner
+          slot="input-banner"
+          class="acp-chat__banner"
+          .permission=${this.permission}
+          .notice=${this.notice}
+        ></acp-session-banner>
         <chx-message-composer
           slot="message-composer"
           class="acp-chat__composer"
@@ -367,7 +437,13 @@ export class AcpChat extends LitElement {
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
             <md-icon class="acp-chat__attach-icon">${unsafeSVG(addIcon)}</md-icon>
           </md-icon-button>
-          <acp-agent-picker slot="leading" class="acp-chat__agent-picker"></acp-agent-picker>
+          <acp-agent-picker
+            slot="leading"
+            class="acp-chat__agent-picker"
+            .composer=${this.composer}
+            .agents=${this.agents}
+            .agent=${this.agent}
+          ></acp-agent-picker>
           <chx-attachments slot="attachments"></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
           <chx-command-picker
@@ -386,10 +462,18 @@ export class AcpChat extends LitElement {
             @chx-command-query=${this.#onCommandQuery}
             @chx-command-picked=${this.#onCommandPicked}
           ></chx-command-picker>
-          <acp-mode-picker slot="actions"></acp-mode-picker>
-          <acp-context-meter slot="actions"></acp-context-meter>
+          <acp-mode-picker slot="actions" .options=${this.composer?.configOptions ?? []}></acp-mode-picker>
+          <acp-context-meter slot="actions" .usage=${this.composer?.usage ?? null}></acp-context-meter>
           <!-- Where the session runs is picked before the first message; the footer goes with it. -->
-          ${empty ? html`<acp-run-target slot="footer" class="acp-chat__run-target"></acp-run-target>` : nothing}
+          ${empty
+            ? html`<acp-run-target
+                slot="footer"
+                class="acp-chat__run-target"
+                .composer=${this.composer}
+                .branches=${this.branches}
+                .currentBranch=${this.currentBranch}
+              ></acp-run-target>`
+            : nothing}
         </chx-message-composer>
       </chx-chat>
     `;

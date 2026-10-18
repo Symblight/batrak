@@ -16,9 +16,9 @@ import {
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
 import { reportError } from './notices.js';
+import { configOf } from '../models/config-options.js';
 import {
   composerOf,
-  configOf,
   forgetComposer,
   revertConfigOption,
   setConfigOption,

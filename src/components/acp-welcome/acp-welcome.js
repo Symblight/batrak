@@ -4,20 +4,19 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import cloudDownloadIcon from '@material-design-icons/svg/outlined/cloud_download.svg?raw';
-import { projectController } from '../../services/project-controller.js';
 import styles from './acp-welcome.css?inline';
-import { reportError } from '../../services/notices.js';
 
 /**
  * @tag acp-welcome
  * @summary Shown while no project is open: open a local folder or a GitHub repository.
+ * @fires acp-open-local `null`
  * @fires acp-open-repository `null`
  */
 export class AcpWelcome extends LitElement {
   static styles = styles;
 
   #openLocal() {
-    projectController.open().catch((err) => reportError('Opening folder failed', err));
+    this.dispatchEvent(new CustomEvent('acp-open-local', { detail: null, bubbles: true, composed: true }));
   }
 
   #openRepository() {

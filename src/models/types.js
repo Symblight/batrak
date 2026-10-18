@@ -426,6 +426,8 @@
  * @property {string} glyph One or two letters for its badge.
  */
 
+/** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */
+
 /**
  * One value of an ACP session config option.
  * @typedef {Object} ConfigOptionValue
