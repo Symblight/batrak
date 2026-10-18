@@ -409,11 +409,12 @@ export class AcpChat extends LitElement {
         .partElements=${this.partElements}
         @chx-messages-change=${this.#onMessagesChange}
       >
+        <!-- "auto": WebKit sends a smooth pin scroll to an older turn instead of the sent message. -->
         <chx-message-list
           slot="message-list"
           class="acp-chat__message-list"
           ?hidden=${empty}
-          scroll-behavior="smooth"
+          scroll-behavior="auto"
           content-align="start"
           scroll-mode="pin-top"
         >
