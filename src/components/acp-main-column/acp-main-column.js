@@ -44,6 +44,7 @@ import {
   setEditorFont,
   setEditorFontSize,
 } from '../../stores/settings.js';
+import { $worktrees } from '../../stores/sessions.js';
 import { $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import '../acp-comment-bar/acp-comment-bar.js';
@@ -67,6 +68,7 @@ export class AcpMainColumn extends LitElement {
   #review = new ChangesReviewController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
   #workspace = new StoreController(this, { store: $workspace });
+  #worktrees = new StoreController(this, { store: $worktrees });
   #settings = new StoreController(this, { store: $settings });
   #systemFonts = new StoreController(this, { store: $systemFonts });
   #comments = new StoreController(this, { store: $comments });
@@ -195,6 +197,7 @@ export class AcpMainColumn extends LitElement {
         .active=${active}
         .pinned=${pinned}
         .root=${this.#workspace.value?.path ?? null}
+        .worktrees=${this.#worktrees.value}
         .editorFont=${settings.editorFont}
         .editorFontSize=${settings.editorFontSize}
         .comments=${this.#comments.value}

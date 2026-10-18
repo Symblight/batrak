@@ -48,6 +48,9 @@ pub trait SessionEnv: Send + Sync {
     fn agent_cwd(&self) -> &Path;
     /// The same directory on the host.
     fn host_dir(&self) -> &Path;
+    /// The project's own folder (`host_dir` for `local`): a prompt may quote the user's files there
+    /// by absolute path.
+    fn project_dir(&self) -> &Path;
     fn spawn_agent(&self, launch: Launch) -> Result<(AgentProcess, AgentPipes), String>;
     /// Maps a path the agent sent to the host. Doesn't check it: [`confine`] does.
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String>;

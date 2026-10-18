@@ -224,6 +224,14 @@ impl Sessions {
         sessions
     }
 
+    /// Whether a canonical `path` lies in a worktree session's folder, which the page may read.
+    pub fn contains(&self, path: &Path) -> bool {
+        lock(&self.inner.sessions).values().any(|s| {
+            let record = lock(&s.record);
+            record.mode == Mode::Worktree && path.starts_with(&record.agent_cwd)
+        })
+    }
+
     fn get(&self, id: &str) -> Result<Arc<SessionState>, String> {
         lock(&self.inner.sessions).get(id).cloned().ok_or_else(|| format!("unknown session {id}"))
     }
@@ -881,11 +889,23 @@ struct StartedAgent {
     config_options: Vec<Value>,
 }
 
-/// The page's prompt as ACP blocks: paths checked, mapped to the agent's side, selections read.
+/// The page's prompt as ACP blocks: paths checked, mapped to the agent's side, selections read. A
+/// relative path is the session's own file; an absolute one is the user's, in the project (a
+/// worktree session then gets the project's text, as the user selected it).
 fn prompt_blocks(env: &dyn SessionEnv, prompt: Vec<PromptInput>) -> Result<Vec<PromptBlock>, String> {
-    let resolve = |rel: &str| -> Result<(PathBuf, PathBuf), String> {
-        let rel = crate::workspace::checked_rel(rel)?;
-        let host = env::confine(env.host_dir(), &env.host_dir().join(rel), Access::Read)?;
+    let resolve = |path: &str| -> Result<(PathBuf, PathBuf), String> {
+        if Path::new(path).is_absolute() {
+            let host = env::confine(env.project_dir(), Path::new(path), Access::Read)?;
+            return Ok((host.clone(), host));
+        }
+        let rel = crate::workspace::checked_rel(path)?;
+        let host = env::confine(env.host_dir(), &env.host_dir().join(rel), Access::Read).map_err(|e| {
+            if env.host_dir() != env.project_dir() && env.project_dir().join(rel).exists() {
+                format!("{path}: not in this session's worktree (untracked or ignored in the project)")
+            } else {
+                e
+            }
+        })?;
         Ok((host, env.agent_cwd().join(rel)))
     };
     prompt

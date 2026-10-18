@@ -5,6 +5,7 @@ use std::process::Command;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::config::AgentConfigs;
+use crate::session::Sessions;
 use crate::workspace::Workspaces;
 
 use super::blocking;
@@ -14,21 +15,24 @@ fn user_agents_file(configs: &AgentConfigs) -> Option<std::path::PathBuf> {
     configs.user_file().and_then(|f| dunce::canonicalize(f).ok())
 }
 
-/// Reads a file inside an opened workspace root (or the user's agents.json) as UTF-8 text. Fails for
-/// binary (non-UTF-8) files and for paths outside every root; symlinks are resolved first, so none
-/// can lead out of a root.
+/// Reads a file inside an opened workspace root, a worktree session's folder (or the user's
+/// agents.json) as UTF-8 text. Fails for binary (non-UTF-8) files and for paths outside every root;
+/// symlinks are resolved first, so none can lead out of a root.
 #[tauri::command]
 pub async fn read_file(
     workspaces: State<'_, Workspaces>,
     configs: State<'_, AgentConfigs>,
+    sessions: State<'_, Sessions>,
     path: String,
 ) -> Result<String, String> {
     let workspaces = workspaces.inner().clone();
     let configs = configs.inner().clone();
+    let sessions = sessions.inner().clone();
     blocking(move || {
         // Same form as the roots (no `\\?\` on Windows), so `contains` can compare them.
         let canonical = dunce::canonicalize(Path::new(&path)).map_err(|e| format!("{path}: {e}"))?;
-        if !workspaces.contains(&canonical) && Some(&canonical) != user_agents_file(&configs).as_ref() {
+        let readable = workspaces.contains(&canonical) || sessions.contains(&canonical);
+        if !readable && Some(&canonical) != user_agents_file(&configs).as_ref() {
             return Err(format!("{path}: outside the opened folder"));
         }
         fs::read_to_string(&canonical).map_err(|e| format!("{path}: {e}"))

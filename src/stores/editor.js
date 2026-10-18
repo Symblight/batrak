@@ -1,5 +1,6 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentMapStore } from './persistent.js';
+import { $worktrees } from './sessions.js';
 import { $workspace } from './workspace.js';
 import { isUserAgentsFile } from '../models/agents-file.js';
 
@@ -37,15 +38,17 @@ export function parseTabId(id) {
 }
 
 /**
- * Whether a tab may be open in a project: a file tab only inside its folder (the user's agents.json
- * anywhere), a view anywhere.
+ * Whether a tab may be open in a project: a file tab only inside its folder or one of its worktree
+ * sessions' (the user's agents.json anywhere), a view anywhere.
  * @param {string} id Tab id.
  * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
+ * @param {readonly string[]} folders The project's worktree session folders.
  */
-function belongsTo(id, root) {
+function belongsTo(id, root, folders) {
   const { kind, path } = parseTabId(id);
   if (kind !== 'file' || isUserAgentsFile(path)) return true;
-  return root !== NO_PROJECT && path.startsWith(`${root}/`);
+  if (root === NO_PROJECT) return false;
+  return [root, ...folders].some((folder) => path.startsWith(`${folder}/`));
 }
 
 /**
@@ -123,17 +126,18 @@ try {
 export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
 
 /**
- * Tabs of the active project (`$workspace`), only files inside it; while no project is open, the
- * tabs that show no file (Settings).
+ * Tabs of the active project (`$workspace`), only files inside it or its worktree sessions' folders;
+ * while no project is open, the tabs that show no file (Settings).
  */
-export const $editorTabs = computed([$projectTabs, $workspace], (projects, workspace) => {
+export const $editorTabs = computed([$projectTabs, $workspace, $worktrees], (projects, workspace, worktrees) => {
   const root = workspace?.path ?? NO_PROJECT;
   const tabs = projects[root];
   if (!tabs) return NO_TABS;
-  return tabs.paths.every((id) => belongsTo(id, root))
+  const folders = worktrees.filter((w) => w.projectId === root).map((w) => w.folder);
+  return tabs.paths.every((id) => belongsTo(id, root, folders))
     ? tabs
     : tabsOf(
-        tabs.paths.filter((id) => belongsTo(id, root)),
+        tabs.paths.filter((id) => belongsTo(id, root, folders)),
         tabs.active,
         tabs.pinned,
       );

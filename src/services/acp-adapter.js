@@ -3,7 +3,7 @@ import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.
 import { log } from './logger.js';
 import { MESSAGE_PART_RULES } from '../models/chat-parts.js';
 import { applyAgentOptions, setUsage } from '../stores/composer.js';
-import { projectOf, setSessionStatus } from '../stores/sessions.js';
+import { folderOf, setSessionStatus } from '../stores/sessions.js';
 import {
   $sessionNotices,
   addPermissionRequest,
@@ -114,7 +114,7 @@ class MessageBuilder {
     if (update.status) delta.status = update.status;
     if (update.locations) {
       delta.locations = update.locations.map(({ path, line }) => ({
-        path: relativeTo(projectOf(this.sessionId), path),
+        path: relativeTo(folderOf(this.sessionId), path),
         ...(line ? { line } : {}),
       }));
     }

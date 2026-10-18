@@ -406,6 +406,54 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 }
 
 #[tokio::test]
+async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable() {
+    let f = git_fixture("wt-folder");
+    let (local, events) = f.create("l", "fake").unwrap();
+    let (wt, other) = f.create_in("w", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    other.wait_status("idle").await;
+    assert_eq!(local.folder, f.project.to_string_lossy());
+    assert_eq!(Some(&wt.folder), wt.worktree_path.as_ref());
+
+    let root = PathBuf::from(&wt.folder);
+    assert!(f.sessions.contains(&root.join("a.txt")));
+    assert!(!f.sessions.contains(&f.project.join("a.txt")), "a local session's folder is the project's");
+    assert!(!f.sessions.contains(&root.with_file_name("other").join("a.txt")));
+    assert!(!f.sessions.contains(&f.dir.join("data/sessions.json")));
+    f.sessions.remove("w").await.unwrap();
+    assert!(!f.sessions.contains(&root.join("a.txt")), "gone with its session");
+}
+
+#[tokio::test]
+async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks() {
+    let f = git_fixture("wt-prompt");
+    std::fs::write(f.project.join(".env"), "SECRET=1\n").unwrap();
+    std::fs::write(f.project.join("a.txt"), "user one\nuser two\n").unwrap();
+    let (session, events) = f.create_in("p", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let env = lock(&f.sessions.get("p").unwrap().env).clone().unwrap();
+    let wt = PathBuf::from(session.folder);
+    let selection = |path: String| PromptInput::Selection { path, from_line: 1, to_line: 1 };
+
+    // Relative: the session's own copy.
+    let blocks = prompt_blocks(&*env, vec![selection("a.txt".to_owned())]).unwrap();
+    assert_eq!(blocks, [PromptBlock::Selection { uri: format!("{}#L1-1", file_uri(&wt.join("a.txt"))), text: "one\n".to_owned() }]);
+    // Absolute in the project: what the user selected there.
+    let blocks = prompt_blocks(&*env, vec![selection(f.path("a.txt")), PromptInput::Mention { path: f.path("a.txt") }]).unwrap();
+    assert_eq!(
+        blocks,
+        [
+            PromptBlock::Selection { uri: format!("{}#L1-1", file_uri(&f.project.join("a.txt"))), text: "user one\n".to_owned() },
+            PromptBlock::Mention { name: "a.txt".to_owned(), uri: file_uri(&f.project.join("a.txt")) },
+        ]
+    );
+    let err = prompt_blocks(&*env, vec![PromptInput::Mention { path: ".env".to_owned() }]).unwrap_err();
+    assert!(err.contains(".env") && err.contains("not in this session's worktree"), "{err}");
+    let outside = f.dir.join("data/sessions.json").to_string_lossy().into_owned();
+    assert!(prompt_blocks(&*env, vec![PromptInput::Mention { path: outside }]).unwrap_err().contains("outside"));
+}
+
+#[tokio::test]
 async fn a_worktree_session_starts_from_the_chosen_branch() {
     let f = git_fixture("wt-base");
     run_in(&f.project, &["switch", "-qc", "feature"]);

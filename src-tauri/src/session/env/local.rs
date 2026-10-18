@@ -38,6 +38,10 @@ impl SessionEnv for LocalEnv {
         &self.root
     }
 
+    fn project_dir(&self) -> &Path {
+        &self.root
+    }
+
     fn spawn_agent(&self, launch: Launch) -> Result<(AgentProcess, AgentPipes), String> {
         spawn_in(&self.root, launch)
     }

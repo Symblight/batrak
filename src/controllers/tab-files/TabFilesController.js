@@ -6,6 +6,7 @@ import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { $editorTabs, parseTabId } from '../../stores/editor.js';
 import { $gitHead } from '../../stores/git.js';
+import { $sessions } from '../../stores/sessions.js';
 import { $rootId } from '../../stores/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -13,6 +14,7 @@ import { $rootId } from '../../stores/workspace.js';
 /** @typedef {import('../../models/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../models/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../models/types.js').Session} Session */
 
 /** @param {string} path */
 function basename(path) {
@@ -41,6 +43,8 @@ export class TabFilesController {
   #rootId;
   /** @type {StoreController<EditorTabs>} */
   #editorTabs;
+  /** @type {Set<string>} Worktree sessions whose agent is mid-turn. */
+  #busyWorktrees = new Set();
 
   /** @param {ReactiveControllerHost & HTMLElement} host */
   constructor(host) {
@@ -71,7 +75,34 @@ export class TabFilesController {
         }
       },
     });
+    // Nothing watches a worktree: its files are re-read when its session's turn ends.
+    new StoreController(host, {
+      store: $sessions,
+      onChange: (sessions) => {
+        for (const session of sessions) this.#followWorktree(session);
+      },
+    });
     host.addController(this);
+  }
+
+  /**
+   * A worktree session that stopped working may have changed its files: the active tab re-reads
+   * one, the others when activated.
+   * @param {Session} session
+   */
+  #followWorktree(session) {
+    if (session.mode !== 'worktree') return;
+    const busy = session.status === 'working' || session.status === 'waiting';
+    if (busy) {
+      this.#busyWorktrees.add(session.id);
+      return;
+    }
+    if (!this.#busyWorktrees.delete(session.id)) return;
+    for (const tab of this.#tabs) {
+      if (!tab.path.startsWith(`${session.folder}/`) || !readsText(tab) || tab.draft !== null) continue;
+      if (tab.id === this.#activeId) this.#load(tab.id);
+      else if (tab.loaded) this.#patch(tab.id, { loaded: false });
+    }
   }
 
   /** @returns {readonly EditorTab[]} In `$editorTabs` order. */

@@ -8,6 +8,25 @@ export function absPath(root, rel) {
 }
 
 /**
+ * The worktree session folder a path lies in.
+ * @param {readonly import('./types.js').WorktreeFolder[]} worktrees
+ * @param {string} abs Absolute path.
+ */
+export function worktreeOf(worktrees, abs) {
+  return worktrees.find((w) => abs.startsWith(`${w.folder}/`)) ?? null;
+}
+
+/**
+ * A path in a worktree session's folder as the same path in its project; any other as it is.
+ * @param {readonly import('./types.js').WorktreeFolder[]} worktrees
+ * @param {string} abs Absolute path.
+ */
+export function projectPathOf(worktrees, abs) {
+  const worktree = worktreeOf(worktrees, abs);
+  return worktree ? absPath(worktree.projectId, relPath(worktree.folder, abs) ?? '') : abs;
+}
+
+/**
  * @param {string | null} root Absolute path of the project folder.
  * @param {string} abs Absolute path inside the root.
  * @returns {string | null} Relative path, or null when outside the root.

@@ -14,7 +14,7 @@ import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $gitRepo } from '../../stores/git.js';
-import { $activeSessionId } from '../../stores/sessions.js';
+import { $activeFolder, $activeSessionId } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
@@ -43,6 +43,7 @@ export class AcpAgentColumn extends LitElement {
   #agents = new StoreController(this, { store: $agents });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #rootId = new StoreController(this, { store: $rootId });
+  #activeFolder = new StoreController(this, { store: $activeFolder });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
 
@@ -184,7 +185,7 @@ export class AcpAgentColumn extends LitElement {
             .adapter=${acpAdapter}
             .userId=${USER_ID}
             .partElements=${this.#parts.partElements}
-            .root=${workspace.path}
+            .root=${this.#activeFolder.value ?? workspace.path}
             .fileOptions=${this.fileOptions}
             .composer=${composer}
             .agents=${this.#agents.value}

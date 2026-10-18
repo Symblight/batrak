@@ -106,6 +106,10 @@ impl SessionEnv for WorktreeEnv {
         &self.dir
     }
 
+    fn project_dir(&self) -> &Path {
+        &self.project
+    }
+
     fn spawn_agent(&self, launch: Launch) -> Result<(AgentProcess, AgentPipes), String> {
         spawn_in(&self.dir, launch)
     }

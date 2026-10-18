@@ -2,6 +2,7 @@ import { atom, computed } from 'nanostores';
 
 /** @typedef {import('../models/types.js').Session} Session */
 /** @typedef {import('../models/types.js').SessionStatus} SessionStatus */
+/** @typedef {import('../models/types.js').WorktreeFolder} WorktreeFolder */
 
 /** Every agent session, as the backend lists them plus the ones started here; written by `sessionController`. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
@@ -20,6 +21,20 @@ export const $activeSession = computed([$sessions, $activeSessionId], (sessions,
   id === null ? null : (sessions.find((s) => s.id === id) ?? null),
 );
 
+/** The active session's folder (`folderOf()`); notifies only when it changes. */
+export const $activeFolder = computed([$sessions, $draftSessions, $activeSessionId], (sessions, drafts, id) =>
+  id === null ? null : (sessions.find((s) => s.id === id)?.folder ?? drafts[id] ?? null),
+);
+
+/** Every worktree session's folder. */
+export const $worktrees = computed($sessions, (sessions) =>
+  sessions.flatMap((s) =>
+    s.mode === 'worktree' && s.branch
+      ? [/** @type {WorktreeFolder} */ ({ sessionId: s.id, projectId: s.projectId, folder: s.folder, branch: s.branch })]
+      : [],
+  ),
+);
+
 /** @type {Map<string, string>} The session last shown per project id, to come back to it. */
 const lastByProject = new Map();
 
@@ -34,6 +49,15 @@ $activeSessionId.listen((id) => {
  */
 export function projectOf(id) {
   return $sessions.get().find((s) => s.id === id)?.projectId ?? $draftSessions.get()[id] ?? null;
+}
+
+/**
+ * @param {string} id A session's or a draft's.
+ * @returns {string | null} Where its agent works: a worktree session's folder in the worktree, else
+ *   its project. Paths the agent names are relative to it.
+ */
+export function folderOf(id) {
+  return $sessions.get().find((s) => s.id === id)?.folder ?? $draftSessions.get()[id] ?? null;
 }
 
 /** @param {string | null} id */
@@ -92,6 +116,7 @@ export function startSession(id, fields) {
     id,
     projectId,
     status: 'preparing',
+    folder: projectId,
     worktreePath: null,
     branch: null,
     baseCommit: null,

@@ -16,6 +16,7 @@ import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?r
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
+import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
@@ -29,7 +30,7 @@ import '../acp-terminal/acp-terminal.js';
 import '../acp-browser/acp-browser.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import { isAgentsFile } from '../../models/agents-file.js';
-import { relPath } from '../../models/paths.js';
+import { relPath, worktreeOf } from '../../models/paths.js';
 import { lineHeightFor } from '../../models/settings.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
@@ -43,6 +44,7 @@ import styles from './acp-tab-view.css?inline';
 /** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../models/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
 
 /**
  * What the Changes tab shows.
@@ -78,6 +80,7 @@ export class AcpTabView extends LitElement {
     active: { attribute: false },
     pinned: { attribute: false },
     root: { attribute: false },
+    worktrees: { attribute: false },
     editorFont: { attribute: false },
     editorFontSize: { attribute: false },
     comments: { attribute: false },
@@ -146,6 +149,8 @@ export class AcpTabView extends LitElement {
     this.pinned = [];
     /** @type {string | null} The project's path. */
     this.root = null;
+    /** @type {readonly WorktreeFolder[]} Worktree sessions' folders, whose files are marked. */
+    this.worktrees = [];
     /** @type {string | null} The code editor's font family; `null` for its default. */
     this.editorFont = null;
     /** @type {number} px */
@@ -329,7 +334,20 @@ export class AcpTabView extends LitElement {
     if (tab.kind === 'terminal') return { title: 'Terminal', icon: terminalIcon, tooltip: 'Terminal' };
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
     const name = basename(tab.path);
+    const worktree = worktreeOf(this.worktrees, tab.path);
+    if (worktree) {
+      return { title: name, icon: branchIcon, tooltip: `${this.#pathOf(tab.path)} in worktree ${worktree.branch}` };
+    }
     return { title: name, icon: fileIconFor(name) ?? fileIcon, tooltip: tab.path };
+  }
+
+  /**
+   * A file's path as the footer shows it: relative to the project, or to its worktree session's folder.
+   * @param {string} path Absolute.
+   */
+  #pathOf(path) {
+    const worktree = worktreeOf(this.worktrees, path);
+    return relPath(worktree ? worktree.folder : this.root, path) ?? path;
   }
 
   /** @param {EditorTab} tab */
@@ -444,7 +462,7 @@ export class AcpTabView extends LitElement {
           .author=${commentAuthor}
           .comments=${this.#comments.threadsOf(tab.path)}
         ></cdx-comments>
-        <cdx-footer slot="footer" path=${relPath(this.root, tab.path) ?? tab.path}></cdx-footer>
+        <cdx-footer slot="footer" path=${this.#pathOf(tab.path)}></cdx-footer>
       </cdx-code-editor>`;
   }
 

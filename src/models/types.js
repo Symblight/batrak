@@ -44,6 +44,7 @@
  * @property {string} agentId
  * @property {string | null} model
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
+ * @property {string} folder Where the agent works: the project, or the project's folder in its worktree.
  * @property {string | null} worktreePath `worktree` only: its root.
  * @property {string | null} branch `worktree` only: the session's own branch.
  * @property {string | null} baseCommit `worktree` only: the commit it started from.
@@ -199,6 +200,15 @@
  * @property {string} path Canonical absolute path.
  * @property {string} name Last path segment.
  * @property {string | null} rootId Workspace snapshot id; every workspace command takes it.
+ */
+
+/**
+ * A worktree session's folder: its files open in tabs of the project, beside the project's own.
+ * @typedef {Object} WorktreeFolder
+ * @property {string} sessionId
+ * @property {string} projectId
+ * @property {string} folder The project's folder in the worktree (`Session.folder`).
+ * @property {string} branch
  */
 
 /**

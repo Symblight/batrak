@@ -193,6 +193,13 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `acp-file-open` (`<acp-app>` opens the tab and selects the file in the tree, expanding its folders);
   a folder's (a folder chip, or a ref the project lists as a folder, like `@.brama`) fires
   `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
+- **Session folders:** `Session.folder` is where the agent works (the project, or the project's
+  folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
+  (`folderOf()`, `$activeFolder`). A worktree session's files open as tabs of its project
+  (`$worktrees`; `read_file` reads its folder through `Sessions::contains`), marked with a branch
+  icon, no diff gutter, re-read when its turn ends (nothing watches a worktree); its folder refs
+  reveal the project's same folder. A prompt path that is relative is the session's own copy; an
+  absolute one inside the project is the user's file there (a selection quotes the project's text).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set

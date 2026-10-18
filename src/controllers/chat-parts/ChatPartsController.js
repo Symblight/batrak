@@ -5,7 +5,8 @@ import { fileIconFor } from '../../models/file-icons.js';
 import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs.js';
 import { listDir } from '../../services/ipc.js';
 import { projectController } from '../../services/project-controller.js';
-import { $activeSessionId, projectOf } from '../../stores/sessions.js';
+import { projectPathOf } from '../../models/paths.js';
+import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions.js';
 import { AcpMarkdown } from '../../components/acp-markdown/acp-markdown.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -273,17 +274,19 @@ export class ChatPartsController {
 
   /**
    * A file opens (`acp-file-open`), a folder is revealed (`acp-file-reveal`). Text can't tell a
-   * folder from a file (`@.brama`), so the project's listing decides.
-   * @param {string} path As the message names it: relative to the session's project, or absolute.
+   * folder from a file (`@.brama`), so the project's listing decides. A worktree session's file opens
+   * from its worktree; its folder is revealed as the project's, which the tree shows.
+   * @param {string} path As the message names it: relative to the session's folder, or absolute.
    * @param {number | null} line
    * @param {boolean} folder Known to be a folder (a folder chip, `@path/`).
    */
   async #open(path, line, folder) {
-    const root = projectOf($activeSessionId.get() ?? '') ?? projectController.path;
+    const root = folderOf($activeSessionId.get() ?? '') ?? projectController.path;
     const absolute = absoluteRefPath(path, root);
     if (!absolute) return;
-    const isDir = folder || (await isFolder(absolute));
-    const detail = isDir ? { path: absolute } : { path: absolute, line };
+    const inProject = projectPathOf($worktrees.get(), absolute);
+    const isDir = folder || (await isFolder(inProject));
+    const detail = isDir ? { path: inProject } : { path: absolute, line };
     this.#host.dispatchEvent(
       new CustomEvent(isDir ? 'acp-file-reveal' : 'acp-file-open', { detail, bubbles: true, composed: true }),
     );

@@ -78,6 +78,8 @@ pub struct Session {
     pub agent_id: String,
     pub model: Option<String>,
     pub mode: Mode,
+    /// Where the agent works: the project, or its folder in the worktree.
+    pub folder: String,
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
     pub base_commit: Option<String>,
@@ -94,6 +96,7 @@ impl From<&SessionRecord> for Session {
             agent_id: r.agent_id.clone(),
             model: r.model.clone(),
             mode: r.mode,
+            folder: r.agent_cwd.to_string_lossy().into_owned(),
             worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
             branch: r.branch.clone(),
             base_commit: r.base_commit.clone(),
