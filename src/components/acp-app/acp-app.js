@@ -3,11 +3,16 @@ import { agentConfig } from '../../services/agent-config.js';
 import { sessionController } from '../../services/session-controller.js';
 import { projectController } from '../../services/project-controller.js';
 import { gitController } from '../../services/git-controller.js';
-import { onMenuAction } from '../../services/ipc.js';
+import { loadAbout } from '../../services/about.js';
+import { onMenuAction, quickOpen, revealPath } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
 import { reportError } from '../../services/notices.js';
+import { $about } from '../../stores/about.js';
 import { $activePath } from '../../stores/editor.js';
-import { $columnWidths, $hiddenColumns, showColumn } from '../../stores/layout.js';
+import { $gitRepo } from '../../stores/git.js';
+import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout.js';
+import { $notices, dismissNotice, holdNotices } from '../../stores/notices.js';
+import { $rootId, $workspace } from '../../stores/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
 import '../acp-toolbar/acp-toolbar.js';
@@ -23,6 +28,7 @@ import { ColumnResizeController } from '../../controllers/resize/ColumnResizeCon
 import styles from './acp-app.css?inline';
 
 /** @typedef {import('../acp-file-column/acp-file-column.js').SideView} SideView */
+/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 
 /**
  * @tag acp-app
@@ -31,6 +37,7 @@ import styles from './acp-app.css?inline';
 export class AcpApp extends LitElement {
   static properties = {
     sideView: { state: true },
+    quickOpenFiles: { state: true },
   };
 
   static styles = styles;
@@ -45,6 +52,13 @@ export class AcpApp extends LitElement {
   });
   #activePath = new StoreController(this, { store: $activePath });
   #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
+  #workspace = new StoreController(this, { store: $workspace });
+  #rootId = new StoreController(this, { store: $rootId });
+  #gitRepo = new StoreController(this, { store: $gitRepo });
+  #notices = new StoreController(this, { store: $notices });
+  #about = new StoreController(this, { store: $about });
+  /** Sequence of Quick Open queries; only the latest answer is shown. */
+  #quickOpenRequest = 0;
   /** @type {Promise<() => void> | null} */
   #menuListener = null;
 
@@ -70,6 +84,8 @@ export class AcpApp extends LitElement {
     super();
     /** @type {SideView} Mirrors the file column's view, for the rail's pressed button. */
     this.sideView = 'files';
+    /** @type {QuickOpenItem[]} */
+    this.quickOpenFiles = [];
   }
 
   connectedCallback() {
@@ -127,6 +143,7 @@ export class AcpApp extends LitElement {
   }
 
   #showAbout() {
+    loadAbout();
     /** @type {HTMLElementTagNameMap['acp-about-dialog']} */ (this.renderRoot.querySelector('acp-about-dialog')).show();
   }
 
@@ -140,9 +157,37 @@ export class AcpApp extends LitElement {
   }
 
   /** @param {Event} e */
-  #onPaletteFileOpen(e) {
-    e.stopPropagation();
-    this.#main.openFile(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
+  async #onPaletteQuery(e) {
+    const { query } = /** @type {CustomEvent<{ query: string | null }>} */ (e).detail;
+    const id = ++this.#quickOpenRequest;
+    const rootId = this.#rootId.value;
+    if (query === null || rootId === null) {
+      this.quickOpenFiles = [];
+      return;
+    }
+    try {
+      const result = await quickOpen(rootId, query);
+      if (id !== this.#quickOpenRequest || result.cancelled) return;
+      this.quickOpenFiles = result.items;
+    } catch (err) {
+      reportError('File search failed', err);
+    }
+  }
+
+  /** @param {Event} e */
+  #onPalettePick(e) {
+    this.#main.openFile(projectController.absPath(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path));
+  }
+
+  /** @param {Event} e */
+  #onColumnToggle(e) {
+    toggleColumn(/** @type {CustomEvent<{ column: string }>} */ (e).detail.column);
+  }
+
+  /** @param {Event} e */
+  #onRevealPath(e) {
+    const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
+    revealPath(path).catch((err) => log('warn', `showing logs failed: ${err}`));
   }
 
   /** @param {Event} e */
@@ -219,7 +264,13 @@ export class AcpApp extends LitElement {
     // With no tabs beside it, the agent column takes the space.
     const agentFills = !hasCode;
     return html`
-      <acp-toolbar class="acp-app__toolbar"></acp-toolbar>
+      <acp-toolbar
+        class="acp-app__toolbar"
+        .workspace=${this.#workspace.value}
+        .git=${this.#gitRepo.value}
+        .hiddenColumns=${hidden}
+        @acp-column-toggle=${this.#onColumnToggle}
+      ></acp-toolbar>
       <div class="acp-app__columns">
         <acp-session-column class="acp-app__session" ?hidden=${sessionHidden}></acp-session-column>
         ${sessionHidden ? nothing : this.#renderResizer('session', 'Resize sessions column')}
@@ -247,11 +298,19 @@ export class AcpApp extends LitElement {
         ></acp-nav-rail>
       </div>
       <acp-quick-open
-        @acp-file-open=${this.#onPaletteFileOpen}
+        .hasProject=${this.#rootId.value !== null}
+        .files=${this.quickOpenFiles}
+        @acp-quick-open-query=${this.#onPaletteQuery}
+        @acp-quick-open-pick=${this.#onPalettePick}
         @acp-go-to-line=${this.#onPaletteGoToLine}
       ></acp-quick-open>
-      <acp-about-dialog></acp-about-dialog>
-      <acp-snackbars class="acp-app__snackbars"></acp-snackbars>
+      <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
+      <acp-snackbars
+        class="acp-app__snackbars"
+        .notices=${this.#notices.value}
+        @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}
+        @acp-notices-hold=${(/** @type {CustomEvent<{ held: boolean }>} */ e) => holdNotices(e.detail.held)}
+      ></acp-snackbars>
     `;
   }
 }

@@ -12,6 +12,7 @@ import { removeProjectTabs } from '../stores/editor.js';
 import { removeProjectExpandedFolders } from '../stores/file-tree.js';
 import { $projects, addProject, removeProject } from '../stores/projects.js';
 import { reportError } from './notices.js';
+import { absPath, relPath } from '../models/paths.js';
 
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('../models/types.js').OpenedRoot} OpenedRoot */
@@ -65,7 +66,7 @@ export class ProjectController extends EventTarget {
    * @returns {string} Absolute path.
    */
   absPath(rel) {
-    return rel ? `${this.path}/${rel}` : (this.path ?? '');
+    return absPath(this.path, rel);
   }
 
   /**
@@ -73,9 +74,7 @@ export class ProjectController extends EventTarget {
    * @returns {string | null} Relative path, or null when outside the root.
    */
   relPath(abs) {
-    if (!this.path) return null;
-    const prefix = `${this.path}/`;
-    return abs.startsWith(prefix) ? abs.slice(prefix.length) : null;
+    return relPath(this.path, abs);
   }
 
   /** Shows the folder picker and activates the chosen folder as a project. */

@@ -4,24 +4,30 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/dialog';
 import '@symblight/wc-material/icon';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { aboutRows, loadAbout } from '../../services/about.js';
-import { revealPath } from '../../services/ipc.js';
-import { log } from '../../services/logger.js';
-import { $about } from '../../stores/about.js';
+import { aboutRows } from '../../models/about.js';
 import styles from './acp-about-dialog.css?inline';
+
+/** @typedef {import('../../models/types.js').AboutInfo} AboutInfo */
 
 /**
  * @tag acp-about-dialog
  * @summary About Brama: the app's version, what it runs on and its log files.
+ * @fires acp-reveal-path `{ path }` Show log files.
  */
 export class AcpAboutDialog extends LitElement {
+  static properties = {
+    about: { attribute: false },
+  };
+
   static styles = styles;
 
-  #about = new StoreController(this, { store: $about });
+  constructor() {
+    super();
+    /** @type {AboutInfo | null} `null` until read. */
+    this.about = null;
+  }
 
   async show() {
-    loadAbout();
     await /** @type {HTMLElementTagNameMap['md-dialog']} */ (this.renderRoot.querySelector('md-dialog')).show();
   }
 
@@ -30,12 +36,13 @@ export class AcpAboutDialog extends LitElement {
   };
 
   #showLogs = () => {
-    const logDir = this.#about.value?.logDir;
-    if (logDir) revealPath(logDir).catch((err) => log('warn', `showing logs failed: ${err}`));
+    const logDir = this.about?.logDir;
+    if (!logDir) return;
+    this.dispatchEvent(new CustomEvent('acp-reveal-path', { detail: { path: logDir }, bubbles: true, composed: true }));
   };
 
   render() {
-    const about = this.#about.value;
+    const about = this.about;
     return html`<md-dialog class="acp-about-dialog__dialog">
       <div slot="headline" class="acp-about-dialog__headline">
         <img class="acp-about-dialog__logo" src="/favicon.svg" alt="" />

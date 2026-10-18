@@ -1,8 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
-import { quickOpen } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
 import styles from './acp-quick-open.css?inline';
-import { reportError } from '../../services/notices.js';
 
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 
@@ -39,26 +36,28 @@ function highlight(text, hits, offset) {
 /**
  * @tag acp-quick-open
  * @summary Quick Open palette (Cmd/Ctrl+P): files, and `:` for Go to line.
- * @fires acp-file-open `{ path }`
+ * @fires acp-quick-open-query `{ query }` Files to search for; `null` drops the search (closed, or a mode).
+ * @fires acp-quick-open-pick `{ path }` Root-relative file picked.
  * @fires acp-go-to-line `{ line }`
  */
 export class AcpQuickOpen extends LitElement {
   static properties = {
     /** Whether a file is open in the editor (`:` needs one). */
     hasOpenFile: { type: Boolean },
+    /** Whether a project is open, so there are files to search. */
+    hasProject: { type: Boolean },
+    /** Matches for the last `acp-quick-open-query`. */
+    files: { attribute: false },
     query: { state: true },
-    files: { state: true },
     selected: { state: true },
   };
 
   static styles = styles;
 
-  /** Sequence of file queries; only the latest answer is shown. */
-  #requestId = 0;
-
   constructor() {
     super();
     this.hasOpenFile = false;
+    this.hasProject = false;
     this.query = '';
     /** @type {QuickOpenItem[]} */
     this.files = [];
@@ -98,29 +97,30 @@ export class AcpQuickOpen extends LitElement {
     this.#dialog?.close();
   }
 
+  willUpdate(/** @type {Map<string, unknown>} */ changed) {
+    if (changed.has('files')) this.selected = 0;
+  }
+
   /** Dialog closed by any means: drop in-flight answers and reset. */
   #onClose() {
-    this.#requestId++;
     this.query = '';
     this.files = [];
+    this.#query(null);
   }
 
   /** Searches files for the current query, unless a mode prefix is active. */
-  async #queryFiles() {
-    const id = ++this.#requestId;
-    const rootId = projectController.rootId;
-    if (this.#mode || rootId === null) {
+  #queryFiles() {
+    if (this.#mode || !this.hasProject) {
       this.files = [];
-      return;
+      this.#query(null);
+    } else {
+      this.#query(this.query);
     }
-    try {
-      const result = await quickOpen(rootId, this.query);
-      if (id !== this.#requestId || result.cancelled) return;
-      this.files = result.items;
-      this.selected = 0;
-    } catch (err) {
-      reportError('File search failed', err);
-    }
+  }
+
+  /** @param {string | null} query */
+  #query(query) {
+    this.dispatchEvent(new CustomEvent('acp-quick-open-query', { detail: { query }, bubbles: true, composed: true }));
   }
 
   /** @param {Event} e */
@@ -159,14 +159,14 @@ export class AcpQuickOpen extends LitElement {
       key: file.path,
       label: highlight(file.name, hits, nameStart),
       detail: dir ? highlight(dir, hits, 0) : nothing,
-      run: () => this.#emit('acp-file-open', { path: projectController.absPath(file.path) }),
+      run: () => this.#emit('acp-quick-open-pick', { path: file.path }),
     };
   }
 
   /** Text shown instead of an empty list. */
   #message() {
     const mode = this.#mode;
-    if (projectController.rootId === null) return 'Open a project first';
+    if (!this.hasProject) return 'Open a project first';
     if (mode?.soon) return `${mode.title}: coming soon`;
     if (mode) return this.hasOpenFile ? 'Type a line number, e.g. :42' : 'Open a file first';
     if (this.query.trim() === '') return 'Type to search files by name';
