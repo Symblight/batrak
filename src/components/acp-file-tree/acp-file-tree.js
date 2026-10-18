@@ -5,16 +5,12 @@ import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
-import { listDir } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $openingPath, $rootId } from '../../stores/workspace.js';
-import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
+import { absPath } from '../../models/paths.js';
 import styles from './acp-file-tree.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean }} TreeItem */
+/** @typedef {(rootId: string, rel: string) => Promise<WorkspaceEntry[]>} ListDir A folder's entries; `''` is the root. */
 
 /**
  * @param {WorkspaceEntry} e
@@ -43,23 +39,46 @@ function parentOf(path) {
 
 /**
  * @tag acp-file-tree
- * @summary Lazy file tree of the opened project, reloaded where the file watcher reports changes; its
- *   expanded folders are `$expandedFolders`.
+ * @summary Lazy file tree of the opened project, a folder listed as it expands; controlled by its
+ *   `expanded` folders.
  * @fires acp-file-open `{ path }`
+ * @fires acp-expanded-change `{ paths }` Root-relative folders to keep expanded.
  */
 export class AcpFileTree extends LitElement {
+  static properties = {
+    rootId: { attribute: false },
+    root: { attribute: false },
+    listDir: { attribute: false },
+    expanded: { attribute: false },
+    opening: { type: Boolean },
+  };
+
   static styles = styles;
+
+  constructor() {
+    super();
+    /** @type {string | null} The project's snapshot id; `null` while none is open. */
+    this.rootId = null;
+    /** @type {string | null} The project's path. */
+    this.root = null;
+    /** @type {ListDir} */
+    this.listDir = async () => [];
+    /** @type {string[]} Root-relative folders to keep expanded, loaded or not. */
+    this.expanded = [];
+    /** A project is opening: a spinner shows in place of the tree. */
+    this.opening = false;
+  }
 
   /** Lazy loader for tvx-tree-view: one directory level per expand. */
   #dataSource = {
     /** @param {TreeItem | undefined} parent */
     getTreeItems: async (parent) => {
-      const rootId = this.#rootId.value;
+      const rootId = this.rootId;
       if (rootId === null) return [];
-      const items = await listDir(rootId, parent?.id ?? '');
+      const items = await this.listDir(rootId, parent?.id ?? '');
       // A branch still loading when the project switched would land in the new project's folder of
       // the same name: fail it, so the tree drops it.
-      if (this.#rootId.value !== rootId) {
+      if (this.rootId !== rootId) {
         // While it was in flight, the new project's folder of that id was skipped as loading; load
         // it once the tree has cleared the flag (it reloads only a folder that is expanded).
         if (parent) queueMicrotask(() => this.#tree?.loading.reload(parent.id));
@@ -70,13 +89,12 @@ export class AcpFileTree extends LitElement {
     /** @param {TreeItem} item */
     getChildrenCount: (item) => (item.isDir ? undefined : 0),
   };
-  /** A new root lists different files; also fires on connect, before the tree exists. */
-  #rootId = new StoreController(this, { store: $rootId, onChange: () => this.#switchProject() });
-  /** The tree mirrors the store: expansions by the user are written there, then applied from it. */
-  #expanded = new StoreController(this, {
-    store: $expandedFolders,
-    onChange: (paths) => this.#applyExpansion(paths),
-  });
+  /**
+   * The latest `expanded`: what this tree asked for is used before the property comes back with it.
+   * The tree mirrors it: the user's expansions are sent up, then applied from it.
+   * @type {string[]}
+   */
+  #expanded = [];
   /** @type {string | null} Root whose top-level folders the tree lists; `null` until they load. */
   #listedRoot = null;
   /** Set while the tree is changed from the store, so its `tvx-expansion-change` isn't written back. */
@@ -87,14 +105,35 @@ export class AcpFileTree extends LitElement {
   #listedFolders = new Set();
   /** Set while `reveal()` selects a row, so the selection doesn't open it. */
   #revealing = false;
-  #openingPath = new StoreController(this, { store: $openingPath });
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+
+  /** @param {import('lit').PropertyValues<this>} changed */
+  willUpdate(changed) {
+    if (changed.has('expanded')) this.#expanded = this.expanded;
+  }
+
+  /** @param {import('lit').PropertyValues<this>} changed */
+  updated(changed) {
+    // A new root lists different files; not on the first render, when the tree lists it anyway.
+    if (changed.has('rootId') && changed.get('rootId') !== undefined) this.#switchProject();
+    if (changed.has('expanded')) this.#applyExpansion(this.#expanded);
+  }
+
+  /**
+   * Lists folders again where the file watcher reports changes.
+   * @param {string[]} dirs Root-relative; `''` is the root.
+   */
+  reload(dirs) {
     for (const dir of dirs) {
       if (dir === '') this.#tree?.loading.reload();
       else this.#tree?.loading.reload(dir);
     }
-  };
+  }
+
+  /** @param {string[]} paths */
+  #setExpanded(paths) {
+    this.#expanded = paths;
+    this.dispatchEvent(new CustomEvent('acp-expanded-change', { detail: { paths }, bubbles: true, composed: true }));
+  }
 
   /** Lists the active project; its folders expand from the store as their parents load. */
   #switchProject() {
@@ -116,7 +155,7 @@ export class AcpFileTree extends LitElement {
    */
   #applyExpansion(paths, { force = false } = {}) {
     const tree = this.#tree;
-    if (!tree || (!force && this.#listedRoot !== this.#rootId.value)) return;
+    if (!tree || (!force && this.#listedRoot !== this.rootId)) return;
     this.#applying = true;
     try {
       tree.expansion.set(paths);
@@ -132,13 +171,13 @@ export class AcpFileTree extends LitElement {
    */
   #onExpansionChange(e) {
     const tree = this.#tree;
-    if (this.#applying || !tree || this.#listedRoot !== this.#rootId.value) return;
+    if (this.#applying || !tree || this.#listedRoot !== this.rootId) return;
     const { expandedItems } = /** @type {CustomEvent<{ expandedItems: Set<PropertyKey> }>} */ (e).detail;
     const next = new Set(/** @type {string[]} */ ([...expandedItems].filter((id) => typeof id === 'string')));
-    for (const path of this.#expanded.value) {
+    for (const path of this.#expanded) {
       if (tree.nodes.getItem(path) === null) next.add(path);
     }
-    setExpandedFolders([...next]);
+    this.#setExpanded([...next]);
   }
 
   /**
@@ -148,26 +187,26 @@ export class AcpFileTree extends LitElement {
    */
   async #onChildrenLoaded(e) {
     const { id, items } = /** @type {CustomEvent<{ id: string | null, items: TreeItem[] }>} */ (e).detail;
-    const rootId = this.#rootId.value;
+    const rootId = this.rootId;
     // On launch the tree lists before `restore()` opens the root; that empty listing would read as
     // every stored folder being gone.
     if (rootId === null) return;
     if (id === null) this.#listedRoot = rootId;
     const parent = id ?? '';
     const present = new Set(items.map((item) => item.id));
-    const stored = this.#expanded.value;
+    const stored = this.#expanded;
     const gone = stored.filter((path) => parentOf(path) === parent && !present.has(path));
     if (gone.length) {
-      setExpandedFolders(stored.filter((path) => !gone.some((g) => path === g || path.startsWith(`${g}/`))));
+      this.#setExpanded(stored.filter((path) => !gone.some((g) => path === g || path.startsWith(`${g}/`))));
     }
     // A branch's children are in the tree's model when this fires; top-level items only after its
     // next render (`willUpdate`), and it skips ids it doesn't know yet.
     if (id === null) {
       await this.#tree?.updateComplete;
-      if (this.#rootId.value !== rootId) return;
+      if (this.rootId !== rootId) return;
     }
     this.#listedFolders.add(parent);
-    this.#applyExpansion(this.#expanded.value);
+    this.#applyExpansion(this.#expanded);
     this.#selectPending();
   }
 
@@ -180,10 +219,10 @@ export class AcpFileTree extends LitElement {
   reveal(rel, { expand = false } = {}) {
     const folders = expand ? [rel] : [];
     for (let dir = parentOf(rel); dir; dir = parentOf(dir)) folders.push(dir);
-    const stored = this.#expanded.value;
+    const stored = this.#expanded;
     const collapsed = folders.filter((dir) => !stored.includes(dir));
     this.#pendingReveal = rel;
-    if (collapsed.length) setExpandedFolders([...stored, ...collapsed]);
+    if (collapsed.length) this.#setExpanded([...stored, ...collapsed]);
     this.#selectPending();
   }
 
@@ -214,16 +253,6 @@ export class AcpFileTree extends LitElement {
   /** @returns {HTMLElementTagNameMap['tvx-tree-view'] | null | undefined} */
   get #tree() {
     return this.renderRoot?.querySelector('tvx-tree-view');
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    projectController.addEventListener('fs-change', this.#onFsChange);
-  }
-
-  disconnectedCallback() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
-    super.disconnectedCallback();
   }
 
   /**
@@ -271,7 +300,7 @@ export class AcpFileTree extends LitElement {
   #open(rel) {
     this.dispatchEvent(
       new CustomEvent('acp-file-open', {
-        detail: { path: projectController.absPath(rel) },
+        detail: { path: absPath(this.root, rel) },
         bubbles: true,
         composed: true,
       }),
@@ -279,8 +308,8 @@ export class AcpFileTree extends LitElement {
   }
 
   render() {
-    const opening = this.#openingPath.value !== null;
-    // Hidden rather than removed while a project opens, so `#rootId` can still reload it.
+    const opening = this.opening;
+    // Hidden rather than removed while a project opens, so a new `rootId` can still reload it.
     return html`
       ${opening
         ? html`<div class="acp-file-tree__loading">

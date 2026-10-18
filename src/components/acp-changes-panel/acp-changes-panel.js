@@ -11,17 +11,13 @@ import '@symblight/wc-material/tooltip';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { gitController } from '../../services/git-controller.js';
-import { gitLastCommitMessage } from '../../services/ipc.js';
-import { log } from '../../services/logger.js';
-import { projectController } from '../../services/project-controller.js';
-import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git.js';
-import { notify } from '../../stores/notices.js';
+import { absPath } from '../../models/paths.js';
 import styles from './acp-changes-panel.css?inline';
 
 /** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../../models/types.js').GitFileKind} GitFileKind */
+/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
 /** @typedef {'changes' | 'untracked'} ChangeGroup */
 
 /**
@@ -100,12 +96,19 @@ function buildGroups(files) {
 
 /**
  * @tag acp-changes-panel
- * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit; kept current while active.
+ * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit.
  * @fires acp-diff-open `{ path }` A changed file's name was clicked: show its diff in the Changes tab.
+ * @fires acp-commit-select `{ ids }` The files picked for the commit.
+ * @fires acp-changes-refresh `null`
+ * @fires acp-amend-start `null` Amend was turned on: `fillAmendMessage()` gets the last commit's message.
+ * @fires acp-commit `{ paths, message, amend }` Answered by `commitFinished()`.
  */
 export class AcpChangesPanel extends LitElement {
   static properties = {
-    active: { type: Boolean },
+    changes: { attribute: false },
+    repo: { attribute: false },
+    selection: { attribute: false },
+    root: { attribute: false },
     message: { state: true },
     amend: { state: true },
     committing: { state: true },
@@ -113,22 +116,6 @@ export class AcpChangesPanel extends LitElement {
 
   static styles = styles;
 
-  #changes = new StoreController(this, {
-    store: $gitChanges,
-    onChange: (changes, old) => {
-      if (changes.files !== old?.files || changes.loaded !== old?.loaded) this.#rebuild();
-    },
-  });
-  #repo = new StoreController(this, { store: $gitRepo });
-  /** Picked in this panel or the Changes tab: the tree follows either. */
-  #selection = new StoreController(this, {
-    store: $commitSelection,
-    onChange: () => {
-      this.#syncTree = true;
-    },
-  });
-  /** @type {(() => void) | null} Stops watching; set while active and connected. */
-  #unwatch = null;
   /** @type {ChangeNode[]} */
   #nodes = [];
   /** @type {Map<string, ChangeNode>} Files (what a commit takes) by id. */
@@ -149,8 +136,14 @@ export class AcpChangesPanel extends LitElement {
 
   constructor() {
     super();
-    /** @type {boolean} Shown in the side pane: changes are computed and kept current. */
-    this.active = false;
+    /** @type {GitChangesView} */
+    this.changes = { files: [], loaded: false, loading: false, error: null };
+    /** @type {GitRepoView} */
+    this.repo = { repo: null, error: null };
+    /** @type {ReadonlySet<string>} Picked here or in the Changes tab: the tree follows either. */
+    this.selection = new Set();
+    /** @type {string | null} The project's path. */
+    this.root = null;
     /** @type {string} */
     this.message = '';
     /** @type {boolean} */
@@ -159,21 +152,46 @@ export class AcpChangesPanel extends LitElement {
     this.committing = false;
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    if (this.active) this.#watch();
-  }
-
-  disconnectedCallback() {
-    this.#stopWatching();
-    super.disconnectedCallback();
-  }
-
-  /** @param {import('lit').PropertyValues} changed */
+  /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    if (!changed.has('active')) return;
-    if (this.active) this.#watch();
-    else this.#stopWatching();
+    const old = changed.get('changes');
+    if (changed.has('changes') && (this.changes.files !== old?.files || this.changes.loaded !== old?.loaded)) {
+      this.#rebuild();
+    }
+    if (changed.has('selection')) this.#syncTree = true;
+  }
+
+  /**
+   * The last commit's message, for Amend; ignored once Amend is off again.
+   * @param {string | null} message `null` when there is none.
+   */
+  fillAmendMessage(message) {
+    if (this.amend && message !== null) this.message = message;
+  }
+
+  /**
+   * The commit `acp-commit` asked for is done; a successful one clears the form.
+   * @param {boolean} succeeded
+   */
+  commitFinished(succeeded) {
+    this.committing = false;
+    if (!succeeded) return;
+    this.message = '';
+    this.#draft = '';
+    this.amend = false;
+  }
+
+  /**
+   * @param {string} type
+   * @param {object | null} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /** @param {Iterable<string>} ids */
+  #select(ids) {
+    this.#emit('acp-commit-select', { ids: [...ids] });
   }
 
   updated() {
@@ -188,30 +206,19 @@ export class AcpChangesPanel extends LitElement {
 
   /** @returns {string[]} Ids of the files going into the commit. */
   get #included() {
-    const selection = this.#selection.value;
+    const selection = this.selection;
     return [...this.#leaves.keys()].filter((id) => selection.has(id));
   }
 
-  #watch() {
-    this.#unwatch ??= gitController.watchChanges();
-  }
-
-  #stopWatching() {
-    this.#unwatch?.();
-    this.#unwatch = null;
-  }
-
-  /** Rebuilds the list from `$gitChanges`, keeping checks and collapsed groups that still exist. */
+  /** Rebuilds the list from `changes`, keeping checks and collapsed groups that still exist. */
   #rebuild() {
-    this.#nodes = buildGroups(this.#changes.value.files);
+    this.#nodes = buildGroups(this.changes.files);
     this.#leaves = new Map();
     this.#groupIds = new Set();
     for (const group of this.#nodes) {
       this.#groupIds.add(group.id);
       for (const file of group.children ?? []) this.#leaves.set(file.id, file);
     }
-    // Forget picks of files no longer changed; not while a scan is pending, when the list is empty.
-    if (this.#changes.value.loaded) setCommitSelection(this.#included);
     this.#collapsed = new Set([...this.#collapsed].filter((id) => this.#groupIds.has(id)));
     this.#syncTree = true;
     this.#syncing = true;
@@ -236,7 +243,7 @@ export class AcpChangesPanel extends LitElement {
   #onSelectionChange(e) {
     if (this.#syncing) return;
     const { selectedItems } = /** @type {CustomEvent<{ selectedItems: Set<PropertyKey> }>} */ (e).detail;
-    setCommitSelection([...this.#leaves.keys()].filter((id) => selectedItems.has(id)));
+    this.#select([...this.#leaves.keys()].filter((id) => selectedItems.has(id)));
   }
 
   /** @param {Event} e */
@@ -248,11 +255,11 @@ export class AcpChangesPanel extends LitElement {
 
   /** The all-files checkbox: everything in unless everything already is, then everything out. */
   #onToggleAll() {
-    setCommitSelection(this.#included.length === this.#leaves.size ? [] : this.#leaves.keys());
+    this.#select(this.#included.length === this.#leaves.size ? [] : this.#leaves.keys());
   }
 
   /** @param {Event} e */
-  async #onAmendChange(e) {
+  #onAmendChange(e) {
     const amend = /** @type {HTMLInputElement} */ (e.target).checked;
     this.amend = amend;
     if (!amend) {
@@ -260,9 +267,7 @@ export class AcpChangesPanel extends LitElement {
       return;
     }
     this.#draft = this.message;
-    const rootId = projectController.rootId;
-    const last = rootId ? await gitLastCommitMessage(rootId).catch(() => null) : null;
-    if (this.amend && last !== null) this.message = last;
+    this.#emit('acp-amend-start', null);
   }
 
   /** @param {Event} e */
@@ -273,16 +278,10 @@ export class AcpChangesPanel extends LitElement {
   /** @param {ChangeNode} node */
   #open(node) {
     if (!node.file) return;
-    this.dispatchEvent(
-      new CustomEvent('acp-diff-open', {
-        detail: { path: projectController.absPath(node.id) },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this.#emit('acp-diff-open', { path: absPath(this.root, node.id) });
   }
 
-  async #commit() {
+  #commit() {
     if (this.committing) return;
     /** @type {string[]} */
     const paths = [];
@@ -292,21 +291,8 @@ export class AcpChangesPanel extends LitElement {
       paths.push(file.path);
       if (file.origPath) paths.push(file.origPath);
     }
-    const amend = this.amend;
     this.committing = true;
-    try {
-      const { sha, summary } = await gitController.commit(paths, this.message.trim(), amend);
-      notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
-      this.message = '';
-      this.#draft = '';
-      this.amend = false;
-    } catch (err) {
-      // Not `reportError`: a hook's output may quote file contents, which stay out of the log.
-      log('warn', `${amend ? 'amend' : 'commit'} failed`);
-      notify('error', `Commit failed: ${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      this.committing = false;
-    }
+    this.#emit('acp-commit', { paths, message: this.message.trim(), amend: this.amend });
   }
 
   /**
@@ -381,7 +367,7 @@ export class AcpChangesPanel extends LitElement {
   };
 
   #renderBody() {
-    const { loaded, loading, error } = this.#changes.value;
+    const { loaded, loading, error } = this.changes;
     if (loading && !loaded) {
       return html`<div class="acp-changes-panel__state">
         <md-progress-circular class="acp-changes-panel__spinner" aria-label="Loading changes"></md-progress-circular>
@@ -392,7 +378,7 @@ export class AcpChangesPanel extends LitElement {
         <b class="acp-changes-panel__state-title">Couldn't read changes</b><span>${error}</span>
       </div>`;
     }
-    if (loaded && !this.#repo.value.repo) {
+    if (loaded && !this.repo.repo) {
       return html`<div class="acp-changes-panel__state">
         <b class="acp-changes-panel__state-title">Not a git repository</b>
       </div>`;
@@ -447,7 +433,7 @@ export class AcpChangesPanel extends LitElement {
           class="acp-changes-panel__refresh"
           aria-label="Refresh"
           title="Refresh"
-          @click=${() => gitController.refreshChanges()}
+          @click=${() => this.#emit('acp-changes-refresh', null)}
         >
           <md-icon class="acp-changes-panel__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
         </md-icon-button>

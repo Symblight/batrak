@@ -365,6 +365,13 @@
  */
 
 /**
+ * A file's Find in Files matches.
+ * @typedef {Object} SearchFileResult
+ * @property {string} path Root-relative.
+ * @property {LineMatch[]} matches
+ */
+
+/**
  * Streamed Find in Files message; mirrors `workspace::search::SearchEvent`.
  * @typedef {{ kind: 'file', path: string, matches: LineMatch[] }
  *   | { kind: 'done', total: number, limitHit: boolean, cancelled: boolean }

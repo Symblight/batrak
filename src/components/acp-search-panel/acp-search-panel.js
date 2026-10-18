@@ -10,15 +10,12 @@ import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw'
 import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
-import { cancelSearch, findInFiles } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $rootId } from '../../stores/workspace.js';
+import { absPath } from '../../models/paths.js';
 import styles from './acp-search-panel.css?inline';
 
 /** @typedef {import('../../models/types.js').LineMatch} LineMatch */
-/** @typedef {import('../../models/types.js').SearchEvent} SearchEvent */
-/** @typedef {{ path: string, matches: LineMatch[] }} FileResult */
+/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types.js').SearchFileResult} FileResult */
 
 /** Typing pause before a search starts. */
 const DEBOUNCE_MS = 250;
@@ -45,59 +42,45 @@ function highlight(text, ranges) {
 
 /**
  * @tag acp-search-panel
- * @summary Find in Files over the workspace snapshot, results streamed in by file.
+ * @summary Find in Files: the query, its options and filters, and the results by file.
+ * @fires acp-search `{ options, delay }` Search for `options` after `delay` ms (typing pauses first).
  * @fires acp-file-open `{ path, line }` when a match is clicked
  */
 export class AcpSearchPanel extends LitElement {
   static properties = {
-    /** Hidden panels cancel their search. */
-    active: { type: Boolean },
+    root: { attribute: false },
+    results: { attribute: false },
+    searching: { type: Boolean },
+    limitHit: { type: Boolean },
+    error: { type: String },
     query: { state: true },
     caseSensitive: { state: true },
     wholeWord: { state: true },
     regex: { state: true },
     include: { state: true },
     exclude: { state: true },
-    results: { state: true },
     collapsed: { state: true },
-    searching: { state: true },
-    limitHit: { state: true },
-    error: { state: true },
   };
 
   static styles = styles;
 
-  /** Id of the current search; events of older ones are dropped. */
-  #generation = 0;
-  /** @type {ReturnType<typeof setTimeout> | undefined} */
-  #debounce = undefined;
-  /** @type {FileResult[]} Results received since the last render. */
-  #incoming = [];
-  #frame = 0;
-  /** Re-runs the search in a newly opened folder. */
-  #rootId = new StoreController(this, { store: $rootId, onChange: () => this.#schedule(0) });
-
   constructor() {
     super();
-    this.active = false;
+    /** @type {string | null} The project's path. */
+    this.root = null;
+    /** @type {readonly FileResult[]} */
+    this.results = [];
+    this.searching = false;
+    this.limitHit = false;
+    this.error = '';
     this.query = '';
     this.caseSensitive = false;
     this.wholeWord = false;
     this.regex = false;
     this.include = '';
     this.exclude = '';
-    /** @type {FileResult[]} */
-    this.results = [];
     /** @type {Set<string>} Paths of collapsed file groups. */
     this.collapsed = new Set();
-    this.searching = false;
-    this.limitHit = false;
-    this.error = '';
-  }
-
-  disconnectedCallback() {
-    this.#cancel();
-    super.disconnectedCallback();
   }
 
   /** Focuses the query input and selects its text. */
@@ -108,46 +91,18 @@ export class AcpSearchPanel extends LitElement {
     if (field.inputOrTextArea instanceof HTMLInputElement) field.inputOrTextArea.select();
   }
 
-  /** @param {import('lit').PropertyValues} changed */
+  /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    if (!changed.has('active') || changed.get('active') === undefined) return;
-    // Closing the panel stops the search; reopening runs it again.
-    if (this.active) this.#schedule(0);
-    else this.#cancel();
+    // A new search starts with no results: its groups start expanded.
+    if (changed.has('results') && this.results.length === 0) this.collapsed = new Set();
   }
 
   /**
-   * (Re)starts the search after `delay` ms.
+   * Searches for the current inputs after `delay` ms.
    * @param {number} delay
    */
   #schedule(delay) {
-    clearTimeout(this.#debounce);
-    this.#debounce = setTimeout(() => this.#search(), delay);
-  }
-
-  /** Stops the running search; its late events are ignored. */
-  #cancel() {
-    clearTimeout(this.#debounce);
-    this.#generation++;
-    this.searching = false;
-    if (projectController.rootId) cancelSearch(projectController.rootId).catch(() => {});
-  }
-
-  /** Starts a search for the current inputs, replacing any previous results. */
-  async #search() {
-    const generation = ++this.#generation;
-    const rootId = projectController.rootId;
-    this.results = [];
-    this.#incoming = [];
-    this.collapsed = new Set();
-    this.limitHit = false;
-    this.error = '';
-    if (!this.active || rootId === null || this.query === '') {
-      this.searching = false;
-      if (rootId !== null) cancelSearch(rootId).catch(() => {});
-      return;
-    }
-    this.searching = true;
+    /** @type {SearchOptions} */
     const options = {
       query: this.query,
       caseSensitive: this.caseSensitive,
@@ -156,35 +111,7 @@ export class AcpSearchPanel extends LitElement {
       include: this.include,
       exclude: this.exclude,
     };
-    try {
-      await findInFiles(rootId, options, (event) => {
-        if (generation === this.#generation) this.#onEvent(event);
-      });
-    } catch (err) {
-      if (generation === this.#generation) {
-        this.searching = false;
-        this.error = String(err);
-      }
-    }
-  }
-
-  /** @param {SearchEvent} event */
-  #onEvent(event) {
-    if (event.kind === 'file') {
-      // Batch messages into one render per frame.
-      this.#incoming.push({ path: event.path, matches: event.matches });
-      this.#frame ||= requestAnimationFrame(() => {
-        this.#frame = 0;
-        this.results = [...this.results, ...this.#incoming];
-        this.#incoming = [];
-      });
-    } else if (event.kind === 'done') {
-      this.searching = false;
-      this.limitHit = event.limitHit;
-    } else {
-      this.searching = false;
-      this.error = event.message;
-    }
+    this.dispatchEvent(new CustomEvent('acp-search', { detail: { options, delay }, bubbles: true, composed: true }));
   }
 
   /**
@@ -224,7 +151,7 @@ export class AcpSearchPanel extends LitElement {
   #open(rel, line) {
     this.dispatchEvent(
       new CustomEvent('acp-file-open', {
-        detail: { path: projectController.absPath(rel), line },
+        detail: { path: absPath(this.root, rel), line },
         bubbles: true,
         composed: true,
       }),
