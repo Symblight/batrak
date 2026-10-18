@@ -1,30 +1,27 @@
-import {
-  $commentFocus,
-  $comments,
-  addComment,
-  deleteComment,
-  editComment,
-  focusComment,
-  threadsOf,
-} from '../../stores/comments.js';
-import { commentAuthor } from '../../models/editor-plugins.js';
 import { editorOf } from '../../models/editor-events.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('../../models/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 
 /**
  * @typedef {Object} EditorCommentsConfig
  * @property {(file: string) => string | null} pathOf Absolute path of an editor's `filename`; `null`
  *   when it can't be resolved (no project).
+ * @property {() => Readonly<Record<string, readonly AgentThread[]>>} comments Every file's threads, by
+ *   absolute path (the host's property).
+ * @property {() => CommentFocus | null} focus A comment to reveal (the host's property).
  */
 
+/** @type {readonly AgentThread[]} */
+const NONE = [];
+
 /**
- * Connects the host's `cdx-code-editor`s to `$comments`: their `<cdx-comments>` are controlled
- * (`.comments=${controller.threadsOf(path)}`), their submit / edit / delete land in the store, and a
- * `$commentFocus` on a file one of them shows is revealed there. Any number of editors per host, any
- * number of hosts.
+ * Controls the host's `cdx-code-editor`s' comments: their `<cdx-comments>` show the host's threads
+ * (`.comments=${controller.threadsOf(path)}`), their submit / edit / delete become host events, and a
+ * focus on a file one of them shows is revealed there. Any number of editors per host, any number
+ * of hosts.
  * @implements {ReactiveController}
  */
 export class EditorCommentsController {
@@ -32,8 +29,6 @@ export class EditorCommentsController {
   #host;
   /** @type {EditorCommentsConfig} */
   #config;
-  /** @type {(() => void)[]} */
-  #unsubscribe = [];
   /** A reveal waiting for the editors to settle; one at a time. */
   #revealing = false;
 
@@ -52,34 +47,36 @@ export class EditorCommentsController {
    * @returns {readonly AgentThread[]}
    */
   threadsOf(path) {
-    return threadsOf(path ?? '');
+    return this.#config.comments()[path ?? ''] ?? NONE;
   }
 
   hostConnected() {
     this.#host.addEventListener('cdx-comment-submit', this.#onSubmit);
     this.#host.addEventListener('cdx-comment-edit', this.#onEdit);
     this.#host.addEventListener('cdx-comment-delete', this.#onDelete);
-    this.#unsubscribe = [
-      $comments.listen(() => this.#host.requestUpdate()),
-      $commentFocus.listen(() => this.#host.requestUpdate()),
-    ];
   }
 
   hostDisconnected() {
     this.#host.removeEventListener('cdx-comment-submit', this.#onSubmit);
     this.#host.removeEventListener('cdx-comment-edit', this.#onEdit);
     this.#host.removeEventListener('cdx-comment-delete', this.#onDelete);
-    for (const unsubscribe of this.#unsubscribe) unsubscribe();
-    this.#unsubscribe = [];
   }
 
   hostUpdated() {
-    if ($commentFocus.get() && !this.#revealing) this.#reveal();
+    if (this.#config.focus() && !this.#revealing) this.#reveal();
   }
 
-  /** Reveals `$commentFocus` in a visible editor of its file, once that editor holds the thread. */
+  /**
+   * @param {string} type
+   * @param {object} detail
+   */
+  #emit(type, detail) {
+    this.#host.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /** Reveals the focus in a visible editor of its file, once that editor holds the thread. */
   async #reveal() {
-    const focus = $commentFocus.get();
+    const focus = this.#config.focus();
     if (!focus) return;
     const editor = [...this.#host.renderRoot.querySelectorAll('cdx-code-editor')].find(
       (e) => this.#config.pathOf(e.filename) === focus.path && e.getClientRects().length > 0, // not in a hidden tab
@@ -94,9 +91,9 @@ export class EditorCommentsController {
     } finally {
       this.#revealing = false;
     }
-    if ($commentFocus.get() !== focus) return;
+    if (this.#config.focus() !== focus) return;
     if (!editor.comments.get().some((/** @type {{ id: string }} */ t) => t.id === focus.threadId)) return; // not loaded yet: next update
-    focusComment(null);
+    this.#emit('acp-comment-revealed', { focus });
     editor.comments.reveal(focus.threadId);
   }
 
@@ -115,18 +112,18 @@ export class EditorCommentsController {
     if (path === null || detail.isReply) return;
     const doc = editorOf(e, this.#host.renderRoot)?.view?.state.doc;
     const fromLine = detail.range && doc ? doc.lineAt(Math.min(detail.range.from, doc.length)).number : detail.line;
-    addComment(path, { ...detail, fromLine: Math.min(fromLine, detail.line) }, commentAuthor);
+    this.#emit('acp-comment-add', { path, draft: { ...detail, fromLine: Math.min(fromLine, detail.line) } });
   };
 
   #onEdit = (/** @type {Event} */ e) => {
     const { threadId, commentId, body } = /** @type {HTMLElementEventMap['cdx-comment-edit']} */ (e).detail;
     const path = this.#pathOf(e);
-    if (path !== null) editComment(path, threadId, commentId, body);
+    if (path !== null) this.#emit('acp-comment-edit', { path, threadId, commentId, body });
   };
 
   #onDelete = (/** @type {Event} */ e) => {
     const { threadId, commentId } = /** @type {HTMLElementEventMap['cdx-comment-delete']} */ (e).detail;
     const path = this.#pathOf(e);
-    if (path !== null) deleteComment(path, threadId, commentId);
+    if (path !== null) this.#emit('acp-comment-delete', { path, threadId, commentId });
   };
 }

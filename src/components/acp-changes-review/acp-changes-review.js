@@ -19,20 +19,18 @@ import keyboardArrowDownIcon from '@material-design-icons/svg/outlined/keyboard_
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { gitController } from '../../services/git-controller.js';
-import { gitFileAtHead, readFile } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { $commitSelection, $gitChanges, $gitHead, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
-import { $rootId } from '../../stores/workspace.js';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
+import { absPath } from '../../models/paths.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './acp-changes-review.css?inline';
 
 /** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 
 /**
  * A changed file as a row.
@@ -41,15 +39,6 @@ import styles from './acp-changes-review.css?inline';
  * @property {string} name File name.
  * @property {string} dir Its folder, relative to the root; `''` at the top.
  * @property {GitFileStatus} file
- */
-
-/**
- * An expanded file's diff: the file now against the file at HEAD.
- * @typedef {Object} FileDiff
- * @property {string} content `''` for a deleted file.
- * @property {string} baseline `''` for a new file.
- * @property {string} error
- * @property {boolean} loading
  */
 
 /** Disabled controls of features that don't exist yet say so on hover. */
@@ -98,24 +87,6 @@ function relativePath(from, to) {
   return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
 }
 
-/**
- * Whether two status entries of one file describe the same change.
- * @param {GitFileStatus | undefined} a
- * @param {GitFileStatus | undefined} b
- */
-function sameStatus(a, b) {
-  return (
-    a !== undefined &&
-    b !== undefined &&
-    a.kind === b.kind &&
-    a.staged === b.staged &&
-    a.unstaged === b.unstaged &&
-    a.origPath === b.origPath &&
-    a.added === b.added &&
-    a.removed === b.removed
-  );
-}
-
 /** @param {GitFileStatus[]} files */
 function toRows(files) {
   return files
@@ -129,87 +100,75 @@ function toRows(files) {
 
 /**
  * @tag acp-changes-review
- * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD; kept current while active.
+ * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD.
  * @fires acp-file-open `{ path }` Edit was pressed on a file.
+ * @fires acp-change-toggle `{ id }` A row was clicked: expand or collapse its diff.
+ * @fires acp-change-expand `{ id }`
+ * @fires acp-changes-collapse `null` Collapse all.
+ * @fires acp-commit-pick `{ ids, picked }`
+ * @fires acp-commit-select `{ ids }` Select all, or none.
  */
 export class AcpChangesReview extends LitElement {
   static properties = {
-    active: { type: Boolean },
-    expanded: { state: true },
-    diffs: { state: true },
+    changes: { attribute: false },
+    repo: { attribute: false },
+    selection: { attribute: false },
+    expanded: { attribute: false },
+    diffs: { attribute: false },
+    root: { attribute: false },
+    comments: { attribute: false },
+    commentFocus: { attribute: false },
     hovered: { state: true },
   };
 
   static styles = styles;
 
-  #changes = new StoreController(this, { store: $gitChanges, onChange: (changes, old) => this.#onChanges(changes, old) });
-  /**
-   * HEAD moved: every diff's baseline is stale; read again with the status refresh that follows.
-   * Not when HEAD first becomes known.
-   */
-  #gitHead = new StoreController(this, {
-    store: $gitHead,
-    onChange: (_head, old) => {
-      if (old == null) return;
-      for (const id of this.expanded) this.#staleDiffs.add(id);
-    },
+  #comments = new EditorCommentsController(this, {
+    pathOf: (file) => absPath(this.root, file),
+    comments: () => this.comments,
+    focus: () => this.commentFocus,
   });
-  /** @type {Set<string>} Expanded files whose diff must be read again, once the status is current. */
-  #staleDiffs = new Set();
-  /** @type {string | null} Root whose files are expanded and diffed. */
-  #shownRoot = null;
-  /** @type {Map<string, ReadonlySet<string>>} Expanded files of the other open roots, by root id. */
-  #expandedByRoot = new Map();
-  #rootId = new StoreController(this, { store: $rootId, onChange: (rootId) => this.#switchRoot(rootId) });
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { added, modified, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
-    for (const id of [...added, ...modified, ...removed]) {
-      if (this.expanded.has(id)) this.#staleDiffs.add(id);
-    }
-  };
-  #repo = new StoreController(this, { store: $gitRepo });
-  #selection = new StoreController(this, { store: $commitSelection });
-  #comments = new EditorCommentsController(this, { pathOf: (file) => projectController.absPath(file) });
-  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => projectController.absPath(file) });
-  /** @type {(() => void) | null} Stops watching; set while active and connected. */
-  #unwatch = null;
+  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => absPath(this.root, file) });
   /** @type {ChangeRow[]} */
   #rows = [];
   /** @type {string | null} A file to scroll to once its row is rendered. */
   #pendingScroll = null;
-  /** @type {Map<string, number>} Latest diff read per file; an older one that resolves later is dropped. */
-  #loads = new Map();
-  #loadCount = 0;
 
   constructor() {
     super();
-    /** @type {boolean} The active tab: changes are computed and kept current. */
-    this.active = false;
+    /** @type {GitChangesView} */
+    this.changes = { files: [], loaded: false, loading: false, error: null };
+    /** @type {GitRepoView} */
+    this.repo = { repo: null, error: null };
+    /** @type {ReadonlySet<string>} Files picked for the next commit. */
+    this.selection = new Set();
     /** @type {ReadonlySet<string>} Files shown with their diff. */
     this.expanded = new Set();
     /** @type {ReadonlyMap<string, FileDiff>} */
     this.diffs = new Map();
+    /** @type {string | null} The project's path; ids are relative to it. */
+    this.root = null;
+    /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
+    this.comments = {};
+    /** @type {CommentFocus | null} */
+    this.commentFocus = null;
     /** @type {string | null} Row under the pointer or holding focus: it shows its actions. */
     this.hovered = null;
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    projectController.addEventListener('fs-change', this.#onFsChange);
-    if (this.active) this.#watch();
-  }
-
-  disconnectedCallback() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
-    this.#stopWatching();
-    super.disconnectedCallback();
-  }
-
-  /** @param {import('lit').PropertyValues} changed */
+  /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    if (!changed.has('active')) return;
-    if (this.active) this.#watch();
-    else this.#stopWatching();
+    const old = changed.get('changes');
+    if (changed.has('changes') && this.changes.files !== old?.files) {
+      this.#rows = toRows(this.changes.files);
+      // A new listing without the file to scroll to: it has no row to scroll to.
+      const pending = this.#pendingScroll;
+      if (this.changes.loaded && pending !== null && !this.#rows.some((row) => row.id === pending)) this.#pendingScroll = null;
+    }
+    if (changed.has('root') && changed.get('root') !== undefined) {
+      this.#pendingScroll = null;
+      this.hovered = null;
+    }
   }
 
   updated() {
@@ -222,138 +181,37 @@ export class AcpChangesReview extends LitElement {
   }
 
   /**
-   * Expands a changed file and scrolls to it, now or once the changes are listed.
+   * Scrolls to a changed file's row, now or once the changes are listed.
    * @param {string} id Root-relative path of the file.
    */
-  reveal(id) {
-    this.#expand(id);
+  scrollToChange(id) {
     this.#pendingScroll = id;
     this.requestUpdate();
   }
 
-  #watch() {
-    this.#unwatch ??= gitController.watchChanges();
-  }
-
-  #stopWatching() {
-    this.#unwatch?.();
-    this.#unwatch = null;
-  }
-
   /**
-   * New status: rows follow it, and a diff is read again only when its file changed (on disk, in
-   * the status, or HEAD moved). A check that found nothing new keeps the same `files` array.
-   * @param {GitChangesView} changes
-   * @param {GitChangesView | undefined} old
+   * @param {string} type
+   * @param {object | null} detail
    */
-  #onChanges({ files, loaded, loading }, old) {
-    if (files !== old?.files) {
-      const previous = new Map(this.#rows.map((row) => [row.id, row.file]));
-      this.#rows = toRows(files);
-      if (loaded) {
-        const ids = new Set(this.#rows.map((row) => row.id));
-        if (this.#pendingScroll !== null && !ids.has(this.#pendingScroll)) this.#pendingScroll = null;
-        const expanded = [...this.expanded].filter((id) => ids.has(id));
-        if (expanded.length !== this.expanded.size) this.expanded = new Set(expanded);
-        for (const row of this.#rows) {
-          if (this.expanded.has(row.id) && !sameStatus(previous.get(row.id), row.file)) this.#staleDiffs.add(row.id);
-        }
-      }
-    }
-    if (loaded && !loading) this.#flushStaleDiffs();
-  }
-
-  /**
-   * Another project: its own expanded files come back, but no diff is carried over — paths repeat
-   * across projects, and the files may have changed while it was inactive.
-   * @param {string | null} rootId
-   */
-  #switchRoot(rootId) {
-    const previous = this.#shownRoot;
-    if (previous === rootId) return;
-    this.#shownRoot = rootId;
-    if (previous !== null && projectController.isOpen(previous)) this.#expandedByRoot.set(previous, this.expanded);
-    for (const id of this.#expandedByRoot.keys()) {
-      if (!projectController.isOpen(id)) this.#expandedByRoot.delete(id);
-    }
-    const saved = rootId === null ? undefined : this.#expandedByRoot.get(rootId);
-    if (rootId !== null) this.#expandedByRoot.delete(rootId);
-    this.expanded = new Set(saved);
-    this.diffs = new Map();
-    this.#loads.clear(); // reads still in flight belong to the other project
-    this.#staleDiffs.clear();
-    this.#pendingScroll = null;
-    const { loaded, loading } = this.#changes.value;
-    if (loaded && !loading) this.#flushStaleDiffs();
-  }
-
-  /** Reads the stale diffs again, and those of expanded files never read. */
-  #flushStaleDiffs() {
-    for (const row of this.#rows) {
-      if (!this.expanded.has(row.id)) continue;
-      if (this.#staleDiffs.has(row.id) || !this.diffs.has(row.id)) this.#loadDiff(row.id);
-    }
-    this.#staleDiffs.clear();
-  }
-
-  /** @param {string} id */
-  #expand(id) {
-    if (this.expanded.has(id)) return;
-    this.expanded = new Set([...this.expanded, id]);
-    if (this.#rows.some((row) => row.id === id)) this.#loadDiff(id);
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   /** @param {string} id */
   #toggle(id) {
-    if (!this.expanded.has(id)) {
-      this.#expand(id);
-      return;
-    }
-    const next = new Set(this.expanded);
-    next.delete(id);
-    this.expanded = next;
+    this.#emit('acp-change-toggle', { id });
   }
 
-  /**
-   * Reads a file and its HEAD version for its diff: a deleted file is nothing against HEAD, a new
-   * one is the file against nothing.
-   * @param {string} id
-   */
-  async #loadDiff(id) {
-    this.#staleDiffs.delete(id);
-    const load = ++this.#loadCount;
-    this.#loads.set(id, load);
-    const previous = this.diffs.get(id);
-    if (!previous) this.#setDiff(id, { content: '', baseline: '', error: '', loading: true });
-    const rootId = projectController.rootId;
-    const path = projectController.absPath(id);
-    const [content, baseline] = await Promise.all([
-      readFile(path).catch(() => null),
-      rootId ? gitFileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
-    ]);
-    if (this.#loads.get(id) !== load) return;
-    this.#setDiff(
-      id,
-      content === null && baseline === null
-        ? { content: '', baseline: '', error: `${id}: neither on disk nor in HEAD`, loading: false }
-        : { content: content ?? '', baseline: baseline ?? '', error: '', loading: false },
-    );
-  }
-
-  /**
-   * @param {string} id
-   * @param {FileDiff} diff
-   */
-  #setDiff(id, diff) {
-    this.diffs = new Map(this.diffs).set(id, diff);
+  /** @param {string} id */
+  #expand(id) {
+    if (!this.expanded.has(id)) this.#emit('acp-change-expand', { id });
   }
 
   /** @param {Event} e */
   #onToggleAll(e) {
     e.stopPropagation();
     const ids = this.#rows.map((row) => row.id);
-    const selection = this.#selection.value;
-    setCommitSelection(ids.every((id) => selection.has(id)) ? [] : ids);
+    this.#emit('acp-commit-select', { ids: ids.every((id) => this.selection.has(id)) ? [] : ids });
   }
 
   /**
@@ -361,7 +219,7 @@ export class AcpChangesReview extends LitElement {
    * @param {ChangeRow} row
    */
   #onPick(e, row) {
-    pickForCommit([row.id], /** @type {HTMLInputElement} */ (e.target).checked);
+    this.#emit('acp-commit-pick', { ids: [row.id], picked: /** @type {HTMLInputElement} */ (e.target).checked });
   }
 
   /**
@@ -380,13 +238,7 @@ export class AcpChangesReview extends LitElement {
 
   /** @param {ChangeRow} row */
   #edit(row) {
-    this.dispatchEvent(
-      new CustomEvent('acp-file-open', {
-        detail: { path: projectController.absPath(row.id) },
-        bubbles: true,
-        composed: true,
-      }),
-    );
+    this.#emit('acp-file-open', { path: absPath(this.root, row.id) });
   }
 
   /** @param {string | null} id */
@@ -412,7 +264,7 @@ export class AcpChangesReview extends LitElement {
    */
   #renderRow(row, expanded) {
     const { file } = row;
-    const picked = this.#selection.value.has(row.id);
+    const picked = this.selection.has(row.id);
     const deleted = file.kind === 'deleted';
     const actions = expanded || this.hovered === row.id;
     return html`<div
@@ -496,7 +348,7 @@ export class AcpChangesReview extends LitElement {
         mode="single"
         .noResolve=${true}
         .author=${commentAuthor}
-        .comments=${this.#comments.threadsOf(projectController.absPath(row.id))}
+        .comments=${this.#comments.threadsOf(absPath(this.root, row.id))}
       ></cdx-comments>
     </cdx-code-editor>`;
   }
@@ -512,7 +364,7 @@ export class AcpChangesReview extends LitElement {
 
   #renderToolbar() {
     const total = this.#rows.length;
-    const selection = this.#selection.value;
+    const selection = this.selection;
     const picked = this.#rows.filter((row) => selection.has(row.id)).length;
     /** @type {number | null} */
     let added = null;
@@ -528,7 +380,7 @@ export class AcpChangesReview extends LitElement {
         aria-label="Collapse all"
         title="Collapse all"
         ?disabled=${this.expanded.size === 0}
-        @click=${() => (this.expanded = new Set())}
+        @click=${() => this.#emit('acp-changes-collapse', null)}
       >
         <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
       </md-icon-button>
@@ -547,7 +399,7 @@ export class AcpChangesReview extends LitElement {
   }
 
   #renderBody() {
-    const { loaded, loading, error } = this.#changes.value;
+    const { loaded, loading, error } = this.changes;
     if (loading && !loaded) {
       return html`<div class="acp-changes-review__state">
         <md-progress-circular class="acp-changes-review__spinner" aria-label="Loading changes"></md-progress-circular>
@@ -558,7 +410,7 @@ export class AcpChangesReview extends LitElement {
         <b class="acp-changes-review__state-title">Couldn't read changes</b><span>${error}</span>
       </div>`;
     }
-    if (loaded && !this.#repo.value.repo) {
+    if (loaded && !this.repo.repo) {
       return html`<div class="acp-changes-review__state">
         <b class="acp-changes-review__state-title">Not a git repository</b>
       </div>`;

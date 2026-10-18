@@ -14,27 +14,14 @@ import colorizeIcon from '@material-design-icons/svg/outlined/colorize.svg?raw';
 import removeIcon from '@material-design-icons/svg/outlined/remove.svg?raw';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
 import { fontStack } from '../../models/editor-fonts.js';
-import { loadSystemFonts } from '../../services/fonts.js';
-import { $systemFonts } from '../../stores/fonts.js';
-import {
-  $settings,
-  FONT_SIZE_MAX,
-  FONT_SIZE_MIN,
-  isSectionDefault,
-  lineHeightFor,
-  normalizeHex,
-  resetSection,
-  setAccent,
-  setAppearance,
-  setEditorFont,
-  setEditorFontSize,
-} from '../../stores/settings.js';
+import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings.js';
 import styles from './acp-settings.css?inline';
 
 /** @typedef {import('../../models/types.js').Appearance} Appearance */
 /** @typedef {import('../../models/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../models/types.js').Settings} Settings */
+/** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
 
 /** @type {{ value: Appearance, label: string, icon: string }[]} */
 const APPEARANCES = [
@@ -45,38 +32,48 @@ const APPEARANCES = [
 
 /**
  * @tag acp-settings
- * @summary App settings (`$settings`), shown as a tab in the main column: Theme and Editor.
+ * @summary App settings, shown as a tab in the main column: Theme and Editor.
+ * @fires acp-settings-change `{ patch }` A `Partial<Settings>`; the accent as typed, the font size unclamped.
+ * @fires acp-settings-reset `{ section }`
  */
 export class AcpSettings extends LitElement {
   static properties = {
+    settings: { attribute: false },
+    fonts: { attribute: false },
     accentDraft: { state: true },
     fontSizeDraft: { state: true },
   };
 
   static styles = styles;
 
-  #settings = new StoreController(this, { store: $settings });
-  #systemFonts = new StoreController(this, { store: $systemFonts });
-
   constructor() {
     super();
+    /** @type {Settings | null} */
+    this.settings = null;
+    /** @type {FontFamily[] | null} Installed fonts, sorted; `null` until listed. */
+    this.fonts = null;
     /** @type {string | null} Accent HEX being typed; `null` shows the stored one. */
     this.accentDraft = null;
     /** @type {string | null} Font size being typed; `null` shows the stored one. */
     this.fontSizeDraft = null;
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    loadSystemFonts();
+  /** @param {Partial<Settings>} patch */
+  #change(patch) {
+    this.dispatchEvent(new CustomEvent('acp-settings-change', { detail: { patch }, bubbles: true, composed: true }));
   }
 
-  async firstUpdated() {
+  /** Whether the font menu's height is set; the select renders once `settings` arrive. */
+  #menuSized = false;
+
+  async updated() {
     const select = this.renderRoot.querySelector('md-select');
-    await select?.updateComplete;
+    if (!select || this.#menuSized) return;
+    this.#menuSized = true;
+    await select.updateComplete;
     // md-menu sets its size on its own :host inside md-select's shadow root, with no part to reach it by;
     // an inline style beats that. The value stays in acp-settings.css.
-    select?.menuEl?.style.setProperty('--md-menu-max-height', 'var(--_acp-settings-menu-max-height)');
+    select.menuEl?.style.setProperty('--md-menu-max-height', 'var(--_acp-settings-menu-max-height)');
   }
 
   /** Opens the system color panel of the swatch, a native color input. */
@@ -85,31 +82,31 @@ export class AcpSettings extends LitElement {
   };
 
   #onAppearanceChange = (/** @type {Event} */ e) => {
-    setAppearance(/** @type {CustomEvent<{ value: Appearance }>} */ (e).detail.value);
+    this.#change({ appearance: /** @type {CustomEvent<{ value: Appearance }>} */ (e).detail.value });
   };
 
   #onColorPicked = (/** @type {Event} */ e) => {
     // Inside the text field, whose own `input` handler would take it for typed text.
     e.stopPropagation();
     this.accentDraft = null;
-    setAccent(/** @type {HTMLInputElement} */ (e.target).value);
+    this.#change({ accent: /** @type {HTMLInputElement} */ (e.target).value });
   };
 
   #onAccentInput = (/** @type {Event} */ e) => {
     const value = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
     this.accentDraft = value;
-    setAccent(value);
+    this.#change({ accent: value });
   };
 
   #onFontChange = (/** @type {Event} */ e) => {
-    setEditorFont(/** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value ?? null);
+    this.#change({ editorFont: /** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value || null });
   };
 
   #onFontSizeInput = (/** @type {Event} */ e) => {
     const value = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
     this.fontSizeDraft = value;
     const size = Number(value.trim());
-    if (/^\d+$/.test(value.trim()) && size >= FONT_SIZE_MIN && size <= FONT_SIZE_MAX) setEditorFontSize(size);
+    if (/^\d+$/.test(value.trim()) && size >= FONT_SIZE_MIN && size <= FONT_SIZE_MAX) this.#change({ editorFontSize: size });
   };
 
   #onFontSizeKeydown = (/** @type {KeyboardEvent} */ e) => {
@@ -121,7 +118,7 @@ export class AcpSettings extends LitElement {
   /** @param {number} delta */
   #stepFontSize(delta) {
     this.fontSizeDraft = null;
-    setEditorFontSize(this.#settings.value.editorFontSize + delta);
+    if (this.settings) this.#change({ editorFontSize: this.settings.editorFontSize + delta });
   }
 
   /** Drops what was typed, showing the stored value again (the last valid one). */
@@ -132,29 +129,31 @@ export class AcpSettings extends LitElement {
 
   /**
    * @param {string} title
-   * @param {'theme' | 'editor'} section
+   * @param {SettingsSection} section
+   * @param {Settings} settings
    */
-  #renderGroupHeader(title, section) {
+  #renderGroupHeader(title, section, settings) {
     return html`<div class="acp-settings__group-header">
       <h3 class="acp-settings__group-title">${title}</h3>
       <md-button
         class="acp-settings__reset"
         variant="text"
-        ?disabled=${isSectionDefault(section)}
+        ?disabled=${isSectionDefault(settings, section)}
         @click=${() => {
           this.#revertDrafts();
-          resetSection(section);
+          this.dispatchEvent(new CustomEvent('acp-settings-reset', { detail: { section }, bubbles: true, composed: true }));
         }}
         >Reset</md-button
       >
     </div>`;
   }
 
-  #renderTheme() {
-    const { appearance, accent } = this.#settings.value;
+  /** @param {Settings} settings */
+  #renderTheme(settings) {
+    const { appearance, accent } = settings;
     const accentError = this.accentDraft !== null && normalizeHex(this.accentDraft) === null;
     return html`<section class="acp-settings__group" aria-label="Theme">
-      ${this.#renderGroupHeader('Theme', 'theme')}
+      ${this.#renderGroupHeader('Theme', 'theme', settings)}
       <div class="acp-settings__field">
         <span class="acp-settings__label" id="acp-settings-appearance">Appearance</span>
         <md-segmented-button-group
@@ -224,16 +223,16 @@ export class AcpSettings extends LitElement {
     </md-option-group>`;
   }
 
-  #renderEditor() {
-    const { editorFontSize } = this.#settings.value;
-    const { editorFont } = this.#settings.value;
-    const fonts = this.#systemFonts.value;
+  /** @param {Settings} settings */
+  #renderEditor(settings) {
+    const { editorFontSize, editorFont } = settings;
+    const fonts = this.fonts;
     // Until the list arrives, the saved font is offered alone so the field shows it.
     const font = fonts === null || fonts.some(({ family }) => family === editorFont) ? editorFont : null;
     const fontFamily = font ? fontStack(font) : null;
     const lineHeight = lineHeightFor(editorFontSize);
     return html`<section class="acp-settings__group" aria-label="Editor">
-      ${this.#renderGroupHeader('Editor', 'editor')}
+      ${this.#renderGroupHeader('Editor', 'editor', settings)}
       <div class="acp-settings__field">
         <md-select
           class="acp-settings__input acp-settings__input_font"
@@ -307,11 +306,13 @@ export class AcpSettings extends LitElement {
   }
 
   render() {
+    const settings = this.settings;
+    if (!settings) return nothing;
     return html`<div class="acp-settings__panel">
       <div class="acp-settings__body">
-        ${this.#renderTheme()}
+        ${this.#renderTheme(settings)}
         <hr class="acp-settings__divider" />
-        ${this.#renderEditor()}
+        ${this.#renderEditor(settings)}
       </div>
       <footer class="acp-settings__footer">
         <span class="acp-settings__link" aria-disabled="true" title="Not available yet">

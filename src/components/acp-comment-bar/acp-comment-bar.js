@@ -6,46 +6,57 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/shadow';
 import chevronLeftIcon from '@material-design-icons/svg/outlined/chevron_left.svg?raw';
 import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import { StoreController } from '../../controllers/store/StoreController.js';
-import { $tabComments, focusComment, sendToChat } from '../../stores/comments.js';
 import styles from './acp-comment-bar.css?inline';
+
+/** @typedef {import('../../models/types.js').QueuedComment} QueuedComment */
 
 /**
  * @tag acp-comment-bar
  * @summary Floating bar over the editors: steps through the active tab's agent comments (one file, or every diff in Changes); Send to agent moves them into the chat's composer.
+ * @fires acp-comment-focus `{ path, threadId }` The arrows stepped to a comment.
+ * @fires acp-comments-send `null`
  */
 export class AcpCommentBar extends LitElement {
   static properties = {
+    comments: { attribute: false },
     index: { state: true },
   };
 
   static styles = styles;
 
-  #queued = new StoreController(this, { store: $tabComments });
-
   constructor() {
     super();
-    /** @type {number} The comment the arrows stepped to, in `$tabComments`. */
+    /** @type {readonly QueuedComment[]} The active tab's comments. */
+    this.comments = [];
+    /** @type {number} The comment the arrows stepped to, in `comments`. */
     this.index = 0;
   }
 
+  /**
+   * @param {string} type
+   * @param {object | null} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
   willUpdate() {
-    const count = this.#queued.value.length;
+    const count = this.comments.length;
     this.hidden = count === 0;
     this.index = Math.min(this.index, Math.max(count - 1, 0));
   }
 
   /** @param {number} step `1` or `-1`; wraps around. */
   #step(step) {
-    const queued = this.#queued.value;
+    const queued = this.comments;
     if (!queued.length) return;
     this.index = (this.index + step + queued.length) % queued.length;
     const { path, threadId } = queued[this.index];
-    focusComment({ path, threadId });
+    this.#emit('acp-comment-focus', { path, threadId });
   }
 
   render() {
-    const count = this.#queued.value.length;
+    const count = this.comments.length;
     if (!count) return nothing;
     return html`
       <md-shadow level="3"></md-shadow>
@@ -58,7 +69,7 @@ export class AcpCommentBar extends LitElement {
       <md-icon-button class="acp-comment-bar__nav" aria-label="Next comment" title="Next" @click=${() => this.#step(1)}>
         <md-icon class="acp-comment-bar__nav-icon">${unsafeSVG(chevronRightIcon)}</md-icon>
       </md-icon-button>
-      <md-button class="acp-comment-bar__send" variant="filled" @click=${() => sendToChat(this.#queued.value)}>
+      <md-button class="acp-comment-bar__send" variant="filled" @click=${() => this.#emit('acp-comments-send', null)}>
         Send to agent
       </md-button>
     `;

@@ -1,36 +1,12 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentStore } from './persistent.js';
+import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from '../models/settings.js';
 
 /** @typedef {import('../models/types.js').Appearance} Appearance */
 /** @typedef {import('../models/types.js').Settings} Settings */
 
-export const FONT_SIZE_MIN = 10;
-export const FONT_SIZE_MAX = 24;
-
-/** @type {Settings} */
-const DEFAULTS = { appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13 };
-
-/** @type {Record<'theme' | 'editor', (keyof Settings)[]>} */
-const SECTIONS = { theme: ['appearance', 'accent'], editor: ['editorFont', 'editorFontSize'] };
-
 /** @type {Appearance[]} */
 const APPEARANCES = ['light', 'dark', 'system'];
-
-/**
- * @param {string} value `#RGB` or `#RRGGBB`, any case, surrounding space ignored.
- * @returns {string | null} `#RRGGBB` uppercase; `null` when `value` isn't a hex colour.
- */
-export function normalizeHex(value) {
-  const match = /^#?([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(value.trim());
-  if (!match) return null;
-  const hex = match[1].length === 3 ? [...match[1]].map((c) => c + c).join('') : match[1];
-  return `#${hex.toUpperCase()}`;
-}
-
-/** @param {number} size Font size in px. */
-export function lineHeightFor(size) {
-  return Math.round(size * 1.5);
-}
 
 /** @param {unknown} size */
 function isFontSize(size) {
@@ -87,13 +63,7 @@ export function setEditorFontSize(size) {
   update('editorFontSize', Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
 }
 
-/** @param {keyof typeof SECTIONS} section */
-export function isSectionDefault(section) {
-  const settings = $settings.get();
-  return SECTIONS[section].every((key) => settings[key] === DEFAULTS[key]);
-}
-
-/** @param {keyof typeof SECTIONS} section */
+/** @param {import('../models/settings.js').SettingsSection} section */
 export function resetSection(section) {
   const settings = { ...$settings.get() };
   for (const key of SECTIONS[section]) Object.assign(settings, { [key]: DEFAULTS[key] });

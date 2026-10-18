@@ -28,49 +28,33 @@ import '../acp-image-preview/acp-image-preview.js';
 import '../acp-terminal/acp-terminal.js';
 import '../acp-browser/acp-browser.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
-import { gitFileAtHead, readFile, writeFile } from '../../services/ipc.js';
-import { isAgentsFile, isUserAgentsFile } from '../../models/agents-file.js';
-import { projectController } from '../../services/project-controller.js';
-import { StoreController } from '../../controllers/store/StoreController.js';
+import { isAgentsFile } from '../../models/agents-file.js';
+import { relPath } from '../../models/paths.js';
+import { lineHeightFor } from '../../models/settings.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
-import { reportError } from '../../services/notices.js';
-import {
-  $editorTabs,
-  activateTab,
-  closeAllTabs,
-  closeOtherTabs,
-  closeTabsToRight,
-  closeTab,
-  moveTab,
-  openTab,
-  parseTabId,
-  setTabPinned,
-} from '../../stores/editor.js';
-import { $rootId } from '../../stores/workspace.js';
-import { $gitHead } from '../../stores/git.js';
-import { $editorFont, $editorFontSize, lineHeightFor } from '../../stores/settings.js';
 import styles from './acp-tab-view.css?inline';
 
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../models/types.js').TabKind} TabKind */
+/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types.js').Settings} Settings */
+/** @typedef {import('../../models/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
 
 /**
- * An open tab; which tabs are open, and the active one, live in `$editorTabs`.
- * @typedef {Object} EditorTab
- * @property {string} id Its id in `$editorTabs`.
- * @property {TabKind} kind
- * @property {string} path The file, absolute; `''` for a view (Settings, Changes, Terminal, Browser).
- * @property {string} content
- * @property {string} error
- * @property {boolean} loaded Whether `content` and `baseline` are current. Only the active tab is read
- *   (and only when its view shows text, `readsText()`); the others are read, or re-read after a change
- *   on disk, when they become active.
- * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
- * @property {string | null} draft Unsaved edits (only editable files, `isAgentsFile()`); `null` when
- *   the editor shows what's on disk. A change on disk doesn't replace it.
+ * What the Changes tab shows.
+ * @typedef {Object} ChangesReviewData
+ * @property {GitChangesView} changes
+ * @property {GitRepoView} repo
+ * @property {ReadonlySet<string>} selection Files picked for the next commit.
+ * @property {ReadonlySet<string>} expanded
+ * @property {ReadonlyMap<string, FileDiff>} diffs
  */
+
+/** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
 
 /** @param {string} path */
 function basename(path) {
@@ -79,56 +63,41 @@ function basename(path) {
 
 /**
  * @tag acp-tab-view
- * @summary The main column's tabs (`$editorTabs`): files in the view their kind needs, and views; agents.json files are editable (Mod+S saves).
+ * @summary The main column's tabs: files in the view their kind needs, and views; agents.json files are editable (Mod+S saves).
+ * @fires acp-tab-activate `{ id }`
+ * @fires acp-tab-close `{ id, scope }` A `CloseScope` around the tab, unsaved edits already confirmed.
+ * @fires acp-tab-pin `{ id, pinned }`
+ * @fires acp-tab-move `{ id, index }`
+ * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
+ * @fires acp-tab-save `{ id }`
+ * @fires acp-copy-path `{ path }`
  */
 export class AcpTabView extends LitElement {
   static properties = {
-    tabs: { state: true },
+    tabs: { attribute: false },
+    active: { attribute: false },
+    pinned: { attribute: false },
+    root: { attribute: false },
+    editorFont: { attribute: false },
+    editorFontSize: { attribute: false },
+    comments: { attribute: false },
+    commentFocus: { attribute: false },
+    settings: { attribute: false },
+    fonts: { attribute: false },
+    review: { attribute: false },
   };
 
   static styles = styles;
 
-  /** @type {number | null} Line to reveal in the active tab once loaded (1-based). */
+  /** @type {{ id: string, line: number } | null} Line to reveal in a tab once it is active and loaded (1-based). */
   #pendingLine = null;
   /** Set when the active tab changes; `updated()` scrolls it into view. */
   #activeChanged = false;
-  /** @type {Map<string, number>} Latest read per open tab; an older read that resolves later is dropped. */
-  #loads = new Map();
-  #loadCount = 0;
-  /** @type {Set<string>} Open tabs whose read is in flight. */
-  #reading = new Set();
-  /**
-   * The backend reads only inside an opened root, so the active tab loads once it opens.
-   * Declared before `#editorTabs`: on connect it runs first, while `tabs` is still empty.
-   */
-  #rootId = new StoreController(this, {
-    store: $rootId,
-    onChange: (rootId) => {
-      if (rootId !== null) this.#ensureLoaded(this.#activeId);
-    },
+  #comments = new EditorCommentsController(this, {
+    pathOf: (file) => file,
+    comments: () => this.comments,
+    focus: () => this.commentFocus,
   });
-  #editorTabs = new StoreController(this, { store: $editorTabs, onChange: (tabs, old) => this.#syncTabs(tabs, old) });
-  /** @type {Map<string, number>} Latest baseline read per open file tab, like `#loads`. */
-  #baselineLoads = new Map();
-  /**
-   * A commit or checkout moves HEAD: every open tab's baseline is stale. The active tab re-reads it,
-   * the others when activated. Not when HEAD first becomes known (`old` null, e.g. a root just
-   * opened): `#load` read the active baseline already.
-   */
-  #gitHead = new StoreController(this, {
-    store: $gitHead,
-    onChange: (_head, old) => {
-      if (old == null) return;
-      for (const tab of this.tabs) {
-        if (!this.#content.readsText(tab)) continue;
-        if (tab.id === this.#activeId) this.#loadBaseline(tab.id);
-        else if (tab.loaded) this.#patch(tab.id, { loaded: false });
-      }
-    },
-  });
-  #editorFont = new StoreController(this, { store: $editorFont });
-  #editorFontSize = new StoreController(this, { store: $editorFontSize });
-  #comments = new EditorCommentsController(this, { pathOf: (file) => file });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
   /** @type {TabContentController<EditorTab>} */
   #content = new TabContentController({
@@ -137,9 +106,9 @@ export class AcpTabView extends LitElement {
       // The editor until the rendered preview exists: it keeps the diff gutter, comments and selection actions.
       markdown: (tab) => this.#renderText(tab, () => this.#renderCode(tab)),
       image: (tab) => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path}></acp-image-preview>`,
-      settings: () => html`<acp-settings class="acp-tab-view__view"></acp-settings>`,
-      changes: (tab) =>
-        html`<acp-changes-review class="acp-tab-view__view" .active=${tab.id === this.#activeId}></acp-changes-review>`,
+      settings: () =>
+        html`<acp-settings class="acp-tab-view__view" .settings=${this.settings} .fonts=${this.fonts}></acp-settings>`,
+      changes: () => this.#renderChanges(),
       terminal: () => html`<acp-terminal class="acp-tab-view__view"></acp-terminal>`,
       browser: () => html`<acp-browser class="acp-tab-view__view"></acp-browser>`,
     },
@@ -156,22 +125,8 @@ export class AcpTabView extends LitElement {
     axis: 'horizontal',
     container: '.acp-tab-view__tab-strip',
     group: (id) => (this.#isPinned(id) ? 'pinned' : 'tabs'),
-    onReorder: moveTab,
+    onReorder: (id, index) => this.#emit('acp-tab-move', { id, index }),
   });
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { modified, added, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
-    for (const tab of this.tabs) {
-      const rel = projectController.relPath(tab.path);
-      if (rel === null) continue;
-      // Read-only for now, so there are no local edits to protect: just reload.
-      if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
-      else if (!this.#content.readsText(tab) || tab.draft !== null) continue; // keep unsaved edits
-      else if (modified.includes(rel) || added.includes(rel)) {
-        if (tab.id === this.#activeId) this.#load(tab.id);
-        else if (tab.loaded) this.#patch(tab.id, { loaded: false });
-      }
-    }
-  };
   /** A plain mouse wheel only scrolls vertically; turn that into scrolling the tab strip. */
   #onStripWheel = (/** @type {WheelEvent} */ e) => {
     if (Math.abs(e.deltaX) >= Math.abs(e.deltaY)) return;
@@ -183,55 +138,68 @@ export class AcpTabView extends LitElement {
 
   constructor() {
     super();
-    /** @type {EditorTab[]} In `$editorTabs` order. */
+    /** @type {readonly EditorTab[]} In strip order. */
     this.tabs = [];
-  }
-
-  /** @returns {string | null} */
-  get #activeId() {
-    return this.#editorTabs.value.active;
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    projectController.addEventListener('fs-change', this.#onFsChange);
-  }
-
-  disconnectedCallback() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
-    super.disconnectedCallback();
+    /** @type {string | null} The active tab's id. */
+    this.active = null;
+    /** @type {readonly string[]} Pinned tabs' ids. */
+    this.pinned = [];
+    /** @type {string | null} The project's path. */
+    this.root = null;
+    /** @type {string | null} The code editor's font family; `null` for its default. */
+    this.editorFont = null;
+    /** @type {number} px */
+    this.editorFontSize = 13;
+    /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
+    this.comments = {};
+    /** @type {CommentFocus | null} */
+    this.commentFocus = null;
+    /** @type {Settings | null} For the Settings tab. */
+    this.settings = null;
+    /** @type {FontFamily[] | null} For the Settings tab. */
+    this.fonts = null;
+    /** @type {ChangesReviewData | null} For the Changes tab. */
+    this.review = null;
   }
 
   /**
-   * Opens a tab (or switches to it), optionally with the caret on a line.
-   * @param {string} id A file's absolute path, or `diffTabId()` of one for its changes.
-   * @param {number | null} [line] 1-based.
+   * @param {string} type
+   * @param {object} detail
    */
-  show(id, line = null) {
-    this.#pendingLine = line;
-    const loaded = this.#find(id)?.loaded;
-    openTab(id); // a new tab starts loading in #syncTabs and reveals the line once loaded
-    if (loaded) this.#revealPendingLine();
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
   /**
-   * Expands a changed file in the Changes tab and scrolls to it; the tab must be open.
+   * Puts the caret on a line of a tab once it is active and loaded.
+   * @param {string} id
+   * @param {number} line 1-based.
+   */
+  revealLine(id, line) {
+    this.#pendingLine = { id, line };
+    this.requestUpdate();
+  }
+
+  /**
+   * Scrolls the Changes tab to a changed file; the tab must be open.
    * @param {string} path Absolute.
    */
   async revealChange(path) {
     await this.updateComplete;
-    const rel = projectController.relPath(path);
-    if (rel !== null) this.renderRoot.querySelector('acp-changes-review')?.reveal(rel);
+    const rel = relPath(this.root, path);
+    if (rel !== null) this.renderRoot.querySelector('acp-changes-review')?.scrollToChange(rel);
   }
 
   /**
-   * Closes a tab, activating a neighbour if it was the active one.
+   * Closes tabs around one after confirming unsaved edits.
    * @param {string} id
+   * @param {CloseScope} scope
+   * @param {string[]} ids The tabs it closes.
    */
-  async close(id) {
-    if (!(await this.#confirmDiscard([id]))) return;
-    if (id === this.#activeId) this.#pendingLine = null;
-    closeTab(id);
+  async #close(id, scope, ids) {
+    if (!(await this.#confirmDiscard(ids))) return;
+    if (this.active !== null && ids.includes(this.active)) this.#pendingLine = null;
+    this.#emit('acp-tab-close', { id, scope });
   }
 
   /**
@@ -254,19 +222,6 @@ export class AcpTabView extends LitElement {
   }
 
   /**
-   * An edit in an editable file: kept as the tab's draft until saved.
-   * @param {string} id
-   * @param {Event} e
-   */
-  #onEdit(id, e) {
-    const tab = this.#find(id);
-    if (!tab) return;
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    const draft = value === tab.content ? null : value;
-    if (draft !== tab.draft) this.#patch(id, { draft });
-  }
-
-  /**
    * Mod+S in an editable file's editor saves it.
    * @param {string} id
    * @param {KeyboardEvent} e
@@ -274,124 +229,28 @@ export class AcpTabView extends LitElement {
   #onEditorKeydown(id, e) {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 's') return;
     e.preventDefault();
-    this.#save(id);
+    this.#emit('acp-tab-save', { id });
   }
 
-  /** @param {string} id */
-  async #save(id) {
-    const tab = this.#find(id);
-    if (!tab || tab.draft === null) return;
-    const content = tab.draft;
-    try {
-      await writeFile(tab.path, content);
-      // Edits typed while saving stay a draft.
-      const now = this.#find(id);
-      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft });
-    } catch (err) {
-      reportError(`Saving ${basename(tab.path)} failed`, err);
+  /** @param {import('lit').PropertyValues<this>} changed */
+  willUpdate(changed) {
+    if (changed.has('active')) this.#activeChanged = true;
+  }
+
+  updated() {
+    const pending = this.#pendingLine;
+    if (pending !== null && pending.id === this.active && this.tabs.find((t) => t.id === pending.id)?.loaded) {
+      this.#revealPendingLine();
     }
-  }
-
-  /**
-   * Mirrors `$editorTabs` into `tabs`, keeping loaded content and loading the active tab if needed.
-   * @param {EditorTabs} tabs
-   * @param {EditorTabs | undefined} old
-   */
-  #syncTabs({ paths, active }, old) {
-    const known = new Map(this.tabs.map((t) => [t.id, t]));
-    this.tabs = paths.map((id) => {
-      const existing = known.get(id);
-      if (existing) return existing;
-      const target = parseTabId(id);
-      // A view, or a file shown other than as text (an image), has nothing to read.
-      return { id, ...target, content: '', error: '', loaded: !this.#content.readsText(target), baseline: null, draft: null };
-    });
-    for (const id of known.keys()) {
-      if (paths.includes(id)) continue;
-      this.#loads.delete(id);
-      this.#baselineLoads.delete(id);
-      this.#reading.delete(id);
-    }
-    this.#ensureLoaded(active);
-    if (active !== old?.active) this.#activeChanged = true;
-  }
-
-  /**
-   * Reads a tab that isn't current yet, unless a read is already in flight.
-   * @param {string | null} id
-   */
-  #ensureLoaded(id) {
-    if (id === null || this.#reading.has(id)) return;
-    const tab = this.#find(id);
-    // The user's agents.json lies outside every root: it reads with no project open.
-    if (this.#rootId.value === null && !(tab && isUserAgentsFile(tab.path))) return;
-    if (tab && !tab.loaded) this.#load(id);
-  }
-
-  /** @param {string} id */
-  #find(id) {
-    return this.tabs.find((t) => t.id === id);
-  }
-
-  /**
-   * @param {string} id
-   * @param {Partial<EditorTab>} changes
-   */
-  #patch(id, changes) {
-    this.tabs = this.tabs.map((t) => (t.id === id ? { ...t, ...changes } : t));
-  }
-
-  /**
-   * Reads a file tab, and separately its baseline; a load error is shown in place of the editor.
-   * @param {string} id
-   */
-  async #load(id) {
-    const { path } = parseTabId(id);
-    const load = ++this.#loadCount;
-    this.#loads.set(id, load);
-    this.#reading.add(id);
-    this.#loadBaseline(id);
-    /** @type {Partial<EditorTab>} */
-    let changes;
-    try {
-      changes = { content: await readFile(path), error: '' };
-    } catch (err) {
-      changes = { content: '', error: String(err) };
-    }
-    if (this.#loads.get(id) !== load) return; // closed, or read again, meanwhile
-    this.#reading.delete(id);
-    this.#patch(id, { ...changes, loaded: true });
-    if (id === this.#activeId) this.#revealPendingLine();
-  }
-
-  /**
-   * A file's text at HEAD; `null` when it has none or on any failure.
-   * @param {string} path Absolute.
-   * @returns {Promise<string | null>}
-   */
-  async #readBaseline(path) {
-    const rootId = this.#rootId.value;
-    const rel = projectController.relPath(path);
-    if (rootId === null || rel === null) return null;
-    return gitFileAtHead(rootId, rel).catch(() => null);
-  }
-
-  /**
-   * Reads a file tab's text at HEAD, for its diff gutter; no baseline (no marks) on any failure.
-   * @param {string} id
-   */
-  async #loadBaseline(id) {
-    const load = ++this.#loadCount;
-    this.#baselineLoads.set(id, load);
-    const baseline = await this.#readBaseline(parseTabId(id).path);
-    if (this.#baselineLoads.get(id) !== load) return; // closed, or read again, meanwhile
-    if (this.#find(id)?.baseline !== baseline) this.#patch(id, { baseline });
+    if (!this.#activeChanged) return;
+    this.#activeChanged = false;
+    this.#revealActiveTab();
   }
 
   /** Puts the caret on `#pendingLine` in the active tab's editor, once. */
   async #revealPendingLine() {
-    const line = this.#pendingLine;
-    if (line === null || this.#activeId === null) return;
+    const pending = this.#pendingLine;
+    if (pending === null) return;
     this.#pendingLine = null;
     await this.updateComplete;
     const editor = this.renderRoot
@@ -399,28 +258,20 @@ export class AcpTabView extends LitElement {
       ?.querySelector('cdx-code-editor');
     if (!editor) return;
     await editor.updateComplete;
-    editor.navigation.goToLine(line);
+    editor.navigation.goToLine(pending.line);
     editor.focus();
-  }
-
-  updated() {
-    if (!this.#activeChanged) return;
-    this.#activeChanged = false;
-    this.#revealActiveTab();
   }
 
   /** Scrolls the tab strip so the active tab is fully visible. */
   #revealActiveTab() {
-    const tab = [...this.renderRoot.querySelectorAll('md-tab')].find(
-      (t) => t.getAttribute('value') === this.#activeId,
-    );
+    const tab = [...this.renderRoot.querySelectorAll('md-tab')].find((t) => t.getAttribute('value') === this.active);
     tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
   }
 
   /** @param {Event} e */
   #onTabChange(e) {
     this.#pendingLine = null;
-    activateTab(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value);
+    this.#emit('acp-tab-activate', { id: /** @type {CustomEvent<{ value: string }>} */ (e).detail.value });
   }
 
   /**
@@ -430,8 +281,8 @@ export class AcpTabView extends LitElement {
    */
   #onCloseClick(e, id) {
     e.stopPropagation(); // don't let the tab activate itself
-    if (this.#isPinned(id)) setTabPinned(id, false);
-    else this.close(id);
+    if (this.#isPinned(id)) this.#emit('acp-tab-pin', { id, pinned: false });
+    else this.#close(id, 'tab', [id]);
   }
 
   /**
@@ -449,41 +300,20 @@ export class AcpTabView extends LitElement {
    * @param {EditorTab} tab The tab the menu was opened on.
    */
   #onMenuSelect(value, tab) {
-    const { paths, active, pinned } = this.#editorTabs.value;
-    const closable = paths.filter((id) => !pinned.includes(id));
-    if (value === 'close') this.close(tab.id);
-    else if (value === 'close-others') {
-      this.#closeAfterConfirm(closable.filter((id) => id !== tab.id), () => {
-        if (this.#activeId !== tab.id) this.#pendingLine = null;
-        closeOtherTabs(tab.id);
-      });
-    } else if (value === 'close-right') {
-      this.#closeAfterConfirm(closable.filter((id) => paths.indexOf(id) > paths.indexOf(tab.id)), () => {
-        if (active !== null && paths.indexOf(active) > paths.indexOf(tab.id)) this.#pendingLine = null;
-        closeTabsToRight(tab.id);
-      });
-    } else if (value === 'close-all') {
-      this.#closeAfterConfirm(closable, () => {
-        this.#pendingLine = null;
-        closeAllTabs();
-      });
-    } else if (value === 'pin' || value === 'unpin') setTabPinned(tab.id, value === 'pin');
-    else if (value === 'copy-path') {
-      navigator.clipboard.writeText(tab.path).catch((err) => reportError('Copying the path failed', err));
-    }
-  }
-
-  /**
-   * @param {string[]} ids The tabs `close` closes.
-   * @param {() => void} close
-   */
-  async #closeAfterConfirm(ids, close) {
-    if (await this.#confirmDiscard(ids)) close();
+    const paths = this.tabs.map((t) => t.id);
+    const closable = paths.filter((id) => !this.#isPinned(id));
+    const index = paths.indexOf(tab.id);
+    if (value === 'close') this.#close(tab.id, 'tab', [tab.id]);
+    else if (value === 'close-others') this.#close(tab.id, 'others', closable.filter((id) => id !== tab.id));
+    else if (value === 'close-right') this.#close(tab.id, 'right', closable.filter((id) => paths.indexOf(id) > index));
+    else if (value === 'close-all') this.#close(tab.id, 'all', closable);
+    else if (value === 'pin' || value === 'unpin') this.#emit('acp-tab-pin', { id: tab.id, pinned: value === 'pin' });
+    else if (value === 'copy-path') this.#emit('acp-copy-path', { path: tab.path });
   }
 
   /** @param {string} id */
   #isPinned(id) {
-    return this.#editorTabs.value.pinned.includes(id);
+    return this.pinned.includes(id);
   }
 
   /**
@@ -541,7 +371,8 @@ export class AcpTabView extends LitElement {
 
   #renderMenu() {
     const tab = this.#menu.target;
-    const { paths, pinned: pins } = this.#editorTabs.value;
+    const paths = this.tabs.map((t) => t.id);
+    const pins = this.pinned;
     const pinned = tab !== null && pins.includes(tab.id);
     // Only the actions that would do something: the close ones never close pinned tabs.
     const closable = paths.filter((id) => !pins.includes(id));
@@ -571,8 +402,8 @@ export class AcpTabView extends LitElement {
 
   /** Font settings for file tabs only; views keep the library defaults. */
   #editorStyle() {
-    const font = this.#editorFont.value;
-    const size = this.#editorFontSize.value;
+    const font = this.editorFont;
+    const size = this.editorFontSize;
     return styleMap({
       '--cdx-code-editor-mono-font-family': font ? fontStack(font) : null,
       '--cdx-code-editor-code-font-size': `${size}px`,
@@ -600,7 +431,9 @@ export class AcpTabView extends LitElement {
         filename=${tab.path}
         .value=${tab.draft ?? tab.content}
         .baseline=${tab.baseline}
-        @cdx-change=${editable ? (/** @type {Event} */ e) => this.#onEdit(tab.id, e) : nothing}
+        @cdx-change=${editable
+          ? (/** @type {CustomEvent<{ value: string }>} */ e) => this.#emit('acp-tab-edit', { id: tab.id, value: e.detail.value })
+          : nothing}
         @keydown=${editable ? (/** @type {KeyboardEvent} */ e) => this.#onEditorKeydown(tab.id, e) : nothing}
       >
         <cdx-diff slot="diff" kind="baseline"></cdx-diff>
@@ -611,13 +444,29 @@ export class AcpTabView extends LitElement {
           .author=${commentAuthor}
           .comments=${this.#comments.threadsOf(tab.path)}
         ></cdx-comments>
-        <cdx-footer slot="footer" path=${projectController.relPath(tab.path) ?? tab.path}></cdx-footer>
+        <cdx-footer slot="footer" path=${relPath(this.root, tab.path) ?? tab.path}></cdx-footer>
       </cdx-code-editor>`;
+  }
+
+  #renderChanges() {
+    const review = this.review;
+    if (!review) return nothing;
+    return html`<acp-changes-review
+      class="acp-tab-view__view"
+      .changes=${review.changes}
+      .repo=${review.repo}
+      .selection=${review.selection}
+      .expanded=${review.expanded}
+      .diffs=${review.diffs}
+      .root=${this.root}
+      .comments=${this.comments}
+      .commentFocus=${this.commentFocus}
+    ></acp-changes-review>`;
   }
 
   /** @param {EditorTab} tab */
   #renderPanel(tab) {
-    return html`<md-tab-panel class="acp-tab-view__panel" value=${tab.id} ?active=${tab.id === this.#activeId}>
+    return html`<md-tab-panel class="acp-tab-view__panel" value=${tab.id} ?active=${tab.id === this.active}>
       ${this.#content.render(tab)}
     </md-tab-panel>`;
   }
@@ -625,7 +474,7 @@ export class AcpTabView extends LitElement {
   render() {
     return html`
       <div class="acp-tab-view__tab-strip" @wheel=${this.#onStripWheel}>
-        <md-tabs class="acp-tab-view__tabs" variant="secondary" .value=${this.#activeId ?? ''} @change=${this.#onTabChange}>
+        <md-tabs class="acp-tab-view__tabs" variant="secondary" .value=${this.active ?? ''} @change=${this.#onTabChange}>
           ${repeat(this.tabs, (t) => t.id, (t) => this.#renderTab(t))}
         </md-tabs>
       </div>

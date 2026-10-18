@@ -1,17 +1,60 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { commentAuthor } from '../../models/editor-plugins.js';
+import { loadSystemFonts } from '../../services/fonts.js';
+import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
+import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
 import {
   $activePath,
+  $editorTabs,
   CHANGES_TAB_ID,
+  SETTINGS_TAB_ID,
+  activateTab,
+  closeAllTabs,
+  closeOtherTabs,
+  closeTab,
+  closeTabsToRight,
+  moveTab,
   openChanges as openChangesTab,
   openSettings as openSettingsTab,
+  openTab,
+  setTabPinned,
 } from '../../stores/editor.js';
-import { $commentFocus } from '../../stores/comments.js';
+import { addToChat } from '../../stores/chat.js';
+import {
+  $commentFocus,
+  $comments,
+  $tabComments,
+  addComment,
+  deleteComment,
+  editComment,
+  focusComment,
+  sendToChat,
+} from '../../stores/comments.js';
+import { $systemFonts } from '../../stores/fonts.js';
+import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
+import {
+  $settings,
+  resetSection,
+  setAccent,
+  setAppearance,
+  setEditorFont,
+  setEditorFontSize,
+} from '../../stores/settings.js';
+import { $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
+
+/** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types.js').Settings} Settings */
+/** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../acp-tab-view/acp-tab-view.js').CloseScope} CloseScope */
+/** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
 /**
  * @tag acp-main-column
@@ -19,6 +62,18 @@ import styles from './acp-main-column.css?inline';
  */
 export class AcpMainColumn extends LitElement {
   static styles = styles;
+
+  #files = new TabFilesController(this);
+  #review = new ChangesReviewController(this);
+  #editorTabs = new StoreController(this, { store: $editorTabs });
+  #workspace = new StoreController(this, { store: $workspace });
+  #settings = new StoreController(this, { store: $settings });
+  #systemFonts = new StoreController(this, { store: $systemFonts });
+  #comments = new StoreController(this, { store: $comments });
+  #tabComments = new StoreController(this, { store: $tabComments });
+  #gitChanges = new StoreController(this, { store: $gitChanges });
+  #gitRepo = new StoreController(this, { store: $gitRepo });
+  #commitSelection = new StoreController(this, { store: $commitSelection });
 
   /** A comment to reveal: show its file; the editor that shows it then reveals it. */
   #commentFocus = new StoreController(this, {
@@ -28,8 +83,13 @@ export class AcpMainColumn extends LitElement {
     },
   });
 
-  /** The bar sits lower in the Changes tab, which has no footer. */
-  #activePath = new StoreController(this, { store: $activePath });
+  /** The bar sits lower in the Changes tab, which has no footer. Settings lists the fonts. */
+  #activePath = new StoreController(this, {
+    store: $activePath,
+    onChange: (path) => {
+      if (path === SETTINGS_TAB_ID) loadSystemFonts();
+    },
+  });
 
   #onFileOpen = (/** @type {Event} */ e) => {
     const { path, line } = /** @type {CustomEvent<{ path: string, line?: number }>} */ (e).detail;
@@ -46,11 +106,12 @@ export class AcpMainColumn extends LitElement {
     super.disconnectedCallback();
   }
 
-  /** Rendered unconditionally, so present after the first render. */
+  /**
+   * Rendered unconditionally, so present after the first render.
+   * @returns {import('../acp-tab-view/acp-tab-view.js').AcpTabView}
+   */
   get #tabView() {
-    return /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-      this.renderRoot.querySelector('acp-tab-view')
-    );
+    return /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (this.renderRoot.querySelector('acp-tab-view'));
   }
 
   /**
@@ -59,7 +120,8 @@ export class AcpMainColumn extends LitElement {
    * @param {number | null} [line] 1-based line to put the caret on.
    */
   openFile(path, line = null) {
-    this.#tabView.show(path, line);
+    if (line !== null) this.#tabView.revealLine(path, line);
+    openTab(path);
     projectController.noteOpened(path);
   }
 
@@ -67,9 +129,13 @@ export class AcpMainColumn extends LitElement {
    * Opens the Changes tab with a file's diff expanded and scrolled into view.
    * @param {string} path Absolute.
    */
-  showChange(path) {
+  async showChange(path) {
     openChangesTab();
-    this.#tabView.revealChange(path);
+    const rel = projectController.relPath(path);
+    if (rel === null) return;
+    this.#review.expand(rel);
+    await this.updateComplete;
+    await this.#tabView.revealChange(path);
   }
 
   /**
@@ -93,16 +159,94 @@ export class AcpMainColumn extends LitElement {
    */
   goToLine(line) {
     const path = $activePath.get();
-    if (path !== null) this.#tabView.show(path, line);
+    if (path !== null) this.#tabView.revealLine(path, line);
+  }
+
+  /** @param {Event} e */
+  #onTabClose(e) {
+    const { id, scope } = /** @type {CustomEvent<{ id: string, scope: CloseScope }>} */ (e).detail;
+    if (scope === 'tab') closeTab(id);
+    else if (scope === 'others') closeOtherTabs(id);
+    else if (scope === 'right') closeTabsToRight(id);
+    else closeAllTabs();
+  }
+
+  /** @param {Event} e */
+  #onCopyPath(e) {
+    const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
+    navigator.clipboard.writeText(path).catch((err) => reportError('Copying the path failed', err));
+  }
+
+  /** @param {Event} e */
+  #onSettingsChange(e) {
+    const { patch } = /** @type {CustomEvent<{ patch: Partial<Settings> }>} */ (e).detail;
+    if (patch.appearance !== undefined) setAppearance(patch.appearance);
+    if (patch.accent !== undefined) setAccent(patch.accent);
+    if (patch.editorFont !== undefined) setEditorFont(patch.editorFont);
+    if (patch.editorFontSize !== undefined) setEditorFontSize(patch.editorFontSize);
   }
 
   render() {
-    return html`<acp-tab-view class="acp-main-column__tabs"></acp-tab-view>
+    const { active, pinned } = this.#editorTabs.value;
+    const settings = this.#settings.value;
+    return html`<acp-tab-view
+        class="acp-main-column__tabs"
+        .tabs=${this.#files.tabs}
+        .active=${active}
+        .pinned=${pinned}
+        .root=${this.#workspace.value?.path ?? null}
+        .editorFont=${settings.editorFont}
+        .editorFontSize=${settings.editorFontSize}
+        .comments=${this.#comments.value}
+        .commentFocus=${this.#commentFocus.value}
+        .settings=${settings}
+        .fonts=${this.#systemFonts.value}
+        .review=${{
+          changes: this.#gitChanges.value,
+          repo: this.#gitRepo.value,
+          selection: this.#commitSelection.value,
+          expanded: this.#review.expanded,
+          diffs: this.#review.diffs,
+        }}
+        @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
+        @acp-tab-close=${this.#onTabClose}
+        @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) =>
+          setTabPinned(e.detail.id, e.detail.pinned)}
+        @acp-tab-move=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) =>
+          moveTab(e.detail.id, e.detail.index)}
+        @acp-tab-edit=${(/** @type {CustomEvent<{ id: string, value: string }>} */ e) =>
+          this.#files.edit(e.detail.id, e.detail.value)}
+        @acp-tab-save=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.save(e.detail.id)}
+        @acp-copy-path=${this.#onCopyPath}
+        @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>
+          addComment(e.detail.path, e.detail.draft, commentAuthor)}
+        @acp-comment-edit=${(
+          /** @type {CustomEvent<{ path: string, threadId: string, commentId: string, body: string }>} */ e,
+        ) => editComment(e.detail.path, e.detail.threadId, e.detail.commentId, e.detail.body)}
+        @acp-comment-delete=${(/** @type {CustomEvent<{ path: string, threadId: string, commentId: string }>} */ e) =>
+          deleteComment(e.detail.path, e.detail.threadId, e.detail.commentId)}
+        @acp-comment-revealed=${(/** @type {CustomEvent<{ focus: CommentFocus }>} */ e) => {
+          if ($commentFocus.get() === e.detail.focus) focusComment(null);
+        }}
+        @acp-chat-add=${(/** @type {CustomEvent<{ inserts: ChatInsert[] }>} */ e) => addToChat(e.detail.inserts)}
+        @acp-change-toggle=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#review.toggle(e.detail.id)}
+        @acp-change-expand=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#review.expand(e.detail.id)}
+        @acp-changes-collapse=${() => this.#review.collapseAll()}
+        @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
+          pickForCommit(e.detail.ids, e.detail.picked)}
+        @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
+        @acp-settings-change=${this.#onSettingsChange}
+        @acp-settings-reset=${(/** @type {CustomEvent<{ section: SettingsSection }>} */ e) =>
+          resetSection(e.detail.section)}
+      ></acp-tab-view>
       <acp-comment-bar
         class=${classMap({
           'acp-main-column__comment-bar': true,
           'acp-main-column__comment-bar_changes': this.#activePath.value === CHANGES_TAB_ID,
         })}
+        .comments=${this.#tabComments.value}
+        @acp-comment-focus=${(/** @type {CustomEvent<CommentFocus>} */ e) => focusComment(e.detail)}
+        @acp-comments-send=${() => sendToChat($tabComments.get())}
       ></acp-comment-bar>`;
   }
 }

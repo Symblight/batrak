@@ -480,4 +480,29 @@
  * @property {boolean} started After the first message: the agent and run target are fixed.
  */
 
+/**
+ * An open tab with what it shows; which tabs are open, and the active one, live in `$editorTabs`.
+ * @typedef {Object} EditorTab
+ * @property {string} id Its id in `$editorTabs`.
+ * @property {TabKind} kind
+ * @property {string} path The file, absolute; `''` for a view (Settings, Changes, Terminal, Browser).
+ * @property {string} content
+ * @property {string} error
+ * @property {boolean} loaded Whether `content` and `baseline` are current. Only the active tab is read
+ *   (and only when its view shows text, `readsText()`); the others are read, or re-read after a change
+ *   on disk, when they become active.
+ * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
+ * @property {string | null} draft Unsaved edits (only editable files, `isAgentsFile()`); `null` when
+ *   the editor shows what's on disk. A change on disk doesn't replace it.
+ */
+
+/**
+ * An expanded file's diff in the Changes tab: the file now against the file at HEAD.
+ * @typedef {Object} FileDiff
+ * @property {string} content `''` for a deleted file.
+ * @property {string} baseline `''` for a new file.
+ * @property {string} error
+ * @property {boolean} loading
+ */
+
 export {};

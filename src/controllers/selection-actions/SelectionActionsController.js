@@ -3,7 +3,6 @@ import { flip, hide, offset, shift } from '@floating-ui/dom';
 import '../../components/acp-selection-actions/acp-selection-actions.js';
 import { FloatingController } from '../floating/FloatingController.js';
 import { editorOf } from '../../models/editor-events.js';
-import { addToChat } from '../../stores/chat.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -28,7 +27,7 @@ const GAP = 6;
 
 /**
  * Shows `<acp-selection-actions>` under the caret of a non-empty selection in one of the host's
- * `cdx-code-editor`s: Add to chat (a `path:from-to` chip, through `addToChat`) and Comment (the
+ * `cdx-code-editor`s: Add to chat (an `acp-chat-add` event with its `path:from-to` chip) and Comment (the
  * editor's comment field on the selected range). Placed by a `FloatingController`: it follows the caret
  * as the code scrolls, flips above it near the window's bottom and hides while it's scrolled out of
  * view. The host renders `controller.render()`.
@@ -195,7 +194,8 @@ export class SelectionActionsController {
     const path = editor && this.#config.pathOf(editor.filename);
     this.#hide();
     if (!lines || !path) return;
-    addToChat([{ path, fromLine: lines.fromLine, toLine: lines.toLine, body: '' }]);
+    const inserts = [{ path, fromLine: lines.fromLine, toLine: lines.toLine, body: '' }];
+    this.#host.dispatchEvent(new CustomEvent('acp-chat-add', { detail: { inserts }, bubbles: true, composed: true }));
   }
 
   /** Opens the comment field under the selection's last line, on the selected range. */
