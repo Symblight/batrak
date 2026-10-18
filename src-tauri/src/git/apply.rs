@@ -43,6 +43,40 @@ fn with_snapshot<T>(
     f(&run)
 }
 
+/// Commits the worktree's uncommitted and untracked work (ignored files aren't) onto `branch`,
+/// which must be the one it has checked out, so the work outlives the worktree. Built in a scratch
+/// index, with no hooks; the branch moves only if no one moved it meanwhile. Without a git identity
+/// the commit is Brama's. `None` when there's nothing uncommitted.
+pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str) -> Result<Option<String>, String> {
+    let text = |out: Vec<u8>| String::from_utf8_lossy(&out).trim().to_owned();
+    let current = exec::run(git, worktree, &exec::args(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]), Mode::Background);
+    if current.map(text).ok().as_deref() != Some(branch) {
+        return Err(format!("{}: not on branch {branch}", worktree.display()));
+    }
+    with_mutation(git, worktree, || {
+        with_snapshot(git, worktree, |run| {
+            let tree = text(run(&[&"write-tree"])?);
+            let head = text(run(&[&"rev-parse", &"--verify", &"HEAD^{commit}"])?);
+            if tree == text(run(&[&"rev-parse", &"HEAD^{tree}"])?) {
+                return Ok(None);
+            }
+            let has_identity = exec::run_with(git, worktree, &exec::args(&[&"var", &"GIT_COMMITTER_IDENT"]), Mode::Background, &Options::default())?.success();
+            let brama = OsStr::new("Brama");
+            let email = OsStr::new("brama@localhost");
+            let identity: [(&str, &OsStr); 4] =
+                [("GIT_AUTHOR_NAME", brama), ("GIT_AUTHOR_EMAIL", email), ("GIT_COMMITTER_NAME", brama), ("GIT_COMMITTER_EMAIL", email)];
+            let opts = Options { env: if has_identity { &[] } else { &identity }, ..Default::default() };
+            let out = exec::run_with(git, worktree, &exec::args(&[&"commit-tree", &tree, &"-p", &head, &"-m", &message]), Mode::Local, &opts)?;
+            if !out.success() {
+                return Err(exec::failure_message(&out));
+            }
+            let sha = text(out.stdout);
+            run(&[&"update-ref", &format!("refs/heads/{branch}"), &sha, &head])?;
+            Ok(Some(sha))
+        })
+    })
+}
+
 /// Patch from `base` to the worktree's current files, uncommitted and untracked ones included
 /// (ignored files are not). The worktree's own index is untouched.
 pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
@@ -183,6 +217,25 @@ mod tests {
         assert_eq!(run_in(&wt, &["diff", "--cached", "--name-only"]), "app/new.txt\n", "the worktree's index is untouched");
         assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "edit.txt").unwrap().as_deref(), Some("one\n"));
         assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "new.txt").unwrap(), None);
+    }
+
+    #[test]
+    fn a_snapshot_commits_uncommitted_and_untracked_work_onto_the_branch() {
+        let mut repo = TestRepo::with_commit("snapshot");
+        let wt = repo.worktree("snapshot-wt", "brama/snap");
+        let git = git_bin();
+        assert_eq!(snapshot_commit(&git, &wt, "brama/snap", "Work in progress").unwrap(), None, "nothing to keep");
+
+        let before = run_in(&wt, &["rev-parse", "HEAD"]).trim().to_owned();
+        std::fs::write(wt.join("README.md"), "edited\n").unwrap();
+        std::fs::write(wt.join("new.txt"), "untracked\n").unwrap();
+        let sha = snapshot_commit(&git, &wt, "brama/snap", "Work in progress").unwrap().unwrap();
+        assert_eq!(repo.git(&["rev-parse", "brama/snap"]).trim(), sha);
+        assert_eq!(repo.git(&["rev-parse", "brama/snap^"]).trim(), before);
+        assert_eq!(repo.git(&["show", "brama/snap:new.txt"]), "untracked\n");
+        assert_eq!(repo.git(&["show", "brama/snap:README.md"]), "edited\n");
+        assert_eq!(repo.git(&["log", "-1", "--format=%s", "brama/snap"]).trim(), "Work in progress");
+        assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main", "the checkout stays");
     }
 
     #[test]

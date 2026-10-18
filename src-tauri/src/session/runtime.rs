@@ -610,6 +610,41 @@ impl Sessions {
         Ok(self.inner.log_path(id))
     }
 
+    /// At launch: drops the worktree metadata of deleted folders in every project with worktree
+    /// sessions, and removes the worktrees in app data no session owns (left by a removal that
+    /// failed), unless they hold uncommitted work. Branches stay. Blocking.
+    pub fn tidy_worktrees(&self) {
+        let records: Vec<SessionRecord> = lock(&self.inner.sessions).values().map(|s| s.record()).collect();
+        let worktrees: Vec<&SessionRecord> = records.iter().filter(|r| r.mode == Mode::Worktree).collect();
+        let owned: std::collections::HashSet<&Path> = worktrees.iter().filter_map(|r| r.worktree_path.as_deref()).collect();
+        let projects: std::collections::HashSet<&Path> = worktrees.iter().map(|r| r.project_path.as_path()).collect();
+        if let Ok(git) = crate::git::binary::git() {
+            for project in projects.into_iter().filter(|p| p.is_dir()) {
+                if let Err(e) = crate::git::worktree::prune(git, project) {
+                    tracing::info!(project = %project.display(), "pruning worktrees failed: {e}");
+                }
+            }
+        }
+        let Ok(groups) = std::fs::read_dir(self.inner.data_dir().join("worktrees")) else { return };
+        for group in groups.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()) {
+            let Ok(group) = dunce::canonicalize(&group) else { continue };
+            for path in std::fs::read_dir(&group).into_iter().flatten().filter_map(Result::ok).map(|e| e.path()) {
+                if owned.contains(path.as_path()) || !path.is_dir() {
+                    continue;
+                }
+                if let Err(e) = env::remove_orphan(&path) {
+                    if e.contains("uncommitted") {
+                        tracing::warn!("{e}");
+                    } else {
+                        tracing::info!("{e}");
+                    }
+                }
+            }
+            // Only when empty.
+            let _ = std::fs::remove_dir(&group);
+        }
+    }
+
     /// App exit: every agent process group is stopped, every session saved as `stopped`.
     pub fn shutdown(&self) {
         let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();

@@ -310,7 +310,7 @@ export class AcpSessionColumn extends LitElement {
       message: `"${session.title}" and its conversation will be deleted${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
       detail:
         session.mode === 'worktree'
-          ? `Its worktree is deleted unless it has uncommitted changes; branch ${session.branch} is kept if it has commits.`
+          ? `Its worktree is deleted; uncommitted work is first committed onto ${session.branch}, which is kept if it has commits.`
           : 'Files the agent changed in the project stay as they are.',
       confirmLabel: 'Remove',
       destructive: true,

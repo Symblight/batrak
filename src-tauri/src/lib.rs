@@ -35,7 +35,10 @@ pub fn run() {
             let user_agents = app.path().config_dir().ok().map(|dir| dir.join("brama").join(config::AGENTS_FILE));
             let data_dir = app.path().app_data_dir()?;
             let configs = config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json")));
-            app.manage(session::Sessions::new(session::SessionsOptions::for_app(data_dir, configs.clone())));
+            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir, configs.clone()));
+            let tidy = sessions.clone();
+            tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
+            app.manage(sessions);
             app.manage(configs);
             Ok(())
         })

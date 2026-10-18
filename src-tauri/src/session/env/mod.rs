@@ -7,7 +7,7 @@ mod local;
 mod worktree;
 
 pub use local::LocalEnv;
-pub use worktree::WorktreeEnv;
+pub use worktree::{remove_orphan, WorktreeEnv};
 
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
@@ -55,7 +55,6 @@ pub trait SessionEnv: Send + Sync {
     /// Maps a path the agent sent to the host. Doesn't check it: [`confine`] does.
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String>;
     /// Keeps the session's work when it's closed for good (a worktree's final snapshot).
-    #[allow(dead_code)] // called once sessions can be archived (worktree mode)
     fn archive(&self) -> Result<(), String>;
     /// Throws the session's directory away (never the project's own).
     fn discard(&self) -> Result<(), String>;
@@ -98,6 +97,7 @@ pub fn for_session(record: &SessionRecord) -> Result<Box<dyn SessionEnv>, String
                 record.agent_cwd.clone(),
                 branch.clone(),
                 base.clone(),
+                record.title.clone(),
             )))
         }
         Mode::Docker => Err("Docker sessions are not available yet; use Local or Worktree".to_owned()),

@@ -644,15 +644,55 @@ async fn removing_a_worktree_session_deletes_a_clean_worktree_and_keeps_work() {
     assert!(!wt.exists());
     assert!(branches().contains(&committed.branch.unwrap()));
 
-    // Uncommitted work is never deleted.
+    // Uncommitted work is committed onto the branch first, then the folder goes.
     let (dirty, events) = f.create_in("d", "fake", Mode::Worktree, None).unwrap();
     events.wait_status("idle").await;
     let wt = PathBuf::from(dirty.worktree_path.unwrap());
+    let branch = dirty.branch.unwrap();
     std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
+    std::fs::write(wt.join("new.txt"), "untracked").unwrap();
     f.sessions.remove("d").await.unwrap();
     assert!(f.sessions.list().is_empty());
+    assert!(!wt.exists());
+    assert_eq!(run_in(&f.project, &["show", &format!("{branch}:a.txt")]), "unsaved");
+    assert_eq!(run_in(&f.project, &["show", &format!("{branch}:new.txt")]), "untracked");
+    assert!(run_in(&f.project, &["log", "-1", "--format=%s", &branch]).contains("Session d"));
+    assert!(run_in(&f.project, &["status", "--porcelain"]).is_empty(), "the project is untouched");
+}
+
+#[tokio::test]
+async fn a_detached_worktree_with_uncommitted_work_is_kept_on_remove() {
+    let f = git_fixture("wt-remove-detached");
+    let (session, events) = f.create_in("x", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(session.worktree_path.unwrap());
+    run_in(&wt, &["switch", "-q", "--detach"]);
+    std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
+    f.sessions.remove("x").await.unwrap();
     assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "unsaved");
-    assert!(branches().contains(&dirty.branch.unwrap()));
+}
+
+#[tokio::test]
+async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work() {
+    let f = git_fixture("wt-tidy");
+    let (kept, events) = f.create_in("k", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let kept = PathBuf::from(kept.worktree_path.unwrap());
+    let group = kept.parent().unwrap().to_path_buf();
+    let git = crate::git::test_repo::git_bin();
+    let (orphan, dirty) = (group.join("orphan"), group.join("dirty"));
+    crate::git::worktree::add(&git, &f.project, &orphan, "brama/orphan", "main").unwrap();
+    crate::git::worktree::add(&git, &f.project, &dirty, "brama/dirty", "main").unwrap();
+    std::fs::write(dirty.join("work.txt"), "w").unwrap();
+    std::fs::create_dir_all(f.dir.join("data/worktrees/empty-group")).unwrap();
+
+    f.sessions.tidy_worktrees();
+    assert!(kept.join("a.txt").exists(), "a session's own");
+    assert!(!orphan.exists());
+    assert!(run_in(&f.project, &["branch", "--list", "brama/orphan"]).contains("brama/orphan"), "branches stay");
+    assert_eq!(std::fs::read_to_string(dirty.join("work.txt")).unwrap(), "w");
+    assert!(!f.dir.join("data/worktrees/empty-group").exists());
+    assert!(!run_in(&f.project, &["worktree", "list"]).contains("orphan"));
 }
 
 #[tokio::test]

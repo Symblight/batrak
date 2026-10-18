@@ -19,11 +19,19 @@ pub struct WorktreeEnv {
     dir: PathBuf,
     branch: String,
     base_commit: String,
+    /// The session's, for its snapshot commit.
+    title: String,
 }
 
 impl WorktreeEnv {
-    pub fn new(project: PathBuf, root: PathBuf, dir: PathBuf, branch: String, base_commit: String) -> WorktreeEnv {
-        WorktreeEnv { project, root, dir, branch, base_commit }
+    pub fn new(project: PathBuf, root: PathBuf, dir: PathBuf, branch: String, base_commit: String, title: String) -> WorktreeEnv {
+        WorktreeEnv { project, root, dir, branch, base_commit, title }
+    }
+
+    /// Whether the worktree has its branch checked out (not detached by Check Out Branch).
+    fn on_branch(&self, git: &Path) -> bool {
+        let head = exec::run(git, &self.root, &exec::args(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]), GitMode::Background);
+        head.map(|h| String::from_utf8_lossy(&h).trim().to_owned()).ok().as_deref() == Some(self.branch.as_str())
     }
 
     /// Whether the session's branch is checked out in another worktree (the project's checkout).
@@ -98,8 +106,7 @@ impl SessionEnv for WorktreeEnv {
             }
             tracing::info!(path = %self.root.display(), branch = %self.branch, "worktree checked out");
         }
-        let head = exec::run(git, &self.root, &exec::args(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]), GitMode::Background);
-        if head.map(|h| String::from_utf8_lossy(&h).trim().to_owned()).ok().as_deref() != Some(self.branch.as_str()) {
+        if !self.on_branch(git) {
             if self.checked_out_elsewhere(git)? {
                 return Err(format!(
                     "Branch {} is checked out in the project; switch the project to another branch to go on with this session",
@@ -135,17 +142,27 @@ impl SessionEnv for WorktreeEnv {
         Ok(agent_path.to_path_buf())
     }
 
-    /// The branch keeps the commits; uncommitted work stays in the folder.
+    /// Commits the uncommitted work onto the session's branch (see `git::apply::snapshot_commit`).
     fn archive(&self) -> Result<(), String> {
+        let git = binary::git()?;
+        let message = format!("Work in progress from session \"{}\"\n\nSaved by Brama when the session was removed.", self.title);
+        if let Some(sha) = crate::git::apply::snapshot_commit(git, &self.root, &self.branch, &message)? {
+            tracing::info!(branch = %self.branch, %sha, "saved the worktree's uncommitted work");
+        }
         Ok(())
     }
 
-    /// Removes a clean worktree, and its branch when it has no commits of its own. A worktree with
-    /// uncommitted changes is kept.
+    /// Removes the worktree, its uncommitted work first committed onto its branch (`archive`), and
+    /// the branch when it has no commits of its own. A detached worktree with uncommitted work is
+    /// kept: its branch is the project's then.
     fn discard(&self) -> Result<(), String> {
         let git = binary::git()?;
         if self.root.exists() && worktree::is_dirty(git, &self.root)? {
-            return Err(format!("{}: has uncommitted changes, so it was kept", self.root.display()));
+            if !self.on_branch(git) {
+                return Err(format!("{}: has uncommitted changes and isn't on its branch, so it was kept", self.root.display()));
+            }
+            self.archive()?;
+            worktree::remove_saved(git, &self.project, &self.root)?;
         }
         let tip = self.tip(git);
         // A branch checked out elsewhere can't be deleted (git refuses); it's the project's now.
@@ -163,6 +180,22 @@ impl SessionEnv for WorktreeEnv {
         tracing::info!(path = %self.root.display(), branch = %self.branch, ?cleanup, "worktree removed");
         Ok(())
     }
+}
+
+/// Removes a worktree in app data that no session owns, unless it has uncommitted changes; its
+/// branch stays. A folder that isn't a worktree goes only when empty. Blocking.
+pub fn remove_orphan(path: &Path) -> Result<(), String> {
+    if !path.join(".git").exists() {
+        return fs::remove_dir(path).map_err(|e| format!("{}: {e}", path.display()));
+    }
+    let git = binary::git()?;
+    if worktree::is_dirty(git, path)? {
+        return Err(format!("{}: a removed session's worktree with uncommitted changes; kept", path.display()));
+    }
+    let repo = crate::git::lock::common_dir(git, path)?;
+    worktree::remove(git, &repo, path, None, worktree::BranchCleanup::Keep)?;
+    tracing::info!(path = %path.display(), "removed a worktree no session owns");
+    Ok(())
 }
 
 /// `text` as a branch-name part: lowercase ASCII letters and digits, runs of anything else as

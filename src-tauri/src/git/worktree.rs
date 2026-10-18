@@ -120,6 +120,14 @@ pub fn remove(git: &Path, repo: &Path, path: &Path, branch: Option<&str>, cleanu
     })
 }
 
+/// Removes the worktree at `path` whatever its changes hold: only once they were saved (a
+/// snapshot commit on its branch, which stays).
+pub fn remove_saved(git: &Path, repo: &Path, path: &Path) -> Result<(), String> {
+    with_mutation(git, repo, || {
+        exec::run(git, repo, &exec::args(&[&"worktree", &"remove", &"--force", &path]), Mode::Local).map(drop)
+    })
+}
+
 /// Drops metadata of worktrees whose directories were deleted outside the app.
 pub fn prune(git: &Path, repo: &Path) -> Result<(), String> {
     with_mutation(git, repo, || exec::run(git, repo, &exec::args(&[&"worktree", &"prune"]), Mode::Local).map(drop))

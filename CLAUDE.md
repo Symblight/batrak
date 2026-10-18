@@ -172,9 +172,13 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
   `HOOK(git)` comments in `run_turn` mark the checkpoint points. `Sessions::remove` (session row
   menu → Remove session) stops the agent, unlists the session, deletes `sessions/<id>/`
-  (transcript, log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` removes a
-  clean worktree, deletes its branch only when it has no commits past the base, and keeps a dirty
-  worktree (a warning).
+  (transcript, log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
+  uncommitted work onto its branch (`archive` → `git::apply::snapshot_commit`: scratch index, no
+  hooks, CAS `update-ref`, Brama's identity when git has none), removes the worktree, and deletes
+  the branch only when it has no commits past the base. A detached worktree (Check Out Branch)
+  with uncommitted work is kept (a warning). At launch `Sessions::tidy_worktrees` (background)
+  prunes worktree metadata and removes app-data worktrees no session owns, unless dirty (a
+  warning); branches stay.
 - **ACP host** (`src-tauri/src/acp/`): the only module using `agent-client-protocol` (pinned). One
   process per session in its own process group (stopped as a group; `process::stop_all` on app
   exit), stderr → `<app data>/sessions/<id>/agent.log`. Dispatch-loop callbacks never wait:
@@ -288,7 +292,7 @@ helpers apply.
   (`session_check_out_branch`: refused while the worktree is dirty, which a checkout would leave
   behind; stops the agent, detaches the worktree). Both are refused mid-turn. A worktree whose
   branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
-  dirty worktree is never removed.
+  dirty worktree is removed only after its work was committed (`remove_saved`).
 - Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
