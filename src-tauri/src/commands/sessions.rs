@@ -138,6 +138,29 @@ pub async fn session_history(sessions: State<'_, Sessions>, session_id: String) 
     blocking(move || sessions.history(&session_id)).await?
 }
 
+/// A worktree session's changed files since it started (its commits and uncommitted work),
+/// relative to its folder.
+#[tauri::command]
+pub async fn session_changes(
+    sessions: State<'_, Sessions>,
+    session_id: String,
+) -> Result<Vec<crate::git::repo::FileStatus>, String> {
+    let sessions = sessions.inner().clone();
+    blocking(move || sessions.changes(&session_id)).await?
+}
+
+/// A worktree session's file at the commit it started from, its diff's baseline; `null` when new,
+/// binary or too large.
+#[tauri::command]
+pub async fn session_file_at_base(
+    sessions: State<'_, Sessions>,
+    session_id: String,
+    path: String,
+) -> Result<Option<String>, String> {
+    let sessions = sessions.inner().clone();
+    blocking(move || sessions.file_at_base(&session_id, &path)).await?
+}
+
 /// Opens the agent's stderr log in the OS's default viewer.
 #[tauri::command]
 pub async fn session_open_log(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {

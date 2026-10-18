@@ -3,9 +3,11 @@ import { isRecord, persistentMapStore } from './persistent.js';
 import { $worktrees } from './sessions.js';
 import { $workspace } from './workspace.js';
 import { isUserAgentsFile } from '../models/agents-file.js';
+import { sessionChangesTabId, sessionOfTab } from '../models/tab-ids.js';
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../models/types.js').TabKind} TabKind */
+/** @typedef {import('../models/types.js').WorktreeFolder} WorktreeFolder */
 
 /** Id of the Settings tab. */
 export const SETTINGS_TAB_ID = 'view:settings';
@@ -33,22 +35,24 @@ const NO_PROJECT = '';
  *   view, like Settings).
  */
 export function parseTabId(id) {
-  const view = VIEW_TABS.get(id);
+  const view = VIEW_TABS.get(id) ?? (sessionOfTab(id) !== null ? 'session-changes' : undefined);
   return view ? { kind: view, path: '' } : { kind: 'file', path: id };
 }
 
 /**
  * Whether a tab may be open in a project: a file tab only inside its folder or one of its worktree
- * sessions' (the user's agents.json anywhere), a view anywhere.
+ * sessions' (the user's agents.json anywhere), a session's changes while it's one of them, any other
+ * view anywhere.
  * @param {string} id Tab id.
  * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
- * @param {readonly string[]} folders The project's worktree session folders.
+ * @param {readonly WorktreeFolder[]} worktrees The project's worktree sessions.
  */
-function belongsTo(id, root, folders) {
+function belongsTo(id, root, worktrees) {
   const { kind, path } = parseTabId(id);
+  if (kind === 'session-changes') return worktrees.some((w) => w.sessionId === sessionOfTab(id));
   if (kind !== 'file' || isUserAgentsFile(path)) return true;
   if (root === NO_PROJECT) return false;
-  return [root, ...folders].some((folder) => path.startsWith(`${folder}/`));
+  return [root, ...worktrees.map((w) => w.folder)].some((folder) => path.startsWith(`${folder}/`));
 }
 
 /**
@@ -133,11 +137,11 @@ export const $editorTabs = computed([$projectTabs, $workspace, $worktrees], (pro
   const root = workspace?.path ?? NO_PROJECT;
   const tabs = projects[root];
   if (!tabs) return NO_TABS;
-  const folders = worktrees.filter((w) => w.projectId === root).map((w) => w.folder);
-  return tabs.paths.every((id) => belongsTo(id, root, folders))
+  const own = worktrees.filter((w) => w.projectId === root);
+  return tabs.paths.every((id) => belongsTo(id, root, own))
     ? tabs
     : tabsOf(
-        tabs.paths.filter((id) => belongsTo(id, root, folders)),
+        tabs.paths.filter((id) => belongsTo(id, root, own)),
         tabs.active,
         tabs.pinned,
       );
@@ -257,6 +261,14 @@ export function openSettings() {
 /** Opens the Changes tab, or switches to it. */
 export function openChanges() {
   openTab(CHANGES_TAB_ID);
+}
+
+/**
+ * Opens the tab with a worktree session's changes, or switches to it; its project must be active.
+ * @param {string} sessionId
+ */
+export function openSessionChanges(sessionId) {
+  openTab(sessionChangesTabId(sessionId));
 }
 
 /** Opens the Terminal tab, or switches to it. */

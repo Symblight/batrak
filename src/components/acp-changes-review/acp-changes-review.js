@@ -100,7 +100,7 @@ function toRows(files) {
 
 /**
  * @tag acp-changes-review
- * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD.
+ * @summary The Changes tab: every changed file as a row that expands into its diff against HEAD, picked for the next commit; with `base`, a worktree session's changes since that commit, nothing to pick.
  * @fires acp-file-open `{ path }` Edit was pressed on a file.
  * @fires acp-change-toggle `{ id }` A row was clicked: expand or collapse its diff.
  * @fires acp-change-expand `{ id }`
@@ -116,6 +116,7 @@ export class AcpChangesReview extends LitElement {
     expanded: { attribute: false },
     diffs: { attribute: false },
     root: { attribute: false },
+    base: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
     hovered: { state: true },
@@ -146,8 +147,10 @@ export class AcpChangesReview extends LitElement {
     this.expanded = new Set();
     /** @type {ReadonlyMap<string, FileDiff>} */
     this.diffs = new Map();
-    /** @type {string | null} The project's path; ids are relative to it. */
+    /** @type {string | null} The project's path (a worktree session's folder with `base`); ids are relative to it. */
     this.root = null;
+    /** @type {string | null} A worktree session's base commit: its changes since then, read-only. */
+    this.base = null;
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
     this.comments = {};
     /** @type {CommentFocus | null} */
@@ -285,13 +288,15 @@ export class AcpChangesReview extends LitElement {
       @focusout=${() => this.#hover(null)}
     >
       <md-icon class="acp-changes-review__chevron">${unsafeSVG(expanded ? expandMoreIcon : chevronRightIcon)}</md-icon>
-      <md-checkbox
-        class="acp-changes-review__pick"
-        aria-label=${`Select ${row.name} for the commit`}
-        .checked=${picked}
-        @click=${(/** @type {Event} */ e) => e.stopPropagation()}
-        @change=${(/** @type {Event} */ e) => this.#onPick(e, row)}
-      ></md-checkbox>
+      ${this.base === null
+        ? html`<md-checkbox
+            class="acp-changes-review__pick"
+            aria-label=${`Select ${row.name} for the commit`}
+            .checked=${picked}
+            @click=${(/** @type {Event} */ e) => e.stopPropagation()}
+            @change=${(/** @type {Event} */ e) => this.#onPick(e, row)}
+          ></md-checkbox>`
+        : nothing}
       <span class="acp-changes-review__badge" aria-hidden="true">${typeBadge(row.name)}</span>
       <span class=${classMap({ 'acp-changes-review__name': true, 'acp-changes-review__name_deleted': deleted })}
         >${row.name}</span
@@ -384,15 +389,19 @@ export class AcpChangesReview extends LitElement {
       >
         <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
       </md-icon-button>
-      <md-checkbox
-        class="acp-changes-review__all"
-        aria-label="Select all changed files"
-        ?disabled=${total === 0}
-        .checked=${total > 0 && picked === total}
-        .indeterminate=${picked > 0 && picked < total}
-        @change=${this.#onToggleAll}
-      ></md-checkbox>
-      <span class="acp-changes-review__summary">${picked}/${total} files selected</span>
+      ${this.base === null
+        ? html`<md-checkbox
+              class="acp-changes-review__all"
+              aria-label="Select all changed files"
+              ?disabled=${total === 0}
+              .checked=${total > 0 && picked === total}
+              .indeterminate=${picked > 0 && picked < total}
+              @change=${this.#onToggleAll}
+            ></md-checkbox>
+            <span class="acp-changes-review__summary">${picked}/${total} files selected</span>`
+        : html`<span class="acp-changes-review__summary"
+            >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
+          >`}
       ${this.#renderCounts(added, removed)}
       <span class="acp-changes-review__spacer"></span>
     </header>`;
@@ -410,7 +419,7 @@ export class AcpChangesReview extends LitElement {
         <b class="acp-changes-review__state-title">Couldn't read changes</b><span>${error}</span>
       </div>`;
     }
-    if (loaded && !this.repo.repo) {
+    if (loaded && !this.repo.repo && this.base === null) {
       return html`<div class="acp-changes-review__state">
         <b class="acp-changes-review__state-title">Not a git repository</b>
       </div>`;
@@ -419,7 +428,7 @@ export class AcpChangesReview extends LitElement {
       return html`<div class="acp-changes-review__state">
         <md-icon class="acp-changes-review__state-icon">${unsafeSVG(checkCircleIcon)}</md-icon>
         <b class="acp-changes-review__state-title">No changes</b>
-        <span>The working tree matches HEAD.</span>
+        <span>${this.base === null ? 'The working tree matches HEAD.' : 'Nothing changed since the session started.'}</span>
       </div>`;
     }
     return html`<div class="acp-changes-review__list" role="tree" aria-label="Changed files">

@@ -30,7 +30,15 @@ export const $activeFolder = computed([$sessions, $draftSessions, $activeSession
 export const $worktrees = computed($sessions, (sessions) =>
   sessions.flatMap((s) =>
     s.mode === 'worktree' && s.branch
-      ? [/** @type {WorktreeFolder} */ ({ sessionId: s.id, projectId: s.projectId, folder: s.folder, branch: s.branch })]
+      ? [
+          /** @type {WorktreeFolder} */ ({
+            sessionId: s.id,
+            projectId: s.projectId,
+            folder: s.folder,
+            branch: s.branch,
+            title: s.title,
+          }),
+        ]
       : [],
   ),
 );

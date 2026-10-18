@@ -31,6 +31,7 @@ import '../acp-browser/acp-browser.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import { isAgentsFile } from '../../models/agents-file.js';
 import { relPath, worktreeOf } from '../../models/paths.js';
+import { sessionOfTab } from '../../models/tab-ids.js';
 import { lineHeightFor } from '../../models/settings.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
@@ -45,6 +46,7 @@ import styles from './acp-tab-view.css?inline';
 /** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../models/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
 
 /**
  * What the Changes tab shows.
@@ -88,6 +90,7 @@ export class AcpTabView extends LitElement {
     settings: { attribute: false },
     fonts: { attribute: false },
     review: { attribute: false },
+    sessionReview: { attribute: false },
   };
 
   static styles = styles;
@@ -112,6 +115,7 @@ export class AcpTabView extends LitElement {
       settings: () =>
         html`<acp-settings class="acp-tab-view__view" .settings=${this.settings} .fonts=${this.fonts}></acp-settings>`,
       changes: () => this.#renderChanges(),
+      'session-changes': (tab) => this.#renderSessionChanges(tab),
       terminal: () => html`<acp-terminal class="acp-tab-view__view"></acp-terminal>`,
       browser: () => html`<acp-browser class="acp-tab-view__view"></acp-browser>`,
     },
@@ -165,6 +169,8 @@ export class AcpTabView extends LitElement {
     this.fonts = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;
+    /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */
+    this.sessionReview = null;
   }
 
   /**
@@ -331,6 +337,11 @@ export class AcpTabView extends LitElement {
     if (tab.kind === 'changes') {
       return { title: 'Changes', icon: differenceIcon, tooltip: 'Changed files and their diffs against HEAD' };
     }
+    if (tab.kind === 'session-changes') {
+      const worktree = this.worktrees.find((w) => w.sessionId === sessionOfTab(tab.id));
+      const branch = worktree?.branch ?? 'its worktree';
+      return { title: worktree?.title ?? 'Changes', icon: differenceIcon, tooltip: `Changes on ${branch} since the session started` };
+    }
     if (tab.kind === 'terminal') return { title: 'Terminal', icon: terminalIcon, tooltip: 'Terminal' };
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
     const name = basename(tab.path);
@@ -477,6 +488,22 @@ export class AcpTabView extends LitElement {
       .expanded=${review.expanded}
       .diffs=${review.diffs}
       .root=${this.root}
+      .comments=${this.comments}
+      .commentFocus=${this.commentFocus}
+    ></acp-changes-review>`;
+  }
+
+  /** @param {EditorTab} tab */
+  #renderSessionChanges(tab) {
+    const review = this.sessionReview;
+    if (!review || review.sessionId !== sessionOfTab(tab.id)) return nothing;
+    return html`<acp-changes-review
+      class="acp-tab-view__view"
+      .changes=${review.changes}
+      .expanded=${review.expanded}
+      .diffs=${review.diffs}
+      .root=${review.folder}
+      .base=${review.base}
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
     ></acp-changes-review>`;

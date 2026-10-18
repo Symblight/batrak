@@ -261,7 +261,7 @@ fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (O
 }
 
 /// `added\tremoved\tpath\0` records; a binary file has `-` for both counts.
-fn parse_numstat(text: &str) -> HashMap<String, (Option<u32>, Option<u32>)> {
+pub(crate) fn parse_numstat(text: &str) -> HashMap<String, (Option<u32>, Option<u32>)> {
     text.split('\0')
         .filter_map(|record| {
             let mut fields = record.splitn(3, '\t');

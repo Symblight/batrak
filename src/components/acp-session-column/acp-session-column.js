@@ -17,6 +17,7 @@ import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
+import { openSessionChanges } from '../../stores/editor.js';
 import { $activeSessionId, $sessions } from '../../stores/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace.js';
 import { getHomeDir } from '../../services/ipc.js';
@@ -51,7 +52,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-column
- * @summary Projects, each expanding into its agent sessions with their status (and a worktree session's branch); "+ New" opens a folder, "+" and a context menu per project, and one per session (rename, log, stop, remove).
+ * @summary Projects, each expanding into its agent sessions with their status (and a worktree session's branch); "+ New" opens a folder, "+" and a context menu per project, and one per session (rename, review a worktree's changes, log, stop, remove).
  */
 export class AcpSessionColumn extends LitElement {
   static properties = {
@@ -217,9 +218,21 @@ export class AcpSessionColumn extends LitElement {
    */
   #onSessionMenuSelect(value, session) {
     if (value === 'rename') this.#startRename(session);
+    else if (value === 'review') this.#reviewChanges(session);
     else if (value === 'log') sessionController.openLog(session.id);
     else if (value === 'stop') sessionController.stop(session.id);
     else if (value === 'remove') this.#removeSession(session);
+  }
+
+  /**
+   * Opens a worktree session's Changes tab in its project, switching to the project first.
+   * @param {Session} session
+   */
+  async #reviewChanges(session) {
+    await this.#activate(session.projectId);
+    if (this.#workspace.value?.path !== session.projectId) return;
+    await sessionController.select(session.id).catch((err) => reportError('Selecting session failed', err));
+    openSessionChanges(session.id);
   }
 
   /**
@@ -420,6 +433,9 @@ export class AcpSessionColumn extends LitElement {
       @closed=${this.#sessionMenu.onClosed}
     >
       <md-menu-item class="acp-session-column__menu-item" value="rename">Rename</md-menu-item>
+      ${session?.mode === 'worktree'
+        ? html`<md-menu-item class="acp-session-column__menu-item" value="review">Review changes</md-menu-item>`
+        : nothing}
       <md-menu-item class="acp-session-column__menu-item" value="log">Open agent log</md-menu-item>
       ${session && RUNNING.has(session.status)
         ? html`<md-menu-item class="acp-session-column__menu-item" value="stop">Stop agent</md-menu-item>`

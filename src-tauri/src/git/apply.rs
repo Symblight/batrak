@@ -1,10 +1,12 @@
 //! Bringing a worktree's work back to the main checkout: as a patch ("Apply Locally") or by
 //! checking its branch out there ("Check Out Branch").
 
-use std::path::Path;
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
 
 use super::exec::{self, Mode, Options, TempFile};
 use super::lock::with_mutation;
+use super::repo::{self, FileKind, FileStatus};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ApplyOutcome {
@@ -16,19 +18,60 @@ pub enum ApplyOutcome {
     Conflicts(Vec<String>),
 }
 
-/// Patch from `base` to the worktree's current files, uncommitted and untracked ones included
-/// (ignored files are not). Built in a temporary index, so the worktree's own index is untouched.
-pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
+/// Runs git commands against a scratch index holding the worktree's files as they are now,
+/// uncommitted and untracked ones included (ignored ones not). Seeded from the worktree's own index,
+/// so `add -A` hashes only changed files; that index is never touched. `worktree` may be a folder in it.
+fn with_snapshot<T>(
+    git: &Path,
+    worktree: &Path,
+    f: impl FnOnce(&dyn Fn(&[&dyn AsRef<OsStr>]) -> Result<Vec<u8>, String>) -> Result<T, String>,
+) -> Result<T, String> {
     let index = TempFile::new("index");
-    let env: [(&str, &std::ffi::OsStr); 1] = [("GIT_INDEX_FILE", index.path.as_os_str())];
+    let real = exec::run(git, worktree, &exec::args(&[&"rev-parse", &"--path-format=absolute", &"--git-path", &"index"]), Mode::Background)?;
+    let seeded = std::fs::copy(PathBuf::from(String::from_utf8_lossy(&real).trim()), &index.path).is_ok();
+    let env: [(&str, &OsStr); 1] = [("GIT_INDEX_FILE", index.path.as_os_str())];
     let opts = Options { env: &env, ..Default::default() };
-    let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Vec<u8>, String> {
+    let run = |args: &[&dyn AsRef<OsStr>]| -> Result<Vec<u8>, String> {
         let out = exec::run_with(git, worktree, &exec::args(args), Mode::Local, &opts)?;
         if out.success() { Ok(out.stdout) } else { Err(exec::failure_message(&out)) }
     };
-    run(&[&"read-tree", &"HEAD"])?;
+    if !seeded {
+        run(&[&"read-tree", &"HEAD"])?;
+    }
     run(&[&"add", &"-A"])?;
-    run(&[&"diff", &"--cached", &"--binary", &base])
+    f(&run)
+}
+
+/// Patch from `base` to the worktree's current files, uncommitted and untracked ones included
+/// (ignored files are not). The worktree's own index is untouched.
+pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
+    with_snapshot(git, worktree, |run| run(&[&"diff", &"--cached", &"--binary", &base]))
+}
+
+/// Files under `dir` (a worktree or a folder in one; paths relative to it) that differ from
+/// `base`: its commits and uncommitted work together, with line counts. Renames show as a deletion
+/// and an addition. Sorted by path.
+pub fn changed_since(git: &Path, dir: &Path, base: &str) -> Result<Vec<FileStatus>, String> {
+    with_snapshot(git, dir, |run| {
+        let diff = |format: &'static str| run(&[&"diff", &"--cached", &format, &"-z", &"--relative", &"--no-renames", &base]);
+        let names = diff("--name-status")?;
+        let counts = repo::parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
+        let names = String::from_utf8_lossy(&names);
+        let mut fields = names.split('\0').filter(|f| !f.is_empty());
+        let mut files = Vec::new();
+        while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
+            let kind = match status.as_bytes().first() {
+                Some(b'A') => FileKind::Added,
+                Some(b'D') => FileKind::Deleted,
+                Some(b'T') => FileKind::TypeChanged,
+                _ => FileKind::Modified,
+            };
+            let (added, removed) = counts.get(path).copied().unwrap_or((None, None));
+            files.push(FileStatus { path: path.to_owned(), kind, staged: false, unstaged: true, orig_path: None, added, removed });
+        }
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(files)
+    })
 }
 
 /// Applies the worktree's changes since `base` to the checkout at `target`. A plain apply is
@@ -88,8 +131,9 @@ pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::git::repo::FileKind;
     use crate::git::test_repo::{git_bin, run_in, TestRepo};
-    use crate::git::worktree;
+    use crate::git::{blob, worktree};
 
     #[test]
     fn applies_uncommitted_and_untracked_work_unstaged() {
@@ -105,6 +149,39 @@ mod tests {
         assert!(repo.path.join("new.rs").exists());
         assert!(repo.git(&["diff", "--cached", "--name-only"]).is_empty(), "nothing staged");
         assert!(run_in(&wt, &["diff", "--cached", "--name-only"]).is_empty(), "worktree index untouched");
+    }
+
+    #[test]
+    fn files_changed_since_the_base_commit_and_their_text_there() {
+        let mut repo = TestRepo::with_commit("since");
+        for (path, text) in [("app/edit.txt", "one\n"), ("app/gone.txt", "gone\n"), ("app/keep.txt", "keep\n")] {
+            repo.write(path, text);
+        }
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "app"]);
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let wt = repo.worktree("since-wt", "brama/since");
+        std::fs::write(wt.join("app/edit.txt"), "one\ntwo\n").unwrap();
+        run_in(&wt, &["commit", "-qam", "agent"]);
+        std::fs::remove_file(wt.join("app/gone.txt")).unwrap();
+        std::fs::write(wt.join("app/new.txt"), "a\nb\nc\n").unwrap();
+        std::fs::write(wt.join("outside.txt"), "not the project's").unwrap();
+        run_in(&wt, &["add", "app/new.txt"]);
+        let git = git_bin();
+
+        let files = changed_since(&git, &wt.join("app"), &base).unwrap();
+        let summary: Vec<_> = files.iter().map(|f| (f.path.as_str(), f.kind, f.added, f.removed)).collect();
+        assert_eq!(
+            summary,
+            [
+                ("edit.txt", FileKind::Modified, Some(1), Some(0)),
+                ("gone.txt", FileKind::Deleted, Some(0), Some(1)),
+                ("new.txt", FileKind::Added, Some(3), Some(0)),
+            ]
+        );
+        assert_eq!(run_in(&wt, &["diff", "--cached", "--name-only"]), "app/new.txt\n", "the worktree's index is untouched");
+        assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "edit.txt").unwrap().as_deref(), Some("one\n"));
+        assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "new.txt").unwrap(), None);
     }
 
     #[test]

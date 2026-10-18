@@ -454,6 +454,26 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
 }
 
 #[tokio::test]
+async fn a_worktree_sessions_changes_are_listed_against_its_base() {
+    let f = git_fixture("wt-changes");
+    let (session, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
+    let (_, local) = f.create("l", "fake").unwrap();
+    events.wait_status("idle").await;
+    local.wait_status("idle").await;
+    let wt = PathBuf::from(&session.folder);
+    assert!(f.sessions.changes("c").unwrap().is_empty(), "nothing done yet");
+
+    assert_eq!(f.ask("c", &events, &format!("write {} one\nmore", wt.join("a.txt").display())).await, "written");
+    assert_eq!(f.ask("c", &events, &format!("write {} new", wt.join("dir/new.txt").display())).await, "written");
+    let changed: Vec<_> = f.sessions.changes("c").unwrap().into_iter().map(|file| file.path).collect();
+    assert_eq!(changed, ["a.txt", "dir/new.txt"]);
+    assert_eq!(f.sessions.file_at_base("c", "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
+    assert_eq!(f.sessions.file_at_base("c", "dir/new.txt").unwrap(), None);
+    assert!(f.sessions.file_at_base("c", "../x").is_err());
+    assert!(f.sessions.changes("l").unwrap_err().contains("worktree"));
+}
+
+#[tokio::test]
 async fn a_worktree_session_starts_from_the_chosen_branch() {
     let f = git_fixture("wt-base");
     run_in(&f.project, &["switch", "-qc", "feature"]);

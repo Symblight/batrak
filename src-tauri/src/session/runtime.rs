@@ -523,6 +523,30 @@ impl Sessions {
         Ok(())
     }
 
+    /// A worktree session's changed files since its base commit, relative to its folder. Blocking.
+    pub fn changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
+        let (dir, base) = self.worktree_of(id)?;
+        crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base)
+    }
+
+    /// A worktree session's file (relative to its folder) at its base commit; `None` when it
+    /// wasn't there, is binary or too large. Blocking.
+    pub fn file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
+        crate::workspace::checked_rel(path)?;
+        let (dir, base) = self.worktree_of(id)?;
+        crate::git::blob::file_at(crate::git::binary::git()?, &dir, &base, path)
+    }
+
+    /// A worktree session's folder and base commit.
+    fn worktree_of(&self, id: &str) -> Result<(PathBuf, String), String> {
+        let record = self.get(id)?.record();
+        match (record.mode, record.base_commit) {
+            (Mode::Worktree, Some(base)) if record.agent_cwd.is_dir() => Ok((record.agent_cwd, base)),
+            (Mode::Worktree, Some(_)) => Err(format!("{}: the worktree isn't checked out", record.agent_cwd.display())),
+            _ => Err("only worktree sessions have changes of their own".to_owned()),
+        }
+    }
+
     /// The agent's stderr log of a session.
     pub fn log_path(&self, id: &str) -> Result<PathBuf, String> {
         self.get(id)?;

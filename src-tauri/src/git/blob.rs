@@ -10,9 +10,14 @@ const MAX_BLOB: usize = 5 * 1024 * 1024;
 /// Text of `rel` (relative to `root`) at HEAD; `None` when it isn't in HEAD (new file, no
 /// commits, not a repository), is binary, or is over `MAX_BLOB`.
 pub fn file_at_head(git: &Path, root: &Path, rel: &str) -> Result<Option<String>, String> {
-    // `HEAD:./path` resolves against the working directory, so a root in a subdirectory of
+    file_at(git, root, "HEAD", rel)
+}
+
+/// [`file_at_head`] at the commit `rev`.
+pub fn file_at(git: &Path, root: &Path, rev: &str, rel: &str) -> Result<Option<String>, String> {
+    // `<rev>:./path` resolves against the working directory, so a root in a subdirectory of
     // its repository needs no prefix.
-    let spec = format!("HEAD:./{rel}");
+    let spec = format!("{rev}:./{rel}");
     let opts = Options { max_output: Some(MAX_BLOB), ..Default::default() };
     let out = match exec::run_with(git, root, &exec::args(&[&"cat-file", &"blob", &spec]), Mode::Background, &opts) {
         Ok(out) => out,

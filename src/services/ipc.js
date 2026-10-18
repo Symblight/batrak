@@ -12,6 +12,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
 /** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
+/** @typedef {import('../models/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../models/types.js').GitCommitted} GitCommitted */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../models/types.js').LogLevel} LogLevel */
@@ -408,6 +409,25 @@ export function gitHead(rootId) {
  */
 export function gitStatus(rootId, since, force = false) {
   return invoke('git_status', { rootId, since, force });
+}
+
+/**
+ * A worktree session's changed files since it started (its commits and uncommitted work).
+ * @param {string} sessionId
+ * @returns {Promise<GitFileStatus[]>} Paths relative to the session's folder.
+ */
+export function sessionChanges(sessionId) {
+  return invoke('session_changes', { sessionId });
+}
+
+/**
+ * A worktree session's file at the commit it started from: its diff's baseline.
+ * @param {string} sessionId
+ * @param {string} path Relative to the session's folder.
+ * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
+ */
+export function sessionFileAtBase(sessionId, path) {
+  return invoke('session_file_at_base', { sessionId, path });
 }
 
 /**

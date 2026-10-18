@@ -200,6 +200,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   icon, no diff gutter, re-read when its turn ends (nothing watches a worktree); its folder refs
   reveal the project's same folder. A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
+  Session row menu → Review changes opens the session's own Changes tab (`view:session-changes:<id>`,
+  `models/tab-ids.js`; kept while it's a worktree session of the project): `SessionChangesController`
+  (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,
+  `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
+  each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
+  `base` shows them without commit picks.
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set

@@ -7,6 +7,7 @@ import { projectController } from '../../services/project-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
+import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
 import {
   $activePath,
   $editorTabs,
@@ -66,6 +67,7 @@ export class AcpMainColumn extends LitElement {
 
   #files = new TabFilesController(this);
   #review = new ChangesReviewController(this);
+  #sessionReview = new SessionChangesController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
   #workspace = new StoreController(this, { store: $workspace });
   #worktrees = new StoreController(this, { store: $worktrees });
@@ -106,6 +108,11 @@ export class AcpMainColumn extends LitElement {
   disconnectedCallback() {
     this.removeEventListener('acp-file-open', this.#onFileOpen);
     super.disconnectedCallback();
+  }
+
+  /** The review a Changes view's events come from: an active worktree session tab's, else the project's. */
+  get #reviewShown() {
+    return this.#sessionReview.view ? this.#sessionReview : this.#review;
   }
 
   /**
@@ -198,6 +205,7 @@ export class AcpMainColumn extends LitElement {
         .pinned=${pinned}
         .root=${this.#workspace.value?.path ?? null}
         .worktrees=${this.#worktrees.value}
+        .sessionReview=${this.#sessionReview.view}
         .editorFont=${settings.editorFont}
         .editorFontSize=${settings.editorFontSize}
         .comments=${this.#comments.value}
@@ -232,9 +240,9 @@ export class AcpMainColumn extends LitElement {
           if ($commentFocus.get() === e.detail.focus) focusComment(null);
         }}
         @acp-chat-add=${(/** @type {CustomEvent<{ inserts: ChatInsert[] }>} */ e) => addToChat(e.detail.inserts)}
-        @acp-change-toggle=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#review.toggle(e.detail.id)}
-        @acp-change-expand=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#review.expand(e.detail.id)}
-        @acp-changes-collapse=${() => this.#review.collapseAll()}
+        @acp-change-toggle=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.toggle(e.detail.id)}
+        @acp-change-expand=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.expand(e.detail.id)}
+        @acp-changes-collapse=${() => this.#reviewShown.collapseAll()}
         @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
           pickForCommit(e.detail.ids, e.detail.picked)}
         @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
