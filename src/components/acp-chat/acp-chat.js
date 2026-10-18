@@ -18,6 +18,7 @@ import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
 import '../acp-context-meter/acp-context-meter.js';
 import '../acp-mode-picker/acp-mode-picker.js';
+import '../acp-part-thinking/acp-part-thinking.js';
 import '../acp-run-target/acp-run-target.js';
 import '../acp-session-banner/acp-session-banner.js';
 
@@ -418,7 +419,8 @@ export class AcpChat extends LitElement {
           content-align="start"
           scroll-mode="pin-top"
         >
-          <chx-streaming-indicator slot="streaming"></chx-streaming-indicator>
+          <!-- Waiting for the reply's first update: the agent thinking, as its thoughts look. -->
+          <acp-part-thinking slot="streaming"></acp-part-thinking>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
         <acp-session-banner

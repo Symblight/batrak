@@ -31,20 +31,27 @@ const AGENT_ID = 'agent';
  * Turns ACP session updates into `<chx-chat>` chunks for one message. Consecutive text (or thought)
  * chunks grow one part; a tool call or plan in between starts the next text part, so the reply
  * reads in the order the agent worked. Tool calls are keyed by ACP's `toolCallId`.
+ *
+ * ACP never says a thought is over: any other update ends it (`part-end`), and a live one carries
+ * when it started and ended in `data` (`startedAt`, `endedAt`).
  */
 class MessageBuilder {
   messageId = crypto.randomUUID();
   /** @type {string | null} */
   #lastKind = null;
   #parts = 0;
+  /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
+  #thought = null;
 
   /**
    * @param {string} sessionId
    * @param {string} authorId
+   * @param {{ live?: boolean }} [options] `live`: updates arrive as the agent works, so thoughts are timed.
    */
-  constructor(sessionId, authorId) {
+  constructor(sessionId, authorId, { live = false } = {}) {
     this.sessionId = sessionId;
     this.authorId = authorId;
+    this.live = live;
   }
 
   /** @param {string} kind */
@@ -77,15 +84,47 @@ class MessageBuilder {
    * @returns {ChxChunk[]}
    */
   chunks(update) {
+    if (update.sessionUpdate === 'agent_thought_chunk') return this.#thoughtChunks(update);
+    const chunks = this.#chunks(update);
+    return chunks.length ? [...this.#endThought(), ...chunks] : chunks;
+  }
+
+  /**
+   * @param {AcpSessionUpdate} update
+   * @returns {ChxChunk[]}
+   */
+  #thoughtChunks(update) {
+    const text = textOf(update);
+    if (!text) return [];
+    const partId = this.#partId('thought');
+    if (this.#thought?.partId === partId) return [this.chunk(partId, 'thought', { text })];
+    const startedAt = this.live ? Date.now() : null;
+    this.#thought = { partId, startedAt };
+    return [this.chunk(partId, 'thought', startedAt === null ? { text } : { text, data: { startedAt } })];
+  }
+
+  /** @returns {ChxChunk[]} Ends the thought being streamed, if any. */
+  #endThought() {
+    const thought = this.#thought;
+    if (!thought) return [];
+    this.#thought = null;
+    const { messageId, sessionId: conversationId } = this;
+    /** @type {ChxChunk} */
+    const end = { kind: 'part-end', messageId, conversationId, partId: thought.partId };
+    if (thought.startedAt === null) return [end];
+    return [this.chunk(thought.partId, 'thought', { data: { startedAt: thought.startedAt, endedAt: Date.now() } }), end];
+  }
+
+  /**
+   * @param {AcpSessionUpdate} update
+   * @returns {ChxChunk[]}
+   */
+  #chunks(update) {
     switch (update.sessionUpdate) {
       case 'agent_message_chunk':
       case 'user_message_chunk': {
         const text = textOf(update);
         return text ? [this.chunk(this.#partId('text'), 'text', { text })] : [];
-      }
-      case 'agent_thought_chunk': {
-        const text = textOf(update);
-        return text ? [this.chunk(this.#partId('thought'), 'thought', { text })] : [];
       }
       case 'tool_call':
       case 'tool_call_update': {
@@ -121,10 +160,10 @@ class MessageBuilder {
     return delta;
   }
 
-  /** @returns {ChxChunk} */
+  /** @returns {ChxChunk[]} The thought being streamed ends with the message. */
   finish(cancelled = false) {
     const { messageId, sessionId: conversationId } = this;
-    return { kind: cancelled ? 'abort' : 'finish', messageId, conversationId };
+    return [...this.#endThought(), { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
   }
 }
 
@@ -207,7 +246,7 @@ function endTurn(sessionId, { cancelled = false, error }) {
     if (error !== undefined) {
       turn.controller.error(new Error(error));
     } else {
-      turn.controller.enqueue(turn.builder.finish(cancelled));
+      for (const chunk of turn.builder.finish(cancelled)) turn.controller.enqueue(chunk);
       turn.controller.close();
     }
   } catch {
@@ -242,7 +281,7 @@ function replay(sessionId, update) {
 function endReplay(sessionId) {
   const builder = replays.get(sessionId);
   replays.delete(sessionId);
-  if (builder) deliver(builder.finish());
+  if (builder) builder.finish().forEach(deliver);
 }
 
 /**
@@ -268,7 +307,7 @@ export function restoreHistory(sessionId, entries) {
   /** @type {MessageBuilder | null} */
   let reply = null;
   const endReply = (cancelled = false) => {
-    if (reply) deliver(reply.finish(cancelled));
+    if (reply) reply.finish(cancelled).forEach(deliver);
     reply = null;
   };
   for (const entry of entries) {
@@ -276,7 +315,7 @@ export function restoreHistory(sessionId, entries) {
       endReply();
       const message = new MessageBuilder(sessionId, USER_ID);
       deliver(message.chunk(`${message.messageId}-t1`, 'text', { text: promptText(entry.prompt) }));
-      deliver(message.finish());
+      message.finish().forEach(deliver);
     } else if (entry.kind === 'update') {
       reply ??= new MessageBuilder(sessionId, AGENT_ID);
       for (const chunk of reply.chunks(entry.update)) deliver(chunk);
@@ -480,7 +519,7 @@ export const acpAdapter = {
     });
     /** @type {Turn} */
     const turn = {
-      builder: new MessageBuilder(sessionId, AGENT_ID),
+      builder: new MessageBuilder(sessionId, AGENT_ID, { live: true }),
       controller: /** @type {ReadableStreamDefaultController<ChxChunk>} */ (controller),
       started: false,
     };

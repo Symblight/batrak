@@ -8,13 +8,13 @@ import { projectController } from '../../services/project-controller.js';
 import { projectPathOf } from '../../models/paths.js';
 import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions.js';
 import { AcpMarkdown } from '../../components/acp-markdown/acp-markdown.js';
+import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thinking.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('@symblight/chat/composer').ChxCodeBlock} ChxCodeBlock */
-/** @typedef {import('@symblight/chat/agent').ChxThought} ChxThought */
 /** @typedef {import('@symblight/chat/agent').ChxPlan} ChxPlan */
 /** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
@@ -220,11 +220,20 @@ export class ChatPartsController {
       markdown.streaming = part.state === 'streaming';
       return markdown;
     },
-    thought: (part, previous) => {
-      const thought = /** @type {ChxThought} */ (previous ?? document.createElement('chx-thought'));
-      thought.text = part.text ?? '';
-      thought.streaming = part.state === 'streaming';
-      return thought;
+    // A thought the turn was stopped in is the reply's last part (any other part ends it).
+    thought: (part, previous, message) => {
+      const thinking = previous instanceof AcpPartThinking ? previous : new AcpPartThinking();
+      const { startedAt, endedAt } = part.data ?? {};
+      thinking.text = part.text ?? '';
+      thinking.startedAt = typeof startedAt === 'number' ? startedAt : null;
+      thinking.endedAt = typeof endedAt === 'number' ? endedAt : null;
+      thinking.status =
+        part.state === 'streaming'
+          ? 'streaming'
+          : message.status === 'cancelled' && message.parts.at(-1)?.id === part.id
+            ? 'stopped'
+            : 'done';
+      return thinking;
     },
     plan: (part, previous) => {
       const plan = /** @type {ChxPlan} */ (previous ?? document.createElement('chx-plan'));

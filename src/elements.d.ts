@@ -19,6 +19,7 @@ import type { AcpFileColumn } from './components/acp-file-column/acp-file-column
 import type { AcpFileTree } from './components/acp-file-tree/acp-file-tree.js';
 import type { AcpModePicker } from './components/acp-mode-picker/acp-mode-picker.js';
 import type { AcpNavRail } from './components/acp-nav-rail/acp-nav-rail.js';
+import type { AcpPartThinking } from './components/acp-part-thinking/acp-part-thinking.js';
 import type { AcpResizeHandle } from './components/acp-resize-handle/acp-resize-handle.js';
 import type { AcpRunTarget } from './components/acp-run-target/acp-run-target.js';
 import type { AcpQuickOpen } from './components/acp-quick-open/acp-quick-open.js';
@@ -55,6 +56,7 @@ declare global {
     'acp-file-tree': AcpFileTree;
     'acp-mode-picker': AcpModePicker;
     'acp-nav-rail': AcpNavRail;
+    'acp-part-thinking': AcpPartThinking;
     'acp-quick-open': AcpQuickOpen;
     'acp-resize-handle': AcpResizeHandle;
     'acp-run-target': AcpRunTarget;

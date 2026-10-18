@@ -192,7 +192,11 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
   notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>`; `$agentList`
   (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
-  `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`).
+  `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
+  width (`chx-message:not([own])` in `shadow.css`). A thought is `<acp-part-thinking>`: ACP never
+  ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live
+  one timed in `data` (`startedAt`, `endedAt`); the last part of a cancelled reply shows as stopped.
+  It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
   `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
   (`models/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
   and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
