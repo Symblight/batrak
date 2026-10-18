@@ -6,6 +6,7 @@ use std::time::Instant;
 
 use super::*;
 use crate::acp::fake_agent::{self, FakeAgentOptions, FakeAgentState};
+use crate::git::apply::ApplyOutcome;
 use crate::git::test_repo::run_in;
 
 struct FakeLauncher {
@@ -471,6 +472,68 @@ async fn a_worktree_sessions_changes_are_listed_against_its_base() {
     assert_eq!(f.sessions.file_at_base("c", "dir/new.txt").unwrap(), None);
     assert!(f.sessions.file_at_base("c", "../x").is_err());
     assert!(f.sessions.changes("l").unwrap_err().contains("worktree"));
+}
+
+#[tokio::test]
+async fn applying_a_worktree_sessions_work_brings_it_to_the_project_unstaged() {
+    let f = git_fixture("wt-apply");
+    let (session, events) = f.create_in("a", "fake", Mode::Worktree, None).unwrap();
+    let (_, local) = f.create("l", "fake").unwrap();
+    events.wait_status("idle").await;
+    local.wait_status("idle").await;
+    assert_eq!(f.sessions.apply_locally("a").await.unwrap(), ApplyOutcome::Empty);
+    assert!(f.sessions.apply_locally("l").await.unwrap_err().contains("worktree"));
+
+    let wt = PathBuf::from(&session.folder);
+    std::fs::write(wt.join("committed.txt"), "c\n").unwrap();
+    run_in(&wt, &["add", "."]);
+    run_in(&wt, &["commit", "-qm", "agent"]);
+    assert_eq!(f.ask("a", &events, &format!("write {} edited", wt.join("a.txt").display())).await, "written");
+
+    // Not while the agent works on it.
+    events.clear();
+    f.sessions.send_prompt("a", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+    assert!(f.sessions.apply_locally("a").await.unwrap_err().contains("working"));
+    f.sessions.cancel("a").unwrap();
+    events.wait_turn_end().await;
+
+    assert_eq!(f.sessions.apply_locally("a").await.unwrap(), ApplyOutcome::Clean);
+    assert_eq!(std::fs::read_to_string(f.project.join("a.txt")).unwrap(), "edited");
+    assert_eq!(std::fs::read_to_string(f.project.join("committed.txt")).unwrap(), "c\n");
+    assert!(run_in(&f.project, &["diff", "--cached", "--name-only"]).is_empty(), "unstaged");
+    assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), "main");
+}
+
+#[tokio::test]
+async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_over() {
+    let f = git_fixture("wt-checkout");
+    let (session, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(&session.folder);
+    let branch = session.branch.clone().unwrap();
+    std::fs::write(wt.join("work.txt"), "w\n").unwrap();
+    let err = f.sessions.check_out_branch("c").await.unwrap_err();
+    assert!(err.contains("uncommitted") && err.contains("Apply Locally"), "{err}");
+    run_in(&wt, &["add", "."]);
+    run_in(&wt, &["commit", "-qm", "agent"]);
+
+    f.sessions.check_out_branch("c").await.unwrap();
+    assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), branch);
+    assert_eq!(std::fs::read_to_string(f.project.join("work.txt")).unwrap(), "w\n");
+    let listed = f.sessions.list().into_iter().find(|s| s.id == "c").unwrap();
+    assert_eq!(listed.status, SessionStatus::Stopped);
+
+    // While the project has its branch, the session can't go on (its commits would land nowhere).
+    events.clear();
+    f.sessions.restart("c").await.unwrap();
+    let failed = events.wait_for("start error", |e| e.kind == "error").await;
+    assert!(failed.payload["message"].as_str().unwrap().contains("checked out in the project"), "{:?}", failed.payload);
+    run_in(&f.project, &["switch", "-q", "main"]);
+    events.clear();
+    f.sessions.restart("c").await.unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), branch, "back on its branch");
 }
 
 #[tokio::test]

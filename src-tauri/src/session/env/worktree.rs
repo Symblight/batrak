@@ -26,6 +26,12 @@ impl WorktreeEnv {
         WorktreeEnv { project, root, dir, branch, base_commit }
     }
 
+    /// Whether the session's branch is checked out in another worktree (the project's checkout).
+    fn checked_out_elsewhere(&self, git: &Path) -> Result<bool, String> {
+        let entries = worktree::list(git, &self.project)?;
+        Ok(entries.iter().any(|e| e.branch.as_deref() == Some(self.branch.as_str()) && e.path != self.root))
+    }
+
     /// The branch's commit, `None` once it's gone.
     fn tip(&self, git: &Path) -> Option<String> {
         let rev = format!("refs/heads/{}^{{commit}}", self.branch);
@@ -74,13 +80,14 @@ impl SessionEnv for WorktreeEnv {
     }
 
     /// Checks the worktree out on the first start, and again from its branch when its folder was
-    /// deleted.
+    /// deleted. A worktree whose branch was checked out in the project (Check Out Branch) goes back
+    /// on it, or doesn't start: its agent's commits would land on no branch.
     fn prepare(&self, cancel: &AtomicBool) -> Result<(), String> {
         if !self.project.is_dir() {
             return Err(format!("{}: the project folder is gone", self.project.display()));
         }
+        let git = binary::git()?;
         if !self.root.join(".git").exists() {
-            let git = binary::git()?;
             worktree::prune(git, &self.project)?;
             if cancel.load(Ordering::SeqCst) {
                 return Err("cancelled".to_owned());
@@ -90,6 +97,16 @@ impl SessionEnv for WorktreeEnv {
                 None => worktree::add(git, &self.project, &self.root, &self.branch, &self.base_commit)?,
             }
             tracing::info!(path = %self.root.display(), branch = %self.branch, "worktree checked out");
+        }
+        let head = exec::run(git, &self.root, &exec::args(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]), GitMode::Background);
+        if head.map(|h| String::from_utf8_lossy(&h).trim().to_owned()).ok().as_deref() != Some(self.branch.as_str()) {
+            if self.checked_out_elsewhere(git)? {
+                return Err(format!(
+                    "Branch {} is checked out in the project; switch the project to another branch to go on with this session",
+                    self.branch
+                ));
+            }
+            exec::run(git, &self.root, &exec::args(&[&"switch", &"--end-of-options", &self.branch]), GitMode::Local)?;
         }
         if self.dir.is_dir() {
             Ok(())
@@ -131,7 +148,9 @@ impl SessionEnv for WorktreeEnv {
             return Err(format!("{}: has uncommitted changes, so it was kept", self.root.display()));
         }
         let tip = self.tip(git);
-        let cleanup = if tip.as_deref() == Some(self.base_commit.as_str()) {
+        // A branch checked out elsewhere can't be deleted (git refuses); it's the project's now.
+        let unused = tip.as_deref() == Some(self.base_commit.as_str()) && !self.checked_out_elsewhere(git)?;
+        let cleanup = if unused {
             worktree::BranchCleanup::Delete
         } else {
             worktree::BranchCleanup::Keep

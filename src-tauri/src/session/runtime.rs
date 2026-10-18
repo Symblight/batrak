@@ -523,6 +523,63 @@ impl Sessions {
         Ok(())
     }
 
+    /// Applies a worktree session's work since its base (commits and uncommitted changes) to the
+    /// project's checkout, unstaged; a checkout that moved on gets a three-way merge. Refused while
+    /// a turn runs.
+    pub async fn apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
+        let state = self.get(id)?;
+        let (dir, base) = self.worktree_of(id)?;
+        self.idle_worktree(&state)?;
+        let project = state.record().project_path;
+        let outcome = tokio::task::spawn_blocking(move || {
+            crate::git::apply::apply_locally(crate::git::binary::git()?, &dir, &base, &project)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        tracing::info!(session = %id, ?outcome, "applied the worktree's work to the project");
+        Ok(outcome)
+    }
+
+    /// Hands a worktree session's branch to the project: stops the agent and checks the branch out
+    /// in the project's checkout (the worktree is left detached; the session goes on only once the
+    /// project is on another branch). Refused while a turn runs or the worktree has uncommitted
+    /// changes, which a checkout would leave behind.
+    pub async fn check_out_branch(&self, id: &str) -> Result<(), String> {
+        let state = self.get(id)?;
+        self.worktree_of(id)?;
+        self.idle_worktree(&state)?;
+        let record = state.record();
+        let (Some(root), Some(branch)) = (record.worktree_path, record.branch) else {
+            return Err("the session's worktree is missing from its record".to_owned());
+        };
+        let check = root.clone();
+        let dirty = tokio::task::spawn_blocking(move || crate::git::worktree::is_dirty(crate::git::binary::git()?, &check))
+            .await
+            .map_err(|e| e.to_string())??;
+        if dirty {
+            return Err("The worktree has uncommitted changes, which a checkout would leave behind: Apply Locally brings them, or ask the agent to commit them".to_owned());
+        }
+        self.inner.stop(&state).await;
+        self.inner.set_status(&state, SessionStatus::Stopped, None);
+        let project = record.project_path;
+        let handed = branch.clone();
+        tokio::task::spawn_blocking(move || {
+            crate::git::apply::check_out_branch(crate::git::binary::git()?, &root, &handed, &project)
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        tracing::info!(session = %id, %branch, "checked the session's branch out in the project");
+        Ok(())
+    }
+
+    /// Refuses git work on a worktree its agent is changing.
+    fn idle_worktree(&self, state: &SessionState) -> Result<(), String> {
+        if state.turn_running.load(Ordering::SeqCst) {
+            return Err("The agent is working in the worktree; wait for its turn to end, or stop it".to_owned());
+        }
+        Ok(())
+    }
+
     /// A worktree session's changed files since its base commit, relative to its folder. Blocking.
     pub fn changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
         let (dir, base) = self.worktree_of(id)?;

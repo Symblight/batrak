@@ -28,6 +28,12 @@
 .acp-changes-review__tool-icon {
   font-size: var(--icon-size-lg);
 }
+.acp-changes-review__session-action {
+  flex: none;
+  --md-button-font-size: var(--font-size-md);
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
+}
 .acp-changes-review__all {
   flex: none;
 }

@@ -504,6 +504,7 @@ export class AcpTabView extends LitElement {
       .diffs=${review.diffs}
       .root=${review.folder}
       .base=${review.base}
+      .branch=${review.branch}
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
     ></acp-changes-review>`;

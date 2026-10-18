@@ -8,7 +8,8 @@ use super::exec::{self, Mode, Options, TempFile};
 use super::lock::with_mutation;
 use super::repo::{self, FileKind, FileStatus};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "outcome", content = "conflicts", rename_all = "lowercase")]
 pub enum ApplyOutcome {
     /// The worktree has no changes since `base`.
     Empty,

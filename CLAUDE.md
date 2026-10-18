@@ -205,7 +205,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,
   `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
   each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
-  `base` shows them without commit picks.
+  `base` shows them without commit picks, with Apply locally and Check out branch (also in the
+  row menu, through `sessionController`).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
@@ -280,8 +281,14 @@ helpers apply.
   filters run under `Mode::Hooks`: 10 min timeout, own process group, stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
 - `worktree` backs worktree sessions (`add` / `attach` check out under `Mode::Hooks`: a big
-  tree, LFS or a `post-checkout` hook outlast 10 s). `apply` (Apply Locally / Check Out Branch) is
-  tested but not exposed yet. A dirty worktree is never removed.
+  tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a worktree session's Apply
+  Locally (`session_apply_locally`: its commits and uncommitted work since `baseCommit` as an
+  unstaged patch, `--3way` with a conflict list when the project moved on; applied from the
+  project's folder, so changes outside it are left out) and Check Out Branch
+  (`session_check_out_branch`: refused while the worktree is dirty, which a checkout would leave
+  behind; stops the agent, detaches the worktree). Both are refused mid-turn. A worktree whose
+  branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
+  dirty worktree is never removed.
 - Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`

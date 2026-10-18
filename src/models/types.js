@@ -213,6 +213,12 @@
  */
 
 /**
+ * What Apply Locally did with a worktree session's work.
+ * @typedef {{ outcome: 'empty' | 'clean' } | { outcome: 'conflicts', conflicts: string[] }} ApplyResult
+ *   `conflicts`: files (relative to the repository) left with conflict markers by a three-way merge.
+ */
+
+/**
  * The open project's `.brama/workspace.json`.
  * @typedef {Object} WorkspaceSettings
  * @property {'local' | 'worktree'} defaultMode The run target a new session starts with.

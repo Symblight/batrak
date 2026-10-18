@@ -4,6 +4,7 @@ import { commentAuthor } from '../../models/editor-plugins.js';
 import { loadSystemFonts } from '../../services/fonts.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
+import { sessionController } from '../../services/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
@@ -109,6 +110,16 @@ export class AcpMainColumn extends LitElement {
     this.removeEventListener('acp-file-open', this.#onFileOpen);
     super.disconnectedCallback();
   }
+
+  #onSessionApply = () => {
+    const id = this.#sessionReview.view?.sessionId;
+    if (id) sessionController.applyLocally(id);
+  };
+
+  #onSessionCheckOut = () => {
+    const id = this.#sessionReview.view?.sessionId;
+    if (id) sessionController.checkOutBranch(id);
+  };
 
   /** The review a Changes view's events come from: an active worktree session tab's, else the project's. */
   get #reviewShown() {
@@ -243,6 +254,8 @@ export class AcpMainColumn extends LitElement {
         @acp-change-toggle=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.toggle(e.detail.id)}
         @acp-change-expand=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.expand(e.detail.id)}
         @acp-changes-collapse=${() => this.#reviewShown.collapseAll()}
+        @acp-session-apply=${this.#onSessionApply}
+        @acp-session-check-out=${this.#onSessionCheckOut}
         @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
           pickForCommit(e.detail.ids, e.detail.picked)}
         @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}

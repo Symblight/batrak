@@ -19,6 +19,7 @@ import { $sessions } from '../../stores/sessions.js';
  * @property {ReadonlyMap<string, FileDiff>} diffs
  * @property {string} folder The session's folder.
  * @property {string} base The commit it started from.
+ * @property {string | null} branch
  */
 
 /** @type {GitChangesView} */
@@ -93,6 +94,7 @@ export class SessionChangesController {
       diffs: this.#diffs,
       folder: session.folder,
       base: session.baseCommit,
+      branch: session.branch,
     };
   }
 

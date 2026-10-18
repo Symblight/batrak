@@ -13,6 +13,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('../models/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../models/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../models/types.js').ApplyResult} ApplyResult */
 /** @typedef {import('../models/types.js').GitCommitted} GitCommitted */
 /** @typedef {import('../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../models/types.js').LogLevel} LogLevel */
@@ -418,6 +419,26 @@ export function gitStatus(rootId, since, force = false) {
  */
 export function sessionChanges(sessionId) {
   return invoke('session_changes', { sessionId });
+}
+
+/**
+ * Applies a worktree session's work since it started to the project's checkout, unstaged. Rejects
+ * while its agent is mid-turn.
+ * @param {string} sessionId
+ * @returns {Promise<ApplyResult>}
+ */
+export function sessionApplyLocally(sessionId) {
+  return invoke('session_apply_locally', { sessionId });
+}
+
+/**
+ * Stops a worktree session's agent and checks its branch out in the project's checkout. Rejects
+ * while its agent is mid-turn or the worktree has uncommitted changes.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionCheckOutBranch(sessionId) {
+  return invoke('session_check_out_branch', { sessionId });
 }
 
 /**

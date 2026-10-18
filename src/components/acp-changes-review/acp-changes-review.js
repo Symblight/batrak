@@ -8,6 +8,7 @@ import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
+import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import arrowDownwardIcon from '@material-design-icons/svg/outlined/arrow_downward.svg?raw';
 import arrowDropDownIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import arrowUpwardIcon from '@material-design-icons/svg/outlined/arrow_upward.svg?raw';
@@ -107,6 +108,8 @@ function toRows(files) {
  * @fires acp-changes-collapse `null` Collapse all.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
+ * @fires acp-session-apply `null` With `base`: Apply locally was pressed.
+ * @fires acp-session-check-out `null` With `base`: Check out branch was confirmed.
  */
 export class AcpChangesReview extends LitElement {
   static properties = {
@@ -117,6 +120,7 @@ export class AcpChangesReview extends LitElement {
     diffs: { attribute: false },
     root: { attribute: false },
     base: { attribute: false },
+    branch: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
     hovered: { state: true },
@@ -151,6 +155,8 @@ export class AcpChangesReview extends LitElement {
     this.root = null;
     /** @type {string | null} A worktree session's base commit: its changes since then, read-only. */
     this.base = null;
+    /** @type {string | null} With `base`: the session's branch, which Check out branch hands to the project. */
+    this.branch = null;
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
     this.comments = {};
     /** @type {CommentFocus | null} */
@@ -242,6 +248,20 @@ export class AcpChangesReview extends LitElement {
   /** @param {ChangeRow} row */
   #edit(row) {
     this.#emit('acp-file-open', { path: absPath(this.root, row.id) });
+  }
+
+  /** The project switches branch and the session's agent stops: asked first. */
+  async #checkOut() {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    const confirmed = await dialog.confirm({
+      headline: `Check out ${this.branch}?`,
+      message: "The project switches to the session's branch, with its commits; the session's agent stops.",
+      detail: 'The session goes on once the project is on another branch again.',
+      confirmLabel: 'Check out',
+    });
+    if (confirmed) this.#emit('acp-session-check-out', null);
   }
 
   /** @param {string | null} id */
@@ -404,6 +424,23 @@ export class AcpChangesReview extends LitElement {
           >`}
       ${this.#renderCounts(added, removed)}
       <span class="acp-changes-review__spacer"></span>
+      ${this.base !== null
+        ? html`<md-button
+              class="acp-changes-review__session-action"
+              variant="text"
+              title="Bring the changes into the project, unstaged"
+              ?disabled=${total === 0}
+              @click=${() => this.#emit('acp-session-apply', null)}
+              >Apply locally</md-button
+            >
+            <md-button
+              class="acp-changes-review__session-action"
+              variant="text"
+              title=${`Check ${this.branch} out in the project`}
+              @click=${this.#checkOut}
+              >Check out branch</md-button
+            >`
+        : nothing}
     </header>`;
   }
 
@@ -437,7 +474,8 @@ export class AcpChangesReview extends LitElement {
   }
 
   render() {
-    return html`${this.#renderToolbar()}${this.#renderBody()}${this.#selectionActions.render()}`;
+    return html`${this.#renderToolbar()}${this.#renderBody()}${this.#selectionActions.render()}
+      ${this.base !== null ? html`<acp-confirm-dialog></acp-confirm-dialog>` : nothing}`;
   }
 }
 

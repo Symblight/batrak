@@ -2,6 +2,8 @@ import {
   agentsTrust,
   getActiveSession,
   listSessions,
+  sessionApplyLocally,
+  sessionCheckOutBranch,
   sessionCreate,
   sessionHistory,
   sessionOpen,
@@ -17,6 +19,7 @@ import {
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
 import { reportError } from './notices.js';
+import { notify } from '../stores/notices.js';
 import { configOf } from '../models/config-options.js';
 import {
   composerOf,
@@ -184,6 +187,37 @@ export class SessionController {
    */
   stop(id) {
     sessionStop(id).catch((err) => reportError('Stopping the agent failed', err));
+  }
+
+  /**
+   * Brings a worktree session's work (commits and uncommitted changes since it started) into the
+   * project's checkout as unstaged changes; says what happened.
+   * @param {string} id
+   */
+  async applyLocally(id) {
+    const title = $sessions.get().find((s) => s.id === id)?.title ?? 'the session';
+    try {
+      const result = await sessionApplyLocally(id);
+      if (result.outcome === 'conflicts') notify('warn', `Applied "${title}" with conflicts in ${result.conflicts.join(', ')}`);
+      else if (result.outcome === 'empty') notify('info', `"${title}" has no changes to apply`);
+      else notify('info', `Applied "${title}" to the project, unstaged`);
+    } catch (err) {
+      reportError('Applying the session failed', err);
+    }
+  }
+
+  /**
+   * Stops a worktree session's agent and checks its branch out in the project.
+   * @param {string} id
+   */
+  async checkOutBranch(id) {
+    const branch = $sessions.get().find((s) => s.id === id)?.branch ?? 'the branch';
+    try {
+      await sessionCheckOutBranch(id);
+      notify('info', `Checked out ${branch}`);
+    } catch (err) {
+      reportError(`Checking out ${branch} failed`, err);
+    }
   }
 
   /**
