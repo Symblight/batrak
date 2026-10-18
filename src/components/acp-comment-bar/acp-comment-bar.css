@@ -10,21 +10,21 @@
   background: var(--md-surface-container-high);
   color: var(--md-on-surface);
   font-family: var(--font-family);
-  font-size: 13px;
+  font-size: var(--font-size-md);
 }
 :host([hidden]) {
   display: none;
 }
 
 .acp-comment-bar__nav {
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-font-size: var(--icon-size-lg);
   --md-icon-button-foreground-color: var(--md-on-surface-variant);
 }
 .acp-comment-bar__nav::part(button) {
   padding: 5px;
 }
 .acp-comment-bar__nav-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 
 .acp-comment-bar__position {
@@ -36,9 +36,9 @@
 
 /* Sized like the Changes panel's Commit button; colours are the theme's filled button. */
 .acp-comment-bar__send {
-  --md-button-font-size: 13px;
-  --md-button-block-start-space: 6px;
-  --md-button-block-end-space: 6px;
+  --md-button-font-size: var(--font-size-md);
+  --md-button-block-start-space: var(--button-block-space-regular);
+  --md-button-block-end-space: var(--button-block-space-regular);
   --md-button-inline-start-space: 16px;
   --md-button-inline-end-space: 16px;
 }

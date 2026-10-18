@@ -2,6 +2,8 @@
   --acp-resize-handle-hit-width: 8px;
   --acp-resize-handle-line-color: var(--md-outline-variant);
   --acp-resize-handle-active-color: var(--md-primary);
+  --_acp-resize-handle-line-width: 1px;
+  --_acp-resize-handle-color: var(--acp-resize-handle-line-color);
 
   position: relative;
   display: block;
@@ -18,9 +20,9 @@
   position: absolute;
   inset-block: 0;
   inset-inline-start: 50%;
-  width: 1px;
+  width: var(--_acp-resize-handle-line-width);
   transform: translateX(-50%);
-  background: var(--acp-resize-handle-line-color);
+  background: var(--_acp-resize-handle-color);
   transition:
     width 0.15s,
     background-color 0.15s;
@@ -29,9 +31,9 @@
     transition: none;
   }
 }
-:host(:hover) .acp-resize-handle__line,
-:host(:focus-visible) .acp-resize-handle__line,
-:host([dragging]) .acp-resize-handle__line {
-  width: 3px;
-  background: var(--acp-resize-handle-active-color);
+:host(:hover),
+:host(:focus-visible),
+:host([dragging]) {
+  --_acp-resize-handle-line-width: 3px;
+  --_acp-resize-handle-color: var(--acp-resize-handle-active-color);
 }

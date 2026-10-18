@@ -8,9 +8,21 @@
   min-height: 0;
   box-sizing: border-box;
   padding-block-end: var(--space-3);
+  /* Compact type: the app's scale instead of MD3's 16/14/12px body. */
+  --chx-chat-body-large-font-size: var(--font-size-lg);
+  --chx-chat-body-large-line-height: 20px;
+  --chx-chat-body-medium-font-size: var(--font-size-md);
+  --chx-chat-body-medium-line-height: 18px;
+  --chx-chat-body-small-font-size: var(--font-size-xs);
+  --chx-chat-body-small-line-height: 16px;
+  --chx-chat-label-large-font-size: var(--font-size-md);
+  --chx-chat-label-medium-font-size: var(--font-size-sm);
+  --chx-chat-label-small-font-size: var(--font-size-xs);
+  --chx-chat-code-font-size: var(--font-size-sm);
+  --chx-chat-code-line-height: 1.6;
 }
 .acp-chat__attach-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 /* Agent composer: an outlined field on a tray that holds where the session runs. */
 .acp-chat__composer {
@@ -43,6 +55,11 @@
 .acp-chat__chat_empty {
   justify-content: center;
 }
+.acp-chat__message-list {
+  &[hidden] {
+    display: none;
+  }
+}
 /* Compact scrollbar, like the editor's (`models/editor-plugins.js`): WebKit (Tauri on macOS) lacks
    `scrollbar-color` and gets the pseudo-elements. Separate rules: a selector the engine rejects drops only its own. */
 @supports (scrollbar-color: auto) {
@@ -62,7 +79,4 @@
     background: var(--md-outline-variant);
     border-radius: 3px;
   }
-}
-.acp-chat__message-list[hidden] {
-  display: none;
 }

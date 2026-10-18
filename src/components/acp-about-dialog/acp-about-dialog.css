@@ -39,7 +39,7 @@
   min-width: 0;
   display: grid;
   grid-template-columns: auto 1fr;
-  gap: 6px var(--space-4);
+  gap: var(--space-1-5) var(--space-4);
   margin: 0;
   font: 400 13px/18px var(--font-family);
 }
@@ -60,12 +60,12 @@
   width: 100%;
 }
 .acp-about-dialog__action {
-  --md-button-font-size: 13px;
+  --md-button-font-size: var(--font-size-md);
 }
 /* Show log files stays at the start; Close goes to the end. */
 .acp-about-dialog__action_close {
   margin-inline-start: auto;
 }
 .acp-about-dialog__icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }

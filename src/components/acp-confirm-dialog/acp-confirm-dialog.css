@@ -45,7 +45,7 @@
   padding-block-start: calc(var(--space-4) + var(--space-2));
 }
 .acp-confirm-dialog__action {
-  --md-button-font-size: 13px;
+  --md-button-font-size: var(--font-size-md);
 }
 .acp-confirm-dialog__action_destructive {
   --md-button-background-color: var(--md-error);

@@ -13,7 +13,7 @@
 }
 .acp-main-column__comment-bar {
   position: absolute;
-  z-index: 1;
+  z-index: var(--z-raised);
   /* Above a file tab's footer */
   inset-block-end: 44px;
   inset-inline-end: var(--space-4);

@@ -47,6 +47,11 @@
   --diff-add-fg: #0a5c2c;
   --diff-del-fg: #93211a;
   --search-hit: color-mix(in srgb, var(--md-primary) 22%, transparent);
+  /* MD3 state layers: on-surface over the element's own background */
+  --state-hover: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+  --state-focus: color-mix(in srgb, var(--md-on-surface) 10%, transparent);
+  --state-pressed: color-mix(in srgb, var(--md-on-surface) 12%, transparent);
+  --state-disabled: color-mix(in srgb, var(--md-on-surface) 38%, transparent);
   /* Warning icon on a snackbar (inverse surface: dark in the light theme). MD3 has no warning role. */
   --notice-warn: #ffb951;
 
@@ -58,13 +63,33 @@
   --file-tree-width: calc((100vw - var(--nav-rail-width)) * 0.2);
   --agent-column-width: calc((100vw - var(--nav-rail-width)) * 0.6);
   --column-gap: var(--space-1);
+  /* Column limits: the resize handles' CSS minimums and maximums */
+  --session-column-min-width: 180px;
+  --file-tree-min-width: 200px;
+  --agent-column-min-width: 280px;
+  --main-column-min-width: 400px;
+  --column-max-width: 524px;
+
+  /* Stacking */
+  --z-raised: 1;
+  --z-overlay: 10;
+
+  /* Elevation */
+  --elevation-2:
+    0 1px 2px color-mix(in srgb, black 30%, transparent),
+    0 2px 6px 2px color-mix(in srgb, black 15%, transparent);
+  --elevation-3: 0 8px 24px color-mix(in srgb, var(--md-on-surface) 24%, transparent);
 
   /* Shape — wc-material MD3 corner scale */
+  --shape-corner-extra-small: 4px;
+  --shape-corner-small: 8px;
   --shape-corner-medium: var(--md-sys-shape-corner-medium);
   --shape-corner-full: var(--md-sys-shape-corner-full);
 
   /* Spacing */
+  --space-0-5: 2px;
   --space-1: 4px;
+  --space-1-5: 6px;
   --space-2: 8px;
   --space-3: 12px;
   --space-4: 16px;
@@ -72,8 +97,23 @@
   /* Typography */
   --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --font-family-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-  --font-size-title: 14px;
+  --font-size-xs: 11px;
+  --font-size-sm: 12px;
+  --font-size-md: 13px;
+  --font-size-lg: 14px;
+  --font-size-title: var(--font-size-lg);
+  --font-weight-medium: 500;
   --font-weight-title: 600;
+
+  /* Icon sizes: set as font-size on the icon's class */
+  --icon-size-xs: 14px;
+  --icon-size-sm: 16px;
+  --icon-size-md: 18px;
+  --icon-size-lg: 20px;
+
+  /* md-button vertical padding: compact chips and rows, regular actions */
+  --button-block-space-compact: var(--space-1);
+  --button-block-space-regular: var(--space-1-5);
 }
 
 /* Set by services/theme.js from the Appearance setting, which may differ from the OS scheme. */

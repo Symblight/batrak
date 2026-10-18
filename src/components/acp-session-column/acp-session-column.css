@@ -1,7 +1,4 @@
 :host {
-  --_acp-session-column-hover: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
-  --_acp-session-column-focus: color-mix(in srgb, var(--md-on-surface) 10%, transparent);
-
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -31,33 +28,36 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 4px var(--space-2);
+  padding: 0 var(--space-1) var(--space-2);
 }
 
 /* Project row */
 .acp-session-column__project {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   min-width: 0;
   height: 32px;
-  margin-top: 2px;
-  padding: 0 4px 0 2px;
-  border-radius: 9999px;
+  margin-top: var(--space-0-5);
+  padding: 0 var(--space-1) 0 var(--space-0-5);
+  border-radius: var(--shape-corner-full);
   cursor: pointer;
   outline: none;
 
   &:hover {
-    background: var(--_acp-session-column-hover);
+    background: var(--state-hover);
   }
   &:focus-visible {
     outline: 2px solid var(--md-primary);
     outline-offset: -2px;
   }
 }
-.acp-session-column__project_menu-open,
-.acp-session-column__project_menu-open:hover {
-  background: var(--_acp-session-column-focus);
+.acp-session-column__project_menu-open {
+  background: var(--state-focus);
+
+  &:hover {
+    background: var(--state-focus);
+  }
 }
 .acp-session-column__project-name_active {
   color: var(--md-primary);
@@ -67,7 +67,7 @@
 }
 .acp-session-column__chevron {
   flex: none;
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
   color: var(--md-on-surface-variant);
 }
 .acp-session-column__project-name {
@@ -76,26 +76,26 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
 }
 .acp-session-column__project-path {
   flex: 1;
   min-width: 0;
-  margin-left: 4px;
+  margin-inline-start: var(--space-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   color: var(--md-on-surface-variant);
 }
 .acp-session-column__count {
   flex: none;
-  padding: 0 2px;
-  font-size: 11px;
-  font-weight: 500;
+  padding: 0 var(--space-0-5);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   line-height: 16px;
   font-variant-numeric: tabular-nums;
   color: var(--md-on-surface-variant);
@@ -103,21 +103,21 @@
 /* 24px standard icon button: 18px icon + 2px padding + the library's 1px transparent border. */
 .acp-session-column__add {
   flex: none;
-  --md-icon-button-font-size: 18px;
+  --md-icon-button-font-size: var(--icon-size-md);
 }
 .acp-session-column__add::part(button) {
-  padding: 2px;
+  padding: var(--space-0-5);
 }
 .acp-session-column__add-icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }
 
 /* Sessions */
 .acp-session-column__sessions {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 2px 0 6px;
+  gap: var(--space-0-5);
+  padding: var(--space-0-5) 0 var(--space-1-5);
 }
 .acp-session-column__session {
   display: flex;
@@ -126,33 +126,36 @@
   min-width: 0;
   height: 28px;
   padding: 0 10px 0 28px;
-  border-radius: 9999px;
+  border-radius: var(--shape-corner-full);
   color: var(--md-on-surface-variant);
   cursor: pointer;
   outline: none;
 
   &:hover {
-    background: var(--_acp-session-column-hover);
+    background: var(--state-hover);
   }
   &:focus-visible {
     outline: 2px solid var(--md-primary);
     outline-offset: -2px;
   }
 }
-.acp-session-column__session_selected,
-.acp-session-column__session_selected:hover {
+.acp-session-column__session_selected {
   --_acp-session-column-title-color: currentColor;
-  --_acp-session-column-title-weight: 500;
+  --_acp-session-column-title-weight: var(--font-weight-medium);
 
   background: var(--md-secondary-container);
   color: var(--md-on-secondary-container);
+
+  &:hover {
+    background: var(--md-secondary-container);
+  }
 }
 .acp-session-column__status {
   flex: none;
   width: 8px;
   height: 8px;
   box-sizing: border-box;
-  border-radius: 9999px;
+  border-radius: var(--shape-corner-full);
 }
 .acp-session-column__status_working {
   background: var(--md-primary);
@@ -170,8 +173,7 @@
 }
 /* No agent process: a dimmed outline. */
 .acp-session-column__status_stopped {
-  border: 1.5px solid currentColor;
-  opacity: 0.4;
+  border: 1.5px solid color-mix(in srgb, currentColor 40%, transparent);
 }
 /* currentColor: follows the row, so it stays visible on the selected row too. */
 .acp-session-column__status_idle {
@@ -183,7 +185,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   font-weight: var(--_acp-session-column-title-weight, 400);
   line-height: 20px;
   color: var(--_acp-session-column-title-color, var(--md-on-surface));
@@ -193,39 +195,40 @@
   min-width: 0;
   height: 22px;
   box-sizing: border-box;
-  margin: 0 0 0 -4px;
-  padding: 0 4px;
+  margin: 0;
+  margin-inline-start: -4px;
+  padding: 0 var(--space-1);
   border: 1px solid var(--md-primary);
-  border-radius: 4px;
+  border-radius: var(--shape-corner-extra-small);
   background: var(--md-surface);
   color: var(--md-on-surface);
   font: inherit;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 20px;
   outline: none;
 }
 .acp-session-column__session-age {
   flex: none;
-  font-size: 11px;
+  font-size: var(--font-size-xs);
   line-height: 16px;
   letter-spacing: 0.3px;
   font-variant-numeric: tabular-nums;
 }
 .acp-session-column__empty {
-  padding: 4px 12px 10px 30px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-3) 10px 30px;
+  font-size: var(--font-size-sm);
   line-height: 20px;
   color: var(--md-on-surface-variant);
 }
 .acp-session-column__error {
-  padding: 4px 12px 6px 30px;
-  font-size: 12px;
+  padding: var(--space-1) var(--space-3) var(--space-1-5) 30px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   overflow-wrap: anywhere;
   color: var(--md-error);
 }
 .acp-session-column__empty-icon {
-  font-size: 16px;
+  font-size: var(--icon-size-sm);
   vertical-align: -3px;
 }
 
@@ -235,5 +238,5 @@
   --md-menu-min-width: 12.5rem;
 }
 .acp-session-column__menu-icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }

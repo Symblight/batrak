@@ -50,7 +50,7 @@
 .acp-tab-view__tab-label {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .acp-tab-view__close {
   display: inline-flex;
@@ -58,22 +58,22 @@
   justify-content: center;
   width: 20px;
   height: 20px;
-  margin-right: -8px;
+  margin-inline-end: -8px;
   border-radius: 50%;
   color: var(--md-on-surface-variant);
   cursor: pointer;
 
   &:hover,
   &:focus-visible {
-    background: color-mix(in oklch, var(--md-on-surface) 12%, transparent);
+    background: var(--state-pressed);
     outline: none;
   }
 }
 .acp-tab-view__file-icon {
-  font-size: 14px;
+  font-size: var(--icon-size-xs);
 }
 .acp-tab-view__close-icon {
-  font-size: 16px;
+  font-size: var(--icon-size-sm);
 }
 .acp-tab-view__panel {
   flex: 1;
@@ -117,7 +117,7 @@
 
 /* Unsaved edits: a dot after the name, in the accent color. */
 .acp-tab-view__unsaved {
-  margin-inline-start: 2px;
+  margin-inline-start: var(--space-0-5);
   color: var(--md-primary);
   font-size: 10px;
   line-height: 1;

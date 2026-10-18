@@ -19,19 +19,19 @@
   --md-text-field-bottom-space: 8px;
   --md-text-field-inline-start-space: var(--space-3);
   --md-text-field-inline-end-space: var(--space-3);
-  --md-text-field-font-size: 14px;
+  --md-text-field-font-size: var(--font-size-lg);
   --md-text-field-line-height: 20px;
   --md-text-field-letter-spacing: normal;
   --md-text-field-foreground-color: var(--md-on-surface);
   --md-text-field-border-color: var(--md-outline);
   --md-text-field-primary-color: var(--md-primary);
-  --md-outlined-text-field-shape: 4px;
+  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
 
   caret-color: var(--md-primary);
 }
 .acp-search-panel__field_query {
   --md-text-field-font-family: var(--font-family-mono);
-  --md-text-field-font-size: 13px;
+  --md-text-field-font-size: var(--font-size-md);
   --md-text-field-inline-end-space: 0;
   --md-text-field-trailing-space: 4px;
 }
@@ -48,7 +48,7 @@
 }
 /* 28px icon toggle: 20px icon + 3px padding + the library's 1px transparent border. */
 .acp-search-panel__option {
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-font-size: var(--icon-size-lg);
 
   &[selected] {
     --md-icon-button-background-color: var(--md-secondary-container);
@@ -63,14 +63,14 @@
   outline-offset: 1px;
 }
 .acp-search-panel__option-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 
 .acp-search-panel__summary {
-  padding: var(--space-3) var(--space-4) 6px;
+  padding: var(--space-3) var(--space-4) var(--space-1-5);
   color: var(--md-on-surface-variant);
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: 16px;
   letter-spacing: 0;
   font-variant-numeric: tabular-nums;
@@ -84,7 +84,7 @@
   min-height: 0;
   overflow: auto;
   margin: 0;
-  padding: 0 4px var(--space-3);
+  padding: 0 var(--space-1) var(--space-3);
   list-style: none;
   scrollbar-width: thin;
   scrollbar-color: var(--md-outline-variant) transparent;
@@ -101,17 +101,17 @@
   align-items: center;
   width: 100%;
   min-width: 0;
-  padding: 0 var(--space-2) 0 4px;
+  padding: 0 var(--space-2) 0 var(--space-1);
   border: none;
-  border-radius: 9999px;
+  border-radius: var(--shape-corner-full);
   background: transparent;
   color: inherit;
   font: inherit;
-  text-align: left;
+  text-align: start;
   cursor: pointer;
 
   &:hover {
-    background: color-mix(in srgb, var(--md-on-surface) 8%, transparent);
+    background: var(--state-hover);
   }
 
   &:focus-visible {
@@ -120,9 +120,9 @@
   }
 }
 .acp-search-panel__file-header {
-  gap: 6px;
+  gap: var(--space-1-5);
   height: 32px;
-  margin-top: 2px;
+  margin-top: var(--space-0-5);
 }
 .acp-search-panel__match {
   gap: 10px;
@@ -132,17 +132,17 @@
 .acp-search-panel__chevron {
   flex: none;
   color: var(--md-on-surface-variant);
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 .acp-search-panel__file-icon {
   flex: none;
-  font-size: 14px;
+  font-size: var(--icon-size-xs);
 }
 .acp-search-panel__file-name {
   flex: none;
   color: var(--md-on-surface);
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
 }
 .acp-search-panel__file-dir {
@@ -152,7 +152,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   color: var(--md-on-surface-variant);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
 }
 .acp-search-panel__count {
@@ -161,11 +161,11 @@
   box-sizing: border-box;
   height: 20px;
   padding: 0 7px;
-  border-radius: 9999px;
+  border-radius: var(--shape-corner-full);
   background: var(--md-surface-container-highest);
   color: var(--md-on-surface-variant);
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
   text-align: center;
   font-variant-numeric: tabular-nums;
@@ -177,9 +177,9 @@
   width: calc(4ch + 22px);
   color: var(--md-on-surface-variant);
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 20px;
-  text-align: right;
+  text-align: end;
 }
 .acp-search-panel__text {
   flex: 1;
@@ -189,7 +189,7 @@
   white-space: nowrap;
   color: var(--md-on-surface);
   font-family: var(--font-family-mono);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 20px;
 }
 .acp-search-panel__hit {

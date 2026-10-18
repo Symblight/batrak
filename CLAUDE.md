@@ -388,6 +388,22 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   component sets only what differs (e.g. a menu's `--md-menu-min-width`), never menu density.
 - Colors come from the app tokens in `src/styles/tokens.css` (`--md-surface`, `--md-on-surface-variant`,
   `--md-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--space-*`. No raw hex.
+- **Scales live in `tokens.css`; no literals for them in components:** type (`--font-size-xs/sm/md/lg`,
+  `--font-weight-medium`), icons (`--icon-size-xs…lg`, set as `font-size` on the icon's class), spacing
+  (`--space-0-5…4`), corners (`--shape-corner-extra-small/small/medium/full`), state layers
+  (`--state-hover/focus/pressed/disabled`), elevation (`--elevation-*`), stacking (`--z-*`), column limits
+  and `md-button` vertical padding (`--button-block-space-compact/regular`). A one-off optical value stays
+  a literal; add a token once a second place needs it. Prefer logical properties (`margin-inline-start`,
+  `inset-block-end`, `text-align: start`).
+- **Derived colors use `color-mix()`** over those tokens (hover/pressed tints, translucent fills,
+  borders: `color-mix(in srgb, var(--md-primary) 12%, transparent)`), not a new token or an `rgba()`
+  copy of one, so they follow the theme and accent.
+- **Layout that depends on available space uses container queries** (`container-type: inline-size` on
+  the host or a wrapper, `@container (width < …)`), not `@media` on the viewport: columns are resized
+  and hidden, so a component's width isn't the window's. Name the container
+  (`container-name: acp-<component>`) when a rule must target a specific one.
+- **Use native CSS nesting** (`&`) for a node's states and its `@container` / `@media` rules, kept
+  inside the selector they change (rules in "BEM" below).
 
 ### BEM
 
@@ -410,7 +426,7 @@ full rules — load them when writing or reviewing component CSS or structure.
   Outer-tree rules already beat a child's `:host` rules, so a parent hides a child with
   `.parent__pane[hidden] { display: none; }` — no `!important`.
 - **Native CSS nesting** only via `&`, for one node's own states: `&:hover`, `&::placeholder`,
-  `&[active]`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
+  `&[active]`, `@container (…) { … }`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
   creates a descendant combinator — don't. The `safari >= 15` build target (Lightning CSS) down-compiles nesting.
 - Component custom properties are namespaced `--acp-<component>-*` (public) / `--_acp-<component>-*`
   (internal). Theme third-party elements through their own documented properties

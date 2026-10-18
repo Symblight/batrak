@@ -20,7 +20,7 @@
 .acp-toolbar__git-error {
   overflow: hidden;
   font-family: var(--font-family-mono);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -38,8 +38,8 @@
 }
 /* MD3 icon button XS: 32px square, 8px radius, 20px icon. */
 .acp-toolbar__toggle {
-  --md-icon-button-border-radius: 8px;
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-border-radius: var(--shape-corner-small);
+  --md-icon-button-font-size: var(--icon-size-lg);
   --md-icon-button-foreground-color: var(--md-on-surface-variant);
 
   flex: none;
@@ -58,7 +58,7 @@
   outline-offset: 2px;
 }
 .acp-toolbar__toggle-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 /* `view_sidebar` has its panel on the right; mirrored for a column on the left. */
 .acp-toolbar__toggle-icon_start {

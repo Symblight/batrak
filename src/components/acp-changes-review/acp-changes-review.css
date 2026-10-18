@@ -13,27 +13,27 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1-5);
   min-height: 48px;
   box-sizing: border-box;
-  padding: 10px var(--space-3) 6px var(--space-2);
+  padding: 10px var(--space-3) var(--space-1-5) var(--space-2);
 }
 .acp-changes-review__tool {
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-font-size: var(--icon-size-lg);
   --md-icon-button-foreground-color: var(--md-on-surface-variant);
 }
 .acp-changes-review__tool::part(button) {
   padding: 5px;
 }
 .acp-changes-review__tool-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 .acp-changes-review__all {
   flex: none;
 }
 .acp-changes-review__summary {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
@@ -43,39 +43,39 @@
 .acp-changes-review__tools {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 .acp-changes-review__view-mode {
-  --md-button-font-size: 13px;
+  --md-button-font-size: var(--font-size-md);
   --md-button-foreground-color: var(--md-on-surface-variant);
-  --md-button-block-start-space: 6px;
-  --md-button-block-end-space: 6px;
+  --md-button-block-start-space: var(--button-block-space-regular);
+  --md-button-block-end-space: var(--button-block-space-regular);
 }
 /* Split button: two tonal halves, full outer corners, 4px inner ones, 2px apart. */
 .acp-changes-review__review {
   display: inline-flex;
-  gap: 2px;
-  margin-left: var(--space-2);
+  gap: var(--space-0-5);
+  margin-inline-start: var(--space-2);
 }
 .acp-changes-review__review-main {
-  --md-button-font-size: 13px;
-  --md-button-block-start-space: 6px;
-  --md-button-block-end-space: 6px;
-  --md-button-border-start-end-radius: 4px;
-  --md-button-border-end-end-radius: 4px;
+  --md-button-font-size: var(--font-size-md);
+  --md-button-block-start-space: var(--button-block-space-regular);
+  --md-button-block-end-space: var(--button-block-space-regular);
+  --md-button-border-start-end-radius: var(--shape-corner-extra-small);
+  --md-button-border-end-end-radius: var(--shape-corner-extra-small);
 }
 .acp-changes-review__review-menu {
-  --md-icon-button-font-size: 18px;
+  --md-icon-button-font-size: var(--icon-size-md);
   --md-icon-button-background-color: var(--md-secondary-container);
   --md-icon-button-foreground-color: var(--md-on-secondary-container);
-  --md-icon-button-border-start-start-radius: 4px;
-  --md-icon-button-border-end-start-radius: 4px;
+  --md-icon-button-border-start-start-radius: var(--shape-corner-extra-small);
+  --md-icon-button-border-end-start-radius: var(--shape-corner-extra-small);
 }
 .acp-changes-review__review-menu::part(button) {
-  padding: 6px;
+  padding: var(--space-1-5);
 }
 .acp-changes-review__review-icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }
 
 /* Files */
@@ -84,7 +84,7 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: var(--space-0-5);
   overflow: auto;
   /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
   padding: 0 var(--space-2) 72px;
@@ -97,14 +97,14 @@
   min-width: 0;
   height: 40px;
   box-sizing: border-box;
-  padding: 0 4px 0 var(--space-2);
-  border-radius: 9999px;
+  padding: 0 var(--space-1) 0 var(--space-2);
+  border-radius: var(--shape-corner-full);
   cursor: pointer;
   outline: none;
   scroll-margin-top: 6px;
 
   &:hover {
-    background: color-mix(in srgb, var(--md-on-surface) 6%, transparent);
+    background: var(--state-hover);
   }
   &:focus-visible {
     outline: 2px solid var(--md-primary);
@@ -112,14 +112,17 @@
   }
 }
 /* The expanded file's header: sits in the card on its surface, square below. */
-.acp-changes-review__row_header,
-.acp-changes-review__row_header:hover {
+.acp-changes-review__row_header {
   border-radius: 11px 11px 0 0;
   background: transparent;
+
+  &:hover {
+    background: transparent;
+  }
 }
 .acp-changes-review__chevron {
   flex: none;
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
   color: var(--md-on-surface-variant);
 }
 .acp-changes-review__pick {
@@ -140,8 +143,8 @@
 }
 .acp-changes-review__name {
   flex: none;
-  font-size: 13px;
-  font-weight: 500;
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
   white-space: nowrap;
   color: var(--md-on-surface);
@@ -155,7 +158,7 @@
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -170,7 +173,7 @@
 .acp-changes-review__counts {
   flex: none;
   display: inline-flex;
-  gap: 6px;
+  gap: var(--space-1-5);
   font: 500 11.5px/16px var(--font-family-mono);
   font-variant-numeric: tabular-nums;
 }
@@ -185,20 +188,20 @@
   display: flex;
 }
 .acp-changes-review__action {
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-font-size: var(--icon-size-lg);
   --md-icon-button-foreground-color: var(--md-on-surface-variant);
 }
 .acp-changes-review__action::part(button) {
   padding: 5px;
 }
 .acp-changes-review__action-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 
 /* Expanded file: header row and diff in an outlined card, on the column's surface */
 .acp-changes-review__card {
   flex: none;
-  margin-block: 4px;
+  margin-block: var(--space-1);
   border: 1px solid var(--md-outline-variant);
   border-radius: 12px;
   background: var(--column-background);
@@ -225,7 +228,7 @@
   justify-content: center;
   min-height: 64px;
   padding: var(--space-3);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--md-on-surface-variant);
 }
 
@@ -236,22 +239,22 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 24px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   text-align: center;
   overflow-wrap: anywhere;
   color: var(--md-on-surface-variant);
 }
 .acp-changes-review__state-icon {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   font-size: 28px;
   color: var(--vcs-add);
 }
 .acp-changes-review__state-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
   color: var(--md-on-surface);
 }

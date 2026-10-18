@@ -7,7 +7,7 @@
   width: 100%;
   justify-content: center;
 
-  padding: 16px;
+  padding: var(--space-4);
 }
 
 /* A side-panel-width column at the tab's start, as in the design. */
@@ -26,7 +26,7 @@
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 4px var(--space-4) var(--space-4);
+  padding: var(--space-1) var(--space-4) var(--space-4);
 }
 .acp-settings__footer {
   flex: none;
@@ -57,11 +57,11 @@
   color: var(--md-primary);
 }
 .acp-settings__reset {
-  --md-button-block-start-space: 4px;
-  --md-button-block-end-space: 4px;
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
   --md-button-inline-start-space: var(--space-3);
   --md-button-inline-end-space: var(--space-3);
-  --md-button-font-size: 13px;
+  --md-button-font-size: var(--font-size-md);
   margin-inline-end: calc(-1 * var(--space-2));
 }
 .acp-settings__divider {
@@ -74,7 +74,7 @@
 .acp-settings__field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1-5);
 }
 .acp-settings__label {
   font: 500 13px/20px var(--font-family);
@@ -89,10 +89,10 @@
 .acp-settings__segments {
   --md-segmented-button-group-height: 32px;
   --md-segmented-button-label-text-size: 13px;
-  --md-segmented-button-icon-size: 18px;
+  --md-segmented-button-icon-size: var(--icon-size-md);
 }
 .acp-settings__segment-icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }
 
 /* Dense MD3 outlined field, shared by every field here: 40px (8 + 24 + 8). Text starts 16px in, where
@@ -107,14 +107,14 @@
   --md-text-field-inline-end-space: 0;
   --md-text-field-leading-space: var(--space-3);
   --md-text-field-trailing-space: 4px;
-  --md-text-field-font-size: 14px;
-  --md-text-field-label-size: 14px;
+  --md-text-field-font-size: var(--font-size-lg);
+  --md-text-field-label-size: var(--font-size-lg);
   --md-text-field-line-height: 20px;
   --md-text-field-letter-spacing: normal;
   --md-text-field-foreground-color: var(--md-on-surface);
   --md-text-field-border-color: var(--md-outline);
   --md-text-field-primary-color: var(--md-primary);
-  --md-outlined-text-field-shape: 4px;
+  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
 
   caret-color: var(--md-primary);
 }
@@ -157,17 +157,17 @@
 }
 .acp-settings__stepper {
   display: flex;
-  gap: 2px;
+  gap: var(--space-0-5);
 }
 /* 28px icon button: 18px icon + 4px padding + the library's 1px transparent border. */
 .acp-settings__icon-button {
-  --md-icon-button-font-size: 18px;
+  --md-icon-button-font-size: var(--icon-size-md);
 }
 .acp-settings__icon-button::part(button) {
-  padding: 4px;
+  padding: var(--space-1);
 }
 .acp-settings__icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }
 
 /* Two lines of code in the chosen editor font; size and line height set inline. */
@@ -178,7 +178,7 @@
   padding: var(--space-2) var(--space-3);
   overflow: hidden;
   border: 1px solid var(--md-outline-variant);
-  border-radius: 8px;
+  border-radius: var(--shape-corner-small);
   background: var(--md-surface-container-lowest);
   color: var(--md-on-surface);
   font-family: var(--_acp-settings-preview-font, var(--font-family-mono));
@@ -186,7 +186,7 @@
 }
 .acp-settings__line-number {
   color: var(--md-on-surface-variant);
-  text-align: right;
+  text-align: end;
 }
 .acp-settings__keyword {
   color: var(--md-tertiary);
@@ -199,9 +199,9 @@
 .acp-settings__link {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1-5);
   font: 500 13px/20px var(--font-family);
-  color: color-mix(in srgb, var(--md-on-surface) 38%, transparent);
+  color: var(--state-disabled);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 3px;

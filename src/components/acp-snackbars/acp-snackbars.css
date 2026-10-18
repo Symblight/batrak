@@ -36,7 +36,7 @@
 }
 .acp-snackbars__icon {
   flex: none;
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
   color: var(--_acp-snackbars-icon-color);
 }
 .acp-snackbars__message {
@@ -50,7 +50,7 @@
 }
 .acp-snackbars__count {
   flex: none;
-  opacity: 0.72;
+  color: color-mix(in srgb, currentColor 72%, transparent);
   font-variant-numeric: tabular-nums;
 }
 

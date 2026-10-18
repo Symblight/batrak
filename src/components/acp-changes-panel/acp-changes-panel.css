@@ -16,7 +16,7 @@
   align-items: center;
   gap: 10px;
   height: 36px;
-  padding: 0 4px 0 7px;
+  padding: 0 var(--space-1) 0 7px;
   border-bottom: 1px solid var(--md-outline-variant);
 }
 .acp-changes-panel__all {
@@ -24,8 +24,8 @@
 }
 .acp-changes-panel__summary {
   overflow: hidden;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
   line-height: 16px;
   letter-spacing: 0.3px;
   font-variant-numeric: tabular-nums;
@@ -37,21 +37,21 @@
   flex: 1;
 }
 .acp-changes-panel__refresh {
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-font-size: var(--icon-size-lg);
   --md-icon-button-foreground-color: var(--md-on-surface-variant);
 }
 .acp-changes-panel__refresh::part(button) {
   padding: 5px;
 }
 .acp-changes-panel__refresh-icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 
 /* Tree */
 .acp-changes-panel__tree {
   flex: 1;
   min-height: 0;
-  padding: 4px 4px var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-2);
   --tvx-tree-view-color-on-surface: var(--md-on-surface);
   --tvx-tree-view-color-on-surface-variant: var(--md-on-surface-variant);
   --tvx-tree-view-color-outline-variant: var(--md-outline-variant);
@@ -65,22 +65,22 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 4px;
+  gap: var(--space-1);
   padding: 24px;
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   text-align: center;
   overflow-wrap: anywhere;
   color: var(--md-on-surface-variant);
 }
 .acp-changes-panel__state-icon {
-  margin-bottom: 4px;
+  margin-bottom: var(--space-1);
   font-size: 28px;
   color: var(--vcs-add);
 }
 .acp-changes-panel__state-title {
-  font-size: 14px;
-  font-weight: 500;
+  font-size: var(--font-size-lg);
+  font-weight: var(--font-weight-medium);
   line-height: 20px;
   color: var(--md-on-surface);
 }
@@ -100,7 +100,7 @@
 .acp-changes-panel__message {
   width: 100%;
   min-width: 0;
-  --md-text-field-font-size: 13px;
+  --md-text-field-font-size: var(--font-size-md);
   --md-text-field-line-height: 20px;
   --md-text-field-background-color: var(--column-background);
 }
@@ -118,7 +118,7 @@
   align-items: center;
   gap: 10px;
   padding-left: 3px;
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 20px;
   cursor: pointer;
 }
@@ -127,12 +127,12 @@
 }
 .acp-changes-panel__commit {
   flex: 1 0 auto;
-  --md-button-font-size: 13px;
-  --md-button-block-start-space: 6px;
-  --md-button-block-end-space: 6px;
+  --md-button-font-size: var(--font-size-md);
+  --md-button-block-start-space: var(--button-block-space-regular);
+  --md-button-block-end-space: var(--button-block-space-regular);
   --md-button-inline-start-space: 12px;
   --md-button-inline-end-space: 16px;
 }
 .acp-changes-panel__commit-icon {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
 }

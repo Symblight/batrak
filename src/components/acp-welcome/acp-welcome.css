@@ -14,6 +14,13 @@
   align-items: center;
   max-width: 480px;
   text-align: center;
+
+  /* Too narrow for both buttons on one line: stack them full width, the primary one on top. */
+  @container (width < 480px) {
+    align-self: stretch;
+    max-width: 360px;
+    margin-inline: auto;
+  }
 }
 .acp-welcome__title {
   margin: 0;
@@ -24,7 +31,7 @@
 }
 .acp-welcome__subtitle {
   margin: var(--space-2) 0 0;
-  font-size: 14px;
+  font-size: var(--font-size-lg);
   line-height: 20px;
   letter-spacing: 0.25px;
   color: var(--md-on-surface-variant);
@@ -35,6 +42,11 @@
   justify-content: center;
   gap: var(--space-3);
   margin-top: 32px;
+
+  @container (width < 480px) {
+    flex-direction: column;
+    align-self: stretch;
+  }
 }
 .acp-welcome__action {
   &[variant='outlined'] {
@@ -42,18 +54,5 @@
   }
 }
 .acp-welcome__action-icon {
-  font-size: 18px;
-}
-
-/* Too narrow for both buttons on one line: stack them full width, the primary one on top. */
-@container (width < 480px) {
-  .acp-welcome__content {
-    align-self: stretch;
-    max-width: 360px;
-    margin-inline: auto;
-  }
-  .acp-welcome__actions {
-    flex-direction: column;
-    align-self: stretch;
-  }
+  font-size: var(--icon-size-md);
 }

@@ -2,18 +2,18 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0-5);
   min-width: 0;
   color: var(--md-on-surface-variant);
-  font-size: 12.5px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
 }
 
 .acp-run-target__button {
-  --md-button-font-size: 12.5px;
+  --md-button-font-size: var(--font-size-sm);
   --md-button-line-height: 16px;
-  --md-button-block-start-space: 4px;
-  --md-button-block-end-space: 4px;
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
   --md-button-foreground-color: var(--md-on-surface-variant);
   /* The text variant sets its inline padding (12px) on these, not on the public tokens. */
   --_btn-container-space-left: 8px;
@@ -21,22 +21,22 @@
 }
 
 .acp-run-target__arrow {
-  font-size: 16px;
+  font-size: var(--icon-size-sm);
   vertical-align: middle;
 }
 
 .acp-run-target__fixed {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-0-5);
   height: 24px;
   padding-inline: var(--space-1);
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   white-space: nowrap;
 }
 
 .acp-run-target__icon {
-  font-size: 16px;
+  font-size: var(--icon-size-sm);
 }
 
 .acp-run-target__note {
@@ -45,19 +45,17 @@
   gap: var(--space-1);
   margin-inline-start: auto;
   padding-inline-end: var(--space-1);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--md-error);
+
+  /* The full-access note is the mode menu's description too; a narrow composer drops it. */
+  @container acp-composer (width <= 500px) {
+    display: none;
+  }
 }
 
 .acp-run-target__note-icon {
-  font-size: 16px;
-}
-
-/* The full-access note is the mode menu's description too; a narrow composer drops it. */
-@container acp-composer (width <= 500px) {
-  .acp-run-target__note {
-    display: none;
-  }
+  font-size: var(--icon-size-sm);
 }
 
 .acp-run-target__menu {

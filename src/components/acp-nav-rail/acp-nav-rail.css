@@ -11,7 +11,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: var(--space-1);
   box-sizing: border-box;
   height: 100%;
   padding-block: var(--space-2);
@@ -25,8 +25,8 @@
 }
 /* MD3 icon button XS: 32px square, 8px radius, 20px icon. */
 .acp-nav-rail__button {
-  --md-icon-button-border-radius: 8px;
-  --md-icon-button-font-size: 20px;
+  --md-icon-button-border-radius: var(--shape-corner-small);
+  --md-icon-button-font-size: var(--icon-size-lg);
 
   &[selected] {
     --md-icon-button-background-color: var(--md-secondary-container);
@@ -43,12 +43,12 @@
   outline-offset: 2px;
 }
 .acp-nav-rail__icon {
-  font-size: 20px;
+  font-size: var(--icon-size-lg);
 }
 .acp-nav-rail__badge {
   position: absolute;
-  top: 4px;
-  right: 5px;
+  inset-block-start: var(--space-1);
+  inset-inline-end: 5px;
   border-radius: 50%;
   /* Cut-out ring in the colour behind the dot. */
   box-shadow: 0 0 0 1.5px var(--md-surface);

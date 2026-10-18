@@ -2,13 +2,15 @@
   display: block;
 }
 
-.acp-session-banner__banner[hidden] {
-  display: none;
+.acp-session-banner__banner {
+  &[hidden] {
+    display: none;
+  }
 }
 
 .acp-session-banner__action {
-  --md-button-font-size: 12.5px;
+  --md-button-font-size: var(--font-size-sm);
   --md-button-line-height: 16px;
-  --md-button-block-start-space: 4px;
-  --md-button-block-end-space: 4px;
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
 }

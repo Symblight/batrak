@@ -3,7 +3,7 @@
 }
 
 .acp-context-meter__button {
-  --md-button-font-size: 12px;
+  --md-button-font-size: var(--font-size-sm);
   --md-button-line-height: 16px;
   --md-button-block-start-space: 8px;
   --md-button-block-end-space: 8px;
@@ -11,7 +11,7 @@
 }
 
 .acp-context-meter__ring {
-  font-size: 18px;
+  font-size: var(--icon-size-md);
   --md-progress-circular-track-color: color-mix(in srgb, var(--md-on-surface) 14%, transparent);
 }
 .acp-context-meter__ring_warning {
@@ -23,6 +23,11 @@
 
 .acp-context-meter__percent {
   font-variant-numeric: tabular-nums;
+
+  /* A narrow composer shows the ring only. */
+  @container acp-composer (width <= 440px) {
+    display: none;
+  }
 }
 
 /* An auto popover in the top layer; FloatingController writes `left` / `top`. */
@@ -39,11 +44,9 @@
   border: 0;
   border-radius: var(--shape-corner-medium);
   background: var(--md-surface-container);
-  box-shadow:
-    0 1px 2px rgb(0 0 0 / 0.3),
-    0 2px 6px 2px rgb(0 0 0 / 0.15);
+  box-shadow: var(--elevation-2);
   color: var(--md-on-surface);
-  font-size: 13px;
+  font-size: var(--font-size-md);
   line-height: 20px;
 }
 
@@ -55,16 +58,16 @@
 }
 
 .acp-context-meter__title {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
 }
 
 .acp-context-meter__label {
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   color: var(--md-on-surface-variant);
 }
 
 .acp-context-meter__value {
-  font-weight: 500;
+  font-weight: var(--font-weight-medium);
   font-variant-numeric: tabular-nums;
 }
 
@@ -85,14 +88,7 @@
   margin: var(--space-3) 0 0;
   padding-top: var(--space-3);
   border-top: 1px solid var(--md-outline-variant);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
   line-height: 16px;
   color: var(--md-on-surface-variant);
-}
-
-/* A narrow composer shows the ring only. */
-@container acp-composer (width <= 440px) {
-  .acp-context-meter__percent {
-    display: none;
-  }
 }

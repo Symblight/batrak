@@ -4,12 +4,12 @@
   margin: 10vh auto auto;
   padding: 0;
   border: 1px solid var(--md-outline-variant);
-  border-radius: 8px;
+  border-radius: var(--shape-corner-small);
   background: var(--md-surface-container-high);
   color: var(--md-on-surface);
   font-family: var(--font-family);
-  font-size: 13px;
-  box-shadow: 0 8px 24px color-mix(in srgb, var(--md-on-surface) 24%, transparent);
+  font-size: var(--font-size-md);
+  box-shadow: var(--elevation-3);
 
   &::backdrop {
     background: transparent;
@@ -25,7 +25,7 @@
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: 14px;
+  font-size: var(--font-size-lg);
 
   &::placeholder {
     color: var(--md-on-surface-variant);
@@ -35,15 +35,15 @@
   max-height: 50vh;
   overflow: auto;
   margin: 0;
-  padding: 4px;
+  padding: var(--space-1);
   list-style: none;
 }
 .acp-quick-open__item {
   display: flex;
   align-items: baseline;
   gap: var(--space-2);
-  padding: 4px var(--space-2);
-  border-radius: 4px;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--shape-corner-extra-small);
   white-space: nowrap;
   cursor: pointer;
 }
@@ -54,7 +54,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--md-on-surface-variant);
-  font-size: 12px;
+  font-size: var(--font-size-sm);
 }
 .acp-quick-open__hit {
   color: var(--md-primary);

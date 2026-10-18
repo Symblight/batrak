@@ -21,8 +21,8 @@
      starts from the rendered width. */
   flex: 0 1 var(--session-column-width);
   width: var(--session-column-width);
-  min-width: 180px;
-  max-width: 524px;
+  min-width: var(--session-column-min-width);
+  max-width: var(--column-max-width);
 
   &[hidden] {
     display: none;
@@ -31,7 +31,7 @@
 .acp-app__agent {
   flex: 0 1000 var(--agent-column-width);
   width: var(--agent-column-width);
-  min-width: 280px;
+  min-width: var(--agent-column-min-width);
 }
 .acp-app__agent_fill {
   flex: 1;
@@ -41,12 +41,12 @@
   /* Pull in by the gaps on both sides, so the handle fills the one gap between its columns. */
   --acp-resize-handle-line-color: transparent;
 
-  z-index: 1;
+  z-index: var(--z-raised);
   margin-inline: calc((var(--column-gap) + var(--acp-resize-handle-hit-width)) / -2);
 }
 .acp-app__main {
   flex: 1;
-  min-width: 400px;
+  min-width: var(--main-column-min-width);
 
   &[hidden] {
     display: none;
@@ -55,8 +55,8 @@
 .acp-app__files {
   flex: 0 1 var(--file-tree-width);
   width: var(--file-tree-width);
-  min-width: 200px;
-  max-width: 524px;
+  min-width: var(--file-tree-min-width);
+  max-width: var(--column-max-width);
 
   &[hidden] {
     display: none;
@@ -67,7 +67,7 @@
 }
 .acp-app__snackbars {
   position: fixed;
-  z-index: 10;
+  z-index: var(--z-overlay);
   inset-block-end: var(--space-4);
   inset-inline-end: calc(var(--nav-rail-width) + var(--space-4));
   width: min(440px, calc(100vw - var(--nav-rail-width) - 2 * var(--space-4)));
