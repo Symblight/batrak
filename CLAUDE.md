@@ -32,6 +32,37 @@ and is reached through `src/services/ipc.js`.
 Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor` (`cdx-*`),
 `@symblight/tree-view` (`tvx-*`), `@symblight/chat` (`chx-*`).
 
+### Layers
+
+- **Data layer** (infrastructure): `src/stores/` (nanostores atoms and their actions) and
+  `src/services/` (backend calls, controllers that write stores), plus every browser API that holds or
+  fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
+  `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
+  `@tauri-apps/*` (only in `services/ipc.js`). Nothing above it talks to these directly.
+- **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
+  `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
+  from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass
+  data down as properties, through their children to the leaves (`<acp-chat>` hands the composer's
+  pickers theirs, `<acp-tab-view>` the Settings and Changes tabs theirs).
+- **Every other component is presentational:** data in through properties, intents out as `acp-*`
+  events that the column handles (they bubble, composed, through the components in between). No
+  imports from `stores/` or `services/`, no `StoreController`, no storage, network or clipboard APIs.
+  A child that needs data gets a property; one that must change data fires an event. Where an answer
+  belongs to one request, the container calls the child back (`<acp-changes-panel>`'s
+  `commitFinished()`, `fillAmendMessage()`); a lazy loader is a property (`<acp-file-tree>`'s
+  `listDir`); a query is an event answered by a property (`acp-quick-open-query` → `files`,
+  `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`).
+- A controller counts as part of its host. The data controllers (they read stores or call services)
+  are hosted only by a container: `ChatSessionController`, `ChatPartsController` (agent column),
+  `TabFilesController` (open tabs' files: reads, baselines, drafts, saves) and `ChangesReviewController`
+  (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column).
+  The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
+  `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
+  `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`,
+  `ContextMenuController`, `TabContentController`. `models/` stays pure (no stores, no services):
+  shared pure helpers live there (`paths.js`, `settings.js`, `config-options.js`, `about.js`), not in a
+  store module.
+
 ### Global state
 
 [nanostores](https://github.com/nanostores/nanostores) atoms in `src/stores/`, named `$camelCase`.
@@ -42,10 +73,10 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   re-announce it with an event.
 - **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor.js`) or, when they
   call the backend, in a service that writes the store (`projectController.open()` / `restore()` →
-  `$workspace`). Components call actions; they don't `set()` stores other modules own.
+  `$workspace`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
 - **Narrow with `computed`.** `$rootId` (from `$workspace`) and `$activePath` (from `$editorTabs`) notify
   only when their slice changes, so subscribe to the narrowest store you need.
-- **Components subscribe with `StoreController`** (`src/controllers/store/`):
+- **Container components subscribe with `StoreController`** (`src/controllers/store/`):
   `#workspace = new StoreController(this, { store: $workspace })`, read `this.#workspace.value` in
   `render()`. It re-renders the host on change; `onChange(value, oldValue)` runs a side effect (also once
   on connect). Outside a component, or for a one-off read in a handler, use `$store.get()`.
@@ -69,7 +100,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
   active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
-  writes the user's expand/collapse there and expands stored folders as their parents load),
+  sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
+  stored folders as their parents load),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
   shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
@@ -84,7 +116,8 @@ the opened project (`showProject()`: the project's last shown session, its newes
 `create()`s drafts and `start()`s one on its first message. The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
 (messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
-(`src/controllers/chat-session/`): `activeConversationId`, the draft's first send (put back into
+(`src/controllers/chat-session/`, on `<acp-agent-column>`, reaching the chat through `<acp-chat>`'s
+`chat`): `activeConversationId`, the draft's first send (put back into
 the composer when the backend refuses the session), and each session's unsent composer text and files.
 Statuses come from the backend's session events. A draft shows only the composer, centered; the message
 list appears with the first message. Replies come over ACP (see "Agents over ACP"); messages live only
@@ -93,14 +126,16 @@ in the chat element, and an agent with `session/load` replays them when it start
 **Agent comments:** line comments typed in any `cdx-code-editor` live in `$comments` (`stores/comments.js`,
 by absolute path, in memory). Every editor's `<cdx-comments>` is controlled through
 `EditorCommentsController` (`src/controllers/comments/`): `.comments=${this.#comments.threadsOf(path)}`,
-and its submit / edit / delete events become store actions, so one file shown twice (a tab and the
+and its submit / edit / delete become `acp-comment-*` events that `<acp-main-column>` turns into store
+actions, so one file shown twice (a tab and the
 Changes tab) stays in sync. `<acp-comment-bar>` (over `<acp-main-column>`) steps through
 `$tabComments` (the active tab's file, or every changed file in Changes) by setting `$commentFocus`: the main column shows the file,
 the visible editor of it reveals the thread. Send to agent (`sendToChat()`) clears the comments from the code and hands them to the chat
-(`addToChat()`, `stores/chat.js`); `<acp-chat>` takes `$chatInserts` into its composer: a comment as its
+(`addToChat()`, `stores/chat.js`); `<acp-agent-column>` takes `$chatInserts` into `<acp-chat>`'s composer
+(`insertCode()`, once `composerReady()`): a comment as its
 own line (file chip `path:line` or `path:from-to`, then the text), a selection as a chip at the caret.
 `SelectionActionsController` (`src/controllers/selection-actions/`) shows `<acp-selection-actions>`
-(Add to chat / Comment) under the caret of a settled selection in the host's own editors: a manual
+(Add to chat, as `acp-chat-add`; Comment) under the caret of a settled selection in the host's own editors: a manual
 `popover` toolbar (top layer), placed by `FloatingController` (`src/controllers/floating/`, Floating UI
 `computePosition` + `autoUpdate` against a virtual caret element), so it follows scrolling and hides
 while the caret is out of view. Alt+F10 focuses it, arrows move between actions, Escape closes it,
@@ -227,8 +262,9 @@ helpers apply.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
   scans the working tree) is computed **only on demand**: `gitController.watchChanges()` starts it and
-  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-changes-panel>`
-  watches while it is the active side pane, `<acp-changes-review>` while its tab is active. Stopping
+  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-file-column>`
+  watches while Changes is the side pane, `ChangesReviewController` while the Changes tab is active
+  (the column also forgets picks of files no longer changed). Stopping
   keeps the files in the store; the spinner shows only for a root's first status. The files picked
   for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor
