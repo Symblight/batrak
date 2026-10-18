@@ -148,6 +148,9 @@ struct SessionState {
     env: Mutex<Option<Arc<dyn SessionEnv>>>,
     /// The start in progress, aborted by Stop (dropping it kills the agent's process group).
     starting: Mutex<Option<AbortHandle>>,
+    /// Set by Stop for the start in progress: its blocking `prepare` (a checkout) isn't aborted
+    /// with the task, so it checks this and undoes its work.
+    prepare_cancel: Mutex<Option<Arc<AtomicBool>>>,
     /// Starts attempted so far. A caller notes it before waiting for a start in progress; when that
     /// start failed, the caller fails with it (`start_error`) instead of starting again.
     start_attempts: AtomicU64,
@@ -529,7 +532,7 @@ impl Sessions {
     pub async fn apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
         let state = self.get(id)?;
         let (dir, base) = self.worktree_of(id)?;
-        self.idle_worktree(&state)?;
+        let _slot = Self::idle_worktree(&state)?;
         let project = state.record().project_path;
         let outcome = tokio::task::spawn_blocking(move || {
             crate::git::apply::apply_locally(crate::git::binary::git()?, &dir, &base, &project)
@@ -547,7 +550,7 @@ impl Sessions {
     pub async fn check_out_branch(&self, id: &str) -> Result<(), String> {
         let state = self.get(id)?;
         self.worktree_of(id)?;
-        self.idle_worktree(&state)?;
+        let _slot = Self::idle_worktree(&state)?;
         let record = state.record();
         let (Some(root), Some(branch)) = (record.worktree_path, record.branch) else {
             return Err("the session's worktree is missing from its record".to_owned());
@@ -572,12 +575,13 @@ impl Sessions {
         Ok(())
     }
 
-    /// Refuses git work on a worktree its agent is changing.
-    fn idle_worktree(&self, state: &SessionState) -> Result<(), String> {
-        if state.turn_running.load(Ordering::SeqCst) {
+    /// Takes the session's turn slot for git work on its worktree, so no prompt starts while it runs
+    /// (`send_prompt` then refuses); released when the guard drops. Refused while a turn runs.
+    fn idle_worktree(state: &Arc<SessionState>) -> Result<SlotGuard, String> {
+        if state.turn_running.swap(true, Ordering::SeqCst) {
             return Err("The agent is working in the worktree; wait for its turn to end, or stop it".to_owned());
         }
-        Ok(())
+        Ok(SlotGuard(Arc::clone(state)))
     }
 
     /// A worktree session's changed files since its base commit, relative to its folder. Blocking.
@@ -616,7 +620,6 @@ impl Sessions {
     pub fn tidy_worktrees(&self) {
         let records: Vec<SessionRecord> = lock(&self.inner.sessions).values().map(|s| s.record()).collect();
         let worktrees: Vec<&SessionRecord> = records.iter().filter(|r| r.mode == Mode::Worktree).collect();
-        let owned: std::collections::HashSet<&Path> = worktrees.iter().filter_map(|r| r.worktree_path.as_deref()).collect();
         let projects: std::collections::HashSet<&Path> = worktrees.iter().map(|r| r.project_path.as_path()).collect();
         if let Ok(git) = crate::git::binary::git() {
             for project in projects.into_iter().filter(|p| p.is_dir()) {
@@ -629,7 +632,9 @@ impl Sessions {
         for group in groups.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()) {
             let Ok(group) = dunce::canonicalize(&group) else { continue };
             for path in std::fs::read_dir(&group).into_iter().flatten().filter_map(Result::ok).map(|e| e.path()) {
-                if owned.contains(path.as_path()) || !path.is_dir() {
+                // Asked of the live sessions, not a list read earlier: one created meanwhile may be
+                // checking this folder out.
+                if !path.is_dir() || self.owns_worktree(&path) {
                     continue;
                 }
                 if let Err(e) = env::remove_orphan(&path) {
@@ -645,11 +650,19 @@ impl Sessions {
         }
     }
 
+    /// Whether a listed session's worktree is at `path`.
+    fn owns_worktree(&self, path: &Path) -> bool {
+        lock(&self.inner.sessions).values().any(|s| lock(&s.record).worktree_path.as_deref() == Some(path))
+    }
+
     /// App exit: every agent process group is stopped, every session saved as `stopped`.
     pub fn shutdown(&self) {
         let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
         for state in &states {
             state.stopping.store(true, Ordering::SeqCst);
+            if let Some(cancel) = lock(&state.prepare_cancel).take() {
+                cancel.store(true, Ordering::SeqCst);
+            }
             if let Some(start) = lock(&state.starting).take() {
                 start.abort();
             }
@@ -683,6 +696,7 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
         conn: Mutex::new(None),
         env: Mutex::new(None),
         starting: Mutex::new(None),
+        prepare_cancel: Mutex::new(None),
         start_attempts: AtomicU64::new(0),
         start_error: Mutex::new(None),
         generation: AtomicU64::new(0),
@@ -833,8 +847,10 @@ impl Inner {
         let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(&record)?);
         let preparing = Arc::clone(&env);
         let cancel = Arc::new(AtomicBool::new(false));
-        let flag = Arc::clone(&cancel);
-        tokio::task::spawn_blocking(move || preparing.prepare(&flag)).await.map_err(|e| e.to_string())??;
+        *lock(&state.prepare_cancel) = Some(Arc::clone(&cancel));
+        let prepared = tokio::task::spawn_blocking(move || preparing.prepare(&cancel)).await;
+        lock(&state.prepare_cancel).take();
+        prepared.map_err(|e| e.to_string())??;
 
         self.set_status(&state, SessionStatus::Starting, Some("Starting agent…"));
         let merged = self.opts.configs.merged(Some(&record.project_path));
@@ -938,6 +954,9 @@ impl Inner {
 
     async fn stop(&self, state: &SessionState) {
         state.stopping.store(true, Ordering::SeqCst);
+        if let Some(cancel) = lock(&state.prepare_cancel).take() {
+            cancel.store(true, Ordering::SeqCst);
+        }
         if let Some(start) = lock(&state.starting).take() {
             start.abort();
         }
@@ -977,6 +996,15 @@ impl Inner {
         let message = format!("The agent stopped: {reason}");
         state.emit("error", json!({ "message": message }));
         self.set_status(state, SessionStatus::Error, Some(&message));
+    }
+}
+
+/// A session's turn slot held for git work; released on drop.
+struct SlotGuard(Arc<SessionState>);
+
+impl Drop for SlotGuard {
+    fn drop(&mut self) {
+        self.0.turn_running.store(false, Ordering::SeqCst);
     }
 }
 

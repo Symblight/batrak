@@ -7,6 +7,18 @@ import { atom, computed } from 'nanostores';
 /** Every agent session, as the backend lists them plus the ones started here; written by `sessionController`. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
 
+/** The backend's list has arrived (`setListedSessions()`); until then `$sessions` is only what started here. */
+export const $sessionsLoaded = atom(false);
+
+/**
+ * The backend's sessions, at launch.
+ * @param {Session[]} sessions
+ */
+export function setListedSessions(sessions) {
+  $sessions.set(sessions);
+  $sessionsLoaded.set(true);
+}
+
 /**
  * New sessions with no message yet, session id → project id. Not listed; the first message makes one
  * a `Session` (`startSession()`).

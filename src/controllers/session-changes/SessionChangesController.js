@@ -56,6 +56,8 @@ export class SessionChangesController {
   /** @type {Map<string, number>} Latest diff read per file; an older one that resolves later is dropped. */
   #loads = new Map();
   #loadCount = 0;
+  /** Latest list asked for; an older one that resolves later (a slow scan) is dropped. */
+  #listCount = 0;
   /** The shown session was mid-turn at its last status. */
   #busy = false;
 
@@ -115,6 +117,7 @@ export class SessionChangesController {
   async #list() {
     const id = this.#sessionId;
     if (id === null) return;
+    const list = ++this.#listCount;
     this.#changes = { ...this.#changes, loading: true };
     this.#host.requestUpdate();
     /** @type {GitChangesView} */
@@ -124,7 +127,7 @@ export class SessionChangesController {
     } catch (err) {
       changes = { files: [], loaded: true, loading: false, error: String(err) };
     }
-    if (id !== this.#sessionId) return;
+    if (id !== this.#sessionId || list !== this.#listCount) return;
     this.#changes = changes;
     const listed = new Set(changes.files.map((file) => file.path));
     this.#expanded = new Set([...this.#expanded].filter((rel) => listed.has(rel)));

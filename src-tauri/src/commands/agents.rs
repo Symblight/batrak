@@ -19,12 +19,18 @@ pub async fn agents_list(configs: State<'_, AgentConfigs>, project_path: Option<
     .await?
 }
 
-/// The project's `.brama/workspace.json` settings (how its sessions start).
+/// The project's `.brama/workspace.json` settings (how its sessions start). A `worktree` default
+/// counts only where a worktree can start (a repository with a commit): every project opened before
+/// the setting was read got it written, git or not.
 #[tauri::command]
 pub async fn workspace_settings(project_path: String) -> Result<crate::config::WorkspaceSettings, String> {
     blocking(move || {
         let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
-        Ok(crate::config::workspace_settings(&project))
+        let mut settings = crate::config::workspace_settings(&project);
+        if settings.default_mode == "worktree" && !crate::session::env::can_place(&project) {
+            settings.default_mode = "local".to_owned();
+        }
+        Ok(settings)
     })
     .await?
 }

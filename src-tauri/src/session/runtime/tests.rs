@@ -506,6 +506,27 @@ async fn applying_a_worktree_sessions_work_brings_it_to_the_project_unstaged() {
 }
 
 #[tokio::test]
+async fn apply_and_check_out_hold_the_turn_slot_only_while_they_run() {
+    let f = git_fixture("wt-slot");
+    let (session, events) = f.create_in("s", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let state = f.sessions.get("s").unwrap();
+    assert_eq!(f.sessions.apply_locally("s").await.unwrap(), ApplyOutcome::Empty);
+    assert!(!state.turn_running.load(Ordering::SeqCst), "released after an apply");
+    std::fs::write(PathBuf::from(&session.folder).join("dirty.txt"), "d").unwrap();
+    assert!(f.sessions.check_out_branch("s").await.is_err());
+    assert!(!state.turn_running.load(Ordering::SeqCst), "released after a refusal");
+    assert_eq!(f.ask("s", &events, "hello").await, "Hello, world");
+
+    // A turn holds it: the git work waits for none.
+    let held = state.turn_running.swap(true, Ordering::SeqCst);
+    assert!(!held);
+    assert!(f.sessions.apply_locally("s").await.unwrap_err().contains("working"));
+    assert!(state.turn_running.load(Ordering::SeqCst), "a refused claim leaves the turn's slot alone");
+    state.turn_running.store(false, Ordering::SeqCst);
+}
+
+#[tokio::test]
 async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_over() {
     let f = git_fixture("wt-checkout");
     let (session, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();

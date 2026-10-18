@@ -48,6 +48,12 @@ impl WorktreeEnv {
     }
 }
 
+/// Whether a worktree session can start in `project`: it's in a repository with a commit. Blocking.
+pub fn can_place(project: &Path) -> bool {
+    let Ok(git) = binary::git() else { return false };
+    exec::run(git, project, &exec::args(&[&"rev-parse", &"--verify", &"--quiet", &"HEAD^{commit}"]), GitMode::Background).is_ok()
+}
+
 /// Where a new worktree session goes, checked against the repository: `base` (a branch or commit,
 /// `None` for the project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
 pub fn place(project: &Path, worktrees: &Path, session_id: &str, title: &str, base: Option<&str>) -> Result<Placement, String> {
@@ -100,9 +106,17 @@ impl SessionEnv for WorktreeEnv {
             if cancel.load(Ordering::SeqCst) {
                 return Err("cancelled".to_owned());
             }
-            match self.tip(git) {
-                Some(_) => worktree::attach(git, &self.project, &self.root, &self.branch)?,
-                None => worktree::add(git, &self.project, &self.root, &self.branch, &self.base_commit)?,
+            let existing = self.tip(git).is_some();
+            if existing {
+                worktree::attach(git, &self.project, &self.root, &self.branch)?;
+            } else {
+                worktree::add(git, &self.project, &self.root, &self.branch, &self.base_commit)?;
+            }
+            // Stopped while git checked out (it can't be interrupted): undone, the new branch too.
+            if cancel.load(Ordering::SeqCst) {
+                let cleanup = if existing { worktree::BranchCleanup::Keep } else { worktree::BranchCleanup::Delete };
+                worktree::remove(git, &self.project, &self.root, Some(&self.branch), cleanup)?;
+                return Err("cancelled".to_owned());
             }
             tracing::info!(path = %self.root.display(), branch = %self.branch, "worktree checked out");
         }
@@ -229,6 +243,47 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_worktree_needs_a_repository_with_a_commit() {
+        use crate::git::test_repo::{temp_dir, TestRepo};
+        let repo = TestRepo::with_commit("can-place");
+        assert!(can_place(&repo.path));
+        std::fs::create_dir_all(repo.path.join("sub")).unwrap();
+        assert!(can_place(&repo.path.join("sub")));
+        assert!(!can_place(&TestRepo::new("can-place-unborn").path));
+        let plain = temp_dir("can-place-plain");
+        assert!(!can_place(&plain));
+        std::fs::remove_dir_all(plain).unwrap();
+    }
+
+    /// A checkout that finishes after Stop is undone: no worktree, no new branch.
+    #[cfg(unix)]
+    #[test]
+    fn a_checkout_cancelled_while_it_runs_is_undone() {
+        use crate::git::test_repo::{temp_dir, TestRepo};
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::Arc;
+        let repo = TestRepo::with_commit("cancel-checkout");
+        let hook = repo.path.join(".git/hooks/post-checkout");
+        std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+        std::fs::write(&hook, "#!/bin/sh\nsleep 1\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let home = temp_dir("cancel-checkout-home");
+        let root = home.join("s");
+        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/cancel".into(), base, "t".into());
+
+        let cancel = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&cancel);
+        let preparing = std::thread::spawn(move || env.prepare(&flag));
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        cancel.store(true, Ordering::SeqCst);
+        assert!(preparing.join().unwrap().unwrap_err().contains("cancelled"));
+        assert!(!root.exists());
+        assert!(repo.git(&["branch", "--list", "brama/cancel"]).is_empty());
+        std::fs::remove_dir_all(home).unwrap();
+    }
 
     #[test]
     fn branch_names_are_slugs() {

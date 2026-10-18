@@ -1,6 +1,6 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentMapStore } from './persistent.js';
-import { $worktrees } from './sessions.js';
+import { $sessionsLoaded, $worktrees } from './sessions.js';
 import { $workspace } from './workspace.js';
 import { isUserAgentsFile } from '../models/agents-file.js';
 import { sessionChangesTabId, sessionOfTab } from '../models/tab-ids.js';
@@ -45,13 +45,15 @@ export function parseTabId(id) {
  * view anywhere.
  * @param {string} id Tab id.
  * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
- * @param {readonly WorktreeFolder[]} worktrees The project's worktree sessions.
+ * @param {readonly WorktreeFolder[] | null} worktrees The project's worktree sessions; `null` until
+ *   the sessions are listed, when a tab that may be one's is kept (a write now must not drop it).
  */
 function belongsTo(id, root, worktrees) {
   const { kind, path } = parseTabId(id);
-  if (kind === 'session-changes') return worktrees.some((w) => w.sessionId === sessionOfTab(id));
+  if (kind === 'session-changes') return worktrees === null || worktrees.some((w) => w.sessionId === sessionOfTab(id));
   if (kind !== 'file' || isUserAgentsFile(path)) return true;
   if (root === NO_PROJECT) return false;
+  if (worktrees === null) return true;
   return [root, ...worktrees.map((w) => w.folder)].some((folder) => path.startsWith(`${folder}/`));
 }
 
@@ -133,19 +135,22 @@ export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
  * Tabs of the active project (`$workspace`), only files inside it or its worktree sessions' folders;
  * while no project is open, the tabs that show no file (Settings).
  */
-export const $editorTabs = computed([$projectTabs, $workspace, $worktrees], (projects, workspace, worktrees) => {
-  const root = workspace?.path ?? NO_PROJECT;
-  const tabs = projects[root];
-  if (!tabs) return NO_TABS;
-  const own = worktrees.filter((w) => w.projectId === root);
-  return tabs.paths.every((id) => belongsTo(id, root, own))
-    ? tabs
-    : tabsOf(
-        tabs.paths.filter((id) => belongsTo(id, root, own)),
-        tabs.active,
-        tabs.pinned,
-      );
-});
+export const $editorTabs = computed(
+  [$projectTabs, $workspace, $worktrees, $sessionsLoaded],
+  (projects, workspace, worktrees, loaded) => {
+    const root = workspace?.path ?? NO_PROJECT;
+    const tabs = projects[root];
+    if (!tabs) return NO_TABS;
+    const own = loaded ? worktrees.filter((w) => w.projectId === root) : null;
+    return tabs.paths.every((id) => belongsTo(id, root, own))
+      ? tabs
+      : tabsOf(
+          tabs.paths.filter((id) => belongsTo(id, root, own)),
+          tabs.active,
+          tabs.pinned,
+        );
+  },
+);
 
 /** @param {EditorTabs} tabs Replaces the tabs of the active project, or of no project. */
 function setTabs(tabs) {

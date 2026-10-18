@@ -147,7 +147,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
 
 - **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`'s
-  `defaultMode` (`local` / `worktree`, anything else `local`) is the run target a new session's
+  `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
+  a commit, since older projects got it written whether git or not) is the run target a new session's
   composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
   base from `git_branches` (local branches, sessions' `brama/…` left out). Agents merge by id: built-in
   (`claude` → `npx -y @agentclientprotocol/claude-agent-acp`) < `<config dir>/brama/agents.json` <
@@ -167,7 +168,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
   builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
   branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`
-  (again from the branch if the folder was deleted); its cwd is the project's folder in it. No
+  (again from the branch if the folder was deleted; Stop mid-checkout, which git can't be
+  interrupted in, sets `prepare_cancel` and `prepare` undoes it); its cwd is the project's folder in it. No
   repository, no commit or an unknown base refuses the create. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
   `HOOK(git)` comments in `run_turn` mark the checkpoint points. `Sessions::remove` (session row
@@ -290,7 +292,8 @@ helpers apply.
   unstaged patch, `--3way` with a conflict list when the project moved on; applied from the
   project's folder, so changes outside it are left out) and Check Out Branch
   (`session_check_out_branch`: refused while the worktree is dirty, which a checkout would leave
-  behind; stops the agent, detaches the worktree). Both are refused mid-turn. A worktree whose
+  behind; stops the agent, detaches the worktree). Both are refused mid-turn and hold the turn
+  slot while they run (`SlotGuard`), so no prompt starts under them. A worktree whose
   branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
   dirty worktree is removed only after its work was committed (`remove_saved`).
 - Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.

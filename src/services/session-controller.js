@@ -37,6 +37,7 @@ import {
   removeSession,
   revertToDraft,
   selectSession,
+  setListedSessions,
   showProject,
   startSession,
   upsertSession,
@@ -58,7 +59,7 @@ export class SessionController {
   /** @returns {Promise<void>} */
   async init() {
     const sessions = await listSessions();
-    $sessions.set(sessions);
+    setListedSessions(sessions);
     for (const session of sessions) {
       sessionOpen(session.id, handleSessionEvent).catch((err) => reportError(`Opening "${session.title}" failed`, err));
     }
