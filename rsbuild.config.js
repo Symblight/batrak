@@ -10,7 +10,7 @@ export default defineConfig({
   dev: { hmr: false, liveReload: true, lazyCompilation: false },
   output: {
     distPath: { root: 'dist' },
-    overrideBrowserslist: ['safari >= 15'],
+    overrideBrowserslist: ['safari >= 18.2'],
   },
   tools: {
     rspack: { watchOptions: { ignored: ['**/src-tauri/**', '**/node_modules/**'] } },

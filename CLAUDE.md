@@ -482,7 +482,7 @@ full rules — load them when writing or reviewing component CSS or structure.
   `.parent__pane[hidden] { display: none; }` — no `!important`.
 - **Native CSS nesting** only via `&`, for one node's own states: `&:hover`, `&::placeholder`,
   `&[active]`, `@container (…) { … }`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
-  creates a descendant combinator — don't. The `safari >= 15` build target (Lightning CSS) down-compiles nesting.
+  creates a descendant combinator — don't. The `safari >= 18.2` build target (Tauri's WebKit on current macOS; no older fallbacks) keeps nesting, `@scope` and `scrollbar-color` native.
 - Component custom properties are namespaced `--acp-<component>-*` (public) / `--_acp-<component>-*`
   (internal). Theme third-party elements through their own documented properties
   (`--tvx-tree-view-*`, `--cdx-status-bar-*`, `--md-tab-*`).

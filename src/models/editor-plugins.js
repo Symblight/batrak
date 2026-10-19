@@ -4,27 +4,15 @@ import { allPreset } from '@symblight/code-editor/presets';
 
 /**
  * Compact scrollbars. CodeMirror's scroller sits in the editor's shadow root, out of reach of our CSS,
- * so the rules go in as a theme. WebKit (Tauri on macOS) lacks `scrollbar-color`: it gets the pseudo-elements.
+ * so the rules go in as a theme.
  */
 const scrollbarPlugin = defineCdxPlugin({
   id: 'acp-scrollbar',
   extensions: [
     EditorView.theme({
-      '@supports (scrollbar-color: auto)': {
-        '.cm-scroller': {
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'var(--md-outline-variant) transparent',
-        },
-      },
-      '@supports not (scrollbar-color: auto)': {
-        '.cm-scroller::-webkit-scrollbar': { width: '6px', height: '6px' },
-        '.cm-scroller::-webkit-scrollbar-track, .cm-scroller::-webkit-scrollbar-corner': {
-          background: 'transparent',
-        },
-        '.cm-scroller::-webkit-scrollbar-thumb': {
-          background: 'var(--md-outline-variant)',
-          borderRadius: '3px',
-        },
+      '.cm-scroller': {
+        scrollbarWidth: 'thin',
+        scrollbarColor: 'var(--md-outline-variant) transparent',
       },
     }),
   ],

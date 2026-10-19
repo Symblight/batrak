@@ -14,20 +14,6 @@
   scrollbar-width: thin;
   scrollbar-color: var(--md-outline-variant) transparent;
 }
-@supports not (scrollbar-color: auto) {
-  ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track,
-  ::-webkit-scrollbar-corner {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: var(--md-outline-variant);
-    border-radius: 3px;
-  }
-}
 
 /* Every menu and context menu: compact rows, the library's type sizes. */
 md-menu {
@@ -70,12 +56,13 @@ chx-message-row {
 
 /* A reply's parts rise in as they stream in. Only while the row is busy, so history and rows
    scrolled back into view appear still; opacity and transform only, so row heights don't move. */
-chx-message-row[aria-busy='true'] > chx-message > * {
-  animation: acp-part-enter 500ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
-}
-@media (prefers-reduced-motion: reduce) {
-  chx-message-row[aria-busy='true'] > chx-message > * {
-    animation: none;
+@scope (chx-message-row[aria-busy='true']) {
+  :scope > chx-message > * {
+    animation: acp-part-enter 500ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
   }
 }
 @keyframes acp-part-enter {
