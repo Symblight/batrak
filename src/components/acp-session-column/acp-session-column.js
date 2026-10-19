@@ -200,7 +200,7 @@ export class AcpSessionColumn extends LitElement {
   /** @param {Session} session */
   #select(session) {
     this.#activate(session.projectId);
-    sessionController.select(session.id).catch((err) => reportError('Selecting session failed', err));
+    sessionController.select(session.id);
   }
 
   /** @param {Event} e */

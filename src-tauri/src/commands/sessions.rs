@@ -29,14 +29,6 @@ pub async fn list_sessions(sessions: State<'_, Sessions>) -> Result<Vec<Session>
     Ok(sessions.list())
 }
 
-#[tauri::command]
-pub fn get_active_session() -> Option<String> {
-    None
-}
-
-#[tauri::command]
-pub fn set_active_session(_id: String) {}
-
 /// A draft's first message: creates the session under the draft's id and starts its workspace
 /// and agent in the background. Refused when a local session already runs in the project, or a
 /// worktree one has no repository or `base_branch` to start from.

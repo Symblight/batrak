@@ -33,19 +33,6 @@ export function listSessions() {
   return invoke('list_sessions');
 }
 
-/** @returns {Promise<string | null>} */
-export function getActiveSession() {
-  return invoke('get_active_session');
-}
-
-/**
- * @param {string} id
- * @returns {Promise<void>}
- */
-export function setActiveSession(id) {
-  return invoke('set_active_session', { id });
-}
-
 /**
  * A draft's first message: creates the session (under the draft's id) and starts its agent in the
  * background. Rejects when a local session already runs in the project, or a worktree one has no

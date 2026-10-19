@@ -1,6 +1,5 @@
 import {
   agentsTrust,
-  getActiveSession,
   listSessions,
   sessionApplyLocally,
   sessionCheckOutBranch,
@@ -15,7 +14,6 @@ import {
   sessionResume,
   sessionSetConfigOption,
   sessionStop,
-  setActiveSession,
   workspaceSettings,
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
@@ -83,8 +81,6 @@ export class SessionController {
       if (sessions.some((s) => s.id === id)) this.#loadHistory(id);
       this.#resume(id);
     });
-    const active = await getActiveSession();
-    if (active !== null && projectOf(active) !== null) selectSession(active);
     $workspacePath.subscribe((path) => {
       this.#loadSettings(path);
       if (path !== null) showProject(path);
@@ -149,11 +145,9 @@ export class SessionController {
 
   /**
    * @param {string} id A listed session's or a draft's.
-   * @returns {Promise<void>}
    */
-  async select(id) {
+  select(id) {
     selectSession(id);
-    if ($sessions.get().some((s) => s.id === id)) await setActiveSession(id);
   }
 
   /**
@@ -192,7 +186,6 @@ export class SessionController {
       },
     );
     trackCreate(id, created);
-    if ($activeSessionId.get() === id) setActiveSession(id).catch(() => {});
   }
 
   /**
