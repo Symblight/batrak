@@ -120,13 +120,15 @@
 }
 
 /* Set by services/theme.js from the Appearance setting, which may differ from the OS scheme. */
-:root[data-theme='dark'] {
-  --terminal-accent: #4cdbae;
-  --vcs-add: #81c995;
-  --diff-add-fg: #a8dab5;
-  --diff-del-fg: #f2b8b5;
-  --search-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
-  --notice-warn: #8a5300;
+@scope (:root[data-theme='dark']) {
+  :scope {
+    --terminal-accent: #4cdbae;
+    --vcs-add: #81c995;
+    --diff-add-fg: #a8dab5;
+    --diff-del-fg: #f2b8b5;
+    --search-hit: color-mix(in srgb, var(--md-primary) 28%, transparent);
+    --notice-warn: #8a5300;
+  }
 }
 
 [hidden] {
