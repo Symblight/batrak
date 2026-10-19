@@ -228,8 +228,11 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
   through `session/set_mode`). `applyAgentOptions()` (`stores/composer.js`) replaces the session's
-  options and caches them per agent (`brama:agents:config-options`), so a new session shows the real
-  models before it starts. An agent with nothing cached is probed once per launch
+  options and caches them per agent (`brama:agents:config-options`, keeping the agent's defaults
+  as first learned), so a new session shows the real models before it starts. A new session starts
+  with the user's last picks for its agent (`brama:agents:last-picks`; never a permission mode,
+  category `mode`); a listed session without a composer this launch (after a reload) gets one
+  from its record: its agent, `config`, run target, started. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
   `session/new`, no prompt, stopped). A pick goes through `sessionController.setConfigOption()`: shown at once,
   sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session

@@ -172,8 +172,9 @@ export class SessionController {
     const { agentId, chosen: config, runTarget } = composerOf(id);
     const mode = runTarget.kind;
     const baseBranch = mode === 'worktree' ? runTarget.branch : null;
-    startSession(id, { title, agentId, config, mode });
+    // While it's a draft still: a listed session without a composer would get one from its record.
     startComposer(id);
+    startSession(id, { title, agentId, config, mode });
     setSessionNotice(id, null);
     const request = { sessionId: id, projectPath, agentId, mode, title, config, baseBranch };
     const created = sessionCreate(request, handleSessionEvent).then(

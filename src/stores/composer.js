@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import { $activeSessionId } from './sessions.js';
+import { $activeSessionId, $sessions } from './sessions.js';
 import { $agentList } from './agents.js';
 import { $workspaceSettings } from './workspace.js';
 import { isRecord, persistentStore } from './persistent.js';
@@ -7,13 +7,15 @@ import { isRecord, persistentStore } from './persistent.js';
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
 /** @typedef {import('../models/types.js').ComposerState} ComposerState */
 /** @typedef {import('../models/types.js').RunTarget} RunTarget */
+/** @typedef {import('../models/types.js').Session} Session */
 
 /** @typedef {import('../models/types.js').CatalogAgent} CatalogAgent */
 /** @typedef {import('../models/types.js').AcpConfigOption} AcpConfigOption */
 
 /**
- * Each agent's config options as its last session reported them, by agent id: a new session shows
- * the agent's real models and levels before it starts. Shared by every window.
+ * Each agent's config options by agent id, so a new session shows the agent's real models and
+ * levels before it starts. `currentValue` is the agent's own default as first learned (a probe
+ * replaces it), not what some session was switched to. Shared by every window.
  */
 const $agentOptions = persistentStore(
   'brama:agents:config-options',
@@ -25,6 +27,50 @@ const $agentOptions = persistentStore(
         : null,
   },
 );
+
+/**
+ * @param {unknown} raw
+ * @returns {Record<string, Record<string, string>> | null}
+ */
+function parsePicks(raw) {
+  if (!isRecord(raw)) return null;
+  /** @type {Record<string, Record<string, string>>} */
+  const picks = {};
+  for (const [agentId, values] of Object.entries(raw)) {
+    if (!isRecord(values)) continue;
+    picks[agentId] = {};
+    for (const [id, value] of Object.entries(values)) if (typeof value === 'string') picks[agentId][id] = value;
+  }
+  return picks;
+}
+
+/**
+ * What the user last picked for each agent's options, by agent id, then option id: a new session
+ * of the agent starts with them. No permission mode (category `mode`): a new session starts in the
+ * agent's own, never in one another session was given. Shared by every window.
+ */
+const $lastPicks = persistentStore(
+  'brama:agents:last-picks',
+  /** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */ ({}),
+  { parse: parsePicks },
+);
+
+/**
+ * @param {ConfigOption} option
+ * @param {string | undefined} value
+ */
+function offers(option, value) {
+  return value !== undefined && option.options.some((v) => v.value === value);
+}
+
+/**
+ * The options with the given values shown where they offer them.
+ * @param {ConfigOption[]} options
+ * @param {Readonly<Record<string, string>>} values By option id.
+ */
+function withValues(options, values) {
+  return options.map((o) => (offers(o, values[o.id]) ? { ...o, currentValue: values[o.id] } : o));
+}
 
 /**
  * ACP config options as the composer shows them: select options only, groups flattened.
@@ -88,17 +134,40 @@ function agentOf(agentId) {
 }
 
 /**
+ * A draft's: the agent's defaults with the user's last picks for it, which are sent when it starts.
  * @param {string} agentId
  * @returns {ComposerState}
  */
 function freshState(agentId) {
+  const options = agentOf(agentId).configOptions;
+  const picks = $lastPicks.get()[agentId] ?? {};
+  // With the options unknown, every pick goes; the backend leaves out what the agent lacks.
+  const chosen = options.length
+    ? Object.fromEntries(Object.entries(picks).filter(([id, value]) => options.some((o) => o.id === id && offers(o, value))))
+    : { ...picks };
   return {
     agentId,
-    configOptions: agentOf(agentId).configOptions.map((o) => ({ ...o })),
-    chosen: {},
+    configOptions: withValues(options, chosen),
+    chosen,
     usage: null,
     runTarget: { kind: $workspaceSettings.get().defaultMode, branch: null },
     started: false,
+  };
+}
+
+/**
+ * A listed session's before its agent reports (after a reload): its own agent, values and run target.
+ * @param {Session} session
+ * @returns {ComposerState}
+ */
+function listedState(session) {
+  return {
+    agentId: session.agentId,
+    configOptions: withValues(agentOf(session.agentId).configOptions, session.config),
+    chosen: {},
+    usage: null,
+    runTarget: { kind: session.mode, branch: session.mode === 'worktree' ? session.branch : null },
+    started: true,
   };
 }
 
@@ -116,16 +185,19 @@ const $composers = atom(/** @type {Readonly<Record<string, ComposerState>>} */ (
 
 /** The active session's composer: agent, its ACP config options, context usage, where it runs. */
 export const $composer = computed(
-  [$composers, $activeSessionId, $newSessionAgentId, $agents, $workspaceSettings],
-  (composers, id, agentId) => (id === null ? undefined : composers[id]) ?? freshState(agentId),
+  [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $workspaceSettings, $lastPicks],
+  (_composers, id, _sessions, agentId) => (id === null ? freshState(agentId) : composerOf(id)),
 );
 
 /**
- * @param {string} id A session's.
+ * @param {string} id A session's or a draft's.
  * @returns {ComposerState}
  */
 export function composerOf(id) {
-  return $composers.get()[id] ?? freshState($newSessionAgentId.get());
+  const stored = $composers.get()[id];
+  if (stored) return stored;
+  const session = $sessions.get().find((s) => s.id === id);
+  return session ? listedState(session) : freshState($newSessionAgentId.get());
 }
 
 /**
@@ -163,11 +235,18 @@ export function selectAgent(agentId) {
 /**
  * The user picked a config option value: shown at once and kept as chosen until the agent
  * confirms it (`applyAgentOptions()`), so a pick made before the agent runs reaches it on start.
+ * New sessions of the agent start with it too, unless it's a permission mode.
  * @param {string} id A session's or a draft's.
  * @param {string} configId
  * @param {string} value
  */
 export function setConfigOption(id, configId, value) {
+  const { agentId, configOptions } = composerOf(id);
+  const option = configOptions.find((o) => o.id === configId);
+  if (option && option.category !== 'mode') {
+    const picks = $lastPicks.get();
+    $lastPicks.set({ ...picks, [agentId]: { ...picks[agentId], [configId]: value } });
+  }
   updateComposer(id, (state) => ({
     ...state,
     configOptions: state.configOptions.map((o) => (o.id === configId ? { ...o, currentValue: value } : o)),
@@ -176,12 +255,19 @@ export function setConfigOption(id, configId, value) {
 }
 
 /**
- * Forgets a pick the agent refused; its options come back as the agent has them.
+ * Forgets a pick the agent refused, for new sessions too (they get `previous` again); its options
+ * come back as the agent has them.
  * @param {string} id
  * @param {string} configId
  * @param {string} previous The value shown before the pick.
  */
 export function revertConfigOption(id, configId, previous) {
+  const { agentId, chosen: pending } = composerOf(id);
+  const picks = $lastPicks.get();
+  const refused = picks[agentId]?.[configId];
+  if (refused !== undefined && refused === pending[configId]) {
+    $lastPicks.set({ ...picks, [agentId]: { ...picks[agentId], [configId]: previous } });
+  }
   updateComposer(id, (state) => {
     const { [configId]: _, ...chosen } = state.chosen;
     return {
@@ -194,8 +280,8 @@ export function revertConfigOption(id, configId, previous) {
 
 /**
  * The agent's config options (at start, after a change, or its own update) replace the session's,
- * and become what new sessions of the agent show. Picks the agent doesn't have yet are returned,
- * to be sent to it; picks it now has are done.
+ * and become what new sessions of the agent show, keeping the defaults already known. Picks the
+ * agent doesn't have yet are returned, to be sent to it; picks it now has are done.
  * @param {string} id A session's.
  * @param {unknown} agentOptions ACP `SessionConfigOption[]`.
  * @returns {{ configId: string, value: string }[]} Picks still to send.
@@ -213,7 +299,9 @@ export function applyAgentOptions(id, agentOptions) {
   // What the agent will be set to shows now.
   const shown = options.map((o) => (o.id in chosen ? { ...o, currentValue: chosen[o.id] } : o));
   updateComposer(id, (s) => ({ ...s, configOptions: shown, chosen }));
-  $agentOptions.set({ ...$agentOptions.get(), [state.agentId]: options });
+  const known = $agentOptions.get()[state.agentId] ?? [];
+  const defaults = Object.fromEntries(known.map((o) => [o.id, o.currentValue]));
+  $agentOptions.set({ ...$agentOptions.get(), [state.agentId]: withValues(options, defaults) });
   return Object.entries(chosen).map(([configId, value]) => ({ configId, value }));
 }
 
