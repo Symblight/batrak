@@ -3,6 +3,7 @@
 }
 
 .acp-session-banner__banner {
+  margin-block-end: var(--space-2);
   &[hidden] {
     display: none;
   }

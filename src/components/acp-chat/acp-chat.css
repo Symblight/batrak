@@ -21,11 +21,22 @@
   --chx-chat-code-font-size: var(--font-size-sm);
   --chx-chat-code-line-height: 1.6;
 }
+/* Fades the end of the message list into the column: the banner always sits right below the list
+   (mounted, 0 high, when hidden; its gap to the composer is its own). Raised, or the rows' own
+   layers paint over the shadow; the composer, later and raised too, covers the shadow's lower half. */
+.acp-chat__banner {
+  position: relative;
+  z-index: var(--z-raised);
+  padding-block-end: 0;
+  box-shadow: 0 0 calc(2 * var(--space-3)) var(--space-3) var(--column-background);
+}
 .acp-chat__attach-icon {
   font-size: var(--icon-size-lg);
 }
 /* Agent composer: an outlined field on a tray that holds where the session runs. */
 .acp-chat__composer {
+  position: relative;
+  z-index: var(--z-raised);
   /* The pickers in its bar compress by the composer's width, not the window's (`@container acp-composer`). */
   container: acp-composer / inline-size;
   --chx-message-composer-background: var(--md-surface-container-high);
