@@ -1,4 +1,5 @@
 import './styles/tokens.css';
+import './styles/fonts/fonts.css';
 // Before any component: every shadow root gets the shared styles.
 import './styles/shadow-styles.js';
 import { logUncaughtErrors } from './services/logger.js';

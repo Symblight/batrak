@@ -98,8 +98,9 @@
   --space-4: 16px;
 
   /* Typography */
-  --font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-family-mono: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --font-family: 'Google Sans Flex', 'Google Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-family-mono: 'Google Sans Code', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --cdx-code-editor-mono-font-family: var(--font-family-mono);
   --font-size-xs: 11px;
   --font-size-sm: 12px;
   --font-size-md: 13px;
