@@ -112,7 +112,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 **Sessions:** `stores/sessions.js` holds `$sessions` (listed), `$draftSessions` (id → project id: a
 "New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
 conversation id; `$activeSession` is `null` for a draft. `sessionController` keeps the active session in
-the opened project (`showProject()`: the project's last shown session, its newest, or a new draft),
+the opened project (`showProject()`: the project's last shown session (`brama:sessions:last:<project path>`, per window, so it
+survives a relaunch), its newest, or a new draft),
 `create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
 agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation

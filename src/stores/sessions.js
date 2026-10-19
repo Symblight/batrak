@@ -1,4 +1,5 @@
 import { atom, computed } from 'nanostores';
+import { persistentMapStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').Session} Session */
 /** @typedef {import('../models/types.js').SessionStatus} SessionStatus */
@@ -55,12 +56,15 @@ export const $worktrees = computed($sessions, (sessions) =>
   ),
 );
 
-/** @type {Map<string, string>} The session last shown per project id, to come back to it. */
-const lastByProject = new Map();
+/**
+ * The session last shown per project id, to come back to it, also after a relaunch. Per window, like
+ * the tabs; a draft's id doesn't outlive the launch, so `showProject()` then falls back.
+ */
+const $lastByProject = persistentMapStore('brama:sessions:last:', (raw) => (typeof raw === 'string' ? raw : null));
 
 $activeSessionId.listen((id) => {
   const projectId = id === null ? null : projectOf(id);
-  if (id !== null && projectId !== null) lastByProject.set(projectId, id);
+  if (id !== null && projectId !== null) $lastByProject.setKey(projectId, id);
 });
 
 /**
@@ -109,7 +113,7 @@ export function newSession(projectId) {
 export function showProject(projectId) {
   const active = $activeSessionId.get();
   if (active !== null && projectOf(active) === projectId) return;
-  const last = lastByProject.get(projectId);
+  const last = $lastByProject.get()[projectId];
   if (last !== undefined && projectOf(last) === projectId) {
     $activeSessionId.set(last);
     return;
@@ -186,8 +190,8 @@ export function removeSession(id) {
   const session = $sessions.get().find((s) => s.id === id);
   if (!session) return;
   $sessions.set($sessions.get().filter((s) => s !== session));
-  for (const [projectId, last] of lastByProject) {
-    if (last === id) lastByProject.delete(projectId);
+  for (const [projectId, last] of Object.entries($lastByProject.get())) {
+    if (last === id) $lastByProject.setKey(projectId, undefined);
   }
   if ($activeSessionId.get() === id) {
     $activeSessionId.set(null);
