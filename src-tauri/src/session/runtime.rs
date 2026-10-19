@@ -1,7 +1,7 @@
 //! Running sessions: lifecycle (draft → preparing → starting → idle ⇄ working → stopped, any →
 //! error), turns, permissions, and the event stream to the frontend.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -83,6 +83,8 @@ pub struct SessionsOptions {
     /// The environment agents start from (the login shell's). Blocking.
     pub base_env: Arc<dyn Fn() -> HashMap<String, String> + Send + Sync>,
     pub launcher: Arc<dyn Launcher>,
+    /// How long a starting agent may take to answer `initialize`, and each config option the
+    /// session is set to.
     pub initialize_timeout: Duration,
 }
 
@@ -108,8 +110,9 @@ pub struct CreateSession {
     pub agent_id: String,
     pub mode: Mode,
     pub title: String,
+    /// The agent's config options picked in the draft (model, thought level, mode), by id.
     #[serde(default)]
-    pub model: Option<String>,
+    pub config: BTreeMap<String, String>,
     /// `worktree`: the branch or commit to start from; `None` for the project's HEAD.
     #[serde(default)]
     pub base_branch: Option<String>,
@@ -271,7 +274,7 @@ impl Sessions {
             title: req.title,
             status: SessionStatus::Preparing,
             created_at: iso_now(),
-            model: req.model,
+            config: req.config,
             worktree_path: placed.worktree_path,
             branch: placed.branch,
             base_commit: placed.base_commit,
@@ -562,6 +565,8 @@ impl Sessions {
         let state = self.get(id)?;
         let conn = state.conn().ok_or("The agent isn't running; the choice applies when it starts")?;
         let options = conn.set_config_option(config_id, value).await?;
+        remember_config(&state, &options);
+        self.inner.persist();
         state.emit("config-options", json!({ "configOptions": options }));
         Ok(())
     }
@@ -744,6 +749,52 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
         cancel_requested: AtomicBool::new(false),
         stopping: AtomicBool::new(false),
     }
+}
+
+/// Sets a freshly started agent to the session's config: each value it offers and doesn't have
+/// yet. One choice can change the others (a model without thought levels), so each next one is
+/// picked from the options the last answer brought. An agent that doesn't answer within `limit`
+/// (or goes away) is left as it is. Returns the options as they are then.
+async fn apply_config(
+    conn: &Connection,
+    wanted: &BTreeMap<String, String>,
+    mut options: Vec<Value>,
+    limit: Duration,
+) -> Vec<Value> {
+    let mut tried = std::collections::HashSet::new();
+    while let Some((id, value)) =
+        wanted.iter().find(|(id, value)| !tried.contains(id.as_str()) && offers_other(&options, id, value))
+    {
+        tried.insert(id.as_str());
+        let answer = tokio::select! {
+            answer = tokio::time::timeout(limit, conn.set_config_option(id, value)) => answer,
+            _ = conn.closed() => break,
+        };
+        match answer {
+            Ok(Ok(now)) => options = now,
+            Ok(Err(e)) => tracing::info!(config = %id, value = %value, "the agent refused the session's choice: {e}"),
+            Err(_) => {
+                tracing::info!(config = %id, "the agent didn't answer within {}s; left as it is", limit.as_secs_f32());
+                break;
+            }
+        }
+    }
+    options
+}
+
+/// Whether option `id` can be set to `value` and isn't already; values may come in groups.
+fn offers_other(options: &[Value], id: &str, value: &str) -> bool {
+    let Some(option) = options.iter().find(|o| o["id"] == id) else { return false };
+    let values = option["options"].as_array().into_iter().flatten();
+    let mut flat = values.flat_map(|v| v["options"].as_array().map_or_else(|| vec![v], |group| group.iter().collect()));
+    option["currentValue"] != value && flat.any(|v| v["value"] == value)
+}
+
+/// The options' current values become the session's config; one the agent no longer lists keeps
+/// its last value.
+fn remember_config(state: &SessionState, options: &[Value]) {
+    let current = options.iter().filter_map(|o| Some((o["id"].as_str()?.to_owned(), o["currentValue"].as_str()?.to_owned())));
+    lock(&state.record).config.extend(current);
 }
 
 impl Inner {
@@ -941,6 +992,10 @@ impl Inner {
             history_restored = started.history_restored,
             "agent ready"
         );
+        // Still in the task Stop aborts, and before anyone gets the connection: the first prompt
+        // runs with the session's choices.
+        let options = apply_config(&conn, &record.config, started.config_options, self.opts.initialize_timeout).await;
+        remember_config(&state, &options);
         lock(&state.record).acp_session_id = Some(started.acp_session_id.clone());
         self.persist();
         Ok((
@@ -949,7 +1004,7 @@ impl Inner {
                 process,
                 resumed: record.acp_session_id.is_some(),
                 history_restored: started.history_restored,
-                config_options: started.config_options,
+                config_options: options,
             },
             env,
         ))
@@ -1212,6 +1267,8 @@ impl ClientHost for SessionHost {
         let options = state.conn().and_then(|conn| conn.note_update(&update));
         state.emit("update", update);
         if let Some(options) = options {
+            // Saved with the next status change.
+            remember_config(&state, &options);
             state.emit("config-options", json!({ "configOptions": options }));
         }
     }

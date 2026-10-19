@@ -8,6 +8,7 @@ mod transcript;
 
 pub use runtime::{CreateSession, Envelope, EventSink, PromptInput, Sessions, SessionsOptions};
 
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -55,8 +56,10 @@ pub struct SessionRecord {
     pub title: String,
     pub status: SessionStatus,
     pub created_at: String,
+    /// The agent's config options (model, thought level, mode…) as last chosen or reported, by
+    /// id: a new start of the agent is set to them.
     #[serde(default)]
-    pub model: Option<String>,
+    pub config: BTreeMap<String, String>,
     /// `worktree` only: the worktree's root (`agent_cwd` is the project's folder in it), its
     /// branch, and the commit it started from.
     #[serde(default)]
@@ -76,7 +79,7 @@ pub struct Session {
     pub title: String,
     pub status: SessionStatus,
     pub agent_id: String,
-    pub model: Option<String>,
+    pub config: BTreeMap<String, String>,
     pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
     pub folder: String,
@@ -94,7 +97,7 @@ impl From<&SessionRecord> for Session {
             title: r.title.clone(),
             status: r.status,
             agent_id: r.agent_id.clone(),
-            model: r.model.clone(),
+            config: r.config.clone(),
             mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),
             worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),

@@ -129,7 +129,7 @@ export function showProject(projectId) {
 /**
  * A draft's first message: it becomes a listed session, `preparing` until the backend reports.
  * @param {string} id
- * @param {Pick<Session, 'title' | 'agentId' | 'model' | 'mode'>} fields
+ * @param {Pick<Session, 'title' | 'agentId' | 'config' | 'mode'>} fields
  */
 export function startSession(id, fields) {
   const { [id]: projectId, ...drafts } = $draftSessions.get();

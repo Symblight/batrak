@@ -1,6 +1,7 @@
 //! Agent session commands. Events of a session reach a window through the channel it passed to
 //! `session_create` / `session_open`.
 
+use std::collections::BTreeMap;
 use std::path::Path;
 use std::sync::Arc;
 
@@ -42,11 +43,12 @@ pub async fn session_create(
     agent_id: String,
     mode: Mode,
     title: String,
-    model: Option<String>,
+    config: Option<BTreeMap<String, String>>,
     base_branch: Option<String>,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
-    let request = CreateSession { session_id, project_path, agent_id, mode, title, model, base_branch };
+    let config = config.unwrap_or_default();
+    let request = CreateSession { session_id, project_path, agent_id, mode, title, config, base_branch };
     let sessions = sessions.inner().clone();
     let label = window.label().to_owned();
     blocking(move || sessions.create(request, &label, sink(channel))).await?

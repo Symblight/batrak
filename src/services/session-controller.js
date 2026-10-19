@@ -19,7 +19,6 @@ import {
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
 import { reportError } from './notices.js';
 import { notify } from '../stores/notices.js';
-import { configOf } from '../models/config-options.js';
 import {
   composerOf,
   forgetComposer,
@@ -169,14 +168,14 @@ export class SessionController {
   start(id, title) {
     const projectPath = $draftSessions.get()[id];
     if (projectPath === undefined) return;
-    const { agentId, configOptions, runTarget } = composerOf(id);
-    const model = configOf(configOptions, 'model')?.currentValue ?? null;
+    // Only what was picked in the draft: the values it shows otherwise are another session's.
+    const { agentId, chosen: config, runTarget } = composerOf(id);
     const mode = runTarget.kind;
     const baseBranch = mode === 'worktree' ? runTarget.branch : null;
-    startSession(id, { title, agentId, model, mode });
+    startSession(id, { title, agentId, config, mode });
     startComposer(id);
     setSessionNotice(id, null);
-    const request = { sessionId: id, projectPath, agentId, mode, title, model, baseBranch };
+    const request = { sessionId: id, projectPath, agentId, mode, title, config, baseBranch };
     const created = sessionCreate(request, handleSessionEvent).then(
       (session) => upsertSession(session),
       (err) => {

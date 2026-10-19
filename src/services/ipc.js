@@ -43,19 +43,19 @@ export function listSessions() {
  * @param {string} session.agentId
  * @param {RunTargetKind} session.mode
  * @param {string} session.title
- * @param {string | null} session.model
+ * @param {Record<string, string>} session.config The agent's config options picked in the draft, by id.
  * @param {string | null} session.baseBranch `worktree`: the branch to start from; `null` for HEAD.
  * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
  * @returns {Promise<Session>}
  */
-export function sessionCreate({ sessionId, projectPath, agentId, mode, title, model, baseBranch }, onEvent) {
+export function sessionCreate({ sessionId, projectPath, agentId, mode, title, config, baseBranch }, onEvent) {
   return invoke('session_create', {
     sessionId,
     projectPath,
     agentId,
     mode,
     title,
-    model,
+    config,
     baseBranch,
     channel: channelOf(onEvent),
   });

@@ -42,7 +42,8 @@
  * @property {string} title
  * @property {SessionStatus} status
  * @property {string} agentId
- * @property {string | null} model
+ * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
+ *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
  * @property {string} folder Where the agent works: the project, or the project's folder in its worktree.
  * @property {string | null} worktreePath `worktree` only: its root.

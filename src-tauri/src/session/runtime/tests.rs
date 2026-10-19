@@ -160,16 +160,23 @@ impl Fixture {
     }
 
     fn create_in(&self, id: &str, agent: &str, mode: Mode, base: Option<&str>) -> Result<(Session, Arc<Recorder>), String> {
-        let recorder = Arc::new(Recorder::default());
-        let req = CreateSession {
+        self.create_from(self.request(id, agent, mode, base))
+    }
+
+    fn request(&self, id: &str, agent: &str, mode: Mode, base: Option<&str>) -> CreateSession {
+        CreateSession {
             session_id: id.to_owned(),
             project_path: self.project.to_string_lossy().into_owned(),
             agent_id: agent.to_owned(),
             mode,
             title: format!("Session {id}"),
-            model: None,
+            config: BTreeMap::new(),
             base_branch: base.map(str::to_owned),
-        };
+        }
+    }
+
+    fn create_from(&self, req: CreateSession) -> Result<(Session, Arc<Recorder>), String> {
+        let recorder = Arc::new(Recorder::default());
         let session = self.sessions.create(req, "main", Arc::clone(&recorder) as Arc<dyn EventSink>)?;
         Ok((session, recorder))
     }
@@ -878,6 +885,68 @@ async fn config_options_arrive_at_start_and_follow_a_change() {
 }
 
 #[tokio::test]
+async fn a_sessions_config_options_come_back_when_its_agent_starts_again() {
+    let f = fixture("keep-options", FakeAgentOptions { load_session: true, ..Default::default() });
+    let mut req = f.request("k", "fake", Mode::Local, None);
+    // Picked in the draft; the fake refuses any effort, which doesn't stop the start.
+    req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned()), ("effort".to_owned(), "low".to_owned())]);
+    let (_, events) = f.create_from(req).unwrap();
+    events.wait_status("idle").await;
+    let model = |e: &Envelope| e.payload["configOptions"][0]["currentValue"].clone();
+    let options = events.wait_for("options", |e| e.kind == "config-options").await;
+    assert_eq!(model(&options), "fast", "the first options shown are the picked ones");
+    assert_eq!(*lock(&lock(&f.launcher.agents)[0].model), "fast", "set before the first prompt can run");
+    assert_eq!(f.sessions.list()[0].config["model"], "fast");
+
+    // A stopped agent starts with the session's choice, not its default.
+    f.sessions.set_config_option("k", "model", "smart").await.unwrap();
+    f.sessions.set_config_option("k", "model", "fast").await.unwrap();
+    f.sessions.stop("k").await.unwrap();
+    events.clear();
+    assert!(f.sessions.resume("k").await.unwrap());
+    events.wait_status("idle").await;
+    let options = events.wait_for("options", |e| e.kind == "config-options").await;
+    assert_eq!(model(&options), "fast");
+    assert_eq!(*lock(&lock(&f.launcher.agents)[1].model), "fast");
+
+    // And after the app restarts.
+    f.sessions.shutdown();
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    assert_eq!(reopened.list()[0].config["model"], "fast");
+    let events = Arc::new(Recorder::default());
+    reopened.attach("k", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    assert!(reopened.resume("k").await.unwrap());
+    events.wait_status("idle").await;
+    assert_eq!(*lock(&lock(&f.launcher.agents)[2].model), "fast");
+    reopened.shutdown();
+}
+
+#[tokio::test]
+async fn an_agent_that_never_answers_a_config_option_neither_holds_up_its_start_nor_stop() {
+    let f = fixture("hang-options", FakeAgentOptions { hang_set_config: true, ..Default::default() });
+    let mut req = f.request("h", "fake", Mode::Local, None);
+    req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned())]);
+    let (_, events) = f.create_from(req).unwrap();
+    events.wait_for("the agent asked", |_| f.launcher.launches.load(Ordering::SeqCst) == 1).await;
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    tokio::time::timeout(Duration::from_secs(2), f.sessions.stop("h")).await.expect("Stop waits for the agent's answer").unwrap();
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Stopped);
+
+    // Given up on after the timeout: the agent runs, with its own value.
+    let mut options = options_for(&f.dir, &f.launcher);
+    options.initialize_timeout = Duration::from_millis(100);
+    f.sessions.shutdown();
+    let reopened = Sessions::new(options);
+    let events = Arc::new(Recorder::default());
+    reopened.attach("h", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    assert!(reopened.resume("h").await.unwrap());
+    events.wait_status("idle").await;
+    let shown = events.wait_for("options", |e| e.kind == "config-options").await;
+    assert_eq!(shown.payload["configOptions"][0]["currentValue"], "smart");
+    reopened.shutdown();
+}
+
+#[tokio::test]
 async fn a_renamed_session_keeps_its_title_after_a_restart() {
     let f = fixture("rename", FakeAgentOptions::default());
     let (_, events) = f.create("n", "fake").unwrap();
@@ -1092,7 +1161,7 @@ async fn real_claude_agent_end_to_end() {
         agent_id: "claude".to_owned(),
         mode: Mode::Local,
         title: "real".to_owned(),
-        model: None,
+        config: BTreeMap::new(),
         base_branch: None,
     };
     sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();

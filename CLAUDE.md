@@ -232,7 +232,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   models before it starts. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
   `session/new`, no prompt, stopped). A pick goes through `sessionController.setConfigOption()`: shown at once,
-  sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts.
+  sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session
+  keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
+  every answer and update): a new start of its agent is set to them (`apply_config`, inside the
+  start Stop aborts, each answer bounded by `initialize_timeout`) before anyone gets the connection, so an agent that forgets its model on restart or `session/load` doesn't drop it.
 - **History**: each session's conversation is appended to `sessions/<id>/transcript.jsonl` (prompts,
   the turn's updates, turn ends; not `usage_update`, not a `session/load` replay); `session_history`
   returns it and `restoreHistory()` rebuilds the chat the first time a session is shown after a

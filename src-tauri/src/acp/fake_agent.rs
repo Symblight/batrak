@@ -30,6 +30,8 @@ pub struct FakeAgentOptions {
     pub load_session: bool,
     /// `session/new` fails with AuthRequired.
     pub require_auth: bool,
+    /// `session/set_config_option` is never answered.
+    pub hang_set_config: bool,
 }
 
 /// What the test can observe of the agent.
@@ -66,6 +68,7 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
     let on_prompt = Arc::clone(&state);
     let new_options = options.clone();
     let on_set = Arc::clone(&state);
+    let hang_set_config = options.hang_set_config;
     let result = Agent
         .builder()
         .name("fake-agent")
@@ -100,12 +103,20 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
                     sid,
                     SessionUpdate::AgentMessageChunk(ContentChunk::new(text("earlier answer"))),
                 ))?;
-                responder.respond(LoadSessionResponse::new())
+                // A new process: the model is the default again.
+                responder.respond(LoadSessionResponse::new().config_options(config_options("smart")))
             },
             agent_client_protocol::on_receive_request!(),
         )
         .on_receive_request(
             async move |request: SetSessionConfigOptionRequest, responder: Responder<SetSessionConfigOptionResponse>, _cx| {
+                if hang_set_config {
+                    tokio::spawn(async move {
+                        std::future::pending::<()>().await;
+                        drop(responder);
+                    });
+                    return Ok(());
+                }
                 let SessionConfigOptionValue::ValueId { value } = request.value else {
                     return responder.respond_with_error(agent_client_protocol::Error::invalid_params());
                 };
