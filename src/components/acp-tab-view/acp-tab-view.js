@@ -60,6 +60,8 @@ import styles from './acp-tab-view.css?inline';
 
 /** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
 
+const RETURN_DELAY_MS = 2000;
+
 /** @param {string} path */
 function basename(path) {
   return path.split(/[\\/]/).pop() || path;
@@ -142,6 +144,19 @@ export class AcpTabView extends LitElement {
     e.preventDefault();
     strip.scrollLeft += e.deltaY;
   };
+
+  /** @type {ReturnType<typeof setTimeout> | undefined} Brings the active tab back after the strip was scrolled away and left alone. */
+  #returnTimer;
+  /** Counts down only while the strip is not hovered. */
+  #scheduleReturn = () => {
+    clearTimeout(this.#returnTimer);
+    this.#returnTimer = setTimeout(() => {
+      const strip = this.renderRoot.querySelector('.acp-tab-view__tab-strip');
+      if (strip?.matches(':hover') ||this.#sortable.dragging !== null) return;
+      this.#revealActiveTab('instant');
+    }, RETURN_DELAY_MS);
+  };
+  #pauseReturn = () => clearTimeout(this.#returnTimer);
 
   constructor() {
     super();
@@ -243,6 +258,11 @@ export class AcpTabView extends LitElement {
     this.#emit('acp-tab-save', { id });
   }
 
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this.#returnTimer);
+  }
+
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
     if (changed.has('active')) this.#activeChanged = true;
@@ -273,10 +293,15 @@ export class AcpTabView extends LitElement {
     editor.focus();
   }
 
-  /** Scrolls the tab strip so the active tab is fully visible. */
-  #revealActiveTab() {
+  /**
+   * Scrolls the tab strip so the active tab is fully visible.
+   * @param {ScrollBehavior} [behavior] Defaults to the strip's own (smooth).
+   */
+  async #revealActiveTab(behavior = 'auto') {
     const tab = [...this.renderRoot.querySelectorAll('md-tab')].find((t) => t.getAttribute('value') === this.active);
-    tab?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    // The tab lays out after it upgrades; scroll once it has.
+    await tab?.updateComplete;
+    tab?.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior });
   }
 
   /** @param {Event} e */
@@ -519,7 +544,10 @@ export class AcpTabView extends LitElement {
 
   render() {
     return html`
-      <div class="acp-tab-view__tab-strip" @wheel=${this.#onStripWheel}>
+      <div class="acp-tab-view__tab-strip" @wheel=${this.#onStripWheel} 
+        @pointerenter=${this.#pauseReturn}
+        @pointerleave=${this.#scheduleReturn}
+      >
         <md-tabs class="acp-tab-view__tabs" variant="secondary" .value=${this.active ?? ''} @change=${this.#onTabChange}>
           ${repeat(this.tabs, (t) => t.id, (t) => this.#renderTab(t))}
         </md-tabs>
