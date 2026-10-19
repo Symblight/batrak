@@ -450,6 +450,7 @@ export class AcpChat extends LitElement {
           ></acp-agent-picker>
           <chx-attachments slot="attachments"></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
+          <chx-code-block-paste></chx-code-block-paste>
           <chx-command-picker
             id="acp-chat-files"
             slot="command-field"
