@@ -1,4 +1,8 @@
 :host {
+  /* Readable widths in a wider chat: the banner and the composer; the messages, whose rows
+     (`chx-message-row`, out of reach here) `shadow.css` sizes from the inherited private value. */
+  --_acp-chat-content-max-width: var(--acp-chat-content-max-width, none);
+  --_acp-chat-messages-max-width: var(--acp-chat-messages-max-width, none);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -25,6 +29,7 @@
    (mounted, 0 high, when hidden; its gap to the composer is its own). Raised, or the rows' own
    layers paint over the shadow; the composer, later and raised too, covers the shadow's lower half. */
 .acp-chat__banner {
+  max-width: var(--_acp-chat-content-max-width);
   position: relative;
   z-index: var(--z-raised);
   padding-block-end: 0;
@@ -35,6 +40,9 @@
 }
 /* Agent composer: an outlined field on a tray that holds where the session runs. */
 .acp-chat__composer {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: var(--_acp-chat-content-max-width);
   position: relative;
   z-index: var(--z-raised);
   /* The pickers in its bar compress by the composer's width, not the window's (`@container acp-composer`). */
@@ -66,10 +74,34 @@
 .acp-chat__chat_empty {
   justify-content: center;
 }
+/* The scroller spans the chat (its scrollbar at the edge); the rows keep the composer's inset
+   (`chx-chat` pads it 1rem), so the messages line up with the field. */
 .acp-chat__message-list {
+  --chx-message-list-padding: 0;
+
   &[hidden] {
     display: none;
   }
+}
+.acp-chat__message-list::part(item) {
+  box-sizing: border-box;
+  padding-inline: var(--space-4);
+}
+/* The reply's thinking, in the list's footer (a block, not the rows' flex column), sized and
+   centered like a row: `translate` instead of an auto margin. */
+.acp-chat__streaming {
+  box-sizing: border-box;
+  position: relative;
+  inset-inline-start: 50%;
+  translate: -50% 0;
+  width: 100%;
+  max-width: var(--_acp-chat-messages-max-width);
+  padding-inline: var(--space-4);
+}
+/* The scrollbar's width on the other side too: the rows then center on the composer's axis, and
+   nothing shifts when the scrollbar comes and goes. */
+.acp-chat__message-list::part(scroller) {
+  scrollbar-gutter: stable both-edges;
 }
 /* Compact scrollbar, like the editor's (`models/editor-plugins.js`): WebKit (Tauri on macOS) lacks
    `scrollbar-color` and gets the pseudo-elements. Separate rules: a selector the engine rejects drops only its own. */

@@ -420,7 +420,7 @@ export class AcpChat extends LitElement {
           scroll-mode="pin-top"
         >
           <!-- Waiting for the reply's first update: the agent thinking, as its thoughts look. -->
-          <acp-part-thinking slot="streaming"></acp-part-thinking>
+          <acp-part-thinking slot="streaming" class="acp-chat__streaming"></acp-part-thinking>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
         <acp-session-banner

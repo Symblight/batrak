@@ -69,6 +69,9 @@
   --agent-column-min-width: 280px;
   --main-column-min-width: 400px;
   --column-max-width: 524px;
+  /* The agent chat's readable widths in a wider column: its banner and composer, its messages */
+  --chat-content-max-width: 810px;
+  --chat-messages-max-width: 760px;
 
   /* Stacking */
   --z-raised: 1;

@@ -59,6 +59,15 @@ chx-message:not([own]) {
   align-self: stretch;
 }
 
+/* A readable line length in a wide chat, centered in the list's row (a flex column). `<acp-chat>`
+   resolves the width; it reaches here inherited through the chat's shadow roots. */
+chx-message-row {
+  box-sizing: border-box;
+  align-self: center;
+  width: 100%;
+  max-width: var(--_acp-chat-messages-max-width, none);
+}
+
 /* A reply's parts rise in as they stream in. Only while the row is busy, so history and rows
    scrolled back into view appear still; opacity and transform only, so row heights don't move. */
 chx-message-row[aria-busy='true'] > chx-message > * {
