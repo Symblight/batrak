@@ -34,6 +34,7 @@ export class TabFilesController {
   #tabs = [];
   /** @type {Map<string, number>} Latest read per open tab; an older read that resolves later is dropped. */
   #loads = new Map();
+  /** Sequence number handed to each diff/file read. */
   #loadCount = 0;
   /** @type {Set<string>} Open tabs whose read is in flight. */
   #reading = new Set();

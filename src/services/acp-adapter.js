@@ -39,6 +39,7 @@ class MessageBuilder {
   messageId = crypto.randomUUID();
   /** @type {string | null} */
   #lastKind = null;
+  /** Parts started in this message, which numbers the next part's id. */
   #parts = 0;
   /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
   #thought = null;
@@ -160,7 +161,10 @@ class MessageBuilder {
     return delta;
   }
 
-  /** @returns {ChxChunk[]} The thought being streamed ends with the message. */
+  /**
+   * @param {boolean} cancelled The reply was stopped: its last part shows as stopped.
+   * @returns {ChxChunk[]} The thought being streamed ends with the message.
+   */
   finish(cancelled = false) {
     const { messageId, sessionId: conversationId } = this;
     return [...this.#endThought(), { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
@@ -306,6 +310,7 @@ export function restoreHistory(sessionId, entries) {
   restored.add(sessionId);
   /** @type {MessageBuilder | null} */
   let reply = null;
+  /** @param {boolean} cancelled */
   const endReply = (cancelled = false) => {
     if (reply) reply.finish(cancelled).forEach(deliver);
     reply = null;
@@ -493,6 +498,7 @@ export function promptOf(message) {
  * @type {ChxChatAdapter}
  */
 export const acpAdapter = {
+  /** @param {SubscribeHandlers} subscribed The chat's callbacks; replaces the previous subscriber. */
   subscribe(subscribed) {
     handlers = subscribed;
     subscribed.onConnectionChange('connected');
@@ -502,6 +508,10 @@ export const acpAdapter = {
     };
   },
 
+  /**
+   * @param {ChxMessage} message
+   * @param {{ signal: AbortSignal }} options Aborted when the user stops the turn.
+   */
   async sendMessage(message, { signal }) {
     const sessionId = message.conversationId;
     if (!sessionId) throw new Error('No session');

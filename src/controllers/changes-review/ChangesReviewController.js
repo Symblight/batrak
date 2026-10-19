@@ -54,9 +54,11 @@ export class ChangesReviewController {
   #expandedByRoot = new Map();
   /** @type {Map<string, number>} Latest diff read per file; an older one that resolves later is dropped. */
   #loads = new Map();
+  /** Sequence number handed to each diff/file read. */
   #loadCount = 0;
   /** The Changes tab is open. */
   #open = false;
+  /** The host is connected. */
   #connected = false;
   /** @type {(() => void) | null} Stops watching; set while the tab is active. */
   #unwatch = null;
@@ -237,6 +239,7 @@ export class ChangesReviewController {
     this.#setExpanded(next);
   }
 
+  /** Collapses every expanded file. */
   collapseAll() {
     this.#setExpanded(new Set());
   }

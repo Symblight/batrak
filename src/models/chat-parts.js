@@ -10,6 +10,7 @@ export const codePartRule = {
   }),
 };
 
+/** Matches the paste chip of a long text that isn't code. */
 export const longTextPartRule = {
   type: 'longText',
   selector: 'span[data-paste-lines]:not([data-lang])',

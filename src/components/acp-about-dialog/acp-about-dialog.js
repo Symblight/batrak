@@ -27,6 +27,7 @@ export class AcpAboutDialog extends LitElement {
     this.about = null;
   }
 
+  /** Opens the dialog. */
   async show() {
     await /** @type {HTMLElementTagNameMap['md-dialog']} */ (this.renderRoot.querySelector('md-dialog')).show();
   }

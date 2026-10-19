@@ -81,7 +81,10 @@ export class AcpAgentPicker extends LitElement {
       );
   }
 
-  /** @param {AgentInfo} agent */
+  /**
+   * @param {AgentInfo} agent
+   * @param {string} slot
+   */
   #renderGlyph(agent, slot = 'leading') {
     return html`<span class="acp-agent-picker__glyph" slot=${slot}>${agent.glyph}</span>`;
   }

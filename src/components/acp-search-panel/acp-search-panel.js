@@ -70,14 +70,23 @@ export class AcpSearchPanel extends LitElement {
     this.root = null;
     /** @type {readonly FileResult[]} */
     this.results = [];
+    /** @type {boolean} */
     this.searching = false;
+    /** @type {boolean} */
     this.limitHit = false;
+    /** @type {string} */
     this.error = '';
+    /** @type {string} */
     this.query = '';
+    /** @type {boolean} */
     this.caseSensitive = false;
+    /** @type {boolean} */
     this.wholeWord = false;
+    /** @type {boolean} */
     this.regex = false;
+    /** @type {string} */
     this.include = '';
+    /** @type {string} */
     this.exclude = '';
     /** @type {Set<string>} Paths of collapsed file groups. */
     this.collapsed = new Set();

@@ -262,4 +262,5 @@ export class ProjectController extends EventTarget {
   }
 }
 
+/** The app's one `ProjectController`. */
 export const projectController = new ProjectController();

@@ -71,13 +71,19 @@ export class AcpResizeHandle extends LitElement {
 
   constructor() {
     super();
+    /** @type {string} */
     this.name = '';
     /** @type {ResizeEdge} */
     this.edge = 'end';
+    /** @type {string} */
     this.label = '';
+    /** @type {number} */
     this.value = 0;
+    /** @type {number} */
     this.min = 0;
+    /** @type {number} */
     this.max = 0;
+    /** @type {boolean} */
     this.dragging = false;
   }
 
@@ -102,6 +108,7 @@ export class AcpResizeHandle extends LitElement {
     this.removeEventListener('pointerup', this.#onPointerup);
     this.removeEventListener('lostpointercapture', this.#onLostPointerCapture);
     this.#press = null;
+    /** @type {boolean} */
     this.dragging = false;
     super.disconnectedCallback();
   }
@@ -150,6 +157,7 @@ export class AcpResizeHandle extends LitElement {
     const dx = e.clientX - this.#press.startX;
     if (!this.dragging) {
       if (Math.abs(dx) < DRAG_THRESHOLD) return;
+      /** @type {boolean} */
       this.dragging = true;
       this.#emit('acp-resize-start', undefined, this.#measure());
     }
@@ -168,6 +176,7 @@ export class AcpResizeHandle extends LitElement {
     if (e.pointerId !== this.#press?.pointerId) return;
     this.#press = null;
     if (!this.dragging) return;
+    /** @type {boolean} */
     this.dragging = false;
     this.#emit('acp-resize-end');
   };

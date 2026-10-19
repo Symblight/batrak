@@ -31,6 +31,7 @@ const markdown = new Marked({
   gfm: true,
   renderer: {
     // An image would load as soon as the reply shows, so a reply could send data out in its URL.
+    /** @param {{ href: string, text: string }} token */
     image({ href, text }) {
       return `<a href="${escapeHtml(href)}">${escapeHtml(text || href)}</a>`;
     },

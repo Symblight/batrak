@@ -57,7 +57,10 @@ export class AcpModePicker extends LitElement {
     this.options = [];
   }
 
-  /** @param {ConfigOptionValue} value */
+  /**
+   * @param {ConfigOptionValue} value
+   * @param {boolean} selected
+   */
   #renderItem(value, selected = false) {
     const { icon, risk } = lookOf(value.value);
     return html`

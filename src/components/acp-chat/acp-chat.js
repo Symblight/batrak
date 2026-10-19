@@ -201,6 +201,7 @@ export class AcpChat extends LitElement {
     super();
     /** @type {string | undefined} */
     this.conversationId = undefined;
+    /** @type {boolean} */
     this.empty = false;
     /** @type {ChxChat['adapter']} */
     this.adapter = undefined;

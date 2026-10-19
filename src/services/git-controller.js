@@ -26,7 +26,9 @@ class SerialTask {
   #job;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #timer;
+  /** The job is running. */
   #running = false;
+  /** A request came in while it ran. */
   #again = false;
 
   /** @param {() => Promise<void>} job Handles its own errors. */
@@ -139,6 +141,7 @@ export class GitController {
     if (this.#watchers) this.#changes.schedule(0);
   }
 
+  /** Stops following the active root. */
   stop() {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
@@ -242,4 +245,5 @@ export class GitController {
   }
 }
 
+/** The app's one `GitController`. */
 export const gitController = new GitController();

@@ -331,4 +331,5 @@ export class SessionController {
   }
 }
 
+/** The app's one `SessionController`. */
 export const sessionController = new SessionController();

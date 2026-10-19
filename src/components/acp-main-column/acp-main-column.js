@@ -1,8 +1,8 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { commentAuthor } from '../../models/editor-plugins.js';
+import { copyText } from '../../services/clipboard.js';
 import { loadSystemFonts } from '../../services/fonts.js';
-import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -194,7 +194,7 @@ export class AcpMainColumn extends LitElement {
   /** @param {Event} e */
   #onCopyPath(e) {
     const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
-    navigator.clipboard.writeText(path).catch((err) => reportError('Copying the path failed', err));
+    copyText(path, 'Copying the path failed');
   }
 
   /** @param {Event} e */

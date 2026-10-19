@@ -56,11 +56,15 @@ export class AcpQuickOpen extends LitElement {
 
   constructor() {
     super();
+    /** @type {boolean} */
     this.hasOpenFile = false;
+    /** @type {boolean} */
     this.hasProject = false;
+    /** @type {string} */
     this.query = '';
     /** @type {QuickOpenItem[]} */
     this.files = [];
+    /** @type {number} */
     this.selected = 0;
   }
 
@@ -80,6 +84,7 @@ export class AcpQuickOpen extends LitElement {
    */
   async show(prefix = '') {
     this.query = prefix;
+    /** @type {number} */
     this.selected = 0;
     this.files = [];
     await this.updateComplete;
@@ -103,6 +108,7 @@ export class AcpQuickOpen extends LitElement {
 
   /** Dialog closed by any means: drop in-flight answers and reset. */
   #onClose() {
+    /** @type {string} */
     this.query = '';
     this.files = [];
     this.#query(null);

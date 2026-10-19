@@ -22,7 +22,9 @@ export class FindInFilesController {
   #debounce = undefined;
   /** @type {SearchFileResult[]} Results received since the last render. */
   #incoming = [];
+  /** Pending animation frame that flushes `#incoming`. */
   #frame = 0;
+  /** The Find in Files pane is shown. */
   #active = false;
   /** @type {SearchOptions} */
   #options = { query: '', caseSensitive: false, wholeWord: false, regex: false, include: '', exclude: '' };

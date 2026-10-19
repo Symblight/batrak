@@ -22,6 +22,10 @@ const NONE = [];
  * (`.comments=${controller.threadsOf(path)}`), their submit / edit / delete become host events, and a
  * focus on a file one of them shows is revealed there. Any number of editors per host, any number
  * of hosts.
+ * @fires acp-comment-add {{ path: string, draft: { threadId: string, fromLine: number, line: number, lineText: string, body: string } }}
+ * @fires acp-comment-edit {{ path: string, threadId: string, commentId: string, body: string }}
+ * @fires acp-comment-delete {{ path: string, threadId: string, commentId: string }}
+ * @fires acp-comment-revealed {{ focus: CommentFocus }}
  * @implements {ReactiveController}
  */
 export class EditorCommentsController {

@@ -31,6 +31,7 @@ const GAP = 6;
  * editor's comment field on the selected range). Placed by a `FloatingController`: it follows the caret
  * as the code scrolls, flips above it near the window's bottom and hides while it's scrolled out of
  * view. The host renders `controller.render()`.
+ * @fires acp-chat-add {{ inserts: { path: string, fromLine: number, toLine: number, body: string }[] }}
  * @implements {ReactiveController}
  */
 export class SelectionActionsController {

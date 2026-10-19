@@ -55,6 +55,7 @@ export class SessionChangesController {
   #diffs = new Map();
   /** @type {Map<string, number>} Latest diff read per file; an older one that resolves later is dropped. */
   #loads = new Map();
+  /** Sequence number handed to each diff/file read. */
   #loadCount = 0;
   /** Latest list asked for; an older one that resolves later (a slow scan) is dropped. */
   #listCount = 0;
@@ -155,6 +156,7 @@ export class SessionChangesController {
     this.#host.requestUpdate();
   }
 
+  /** Collapses every expanded file. */
   collapseAll() {
     this.#expanded = new Set();
     this.#host.requestUpdate();

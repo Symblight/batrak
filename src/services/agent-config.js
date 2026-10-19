@@ -18,6 +18,7 @@ export class AgentConfig {
   /** Probes run one at a time: each starts an agent process. */
   #probing = Promise.resolve();
 
+  /** Follows the open project: loads its agents now and when an agents.json changes. */
   start() {
     $workspacePath.subscribe((path) => this.#refresh(path));
     onAgentsChanged((projectPath) => {
@@ -68,4 +69,5 @@ export class AgentConfig {
   }
 }
 
+/** The app's one `AgentConfig`. */
 export const agentConfig = new AgentConfig();

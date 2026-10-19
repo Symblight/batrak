@@ -35,6 +35,7 @@ export class AcpPartThinking extends LitElement {
 
   constructor() {
     super();
+    /** @type {string} */
     this.text = '';
     /** @type {ThinkingStatus} */
     this.status = 'streaming';
@@ -42,7 +43,9 @@ export class AcpPartThinking extends LitElement {
     this.startedAt = null;
     /** @type {number | null} */
     this.endedAt = null;
+    /** @type {boolean} */
     this.open = false;
+    /** @type {boolean} */
     this.peek = true;
   }
 

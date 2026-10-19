@@ -27,6 +27,7 @@ import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thi
 
 /** Chip template ids: file chips carry the path in `data-path`, folder chips also `data-kind="folder"`. */
 export const FILE_CHIP_TEMPLATE = 'acp-chat-file-chip';
+/** Template id of a slash command's chip. */
 export const COMMAND_CHIP_TEMPLATE = 'acp-chat-command-chip';
 
 /**
@@ -156,6 +157,8 @@ async function isFolder(absolute) {
  * tool calls, attachments) with file refs as chips and links, and opens a clicked one from the host:
  * a file chip or link in a message, or a tool call's location, fires `acp-file-open`; a folder's,
  * `acp-file-reveal`.
+ * @fires acp-file-open {{ path: string, line?: number }}
+ * @fires acp-file-reveal {{ path: string }}
  * @implements {ReactiveController}
  */
 export class ChatPartsController {
