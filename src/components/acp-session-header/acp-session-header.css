@@ -133,17 +133,3 @@
 .acp-session-header__new-icon {
   font-size: var(--icon-size-lg);
 }
-
-/* Menu density comes from src/styles/shadow.css. */
-.acp-session-header__menu {
-  --md-menu-min-width: 15rem;
-}
-
-.acp-session-header__menu-icon {
-  font-size: var(--icon-size-lg);
-}
-
-.acp-session-header__menu-item_danger {
-  --md-menu-item-label-text-color: var(--md-error);
-  --md-menu-item-leading-icon-color: var(--md-error);
-}

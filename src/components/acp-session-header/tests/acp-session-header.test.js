@@ -13,14 +13,13 @@ async function render(template) {
 }
 
 /**
- * Picks a menu item as `md-menu` reports it.
+ * Picks a menu item as `<acp-session-menu>` reports it.
  * @param {ShadowRoot} root
  * @param {string} value
  */
 function pick(root, value) {
-  const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
-  const item = /** @type {HTMLElement} */ (root.querySelector(`md-menu-item[value="${value}"]`));
-  menu.dispatchEvent(new CustomEvent('select', { detail: { value, item } }));
+  const menu = /** @type {HTMLElement} */ (root.querySelector('acp-session-menu'));
+  menu.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value }, bubbles: true, composed: true }));
 }
 
 /**
@@ -41,16 +40,27 @@ describe('acp-session-header', () => {
     const button = /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__title-button'));
     expect(button.textContent).to.contain('Fix the tree');
     expect(button.getAttribute('aria-label')).to.equal('Session menu: Fix the tree');
-    const menu = /** @type {HTMLElement & { open: boolean }} */ (root.querySelector('md-menu'));
-    button.click();
-    expect(menu.open).to.equal(true);
+    const menu = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
+    expect(menu.anchor).to.equal(button);
+    expect(menu.sessionTitle).to.equal('Fix the tree');
+  });
+
+  it('flips the chevron while the menu is open', async () => {
+    const { el, root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
+    const menu = /** @type {HTMLElement} */ (root.querySelector('acp-session-menu'));
+    menu.dispatchEvent(new CustomEvent('acp-session-menu-toggle', { detail: { open: true } }));
+    await el.updateComplete;
+    expect(root.querySelector('.acp-session-header__chevron_flipped')).to.not.equal(null);
+    menu.dispatchEvent(new CustomEvent('acp-session-menu-toggle', { detail: { open: false } }));
+    await el.updateComplete;
+    expect(root.querySelector('.acp-session-header__chevron_flipped')).to.equal(null);
   });
 
   it('shows a draft as a new session, with no menu', async () => {
     const { root } = await render(html`<acp-session-header draft></acp-session-header>`);
     expect(root.querySelector('.acp-session-header__title')?.textContent).to.equal('New session');
     expect(root.querySelector('.acp-session-header__title-button')).to.equal(null);
-    expect(root.querySelector('md-menu')).to.equal(null);
+    expect(root.querySelector('acp-session-menu')).to.equal(null);
   });
 
   it('shows the status only while the session isn’t idle', async () => {
@@ -66,12 +76,6 @@ describe('acp-session-header', () => {
     const status = root.querySelector('.acp-session-header__status');
     expect(status?.getAttribute('aria-label')).to.equal('Agent is working');
     expect(status?.querySelector('md-progress-circular')).to.not.equal(null);
-  });
-
-  it('keeps the actions with no backend yet disabled', async () => {
-    const { root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
-    const disabled = [...root.querySelectorAll('md-menu-item[disabled]')].map((i) => i.getAttribute('value'));
-    expect(disabled).to.deep.equal(['open-in', 'open-terminal', 'export', 'archive']);
   });
 
   it('asks the column to reveal or delete the session', async () => {

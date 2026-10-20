@@ -30,6 +30,7 @@ import type { AcpSettings } from './components/acp-settings/acp-settings.js';
 import type { AcpSnackbars } from './components/acp-snackbars/acp-snackbars.js';
 import type { AcpSessionBanner } from './components/acp-session-banner/acp-session-banner.js';
 import type { AcpSessionHeader } from './components/acp-session-header/acp-session-header.js';
+import type { AcpSessionMenu } from './components/acp-session-menu/acp-session-menu.js';
 import type { AcpSessionColumn } from './components/acp-session-column/acp-session-column.js';
 import type { AcpTerminal } from './components/acp-terminal/acp-terminal.js';
 import type { AcpToolbar } from './components/acp-toolbar/acp-toolbar.js';
@@ -67,6 +68,7 @@ declare global {
     'acp-selection-actions': AcpSelectionActions;
     'acp-session-banner': AcpSessionBanner;
     'acp-session-header': AcpSessionHeader;
+    'acp-session-menu': AcpSessionMenu;
     'acp-session-column': AcpSessionColumn;
     'acp-settings': AcpSettings;
     'acp-snackbars': AcpSnackbars;

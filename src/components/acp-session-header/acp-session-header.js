@@ -4,21 +4,14 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/menu';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
-import archiveIcon from '@material-design-icons/svg/outlined/archive.svg?raw';
-import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
-import downloadIcon from '@material-design-icons/svg/outlined/download.svg?raw';
-import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
 import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import newSessionIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
-import openInIcon from '@material-design-icons/svg/outlined/open_in_new.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
-import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import '../acp-session-menu/acp-session-menu.js';
 import { INDICATOR_LABELS } from '../../models/sessions.js';
 import styles from './acp-session-header.css?inline';
 
@@ -114,6 +107,7 @@ export class AcpSessionHeader extends LitElement {
   };
 
   #onSelect = (/** @type {Event} */ e) => {
+    e.stopPropagation();
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     if (value === 'rename') this.#startRename();
     else if (value === 'reveal') this.#emit('acp-session-reveal');
@@ -168,61 +162,23 @@ export class AcpSessionHeader extends LitElement {
       <md-tooltip for="acp-session-header-title" show-delay="800" placement="bottom">${this.sessionTitle}</md-tooltip>`;
   }
 
-  /**
-   * Items whose backend isn't there yet are shown disabled. Gone while renaming: md-menu finds its
-   * `for` anchor only when it connects, and the field replaces the button.
-   */
+  /** Gone while renaming: the field replaces the button it opens from. */
   #renderMenu() {
     if (this.draft || this.renaming) return nothing;
-    return html`<md-menu
-      class="acp-session-header__menu"
-      for="acp-session-header-title"
-      placement="bottom-start"
-      aria-label=${this.sessionTitle}
-      @select=${this.#onSelect}
-      @opening=${() => (this.menuOpen = true)}
-      @closing=${() => (this.menuOpen = false)}
-    >
-      <md-item-group>
-        <md-menu-item value="open-in" disabled>
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(openInIcon)}</md-icon>
-          Open in
-          <md-menu slot="submenu" class="acp-session-header__menu" aria-label="Open in">
-            <md-menu-item value="open-terminal" disabled>
-              <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(terminalIcon)}</md-icon>
-              Terminal
-            </md-menu-item>
-          </md-menu>
-        </md-menu-item>
-      </md-item-group>
-      <md-item-group>
-        <md-menu-item value="rename">
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(editIcon)}</md-icon>
-          Rename
-          <span slot="trailing">F2</span>
-        </md-menu-item>
-      </md-item-group>
-      <md-item-group>
-        <md-menu-item value="reveal">
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(folderOpenIcon)}</md-icon>
-          Reveal workspace in Files
-        </md-menu-item>
-        <md-menu-item value="export" disabled>
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(downloadIcon)}</md-icon>
-          Export transcript (Markdown)
-        </md-menu-item>
-      </md-item-group>
-      <md-item-group>
-        <md-menu-item value="archive" disabled>
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(archiveIcon)}</md-icon>
-          Archive
-        </md-menu-item>
-        <md-menu-item class="acp-session-header__menu-item acp-session-header__menu-item_danger" value="delete">
-          <md-icon slot="leading" class="acp-session-header__menu-icon">${unsafeSVG(deleteIcon)}</md-icon>
-          Delete…
-        </md-menu-item>
-      </md-item-group>
-    </md-menu>`;
+    return html`<acp-session-menu
+      session-title=${this.sessionTitle}
+      @acp-session-menu-select=${this.#onSelect}
+      @acp-session-menu-toggle=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        this.menuOpen = /** @type {CustomEvent<{ open: boolean }>} */ (e).detail.open;
+      }}
+    ></acp-session-menu>`;
+  }
+
+  /** The menu opens from the title button, which only exists once rendered. */
+  updated() {
+    const menu = this.renderRoot.querySelector('acp-session-menu');
+    if (menu) menu.anchor = this.#titleButton;
   }
 
   render() {
