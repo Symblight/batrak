@@ -64,6 +64,24 @@ function refChip(ref) {
 }
 
 /**
+ * A tool call's location (`ChxToolCall.buildLocation`): the library's chip with the file type's icon.
+ * Module-level, so the tool call never sees a new builder and rebuilds the chip.
+ * @param {Parameters<ChxToolCall['buildLocation']>[0]} location
+ */
+export function locationChip({ path, line }) {
+  const name = path.slice(path.lastIndexOf('/') + 1);
+  const chip = document.createElement('chx-chip');
+  chip.title = line === undefined ? path : `${path}:${line}`;
+  chip.dataset.path = path;
+  if (line !== undefined) chip.dataset.line = String(line);
+  const icon = document.createElement('md-icon');
+  icon.slot = 'icon';
+  icon.innerHTML = fileIconFor(name) ?? fileIcon;
+  chip.append(icon, name);
+  return chip;
+}
+
+/**
  * A link that opens the ref's file; the `href` keeps it focusable, `<acp-markdown>` never follows it.
  * @param {FileRef} ref
  * @param {string} text
@@ -248,6 +266,7 @@ export class ChatPartsController {
     },
     tool_call: (part, previous) => {
       const call = /** @type {ChxToolCall} */ (previous ?? document.createElement('chx-tool-call'));
+      call.buildLocation = locationChip;
       call.toolCallId = String(part.data?.toolCallId ?? '');
       call.label = part.label ?? '';
       call.kind = part.kind ?? 'other';
