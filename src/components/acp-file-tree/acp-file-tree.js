@@ -269,7 +269,7 @@ export class AcpFileTree extends LitElement {
     const icon = item.isDir
       ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
       : html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
-    return html`${icon}<md-tooltip for=${id} show-delay="2000" style="width: max-content">${tooltipFor(item)}</md-tooltip>`;
+    return html`${icon}<md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
   }
 
   /**
@@ -283,7 +283,7 @@ export class AcpFileTree extends LitElement {
         style=${item.ignored ? 'color: var(--md-on-surface-variant); opacity: 0.6' : ''}
         >${item.label}</span
       >
-      <md-tooltip for=${id} show-delay="2000" style="width: max-content">${tooltipFor(item)}</md-tooltip>`;
+      <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
   }
 
   /** @param {Event} e */

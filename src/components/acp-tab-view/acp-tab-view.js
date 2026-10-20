@@ -408,7 +408,7 @@ export class AcpTabView extends LitElement {
       @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(tab, e)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(tab, e)}
     >
-      <md-tooltip for=${id} show-delay="2000">${tooltip}</md-tooltip>
+      <md-tooltip class="acp-tab-view__tooltip" for=${id} show-delay="800">${tooltip}</md-tooltip>
       <span class="acp-tab-view__tab-label">
         <md-icon class="acp-tab-view__file-icon">${unsafeSVG(icon)}</md-icon>
         ${title}

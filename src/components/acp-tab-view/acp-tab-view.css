@@ -88,6 +88,11 @@
   align-items: center;
   gap: var(--space-1);
 }
+/* A path on one line: md-tooltip caps its own width (`max-inline-size` on its host), which wraps it. */
+.acp-tab-view__tooltip {
+  width: max-content;
+  max-inline-size: none;
+}
 .acp-tab-view__close {
   display: inline-flex;
   align-items: center;
