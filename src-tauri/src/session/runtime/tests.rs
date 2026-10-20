@@ -1135,8 +1135,8 @@ fn prompt_input_from_the_page() {
     assert_eq!(parsed[2], PromptInput::Selection { path: "a.rs".to_owned(), from_line: 1, to_line: 2 });
 }
 
-/// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, the
-/// built-in config): needs network, Node and a signed-in Claude Code. Run with
+/// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, from a
+/// user-level agents.json): needs network, Node and a signed-in Claude Code. Run with
 /// `cargo test --lib real_claude -- --ignored --nocapture`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -1147,7 +1147,14 @@ async fn real_claude_agent_end_to_end() {
     std::fs::create_dir_all(&project).unwrap();
     crate::config::ensure_project_dir(&project).unwrap();
     let project = dunce::canonicalize(project).unwrap();
-    let mut opts = SessionsOptions::for_app(dir.join("data"), AgentConfigs::new(None, None));
+    let user_file = dir.join("config/agents.json");
+    std::fs::create_dir_all(user_file.parent().unwrap()).unwrap();
+    std::fs::write(
+        &user_file,
+        r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#,
+    )
+    .unwrap();
+    let mut opts = SessionsOptions::for_app(dir.join("data"), AgentConfigs::new(Some(user_file), None));
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
     let probed = sessions.probe_options(Some(&project), "claude").await.unwrap();

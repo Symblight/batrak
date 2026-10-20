@@ -135,12 +135,12 @@ function agentOf(agentId) {
 
 /**
  * A draft's: the agent's defaults with the user's last picks for it, which are sent when it starts.
- * @param {string} agentId
+ * @param {string | null} agentId `null`: the project configures no agent.
  * @returns {ComposerState}
  */
 function freshState(agentId) {
-  const options = agentOf(agentId).configOptions;
-  const picks = $lastPicks.get()[agentId] ?? {};
+  const options = agentId === null ? [] : agentOf(agentId).configOptions;
+  const picks = (agentId !== null && $lastPicks.get()[agentId]) || {};
   // With the options unknown, every pick goes; the backend leaves out what the agent lacks.
   const chosen = options.length
     ? Object.fromEntries(Object.entries(picks).filter(([id, value]) => options.some((o) => o.id === id && offers(o, value))))
@@ -174,10 +174,10 @@ function listedState(session) {
 /** The agent last picked; a new session starts with it while it's configured. */
 const $lastAgentId = atom(/** @type {string | null} */ (null));
 
-/** The agent a new session starts with: the last picked, else the config's default, else the first. */
+/** The agent a new session starts with: the last picked, else the config's default, else the first, else none. */
 const $newSessionAgentId = computed([$lastAgentId, $agentList], (last, list) => {
   if (last !== null && list.agents.some((a) => a.id === last)) return last;
-  return list.defaultAgent ?? list.agents[0]?.id ?? 'claude';
+  return list.defaultAgent ?? list.agents[0]?.id ?? null;
 });
 
 /** Each session's composer by session id, once it differs from a fresh one. In memory. */
@@ -216,9 +216,9 @@ function updateActive(update) {
   if (id !== null) updateComposer(id, update);
 }
 
-/** @param {string} agentId */
+/** @param {string | null} agentId */
 export function agentInfo(agentId) {
-  return agentOf(agentId);
+  return agentId === null ? null : agentOf(agentId);
 }
 
 /**
@@ -243,7 +243,7 @@ export function selectAgent(agentId) {
 export function setConfigOption(id, configId, value) {
   const { agentId, configOptions } = composerOf(id);
   const option = configOptions.find((o) => o.id === configId);
-  if (option && option.category !== 'mode') {
+  if (agentId !== null && option && option.category !== 'mode') {
     const picks = $lastPicks.get();
     $lastPicks.set({ ...picks, [agentId]: { ...picks[agentId], [configId]: value } });
   }
@@ -264,8 +264,8 @@ export function setConfigOption(id, configId, value) {
 export function revertConfigOption(id, configId, previous) {
   const { agentId, chosen: pending } = composerOf(id);
   const picks = $lastPicks.get();
-  const refused = picks[agentId]?.[configId];
-  if (refused !== undefined && refused === pending[configId]) {
+  const refused = agentId !== null ? picks[agentId]?.[configId] : undefined;
+  if (agentId !== null && refused !== undefined && refused === pending[configId]) {
     $lastPicks.set({ ...picks, [agentId]: { ...picks[agentId], [configId]: previous } });
   }
   updateComposer(id, (state) => {
@@ -299,9 +299,11 @@ export function applyAgentOptions(id, agentOptions) {
   // What the agent will be set to shows now.
   const shown = options.map((o) => (o.id in chosen ? { ...o, currentValue: chosen[o.id] } : o));
   updateComposer(id, (s) => ({ ...s, configOptions: shown, chosen }));
-  const known = $agentOptions.get()[state.agentId] ?? [];
-  const defaults = Object.fromEntries(known.map((o) => [o.id, o.currentValue]));
-  $agentOptions.set({ ...$agentOptions.get(), [state.agentId]: withValues(options, defaults) });
+  if (state.agentId !== null) {
+    const known = $agentOptions.get()[state.agentId] ?? [];
+    const defaults = Object.fromEntries(known.map((o) => [o.id, o.currentValue]));
+    $agentOptions.set({ ...$agentOptions.get(), [state.agentId]: withValues(options, defaults) });
+  }
   return Object.entries(chosen).map(([configId, value]) => ({ configId, value }));
 }
 

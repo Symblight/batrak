@@ -4,7 +4,7 @@ use crate::config::{AgentConfigs, AgentList, LaunchConfig};
 
 use super::blocking;
 
-/// The agents configured for a project (built-in, user-level and `.brama/agents.json` merged),
+/// The agents configured for a project (user-level and `.brama/agents.json` merged),
 /// without their commands or environment. `errors` lists files that don't parse.
 #[tauri::command]
 pub async fn agents_list(configs: State<'_, AgentConfigs>, project_path: Option<String>) -> Result<AgentList, String> {

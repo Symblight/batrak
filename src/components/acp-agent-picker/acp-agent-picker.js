@@ -4,6 +4,7 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
+import agentIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
@@ -92,6 +93,22 @@ export class AcpAgentPicker extends LitElement {
   /** @param {ComposerState} composer */
   #renderAgentsMenu({ agentId, configOptions }) {
     return html`
+      ${this.agents.length ? this.#renderAgentsGroup(agentId, configOptions) : nothing}
+      <md-item-group>
+        <md-menu-item class="acp-agent-picker__item" value="" data-action="add-agent">
+          <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
+          Add ACP agent…
+        </md-menu-item>
+      </md-item-group>
+    `;
+  }
+
+  /**
+   * @param {string | null} agentId
+   * @param {readonly ConfigOption[]} configOptions
+   */
+  #renderAgentsGroup(agentId, configOptions) {
+    return html`
       <md-menu-group label="Agent">
         ${this.agents.map((agent) => {
           const current = agent.id === agentId;
@@ -109,20 +126,15 @@ export class AcpAgentPicker extends LitElement {
           `;
         })}
       </md-menu-group>
-      <md-item-group>
-        <md-menu-item class="acp-agent-picker__item" value="" data-action="add-agent">
-          <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
-          Add ACP agent…
-        </md-menu-item>
-      </md-item-group>
     `;
   }
 
   /**
-   * @param {ComposerState} composer
+   * @param {string} agentId
+   * @param {readonly ConfigOption[]} configOptions
    * @param {AgentInfo} agent
    */
-  #renderSessionMenu({ agentId, configOptions }, agent) {
+  #renderSessionMenu(agentId, configOptions, agent) {
     return html`
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" disabled>
@@ -158,27 +170,50 @@ export class AcpAgentPicker extends LitElement {
     this.#emit('acp-config-option', { agentId: agent, configId: config, value: item.getAttribute('value') ?? '' });
   };
 
+  /** With no agent configured, the button only leads to adding one. */
+  #renderAddLabel() {
+    return html`
+      <md-icon slot="icon" class="acp-agent-picker__agent-icon">${unsafeSVG(agentIcon)}</md-icon>
+      <span class="acp-agent-picker__label">
+        <span class="acp-agent-picker__agent">Add agent</span>
+        <md-icon class="acp-agent-picker__arrow">${unsafeSVG(arrowIcon)}</md-icon>
+      </span>
+    `;
+  }
+
+  /**
+   * @param {AgentInfo} agent
+   * @param {string | null} model
+   * @param {string | null} level
+   */
+  #renderAgentLabel(agent, model, level) {
+    return html`
+      ${this.#renderGlyph(agent, 'icon')}
+      <span class="acp-agent-picker__label">
+        <span class="acp-agent-picker__agent">${agent.name}${model ? ' ·' : ''}</span>
+        <span class="acp-agent-picker__model">${model}</span>
+        ${level
+          ? html`<span class="acp-agent-picker__level">
+              <md-icon class="acp-agent-picker__level-icon">${unsafeSVG(thinkingIcon)}</md-icon>${level}
+            </span>`
+          : nothing}
+        <md-icon class="acp-agent-picker__arrow">${unsafeSVG(arrowIcon)}</md-icon>
+      </span>
+    `;
+  }
+
   render() {
     const composer = this.composer;
     const agent = this.agent;
-    if (!composer || !agent) return nothing;
-    const { configOptions, started } = composer;
+    if (!composer) return nothing;
+    const { agentId, configOptions, started } = composer;
     const model = currentName(configOf(configOptions, 'model'));
     const level = currentName(configOf(configOptions, 'thought_level'));
-    const title = [agent.name, model, level].filter(Boolean).join(' · ');
+    const title = agent ? [agent.name, model, level].filter(Boolean).join(' · ') : 'Add an ACP agent';
+    // One button whatever it shows: md-menu finds its `for` anchor only when it connects.
     return html`
       <md-button id="acp-agent-picker-button" class="acp-agent-picker__button" variant="text" title=${title}>
-        ${this.#renderGlyph(agent, 'icon')}
-        <span class="acp-agent-picker__label">
-          <span class="acp-agent-picker__agent">${agent.name}${model ? ' ·' : ''}</span>
-          <span class="acp-agent-picker__model">${model}</span>
-          ${level
-            ? html`<span class="acp-agent-picker__level">
-                <md-icon class="acp-agent-picker__level-icon">${unsafeSVG(thinkingIcon)}</md-icon>${level}
-              </span>`
-            : nothing}
-          <md-icon class="acp-agent-picker__arrow">${unsafeSVG(arrowIcon)}</md-icon>
-        </span>
+        ${agent ? this.#renderAgentLabel(agent, model, level) : this.#renderAddLabel()}
       </md-button>
       <md-menu
         class="acp-agent-picker__menu"
@@ -187,7 +222,9 @@ export class AcpAgentPicker extends LitElement {
         focus-on-open="selected"
         @select=${this.#onSelect}
       >
-        ${started ? this.#renderSessionMenu(composer, agent) : this.#renderAgentsMenu(composer)}
+        ${started && agent && agentId !== null
+          ? this.#renderSessionMenu(agentId, configOptions, agent)
+          : this.#renderAgentsMenu(composer)}
       </md-menu>
     `;
   }

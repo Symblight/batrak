@@ -1,5 +1,5 @@
 //! Agent configuration: `.brama/agents.json` in the project over the user's
-//! `<config dir>/brama/agents.json` over the built-in agents, merged by agent id. The last valid
+//! `<config dir>/brama/agents.json`, merged by agent id; nothing is configured by default. The last valid
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
 pub mod env;
@@ -207,24 +207,6 @@ impl AgentEntry {
             env: self.env.or(base.env),
             disabled: self.disabled,
         }
-    }
-}
-
-/// Agents that work with no configuration. The user's or the project's file can override or
-/// disable them by id.
-fn builtin() -> AgentsFile {
-    let claude = AgentEntry {
-        name: Some("Claude Code".to_owned()),
-        command: Some("npx".to_owned()),
-        args: Some(vec!["-y".to_owned(), "@agentclientprotocol/claude-agent-acp".to_owned()]),
-        env: None,
-        disabled: false,
-    };
-    AgentsFile {
-        version: 1,
-        agents: BTreeMap::from([("claude".to_owned(), claude)]),
-        default_agent: Some("claude".to_owned()),
-        mcp_servers: Vec::new(),
     }
 }
 
@@ -455,7 +437,7 @@ impl AgentConfigs {
     }
 
     /// The merged config of `project`, read from disk on first use; `None`: no project open, the
-    /// user's and built-in agents only.
+    /// user's agents only.
     pub fn merged(&self, project: Option<&Path>) -> Merged {
         match project {
             Some(project) if !self.lock().projects.contains_key(project) => {
@@ -471,9 +453,7 @@ impl AgentConfigs {
         let inner = self.lock();
         let empty = FileState::default();
         let project_state = project.and_then(|p| inner.projects.get(p)).unwrap_or(&empty);
-        let builtin = builtin();
-        let mut layers = vec![&builtin];
-        layers.extend(inner.user.last_valid.as_ref());
+        let layers: Vec<_> = inner.user.last_valid.iter().collect();
         let mut merged = merge(&layers, project_state.last_valid.as_ref());
         let errors = [&inner.user.error, &project_state.error].into_iter().flatten().cloned();
         merged.errors.splice(0..0, errors);
@@ -544,7 +524,17 @@ mod tests {
     }
 
     #[test]
-    fn project_overrides_user_overrides_builtin_and_can_disable() {
+    fn a_new_project_lists_no_agents() {
+        let project = temp_project("no-agents");
+        ensure_project_dir(&project).unwrap();
+        let merged = AgentConfigs::new(None, None).merged(Some(&project));
+        assert!(merged.agents.is_empty(), "{:?}", merged.agents);
+        assert_eq!(merged.default_agent, None);
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn project_overrides_user_and_can_disable() {
         let user = parse(
             Path::new("user.json"),
             r#"{"version":1,"agents":{
@@ -561,9 +551,9 @@ mod tests {
             },"mcpServers":[{"name":"docs","command":"docs-mcp-v2","args":[],"env":[]}]}"#,
         )
         .unwrap();
-        let merged = merge(&[&builtin(), &user], Some(&project));
+        let merged = merge(&[&user], Some(&project));
         let ids: Vec<_> = merged.agents.iter().map(|a| a.id.as_str()).collect();
-        assert_eq!(ids, ["claude", "codex"]);
+        assert_eq!(ids, ["codex"]);
         let codex = merged.agent("codex").unwrap();
         assert_eq!(codex.name, "Codex", "name from the user layer");
         assert_eq!(codex.args, ["-y", "codex-acp@2"], "args from the project");
@@ -600,9 +590,11 @@ mod tests {
 
     #[test]
     fn what_the_project_runs_needs_trust_and_never_reads_the_keychain() {
-        let user =
-            parse(Path::new("user.json"), r#"{"version":1,"agents":{"codex":{"command":"npx","args":["codex-acp"]}}}"#)
-                .unwrap();
+        let user = parse(
+            Path::new("user.json"),
+            r#"{"version":1,"agents":{"codex":{"command":"npx","args":["codex-acp"]},"claude":{"command":"npx"}}}"#,
+        )
+        .unwrap();
         let project = parse(
             Path::new("project.json"),
             r#"{"version":1,"agents":{
@@ -613,14 +605,14 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        let merged = merge(&[&builtin(), &user], Some(&project));
+        let merged = merge(&[&user], Some(&project));
         assert!(!merged.needs_trust("codex"), "a name from the project runs nothing new");
         assert!(merged.needs_trust("repo"));
-        assert!(merged.needs_trust("claude"), "the project changed the built-in's args");
+        assert!(merged.needs_trust("claude"), "the project changed the user's args");
         assert!(merged.agent("thief").is_none());
         assert!(merged.errors.iter().any(|e| e.contains("thief") && e.contains("keychain")), "{:?}", merged.errors);
 
-        let user_only = merge(&[&builtin(), &user], None);
+        let user_only = merge(&[&user], None);
         assert!(!user_only.needs_trust("claude") && !user_only.needs_trust("codex"));
 
         let with_mcp = parse(
@@ -628,7 +620,7 @@ mod tests {
             r#"{"version":1,"mcpServers":[{"name":"x","command":"x","args":[],"env":[]}]}"#,
         )
         .unwrap();
-        let merged = merge(&[&builtin()], Some(&with_mcp));
+        let merged = merge(&[&user], Some(&with_mcp));
         assert!(merged.needs_trust("claude"), "the project's MCP servers start with any agent");
         assert_eq!(merged.launch("claude").unwrap().mcp_servers.len(), 1);
     }

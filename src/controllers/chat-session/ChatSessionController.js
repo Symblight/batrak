@@ -99,7 +99,11 @@ export class ChatSessionController {
   #onSend = (e) => {
     const id = this.#activeId.value;
     if (id === null || this.#session.value !== null) return;
-    sessionController.start(id, titleOf(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value));
+    if (!sessionController.start(id, titleOf(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value))) {
+      // Kept from `<chx-chat>`, and cancelled so the composer keeps the text.
+      e.stopPropagation();
+      e.preventDefault();
+    }
   };
 
   /**

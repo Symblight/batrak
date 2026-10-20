@@ -503,7 +503,7 @@
 /**
  * The agent composer's state for the chat (`$composer`).
  * @typedef {Object} ComposerState
- * @property {string} agentId
+ * @property {string | null} agentId `null` while the project configures no agent; a started session's is set.
  * @property {ConfigOption[]} configOptions The agent's, as it last reported them (shown with `chosen` applied).
  * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
  *   (picked before it started, or on their way), by config option id.

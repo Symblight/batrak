@@ -156,9 +156,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
   a commit, since older projects got it written whether git or not) is the run target a new session's
   composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
-  base from `git_branches` (local branches, sessions' `brama/…` left out). Agents merge by id: built-in
-  (`claude` → `npx -y @agentclientprotocol/claude-agent-acp`) < `<config dir>/brama/agents.json` <
-  `.brama/agents.json` (`"disabled": true` hides one). An invalid file keeps its last valid version
+  base from `git_branches` (local branches, sessions' `brama/…` left out). Agents merge by id:
+  `<config dir>/brama/agents.json` < `.brama/agents.json` (`"disabled": true` hides one); nothing is
+  built in, so a new project has no agent (the composer's picker offers only Add ACP agent…, and a
+  draft's send is refused with a notice). An invalid file keeps its last valid version
   and is reported as `file:line:col`. The watcher flags `.brama/agents.json` (`Changes.config`) →
   reload → `agents://changed`; `.brama/local/` is never in the snapshot. `env` values take
   `${env:NAME}` (login-shell env) and `${keychain:name}` (service `brama`), resolved only at spawn:

@@ -161,15 +161,20 @@ export class SessionController {
    * A draft's first message: it's listed at once, and the backend creates it (workspace, agent)
    * meanwhile; the send waits for that. Refused (e.g. a local session already runs in the
    * project, or a worktree one's base is gone), it's a draft again with the reason above its
-   * composer.
+   * composer. With no agent configured nothing starts, and the notice says how to add one.
    * @param {string} id
    * @param {string} title
+   * @returns {boolean} Whether the message goes: `false` keeps it in the composer.
    */
   start(id, title) {
     const projectPath = $draftSessions.get()[id];
-    if (projectPath === undefined) return;
+    if (projectPath === undefined) return true;
     // Only what was picked in the draft: the values it shows otherwise are another session's.
     const { agentId, chosen: config, runTarget } = composerOf(id);
+    if (agentId === null) {
+      setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .brama/agents.json to start a session.' });
+      return false;
+    }
     const mode = runTarget.kind;
     const baseBranch = mode === 'worktree' ? runTarget.branch : null;
     // While it's a draft still: a listed session without a composer would get one from its record.
@@ -186,6 +191,7 @@ export class SessionController {
       },
     );
     trackCreate(id, created);
+    return true;
   }
 
   /**

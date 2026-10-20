@@ -44,4 +44,12 @@ export default {
   nodeResolve: true,
   browsers: [chromeLauncher({ launchOptions: { channel: 'chrome' } })],
   plugins: [litCssInline, rawText],
+  // nanostores reads `process.env.NODE_ENV`, which the bundler defines.
+  testRunnerHtml: (testFramework) => `<!doctype html>
+    <html>
+      <body>
+        <script>window.process = { env: { NODE_ENV: 'test' } };</script>
+        <script type="module" src="${testFramework}"></script>
+      </body>
+    </html>`,
 };

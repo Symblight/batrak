@@ -89,6 +89,10 @@
   line-height: 1;
 }
 
+.acp-agent-picker__agent-icon {
+  font-size: var(--icon-size-sm);
+}
+
 /* Menu density comes from src/styles/shadow.css. */
 .acp-agent-picker__menu {
   --md-menu-min-width: 13rem;
