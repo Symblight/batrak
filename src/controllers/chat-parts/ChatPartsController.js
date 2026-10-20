@@ -213,7 +213,10 @@ export class ChatPartsController {
       if (message.own) {
         const span = previous?.localName === 'span' ? previous : document.createElement('span');
         if (part.html) span.innerHTML = part.html;
-        else span.textContent = part.text ?? '';
+        else {
+          const lines = (part.text ?? '').split('\n');
+          span.replaceChildren(...lines.flatMap((line, i) => (i ? [document.createElement('br'), line] : [line])));
+        }
         formatFileRefs(span, { links: false });
         return span;
       }

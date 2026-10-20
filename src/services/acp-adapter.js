@@ -1,7 +1,7 @@
 import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
-import { MESSAGE_PART_RULES } from '../models/chat-parts.js';
+import { MESSAGE_PART_RULES, fenceCode, splitFencedCode } from '../models/chat-parts.js';
 import { applyAgentOptions, setUsage } from '../stores/composer.js';
 import { folderOf, setSessionStatus } from '../stores/sessions.js';
 import {
@@ -319,7 +319,9 @@ export function restoreHistory(sessionId, entries) {
     if (entry.kind === 'prompt') {
       endReply();
       const message = new MessageBuilder(sessionId, USER_ID);
-      deliver(message.chunk(`${message.messageId}-t1`, 'text', { text: promptText(entry.prompt) }));
+      splitFencedCode(promptText(entry.prompt)).forEach(({ type, ...delta }, i) =>
+        deliver(message.chunk(`${message.messageId}-${type}${i + 1}`, type, delta)),
+      );
       message.finish().forEach(deliver);
     } else if (entry.kind === 'update') {
       reply ??= new MessageBuilder(sessionId, AGENT_ID);
@@ -471,7 +473,7 @@ export function promptOf(message) {
     if (part.type === 'text' || part.type === 'longText') {
       text += part.text ?? '';
     } else if (part.type === 'code') {
-      text += `\n\`\`\`${part.lang ?? ''}\n${part.text ?? ''}\n\`\`\`\n`;
+      text += fenceCode(part.text ?? '', part.lang ?? '');
     } else if (part.type === 'chip') {
       const path = typeof part.data?.path === 'string' ? part.data.path : null;
       const range = lineRange(part.data?.lines);
