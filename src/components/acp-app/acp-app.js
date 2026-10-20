@@ -261,6 +261,7 @@ export class AcpApp extends LitElement {
     const hidden = this.#hiddenColumns.value;
     const sessionHidden = hidden.includes('session');
     const filesHidden = hidden.includes('side');
+    // A hidden column drops its inline width, so its collapse in CSS can take it to nothing.
     // With no tabs beside it, the agent column takes the space.
     const agentFills = !hasCode;
     return html`
@@ -274,7 +275,7 @@ export class AcpApp extends LitElement {
       <div class="acp-app__columns">
         <acp-session-column
           class="acp-app__session"
-          style=${this.#resize.columnStyle('session')}
+          style=${sessionHidden ? nothing : this.#resize.columnStyle('session')}
           ?hidden=${sessionHidden}
         ></acp-session-column>
         ${sessionHidden ? nothing : this.#renderResizer('session', 'Resize sessions column')}
@@ -289,7 +290,7 @@ export class AcpApp extends LitElement {
         ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
         <acp-file-column
           class="acp-app__files"
-          style=${this.#resize.columnStyle('side')}
+          style=${filesHidden ? nothing : this.#resize.columnStyle('side')}
           ?hidden=${filesHidden}
           @acp-file-open=${this.#onFileOpen}
           @acp-diff-open=${this.#onDiffOpen}

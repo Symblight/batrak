@@ -73,7 +73,7 @@
 /* Drag and drop: the tabs slide aside to open an empty slot where the dragged one would land. Only
    while sorting: on drop the reorder takes over their offsets in the same frame, without animating. */
 .acp-tab-view__tab_sorting {
-  transition: translate 180ms cubic-bezier(0.2, 0, 0, 1);
+  transition: translate 180ms var(--motion-easing-standard);
 
   @media (prefers-reduced-motion: reduce) {
     transition: none;
