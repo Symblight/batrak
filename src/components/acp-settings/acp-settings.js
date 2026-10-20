@@ -14,7 +14,7 @@ import colorizeIcon from '@material-design-icons/svg/outlined/colorize.svg?raw';
 import removeIcon from '@material-design-icons/svg/outlined/remove.svg?raw';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
-import { fontStack } from '../../models/editor-fonts.js';
+import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts.js';
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings.js';
 import styles from './acp-settings.css?inline';
 
@@ -242,7 +242,7 @@ export class AcpSettings extends LitElement {
           .value=${font ?? ''}
           @change=${this.#onFontChange}
         >
-          <md-option class="acp-settings__option" value="">System default</md-option>
+          <md-option class="acp-settings__option acp-settings__option_default" value="">${DEFAULT_EDITOR_FONT} (default)</md-option>
           ${fonts === null
             ? font && this.#renderFontOption(font)
             : html`${this.#renderFontGroup('Monospaced', fonts.filter((f) => f.monospace))}

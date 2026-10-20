@@ -120,7 +120,10 @@
 }
 /* The Font field shows its value in that font. */
 .acp-settings__input_font::part(text-field) {
-  --md-text-field-font-family: var(--_acp-settings-font, var(--font-family));
+  --md-text-field-font-family: var(--_acp-settings-font, var(--font-family-mono));
+}
+.acp-settings__option_default {
+  font-family: var(--font-family-mono);
 }
 /* Read by the inline style firstUpdated() puts on md-select's own md-menu. */
 .acp-settings__input_font {
