@@ -387,6 +387,9 @@ Work test-driven: before changing behavior, write a test that fails for the miss
 behavior, see it fail, then make it pass, then clean up with the tests green. A bug fix starts with a
 test that reproduces it.
 
+- **Styles:** a change that is only CSS (a component's `.css`, `shadow.css`, `tokens.css`) gets no
+  test, and no test asserts computed styles or custom properties, unless I allow it for that change.
+
 - **Backend:** tests live next to the code (`#[cfg(test)] mod tests`, or `<module>/tests.rs` when
   long). Agent behavior is tested against the in-process fake agent (`acp/fake_agent.rs`; extend
   its scripts rather than mocking `Connection`), files against temp folders, git against
