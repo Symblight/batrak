@@ -3,6 +3,7 @@ import { agentConfig } from '../../services/agent-config.js';
 import { sessionController } from '../../services/session-controller.js';
 import { projectController } from '../../services/project-controller.js';
 import { gitController } from '../../services/git-controller.js';
+import { trustController } from '../../services/trust-controller.js';
 import { loadAbout } from '../../services/about.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
@@ -12,9 +13,12 @@ import { $activePath } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout.js';
 import { $notices, dismissNotice, holdNotices } from '../../stores/notices.js';
+import { $trustPrompt } from '../../stores/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace.js';
+import { trustConfirm } from '../../models/trust.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
+import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import '../acp-toolbar/acp-toolbar.js';
 import '../acp-session-column/acp-session-column.js';
 import '../acp-agent-column/acp-agent-column.js';
@@ -29,10 +33,11 @@ import styles from './acp-app.css?inline';
 
 /** @typedef {import('../acp-file-column/acp-file-column.js').SideView} SideView */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types.js').TrustPrompt} TrustPrompt */
 
 /**
  * @tag acp-app
- * @summary Root layout: toolbar, session/agent/editor/file columns, Quick Open, About, snackbars, global shortcuts and menu bar items.
+ * @summary Root layout: toolbar, session/agent/editor/file columns, Quick Open, About, the project trust dialog, snackbars, global shortcuts and menu bar items.
  */
 export class AcpApp extends LitElement {
   static properties = {
@@ -57,6 +62,7 @@ export class AcpApp extends LitElement {
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
+  #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
   /** Sequence of Quick Open queries; only the latest answer is shown. */
   #quickOpenRequest = 0;
   /** @type {Promise<() => void> | null} */
@@ -94,6 +100,7 @@ export class AcpApp extends LitElement {
     this.#menuListener = onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => log('warn', `menu bar not connected: ${err}`));
     agentConfig.start();
+    trustController.start();
     sessionController.init().catch((err) => reportError('Loading sessions failed', err));
     gitController.start();
     projectController.restore().catch((err) => reportError('Reopening folder failed', err));
@@ -104,6 +111,25 @@ export class AcpApp extends LitElement {
     this.#menuListener?.then((stop) => stop()).catch(() => {});
     this.#menuListener = null;
     super.disconnectedCallback();
+  }
+
+  /**
+   * Shows the trust dialog for `prompt`, or closes it; an answer counts only while its prompt is current.
+   * @param {TrustPrompt | null} prompt
+   */
+  async #askTrust(prompt) {
+    await this.updateComplete;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('.acp-app__trust')
+    );
+    if (prompt === null) {
+      dialog.close();
+      return;
+    }
+    const trusted = await dialog.confirm(trustConfirm(prompt));
+    if ($trustPrompt.get() !== prompt) return;
+    if (trusted) trustController.trust();
+    else trustController.dismiss();
   }
 
   /** Rendered unconditionally, so present after the first render. */
@@ -312,6 +338,7 @@ export class AcpApp extends LitElement {
         @acp-go-to-line=${this.#onPaletteGoToLine}
       ></acp-quick-open>
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
+      <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-snackbars
         class="acp-app__snackbars"
         .notices=${this.#notices.value}

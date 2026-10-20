@@ -251,14 +251,23 @@ export function agentsProbeOptions(projectPath, agentId) {
 }
 
 /**
- * Trusts what a project's agents.json runs for one agent, as an `untrusted` event showed it.
- * Refused when the file changed since.
+ * The project's agents that run what its agents.json chose and wait for the user's trust.
  * @param {string} projectPath
- * @param {import('../models/types.js').LaunchConfig} launch
+ * @returns {Promise<import('../models/types.js').UntrustedAgent[]>}
+ */
+export function agentsUntrusted(projectPath) {
+  return invoke('agents_untrusted', { projectPath });
+}
+
+/**
+ * Trusts what a project's agents.json runs for some agents, as `agentsUntrusted()` listed them.
+ * Refused, all of them, when the file changed since.
+ * @param {string} projectPath
+ * @param {import('../models/types.js').LaunchConfig[]} launches
  * @returns {Promise<void>}
  */
-export function agentsTrust(projectPath, launch) {
-  return invoke('agents_trust', { projectPath, launch });
+export function agentsTrust(projectPath, launches) {
+  return invoke('agents_trust', { projectPath, launches });
 }
 
 /**

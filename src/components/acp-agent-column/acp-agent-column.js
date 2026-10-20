@@ -145,7 +145,6 @@ export class AcpAgentColumn extends LitElement {
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
     else if (action === 'restart') sessionController.restart(id);
-    else if (action === 'trust-and-start') sessionController.trustAndStart(id);
     else sessionController.dismissNotice(id);
   }
 

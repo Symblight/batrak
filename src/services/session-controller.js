@@ -1,5 +1,4 @@
 import {
-  agentsTrust,
   listSessions,
   sessionApplyLocally,
   sessionCheckOutBranch,
@@ -32,7 +31,6 @@ import {
   $draftSessions,
   $sessions,
   newSession,
-  projectOf,
   removeSession,
   revertToDraft,
   selectSession,
@@ -41,7 +39,7 @@ import {
   startSession,
   upsertSession,
 } from '../stores/sessions.js';
-import { $sessionNotices, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
+import { removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
 import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
 /** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
@@ -319,24 +317,6 @@ export class SessionController {
     forgetComposer(id);
     this.#historyLoaded.delete(id);
     removeSession(id);
-  }
-
-  /**
-   * Trusts what the project's agents.json runs for the session's agent, as its notice showed it,
-   * and starts the agent.
-   * @param {string} id
-   */
-  async trustAndStart(id) {
-    const launch = $sessionNotices.get()[id]?.launch;
-    const projectPath = projectOf(id);
-    if (!launch || projectPath === null) return;
-    try {
-      await agentsTrust(projectPath, launch);
-    } catch (err) {
-      reportError('Trusting the agent failed', err);
-      return;
-    }
-    this.restart(id);
   }
 
   /** @param {string} id */

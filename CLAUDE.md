@@ -167,8 +167,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   the app run anything on its own: an agent whose `command` / `args` / `env` it sets, or any start
   while it lists `mcpServers`, needs the user's trust in that exact `LaunchConfig` for that project
   (`agents_trust`, kept in `<app data>/trusted-agents.json`; a changed launch needs trust again).
-  Untrusted, a start fails with an `untrusted` event (the banner's Trust and start) and a probe
-  is refused. `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
+  Untrusted, a start fails with an `untrusted` event and a probe is refused. `trustController`
+  (`services/trust-controller.js`) asks in a confirm dialog at the top of `<acp-app>` when a project
+  opens, its agents.json changes or a start is refused (`agents_untrusted` lists every launch
+  waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all (`agents_trust`) and
+  restarts the sessions it held back; Not now holds until what they run changes or a start is
+  refused again (the session keeps its error notice, whose Restart asks again). `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while another local

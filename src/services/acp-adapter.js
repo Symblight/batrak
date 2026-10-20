@@ -11,6 +11,7 @@ import {
   markUnread,
   setSessionNotice,
 } from '../stores/session-runtime.js';
+import { awaitTrust } from '../stores/trust.js';
 
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {NonNullable<ChxChat['adapter']>} ChxChatAdapter */
@@ -404,8 +405,8 @@ export function handleSessionEvent(event) {
       upsertSession(event.payload);
       return;
     case 'untrusted':
-      // After the `error` status, whose notice it replaces.
-      setSessionNotice(sessionId, { kind: 'untrusted', message: event.payload.message, launch: event.payload.launch });
+      // After the `error` status, whose notice stays: the trust dialog asks, and starts it once trusted.
+      awaitTrust(sessionId);
       return;
     case 'error':
       if (event.payload.turn) {

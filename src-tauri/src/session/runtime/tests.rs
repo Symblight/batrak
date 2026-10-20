@@ -1023,7 +1023,7 @@ async fn an_agent_the_project_defines_runs_only_once_trusted() {
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "nothing ran");
 
     let launch: crate::config::LaunchConfig = serde_json::from_value(untrusted.payload["launch"].clone()).unwrap();
-    f.sessions.inner.opts.configs.trust(&f.project, &launch).unwrap();
+    f.sessions.inner.opts.configs.trust(&f.project, &[launch]).unwrap();
     events.clear();
     f.sessions.restart("t").await.unwrap();
     events.wait_status("idle").await;

@@ -12,6 +12,12 @@
 .acp-confirm-dialog__dialog::part(dialog) {
   width: min(400px, calc(100vw - 32px));
 }
+.acp-confirm-dialog__dialog_top::part(dialog) {
+  width: min(480px, calc(100vw - 32px));
+  max-inline-size: none;
+  /* md-dialog centers with `margin: auto` over `inset: 0`; a fixed top margin pins it up. */
+  margin-block-start: var(--space-4);
+}
 
 .acp-confirm-dialog__headline {
   margin: 0;

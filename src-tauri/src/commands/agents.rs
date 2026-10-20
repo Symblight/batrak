@@ -1,6 +1,6 @@
 use tauri::State;
 
-use crate::config::{AgentConfigs, AgentList, LaunchConfig};
+use crate::config::{AgentConfigs, AgentList, LaunchConfig, UntrustedAgent};
 
 use super::blocking;
 
@@ -67,18 +67,33 @@ pub async fn agents_probe_options(
     sessions.probe_options(project.as_deref(), &agent_id).await
 }
 
-/// Trusts what the project's agents.json runs for one agent (its `launch` as the `untrusted` event
-/// showed it); refused when the file has changed since.
+/// The project's agents that run what its agents.json chose and wait for the user's trust, as the
+/// trust dialog shows them.
+#[tauri::command]
+pub async fn agents_untrusted(
+    configs: State<'_, AgentConfigs>,
+    project_path: String,
+) -> Result<Vec<UntrustedAgent>, String> {
+    let configs = configs.inner().clone();
+    blocking(move || {
+        let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
+        Ok(configs.untrusted(&project))
+    })
+    .await?
+}
+
+/// Trusts what the project's agents.json runs for some agents (each `launch` as `agents_untrusted`
+/// showed it); refused, all of them, when the file has changed since.
 #[tauri::command]
 pub async fn agents_trust(
     configs: State<'_, AgentConfigs>,
     project_path: String,
-    launch: LaunchConfig,
+    launches: Vec<LaunchConfig>,
 ) -> Result<(), String> {
     let configs = configs.inner().clone();
     blocking(move || {
         let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
-        configs.trust(&project, &launch)
+        configs.trust(&project, &launches)
     })
     .await?
 }

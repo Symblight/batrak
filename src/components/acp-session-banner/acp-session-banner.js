@@ -5,17 +5,16 @@ import styles from './acp-session-banner.css?inline';
 
 /** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
-/** @typedef {'open-log' | 'restart' | 'trust-and-start' | 'dismiss-notice'} SessionAction */
+/** @typedef {'open-log' | 'restart' | 'dismiss-notice'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */
 const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, an untrusted project agent with Trust and start, stopped with Resume, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
- * @fires acp-agents-file-open `null`
  */
 export class AcpSessionBanner extends LitElement {
   static properties = {
@@ -71,20 +70,6 @@ export class AcpSessionBanner extends LitElement {
         </md-button>
       `;
     }
-    if (notice.kind === 'untrusted') {
-      return html`
-        <md-button slot="actions" class="acp-session-banner__action" variant="text" @click=${() => this.#emit('acp-agents-file-open', null)}>
-          Open agents.json
-        </md-button>
-        <md-button
-          slot="actions"
-          class="acp-session-banner__action"
-          variant="tonal"
-          @click=${() => this.#act('trust-and-start')}
-          >Trust and start</md-button
-        >
-      `;
-    }
     if (notice.kind === 'stopped') {
       return html`<md-button
         slot="actions"
@@ -103,7 +88,7 @@ export class AcpSessionBanner extends LitElement {
     const notice = this.notice;
     const shown = request !== null || notice !== null;
     const label = request?.title ?? notice?.message ?? '';
-    const variant = !request && (notice?.kind === 'error' || notice?.kind === 'untrusted') ? 'danger' : 'default';
+    const variant = !request && notice?.kind === 'error' ? 'danger' : 'default';
     // Kept mounted and only hidden: its live region announces a new label reliably.
     return html`<chx-input-mode-banner
       class="acp-session-banner__banner"

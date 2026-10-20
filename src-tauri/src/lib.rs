@@ -73,6 +73,7 @@ pub fn run() {
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
             commands::agents::agents_trust,
+            commands::agents::agents_untrusted,
             commands::about::about,
             commands::fonts::list_fonts,
             commands::fs::read_file,

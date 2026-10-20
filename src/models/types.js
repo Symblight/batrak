@@ -120,6 +120,21 @@
  */
 
 /**
+ * A project's agent that runs what its agents.json chose, waiting for the user's trust
+ * (`agents_untrusted`).
+ * @typedef {Object} UntrustedAgent
+ * @property {string} name
+ * @property {LaunchConfig} launch
+ */
+
+/**
+ * What the trust dialog asks about: the project's agents waiting for trust.
+ * @typedef {Object} TrustPrompt
+ * @property {string} projectPath
+ * @property {UntrustedAgent[]} agents
+ */
+
+/**
  * What a session start runs, as the user trusts it (`agents_trust`): the agent's command line and
  * env templates, and the MCP servers it's told to start.
  * @typedef {Object} LaunchConfig
@@ -155,12 +170,10 @@
 
 /**
  * What the chat says about a session above its composer: the agent starting, an error (with
- * Restart and Open log), the agent stopped (with Resume), a project-chosen agent waiting for
- * trust (with Trust and start), or information until dismissed.
+ * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'untrusted' | 'info'} kind
+ * @property {'progress' | 'error' | 'stopped' | 'info'} kind
  * @property {string} message
- * @property {LaunchConfig} [launch] What `untrusted` asks to trust.
  */
 
 /**
@@ -463,7 +476,9 @@
  * @property {string} message
  * @property {string} [detail] Secondary line under the message.
  * @property {string} [confirmLabel] Defaults to `OK`.
+ * @property {string} [cancelLabel] Defaults to `Cancel`.
  * @property {boolean} [destructive] Colors the confirm action as an error.
+ * @property {'center' | 'top'} [placement] Where in the window; defaults to `center`.
  */
 
 /**

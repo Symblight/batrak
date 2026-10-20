@@ -115,6 +115,14 @@ struct TrustedLaunch {
     launch: LaunchConfig,
 }
 
+/// A project's agent waiting for the user's trust (`agents_untrusted`): its name and what it runs.
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct UntrustedAgent {
+    pub name: String,
+    pub launch: LaunchConfig,
+}
+
 /// What the agent list shows: no command line, no environment.
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -352,19 +360,38 @@ impl AgentConfigs {
         self.lock().trusted.iter().any(|t| t.project == project && &t.launch == launch)
     }
 
-    /// Trusts `launch` in `project`, replacing what was trusted for the agent there before. Refused
-    /// when it isn't what the project's config says now: the user trusts what they were shown.
-    pub fn trust(&self, project: &Path, launch: &LaunchConfig) -> Result<(), String> {
-        if self.merged(Some(project)).launch(&launch.agent_id).as_ref() != Some(launch) {
+    /// The agents of `project` (canonical) that run something its agents.json chose and that the
+    /// user hasn't trusted as they are now.
+    pub fn untrusted(&self, project: &Path) -> Vec<UntrustedAgent> {
+        let merged = self.merged(Some(project));
+        merged
+            .agents
+            .iter()
+            .filter(|a| merged.needs_trust(&a.id))
+            .filter_map(|a| merged.launch(&a.id).map(|launch| UntrustedAgent { name: a.name.clone(), launch }))
+            .filter(|u| !self.is_trusted(project, &u.launch))
+            .collect()
+    }
+
+    /// Trusts `launches` in `project`, each replacing what was trusted for its agent there before.
+    /// Refused, all of them, when one isn't what the project's config says now: the user trusts
+    /// what they were shown.
+    pub fn trust(&self, project: &Path, launches: &[LaunchConfig]) -> Result<(), String> {
+        let merged = self.merged(Some(project));
+        if launches.iter().any(|launch| merged.launch(&launch.agent_id).as_ref() != Some(launch)) {
             return Err("agents.json changed since; check it and try again".to_owned());
         }
         let trusted = {
             let mut inner = self.lock();
-            inner.trusted.retain(|t| t.project != project || t.launch.agent_id != launch.agent_id);
-            inner.trusted.push(TrustedLaunch { project: project.to_path_buf(), launch: launch.clone() });
+            for launch in launches {
+                inner.trusted.retain(|t| t.project != project || t.launch.agent_id != launch.agent_id);
+                inner.trusted.push(TrustedLaunch { project: project.to_path_buf(), launch: launch.clone() });
+            }
             inner.trusted.clone()
         };
-        tracing::info!(project = %project.display(), agent = %launch.agent_id, "agent trusted");
+        for launch in launches {
+            tracing::info!(project = %project.display(), agent = %launch.agent_id, "agent trusted");
+        }
         match &self.trust_file {
             Some(file) => file.save(&trusted),
             None => Ok(()),
@@ -637,7 +664,7 @@ mod tests {
         let launch = configs.merged(Some(&project)).launch("repo").unwrap();
         assert!(!configs.is_trusted(&project, &launch));
 
-        configs.trust(&project, &launch).unwrap();
+        configs.trust(&project, std::slice::from_ref(&launch)).unwrap();
         assert!(configs.is_trusted(&project, &launch));
         assert!(!configs.is_trusted(&base.join("other"), &launch), "per project");
         assert!(AgentConfigs::new(None, Some(trust_file)).is_trusted(&project, &launch), "kept on disk");
@@ -646,7 +673,37 @@ mod tests {
         configs.reload(&project);
         let changed = configs.merged(Some(&project)).launch("repo").unwrap();
         assert!(!configs.is_trusted(&project, &changed), "a changed command needs trust again");
-        assert!(configs.trust(&project, &launch).is_err(), "only what the file says now can be trusted");
+        assert!(configs.trust(&project, &[launch]).is_err(), "only what the file says now can be trusted");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn untrusted_lists_the_project_agents_waiting_for_trust() {
+        let base = temp_project("untrusted");
+        let project = base.join("p");
+        ensure_project_dir(&project).unwrap();
+        let user_file = base.join("user.json");
+        fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"command":"mine"}}}"#).unwrap();
+        fs::write(
+            project.join(".brama/agents.json"),
+            r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./run-agent","args":["--acp"]},"other":{"command":"./other"}}}"#,
+        )
+        .unwrap();
+        let configs = AgentConfigs::new(Some(user_file), None);
+
+        let waiting = configs.untrusted(&project);
+        let ids: Vec<&str> = waiting.iter().map(|u| u.launch.agent_id.as_str()).collect();
+        assert_eq!(ids, ["other", "repo"], "the user's own agent runs nothing the project chose");
+        assert_eq!(waiting[1].name, "Repo");
+        assert_eq!(waiting[1].launch.args, ["--acp"]);
+
+        let launches: Vec<LaunchConfig> = waiting.into_iter().map(|u| u.launch).collect();
+        configs.trust(&project, &launches).unwrap();
+        assert!(configs.untrusted(&project).is_empty(), "all trusted at once");
+
+        let mut stale = launches.clone();
+        stale[0].command = "./something-else".to_owned();
+        assert!(configs.trust(&project, &stale).is_err(), "one changed launch refuses them all");
         fs::remove_dir_all(base).unwrap();
     }
 

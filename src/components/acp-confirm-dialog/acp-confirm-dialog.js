@@ -44,6 +44,11 @@ export class AcpConfirmDialog extends LitElement {
     return /** @type {Promise<boolean>} */ (answer);
   }
 
+  /** Answers the open question `false`, as when its asker no longer needs the answer. */
+  close() {
+    this.#settle(false);
+  }
+
   /** @param {boolean} confirmed */
   #settle(confirmed) {
     const resolve = this.#resolve;
@@ -65,14 +70,23 @@ export class AcpConfirmDialog extends LitElement {
 
   render() {
     const options = this.options;
-    return html`<md-dialog class="acp-confirm-dialog__dialog" role="alertdialog" @keydown=${this.#onKeydown}>
+    return html`<md-dialog
+      class=${classMap({
+        'acp-confirm-dialog__dialog': true,
+        'acp-confirm-dialog__dialog_top': options?.placement === 'top',
+      })}
+      role="alertdialog"
+      @keydown=${this.#onKeydown}
+    >
       <h2 slot="headline" class="acp-confirm-dialog__headline">${options?.headline ?? nothing}</h2>
       <div class="acp-confirm-dialog__content">
         <p class="acp-confirm-dialog__message">${options?.message ?? nothing}</p>
         ${options?.detail ? html`<p class="acp-confirm-dialog__detail">${options.detail}</p>` : nothing}
       </div>
       <div slot="footer" class="acp-confirm-dialog__footer">
-        <md-button class="acp-confirm-dialog__action" variant="text" autofocus @click=${this.#onCancel}>Cancel</md-button>
+        <md-button class="acp-confirm-dialog__action" variant="text" autofocus @click=${this.#onCancel}
+          >${options?.cancelLabel ?? 'Cancel'}</md-button
+        >
         <md-button
           class=${classMap({
             'acp-confirm-dialog__action': true,
