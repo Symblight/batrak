@@ -9,6 +9,7 @@ pnpm dev             # Rsbuild dev server (port 1420; full reload, no HMR)
 pnpm build           # Build to dist/
 pnpm tauri dev       # Run the desktop app (Tauri, src-tauri/)
 pnpm typecheck       # tsc over the JSDoc types (no emit); must stay clean
+pnpm test            # frontend tests: @web/test-runner in Chrome; must pass
 cd src-tauri && cargo test --lib      # backend tests; must pass
 cd src-tauri && cargo clippy --all-targets   # no warnings
 cd src-tauri && cargo test --lib real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
@@ -386,11 +387,14 @@ test that reproduces it.
   long). Agent behavior is tested against the in-process fake agent (`acp/fake_agent.rs`; extend
   its scripts rather than mocking `Connection`), files against temp folders, git against
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
-- **Frontend:** there is no test runner yet. Keep logic that needs tests out of components, in plain
-  functions (`stores/`, `models/`, `services/acp-adapter.js`), so it can get tests once a runner is
-  added; until then `pnpm typecheck` and the app are the check, and say so when reporting.
-- Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets` and `pnpm typecheck`
-  pass. Say which behavior was verified by a test, which by running the app, and which not at all.
+- **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
+  every `src/**/*.test.js`. A component's tests go in a `tests/` folder inside its own folder, named
+  after it (`components/acp-x/tests/acp-x.test.js`); a plain module's sit beside it
+  (`models/paths.test.js`). Keep logic in plain functions
+  (`stores/`, `models/`, `services/acp-adapter.js`) and test it directly; test a component through its
+  properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
+- Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
+  `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
 
 ## Commits
 
@@ -490,17 +494,21 @@ full rules — load them when writing or reviewing component CSS or structure.
 ### File structure
 
 Flex scheme: `src/components/` is a flat list of block folders, each holding the element's JS and CSS
-under the tag name:
+under the tag name, and its tests in `tests/`:
 
 ```
 src/components/
 ├── acp-tab-view/
 │   ├── acp-tab-view.js
-│   └── acp-tab-view.css
+│   ├── acp-tab-view.css
+│   └── tests/
+│       └── acp-tab-view.test.js
 └── acp-toolbar/
     ├── acp-toolbar.js
-    └── acp-toolbar.css
+    ├── acp-toolbar.css
+    └── tests/
+        └── acp-toolbar.test.js
 ```
 
-No category grouping. Components import each other as `'../acp-x/acp-x.js'` and services as
+The element's tests live in a `tests/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../acp-x/acp-x.js'` and services as
 `'../../services/x.js'`.
