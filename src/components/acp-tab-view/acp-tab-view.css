@@ -9,23 +9,47 @@
   display: none;
 }
 /* The strip scrolls instead of md-tabs, so wheel handling and scrollIntoView have a scroller we own.
-   Scrollbar hidden; wheel, trackpad and the active-tab reveal still scroll it. */
+   Flipped vertically (and the tabs back) so its very thin scrollbar sits on top; the flipped padding
+   is the gap above the tabs. `scrollbar-width` and `scrollbar-color` must stay `auto`, or WebKit ignores the pseudo-elements. */
 .acp-tab-view__tab-strip {
   flex: none;
-  padding: var(--space-2) var(--space-2) 0;
+  padding: 0 var(--space-2) var(--space-0-5);
   overflow-x: auto;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-behavior: smooth;
   scroll-padding-inline: var(--space-2);
-  scrollbar-width: none;
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+  scale: 1 -1;
+}
+.acp-tab-view__tab-strip::-webkit-scrollbar {
+  height: 2px;
+}
+.acp-tab-view__tab-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+/* The thumb shows only while the pointer is over the strip. WebKit doesn't repaint a scrollbar
+   pseudo-element on `:hover`, but does when the scroller's `color` changes: the thumb paints
+   `currentColor` (inset shadow), and the tabs set their own colors. */
+.acp-tab-view__tab-strip {
+  color: transparent;
+  transition: color 150ms ease;
 
-  &::-webkit-scrollbar {
-    display: none;
+  &:hover {
+    color: var(--md-outline-variant);
   }
+}
+.acp-tab-view__tab-strip::-webkit-scrollbar-thumb {
+  border-radius: var(--shape-corner-full);
+  box-shadow: inset 0 0 0 2px;
+}
+.acp-tab-view__tabs {
+  color: var(--md-on-surface);
 }
 .acp-tab-view__tabs {
   width: max-content;
+  scale: 1 -1;
   min-width: 100%;
 }
 .acp-tab-view__tab {
