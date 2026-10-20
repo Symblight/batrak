@@ -1,4 +1,4 @@
-import { computed } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import { isRecord, persistentMapStore } from './persistent.js';
 import { $sessionsLoaded, $worktrees } from './sessions.js';
 import { $workspace } from './workspace.js';
@@ -290,4 +290,20 @@ export function openBrowser() {
 export function activateTab(path) {
   const tabs = $editorTabs.get();
   if (tabs.active !== path && tabs.paths.includes(path)) setTabs({ ...tabs, active: path });
+}
+
+/**
+ * Languages picked for files in the footer's language menu, by absolute path; a file without one is
+ * highlighted by its extension. In memory: a pick lasts until the app reloads.
+ * @type {import('nanostores').WritableAtom<Readonly<Record<string, string>>>}
+ */
+export const $fileLanguages = atom({});
+
+/**
+ * @param {string} path Absolute.
+ * @param {string} language A language name; `''` goes back to the one its extension picks.
+ */
+export function setFileLanguage(path, language) {
+  const { [path]: _, ...rest } = $fileLanguages.get();
+  $fileLanguages.set(language ? { ...rest, [path]: language } : rest);
 }

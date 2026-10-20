@@ -2,6 +2,7 @@ import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { commentAuthor } from '../../models/editor-plugins.js';
 import { copyText } from '../../services/clipboard.js';
+import { listDir } from '../../services/ipc.js';
 import { loadSystemFonts } from '../../services/fonts.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
@@ -12,6 +13,7 @@ import { SessionChangesController } from '../../controllers/session-changes/Sess
 import {
   $activePath,
   $editorTabs,
+  $fileLanguages,
   CHANGES_TAB_ID,
   SETTINGS_TAB_ID,
   activateTab,
@@ -23,6 +25,7 @@ import {
   openChanges as openChangesTab,
   openSettings as openSettingsTab,
   openTab,
+  setFileLanguage,
   setTabPinned,
 } from '../../stores/editor.js';
 import { addToChat } from '../../stores/chat.js';
@@ -47,7 +50,7 @@ import {
   setEditorFontSize,
 } from '../../stores/settings.js';
 import { $worktrees } from '../../stores/sessions.js';
-import { $workspace } from '../../stores/workspace.js';
+import { $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
@@ -70,7 +73,9 @@ export class AcpMainColumn extends LitElement {
   #review = new ChangesReviewController(this);
   #sessionReview = new SessionChangesController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
+  #fileLanguages = new StoreController(this, { store: $fileLanguages });
   #workspace = new StoreController(this, { store: $workspace });
+  #rootId = new StoreController(this, { store: $rootId });
   #worktrees = new StoreController(this, { store: $worktrees });
   #settings = new StoreController(this, { store: $settings });
   #systemFonts = new StoreController(this, { store: $systemFonts });
@@ -215,8 +220,11 @@ export class AcpMainColumn extends LitElement {
         .active=${active}
         .pinned=${pinned}
         .root=${this.#workspace.value?.path ?? null}
+        .rootId=${this.#rootId.value}
+        .listDir=${listDir}
         .worktrees=${this.#worktrees.value}
         .sessionReview=${this.#sessionReview.view}
+        .languages=${this.#fileLanguages.value}
         .editorFont=${settings.editorFont}
         .editorFontSize=${settings.editorFontSize}
         .comments=${this.#comments.value}
@@ -240,6 +248,8 @@ export class AcpMainColumn extends LitElement {
           this.#files.edit(e.detail.id, e.detail.value)}
         @acp-tab-save=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.save(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
+        @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
+          setFileLanguage(e.detail.path, e.detail.language)}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>
           addComment(e.detail.path, e.detail.draft, commentAuthor)}
         @acp-comment-edit=${(

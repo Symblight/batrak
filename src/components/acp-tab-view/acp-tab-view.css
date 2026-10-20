@@ -165,3 +165,25 @@
   font-size: 10px;
   line-height: 1;
 }
+/* The footer's menus: dense rows, like the IDE's breadcrumb popups. */
+.acp-tab-view__footer-menu {
+  --md-menu-min-width: 8rem;
+  --md-menu-max-height: 24rem;
+  --md-menu-shape: var(--shape-corner-small);
+}
+.acp-tab-view__menu-item_compact {
+  --md-menu-item-min-block-size: 1.375rem;
+  --md-menu-item-padding-block: 0;
+  --md-menu-item-padding-inline: var(--space-1-5);
+  --md-menu-item-label-text-size: var(--font-size-sm);
+  --md-menu-item-label-text-line-height: 1.375rem;
+  --md-menu-item-leading-icon-size: var(--icon-size-xs);
+
+  margin-inline: var(--space-0-5);
+}
+.acp-tab-view__entry-icon {
+  font-size: var(--icon-size-xs);
+}
+.acp-tab-view__menu-item_ignored {
+  --md-menu-item-label-text-color: var(--md-on-surface-variant);
+}

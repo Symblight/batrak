@@ -241,6 +241,15 @@ export class AcpApp extends LitElement {
   }
 
   /**
+   * Reveal in Files, from an editor's footer: a file's row, or a folder's, expanded.
+   * @param {Event} e
+   */
+  #onFileReveal(e) {
+    const { path, expand } = /** @type {CustomEvent<{ path: string, expand: boolean }>} */ (e).detail;
+    this.#revealInTree(path, { expand });
+  }
+
+  /**
    * @param {string} path Absolute; outside the project there's no row to show.
    * @param {{ expand?: boolean }} [options] Expand a folder itself too.
    */
@@ -312,7 +321,11 @@ export class AcpApp extends LitElement {
           @acp-file-reveal=${this.#onChatFileReveal}
         ></acp-agent-column>
         ${agentFills ? nothing : this.#renderResizer('agent', 'Resize agent column')}
-        <acp-main-column class="acp-app__main" ?hidden=${!hasCode}></acp-main-column>
+        <acp-main-column
+          class="acp-app__main"
+          ?hidden=${!hasCode}
+          @acp-file-reveal=${this.#onFileReveal}
+        ></acp-main-column>
         ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
         <acp-file-column
           class="acp-app__files"

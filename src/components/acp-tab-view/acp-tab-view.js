@@ -17,7 +17,8 @@ import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
-import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
+import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
+import { commentAuthor, editorLanguages, editorPlugins } from '../../models/editor-plugins.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
@@ -30,7 +31,7 @@ import '../acp-terminal/acp-terminal.js';
 import '../acp-browser/acp-browser.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import { isAgentsFile } from '../../models/agents-file.js';
-import { relPath, worktreeOf } from '../../models/paths.js';
+import { absPath, projectPathOf, relPath, worktreeOf } from '../../models/paths.js';
 import { sessionOfTab } from '../../models/tab-ids.js';
 import { lineHeightFor } from '../../models/settings.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
@@ -46,6 +47,8 @@ import styles from './acp-tab-view.css?inline';
 /** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../models/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../acp-file-tree/acp-file-tree.js').ListDir} ListDir */
 /** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
 
 /**
@@ -59,6 +62,22 @@ import styles from './acp-tab-view.css?inline';
  */
 
 /** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
+
+/**
+ * What the footer's file menu is open for: a tab's file, or a folder on its path.
+ * @typedef {Object} FooterTarget
+ * @property {EditorTab} tab
+ * @property {string} path Absolute: the file, or the folder.
+ * @property {boolean} folder
+ */
+
+/**
+ * A project folder a footer crumb lists, like the IDE's breadcrumbs.
+ * @typedef {Object} FolderList
+ * @property {string} folder Root-relative; `''` for the root.
+ * @property {string} selected Root-relative: the entry on the file's path.
+ * @property {WorkspaceEntry[]} entries
+ */
 
 const RETURN_DELAY_MS = 2000;
 
@@ -77,6 +96,9 @@ function basename(path) {
  * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
  * @fires acp-tab-save `{ id }`
  * @fires acp-copy-path `{ path }`
+ * @fires acp-tab-language `{ path, language }` A language picked in a file's footer; `''` for its extension's.
+ * @fires acp-file-reveal `{ path, expand }` Reveal in Files, or a folder picked in a footer crumb's list.
+ * @fires acp-file-open `{ path }` A file picked in a footer crumb's list.
  */
 export class AcpTabView extends LitElement {
   static properties = {
@@ -93,6 +115,9 @@ export class AcpTabView extends LitElement {
     fonts: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
+    languages: { attribute: false },
+    rootId: { attribute: false },
+    listDir: { attribute: false },
   };
 
   static styles = styles;
@@ -128,9 +153,32 @@ export class AcpTabView extends LitElement {
   });
   /** @type {ContextMenuController<EditorTab>} */
   #menu = new ContextMenuController(this, {
-    menu: () => this.renderRoot.querySelector('md-menu'),
+    menu: () => this.renderRoot.querySelector('.acp-tab-view__menu'),
     onSelect: (value, tab) => this.#onMenuSelect(value, tab),
   });
+  /** @type {ContextMenuController<FooterTarget>} */
+  #fileMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-tab-view__file-menu'),
+    onSelect: (value, target) => this.#onFileMenuSelect(value, target),
+  });
+  /** @type {ContextMenuController<FolderList>} */
+  #folderMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-tab-view__folder-menu'),
+    onSelect: (value, list) => this.#onFolderMenuSelect(value, list),
+  });
+  /** Counts crumb clicks, so a listing that comes back after a newer click is dropped. */
+  #folderListing = 0;
+  /** @type {ContextMenuController<EditorTab>} */
+  #languageMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-tab-view__language-menu'),
+    onSelect: (language, tab) => this.#emit('acp-tab-language', { path: tab.path, language }),
+  });
+  /**
+   * The footer button pressed last. `cdx-status-click` doesn't say which, and the footer's menus open
+   * under it; a capture listener sees the click before the button turns it into that event.
+   * @type {HTMLElement | null}
+   */
+  #statusAnchor = null;
   /** Tabs are dragged within their group: pinned among pinned, the others among the others. */
   #sortable = new SortableController(this, {
     selector: '.acp-tab-view__tab',
@@ -190,6 +238,12 @@ export class AcpTabView extends LitElement {
     this.review = null;
     /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */
     this.sessionReview = null;
+    /** @type {Readonly<Record<string, string>>} Languages picked for files, by absolute path. */
+    this.languages = {};
+    /** @type {string | null} The project's snapshot id, for `listDir`; `null` while none is open. */
+    this.rootId = null;
+    /** @type {ListDir} Lists a project folder for a footer crumb. */
+    this.listDir = async () => [];
   }
 
   /**
@@ -351,6 +405,95 @@ export class AcpTabView extends LitElement {
     else if (value === 'copy-path') this.#emit('acp-copy-path', { path: tab.path });
   }
 
+  /**
+   * @param {string} value The chosen item's.
+   * @param {FooterTarget} target
+   */
+  #onFileMenuSelect(value, { path, folder }) {
+    if (value === 'reveal') this.#emit('acp-file-reveal', { path: projectPathOf(this.worktrees, path), expand: folder });
+    else if (value === 'copy-path') this.#emit('acp-copy-path', { path });
+    else if (value === 'copy-relative-path') this.#emit('acp-copy-path', { path: this.#pathOf(path) });
+  }
+
+  /**
+   * @param {string} value The chosen entry's root-relative path.
+   * @param {FolderList} list
+   */
+  #onFolderMenuSelect(value, list) {
+    const entry = list.entries.find((e) => e.path === value);
+    if (!entry) return;
+    const path = absPath(this.root, entry.path);
+    if (entry.isDir) this.#emit('acp-file-reveal', { path, expand: true });
+    else this.#emit('acp-file-open', { path });
+  }
+
+  /**
+   * Lists a crumb's folder and opens it under the crumb, the entry on the file's path selected.
+   * @param {string} rel The file, root-relative.
+   * @param {number} index The crumb's: `0` is the project's folder.
+   * @param {HTMLElement} anchor
+   */
+  async #openFolderList(rel, index, anchor) {
+    const rootId = this.rootId;
+    if (rootId === null) return;
+    const parts = rel.split('/');
+    const folder = parts.slice(0, index).join('/');
+    const selected = parts.slice(0, index + 1).join('/');
+    const listing = ++this.#folderListing;
+    const entries = await this.listDir(rootId, folder);
+    if (listing !== this.#folderListing || rootId !== this.rootId) return;
+    this.#folderMenu.openFrom({ folder, selected, entries }, anchor);
+  }
+
+  /**
+   * The root-relative path of a file in the project's snapshot, whose folders the footer's crumbs list;
+   * `null` for a worktree session's file or one outside the project.
+   * @param {string} path Absolute.
+   */
+  #listedRel(path) {
+    return worktreeOf(this.worktrees, path) ? null : relPath(this.root, path);
+  }
+
+  /**
+   * A file's path as its footer shows it: a project file's leads with the project's folder.
+   * @param {string} path Absolute.
+   */
+  #footerPath(path) {
+    const rel = this.#listedRel(path);
+    return rel !== null && this.root ? `${basename(this.root)}/${rel}` : this.#pathOf(path);
+  }
+
+  #onStatusPress = (/** @type {Event} */ e) => {
+    this.#statusAnchor =
+      e.composedPath().find(/** @returns {n is HTMLButtonElement} */ (n) => n instanceof HTMLButtonElement) ?? null;
+  };
+
+  /**
+   * The footer's file, folder and language items open their menus; it handles the rest itself.
+   * @param {EditorTab} tab
+   * @param {Event} e
+   */
+  #onStatusClick(tab, e) {
+    const { item, index } = /** @type {CustomEvent<{ item: string, index?: number }>} */ (e).detail;
+    const anchor = this.#statusAnchor ?? /** @type {HTMLElement} */ (e.currentTarget);
+    this.#statusAnchor = null;
+    if (item === 'language') {
+      this.#languageMenu.openFrom(tab, anchor);
+    } else if (item === 'file') {
+      this.#fileMenu.openFrom({ tab, path: tab.path, folder: false }, anchor);
+    } else if (item === 'path' && index !== undefined) {
+      const rel = this.#listedRel(tab.path);
+      if (rel !== null && this.rootId !== null) {
+        this.#openFolderList(rel, index, anchor);
+        return;
+      }
+      // The footer's crumbs are the folders of `#pathOf()`; crumb `index` is that many folders down.
+      const folders = this.#pathOf(tab.path).split('/').filter(Boolean).length - 1;
+      const path = tab.path.split('/').slice(0, index - folders).join('/');
+      this.#fileMenu.openFrom({ tab, path, folder: true }, anchor);
+    }
+  }
+
   /** @param {string} id */
   #isPinned(id) {
     return this.pinned.includes(id);
@@ -458,6 +601,74 @@ export class AcpTabView extends LitElement {
     </md-menu>`;
   }
 
+  /** The footer's menu of its file or of a folder on its path. */
+  #renderFileMenu() {
+    const target = this.#fileMenu.target;
+    return html`<md-menu
+      class="acp-tab-view__file-menu acp-tab-view__footer-menu"
+      aria-label=${target ? basename(target.path) : 'File'}
+      @select=${this.#fileMenu.onSelect}
+      @closed=${this.#fileMenu.onClosed}
+    >
+      <md-menu-item class="acp-tab-view__menu-item acp-tab-view__menu-item_compact" value="reveal">Reveal in Files</md-menu-item>
+      <md-hr></md-hr>
+      <md-menu-item class="acp-tab-view__menu-item acp-tab-view__menu-item_compact" value="copy-path">Copy Path</md-menu-item>
+      <md-menu-item class="acp-tab-view__menu-item acp-tab-view__menu-item_compact" value="copy-relative-path">Copy Relative Path</md-menu-item>
+    </md-menu>`;
+  }
+
+  /** A footer crumb's folder: its folders, then its files; picking one opens or reveals it. */
+  #renderFolderMenu() {
+    const list = this.#folderMenu.target;
+    return html`<md-menu
+      class="acp-tab-view__folder-menu acp-tab-view__footer-menu"
+      aria-label=${list ? basename(absPath(this.root, list.folder)) : 'Folder'}
+      focus-on-open="selected"
+      @select=${this.#folderMenu.onSelect}
+      @closed=${this.#folderMenu.onClosed}
+    >
+      ${(list?.entries ?? []).map(
+        (e) => html`<md-menu-item
+          class=${classMap({
+            'acp-tab-view__menu-item': true,
+            'acp-tab-view__menu-item_compact': true,
+            'acp-tab-view__menu-item_ignored': e.ignored,
+          })}
+          value=${e.path}
+          ?selected=${e.path === list?.selected}
+        >
+          <md-icon slot="leading" class="acp-tab-view__entry-icon"
+            >${unsafeSVG(e.isDir ? folderIcon : (fileIconFor(e.name) ?? fileIcon))}</md-icon
+          >
+          ${e.name}
+        </md-menu-item>`,
+      )}
+    </md-menu>`;
+  }
+
+  /** The footer's language menu: highlight the file as another language, or by its extension again. */
+  #renderLanguageMenu() {
+    const tab = this.#languageMenu.target;
+    const picked = tab ? (this.languages[tab.path] ?? '') : '';
+    /**
+     * @param {string} value
+     * @param {string} label
+     */
+    const item = (value, label) =>
+      html`<md-menu-item class="acp-tab-view__menu-item acp-tab-view__menu-item_compact" value=${value} ?selected=${value === picked}>${label}</md-menu-item>`;
+    return html`<md-menu
+      class="acp-tab-view__language-menu acp-tab-view__footer-menu"
+      aria-label="Language"
+      focus-on-open="selected"
+      @select=${this.#languageMenu.onSelect}
+      @closed=${this.#languageMenu.onClosed}
+    >
+      ${item('', 'Auto Detect')}
+      <md-hr></md-hr>
+      ${tab ? editorLanguages.map((name) => item(name, name)) : nothing}
+    </md-menu>`;
+  }
+
   /** Font settings for file tabs only; views keep the library defaults. */
   #editorStyle() {
     const font = this.editorFont;
@@ -487,8 +698,11 @@ export class AcpTabView extends LitElement {
         .readOnly=${!editable}
         .plugins=${editorPlugins}
         filename=${tab.path}
+        .language=${this.languages[tab.path] ?? ''}
         .value=${tab.draft ?? tab.content}
         .baseline=${tab.baseline}
+        @click=${{ handleEvent: this.#onStatusPress, capture: true }}
+        @cdx-status-click=${(/** @type {Event} */ e) => this.#onStatusClick(tab, e)}
         @cdx-change=${editable
           ? (/** @type {CustomEvent<{ value: string }>} */ e) => this.#emit('acp-tab-edit', { id: tab.id, value: e.detail.value })
           : nothing}
@@ -502,7 +716,7 @@ export class AcpTabView extends LitElement {
           .author=${commentAuthor}
           .comments=${this.#comments.threadsOf(tab.path)}
         ></cdx-comments>
-        <cdx-footer slot="footer" path=${this.#pathOf(tab.path)}></cdx-footer>
+        <cdx-footer slot="footer" path=${this.#footerPath(tab.path)}></cdx-footer>
       </cdx-code-editor>`;
   }
 
@@ -557,7 +771,8 @@ export class AcpTabView extends LitElement {
         </md-tabs>
       </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
-      ${this.#renderMenu()}
+      ${this.#renderMenu()} ${this.#renderFileMenu()} ${this.#renderFolderMenu()}
+      ${this.#renderLanguageMenu()}
       ${this.#selectionActions.render()}
       <acp-confirm-dialog></acp-confirm-dialog>
     `;

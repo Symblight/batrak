@@ -78,3 +78,8 @@ export const commentAuthor = { id: 'me', name: 'You' };
 
 /** Plugins of every read-only code view: the tabs here and the diffs in the Changes tab. */
 export const editorPlugins = [...allPreset, scrollbarPlugin, gutterPlugin, indentGuidePlugin];
+
+/** Names of the languages `editorPlugins` can highlight, sorted, for the footer's language menu. */
+export const editorLanguages = [...new Set(editorPlugins.flatMap((p) => (p.languages ?? []).map((l) => l.name)))].sort(
+  (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }),
+);
