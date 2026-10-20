@@ -22,6 +22,16 @@
   scrollbar-width: auto;
   scrollbar-color: auto;
   scale: 1 -1;
+  /* Fades tabs scrolled under either edge into the column, like the message list into the composer.
+     A mask on the scroller, not its content, so the fades stay put while the tabs scroll. */
+  --_acp-tab-view-fade: var(--space-4);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--_acp-tab-view-fade),
+    black calc(100% - var(--_acp-tab-view-fade)),
+    transparent
+  );
 }
 .acp-tab-view__tab-strip::-webkit-scrollbar {
   height: 2px;
