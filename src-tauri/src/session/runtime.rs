@@ -222,11 +222,11 @@ impl Sessions {
         Sessions { inner: Arc::new(Inner { opts, store, sessions: Mutex::new(sessions) }) }
     }
 
-    /// Newest first.
+    /// Most recently active first.
     pub fn list(&self) -> Vec<Session> {
         let mut sessions: Vec<Session> =
             lock(&self.inner.sessions).values().map(|s| Session::from(&*lock(&s.record))).collect();
-        sessions.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        sessions.sort_by(|a, b| (&b.last_activity_at, &b.created_at).cmp(&(&a.last_activity_at, &a.created_at)));
         sessions
     }
 
@@ -274,6 +274,7 @@ impl Sessions {
             title: req.title,
             status: SessionStatus::Preparing,
             created_at: iso_now(),
+            last_activity_at: None,
             config: req.config,
             worktree_path: placed.worktree_path,
             branch: placed.branch,
@@ -333,6 +334,7 @@ impl Sessions {
         }
         state.cancel_requested.store(false, Ordering::SeqCst);
         state.transcript.append(&json!({ "kind": "prompt", "prompt": prompt, "at": iso_now() }));
+        self.inner.touch(&state);
         let inner = Arc::clone(&self.inner);
         let attempts = state.start_attempts.load(Ordering::SeqCst);
         tokio::spawn(async move {
@@ -345,6 +347,7 @@ impl Sessions {
                 Err(e) => json!({ "kind": "turn-end", "stopReason": "error", "message": e }),
             };
             state.transcript.append(&ended);
+            inner.touch(&state);
             match result {
                 Ok(stop_reason) => {
                     state.emit("turn-end", json!({ "stopReason": stop_reason }));
@@ -808,6 +811,12 @@ impl Inner {
         if let Err(e) = self.store.save(&records) {
             tracing::warn!("saving sessions failed: {e}");
         }
+    }
+
+    /// Marks the session active now (a prompt, a turn's end), which orders the list.
+    fn touch(&self, state: &SessionState) {
+        lock(&state.record).last_activity_at = Some(iso_now());
+        self.persist();
     }
 
     fn set_status(&self, state: &SessionState, status: SessionStatus, message: Option<&str>) {

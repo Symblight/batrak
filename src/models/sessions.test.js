@@ -17,6 +17,7 @@ const SESSION = {
   branch: null,
   baseCommit: null,
   createdAt: '2026-10-20T00:00:00Z',
+  lastActivityAt: '2026-10-20T00:00:00Z',
 };
 
 describe('sessionIndicator', () => {

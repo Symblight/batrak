@@ -55,6 +55,7 @@
  * @property {string | null} branch `worktree` only: the session's own branch.
  * @property {string | null} baseCommit `worktree` only: the commit it started from.
  * @property {string} createdAt
+ * @property {string} lastActivityAt The last prompt or turn end, else `createdAt`; the list's order.
  */
 
 /**

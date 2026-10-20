@@ -56,6 +56,9 @@ pub struct SessionRecord {
     pub title: String,
     pub status: SessionStatus,
     pub created_at: String,
+    /// The last prompt or turn end; `None` until the first prompt.
+    #[serde(default)]
+    pub last_activity_at: Option<String>,
     /// The agent's config options (model, thought level, mode…) as last chosen or reported, by
     /// id: a new start of the agent is set to them.
     #[serde(default)]
@@ -87,6 +90,8 @@ pub struct Session {
     pub branch: Option<String>,
     pub base_commit: Option<String>,
     pub created_at: String,
+    /// The last prompt or turn end, else `created_at`; the list's order.
+    pub last_activity_at: String,
 }
 
 impl From<&SessionRecord> for Session {
@@ -104,6 +109,7 @@ impl From<&SessionRecord> for Session {
             branch: r.branch.clone(),
             base_commit: r.base_commit.clone(),
             created_at: r.created_at.clone(),
+            last_activity_at: r.last_activity_at.clone().unwrap_or_else(|| r.created_at.clone()),
         }
     }
 }

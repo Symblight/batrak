@@ -135,6 +135,7 @@ export function startSession(id, fields) {
   const { [id]: projectId, ...drafts } = $draftSessions.get();
   if (projectId === undefined) return;
   $draftSessions.set(drafts);
+  const now = new Date().toISOString();
   /** @type {Session} */
   const session = {
     id,
@@ -144,7 +145,8 @@ export function startSession(id, fields) {
     worktreePath: null,
     branch: null,
     baseCommit: null,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    lastActivityAt: now,
     ...fields,
   };
   $sessions.set([session, ...$sessions.get()]);
@@ -179,6 +181,17 @@ export function setSessionStatus(id, status) {
   const sessions = $sessions.get();
   const session = sessions.find((s) => s.id === id);
   if (session && session.status !== status) $sessions.set(sessions.map((s) => (s === session ? { ...s, status } : s)));
+}
+
+/**
+ * A prompt went out or a turn ended; the backend stamps its record the same way.
+ * @param {string} id Ignored unless it's a listed session.
+ * @param {string} [at] ISO time, now by default.
+ */
+export function touchSession(id, at = new Date().toISOString()) {
+  const sessions = $sessions.get();
+  if (sessions.some((s) => s.id === id))
+    $sessions.set(sessions.map((s) => (s.id === id ? { ...s, lastActivityAt: at } : s)));
 }
 
 /**

@@ -1277,3 +1277,29 @@ async fn real_claude_agent_end_to_end() {
     eprintln!("log tail: {}", log.lines().rev().take(5).collect::<Vec<_>>().join(" | "));
     let _ = std::fs::remove_dir_all(dir);
 }
+
+#[tokio::test]
+async fn sessions_are_listed_by_last_activity_which_a_prompt_and_its_turn_end_set() {
+    let f = fixture("activity", FakeAgentOptions::default());
+    let (first, events) = f.create("a", "fake").unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(first.last_activity_at, first.created_at, "no activity yet: its creation");
+    f.sessions.stop("a").await.unwrap();
+    let (second, second_events) = f.create("b", "fake").unwrap();
+    second_events.wait_status("idle").await;
+    f.sessions.stop("b").await.unwrap();
+    assert_eq!(f.sessions.list().iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["b", "a"]);
+
+    // Timestamps have milliseconds: the prompt comes strictly after `b` was created.
+    tokio::time::sleep(Duration::from_millis(5)).await;
+    assert_eq!(f.ask("a", &events, "hello").await, "Hello, world");
+    let listed = f.sessions.list();
+    assert_eq!(listed.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+    assert!(listed[0].last_activity_at > second.created_at);
+    let active = listed[0].last_activity_at.clone();
+    f.sessions.shutdown();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let listed = reopened.list();
+    assert_eq!(listed.iter().map(|s| (s.id.as_str(), s.last_activity_at.as_str())).next(), Some(("a", active.as_str())));
+}
