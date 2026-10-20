@@ -55,7 +55,7 @@ export class AcpToolbar extends LitElement {
           >${unsafeSVG(sidebarIcon)}</md-icon
         >
       </md-icon-button>
-      <md-tooltip for=${id} placement="bottom">${tooltip}</md-tooltip>`;
+      <md-tooltip for=${id} show-delay="2000" placement="bottom">${tooltip}</md-tooltip>`;
   }
 
   /** @param {string} column */

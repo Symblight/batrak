@@ -107,7 +107,7 @@ export class AcpNavRail extends LitElement {
               class="acp-nav-rail__badge ${selected ? 'acp-nav-rail__badge_on-selected' : ''}"
             ></md-badge>`
           : nothing}
-        <md-tooltip for=${id} placement="left" offset="16">${tooltip}</md-tooltip>
+        <md-tooltip for=${id} show-delay="2000" placement="left" offset="16">${tooltip}</md-tooltip>
       </div>
     `;
   }
