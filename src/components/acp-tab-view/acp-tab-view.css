@@ -67,8 +67,10 @@
   translate: var(--_acp-tab-view-shift, 0) 0;
   --md-tab-label-size: 0.8rem;
 }
+/* Whole pixels (36px): with a fractional height the flipped strip rounds the tabs 1px off in WebKit
+   while a tab's hover state layer animates. */
 .acp-tab-view__tab::part(tab) {
-  height: 2.2rem;
+  height: 2.25rem;
 }
 /* Drag and drop: the tabs slide aside to open an empty slot where the dragged one would land. Only
    while sorting: on drop the reorder takes over their offsets in the same frame, without animating. */
