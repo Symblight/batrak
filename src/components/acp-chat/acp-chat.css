@@ -83,6 +83,17 @@
     display: none;
   }
 }
+/* Fades the start of the message list into the column, like the banner's shadow at its end; the
+   column clips the shadow's upper half. */
+.acp-chat__message-list::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline: 0;
+  z-index: var(--z-raised);
+  box-shadow: 0 0 calc(2 * var(--space-3)) var(--space-3) var(--column-background);
+  pointer-events: none;
+}
 .acp-chat__message-list::part(item) {
   box-sizing: border-box;
   padding-inline: var(--space-4);
