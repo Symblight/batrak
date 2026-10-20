@@ -1,10 +1,13 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/progress-circular';
 import '../acp-chat/acp-chat.js';
+import '../acp-confirm-dialog/acp-confirm-dialog.js';
+import '../acp-session-header/acp-session-header.js';
 import '../acp-welcome/acp-welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
+import { removeSessionConfirm, sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
@@ -14,7 +17,7 @@ import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $gitRepo } from '../../stores/git.js';
-import { $activeFolder, $activeSessionId } from '../../stores/sessions.js';
+import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
@@ -46,6 +49,8 @@ export class AcpAgentColumn extends LitElement {
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
+  #activeSessionId = new StoreController(this, { store: $activeSessionId });
+  #activeSession = new StoreController(this, { store: $activeSession });
 
   /** @type {ChatSessionController} */
   #session = new ChatSessionController(this, { chat: () => this.#chat?.chat ?? null });
@@ -165,6 +170,49 @@ export class AcpAgentColumn extends LitElement {
     openUrl(url).catch((err) => reportError('Opening the link failed', err));
   }
 
+  /** @param {Event} e */
+  #onRename(e) {
+    const { title } = /** @type {CustomEvent<{ title: string }>} */ (e).detail;
+    const session = $activeSession.get();
+    if (session) sessionController.rename(session.id, title);
+  }
+
+  #onReveal() {
+    const session = $activeSession.get();
+    if (session) projectController.reveal(session.folder).catch((err) => reportError('Revealing folder failed', err));
+  }
+
+  /** Asks first; the project's files stay either way. */
+  async #onDelete() {
+    const session = $activeSession.get();
+    if (!session) return;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    if (await dialog.confirm(removeSessionConfirm(session))) await sessionController.remove(session.id);
+  }
+
+  #onNewSession() {
+    const workspace = $workspace.get();
+    if (workspace) sessionController.create(workspace.path);
+  }
+
+  /** The active session's header; a draft shows as a new session. */
+  #renderHeader() {
+    if (this.#activeSessionId.value === null) return nothing;
+    const session = this.#activeSession.value;
+    return html`<acp-session-header
+      class="acp-agent-column__header"
+      session-title=${session?.title ?? ''}
+      ?draft=${session === null}
+      .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null) : null}
+      @acp-session-rename=${this.#onRename}
+      @acp-session-reveal=${this.#onReveal}
+      @acp-session-delete=${this.#onDelete}
+      @acp-session-new=${this.#onNewSession}
+    ></acp-session-header>`;
+  }
+
   #onOpenLocal() {
     projectController.open().catch((err) => reportError('Opening folder failed', err));
   }
@@ -173,9 +221,10 @@ export class AcpAgentColumn extends LitElement {
     const opening = this.#openingPath.value !== null;
     const workspace = this.#workspace.value;
     const composer = this.#composer.value;
-    const hasSession = $activeSessionId.get() !== null;
+    const hasSession = this.#activeSessionId.value !== null;
     // Hidden rather than removed while a project opens, so the chat keeps its state.
     return html`
+      ${workspace !== null && !opening ? this.#renderHeader() : nothing}
       ${workspace !== null
         ? html`<acp-chat
             class="acp-agent-column__chat"
@@ -214,6 +263,7 @@ export class AcpAgentColumn extends LitElement {
             <md-progress-circular class="acp-agent-column__spinner" aria-label="Opening project"></md-progress-circular>
           </div>`
         : nothing}
+      <acp-confirm-dialog></acp-confirm-dialog>
     `;
   }
 }

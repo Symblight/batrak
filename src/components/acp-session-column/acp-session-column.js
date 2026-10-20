@@ -14,6 +14,7 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
+import { RUNNING, removeSessionConfirm } from '../../models/sessions.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
@@ -27,9 +28,6 @@ import { reportError } from '../../services/notices.js';
 
 /** @typedef {import('../../models/types.js').Project} Project */
 /** @typedef {import('../../models/types.js').Session} Session */
-
-/** Statuses in which a session holds (or is getting) an agent process. */
-const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'waiting']);
 
 const REVEAL_LABEL = /Mac/.test(navigator.userAgent)
   ? 'Show in Finder'
@@ -273,16 +271,7 @@ export class AcpSessionColumn extends LitElement {
     const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
       this.renderRoot.querySelector('acp-confirm-dialog')
     );
-    const confirmed = await dialog.confirm({
-      headline: 'Remove session?',
-      message: `"${session.title}" and its conversation will be deleted${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
-      detail:
-        session.mode === 'worktree'
-          ? `Its worktree is deleted; uncommitted work is first committed onto ${session.branch}, which is kept if it has commits.`
-          : 'Files the agent changed in the project stay as they are.',
-      confirmLabel: 'Remove',
-      destructive: true,
-    });
+    const confirmed = await dialog.confirm(removeSessionConfirm(session));
     if (confirmed) await sessionController.remove(session.id);
   }
 

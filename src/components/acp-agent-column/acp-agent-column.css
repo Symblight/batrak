@@ -30,3 +30,6 @@
 .acp-agent-column__spinner {
   font-size: 40px;
 }
+.acp-agent-column__header {
+  flex: none;
+}

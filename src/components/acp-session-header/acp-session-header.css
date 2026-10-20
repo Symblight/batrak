@@ -1,0 +1,149 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  box-sizing: border-box;
+  height: 48px;
+  padding-inline: var(--space-3) var(--space-2);
+  background: var(--column-background);
+}
+
+.acp-session-header__status {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.acp-session-header__status_permission {
+  color: var(--md-tertiary);
+}
+
+.acp-session-header__status_error {
+  color: var(--md-error);
+}
+
+.acp-session-header__status-icon {
+  font-size: var(--icon-size-md);
+}
+
+.acp-session-header__spinner {
+  font-size: var(--icon-size-sm);
+}
+
+.acp-session-header__title-button {
+  min-width: 0;
+  --md-button-font-size: var(--font-size-title);
+  --md-button-block-start-space: var(--button-block-space-regular);
+  --md-button-block-end-space: var(--button-block-space-regular);
+  --md-button-inline-start-space: var(--space-2);
+  --md-button-inline-end-space: var(--space-1-5);
+  --md-button-foreground-color: var(--md-on-surface);
+}
+
+/* md-button sizes to its content; let its box and label shrink with the host. */
+.acp-session-header__title-button::part(button),
+.acp-session-header__title-button::part(label) {
+  min-width: 0;
+}
+
+.acp-session-header__title-button_open::part(button) {
+  background: var(--state-hover);
+}
+
+.acp-session-header__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.acp-session-header__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--font-size-title);
+  font-weight: var(--font-weight-medium);
+}
+
+/* Not in a button: lines up with where the button's label starts. */
+.acp-session-header__title_draft {
+  padding-inline-start: var(--space-2);
+}
+
+.acp-session-header__chevron {
+  flex: none;
+  font-size: var(--icon-size-lg);
+  color: var(--md-on-surface-variant);
+  transition: transform 200ms var(--motion-easing-standard);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.acp-session-header__chevron_flipped {
+  transform: rotate(180deg);
+}
+
+.acp-session-header__rename {
+  flex: 1;
+  min-width: 0;
+  --md-text-field-top-space: var(--space-1-5);
+  --md-text-field-bottom-space: var(--space-1-5);
+  --md-text-field-inline-start-space: var(--space-3);
+  --md-text-field-inline-end-space: var(--space-3);
+  --md-text-field-font-size: var(--font-size-title);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--md-on-surface);
+  --md-text-field-background-color: var(--md-surface-container-lowest);
+  --md-text-field-border-color: var(--md-outline);
+  --md-text-field-primary-color: var(--md-primary);
+  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
+
+  caret-color: var(--md-primary);
+}
+
+/* The library's focused outline is 3px; the spec asks for 2px. */
+.acp-session-header__rename:focus-within::part(indicator) {
+  border-width: 2px;
+}
+
+.acp-session-header__hint {
+  flex: none;
+  margin-inline: var(--space-2) var(--space-1);
+  color: var(--md-on-surface-variant);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
+.acp-session-header__spacer {
+  flex: 1;
+  min-width: var(--space-2);
+}
+
+.acp-session-header__new {
+  flex: none;
+}
+
+.acp-session-header__new-icon {
+  font-size: var(--icon-size-lg);
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-session-header__menu {
+  --md-menu-min-width: 15rem;
+}
+
+.acp-session-header__menu-icon {
+  font-size: var(--icon-size-lg);
+}
+
+.acp-session-header__menu-item_danger {
+  --md-menu-item-label-text-color: var(--md-error);
+  --md-menu-item-leading-icon-color: var(--md-error);
+}
