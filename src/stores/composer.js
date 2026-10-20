@@ -195,6 +195,9 @@ export const $composer = computed(
  */
 export function composerOf(id) {
   const stored = $composers.get()[id];
+  // A draft kept from before the project had an agent gets the one it has now.
+  const agentId = stored && !stored.started && stored.agentId === null ? $newSessionAgentId.get() : null;
+  if (stored && agentId !== null) return { ...freshState(agentId), runTarget: stored.runTarget };
   if (stored) return stored;
   const session = $sessions.get().find((s) => s.id === id);
   return session ? listedState(session) : freshState($newSessionAgentId.get());
