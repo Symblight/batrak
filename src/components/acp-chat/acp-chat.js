@@ -409,6 +409,7 @@ export class AcpChat extends LitElement {
         .activeConversationId=${this.conversationId}
         .adapter=${this.adapter}
         .partElements=${this.partElements}
+        .noVirtualization=${true}
         @chx-messages-change=${this.#onMessagesChange}
       >
         <!-- "auto": WebKit sends a smooth pin scroll to an older turn instead of the sent message. -->
