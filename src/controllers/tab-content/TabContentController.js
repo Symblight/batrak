@@ -40,6 +40,14 @@ export function readsText(tab) {
 }
 
 /**
+ * @param {TabTarget} tab
+ * @returns {boolean} Whether the tab shows the file, as text or as an image, so the host must read it.
+ */
+export function readsFile(tab) {
+  return readsText(tab) || contentKindOf(tab) === 'image';
+}
+
+/**
  * Picks which view renders a tab's content and renders it with the host's view for that kind. Has no
  * lifecycle, so it isn't added to the host as a `ReactiveController`.
  * @template {TabTarget} T

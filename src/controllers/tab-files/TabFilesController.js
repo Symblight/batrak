@@ -1,7 +1,8 @@
 import { StoreController } from '../store/StoreController.js';
-import { readsText } from '../tab-content/TabContentController.js';
+import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
 import { isUserAgentsFile } from '../../models/agents-file.js';
-import { gitFileAtHead, readFile, writeFile } from '../../services/ipc.js';
+import { imageTypeOf } from '../../models/image-types.js';
+import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { $editorTabs, parseTabId } from '../../stores/editor.js';
@@ -23,7 +24,7 @@ function basename(path) {
 
 /**
  * The open tabs (`$editorTabs`) with what they show: reads the active tab's file and its text at HEAD
- * (the diff gutter), re-reads after a change on disk or a HEAD move, keeps an editable file's unsaved
+ * (the diff gutter), or an image tab's bytes, re-reads after a change on disk or a HEAD move, keeps an editable file's unsaved
  * draft and saves it. The host renders `tabs`.
  * @implements {ReactiveController}
  */
@@ -100,7 +101,7 @@ export class TabFilesController {
     }
     if (!this.#busyWorktrees.delete(session.id)) return;
     for (const tab of this.#tabs) {
-      if (!tab.path.startsWith(`${session.folder}/`) || !readsText(tab) || tab.draft !== null) continue;
+      if (!tab.path.startsWith(`${session.folder}/`) || !readsFile(tab) || tab.draft !== null) continue;
       if (tab.id === this.#activeId) this.#load(tab.id);
       else if (tab.loaded) this.#patch(tab.id, { loaded: false });
     }
@@ -130,7 +131,7 @@ export class TabFilesController {
       const rel = projectController.relPath(tab.path);
       if (rel === null) continue;
       if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
-      else if (!readsText(tab) || tab.draft !== null) continue; // keep unsaved edits
+      else if (!readsFile(tab) || tab.draft !== null) continue; // keep unsaved edits
       else if (modified.includes(rel) || added.includes(rel)) {
         if (tab.id === this.#activeId) this.#load(tab.id);
         else if (tab.loaded) this.#patch(tab.id, { loaded: false });
@@ -175,8 +176,9 @@ export class TabFilesController {
       const existing = known.get(id);
       if (existing) return existing;
       const target = parseTabId(id);
-      // A view, or a file shown other than as text (an image), has nothing to read.
-      return { id, ...target, content: '', error: '', loaded: !readsText(target), baseline: null, draft: null };
+      // A view has nothing to read.
+      const loaded = !readsFile(target);
+      return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, image: null };
     });
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
@@ -214,21 +216,26 @@ export class TabFilesController {
   }
 
   /**
-   * Reads a file tab, and separately its baseline; a load error is shown in place of the editor.
+   * Reads a file tab, and separately its baseline (an image tab: its bytes, no baseline); a load error
+   * is shown in place of the view.
    * @param {string} id
    */
   async #load(id) {
-    const { path } = parseTabId(id);
+    const target = parseTabId(id);
+    const { path } = target;
+    const image = contentKindOf(target) === 'image';
     const load = ++this.#loadCount;
     this.#loads.set(id, load);
     this.#reading.add(id);
-    this.#loadBaseline(id);
+    if (!image) this.#loadBaseline(id);
     /** @type {Partial<EditorTab>} */
     let changes;
     try {
-      changes = { content: await readFile(path), error: '' };
+      changes = image
+        ? { image: new Blob([await readFileBytes(path)], { type: imageTypeOf(path).mime }), error: '' }
+        : { content: await readFile(path), error: '' };
     } catch (err) {
-      changes = { content: '', error: String(err) };
+      changes = { content: '', image: null, error: String(err) };
     }
     if (this.#loads.get(id) !== load) return; // closed, or read again, meanwhile
     this.#reading.delete(id);

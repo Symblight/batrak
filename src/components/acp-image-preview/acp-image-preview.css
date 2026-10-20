@@ -1,9 +1,71 @@
 :host {
+  --_acp-image-preview-check: var(--md-surface-container-high);
+
   display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
   background: var(--column-background);
 }
+
+.acp-image-preview__canvas {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  padding: var(--space-4);
+  overflow: hidden;
+}
+
+.acp-image-preview__canvas_grid {
+  background-color: var(--md-surface-container);
+  background-image:
+    linear-gradient(45deg, var(--_acp-image-preview-check) 25%, transparent 25% 75%, var(--_acp-image-preview-check) 75%),
+    linear-gradient(45deg, var(--_acp-image-preview-check) 25%, transparent 25% 75%, var(--_acp-image-preview-check) 75%);
+  background-size: 16px 16px;
+  background-position:
+    0 0,
+    8px 8px;
+}
+
+/* Fits the canvas but never grows past its natural size, so small icons stay sharp. */
+.acp-image-preview__image {
+  display: block;
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--md-outline) 35%, transparent);
+  user-select: none;
+}
+
 .acp-image-preview__placeholder {
   flex: 1;
+  align-self: stretch;
+}
+
+.acp-image-preview__footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: 28px;
+  padding-inline: var(--space-4);
+  border-block-start: 1px solid var(--md-outline-variant);
+  overflow: hidden;
+  font-size: var(--font-size-sm);
+  color: var(--md-on-surface-variant);
+  white-space: nowrap;
+}
+
+.acp-image-preview__value {
+  font-weight: var(--font-weight-medium);
+  font-variant-numeric: tabular-nums;
+  color: var(--md-on-surface);
+}
+
+.acp-image-preview__separator {
+  flex: none;
+  inline-size: 1px;
+  block-size: 14px;
+  background: var(--md-outline-variant);
 }

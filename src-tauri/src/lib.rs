@@ -75,6 +75,7 @@ pub fn run() {
             commands::about::about,
             commands::fonts::list_fonts,
             commands::fs::read_file,
+            commands::fs::read_file_bytes,
             commands::fs::write_file,
             commands::fs::reveal_path,
             commands::fs::open_url,

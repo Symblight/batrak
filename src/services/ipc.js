@@ -282,6 +282,15 @@ export function readFile(path) {
 }
 
 /**
+ * Raw bytes of a file (an image), at most 64 MB.
+ * @param {string} path Absolute.
+ * @returns {Promise<ArrayBuffer>}
+ */
+export function readFileBytes(path) {
+  return invoke('read_file_bytes', { path });
+}
+
+/**
  * Scans a folder into a snapshot and starts watching it.
  * @param {string} path
  * @returns {Promise<OpenedRoot>}

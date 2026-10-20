@@ -110,10 +110,14 @@ export class AcpTabView extends LitElement {
   /** @type {TabContentController<EditorTab>} */
   #content = new TabContentController({
     views: {
-      code: (tab) => this.#renderText(tab, () => this.#renderCode(tab)),
+      code: (tab) => this.#renderFile(tab, () => this.#renderCode(tab)),
       // The editor until the rendered preview exists: it keeps the diff gutter, comments and selection actions.
-      markdown: (tab) => this.#renderText(tab, () => this.#renderCode(tab)),
-      image: (tab) => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path}></acp-image-preview>`,
+      markdown: (tab) => this.#renderFile(tab, () => this.#renderCode(tab)),
+      image: (tab) =>
+        this.#renderFile(
+          tab,
+          () => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path} .image=${tab.image}></acp-image-preview>`,
+        ),
       settings: () =>
         html`<acp-settings class="acp-tab-view__view" .settings=${this.settings} .fonts=${this.fonts}></acp-settings>`,
       changes: () => this.#renderChanges(),
@@ -466,11 +470,11 @@ export class AcpTabView extends LitElement {
   }
 
   /**
-   * A file's text in its view, or the read error in place of it.
+   * A file in its view, or the read error in place of it.
    * @param {EditorTab} tab
    * @param {() => unknown} view
    */
-  #renderText(tab, view) {
+  #renderFile(tab, view) {
     return tab.error ? html`<pre class="acp-tab-view__error">${tab.error}</pre>` : view();
   }
 

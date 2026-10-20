@@ -21,9 +21,27 @@ const litCssInline = {
   },
 };
 
+/**
+ * Serves `*?raw` (SVG icons) the way the bundle does: the file's text as the default export.
+ * @type {import('@web/dev-server').Plugin}
+ */
+const rawText = {
+  name: 'brama:raw',
+  resolveImport({ source }) {
+    // Rewritten to a `?raw` URL of its own path, so node resolution doesn't drop the query.
+    if (!source.endsWith('?raw') || !source.startsWith('@')) return undefined;
+    return `/node_modules/${source}`;
+  },
+  async serve(context) {
+    if (!context.URL.searchParams.has('raw')) return undefined;
+    const text = await readFile(new URL(`.${context.path}`, import.meta.url), 'utf8');
+    return { type: 'js', body: `export default ${JSON.stringify(text)};` };
+  },
+};
+
 export default {
   files: 'src/**/*.test.js',
   nodeResolve: true,
   browsers: [chromeLauncher({ launchOptions: { channel: 'chrome' } })],
-  plugins: [litCssInline],
+  plugins: [litCssInline, rawText],
 };

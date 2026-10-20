@@ -2,6 +2,7 @@ use std::fs;
 use std::path::Path;
 use std::process::Command;
 
+use tauri::ipc::Response;
 use tauri::{AppHandle, Emitter, State};
 
 use crate::config::AgentConfigs;
@@ -15,9 +16,27 @@ fn user_agents_file(configs: &AgentConfigs) -> Option<std::path::PathBuf> {
     configs.user_file().and_then(|f| dunce::canonicalize(f).ok())
 }
 
-/// Reads a file inside an opened workspace root, a worktree session's folder (or the user's
-/// agents.json) as UTF-8 text. Fails for binary (non-UTF-8) files and for paths outside every root;
-/// symlinks are resolved first, so none can lead out of a root.
+/// Images larger than this aren't sent to the page: one IPC reply holds the whole file.
+const MAX_BYTES: u64 = 64 * 1024 * 1024;
+
+/// A path the page may read, canonical: inside an opened workspace root, a worktree session's
+/// folder, or the user's agents.json. Symlinks are resolved first, so none can lead out of a root.
+fn readable(
+    workspaces: &Workspaces,
+    configs: &AgentConfigs,
+    sessions: &Sessions,
+    path: &str,
+) -> Result<std::path::PathBuf, String> {
+    // Same form as the roots (no `\\?\` on Windows), so `contains` can compare them.
+    let canonical = dunce::canonicalize(Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
+    let inside = workspaces.contains(&canonical) || sessions.contains(&canonical);
+    if !inside && Some(&canonical) != user_agents_file(configs).as_ref() {
+        return Err(format!("{path}: outside the opened folder"));
+    }
+    Ok(canonical)
+}
+
+/// Reads a readable file (see `readable`) as UTF-8 text. Fails for binary (non-UTF-8) files.
 #[tauri::command]
 pub async fn read_file(
     workspaces: State<'_, Workspaces>,
@@ -29,13 +48,37 @@ pub async fn read_file(
     let configs = configs.inner().clone();
     let sessions = sessions.inner().clone();
     blocking(move || {
-        // Same form as the roots (no `\\?\` on Windows), so `contains` can compare them.
-        let canonical = dunce::canonicalize(Path::new(&path)).map_err(|e| format!("{path}: {e}"))?;
-        let readable = workspaces.contains(&canonical) || sessions.contains(&canonical);
-        if !readable && Some(&canonical) != user_agents_file(&configs).as_ref() {
-            return Err(format!("{path}: outside the opened folder"));
-        }
+        let canonical = readable(&workspaces, &configs, &sessions, &path)?;
         fs::read_to_string(&canonical).map_err(|e| format!("{path}: {e}"))
+    })
+    .await?
+}
+
+/// A file's bytes, failing when it has more than `max`.
+fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, String> {
+    let shown = path.display();
+    let len = fs::metadata(path).map_err(|e| format!("{shown}: {e}"))?.len();
+    if len > max {
+        return Err(format!("{shown}: too large to preview ({len} bytes)"));
+    }
+    fs::read(path).map_err(|e| format!("{shown}: {e}"))
+}
+
+/// Reads a readable file (see `readable`) as raw bytes, for an image tab; the page gets an
+/// `ArrayBuffer`, not a JSON array. At most `MAX_BYTES`.
+#[tauri::command]
+pub async fn read_file_bytes(
+    workspaces: State<'_, Workspaces>,
+    configs: State<'_, AgentConfigs>,
+    sessions: State<'_, Sessions>,
+    path: String,
+) -> Result<Response, String> {
+    let workspaces = workspaces.inner().clone();
+    let configs = configs.inner().clone();
+    let sessions = sessions.inner().clone();
+    blocking(move || {
+        let canonical = readable(&workspaces, &configs, &sessions, &path)?;
+        read_capped(&canonical, MAX_BYTES).map(Response::new)
     })
     .await?
 }
@@ -137,7 +180,19 @@ pub async fn open_url(url: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::checked_url;
+    use super::{checked_url, read_capped};
+
+    #[test]
+    fn reads_bytes_up_to_the_cap() {
+        let dir = std::env::temp_dir().join(format!("brama-read-bytes-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("a.png");
+        std::fs::write(&file, [0x89, b'P', b'N', b'G', 0xff]).unwrap();
+        assert_eq!(read_capped(&file, 5), Ok(vec![0x89, b'P', b'N', b'G', 0xff]));
+        let too_big = read_capped(&file, 4).unwrap_err();
+        assert!(too_big.contains("too large"), "{too_big}");
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
 
     #[test]
     fn only_plain_web_and_mail_links_open() {
