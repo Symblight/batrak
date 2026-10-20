@@ -2,6 +2,34 @@ import { readFile } from 'node:fs/promises';
 import { chromeLauncher } from '@web/test-runner-chrome';
 
 /**
+ * Serves Pragmatic drag and drop's `bind-event-listener`, which ships only CommonJS, as ES modules:
+ * each `require('./x')` becomes an import, each `exports.x` (or getter on `exports`) an export.
+ * @type {import('@web/dev-server').Plugin}
+ */
+const bindEventListener = {
+  name: 'brama:bind-event-listener',
+  transform(context) {
+    if (!/\/bind-event-listener\/dist\/[\w-]+\.js$/.test(context.path)) return undefined;
+    const body = /** @type {string} */ (context.body);
+    const required = [...new Set([...body.matchAll(/require\("(\.\/[\w-]+)"\)/g)].map((m) => m[1]))];
+    const names = new Set(
+      [...body.matchAll(/exports\.(\w+) = (?!void 0)|defineProperty\(exports, "(\w+)", \{ enumerable/g)].map(
+        (m) => m[1] ?? m[2],
+      ),
+    );
+    return [
+      ...required.map((path, i) => `import * as __required${i} from '${path}.js';`),
+      `const __modules = { ${required.map((path, i) => `'${path}': __required${i}`).join(', ')} };`,
+      'const require = (path) => __modules[path];',
+      'const exports = {};',
+      body,
+      // Aliased: the module declares its own `function bind`.
+      ...[...names].map((name) => `const __exported_${name} = exports.${name};\nexport { __exported_${name} as ${name} };`),
+    ].join('\n');
+  },
+};
+
+/**
  * Serves `*.css?inline` the way the bundle does: a Lit `CSSResult` as the default export.
  * @type {import('@web/dev-server').Plugin}
  */
@@ -43,7 +71,7 @@ export default {
   files: 'src/**/*.test.js',
   nodeResolve: true,
   browsers: [chromeLauncher({ launchOptions: { channel: 'chrome' } })],
-  plugins: [litCssInline, rawText],
+  plugins: [litCssInline, rawText, bindEventListener],
   // nanostores reads `process.env.NODE_ENV`, which the bundler defines.
   testRunnerHtml: (testFramework) => `<!doctype html>
     <html>

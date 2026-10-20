@@ -378,7 +378,7 @@ export class AcpTabView extends LitElement {
     if (worktree) {
       return { title: name, icon: branchIcon, tooltip: `${this.#pathOf(tab.path)} in worktree ${worktree.branch}` };
     }
-    return { title: name, icon: fileIconFor(name) ?? fileIcon, tooltip: tab.path };
+    return { title: name, icon: fileIconFor(name) ?? fileIcon, tooltip: this.#pathOf(tab.path) };
   }
 
   /**
