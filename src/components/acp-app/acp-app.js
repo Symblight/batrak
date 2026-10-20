@@ -272,10 +272,15 @@ export class AcpApp extends LitElement {
         @acp-column-toggle=${this.#onColumnToggle}
       ></acp-toolbar>
       <div class="acp-app__columns">
-        <acp-session-column class="acp-app__session" ?hidden=${sessionHidden}></acp-session-column>
+        <acp-session-column
+          class="acp-app__session"
+          style=${this.#resize.columnStyle('session')}
+          ?hidden=${sessionHidden}
+        ></acp-session-column>
         ${sessionHidden ? nothing : this.#renderResizer('session', 'Resize sessions column')}
         <acp-agent-column
           class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"
+          style=${agentFills ? nothing : this.#resize.columnStyle('agent')}
           @acp-file-open=${this.#onChatFileOpen}
           @acp-file-reveal=${this.#onChatFileReveal}
         ></acp-agent-column>
@@ -284,6 +289,7 @@ export class AcpApp extends LitElement {
         ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
         <acp-file-column
           class="acp-app__files"
+          style=${this.#resize.columnStyle('side')}
           ?hidden=${filesHidden}
           @acp-file-open=${this.#onFileOpen}
           @acp-diff-open=${this.#onDiffOpen}

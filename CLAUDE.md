@@ -364,11 +364,13 @@ and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads 
   `acp-resize-step` (arrow keys) and `acp-resize-reset` (double-click), detail `{ name, delta }`, with
   `delta > 0` always meaning "wider" (`edge="start"` flips the pointer direction).
 - A host owns its columns: `new ColumnResizeController(this, { store: $columnWidths, columns: { name: {
-  property, min, max } } })`. It handles events whose `name` it knows (and stops them) and writes the
-  width to the CSS custom property on the host; a drag stays local until it ends, then lands in the store
-  (reset removes the key). Column names are keys of the shared store, so they're unique app-wide. The
-  default width is that property's value from `tokens.css` — don't repeat it in JS. Bind
-  `controller.column(name)` onto the handle's `value`/`min`/`max`.
+  property, min, max } } })`. It handles events whose `name` it knows (and stops them) and re-renders
+  the host, which binds `controller.columnStyle(name)` (inline `flex-basis` / `width`) on the column —
+  never a custom property on the host, whose change restyles the whole app every frame; a drag stays
+  local until it ends, then lands in the store (reset removes the key). Column names are keys of the
+  shared store, so they're unique app-wide. The default width is that property's value on `:root`
+  from `tokens.css` — don't repeat it in JS. Bind `controller.column(name)` onto the handle's
+  `value`/`min`/`max`.
 - The parent places the handle with a mix class (`z-index: 1; margin-inline: -4px`); the handle draws
   the divider line, so adjacent columns have no border on that side.
 - A press becomes a drag after 3px of travel, so a click or the double-click reset stores nothing.

@@ -7,9 +7,8 @@ import { StoreController } from '../store/StoreController.js';
 /**
  * One resizable column.
  * @typedef {Object} ResizableColumn
- * @property {string} property CSS custom property the host's styles size the column with,
- *   e.g. `--session-column-width`. Its value in `tokens.css` (any length, e.g. a share of `100vw`) is
- *   the default width.
+ * @property {string} property CSS custom property on `:root` whose value (any length, e.g. a share of
+ *   `100vw`, in `tokens.css`) is the default width, e.g. `--session-column-width`.
  * @property {number} min px
  * @property {number} max px
  * @property {string} [partner] The column across the handle, when it's resizable too: it gets the
@@ -52,9 +51,9 @@ function rootLengthPx(property) {
 
 /**
  * Column widths of one host, driven by the `acp-resize-*` events of the `acp-resize-handle`s in its
- * shadow root. Writes each width to its CSS custom property on the host and re-renders the host,
- * so handles can bind `width()` / `column()` for their ARIA values. A drag stays local until it ends,
- * then lands in the store; every store change (another window included) is applied back.
+ * shadow root. Re-renders the host on every change, so columns bind `columnStyle()` and handles
+ * `column()` for their ARIA values. A drag stays local until it ends, then lands in the store; every
+ * store change (another window included) is applied back.
  * @implements {ReactiveController}
  */
 export class ColumnResizeController {
@@ -99,6 +98,16 @@ export class ColumnResizeController {
    */
   width(name) {
     return this.#widths[name] ?? 0;
+  }
+
+  /**
+   * The column's inline size. Not a custom property on the host: changing an inherited one restyles
+   * everything below it on every frame of a drag.
+   * @param {string} name
+   */
+  columnStyle(name) {
+    const px = `${this.width(name)}px`;
+    return `flex-basis: ${px}; width: ${px}`;
   }
 
   /**
@@ -193,11 +202,10 @@ export class ColumnResizeController {
    * @param {number} width px, clamped to the column's range.
    */
   #apply(name, width) {
-    const { property, min, max } = this.#config.columns[name];
+    const { min, max } = this.#config.columns[name];
     const clamped = Math.round(Math.min(max, Math.max(min, width)));
     if (this.#widths[name] === clamped) return;
     this.#widths[name] = clamped;
-    this.#host.style.setProperty(property, `${clamped}px`);
     this.#host.requestUpdate();
   }
 
