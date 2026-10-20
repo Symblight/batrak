@@ -71,9 +71,12 @@ describe('acp-session-menu', () => {
   it('reports opening and closing', async () => {
     const { el, menu } = await render(html`<acp-session-menu></acp-session-menu>`);
     const events = record(el, 'acp-session-menu-toggle');
+    const closed = record(el, 'acp-session-menu-closed');
     menu.dispatchEvent(new Event('opening'));
     menu.dispatchEvent(new Event('closing'));
     expect(events.map((e) => e.detail)).to.deep.equal([{ open: true }, { open: false }]);
+    menu.dispatchEvent(new Event('closed'));
+    expect(closed).to.have.length(1);
   });
 
   it('opens at a point, for a context menu', async () => {
@@ -88,5 +91,14 @@ describe('acp-session-menu', () => {
     first.openAtPoint(0, 0);
     second.openAtPoint(10, 10);
     expect(firstMenu.open).to.equal(false);
+  });
+
+  it('offers Reset to agent title only when asked to', async () => {
+    const { el } = await render(html`<acp-session-menu></acp-session-menu>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('md-menu-item[value="reset-title"]')).to.equal(null);
+    el.resettable = true;
+    await el.updateComplete;
+    expect(root.querySelector('md-menu-item[value="reset-title"]')?.textContent).to.contain('Reset to agent title');
   });
 });

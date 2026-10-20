@@ -54,6 +54,7 @@ function age(iso) {
  * @fires acp-project-remove `{ projectId }`
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
+ * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-delete `{ sessionId }`
  */
@@ -185,13 +186,14 @@ export class AcpSessionList extends LitElement {
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const sessionId = session.id;
     if (value === 'rename') this.#startRename(session);
-    else if (value === 'reveal' || value === 'delete') this.#emit(`acp-session-${value}`, { sessionId });
+    else if (value === 'reset-title' || value === 'reveal' || value === 'delete')
+      this.#emit(`acp-session-${value}`, { sessionId });
   }
 
   /** @param {Event} e */
-  #onSessionMenuToggle(e) {
+  #onSessionMenuClosed(e) {
     e.stopPropagation();
-    if (!(/** @type {CustomEvent<{ open: boolean }>} */ (e).detail.open)) this.#sessionMenu.onClosed();
+    this.#sessionMenu.onClosed();
   }
 
   /**
@@ -438,8 +440,10 @@ export class AcpSessionList extends LitElement {
       ${this.#renderProjectMenu()}
       <acp-session-menu
         session-title=${target?.title ?? ''}
+        ?resettable=${target !== null && target.titleSource === 'user' && target.agentTitle !== null}
         @acp-session-menu-select=${this.#onSessionMenuSelect}
-        @acp-session-menu-toggle=${this.#onSessionMenuToggle}
+        @acp-session-menu-toggle=${(/** @type {Event} */ e) => e.stopPropagation()}
+        @acp-session-menu-closed=${this.#onSessionMenuClosed}
       ></acp-session-menu>
     `;
   }

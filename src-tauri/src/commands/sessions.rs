@@ -107,6 +107,12 @@ pub async fn session_rename(sessions: State<'_, Sessions>, session_id: String, t
     sessions.rename(&session_id, &title)
 }
 
+/// Gives a renamed session back its agent's title; returns the session as it is then.
+#[tauri::command]
+pub async fn session_reset_title(sessions: State<'_, Sessions>, session_id: String) -> Result<Session, String> {
+    sessions.reset_title(&session_id)
+}
+
 #[tauri::command]
 pub async fn session_restart(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
     sessions.restart(&session_id).await

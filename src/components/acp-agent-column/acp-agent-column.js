@@ -52,7 +52,7 @@ export class AcpAgentColumn extends LitElement {
   #notice = new StoreController(this, { store: $activeNotice });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
-  /** The header's rename, reveal and delete. */
+  /** The header's rename, reset title, reveal and delete. */
   #sessionActions = new SessionActionsController(this, {
     confirm: () => this.renderRoot.querySelector('acp-confirm-dialog'),
   });
@@ -189,6 +189,8 @@ export class AcpAgentColumn extends LitElement {
       session-id=${session?.id ?? ''}
       session-title=${session?.title ?? ''}
       ?draft=${session === null}
+      ?provisional=${session?.titleSource === 'prompt'}
+      ?resettable=${session?.titleSource === 'user' && session.agentTitle !== null}
       .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null) : null}
       @acp-session-new=${this.#onNewSession}
     ></acp-session-header>`;

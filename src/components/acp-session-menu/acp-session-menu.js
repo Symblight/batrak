@@ -1,7 +1,8 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
+import agentTitleIcon from '@material-design-icons/svg/outlined/auto_awesome.svg?raw';
 import archiveIcon from '@material-design-icons/svg/outlined/archive.svg?raw';
 import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
 import downloadIcon from '@material-design-icons/svg/outlined/download.svg?raw';
@@ -15,13 +16,15 @@ import styles from './acp-session-menu.css?inline';
 /**
  * @tag acp-session-menu
  * @summary A session's menu, shared by its header and its list row: opens from `anchor`, at a point, or driven through `menu`; one menu shows at a time, app-wide; items whose backend isn't there yet are disabled.
- * @fires acp-session-menu-select `{ value }` `rename`, `reveal` or `delete`.
- * @fires acp-session-menu-toggle `{ open }`
+ * @fires acp-session-menu-select `{ value }` `rename`, `reset-title`, `reveal` or `delete`.
+ * @fires acp-session-menu-toggle `{ open }` As it starts opening or closing.
+ * @fires acp-session-menu-closed `null` Once closed, after its animation (it may have reopened since).
  */
 export class AcpSessionMenu extends LitElement {
   static properties = {
     anchor: { attribute: false },
     sessionTitle: { attribute: 'session-title' },
+    resettable: { type: Boolean },
   };
 
   static styles = styles;
@@ -35,6 +38,8 @@ export class AcpSessionMenu extends LitElement {
     this.anchor = null;
     /** @type {string} */
     this.sessionTitle = '';
+    /** @type {boolean} The user renamed a session the agent had named: offers its title back. */
+    this.resettable = false;
   }
 
   connectedCallback() {
@@ -99,7 +104,7 @@ export class AcpSessionMenu extends LitElement {
 
   /**
    * @param {string} type
-   * @param {object} detail
+   * @param {object | null} detail
    */
   #emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -121,6 +126,7 @@ export class AcpSessionMenu extends LitElement {
       @select=${this.#onSelect}
       @opening=${() => this.#onToggle(true)}
       @closing=${() => this.#onToggle(false)}
+      @closed=${() => this.#emit('acp-session-menu-closed', null)}
     >
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="open-in" disabled>
@@ -140,6 +146,12 @@ export class AcpSessionMenu extends LitElement {
           Rename
           <span slot="trailing">F2</span>
         </md-menu-item>
+        ${this.resettable
+          ? html`<md-menu-item class="acp-session-menu__item" value="reset-title">
+              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(agentTitleIcon)}</md-icon>
+              Reset to agent title
+            </md-menu-item>`
+          : nothing}
       </md-item-group>
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="reveal">

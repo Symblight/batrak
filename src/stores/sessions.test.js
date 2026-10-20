@@ -12,6 +12,7 @@ describe('sessions', () => {
     startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
     const [session] = $sessions.get();
     expect(session.lastActivityAt).to.equal(session.createdAt);
+    expect([session.titleSource, session.agentTitle]).to.deep.equal(['prompt', null]);
   });
 
   it('marks a session active now', () => {

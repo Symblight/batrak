@@ -18,6 +18,8 @@ const SESSION = {
   baseCommit: null,
   createdAt: '2026-10-20T00:00:00Z',
   lastActivityAt: '2026-10-20T00:00:00Z',
+  titleSource: 'prompt',
+  agentTitle: null,
 };
 
 describe('sessionIndicator', () => {

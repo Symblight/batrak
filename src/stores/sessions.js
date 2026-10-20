@@ -162,6 +162,8 @@ export function startSession(id, fields) {
     baseCommit: null,
     createdAt: now,
     lastActivityAt: now,
+    titleSource: 'prompt',
+    agentTitle: null,
     ...fields,
   };
   $sessions.set([session, ...$sessions.get()]);

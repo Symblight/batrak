@@ -31,6 +31,8 @@ function session(id, fields = {}) {
     baseCommit: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     lastActivityAt: '2026-01-01T00:00:00.000Z',
+    titleSource: 'prompt',
+    agentTitle: null,
     ...fields,
   };
 }
@@ -198,6 +200,23 @@ describe('acp-session-list', () => {
       const reveals = record(el, 'acp-session-reveal');
       menuEl.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value: 'reveal' }, bubbles: true, composed: true }));
       expect(reveals.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }]);
+    });
+
+    it('offers Reset to agent title for a session the user renamed after the agent named it', async () => {
+      const sessions = [session('u', { titleSource: 'user', agentTitle: 'Agent’s' }), session('p')];
+      const { el, root } = await render({ sessions });
+      const menuEl = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
+      const resets = record(el, 'acp-session-reset-title');
+      for (const title of ['Session u', 'Session p']) {
+        row(root, title).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
+        await new Promise((resolve) => setTimeout(resolve, 0));
+        await el.updateComplete;
+        expect(menuEl.resettable, title).to.equal(title === 'Session u');
+      }
+      row(root, 'Session u').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      menuEl.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value: 'reset-title' }, bubbles: true, composed: true }));
+      expect(resets.map((e) => e.detail)).to.deep.equal([{ sessionId: 'u' }]);
     });
 
     it('opens at the pointer on a right-click', async () => {

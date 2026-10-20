@@ -15,6 +15,19 @@ use serde::{Deserialize, Serialize};
 
 use env::Mode;
 
+/// Where a session's title comes from.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TitleSource {
+    /// The first prompt's opening words, until the agent names the session.
+    #[default]
+    Prompt,
+    /// The agent's, from `session_info_update`.
+    Agent,
+    /// The user renamed it: the agent no longer changes it.
+    User,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum SessionStatus {
@@ -54,6 +67,11 @@ pub struct SessionRecord {
     /// Canonical project root; the frontend's project id.
     pub project_path: PathBuf,
     pub title: String,
+    #[serde(default)]
+    pub title_source: TitleSource,
+    /// The title the agent last gave the session, kept under a user's title for Reset.
+    #[serde(default)]
+    pub agent_title: Option<String>,
     pub status: SessionStatus,
     pub created_at: String,
     /// The last prompt or turn end; `None` until the first prompt.
@@ -80,6 +98,8 @@ pub struct Session {
     pub id: String,
     pub project_id: String,
     pub title: String,
+    pub title_source: TitleSource,
+    pub agent_title: Option<String>,
     pub status: SessionStatus,
     pub agent_id: String,
     pub config: BTreeMap<String, String>,
@@ -100,6 +120,8 @@ impl From<&SessionRecord> for Session {
             id: r.session_id.clone(),
             project_id: r.project_path.to_string_lossy().into_owned(),
             title: r.title.clone(),
+            title_source: r.title_source,
+            agent_title: r.agent_title.clone(),
             status: r.status,
             agent_id: r.agent_id.clone(),
             config: r.config.clone(),

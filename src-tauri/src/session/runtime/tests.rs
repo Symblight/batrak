@@ -1303,3 +1303,35 @@ async fn sessions_are_listed_by_last_activity_which_a_prompt_and_its_turn_end_se
     let listed = reopened.list();
     assert_eq!(listed.iter().map(|s| (s.id.as_str(), s.last_activity_at.as_str())).next(), Some(("a", active.as_str())));
 }
+
+#[tokio::test]
+async fn the_agents_title_replaces_the_prompts_and_is_kept_across_a_restart() {
+    let f = fixture("agent-title", FakeAgentOptions::default());
+    let (created, events) = f.create("t", "fake").unwrap();
+    assert_eq!((created.title.as_str(), created.title_source), ("Session t", TitleSource::Prompt));
+    assert_eq!(f.ask("t", &events, "title Tree view gaps").await, "titled");
+
+    let changed = events.wait_for("session", |e| e.kind == "session").await;
+    assert_eq!(changed.payload["title"], "Tree view gaps");
+    assert_eq!(changed.payload["titleSource"], "agent");
+    f.sessions.shutdown();
+
+    let listed = Sessions::new(options_for(&f.dir, &f.launcher)).list();
+    assert_eq!((listed[0].title.as_str(), listed[0].title_source), ("Tree view gaps", TitleSource::Agent));
+}
+
+#[tokio::test]
+async fn after_a_rename_the_agent_no_longer_changes_the_title_until_it_is_reset() {
+    let f = fixture("user-title", FakeAgentOptions::default());
+    let (_, events) = f.create("t", "fake").unwrap();
+    let renamed = f.sessions.rename("t", "Mine").unwrap();
+    assert_eq!(renamed.title_source, TitleSource::User);
+    assert!(f.sessions.reset_title("t").is_err(), "no agent title to go back to yet");
+
+    f.ask("t", &events, "title Tree view gaps").await;
+    let listed = &f.sessions.list()[0];
+    assert_eq!((listed.title.as_str(), listed.agent_title.as_deref()), ("Mine", Some("Tree view gaps")));
+
+    let reset = f.sessions.reset_title("t").unwrap();
+    assert_eq!((reset.title.as_str(), reset.title_source), ("Tree view gaps", TitleSource::Agent));
+}

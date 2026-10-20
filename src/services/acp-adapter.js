@@ -3,7 +3,7 @@ import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.
 import { log } from './logger.js';
 import { MESSAGE_PART_RULES, fenceCode, splitFencedCode } from '../models/chat-parts.js';
 import { applyAgentOptions, setUsage } from '../stores/composer.js';
-import { folderOf, setSessionStatus, touchSession } from '../stores/sessions.js';
+import { folderOf, setSessionStatus, touchSession, upsertSession } from '../stores/sessions.js';
 import {
   $sessionNotices,
   addPermissionRequest,
@@ -398,6 +398,10 @@ export function handleSessionEvent(event) {
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
+      return;
+    case 'session':
+      // The agent named it (`session_info_update`).
+      upsertSession(event.payload);
       return;
     case 'untrusted':
       // After the `error` status, whose notice it replaces.

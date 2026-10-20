@@ -48,6 +48,26 @@
   font-weight: var(--font-weight-medium);
 }
 
+/* The first prompt's words, until the agent names the session. */
+.acp-session-header__title_provisional {
+  font-style: italic;
+  color: var(--md-on-surface-variant);
+}
+
+.acp-session-header__title_fade-in {
+  animation: acp-session-header-fade-in 200ms var(--motion-easing-standard);
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes acp-session-header-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
 /* Not in a button: lines up with where the button's label starts. */
 .acp-session-header__title_draft {
   padding-inline-start: var(--space-2);

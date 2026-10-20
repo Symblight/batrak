@@ -18,6 +18,7 @@ import styles from './acp-session-header.css?inline';
  * @tag acp-session-header
  * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, delete), and a new-session button.
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
+ * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-delete `{ sessionId }`
  * @fires acp-session-new `null`
@@ -27,6 +28,8 @@ export class AcpSessionHeader extends LitElement {
     sessionId: { attribute: 'session-id' },
     sessionTitle: { attribute: 'session-title' },
     draft: { type: Boolean },
+    provisional: { type: Boolean },
+    resettable: { type: Boolean },
     indicator: {},
     renaming: { state: true },
     menuOpen: { state: true },
@@ -42,6 +45,10 @@ export class AcpSessionHeader extends LitElement {
     this.sessionTitle = '';
     /** @type {boolean} A new session before its first message: no menu yet. */
     this.draft = false;
+    /** @type {boolean} The first prompt's words, until the agent names the session. */
+    this.provisional = false;
+    /** @type {boolean} The user renamed a session the agent had named: its menu offers that back. */
+    this.resettable = false;
     /** @type {SessionIndicator | null} */
     this.indicator = null;
     /** @type {boolean} The title is an editable field. */
@@ -56,6 +63,15 @@ export class AcpSessionHeader extends LitElement {
    */
   #emit(type, detail = null) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /** The agent's title just replaced the provisional one: it fades in. */
+  #fadeIn = false;
+
+  /** @param {import('lit').PropertyValues<this>} changed */
+  willUpdate(changed) {
+    if (changed.has('sessionId')) this.#fadeIn = false;
+    else if (changed.get('provisional') === true && !this.provisional) this.#fadeIn = true;
   }
 
   /** @returns {HTMLElement | null} */
@@ -110,7 +126,8 @@ export class AcpSessionHeader extends LitElement {
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const sessionId = this.sessionId;
     if (value === 'rename') this.#startRename();
-    else if (value === 'reveal' || value === 'delete') this.#emit(`acp-session-${value}`, { sessionId });
+    else if (value === 'reset-title' || value === 'reveal' || value === 'delete')
+      this.#emit(`acp-session-${value}`, { sessionId });
   };
 
   #renderTitle() {
@@ -135,7 +152,14 @@ export class AcpSessionHeader extends LitElement {
         @keydown=${this.#onTitleKeydown}
       >
         <span class="acp-session-header__label">
-          <span class="acp-session-header__title">${this.sessionTitle}</span>
+          <span
+            class=${classMap({
+              'acp-session-header__title': true,
+              'acp-session-header__title_provisional': this.provisional,
+              'acp-session-header__title_fade-in': this.#fadeIn,
+            })}
+            >${this.sessionTitle}</span
+          >
           <md-icon
             class=${classMap({ 'acp-session-header__chevron': true, 'acp-session-header__chevron_flipped': this.menuOpen })}
             >${unsafeSVG(expandMoreIcon)}</md-icon
@@ -150,6 +174,7 @@ export class AcpSessionHeader extends LitElement {
     if (this.draft || this.renaming) return nothing;
     return html`<acp-session-menu
       session-title=${this.sessionTitle}
+      ?resettable=${this.resettable}
       @acp-session-menu-select=${this.#onSelect}
       @acp-session-menu-toggle=${(/** @type {Event} */ e) => {
         e.stopPropagation();

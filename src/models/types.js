@@ -36,6 +36,13 @@
  */
 
 /**
+ * Where a session's title comes from (`TitleSource` in src-tauri/src/session/mod.rs): the first
+ * prompt's words until the agent names it (`session_info_update`), or the user's rename, which the
+ * agent no longer changes.
+ * @typedef {'prompt' | 'agent' | 'user'} TitleSource
+ */
+
+/**
  * The status icon a session shows in its header and list row (`sessionIndicator()`).
  * @typedef {'permission' | 'error' | 'running' | 'unread'} SessionIndicator
  */
@@ -45,6 +52,8 @@
  * @property {string} id
  * @property {string} projectId
  * @property {string} title
+ * @property {TitleSource} titleSource
+ * @property {string | null} agentTitle The title the agent last gave it, kept under a user's title.
  * @property {SessionStatus} status
  * @property {string} agentId
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
@@ -106,6 +115,7 @@
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
  *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
+ *   | { kind: 'session', payload: Session }
  * )} SessionEnvelope
  */
 

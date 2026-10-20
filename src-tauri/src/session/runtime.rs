@@ -16,7 +16,7 @@ use tokio::task::AbortHandle;
 
 use super::env::{self, Access, Launch, Mode, SessionEnv};
 use super::transcript::{self, Transcript};
-use super::{iso_now, Session, SessionRecord, SessionStatus};
+use super::{iso_now, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::acp::process::AgentProcess;
 use crate::acp::{self, ClientHost, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
 use crate::config::env::SecretStore;
@@ -37,8 +37,9 @@ pub struct Envelope {
     pub session_id: String,
     pub seq: u64,
     /// `update` (payload: ACP `SessionUpdate`), `status`, `permission-request`, `turn-start`,
-    /// `turn-end` (`{ stopReason }`), `error`, or `config-options` (`{ configOptions }`: the
-    /// agent's model, thought level and mode options as they are now).
+    /// `turn-end` (`{ stopReason }`), `error`, `config-options` (`{ configOptions }`: the
+    /// agent's model, thought level and mode options as they are now), or `session` (the `Session`
+    /// after the agent named it).
     pub kind: &'static str,
     pub payload: Value,
 }
@@ -272,6 +273,8 @@ impl Sessions {
             agent_cwd: placed.agent_cwd,
             project_path: project,
             title: req.title,
+            title_source: TitleSource::Prompt,
+            agent_title: None,
             status: SessionStatus::Preparing,
             created_at: iso_now(),
             last_activity_at: None,
@@ -405,7 +408,7 @@ impl Sessions {
         Ok(())
     }
 
-    /// Sets the title the session is listed by (trimmed, not empty).
+    /// Sets the title the session is listed by (trimmed, not empty); the agent no longer changes it.
     pub fn rename(&self, id: &str, title: &str) -> Result<Session, String> {
         let title = title.trim();
         if title.is_empty() {
@@ -415,6 +418,21 @@ impl Sessions {
         let session = {
             let mut record = lock(&state.record);
             record.title = title.to_owned();
+            record.title_source = TitleSource::User;
+            Session::from(&*record)
+        };
+        self.inner.persist();
+        Ok(session)
+    }
+
+    /// Gives a renamed session back the title its agent gave it, which it then keeps up to date.
+    pub fn reset_title(&self, id: &str) -> Result<Session, String> {
+        let state = self.get(id)?;
+        let session = {
+            let mut record = lock(&state.record);
+            let title = record.agent_title.clone().ok_or("the agent hasn't named this session")?;
+            record.title = title;
+            record.title_source = TitleSource::Agent;
             Session::from(&*record)
         };
         self.inner.persist();
@@ -1246,6 +1264,25 @@ struct SessionHost {
 }
 
 impl SessionHost {
+    /// `session_info_update`'s title: `None` clears it. It becomes the session's title unless the
+    /// user named the session; saved with the next status change or turn end, like config options.
+    fn on_agent_title(&self, state: &SessionState, title: Option<&str>) {
+        let title = title.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
+        let session = {
+            let mut record = lock(&state.record);
+            if record.agent_title == title {
+                return;
+            }
+            record.agent_title.clone_from(&title);
+            if let (Some(title), false) = (title, record.title_source == TitleSource::User) {
+                record.title = title;
+                record.title_source = TitleSource::Agent;
+            }
+            Session::from(&*record)
+        };
+        state.emit("session", serde_json::to_value(session).unwrap_or_default());
+    }
+
     fn env(&self) -> Result<Arc<dyn SessionEnv>, FsError> {
         let state = self.state.upgrade().ok_or_else(|| FsError::Io("the session is gone".to_owned()))?;
         let env = lock(&state.env).clone();
@@ -1274,6 +1311,11 @@ impl ClientHost for SessionHost {
             state.transcript.append(&json!({ "kind": "update", "update": &update }));
         }
         let options = state.conn().and_then(|conn| conn.note_update(&update));
+        if update["sessionUpdate"] == "session_info_update" {
+            if let Some(title) = update.get("title") {
+                self.on_agent_title(&state, title.as_str());
+            }
+        }
         state.emit("update", update);
         if let Some(options) = options {
             // Saved with the next status change.

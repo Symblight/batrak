@@ -9,6 +9,7 @@ import {
   sessionOpenLog,
   sessionRemove,
   sessionRename,
+  sessionResetTitle,
   sessionRespondPermission,
   sessionRestart,
   sessionResume,
@@ -284,6 +285,18 @@ export class SessionController {
       upsertSession(await sessionRename(id, trimmed));
     } catch (err) {
       reportError('Renaming the session failed', err);
+    }
+  }
+
+  /**
+   * Gives a renamed session back its agent's title, which the agent then keeps up to date.
+   * @param {string} id
+   */
+  async resetTitle(id) {
+    try {
+      upsertSession(await sessionResetTitle(id));
+    } catch (err) {
+      reportError('Resetting the title failed', err);
     }
   }
 

@@ -16,7 +16,7 @@ use agent_client_protocol::schema::v1::{
     LoadSessionRequest, LoadSessionResponse, NewSessionRequest, NewSessionResponse, PermissionOption,
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
-    SessionConfigSelectOption, SessionId, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
+    SessionConfigSelectOption, SessionId, SessionInfoUpdate, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
     SetSessionConfigOptionResponse, StopReason, TextContent, ToolCall, ToolCallStatus, ToolCallUpdate,
     ToolCallUpdateFields, WriteTextFileRequest,
 };
@@ -213,6 +213,14 @@ async fn run_turn(
         "hello" => {
             say(cx, &sid, "Hello")?;
             say(cx, &sid, ", world")?;
+        }
+        "title" => {
+            let title: Vec<&str> = words.collect();
+            cx.send_notification(SessionNotification::new(
+                sid.clone(),
+                SessionUpdate::SessionInfoUpdate(SessionInfoUpdate::new().title(title.join(" "))),
+            ))?;
+            say(cx, &sid, "titled")?;
         }
         "permission" => {
             cx.send_notification(SessionNotification::new(

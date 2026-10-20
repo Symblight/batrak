@@ -15,11 +15,11 @@ import { $sessions } from '../../stores/sessions.js';
  */
 
 /** What `<acp-session-header>` and `<acp-session-list>` ask for a session, each with `{ sessionId }`. */
-const EVENTS = ['acp-session-rename', 'acp-session-reveal', 'acp-session-delete'];
+const EVENTS = ['acp-session-rename', 'acp-session-reset-title', 'acp-session-reveal', 'acp-session-delete'];
 
 /**
- * Carries out the session actions a container's children ask for (rename, reveal, delete), so the
- * agent column's header and the session column's list act the same.
+ * Carries out the session actions a container's children ask for (rename, reset title, reveal,
+ * delete), so the agent column's header and the session column's list act the same.
  * @implements {ReactiveController}
  */
 export class SessionActionsController {
@@ -52,6 +52,7 @@ export class SessionActionsController {
     const session = $sessions.get().find((s) => s.id === detail.sessionId);
     if (!session) return;
     if (e.type === 'acp-session-rename') sessionController.rename(session.id, detail.title ?? '');
+    else if (e.type === 'acp-session-reset-title') sessionController.resetTitle(session.id);
     else if (e.type === 'acp-session-reveal')
       projectController.reveal(session.folder).catch((err) => reportError('Revealing folder failed', err));
     else this.#delete(session);
