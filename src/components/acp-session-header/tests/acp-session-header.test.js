@@ -36,7 +36,7 @@ function record(el, type) {
 
 describe('acp-session-header', () => {
   it('shows the title on a button that opens the session menu', async () => {
-    const { root } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+    const { root } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
     const button = /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__title-button'));
     expect(button.textContent).to.contain('Fix the tree');
     expect(button.getAttribute('aria-label')).to.equal('Session menu: Fix the tree');
@@ -46,7 +46,7 @@ describe('acp-session-header', () => {
   });
 
   it('flips the chevron while the menu is open', async () => {
-    const { el, root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
     const menu = /** @type {HTMLElement} */ (root.querySelector('acp-session-menu'));
     menu.dispatchEvent(new CustomEvent('acp-session-menu-toggle', { detail: { open: true } }));
     await el.updateComplete;
@@ -63,33 +63,29 @@ describe('acp-session-header', () => {
     expect(root.querySelector('acp-session-menu')).to.equal(null);
   });
 
-  it('shows the status only while the session isn’t idle', async () => {
-    const { el, root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
-    expect(root.querySelector('.acp-session-header__status')).to.equal(null);
+  it('shows the session’s status', async () => {
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
     el.indicator = 'permission';
     await el.updateComplete;
-    expect(root.querySelector('.acp-session-header__status')?.getAttribute('aria-label')).to.equal(
-      'Waiting for your permission',
-    );
-    el.indicator = 'running';
-    await el.updateComplete;
-    const status = root.querySelector('.acp-session-header__status');
-    expect(status?.getAttribute('aria-label')).to.equal('Agent is working');
-    expect(status?.querySelector('md-progress-circular')).to.not.equal(null);
+    const status = /** @type {HTMLElementTagNameMap['acp-session-status']} */ (root.querySelector('acp-session-status'));
+    expect(status.indicator).to.equal('permission');
   });
 
-  it('asks the column to reveal or delete the session', async () => {
-    const { el, root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
-    const reveals = record(el, 'acp-session-reveal');
-    const deletes = record(el, 'acp-session-delete');
-    pick(root, 'reveal');
-    pick(root, 'delete');
-    expect(reveals).to.have.length(1);
-    expect(deletes).to.have.length(1);
+  it('asks the column for the menu’s actions, naming the session', async () => {
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
+    const types = ['acp-session-reveal', 'acp-session-delete'];
+    /** @type {[string, unknown][]} */
+    const seen = [];
+    for (const type of types) el.addEventListener(type, (e) => seen.push([type, /** @type {CustomEvent} */ (e).detail]));
+    for (const value of ['reveal', 'delete']) pick(root, value);
+    expect(seen).to.deep.equal([
+      ['acp-session-reveal', { sessionId: 's1' }],
+      ['acp-session-delete', { sessionId: 's1' }],
+    ]);
   });
 
   it('asks for a new session from its trailing button', async () => {
-    const { el, root } = await render(html`<acp-session-header session-title="T"></acp-session-header>`);
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
     const events = record(el, 'acp-session-new');
     /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__new')).click();
     expect(events).to.have.length(1);
@@ -106,7 +102,7 @@ describe('acp-session-header', () => {
     }
 
     it('swaps the title for a field with its text selected on F2 or the menu’s Rename', async () => {
-      const { el, root } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+      const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
       const input = await startRename(el);
       expect(input.value).to.equal('Fix the tree');
       expect(root.activeElement).to.equal(input);
@@ -122,29 +118,29 @@ describe('acp-session-header', () => {
     });
 
     it('saves on Enter', async () => {
-      const { el, root } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+      const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
       const events = record(el, 'acp-session-rename');
       const input = await startRename(el);
       input.value = '  TreeView gaps ';
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
       await el.updateComplete;
-      expect(events.map((e) => e.detail)).to.deep.equal([{ title: 'TreeView gaps' }]);
+      expect(events.map((e) => e.detail)).to.deep.equal([{ sessionId: 's1', title: 'TreeView gaps' }]);
       expect(root.querySelector('.acp-session-header__rename')).to.equal(null);
     });
 
     it('saves when the field loses focus', async () => {
-      const { el } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+      const { el } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
       const events = record(el, 'acp-session-rename');
       const input = await startRename(el);
       input.value = 'TreeView gaps';
       // Not `blur()`: a test page without window focus gets no focus events.
       input.dispatchEvent(new FocusEvent('focusout', { bubbles: true, composed: true }));
       await el.updateComplete;
-      expect(events.map((e) => e.detail)).to.deep.equal([{ title: 'TreeView gaps' }]);
+      expect(events.map((e) => e.detail)).to.deep.equal([{ sessionId: 's1', title: 'TreeView gaps' }]);
     });
 
     it('keeps the title on Escape, or when it’s left empty or unchanged', async () => {
-      const { el } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+      const { el } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
       const events = record(el, 'acp-session-rename');
       for (const [value, key] of [
         ['Other', 'Escape'],
@@ -160,7 +156,7 @@ describe('acp-session-header', () => {
     });
 
     it('gives focus back to the title button when it ends', async () => {
-      const { el, root } = await render(html`<acp-session-header session-title="Fix the tree"></acp-session-header>`);
+      const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
       const input = await startRename(el);
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await el.updateComplete;

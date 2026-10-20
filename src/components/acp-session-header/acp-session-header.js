@@ -4,31 +4,27 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
-import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import newSessionIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
-import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import '../acp-session-menu/acp-session-menu.js';
-import { INDICATOR_LABELS } from '../../models/sessions.js';
+import '../acp-session-status/acp-session-status.js';
 import styles from './acp-session-header.css?inline';
 
 /** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
 
-const STATUS_ICONS = { permission: permissionIcon, error: errorIcon };
-
 /**
  * @tag acp-session-header
  * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, delete), and a new-session button.
- * @fires acp-session-rename `{ title }` A new title, trimmed, not empty and not the current one.
- * @fires acp-session-reveal `null`
- * @fires acp-session-delete `null`
+ * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
+ * @fires acp-session-reveal `{ sessionId }`
+ * @fires acp-session-delete `{ sessionId }`
  * @fires acp-session-new `null`
  */
 export class AcpSessionHeader extends LitElement {
   static properties = {
+    sessionId: { attribute: 'session-id' },
     sessionTitle: { attribute: 'session-title' },
     draft: { type: Boolean },
     indicator: {},
@@ -40,6 +36,8 @@ export class AcpSessionHeader extends LitElement {
 
   constructor() {
     super();
+    /** @type {string} Named in every event about the session. */
+    this.sessionId = '';
     /** @type {string} */
     this.sessionTitle = '';
     /** @type {boolean} A new session before its first message: no menu yet. */
@@ -84,7 +82,8 @@ export class AcpSessionHeader extends LitElement {
     if (!this.renaming) return;
     this.renaming = false;
     const title = field.value.trim();
-    if (save && title !== '' && title !== this.sessionTitle) this.#emit('acp-session-rename', { title });
+    if (save && title !== '' && title !== this.sessionTitle)
+      this.#emit('acp-session-rename', { sessionId: this.sessionId, title });
     await this.updateComplete;
     this.#titleButton?.focus();
   }
@@ -109,26 +108,10 @@ export class AcpSessionHeader extends LitElement {
   #onSelect = (/** @type {Event} */ e) => {
     e.stopPropagation();
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    const sessionId = this.sessionId;
     if (value === 'rename') this.#startRename();
-    else if (value === 'reveal') this.#emit('acp-session-reveal');
-    else if (value === 'delete') this.#emit('acp-session-delete');
+    else if (value === 'reveal' || value === 'delete') this.#emit(`acp-session-${value}`, { sessionId });
   };
-
-  #renderStatus() {
-    const indicator = this.indicator;
-    if (indicator === null) return nothing;
-    const label = INDICATOR_LABELS[indicator];
-    return html`<span
-      class="acp-session-header__status acp-session-header__status_${indicator}"
-      role="img"
-      aria-label=${label}
-      title=${label}
-    >
-      ${indicator === 'running'
-        ? html`<md-progress-circular class="acp-session-header__spinner"></md-progress-circular>`
-        : html`<md-icon class="acp-session-header__status-icon">${unsafeSVG(STATUS_ICONS[indicator])}</md-icon>`}
-    </span>`;
-  }
 
   #renderTitle() {
     if (this.draft) return html`<span class="acp-session-header__title acp-session-header__title_draft">New session</span>`;
@@ -183,7 +166,10 @@ export class AcpSessionHeader extends LitElement {
 
   render() {
     return html`
-      ${this.renaming ? nothing : this.#renderStatus()} ${this.#renderTitle()}
+      ${this.renaming || this.indicator === null
+        ? nothing
+        : html`<acp-session-status class="acp-session-header__status" .indicator=${this.indicator}></acp-session-status>`}
+      ${this.#renderTitle()}
       <span class="acp-session-header__spacer"></span>
       ${this.renaming
         ? nothing

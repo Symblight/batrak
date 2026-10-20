@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import { persistentMapStore } from './persistent.js';
+import { persistentMapStore, persistentStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').Session} Session */
 /** @typedef {import('../models/types.js').SessionStatus} SessionStatus */
@@ -7,6 +7,21 @@ import { persistentMapStore } from './persistent.js';
 
 /** Every agent session, as the backend lists them plus the ones started here; written by `sessionController`. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
+
+/** Ids of the sessions pinned to the top of their project's list. Shared by every window. */
+export const $pinnedSessions = persistentStore('brama:sessions:pinned', /** @type {string[]} */ ([]), {
+  parse: (raw) => (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : null),
+});
+
+/**
+ * @param {string} id
+ * @param {boolean} pinned
+ */
+export function setSessionPinned(id, pinned) {
+  const ids = $pinnedSessions.get();
+  if (ids.includes(id) === pinned) return;
+  $pinnedSessions.set(pinned ? [...ids, id] : ids.filter((p) => p !== id));
+}
 
 /** The backend's list has arrived (`setListedSessions()`); until then `$sessions` is only what started here. */
 export const $sessionsLoaded = atom(false);
@@ -203,6 +218,7 @@ export function removeSession(id) {
   const session = $sessions.get().find((s) => s.id === id);
   if (!session) return;
   $sessions.set($sessions.get().filter((s) => s !== session));
+  setSessionPinned(id, false);
   for (const [projectId, last] of Object.entries($lastByProject.get())) {
     if (last === id) $lastByProject.setKey(projectId, undefined);
   }

@@ -37,7 +37,7 @@
 
 /**
  * The status icon a session shows in its header and list row (`sessionIndicator()`).
- * @typedef {'permission' | 'error' | 'running'} SessionIndicator
+ * @typedef {'permission' | 'error' | 'running' | 'unread'} SessionIndicator
  */
 
 /**

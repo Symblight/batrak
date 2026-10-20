@@ -43,6 +43,16 @@ export class ContextMenuController {
     host.addController(this);
   }
 
+  /**
+   * Closes the menu shown until now, if it's another: one menu at a time, app-wide. Every opening
+   * goes through it, a menu's own (`<acp-session-menu>`) too.
+   * @param {HTMLElementTagNameMap['md-menu']} menu
+   */
+  static showOnly(menu) {
+    if (shown && shown !== menu && shown.open) shown.open = false;
+    shown = menu;
+  }
+
   /** @returns {T | null} The target the menu is open for. */
   get target() {
     return this.#target;
@@ -66,13 +76,36 @@ export class ContextMenuController {
     await this.#host.updateComplete;
     // A right-click doesn't light-dismiss the menu, and `openAtPoint()` on an open menu doesn't move
     // it: hide it first so it shows again at the new point.
-    if (shown && shown !== menu && shown.open) shown.open = false;
-    shown = menu;
+    ContextMenuController.showOnly(menu);
     if (menu.open) {
       menu.open = false;
       await menu.updateComplete;
     }
     menu.openAtPoint(x, y);
+  }
+
+  /**
+   * Opens the menu for `target` under `anchor` (a row's menu button); closes it when it's open
+   * from there already.
+   * @param {T} target
+   * @param {HTMLElement} anchor
+   */
+  async openFrom(target, anchor) {
+    const menu = this.#config.menu();
+    if (!menu) return;
+    if (menu.open && this.#target === target && menu.anchorElement === anchor) {
+      await menu.close();
+      return;
+    }
+    this.#setTarget(target);
+    await this.#host.updateComplete;
+    ContextMenuController.showOnly(menu);
+    if (menu.open) {
+      menu.open = false;
+      await menu.updateComplete;
+    }
+    menu.anchorElement = anchor;
+    await menu.show();
   }
 
   /**

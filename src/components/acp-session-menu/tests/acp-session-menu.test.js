@@ -81,4 +81,12 @@ describe('acp-session-menu', () => {
     el.openAtPoint(10, 20);
     expect(menu.open).to.equal(true);
   });
+
+  it('closes any other menu when it opens: one menu at a time', async () => {
+    const { el: first, menu: firstMenu } = await render(html`<acp-session-menu></acp-session-menu>`);
+    const { el: second } = await render(html`<acp-session-menu></acp-session-menu>`);
+    first.openAtPoint(0, 0);
+    second.openAtPoint(10, 10);
+    expect(firstMenu.open).to.equal(false);
+  });
 });

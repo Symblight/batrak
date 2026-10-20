@@ -10,27 +10,6 @@
 
 .acp-session-header__status {
   flex: none;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 20px;
-  height: 20px;
-}
-
-.acp-session-header__status_permission {
-  color: var(--md-tertiary);
-}
-
-.acp-session-header__status_error {
-  color: var(--md-error);
-}
-
-.acp-session-header__status-icon {
-  font-size: var(--icon-size-md);
-}
-
-.acp-session-header__spinner {
-  font-size: var(--icon-size-sm);
 }
 
 .acp-session-header__title-button {

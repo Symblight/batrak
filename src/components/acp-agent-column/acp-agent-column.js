@@ -7,7 +7,8 @@ import '../acp-welcome/acp-welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
-import { removeSessionConfirm, sessionIndicator } from '../../models/sessions.js';
+import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
+import { sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
@@ -51,6 +52,10 @@ export class AcpAgentColumn extends LitElement {
   #notice = new StoreController(this, { store: $activeNotice });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
+  /** The header's rename, reveal and delete. */
+  #sessionActions = new SessionActionsController(this, {
+    confirm: () => this.renderRoot.querySelector('acp-confirm-dialog'),
+  });
 
   /** @type {ChatSessionController} */
   #session = new ChatSessionController(this, { chat: () => this.#chat?.chat ?? null });
@@ -170,28 +175,6 @@ export class AcpAgentColumn extends LitElement {
     openUrl(url).catch((err) => reportError('Opening the link failed', err));
   }
 
-  /** @param {Event} e */
-  #onRename(e) {
-    const { title } = /** @type {CustomEvent<{ title: string }>} */ (e).detail;
-    const session = $activeSession.get();
-    if (session) sessionController.rename(session.id, title);
-  }
-
-  #onReveal() {
-    const session = $activeSession.get();
-    if (session) projectController.reveal(session.folder).catch((err) => reportError('Revealing folder failed', err));
-  }
-
-  /** Asks first; the project's files stay either way. */
-  async #onDelete() {
-    const session = $activeSession.get();
-    if (!session) return;
-    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
-      this.renderRoot.querySelector('acp-confirm-dialog')
-    );
-    if (await dialog.confirm(removeSessionConfirm(session))) await sessionController.remove(session.id);
-  }
-
   #onNewSession() {
     const workspace = $workspace.get();
     if (workspace) sessionController.create(workspace.path);
@@ -203,12 +186,10 @@ export class AcpAgentColumn extends LitElement {
     const session = this.#activeSession.value;
     return html`<acp-session-header
       class="acp-agent-column__header"
+      session-id=${session?.id ?? ''}
       session-title=${session?.title ?? ''}
       ?draft=${session === null}
       .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null) : null}
-      @acp-session-rename=${this.#onRename}
-      @acp-session-reveal=${this.#onReveal}
-      @acp-session-delete=${this.#onDelete}
       @acp-session-new=${this.#onNewSession}
     ></acp-session-header>`;
   }

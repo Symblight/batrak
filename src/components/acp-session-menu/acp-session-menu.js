@@ -9,11 +9,12 @@ import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import openInIcon from '@material-design-icons/svg/outlined/open_in_new.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import styles from './acp-session-menu.css?inline';
 
 /**
  * @tag acp-session-menu
- * @summary A session's menu, shared by its header and its list row: opens from `anchor`, or at a point; items whose backend isn't there yet are disabled.
+ * @summary A session's menu, shared by its header and its list row: opens from `anchor`, at a point, or driven through `menu`; one menu shows at a time, app-wide; items whose backend isn't there yet are disabled.
  * @fires acp-session-menu-select `{ value }` `rename`, `reveal` or `delete`.
  * @fires acp-session-menu-toggle `{ open }`
  */
@@ -68,18 +69,20 @@ export class AcpSessionMenu extends LitElement {
 
   // md-menu's light dismiss ignores clicks on its anchor, so this is what closes it again.
   #onAnchorClick = () => {
-    this.#menu?.toggle();
+    this.menu?.toggle();
   };
 
   /** @param {boolean} open */
   #onToggle(open) {
+    const menu = this.menu;
+    if (open && menu) ContextMenuController.showOnly(menu);
     this.#wired?.setAttribute('aria-expanded', String(open));
     this.#emit('acp-session-menu-toggle', { open });
   }
 
-  /** @returns {HTMLElementTagNameMap['md-menu'] | null} */
-  get #menu() {
-    return this.renderRoot.querySelector('md-menu');
+  /** @returns {HTMLElementTagNameMap['md-menu'] | null} The menu itself, for a `ContextMenuController`. */
+  get menu() {
+    return this.renderRoot?.querySelector('md-menu') ?? null;
   }
 
   /**
@@ -88,7 +91,10 @@ export class AcpSessionMenu extends LitElement {
    * @param {number} y
    */
   openAtPoint(x, y) {
-    this.#menu?.openAtPoint(x, y);
+    const menu = this.menu;
+    if (!menu) return;
+    ContextMenuController.showOnly(menu);
+    menu.openAtPoint(x, y);
   }
 
   /**

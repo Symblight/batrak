@@ -11,19 +11,32 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
   permission: 'Waiting for your permission',
   error: 'Last turn failed',
   running: 'Agent is working',
+  unread: 'New output',
 });
 
 /**
  * The one status a session shows, the most urgent first; `null` when there's nothing to say.
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
+ * @param {boolean} [unread] It has output not seen yet.
  * @returns {SessionIndicator | null}
  */
-export function sessionIndicator(status, permissionPending) {
+export function sessionIndicator(status, permissionPending, unread = false) {
   if (permissionPending || status === 'waiting') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
-  return null;
+  return unread ? 'unread' : null;
+}
+
+/**
+ * A project's sessions as its list shows them: pinned first, each part most recently active first.
+ * @param {readonly Session[]} sessions
+ * @param {readonly string[]} pinned Session ids.
+ * @returns {Session[]}
+ */
+export function orderSessions(sessions, pinned) {
+  const rank = (/** @type {Session} */ s) => (pinned.includes(s.id) ? 0 : 1);
+  return [...sessions].sort((a, b) => rank(a) - rank(b) || b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
 /**

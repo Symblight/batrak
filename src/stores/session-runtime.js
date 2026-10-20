@@ -10,6 +10,23 @@ export const $permissionRequests = atom(/** @type {Readonly<Record<string, reado
 /** What the chat says about each session above its composer, by session id (a draft's too). */
 export const $sessionNotices = atom(/** @type {Readonly<Record<string, SessionNotice>>} */ ({}));
 
+/** Sessions that got output while not shown; cleared when shown. In memory only. */
+export const $unreadSessions = atom(/** @type {readonly string[]} */ ([]));
+
+/**
+ * A turn ended in a session; unless it's the one shown, its output is new.
+ * @param {string} sessionId
+ */
+export function markUnread(sessionId) {
+  const unread = $unreadSessions.get();
+  if (sessionId !== $activeSessionId.get() && !unread.includes(sessionId)) $unreadSessions.set([...unread, sessionId]);
+}
+
+$activeSessionId.listen((id) => {
+  const unread = $unreadSessions.get();
+  if (id !== null && unread.includes(id)) $unreadSessions.set(unread.filter((u) => u !== id));
+});
+
 /** The active session's oldest pending permission request. */
 export const $activePermission = computed([$permissionRequests, $activeSessionId], (requests, id) =>
   id === null ? null : (requests[id]?.[0] ?? null),

@@ -8,6 +8,7 @@ import {
   $sessionNotices,
   addPermissionRequest,
   clearPermissionRequests,
+  markUnread,
   setSessionNotice,
 } from '../stores/session-runtime.js';
 
@@ -393,6 +394,7 @@ export function handleSessionEvent(event) {
     }
     case 'turn-end':
       touchSession(sessionId);
+      markUnread(sessionId);
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
