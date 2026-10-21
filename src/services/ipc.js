@@ -208,17 +208,6 @@ export function workspaceSettings(projectPath) {
 }
 
 /**
- * Sets how the project's local sessions share its checkout (`localTurns` in `.brama/workspace.json`,
- * the rest of the file kept); refused while the file doesn't parse.
- * @param {string} projectPath
- * @param {import('../models/types.js').LocalTurns} localTurns
- * @returns {Promise<WorkspaceSettings>} The settings as they are then.
- */
-export function workspaceSettingsSet(projectPath, localTurns) {
-  return invoke('workspace_settings_set', { projectPath, localTurns });
-}
-
-/**
  * Agents configured for a project, the disabled too: `<config dir>/brama/agents.json` and
  * `.brama/agents.json` merged.
  * @param {string | null} projectPath `null`: no project open.

@@ -54,14 +54,13 @@ import {
   setEditorFontSize,
 } from '../../stores/settings.js';
 import { $worktrees } from '../../stores/sessions.js';
-import { $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
+import { $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../models/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../models/types.js').LocalTurns} LocalTurns */
 /** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').Settings} Settings */
@@ -87,7 +86,6 @@ export class AcpMainColumn extends LitElement {
   #settings = new StoreController(this, { store: $settings });
   #systemFonts = new StoreController(this, { store: $systemFonts });
   #agentList = new StoreController(this, { store: $agentList });
-  #workspaceSettings = new StoreController(this, { store: $workspaceSettings });
   #settingsReveal = new StoreController(this, { store: $settingsReveal });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
@@ -260,7 +258,6 @@ export class AcpMainColumn extends LitElement {
         .settings=${settings}
         .fonts=${this.#systemFonts.value}
         .agents=${this.#agentList.value}
-        .localTurns=${this.#workspace.value ? this.#workspaceSettings.value.localTurns : null}
         .settingsReveal=${this.#settingsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
@@ -307,10 +304,6 @@ export class AcpMainColumn extends LitElement {
           settingsRevealed(e.detail.reveal)}
         @acp-agents-file-open=${() => agentConfig.openFile()}
         @acp-agents-import=${() => agentConfig.importUserAgents()}
-        @acp-local-turns-change=${(/** @type {CustomEvent<{ localTurns: LocalTurns }>} */ e) => {
-          const workspace = $workspace.get();
-          if (workspace) sessionController.setLocalTurns(workspace.path, e.detail.localTurns);
-        }}
         @acp-agent-add=${this.#onAgentSave}
         @acp-agent-update=${this.#onAgentSave}
         @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}

@@ -114,7 +114,6 @@ export class AcpTabView extends LitElement {
     settings: { attribute: false },
     fonts: { attribute: false },
     agents: { attribute: false },
-    localTurns: { attribute: false },
     settingsReveal: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
@@ -152,7 +151,6 @@ export class AcpTabView extends LitElement {
           .settings=${this.settings}
           .fonts=${this.fonts}
           .agents=${this.agents}
-          .localTurns=${this.localTurns}
           .reveal=${this.settingsReveal}
         ></acp-settings>`,
       changes: () => this.#renderChanges(),
@@ -246,8 +244,6 @@ export class AcpTabView extends LitElement {
     this.fonts = null;
     /** @type {import('../../models/types.js').AgentList | null} For the Settings tab. */
     this.agents = null;
-    /** @type {import('../../models/types.js').LocalTurns | null} For the Settings tab: the open project's. */
-    this.localTurns = null;
     /** @type {import('../../models/types.js').SettingsReveal | null} For the Settings tab. */
     this.settingsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */

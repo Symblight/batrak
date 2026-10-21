@@ -99,25 +99,4 @@ describe('acp-settings', () => {
     /** @type {HTMLElement} */ (edit).click();
     expect(opened).to.equal(true);
   });
-
-  it("sets how a project's local sessions take turns, warning before they run at once", async () => {
-    const { el, root } = await render();
-    expect(root.querySelector('.acp-settings__local-turns'), 'no project, no row').to.equal(null);
-    el.localTurns = 'queue';
-    await el.updateComplete;
-    const group = /** @type {HTMLElement & { value: string }} */ (root.querySelector('.acp-settings__local-turns'));
-    expect(group.value).to.equal('queue');
-    expect(root.querySelector('.acp-settings__warning')).to.equal(null);
-    /** @type {unknown[]} */
-    const changed = [];
-    el.addEventListener('acp-local-turns-change', (e) => changed.push(/** @type {CustomEvent} */ (e).detail));
-    group.value = 'parallel';
-    group.dispatchEvent(new CustomEvent('change', { detail: { value: 'parallel' } }));
-    expect(changed).to.deep.equal([{ localTurns: 'parallel' }]);
-    await el.updateComplete;
-    expect(group.value, 'shows the project’s until it changes').to.equal('queue');
-    el.localTurns = 'parallel';
-    await el.updateComplete;
-    expect(root.querySelector('.acp-settings__warning')?.textContent).to.contain('overwrite each other');
-  });
 });

@@ -15,7 +15,6 @@ import {
   sessionSetConfigOption,
   sessionStop,
   workspaceSettings,
-  workspaceSettingsSet,
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
 import { reportError } from './notices.js';
@@ -44,7 +43,7 @@ import {
   upsertSession,
 } from '../stores/sessions.js';
 import { dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
-import { $workspacePath, $workspaceSettings, setWorkspaceSettings } from '../stores/workspace.js';
+import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
 /** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
 const IDLE_STOP_MS = 10 * 60_000;
@@ -102,25 +101,6 @@ export class SessionController {
       if (load === this.#settingsLoad) setWorkspaceSettings(settings);
     } catch (err) {
       reportError('Reading .brama/workspace.json failed', err);
-    }
-  }
-
-  /**
-   * Sets how the project's local sessions take turns; their next turns follow it.
-   * @param {string} path The project's.
-   * @param {import('../models/types.js').LocalTurns} localTurns
-   */
-  async setLocalTurns(path, localTurns) {
-    const load = ++this.#settingsLoad;
-    const before = $workspaceSettings.get();
-    // Shown at once; put back if the file refuses it.
-    setWorkspaceSettings({ ...before, localTurns });
-    try {
-      const settings = await workspaceSettingsSet(path, localTurns);
-      if (load === this.#settingsLoad) setWorkspaceSettings(settings);
-    } catch (err) {
-      if (load === this.#settingsLoad) setWorkspaceSettings(before);
-      reportError('Saving .brama/workspace.json failed', err);
     }
   }
 

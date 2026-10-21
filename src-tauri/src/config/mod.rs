@@ -58,7 +58,7 @@ pub struct WorkspaceSettings {
 }
 
 /// How turns of a project's local sessions share its checkout.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub enum LocalTurns {
     /// One at a time; the others wait for it.
@@ -104,27 +104,6 @@ pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
         _ => LocalTurns::Queue,
     };
     WorkspaceSettings { default_mode: default_mode.unwrap_or_else(|| "worktree".to_owned()), local_turns }
-}
-
-/// Sets `localTurns` in the project's workspace.json, keeping the rest of it and its key order
-/// (created with the defaults when missing). Refused while the file doesn't parse. Blocking.
-pub fn set_local_turns(project: &Path, turns: LocalTurns) -> Result<(), String> {
-    let path = project.join(DIR).join(WORKSPACE_FILE);
-    let text = match fs::read_to_string(&path) {
-        Ok(text) => text,
-        Err(e) if e.kind() == ErrorKind::NotFound => DEFAULT_WORKSPACE.to_owned(),
-        Err(e) => return Err(format!("{}: {e}", path.display())),
-    };
-    let mut value: serde_json::Value = serde_json::from_str(&text)
-        .map_err(|e| format!("{}:{}:{}: {e}; fix workspace.json first", path.display(), e.line(), e.column()))?;
-    let root = value.as_object_mut().ok_or_else(|| format!("{}: not an object", path.display()))?;
-    root.insert("localTurns".to_owned(), serde_json::to_value(turns).map_err(|e| e.to_string())?);
-    let mut out = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
-    out.push('\n');
-    if let Some(dir) = path.parent() {
-        fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    }
-    crate::session::env::write_atomic(&path, out.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// One agent as configured. `env` values are templates (`${env:NAME}`, `${keychain:name}`),
@@ -971,23 +950,6 @@ mod tests {
             assert_eq!(settings.local_turns, LocalTurns::Queue, "{other}");
             assert_eq!(settings.default_mode, "local", "{other} keeps the rest");
         }
-        fs::remove_dir_all(project).unwrap();
-    }
-
-    #[test]
-    fn setting_local_turns_keeps_the_rest_of_workspace_json() {
-        let project = temp_project("set-local-turns");
-        set_local_turns(&project, LocalTurns::Parallel).unwrap();
-        assert_eq!(workspace_settings(&project).local_turns, LocalTurns::Parallel, "a missing file gets the defaults");
-        let file = project.join(".brama/workspace.json");
-        fs::write(&file, r#"{"version":1,"zeta":true,"defaultMode":"local","localTurns":"parallel"}"#).unwrap();
-        set_local_turns(&project, LocalTurns::Queue).unwrap();
-        let text = fs::read_to_string(&file).unwrap();
-        assert_eq!(text, "{\n  \"version\": 1,\n  \"zeta\": true,\n  \"defaultMode\": \"local\",\n  \"localTurns\": \"queue\"\n}\n");
-        fs::write(&file, "{ not json").unwrap();
-        let err = set_local_turns(&project, LocalTurns::Parallel).unwrap_err();
-        assert!(err.contains("workspace.json:1:3") && err.contains("fix workspace.json first"), "{err}");
-        assert_eq!(fs::read_to_string(&file).unwrap(), "{ not json", "left as it was");
         fs::remove_dir_all(project).unwrap();
     }
 

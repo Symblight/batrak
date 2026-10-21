@@ -217,8 +217,7 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
   agents.json drop it from the queue (cancelled, never reaching the agent). Worktree sessions
   never queue, and neither do local ones with `.brama/workspace.json` `"localTurns":
-  "parallel"` (read at each turn; Settings' Agents section sets it, `workspace_settings_set`,
-  keeping the file's other keys). Then the files each turn's tool calls change (diffs, and
+  "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
   locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
   are its `touched`, and a watcher batch of the project (`Sessions::note_changes`, from
   `Workspaces::open`'s callback; none for a project whose root isn't open) naming one that two
