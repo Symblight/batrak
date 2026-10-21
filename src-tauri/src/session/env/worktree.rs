@@ -71,18 +71,23 @@ pub fn place(project: &Path, worktrees: &Path, session_id: &str, title: &str, ba
     })?;
     let base_commit = String::from_utf8_lossy(&base_commit).trim().to_owned();
 
-    let stem = format!("brama/{}-{}", slug(title, "session"), short_id(session_id));
-    let exists = |name: &str| run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/{name}")]).is_ok();
-    let branch = std::iter::once(stem.clone())
-        .chain((2..100).map(|n| format!("{stem}-{n}")))
-        .find(|name| !exists(name))
-        .ok_or_else(|| format!("{stem}: every branch name is taken"))?;
-
     let name = top.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     let group = worktrees.join(format!("{}-{:08x}", slug(&name, "project"), fnv1a(top.as_os_str().as_encoded_bytes()) as u32));
     fs::create_dir_all(&group).map_err(|e| format!("{}: {e}", group.display()))?;
     // Canonical, as `confine` compares against it.
-    let root = dunce::canonicalize(&group).map_err(|e| format!("{}: {e}", group.display()))?.join(session_id);
+    let group = dunce::canonicalize(&group).map_err(|e| format!("{}: {e}", group.display()))?;
+
+    // The folder is named like the branch, `brama/` left out; both must be free.
+    let stem = format!("{}-{}", slug(title, "session"), short_id(session_id));
+    let taken = |leaf: &str| {
+        group.join(leaf).exists() || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/brama/{leaf}")]).is_ok()
+    };
+    let leaf = std::iter::once(stem.clone())
+        .chain((2..100).map(|n| format!("{stem}-{n}")))
+        .find(|leaf| !taken(leaf))
+        .ok_or_else(|| format!("brama/{stem}: every branch name is taken"))?;
+    let branch = format!("brama/{leaf}");
+    let root = group.join(&leaf);
     // `join("")` would add a trailing slash to the agent's cwd.
     let dir = if inside.as_os_str().is_empty() { root.clone() } else { root.join(inside) };
     Ok(Placement { agent_cwd: dir, worktree_path: Some(root), branch: Some(branch), base_commit: Some(base_commit) })
@@ -288,6 +293,24 @@ mod tests {
         assert!(!root.exists());
         assert!(repo.git(&["branch", "--list", "brama/cancel"]).is_empty());
         std::fs::remove_dir_all(home).unwrap();
+    }
+
+    #[test]
+    fn a_worktree_is_named_after_its_session() {
+        use crate::git::test_repo::{temp_dir, TestRepo};
+        let repo = TestRepo::with_commit("place-name");
+        let worktrees = temp_dir("place-name-worktrees");
+        let placed = place(&repo.path, &worktrees, "3f2a91bc-77d0", "Fix the login", None).unwrap();
+        let root = placed.worktree_path.unwrap();
+        assert_eq!(root.file_name().unwrap(), "fix-the-login-3f2a91bc");
+        assert_eq!(placed.branch.as_deref(), Some("brama/fix-the-login-3f2a91bc"));
+
+        // A folder left behind (an orphan kept for its uncommitted work) takes the next name.
+        std::fs::create_dir_all(&root).unwrap();
+        let next = place(&repo.path, &worktrees, "3f2a91bc-77d0", "Fix the login", None).unwrap();
+        assert_eq!(next.worktree_path.unwrap().file_name().unwrap(), "fix-the-login-3f2a91bc-2");
+        assert_eq!(next.branch.as_deref(), Some("brama/fix-the-login-3f2a91bc-2"));
+        std::fs::remove_dir_all(worktrees).unwrap();
     }
 
     #[test]
