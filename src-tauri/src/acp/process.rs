@@ -109,6 +109,16 @@ impl AgentProcess {
         self.child.id()
     }
 
+    /// Waits for the leader to exit, then stops whatever it left in its group.
+    pub async fn wait(&mut self) -> std::io::Result<std::process::ExitStatus> {
+        let status = self.child.wait().await;
+        if let Some(pgid) = self.pgid.take() {
+            signal_group(pgid, Signal::Kill);
+            unregister(pgid);
+        }
+        status
+    }
+
     /// SIGTERM to the group, SIGKILL to whatever is left after a grace period. Waits for the
     /// leader so it isn't left a zombie.
     pub async fn stop(&mut self) {

@@ -150,7 +150,8 @@ fn git_fixture(name: &str) -> Fixture {
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
         data_dir: dir.join("data"),
-        configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json"))),
+        configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json")))
+            .with_registry(crate::config::registry::Registry::of(crate::config::registry::tests::FIXTURE)),
         secrets: Arc::new(Secrets),
         base_env: Arc::new(|| {
             HashMap::from([
@@ -1531,6 +1532,30 @@ async fn a_running_session_hears_when_agents_json_changes_what_its_agent_runs() 
     events.clear();
     f.sessions.sync_agents(&f.project).await;
     assert!(!lock(&events.events).iter().any(|e| e.kind == "agent-outdated"), "a new name runs nothing new");
+}
+
+#[tokio::test]
+async fn an_update_tells_a_running_session_and_its_restart_runs_the_new_version_trusted() {
+    let f = fixture("update", FakeAgentOptions::default());
+    let configs = &f.sessions.inner.opts.configs;
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"claude":{"name":"Claude","command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]}}}"#);
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    let (_, events) = f.create("u", "claude").unwrap();
+    events.wait_status("idle").await;
+
+    assert_eq!(configs.pin_versions(Some(&f.project), Some("claude")).unwrap().len(), 1);
+    f.sessions.sync_agents(&f.project).await;
+    let outdated = events.wait_for("agent-outdated", |e| e.kind == "agent-outdated").await;
+    assert_eq!(outdated.payload["message"], "agents.json changed what Claude runs. Restart to use it.");
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Idle, "nothing restarts on its own");
+
+    events.clear();
+    f.sessions.restart("u").await.unwrap();
+    events.wait_status("idle").await;
+    assert!(!lock(&events.events).iter().any(|e| e.kind == "untrusted"), "the trust went with the pin");
+    let ran = f.sessions.get("u").unwrap().record.lock().unwrap().launch.clone().unwrap();
+    assert_eq!(ran.args, ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"]);
 }
 
 #[tokio::test]

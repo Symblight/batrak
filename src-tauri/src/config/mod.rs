@@ -5,6 +5,7 @@
 pub mod env;
 pub mod registry;
 pub mod switches;
+pub mod update;
 pub mod watch;
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
@@ -186,7 +187,7 @@ pub struct NewAgent {
     #[serde(default)]
     pub name: String,
     /// A registry agent's id (`KnownAgent`).
-    #[serde(default)]
+    #[serde(default, alias = "registry")]
     pub known: Option<String>,
     #[serde(default)]
     pub command: Option<String>,
@@ -503,6 +504,17 @@ struct Removed {
     off: bool,
 }
 
+/// An agent whose launch `pin_versions` pinned to the registry's version.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Pinned {
+    pub agent_id: String,
+    pub name: String,
+    /// `<package>@<version>`, as `npm` takes it.
+    pub spec: String,
+    pub version: String,
+}
+
 /// A removal `restore_agent` can undo with `token`; `project` is whose file changed (`None`: the user's).
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -664,7 +676,8 @@ impl AgentConfigs {
         let mut id = base.clone();
         edit_file(&file, |root| {
             let agents = agents_of(root)?;
-            if let Some(known) = chosen.known.as_ref().filter(|k| !agents.contains_key(&k.id)) {
+            // A registry agent under its own name keeps its id, numbered when taken (`gemini-2`).
+            if let Some(known) = chosen.known.as_ref().filter(|k| !agents.contains_key(&k.id) || agent.name.trim().is_empty()) {
                 base.clone_from(&known.id);
                 id = base.clone();
             }
@@ -753,6 +766,85 @@ impl AgentConfigs {
         }
         tracing::info!(project = %project.display(), agents = ?copied, "the user's agents copied into the project");
         Ok(copied)
+    }
+
+    /// Pins agents of the project's agents.json (the user's without one) to the registry's newer
+    /// version: `agent_id`'s, else every agent with an update. One write, in place, key order kept;
+    /// refused while the file doesn't parse. A project's launch that was trusted stays trusted
+    /// when the pin is all that changed. Returns what it pinned (nothing: up to date).
+    pub fn pin_versions(&self, project: Option<&Path>, agent_id: Option<&str>) -> Result<Vec<Pinned>, String> {
+        let entries = self.registry.agents();
+        let merged = self.merged(project);
+        let targets: Vec<(AgentSummary, String, String)> = self
+            .list(project)
+            .agents
+            .into_iter()
+            .filter(|a| agent_id.is_none_or(|id| a.id == id))
+            .filter_map(|a| {
+                let to = a.update.as_ref()?.to.clone();
+                let matched = registry::match_launch(&entries, &a.command, &a.args)?;
+                let registry::Distribution::Npx { package, .. } = &matched.agent.distribution else { return None };
+                let package = package.clone();
+                Some((a, package, to))
+            })
+            .collect();
+        if targets.is_empty() {
+            return Ok(Vec::new());
+        }
+        let was_trusted: Vec<Option<LaunchConfig>> = targets
+            .iter()
+            .map(|(a, _, _)| {
+                let launch = merged.launch(&a.id)?;
+                let trusted = project.is_some_and(|p| merged.needs_trust(&a.id) && self.is_trusted(p, &launch));
+                trusted.then_some(launch)
+            })
+            .collect();
+        let spec_of = |package: &str, to: &str| format!("{package}@{to}");
+        edit_file(&self.file_of(project)?, |root| {
+            let agents = agents_of(root)?;
+            for (agent, package, to) in &targets {
+                let args = agents
+                    .get_mut(&agent.id)
+                    .and_then(|entry| entry.get_mut("args"))
+                    .and_then(serde_json::Value::as_array_mut)
+                    .ok_or_else(|| format!("agent \"{}\" has no args to pin", agent.id))?;
+                let arg = args
+                    .iter_mut()
+                    .find(|arg| arg.as_str().is_some_and(|a| registry::split_spec(a).0 == package))
+                    .ok_or_else(|| format!("agent \"{}\" doesn't run {package}", agent.id))?;
+                *arg = spec_of(package, to).into();
+            }
+            Ok(())
+        })?;
+        self.reload_file(project);
+        let pinned: Vec<Pinned> = targets
+            .iter()
+            .map(|(a, package, to)| Pinned { agent_id: a.id.clone(), name: a.name.clone(), spec: spec_of(package, to), version: to.clone() })
+            .collect();
+        for p in &pinned {
+            tracing::info!(agent = %p.agent_id, version = %p.version, "agent pinned to the registry's version");
+        }
+        if let Some(project) = project {
+            let now = self.merged(Some(project));
+            let carried: Vec<LaunchConfig> = targets
+                .iter()
+                .zip(&was_trusted)
+                .zip(&pinned)
+                .filter_map(|(((_, package, _), before), pin)| {
+                    let mut expected = before.clone()?;
+                    for arg in &mut expected.args {
+                        if registry::split_spec(arg).0 == package {
+                            arg.clone_from(&pin.spec);
+                        }
+                    }
+                    now.launch(&pin.agent_id).filter(|launch| *launch == expected)
+                })
+                .collect();
+            if !carried.is_empty() {
+                self.trust(project, &carried)?;
+            }
+        }
+        Ok(pinned)
     }
 
     /// Rewrites an agent's name and launch, keeping the rest of its entry; a project's new launch
@@ -1677,6 +1769,76 @@ mod tests {
         assert_eq!(shown["loose"], (Some("gemini"), None, update("0.65.0", true)), "unpinned, never ran: pin the latest");
         assert_eq!(shown["ran"], (Some("gemini"), Some("0.65.0"), None), "what it reported");
         assert_eq!(shown["custom"], (None, Some("3.1.0"), None), "not in the registry: no update");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn an_update_pins_the_registrys_version_in_place() {
+        let base = temp_project("pin");
+        let user_file = base.join("user.json");
+        let text = "{\n  \"version\": 1,\n  \"agents\": {\n    \"claude\": {\n      \"name\": \"Claude\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@agentclientprotocol/claude-agent-acp@0.90.0\", \"--debug\"],\n      \"env\": {\"K\": \"v\"}\n    },\n    \"gem\": {\"command\": \"npx\", \"args\": [\"-y\", \"@google/gemini-cli\", \"--acp\"]},\n    \"custom\": {\"command\": \"./agent\"}\n  },\n  \"mcpServers\": []\n}\n";
+        fs::write(&user_file, text).unwrap();
+        let configs = with_fixture(Some(user_file.clone()), None);
+
+        let pinned = configs.pin_versions(None, Some("claude")).unwrap();
+        assert_eq!(pinned, [Pinned { agent_id: "claude".into(), name: "Claude".into(), spec: "@agentclientprotocol/claude-agent-acp@0.94.0".into(), version: "0.94.0".into() }]);
+        let after: serde_json::Value = serde_json::from_str(&fs::read_to_string(&user_file).unwrap()).unwrap();
+        let mut expected: serde_json::Value = serde_json::from_str(text).unwrap();
+        expected["agents"]["claude"]["args"][1] = "@agentclientprotocol/claude-agent-acp@0.94.0".into();
+        assert_eq!(after, expected, "only the pin changed");
+        let keys: Vec<_> = after.as_object().unwrap().keys().cloned().collect();
+        assert_eq!(keys, ["version", "agents", "mcpServers"], "key order kept");
+        assert_eq!(configs.list(None).agents.iter().find(|a| a.id == "claude").unwrap().update, None, "up to date");
+        assert!(configs.pin_versions(None, Some("claude")).unwrap().is_empty(), "nothing left to update");
+        assert!(configs.pin_versions(None, Some("custom")).unwrap().is_empty(), "not in the registry");
+
+        let all = configs.pin_versions(None, None).unwrap();
+        assert_eq!(all.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["@google/gemini-cli@0.65.0"], "every update: an unpinned one gets pinned");
+        assert_eq!(configs.merged(None).agent("gem").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn an_update_keeps_the_trust_of_what_it_replaced() {
+        let base = temp_project("pin-trust");
+        let project = base.join("p");
+        ensure_project_dir(&project).unwrap();
+        let project_file = project.join(".brama/agents.json");
+        fs::write(
+            &project_file,
+            r#"{"version":1,"agents":{
+                "trusted":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]},
+                "waiting":{"command":"npx","args":["-y","@google/gemini-cli@0.60.0","--acp"]}
+            }}"#,
+        )
+        .unwrap();
+        let configs = with_fixture(None, None);
+        let trusted = configs.merged(Some(&project)).launch("trusted").unwrap();
+        configs.trust(&project, &[trusted]).unwrap();
+
+        let pinned = configs.pin_versions(Some(&project), None).unwrap();
+        assert_eq!(pinned.len(), 2);
+        let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
+        assert_eq!(waiting, ["waiting"], "trusted before, trusted after; the other still waits");
+
+        fs::write(&project_file, r#"{"version":1,"agents":{"trusted":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.91.0"]}}}"#).unwrap();
+        configs.reload(&project);
+        fs::write(&project_file, "{ oops").unwrap();
+        configs.reload(&project);
+        assert!(configs.pin_versions(Some(&project), None).unwrap_err().contains("fix agents.json first"), "an invalid file is refused");
+        assert_eq!(fs::read_to_string(&project_file).unwrap(), "{ oops");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn a_registry_agent_added_twice_gets_its_id_with_a_number() {
+        let base = temp_project("add-twice");
+        let configs = with_fixture(Some(base.join("user.json")), None);
+        let pick: NewAgent = serde_json::from_value(serde_json::json!({ "registry": "gemini" })).unwrap();
+        assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini");
+        assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini-2");
+        assert_eq!(configs.merged(None).agent("gemini-2").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"], "pinned");
         fs::remove_dir_all(base).unwrap();
     }
 

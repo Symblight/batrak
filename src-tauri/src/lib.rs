@@ -41,7 +41,7 @@ pub fn run() {
             );
             let configs =
                 config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json"))).with_registry(registry.clone());
-            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir, configs.clone()));
+            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir.clone(), configs.clone()));
             let tidy = sessions.clone();
             tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
             let emitter = app.handle().clone();
@@ -54,6 +54,12 @@ pub fn run() {
             });
             app.manage(UserAgentsWatch(std::sync::Mutex::new(user_watch)));
             commands::agents::check_registry_daily(app.handle().clone(), registry);
+            let emitter = app.handle().clone();
+            app.manage(config::update::Updater::new(
+                configs.clone(),
+                std::sync::Arc::new(config::update::NpmPrefetch { dir: data_dir.join("npm") }),
+                std::sync::Arc::new(move |project: Option<&std::path::Path>| commands::agents::emit_changed(&emitter, project)),
+            ));
             app.manage(sessions);
             app.manage(configs);
             app.manage(terminal::Terminals::new(terminal::TerminalsOptions {
@@ -98,6 +104,8 @@ pub fn run() {
             commands::agents::agents_import_user,
             commands::agents::agents_set_enabled,
             commands::agents::agents_registry_check,
+            commands::agents::agents_update_version,
+            commands::agents::agents_update_all,
             commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,

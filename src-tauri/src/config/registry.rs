@@ -63,7 +63,7 @@ impl RegistryAgent {
 }
 
 /// `<package>@<version>` (a scope's leading `@` is not the separator).
-fn split_spec(spec: &str) -> (&str, Option<&str>) {
+pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
     match spec.rfind('@') {
         Some(at) if at > 0 => (&spec[..at], Some(&spec[at + 1..])),
         _ => (spec, None),

@@ -1,6 +1,7 @@
 use tauri::{AppHandle, Emitter, State};
 
 use crate::config::registry::{Registry, RegistryState};
+use crate::config::update::{Updated, Updater};
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -216,6 +217,25 @@ pub async fn agents_set_enabled(
     let changed = blocking(move || configs.set_enabled(project.as_deref(), &agent_id, enabled)).await??;
     emit_changed(&app, changed.as_deref());
     Ok(stopped)
+}
+
+/// Pins an agent of the project's agents.json (the user's without one) to the registry's newer
+/// version and downloads it; returns once the download ended (empty: it was up to date). Running
+/// sessions keep their process and hear their launch changed.
+#[tauri::command]
+pub async fn agents_update_version(
+    updater: State<'_, Updater>,
+    project_path: Option<String>,
+    agent_id: String,
+) -> Result<Vec<Updated>, String> {
+    updater.inner().clone().update(project_of(project_path)?, agent_id).await
+}
+
+/// `agents_update_version` for every agent of the scope that has an update: one write, then the
+/// downloads one at a time.
+#[tauri::command]
+pub async fn agents_update_all(updater: State<'_, Updater>, project_path: Option<String>) -> Result<Vec<Updated>, String> {
+    updater.inner().clone().update_all(project_of(project_path)?).await
 }
 
 /// Asks the ACP registry now (Check now); every window hears when its agents changed. Returns how
