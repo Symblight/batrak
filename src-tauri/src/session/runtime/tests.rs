@@ -160,8 +160,12 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
         }),
         launcher: Arc::clone(launcher) as Arc<dyn Launcher>,
         initialize_timeout: Duration::from_secs(5),
+        overlap_grace: OVERLAP_GRACE,
     }
 }
+
+/// How long the fixture's ended turns still count for an overlap.
+const OVERLAP_GRACE: Duration = Duration::from_millis(200);
 
 impl Fixture {
     /// Writes `project`'s agents.json with the fixture's agents and trusts them.
@@ -608,15 +612,52 @@ async fn parallel_turns_that_change_the_same_file_each_hear_of_the_other_once() 
         e.wait_turn_end().await;
     }
 
-    // Once a's turn is over, b's change is its own.
+    // A batch that comes just after a's turn ended still has a's change in it.
     a.clear();
     b.clear();
     edit("a", 0);
-    edit("b", 500);
+    edit("b", 800);
     a.wait_turn_end().await;
     b.kind_seen("tool_call_update").await;
     f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    assert_eq!(overlaps(b), [json!({ "path": "a.txt", "other": { "id": "a", "title": "Session a" } })], "late batch");
+    assert!(overlaps(a).is_empty(), "a's turn is over");
+    b.wait_turn_end().await;
+
+    // Once a's turn is well over, b's change is its own.
+    a.clear();
+    b.clear();
+    edit("a", 0);
+    edit("b", 800);
+    a.wait_turn_end().await;
+    b.kind_seen("tool_call_update").await;
+    tokio::time::sleep(OVERLAP_GRACE * 2).await;
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
     assert!(overlaps(b).is_empty(), "not after a's turn");
+}
+
+#[tokio::test]
+async fn a_file_named_by_another_way_there_is_the_same_file() {
+    let f = fixture("overlap-paths", FakeAgentOptions::default());
+    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::create_dir_all(f.project.join("sub")).unwrap();
+    let mut events = Vec::new();
+    for id in ["a", "b"] {
+        let (_, e) = f.create(id, "fake").unwrap();
+        e.wait_status("idle").await;
+        events.push(e);
+    }
+    let [a, b] = &events[..] else { unreachable!() };
+    f.sessions.send_prompt("a", text(&format!("edit {} 400", f.path("a.txt")))).unwrap();
+    f.sessions.send_prompt("b", text(&format!("edit {} 400", f.path("sub/../a.txt")))).unwrap();
+    for e in [a, b] {
+        e.kind_seen("tool_call_update").await;
+    }
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    for e in [a, b] {
+        assert_eq!(lock(&e.events).iter().filter(|e| e.kind == "overlap").count(), 1);
+        e.wait_turn_end().await;
+    }
 }
 
 #[tokio::test]

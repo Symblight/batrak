@@ -7,7 +7,7 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError, Weak};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -88,7 +88,13 @@ pub struct SessionsOptions {
     /// How long a starting agent may take to answer `initialize`, and each config option the
     /// session is set to.
     pub initialize_timeout: Duration,
+    /// How long after its end a turn's changes still count for an overlap: the watcher reports a
+    /// write a debounce later, so the batch with a turn's last edits may come after it ended.
+    pub overlap_grace: Duration,
 }
+
+/// Several watcher debounces (150 ms), FSEvents' latency included.
+const OVERLAP_GRACE: Duration = Duration::from_secs(1);
 
 impl SessionsOptions {
     pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
@@ -99,6 +105,7 @@ impl SessionsOptions {
             base_env: Arc::new(|| crate::config::env::login_shell_env().clone()),
             launcher: Arc::new(ProcessLauncher),
             initialize_timeout: acp::INITIALIZE_TIMEOUT,
+            overlap_grace: OVERLAP_GRACE,
         }
     }
 }
@@ -183,6 +190,8 @@ struct SessionState {
     touched: Mutex<HashSet<PathBuf>>,
     overlaps: Mutex<HashSet<PathBuf>>,
     tool_kinds: Mutex<HashMap<String, String>>,
+    /// When the last turn ended (`None` while one runs): its `touched` still count for a while.
+    turn_ended: Mutex<Option<Instant>>,
 }
 
 impl SessionState {
@@ -373,7 +382,9 @@ impl Sessions {
         tokio::spawn(async move {
             let result = inner.run_turn(&state, prompt, attempts).await;
             state.turn_running.store(false, Ordering::SeqCst);
-            state.recording.store(false, Ordering::SeqCst);
+            if state.recording.swap(false, Ordering::SeqCst) {
+                *lock(&state.turn_ended) = Some(Instant::now());
+            }
             let ended = match &result {
                 Ok(stop_reason) => json!({ "kind": "turn-end", "stopReason": stop_reason }),
                 Err(_) if state.stopping.load(Ordering::SeqCst) => json!({ "kind": "turn-end", "stopReason": "cancelled" }),
@@ -418,14 +429,17 @@ impl Sessions {
     }
 
     /// Files that changed in a project (root-relative, a watcher batch): each one the tool calls of
-    /// two or more running local turns named is reported to each of them (`overlap`, naming
-    /// another), once per file per turn. A change no tool call names is nobody's.
+    /// two or more local turns named, running or just ended (`overlap_grace`), is reported to each
+    /// running one (`overlap`, naming another), once per file per turn. A change no tool call
+    /// names is nobody's.
     pub fn note_changes(&self, project: &Path, changed: &[String]) {
+        let grace = self.inner.opts.overlap_grace;
         let turns: Vec<_> = lock(&self.inner.sessions)
             .values()
             .filter(|s| {
                 let record = lock(&s.record);
-                record.mode == Mode::Local && record.project_path == project && s.recording.load(Ordering::SeqCst)
+                let ended = || lock(&s.turn_ended).is_some_and(|at| at.elapsed() < grace);
+                record.mode == Mode::Local && record.project_path == project && (s.recording.load(Ordering::SeqCst) || ended())
             })
             .cloned()
             .collect();
@@ -438,7 +452,7 @@ impl Sessions {
             if by.len() < 2 {
                 continue;
             }
-            for state in &by {
+            for state in by.iter().filter(|s| s.recording.load(Ordering::SeqCst)) {
                 let Some(other) = by.iter().find(|o| o.id != state.id) else { continue };
                 if lock(&state.overlaps).insert(path.clone()) {
                     tracing::info!(session = %state.id, other = %other.id, path = %rel, "two running turns changed one file");
@@ -832,6 +846,7 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
         touched: Mutex::default(),
         overlaps: Mutex::default(),
         tool_kinds: Mutex::default(),
+        turn_ended: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),
@@ -1248,6 +1263,7 @@ impl Inner {
         lock(&state.touched).clear();
         lock(&state.overlaps).clear();
         lock(&state.tool_kinds).clear();
+        *lock(&state.turn_ended) = None;
         state.recording.store(true, Ordering::SeqCst);
         state.emit("turn-start", json!({}));
         self.set_status(state, SessionStatus::Working, None);
@@ -1537,7 +1553,7 @@ impl SessionHost {
             update["locations"].as_array().into_iter().flatten().filter(|_| !looks).map(|l| &l["path"]);
         let diffs = update["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "diff").map(|c| &c["path"]);
         let named = locations.chain(diffs).filter_map(Value::as_str).filter_map(|path| {
-            let path = env.agent_cwd().join(path);
+            let path = normalize(&env.agent_cwd().join(path));
             env.to_host_path(&path).ok()
         });
         lock(&state.touched).extend(named);
@@ -1562,6 +1578,22 @@ impl SessionHost {
             }
         })
     }
+}
+
+/// `path` without `.` and `..` (lexically: a symlink is left as named), so that two names of one
+/// file match the watcher's.
+fn normalize(path: &Path) -> PathBuf {
+    let mut out = PathBuf::new();
+    for part in path.components() {
+        match part {
+            std::path::Component::CurDir => {}
+            std::path::Component::ParentDir => {
+                out.pop();
+            }
+            part => out.push(part),
+        }
+    }
+    out
 }
 
 /// ACP tool kinds whose locations are files read, not changed.
