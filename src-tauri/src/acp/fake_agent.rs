@@ -5,6 +5,10 @@
 //! - `permission` → a tool call, a permission request, then a chunk naming the answer
 //! - `read <path>` / `write <path> <text>` → the client's fs methods; a chunk with the result
 //! - `slow` → a chunk every 20 ms until cancelled (`cancelled`) or 200 chunks
+//! - `sleep <ms>` → waits that long (or until cancelled), then a chunk
+//! - `edit <path> <ms>` → a tool call naming the file (location, then a diff), written straight to
+//!   disk as agents' own tools do; then like `sleep`
+//! - `look <path> <ms>` → a read tool call naming the file (location only); then like `sleep`
 //! - `crash` → one chunk, then the agent's side of the pipe closes mid-turn
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
@@ -17,8 +21,8 @@ use agent_client_protocol::schema::v1::{
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
     SessionConfigSelectOption, SessionId, SessionInfoUpdate, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
-    SetSessionConfigOptionResponse, StopReason, TextContent, ToolCall, ToolCallStatus, ToolCallUpdate,
-    ToolCallUpdateFields, WriteTextFileRequest,
+    SetSessionConfigOptionResponse, StopReason, TextContent, ToolCall, ToolCallContent, ToolCallLocation, ToolCallStatus,
+    ToolCallUpdate, ToolCallUpdateFields, ToolKind, WriteTextFileRequest, Diff,
 };
 use agent_client_protocol::{Agent, ByteStreams, Client, ConnectionTo, Responder};
 use tokio::io::DuplexStream;
@@ -274,13 +278,47 @@ async fn run_turn(
         }
         "sleep" => {
             let ms: u64 = words.next().and_then(|w| w.parse().ok()).unwrap_or(100);
-            for _ in 0..ms.div_ceil(10) {
-                if state.cancelled.load(Ordering::SeqCst) {
-                    return Ok(StopReason::Cancelled);
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
+            if !sleep(state, ms).await {
+                return Ok(StopReason::Cancelled);
             }
             say(cx, &sid, "slept")?;
+        }
+        "edit" => {
+            let path = words.next().unwrap_or_default().to_owned();
+            let ms: u64 = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+            cx.send_notification(SessionNotification::new(
+                sid.clone(),
+                SessionUpdate::ToolCall(ToolCall::new("call-edit", format!("Edit {path}")).kind(ToolKind::Edit).locations(vec![ToolCallLocation::new(&path)])),
+            ))?;
+            let _ = std::fs::write(&path, "edited\n");
+            let diff = ToolCallContent::from(Diff::new(&path, "edited\n"));
+            cx.send_notification(SessionNotification::new(
+                sid.clone(),
+                SessionUpdate::ToolCallUpdate(ToolCallUpdate::new(
+                    "call-edit",
+                    ToolCallUpdateFields::new().status(ToolCallStatus::Completed).content(vec![diff]),
+                )),
+            ))?;
+            if !sleep(state, ms).await {
+                return Ok(StopReason::Cancelled);
+            }
+            say(cx, &sid, "edited")?;
+        }
+        "look" => {
+            let path = words.next().unwrap_or_default().to_owned();
+            let ms: u64 = words.next().and_then(|w| w.parse().ok()).unwrap_or(0);
+            cx.send_notification(SessionNotification::new(
+                sid.clone(),
+                SessionUpdate::ToolCall(ToolCall::new("call-look", format!("Read {path}")).kind(ToolKind::Read).locations(vec![ToolCallLocation::new(&path)])),
+            ))?;
+            cx.send_notification(SessionNotification::new(
+                sid.clone(),
+                SessionUpdate::ToolCallUpdate(ToolCallUpdate::new("call-look", ToolCallUpdateFields::new().status(ToolCallStatus::Completed))),
+            ))?;
+            if !sleep(state, ms).await {
+                return Ok(StopReason::Cancelled);
+            }
+            say(cx, &sid, "looked")?;
         }
         "crash" => {
             say(cx, &sid, "about to crash")?;
@@ -292,4 +330,15 @@ async fn run_turn(
         other => say(cx, &sid, &format!("unknown script {other:?}"))?,
     }
     Ok(StopReason::EndTurn)
+}
+
+/// Waits `ms` in steps; `false` when the turn was cancelled meanwhile.
+async fn sleep(state: &FakeAgentState, ms: u64) -> bool {
+    for _ in 0..ms.div_ceil(10) {
+        if state.cancelled.load(Ordering::SeqCst) {
+            return false;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+    true
 }

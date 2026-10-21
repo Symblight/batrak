@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { live } from 'lit/directives/live.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
@@ -30,12 +31,19 @@ import styles from './acp-settings.css?inline';
 /** @typedef {import('../../models/types.js').AgentList} AgentList */
 /** @typedef {import('../../models/types.js').SettingsAnchor} SettingsAnchor */
 /** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../models/types.js').LocalTurns} LocalTurns */
 
 /** @type {{ id: SettingsAnchor, label: string, icon: string }[]} The sections, top to bottom. */
 const SECTIONS = [
   { id: 'theme', label: 'Theme', icon: paletteIcon },
   { id: 'editor', label: 'Editor', icon: codeIcon },
   { id: 'agents', label: 'Agents', icon: smartToyIcon },
+];
+
+/** @type {{ value: LocalTurns, label: string }[]} */
+const LOCAL_TURNS = [
+  { value: 'queue', label: 'One at a time' },
+  { value: 'parallel', label: 'At once' },
 ];
 
 /** How far below the scroller's top a section counts as the one being read. */
@@ -55,12 +63,14 @@ const APPEARANCES = [
  * @fires acp-settings-reset `{ section }`
  * @fires acp-settings-revealed `{ reveal }` The `reveal` asked for was shown.
  * @fires acp-agents-file-open `null`
+ * @fires acp-local-turns-change `{ localTurns }` A `LocalTurns` for the open project.
  */
 export class AcpSettings extends LitElement {
   static properties = {
     settings: { attribute: false },
     fonts: { attribute: false },
     agents: { attribute: false },
+    localTurns: { attribute: false },
     reveal: { attribute: false },
     current: { state: true },
     accentDraft: { state: true },
@@ -77,6 +87,8 @@ export class AcpSettings extends LitElement {
     this.fonts = null;
     /** @type {AgentList | null} */
     this.agents = null;
+    /** @type {LocalTurns | null} The open project's; `null` with no project open. */
+    this.localTurns = null;
     /** @type {SettingsReveal | null} A section to scroll to; `acp-settings-revealed` once it has. */
     this.reveal = null;
     /** @type {SettingsAnchor} The section being read, marked in the list. */
@@ -152,6 +164,13 @@ export class AcpSettings extends LitElement {
 
   #onAppearanceChange = (/** @type {Event} */ e) => {
     this.#change({ appearance: /** @type {CustomEvent<{ value: Appearance }>} */ (e).detail.value });
+  };
+
+  #onLocalTurnsChange = (/** @type {Event} */ e) => {
+    const { value } = /** @type {CustomEvent<{ value: LocalTurns }>} */ (e).detail;
+    this.dispatchEvent(new CustomEvent('acp-local-turns-change', { detail: { localTurns: value }, bubbles: true, composed: true }));
+    // The group shows `localTurns`, not the click: a save that fails leaves it as it was.
+    this.requestUpdate();
   };
 
   #onColorPicked = (/** @type {Event} */ e) => {
@@ -389,7 +408,33 @@ export class AcpSettings extends LitElement {
         </md-button>
       </div>
       <acp-settings-agents .agents=${this.agents}></acp-settings-agents>
+      ${this.localTurns === null ? nothing : this.#renderLocalTurns(this.localTurns)}
     </section>`;
+  }
+
+  /** @param {LocalTurns} localTurns */
+  #renderLocalTurns(localTurns) {
+    return html`<div class="acp-settings__field">
+      <span class="acp-settings__label" id="acp-settings-local-turns">Local sessions' turns</span>
+      <md-segmented-button-group
+        class="acp-settings__segments acp-settings__local-turns"
+        label="Local sessions' turns"
+        aria-labelledby="acp-settings-local-turns"
+        .value=${live(localTurns)}
+        @change=${this.#onLocalTurnsChange}
+      >
+        ${LOCAL_TURNS.map(({ value, label }) => html`<md-segmented-button value=${value}>${label}</md-segmented-button>`)}
+      </md-segmented-button-group>
+      ${localTurns === 'parallel'
+        ? html`<span class="acp-settings__hint acp-settings__warning" role="note"
+            >Agents in the same checkout can overwrite each other's edits, and builds and tests can collide. You're told
+            when two turns change the same file.</span
+          >`
+        : html`<span class="acp-settings__hint"
+            >Local sessions of this project share its checkout: a message waits while another one's turn runs. Saved in
+            .brama/workspace.json.</span
+          >`}
+    </div>`;
   }
 
   #renderNav() {

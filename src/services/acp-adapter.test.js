@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { handleSessionEvent } from './acp-adapter.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
-import { $sessionNotices } from '../stores/session-runtime.js';
+import { $sessionNotices, dismissSessionNotice } from '../stores/session-runtime.js';
 import { $awaitingTrust } from '../stores/trust.js';
 import { $contextUsage, forgetContextUsage } from '../stores/context-usage.js';
 
@@ -68,6 +68,47 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id]?.message, 'a holder without a title').to.equal('Waiting for another session to finish');
     handleSessionEvent({ sessionId: id, seq: 5, kind: 'status', payload: { status: 'working' } });
     expect($sessionNotices.get()[id] ?? null).to.equal(null);
+  });
+
+  it('warns that another running turn changed the same file until the turn ends', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-start', payload: {} });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'working' } });
+    handleSessionEvent({ sessionId: id, seq: 3, kind: 'overlap', payload: { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } } });
+    expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'overlap', message: 'src/a.js was also changed by "Fix the tree"' });
+    handleSessionEvent({ sessionId: id, seq: 4, kind: 'status', payload: { status: 'waiting' } });
+    handleSessionEvent({ sessionId: id, seq: 5, kind: 'status', payload: { status: 'working' } });
+    expect($sessionNotices.get()[id]?.kind, 'through the turn').to.equal('overlap');
+    handleSessionEvent({ sessionId: id, seq: 6, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    expect($sessionNotices.get()[id] ?? null).to.equal(null);
+  });
+
+  it('puts back the notice an overlap covered once the turn ends', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    const outdated = { kind: 'outdated', message: 'agents.json changed what Fake runs. Restart to use it.' };
+    const overlap = { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } };
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message: outdated.message } });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'turn-start', payload: {} });
+    handleSessionEvent({ sessionId: id, seq: 3, kind: 'overlap', payload: overlap });
+    expect($sessionNotices.get()[id]?.kind).to.equal('overlap');
+    handleSessionEvent({ sessionId: id, seq: 4, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    expect($sessionNotices.get()[id]).to.deep.equal(outdated);
+
+    handleSessionEvent({ sessionId: id, seq: 5, kind: 'turn-start', payload: {} });
+    handleSessionEvent({ sessionId: id, seq: 6, kind: 'overlap', payload: overlap });
+    handleSessionEvent({ sessionId: id, seq: 7, kind: 'agent-outdated', payload: { message: null } });
+    expect($sessionNotices.get()[id]?.kind, 'the overlap stays').to.equal('overlap');
+    handleSessionEvent({ sessionId: id, seq: 8, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    expect($sessionNotices.get()[id] ?? null, 'changed back meanwhile').to.equal(null);
+
+    handleSessionEvent({ sessionId: id, seq: 9, kind: 'turn-start', payload: {} });
+    handleSessionEvent({ sessionId: id, seq: 10, kind: 'overlap', payload: overlap });
+    handleSessionEvent({ sessionId: id, seq: 11, kind: 'agent-outdated', payload: { message: outdated.message } });
+    expect($sessionNotices.get()[id]?.kind, 'the overlap stays').to.equal('overlap');
+    dismissSessionNotice(id);
+    expect($sessionNotices.get()[id], 'dismissed, what it covered').to.deep.equal(outdated);
   });
 
   it("keeps a running session's context usage, without its cost", () => {

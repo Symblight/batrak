@@ -77,6 +77,11 @@ impl Recorder {
         lock(&self.events).clear();
     }
 
+    /// Waits for an update of this `sessionUpdate` kind.
+    async fn kind_seen(&self, kind: &str) -> Envelope {
+        self.wait_for(kind, |e| e.kind == "update" && e.payload["sessionUpdate"] == kind).await
+    }
+
     fn texts(&self) -> Vec<String> {
         lock(&self.events)
             .iter()
@@ -553,6 +558,89 @@ async fn resume_starts_a_stopped_agent_once_without_reporting_it_stopped() {
     assert_eq!(agent.loads.load(Ordering::SeqCst), 1, "it continues its ACP session");
     let events = lock(&events.events).clone();
     assert!(!events.iter().any(|e| e.kind == "error" || (e.kind == "status" && e.payload["status"] == "stopped")), "{events:#?}");
+}
+
+#[tokio::test]
+async fn parallel_turns_that_change_the_same_file_each_hear_of_the_other_once() {
+    let f = fixture("overlap", FakeAgentOptions::default());
+    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join("b.txt"), "b\n").unwrap();
+    let mut events = Vec::new();
+    for id in ["a", "b", "c"] {
+        let (_, e) = f.create(id, "fake").unwrap();
+        e.wait_status("idle").await;
+        events.push(e);
+    }
+    let [a, b, c] = &events[..] else { unreachable!() };
+    f.sessions.send_prompt("a", text(&format!("edit {} 400", f.path("a.txt")))).unwrap();
+    f.sessions.send_prompt("b", text(&format!("edit {} 400", f.path("a.txt")))).unwrap();
+    f.sessions.send_prompt("c", text(&format!("edit {} 400", f.path("b.txt")))).unwrap();
+    for e in [a, b, c] {
+        e.kind_seen("tool_call_update").await;
+    }
+
+    // As the project's watcher reports them, twice.
+    for _ in 0..2 {
+        f.sessions.note_changes(&f.project, &["a.txt".to_owned(), "b.txt".to_owned()]);
+    }
+    let overlaps = |e: &Recorder| -> Vec<Value> {
+        lock(&e.events).iter().filter(|e| e.kind == "overlap").map(|e| e.payload.clone()).collect()
+    };
+    assert_eq!(overlaps(a), [json!({ "path": "a.txt", "other": { "id": "b", "title": "Session b" } })]);
+    assert_eq!(overlaps(b), [json!({ "path": "a.txt", "other": { "id": "a", "title": "Session a" } })]);
+    assert!(overlaps(c).is_empty(), "only c changed b.txt");
+    for e in [a, b, c] {
+        assert_eq!(e.wait_turn_end().await, "end_turn");
+    }
+
+    // A new turn hears of it again.
+    let edit = |id: &str, ms: u32| f.sessions.send_prompt(id, text(&format!("edit {} {ms}", f.path("a.txt")))).unwrap();
+    a.clear();
+    b.clear();
+    edit("a", 300);
+    edit("b", 300);
+    for e in [a, b] {
+        e.kind_seen("tool_call_update").await;
+    }
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    assert_eq!((overlaps(a).len(), overlaps(b).len()), (1, 1));
+    for e in [a, b] {
+        e.wait_turn_end().await;
+    }
+
+    // Once a's turn is over, b's change is its own.
+    a.clear();
+    b.clear();
+    edit("a", 0);
+    edit("b", 500);
+    a.wait_turn_end().await;
+    b.kind_seen("tool_call_update").await;
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    assert!(overlaps(b).is_empty(), "not after a's turn");
+}
+
+#[tokio::test]
+async fn a_turn_that_only_read_a_file_did_not_change_it() {
+    let f = fixture("overlap-read", FakeAgentOptions::default());
+    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join("a.txt"), "a\n").unwrap();
+    let mut events = Vec::new();
+    for id in ["a", "b"] {
+        let (_, e) = f.create(id, "fake").unwrap();
+        e.wait_status("idle").await;
+        events.push(e);
+    }
+    let [a, b] = &events[..] else { unreachable!() };
+    f.sessions.send_prompt("a", text(&format!("look {} 400", f.path("a.txt")))).unwrap();
+    f.sessions.send_prompt("b", text(&format!("edit {} 400", f.path("a.txt")))).unwrap();
+    for e in [a, b] {
+        e.kind_seen("tool_call_update").await;
+    }
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    for e in [a, b] {
+        assert!(!lock(&e.events).iter().any(|e| e.kind == "overlap"), "a only read a.txt");
+        e.wait_turn_end().await;
+    }
 }
 
 #[tokio::test]

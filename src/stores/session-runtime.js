@@ -77,7 +77,20 @@ export function setSessionNotice(sessionId, notice) {
   const { [sessionId]: current, ...rest } = $sessionNotices.get();
   if (notice === null) {
     if (current) $sessionNotices.set(rest);
-  } else if (current?.kind !== notice.kind || current.message !== notice.message || current.holder?.id !== notice.holder?.id) {
+  } else if (
+    current?.kind !== notice.kind ||
+    current.message !== notice.message ||
+    current.holder?.id !== notice.holder?.id ||
+    current.under !== notice.under
+  ) {
     $sessionNotices.set({ ...rest, [sessionId]: notice });
   }
+}
+
+/**
+ * Takes the session's notice away; an overlap's gives way to the one it covered.
+ * @param {string} sessionId
+ */
+export function dismissSessionNotice(sessionId) {
+  setSessionNotice(sessionId, $sessionNotices.get()[sessionId]?.under ?? null);
 }

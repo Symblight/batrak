@@ -85,6 +85,7 @@ pub fn run() {
             commands::agents::agents_restore,
             commands::agents::agents_import_user,
             commands::agents::workspace_settings,
+            commands::agents::workspace_settings_set,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
             commands::agents::agents_trust,

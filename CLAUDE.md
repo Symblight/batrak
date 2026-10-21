@@ -217,7 +217,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
   agents.json drop it from the queue (cancelled, never reaching the agent). Worktree sessions
   never queue, and neither do local ones with `.brama/workspace.json` `"localTurns":
-  "parallel"` (read at each turn). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
+  "parallel"` (read at each turn; Settings' Agents section sets it, `workspace_settings_set`,
+  keeping the file's other keys). Then the files each turn's tool calls name (locations, diffs)
+  are its `touched`, and a watcher batch of the project (`Sessions::note_changes`, from
+  `Workspaces::open`'s callback; none for a project whose root isn't open) naming one that two
+  running turns touched sends each an `overlap` (once per file per turn; a banner notice until
+  the turn ends). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
   `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
   builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
   branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`

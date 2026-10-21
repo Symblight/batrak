@@ -35,6 +35,26 @@ pub async fn workspace_settings(project_path: String) -> Result<crate::config::W
     .await?
 }
 
+/// Sets how the project's local sessions share its checkout (`localTurns` in
+/// `.brama/workspace.json`, the rest of it kept); the settings as they are then.
+#[tauri::command]
+pub async fn workspace_settings_set(
+    project_path: String,
+    local_turns: crate::config::LocalTurns,
+) -> Result<crate::config::WorkspaceSettings, String> {
+    let project = blocking({
+        let project_path = project_path.clone();
+        move || {
+            let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
+            crate::config::set_local_turns(&project, local_turns)?;
+            tracing::info!(project = %project.display(), ?local_turns, "local turns set");
+            Ok::<_, String>(project)
+        }
+    })
+    .await??;
+    workspace_settings(project.to_string_lossy().into_owned()).await
+}
+
 /// The agents.json "Add ACP agent…" opens: the project's `.brama/agents.json`, or the user's
 /// without a project; created with the defaults when missing. Absolute path.
 #[tauri::command]

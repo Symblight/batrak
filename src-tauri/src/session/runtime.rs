@@ -1,7 +1,7 @@
 //! Running sessions: lifecycle (draft → preparing → starting → idle ⇄ working → stopped, any →
 //! error), turns, permissions, and the event stream to the frontend.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -177,6 +177,12 @@ struct SessionState {
     /// says otherwise (`agent-outdated`).
     running: Mutex<Option<LaunchConfig>>,
     outdated: AtomicBool,
+    /// Files the running turn's tool calls changed (host paths: diffs, and locations of calls that
+    /// don't only look), and those of them it was told another running turn changed too
+    /// (`overlap`). Cleared at turn start, with the kinds of its tool calls by id.
+    touched: Mutex<HashSet<PathBuf>>,
+    overlaps: Mutex<HashSet<PathBuf>>,
+    tool_kinds: Mutex<HashMap<String, String>>,
 }
 
 impl SessionState {
@@ -408,6 +414,37 @@ impl Sessions {
             lock(&self.inner.sessions).values().filter(|s| lock(&s.record).project_path == project).cloned().collect();
         for state in states {
             self.inner.check_agent(&state).await;
+        }
+    }
+
+    /// Files that changed in a project (root-relative, a watcher batch): each one the tool calls of
+    /// two or more running local turns named is reported to each of them (`overlap`, naming
+    /// another), once per file per turn. A change no tool call names is nobody's.
+    pub fn note_changes(&self, project: &Path, changed: &[String]) {
+        let turns: Vec<_> = lock(&self.inner.sessions)
+            .values()
+            .filter(|s| {
+                let record = lock(&s.record);
+                record.mode == Mode::Local && record.project_path == project && s.recording.load(Ordering::SeqCst)
+            })
+            .cloned()
+            .collect();
+        if turns.len() < 2 {
+            return;
+        }
+        for rel in changed {
+            let path = project.join(rel);
+            let by: Vec<_> = turns.iter().filter(|s| lock(&s.touched).contains(&path)).collect();
+            if by.len() < 2 {
+                continue;
+            }
+            for state in &by {
+                let Some(other) = by.iter().find(|o| o.id != state.id) else { continue };
+                if lock(&state.overlaps).insert(path.clone()) {
+                    tracing::info!(session = %state.id, other = %other.id, path = %rel, "two running turns changed one file");
+                    state.emit("overlap", json!({ "path": rel, "other": { "id": other.id, "title": other.record().title } }));
+                }
+            }
         }
     }
 
@@ -792,6 +829,9 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
         unconfigured: Mutex::new(None),
         running: Mutex::new(None),
         outdated: AtomicBool::new(false),
+        touched: Mutex::default(),
+        overlaps: Mutex::default(),
+        tool_kinds: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),
@@ -1205,11 +1245,16 @@ impl Inner {
         let blocks = tokio::task::spawn_blocking(move || prompt_blocks(&*env, prompt))
             .await
             .map_err(|e| e.to_string())??;
+        lock(&state.touched).clear();
+        lock(&state.overlaps).clear();
+        lock(&state.tool_kinds).clear();
         state.recording.store(true, Ordering::SeqCst);
         state.emit("turn-start", json!({}));
         self.set_status(state, SessionStatus::Working, None);
         // HOOK(git): checkpoint before the turn. `turn_running` is set, so the git layer can
-        // snapshot the session's folder here and refuse user mutations until the turn ends.
+        // snapshot the session's folder here and refuse user mutations until the turn ends. Not
+        // for a local session without a slot (`_slot` is `None`: `localTurns: "parallel"`): other
+        // turns write the same checkout meanwhile, so a checkpoint couldn't say whose change is whose.
         let stop_reason = conn.prompt(blocks).await?;
         // HOOK(git): checkpoint after the turn, while `turn_running` is still set.
         Ok(stop_reason)
@@ -1476,6 +1521,28 @@ impl SessionHost {
         state.emit("session", serde_json::to_value(session).unwrap_or_default());
     }
 
+    /// The files a tool call changes, as the turn's: its diffs, and its locations unless its kind
+    /// (sent once, usually with `tool_call`) only looks at them.
+    fn note_touched(&self, state: &SessionState, update: &Value) {
+        let Some(env) = lock(&state.env).clone() else { return };
+        let looks = {
+            let mut kinds = lock(&state.tool_kinds);
+            let id = update["toolCallId"].as_str().unwrap_or_default();
+            if let Some(kind) = update["kind"].as_str() {
+                kinds.insert(id.to_owned(), kind.to_owned());
+            }
+            kinds.get(id).is_some_and(|kind| LOOKING_TOOL_KINDS.contains(&kind.as_str()))
+        };
+        let locations =
+            update["locations"].as_array().into_iter().flatten().filter(|_| !looks).map(|l| &l["path"]);
+        let diffs = update["content"].as_array().into_iter().flatten().filter(|c| c["type"] == "diff").map(|c| &c["path"]);
+        let named = locations.chain(diffs).filter_map(Value::as_str).filter_map(|path| {
+            let path = env.agent_cwd().join(path);
+            env.to_host_path(&path).ok()
+        });
+        lock(&state.touched).extend(named);
+    }
+
     fn env(&self) -> Result<Arc<dyn SessionEnv>, FsError> {
         let state = self.state.upgrade().ok_or_else(|| FsError::Io("the session is gone".to_owned()))?;
         let env = lock(&state.env).clone();
@@ -1497,6 +1564,9 @@ impl SessionHost {
     }
 }
 
+/// ACP tool kinds whose locations are files read, not changed.
+const LOOKING_TOOL_KINDS: [&str; 4] = ["read", "search", "fetch", "think"];
+
 impl ClientHost for SessionHost {
     fn on_update(&self, update: Value) {
         let Some(state) = self.state.upgrade() else { return };
@@ -1508,6 +1578,9 @@ impl ClientHost for SessionHost {
             if let Some(title) = update.get("title") {
                 self.on_agent_title(&state, title.as_str());
             }
+        }
+        if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
+            self.note_touched(&state, &update);
         }
         state.emit("update", update);
         if let Some(options) = options {

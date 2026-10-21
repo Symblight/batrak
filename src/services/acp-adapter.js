@@ -9,6 +9,7 @@ import {
   $sessionNotices,
   addPermissionRequest,
   clearPermissionRequests,
+  dismissSessionNotice,
   markUnread,
   setSessionNotice,
 } from '../stores/session-runtime.js';
@@ -394,6 +395,14 @@ export function handleSessionEvent(event) {
       setSessionNotice(sessionId, { kind: 'queued', message, holder });
       return;
     }
+    case 'overlap': {
+      const { path, other } = event.payload;
+      const current = $sessionNotices.get()[sessionId];
+      const under = current?.kind === 'overlap' ? current.under : current?.kind === 'info' || current?.kind === 'outdated' ? current : undefined;
+      const message = `${path} was also changed by "${other.title}"`;
+      setSessionNotice(sessionId, under ? { kind: 'overlap', message, under } : { kind: 'overlap', message });
+      return;
+    }
     case 'turn-start': {
       endReplay(sessionId);
       const turn = turns.get(sessionId);
@@ -405,6 +414,7 @@ export function handleSessionEvent(event) {
       markUnread(sessionId);
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
+      if ($sessionNotices.get()[sessionId]?.kind === 'overlap') dismissSessionNotice(sessionId);
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
       return;
     case 'session':
@@ -417,8 +427,14 @@ export function handleSessionEvent(event) {
       return;
     case 'agent-outdated': {
       const { message } = event.payload;
-      if (message !== null) setSessionNotice(sessionId, { kind: 'outdated', message });
-      else if ($sessionNotices.get()[sessionId]?.kind === 'outdated') setSessionNotice(sessionId, null);
+      const current = $sessionNotices.get()[sessionId];
+      if (current?.kind === 'overlap') {
+        // Under the overlap until the turn ends.
+        const { under, ...overlap } = current;
+        if (message !== null) setSessionNotice(sessionId, { ...overlap, under: { kind: 'outdated', message } });
+        else if (under?.kind === 'outdated') setSessionNotice(sessionId, overlap);
+      } else if (message !== null) setSessionNotice(sessionId, { kind: 'outdated', message });
+      else if (current?.kind === 'outdated') setSessionNotice(sessionId, null);
       return;
     }
     case 'unconfigured':
@@ -454,8 +470,8 @@ function noticeOf(sessionId, status, message) {
   const current = $sessionNotices.get()[sessionId] ?? null;
   // The `queued` event says what it waits for.
   if (status === 'queued' && current?.kind === 'queued') return current;
-  // Information and a changed launch stay through the session's turns.
-  return current?.kind === 'info' || current?.kind === 'outdated' ? current : null;
+  // Information and a changed launch stay through the session's turns, an overlap through its turn.
+  return current?.kind === 'info' || current?.kind === 'outdated' || current?.kind === 'overlap' ? current : null;
 }
 
 /**

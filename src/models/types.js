@@ -122,6 +122,7 @@
  *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }
  *   | { kind: 'turn-start', payload: Record<string, never> }
  *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
+ *   | { kind: 'overlap', payload: { path: string, other: { id: string, title: string } } }
  *   | { kind: 'turn-end', payload: { stopReason: string } }
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
@@ -185,10 +186,12 @@
  * What the chat says about a session above its composer: the agent starting, an error (with
  * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued'} kind `outdated`: agents.json
- *   changed what the running agent runs; Restart picks it up. `queued`: the turn waits for `holder`'s.
+ * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued' | 'overlap'} kind `outdated`:
+ *   agents.json changed what the running agent runs; Restart picks it up. `queued`: the turn waits for
+ *   `holder`'s. `overlap`: another running turn changed a file this one did, until the turn ends.
  * @property {string} message
  * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
+ * @property {SessionNotice} [under] `overlap`: the `info` / `outdated` notice it covers, back when it goes.
  */
 
 /**

@@ -65,6 +65,16 @@ fn agents_changed(app: &AppHandle, project: &Path) {
     }
 }
 
+/// Files changed in a project: running local turns that both changed one hear of it.
+fn sessions_changed(app: &AppHandle, project: &Path, changes: &Changes) {
+    use tauri::Manager;
+    let Some(sessions) = app.try_state::<crate::session::Sessions>() else { return };
+    let changed: Vec<String> = changes.added.iter().chain(&changes.modified).chain(&changes.removed).cloned().collect();
+    if !changed.is_empty() {
+        sessions.note_changes(project, &changed);
+    }
+}
+
 pub struct Root {
     pub id: String,
     pub path: PathBuf,
@@ -164,6 +174,7 @@ impl Workspaces {
             if changes.config {
                 agents_changed(&app, &root.path);
             }
+            sessions_changed(&app, &root.path, &changes);
             let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
         });
         self.end_open(group, &cancel);

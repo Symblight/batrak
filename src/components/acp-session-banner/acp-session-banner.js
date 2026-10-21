@@ -12,7 +12,7 @@ const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
  * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
@@ -111,7 +111,7 @@ export class AcpSessionBanner extends LitElement {
       ?hidden=${!shown}
       .label=${label}
       .variant=${variant}
-      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated')}
+      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap')}
       @chx-input-mode-banner-dismiss=${() => this.#act('dismiss-notice')}
     >
       ${request ? this.#renderPermission(request) : notice ? this.#renderNoticeActions(notice) : nothing}
