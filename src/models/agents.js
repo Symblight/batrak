@@ -69,8 +69,9 @@ export function parseCommandLine(line) {
 /**
  * What Settings says of an agent: off, ready (it has answered `initialize`), or not started yet.
  * @param {AgentSummary} agent
- * @returns {{ kind: 'ready' | 'unknown', label: string }}
+ * @returns {{ kind: 'off' | 'ready' | 'unknown', label: string }}
  */
 export function agentStatus(agent) {
+  if (!agent.enabled) return { kind: 'off', label: 'Off' };
   return agent.version ? { kind: 'ready', label: 'Ready' } : { kind: 'unknown', label: 'Not started yet' };
 }

@@ -437,9 +437,14 @@ export function handleSessionEvent(event) {
       else if (current?.kind === 'outdated') setSessionNotice(sessionId, null);
       return;
     }
-    case 'unconfigured':
-      // After the `error` status, whose notice says so: the backend starts it again once agents.json has the agent.
+    case 'unconfigured': {
+      // After the `error` status, whose notice says so: the backend starts it again once agents.json has the agent
+      // (or it's turned on again, which the notice offers).
+      const { agentId, reason } = event.payload;
+      const current = $sessionNotices.get()[sessionId];
+      if (reason === 'off' && current?.kind === 'error') setSessionNotice(sessionId, { ...current, offAgent: agentId });
       return;
+    }
     case 'error':
       if (event.payload.turn) {
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.

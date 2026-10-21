@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { live } from 'lit/directives/live.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/checkbox';
@@ -7,6 +8,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select';
+import '@symblight/wc-material/switch';
 import '@symblight/wc-material/text-field';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
@@ -30,9 +32,10 @@ import styles from './acp-settings-agents.css?inline';
 
 /**
  * @tag acp-settings-agents
- * @summary Settings' Agents section: the configured agents, each with a menu (Edit, Set as default, Remove), and the form to add or edit an ACP agent (a known one or any command).
+ * @summary Settings' Agents section: the configured agents, each with an on/off switch and a menu (Edit, Set as default, Remove), and the form to add or edit an ACP agent (a known one or any command).
  * @fires acp-agent-add `{ agent }` A `NewAgent`; the container answers with `saveFinished()`.
  * @fires acp-agent-update `{ agentId, agent }` A `NewAgent`; the container answers with `saveFinished()`.
+ * @fires acp-agent-enable `{ agentId, enabled }`
  * @fires acp-agent-default `{ agentId }`
  * @fires acp-agent-remove `{ agentId }`
  * @fires acp-agents-import `null` Copy the user's own agents into the project.
@@ -241,8 +244,10 @@ export class AcpSettingsAgents extends LitElement {
       @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(agent, e)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(agent, e)}
     >
-      <span class="acp-settings-agents__glyph" aria-hidden="true">${glyphOf(agent.name)}</span>
-      <div class="acp-settings-agents__text">
+      <span class=${classMap({ 'acp-settings-agents__glyph': true, 'acp-settings-agents__glyph_off': !agent.enabled })} aria-hidden="true"
+        >${glyphOf(agent.name)}</span
+      >
+      <div class=${classMap({ 'acp-settings-agents__text': true, 'acp-settings-agents__text_off': !agent.enabled })}>
         <div class="acp-settings-agents__title">
           <span class="acp-settings-agents__name">${agent.name}</span>
           ${isDefault ? html`<span class="acp-settings-agents__default" title="New sessions start with it">Default</span>` : nothing}
@@ -258,6 +263,14 @@ export class AcpSettingsAgents extends LitElement {
           <span>${status.label}</span>
         </div>
       </div>
+      <md-switch
+        class="acp-settings-agents__switch"
+        aria-label=${`${agent.name} on`}
+        title=${agent.enabled ? 'Turn off: no new sessions, and its sessions stop' : 'Turn on'}
+        .selected=${live(agent.enabled)}
+        @change=${(/** @type {Event} */ e) =>
+          this.#emit('acp-agent-enable', { agentId: agent.id, enabled: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.currentTarget).selected })}
+      ></md-switch>
       <md-icon-button
         class=${classMap({ 'acp-settings-agents__more': true, 'acp-settings-agents__more_shown': showMore })}
         title="Agent menu"
@@ -349,6 +362,8 @@ export class AcpSettingsAgents extends LitElement {
   #renderMenu() {
     const agent = this.#menu.target;
     const isDefault = agent !== null && agent.id === this.agents?.defaultAgent;
+    // The backend refuses an agent that's off.
+    const canDefault = agent !== null && agent.enabled && !isDefault;
     return html`<md-menu
       class="acp-settings-agents__menu"
       placement="bottom-end"
@@ -361,7 +376,7 @@ export class AcpSettingsAgents extends LitElement {
           <md-icon slot="leading" class="acp-settings-agents__menu-icon">${unsafeSVG(editIcon)}</md-icon>
           Edit
         </md-menu-item>
-        <md-menu-item class="acp-settings-agents__menu-item" value="default" ?disabled=${isDefault}>
+        <md-menu-item class="acp-settings-agents__menu-item" value="default" ?disabled=${!canDefault}>
           <md-icon slot="leading" class="acp-settings-agents__menu-icon">${unsafeSVG(starIcon)}</md-icon>
           Set as default
         </md-menu-item>

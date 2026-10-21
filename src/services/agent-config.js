@@ -7,6 +7,7 @@ import {
   agentsRemove,
   agentsRestore,
   agentsSetDefault,
+  agentsSetEnabled,
   agentsUpdate,
   onAgentsChanged,
 } from './ipc.js';
@@ -100,6 +101,22 @@ export class AgentConfig {
       await agentsSetDefault($workspacePath.get(), agentId);
     } catch (err) {
       reportError('Setting the default agent failed', err);
+    }
+  }
+
+  /**
+   * Turns an agent on or off for this user; turning it off stops its sessions (after their running
+   * turns), which the snackbar counts.
+   * @param {string} agentId
+   * @param {boolean} enabled
+   */
+  async setEnabled(agentId, enabled) {
+    const name = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? agentId;
+    try {
+      const stopped = await agentsSetEnabled($workspacePath.get(), agentId, enabled);
+      if (stopped > 0) notify('info', `${name} off · ${stopped} ${stopped === 1 ? 'session' : 'sessions'} stopped`);
+    } catch (err) {
+      reportError(`Turning ${name} ${enabled ? 'on' : 'off'} failed`, err);
     }
   }
 

@@ -108,14 +108,14 @@ export function normalizeOptions(options) {
 }
 
 /**
- * @param {{ id: string, name: string }} agent
+ * @param {{ id: string, name: string, enabled?: boolean }} agent
  * @returns {CatalogAgent}
  */
-function catalogEntry({ id, name }) {
-  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false };
+function catalogEntry({ id, name, enabled = true }) {
+  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false, off: !enabled };
 }
 
-/** The agents the project can run (`$agentList`), each with its config options as last seen. */
+/** The project's agents (`$agentList`), each with its config options as last seen; `off` ones aren't offered. */
 export const $agents = computed([$agentList, $agentOptions], (list) =>
   list.agents.map(catalogEntry),
 );
@@ -169,7 +169,7 @@ const $lastAgentId = atom(/** @type {string | null} */ (null));
 
 /** The agent a new session starts with: the last picked, else the config's default, else the first, else none. */
 const $newSessionAgentId = computed([$lastAgentId, $agentList], (last, list) => {
-  const runnable = list.agents.map((a) => a.id);
+  const runnable = list.agents.filter((a) => a.enabled).map((a) => a.id);
   if (last !== null && runnable.includes(last)) return last;
   if (list.defaultAgent !== null && runnable.includes(list.defaultAgent)) return list.defaultAgent;
   return runnable[0] ?? null;
@@ -190,9 +190,9 @@ export const $composer = computed(
  */
 export function composerOf(id) {
   const stored = $composers.get()[id];
-  // A draft whose agent is gone (none yet, or removed from agents.json since) gets the
+  // A draft whose agent is gone (none yet, removed from agents.json or turned off since) gets the
   // one a new session would, keeping where it runs.
-  const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId);
+  const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId && !a.off);
   if (stored && gone && stored.agentId !== $newSessionAgentId.get()) {
     return withDefaultTarget({ ...freshState($newSessionAgentId.get()), runTarget: stored.runTarget, runTargetPicked: stored.runTargetPicked });
   }

@@ -12,11 +12,12 @@ const LIST = {
       name: 'Claude Code',
       scope: 'user',
       version: '0.9.2',
+      enabled: true,
       command: 'npx',
       args: ['-y', '@agentclientprotocol/claude-agent-acp'],
     },
-    { id: 'repo', name: 'Repo agent', scope: 'project', version: null, command: './run', args: ['--acp'] },
-    { id: 'local', name: 'Local', scope: 'user', version: null, command: 'local', args: [] },
+    { id: 'repo', name: 'Repo agent', scope: 'project', version: null, enabled: true, command: './run', args: ['--acp'] },
+    { id: 'local', name: 'Local', scope: 'user', version: null, enabled: true, command: 'local', args: [] },
   ],
   defaultAgent: 'claude-code',
   known: [
@@ -111,7 +112,27 @@ describe('acp-settings-agents', () => {
     ]);
     const details = rows.map((r) => r.querySelector('.acp-settings-agents__details')?.textContent?.replace(/\s+/g, ' ').trim());
     expect(details).to.deep.equal(['ACP · 0.9.2 · Ready', 'ACP · Not started yet', 'ACP · Not started yet']);
-    expect(root.querySelector('md-switch'), 'no on/off: Remove takes an agent out').to.equal(null);
+  });
+
+  it('turns an agent on and off with its switch', async () => {
+    const agents = LIST.agents.map((a) => (a.id === 'repo' ? { ...a, enabled: false } : a));
+    const { el, root } = await render({ ...LIST, agents });
+    const switches = /** @type {HTMLElementTagNameMap['md-switch'][]} */ ([...root.querySelectorAll('md-switch')]);
+    expect(switches.map((s) => s.selected)).to.deep.equal([true, false, true]);
+    const repo = root.querySelectorAll('.acp-settings-agents__row')[1];
+    expect(repo.querySelector('.acp-settings-agents__details')?.textContent?.replace(/\s+/g, ' ').trim()).to.equal('ACP · Off');
+
+    /** @type {unknown[]} */
+    const fired = [];
+    el.addEventListener('acp-agent-enable', (e) => fired.push(/** @type {CustomEvent} */ (e).detail));
+    switches[0].selected = false;
+    switches[0].dispatchEvent(new Event('change', { bubbles: true }));
+    switches[1].selected = true;
+    switches[1].dispatchEvent(new Event('change', { bubbles: true }));
+    expect(fired).to.deep.equal([
+      { agentId: 'claude-code', enabled: false },
+      { agentId: 'repo', enabled: true },
+    ]);
   });
 
   it('adds a known agent with its own command, which the backend fills in', async () => {
@@ -294,7 +315,7 @@ describe('acp-settings-agents', () => {
   });
 
   it('offers to add the agents of the user\'s own agents.json to the project', async () => {
-    const mine = { id: 'mine', name: 'Mine', scope: /** @type {const} */ ('user'), version: null, command: 'mine', args: [] };
+    const mine = { id: 'mine', name: 'Mine', scope: /** @type {const} */ ('user'), version: null, enabled: true, command: 'mine', args: [] };
     const { el, root } = await render({ ...LIST, userAgents: [mine] });
     const box = /** @type {HTMLElement} */ (root.querySelector('.acp-settings-agents__elsewhere'));
     expect(box.textContent?.replace(/\s+/g, ' ')).to.contain('Mine is in your own agents.json');

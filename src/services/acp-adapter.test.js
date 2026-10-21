@@ -37,6 +37,15 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id]).to.include({ kind: 'error', message });
   });
 
+  it('offers to turn a session\'s agent back on when the user turned it off', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'codex', config: {}, mode: 'local' });
+    const message = 'Codex is off';
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'codex', message, ran: null, reason: 'off' } });
+    expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'error', message, offAgent: 'codex' });
+  });
+
   it('keeps the notice that agents.json changed the running agent until it is restarted or changed back', () => {
     const id = newSession('/p');
     startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });

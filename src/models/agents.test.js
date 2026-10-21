@@ -23,14 +23,18 @@ describe('agents', () => {
     expect(parseCommandLine('  ')).to.deep.equal({ command: '', args: [] });
   });
 
-  it('says whether an agent has run, or has not yet', () => {
-    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: '1.0.0', command: 'a', args: [] })).to.deep.equal({
+  it('says whether an agent has run, or has not yet, or is off', () => {
+    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: '1.0.0', enabled: true, command: 'a', args: [] })).to.deep.equal({
       kind: 'ready',
       label: 'Ready',
     });
-    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: null, command: 'a', args: [] })).to.deep.equal({
+    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: null, enabled: true, command: 'a', args: [] })).to.deep.equal({
       kind: 'unknown',
       label: 'Not started yet',
+    });
+    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: '1.0.0', enabled: false, command: 'a', args: [] })).to.deep.equal({
+      kind: 'off',
+      label: 'Off',
     });
   });
 });

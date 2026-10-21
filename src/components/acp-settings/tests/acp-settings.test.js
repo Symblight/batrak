@@ -7,7 +7,7 @@ import '../acp-settings.js';
 
 /** @type {AgentList} */
 const AGENTS = {
-  agents: [{ id: 'a', name: 'A', scope: 'user', version: null, command: 'a', args: [] }],
+  agents: [{ id: 'a', name: 'A', scope: 'user', version: null, enabled: true, command: 'a', args: [] }],
   defaultAgent: 'a',
   known: [],
   userAgents: [],

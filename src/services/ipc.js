@@ -243,6 +243,18 @@ export function agentsUpdate(projectPath, agentId, agent) {
 }
 
 /**
+ * Turns an agent of the project's agents.json (the user's without a project) on or off for this
+ * user; the file isn't touched.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @param {boolean} enabled
+ * @returns {Promise<number>} How many of the project's sessions turning it off stops.
+ */
+export function agentsSetEnabled(projectPath, agentId, enabled) {
+  return invoke('agents_set_enabled', { projectPath, agentId, enabled });
+}
+
+/**
  * Makes an agent the default for new sessions (the project's agents.json, else the user's).
  * @param {string | null} projectPath
  * @param {string} agentId

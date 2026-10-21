@@ -36,7 +36,7 @@ export class AcpAgentPicker extends LitElement {
     super();
     /** @type {ComposerState | null} The active session's. */
     this.composer = null;
-    /** @type {readonly CatalogAgent[]} Every agent the project can run. */
+    /** @type {readonly CatalogAgent[]} Every agent of the project; `off` ones aren't offered. */
     this.agents = [];
     /** @type {AgentInfo | null} The composer's agent. */
     this.agent = null;
@@ -90,10 +90,15 @@ export class AcpAgentPicker extends LitElement {
     return html`<span class="acp-agent-picker__glyph" slot=${slot}>${agent.glyph}</span>`;
   }
 
+  /** The agents a draft can pick: those not turned off. */
+  get #offered() {
+    return this.agents.filter((a) => !a.off);
+  }
+
   /** @param {ComposerState} composer */
   #renderAgentsMenu({ agentId, configOptions }) {
     return html`
-      ${this.agents.length ? this.#renderAgentsGroup(agentId, configOptions) : nothing}
+      ${this.#offered.length ? this.#renderAgentsGroup(agentId, configOptions) : nothing}
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" value="" data-action="add-agent">
           <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
@@ -110,7 +115,7 @@ export class AcpAgentPicker extends LitElement {
   #renderAgentsGroup(agentId, configOptions) {
     return html`
       <md-menu-group label="Agent">
-        ${this.agents.map((agent) => {
+        ${this.#offered.map((agent) => {
           const current = agent.id === agentId;
           const options = current ? configOptions : agent.configOptions;
           return html`
@@ -139,7 +144,9 @@ export class AcpAgentPicker extends LitElement {
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" disabled>
           ${this.#renderGlyph(agent)} ${agent.name}
-          <span slot="supporting-text">${agent.removed ? 'No longer in agents.json' : 'Fixed for this session'}</span>
+          <span slot="supporting-text"
+            >${agent.removed ? 'No longer in agents.json' : agent.off ? 'Turned off' : 'Fixed for this session'}</span
+          >
           <md-icon slot="trailing" class="acp-agent-picker__lock">${unsafeSVG(lockIcon)}</md-icon>
         </md-menu-item>
       </md-item-group>
@@ -190,7 +197,7 @@ export class AcpAgentPicker extends LitElement {
     return html`
       ${this.#renderGlyph(agent, 'icon')}
       <span class="acp-agent-picker__label">
-        <span class="acp-agent-picker__agent">${agent.name}${agent.removed ? ' (removed)' : ''}${model ? ' ·' : ''}</span>
+        <span class="acp-agent-picker__agent">${agent.name}${agent.removed ? ' (removed)' : agent.off ? ' (off)' : ''}${model ? ' ·' : ''}</span>
         <span class="acp-agent-picker__model">${model}</span>
         ${level
           ? html`<span class="acp-agent-picker__level">

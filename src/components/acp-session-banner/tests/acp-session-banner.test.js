@@ -18,6 +18,19 @@ describe('acp-session-banner', () => {
     expect(acted).to.deep.equal(['restart']);
   });
 
+  it('offers Turn on instead of Restart when the user turned the agent off', async () => {
+    const notice = { kind: /** @type {const} */ ('error'), message: 'Codex is off', offAgent: 'codex' };
+    const el = await fixture(html`<acp-session-banner .notice=${notice} .permission=${null}></acp-session-banner>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const buttons = [...root.querySelectorAll('md-button')];
+    expect(buttons.map((b) => b.textContent?.trim())).to.deep.equal(['Open log', 'Turn on']);
+    /** @type {unknown[]} */
+    const acted = [];
+    el.addEventListener('acp-session-action', (/** @type {Event} */ e) => acted.push(/** @type {CustomEvent} */ (e).detail.action));
+    /** @type {HTMLElement} */ (buttons[1]).click();
+    expect(acted).to.deep.equal(['turn-on-agent']);
+  });
+
   it('links a queued turn to the session it waits for', async () => {
     const notice = { kind: /** @type {const} */ ('queued'), message: 'Waiting for "Fix the tree" to finish', holder: { id: 'a', title: 'Fix the tree' } };
     const el = await fixture(html`<acp-session-banner .notice=${notice} .permission=${null}></acp-session-banner>`);

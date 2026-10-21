@@ -127,7 +127,7 @@
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
  *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
- *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null } }
+ *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null, reason?: 'removed' | 'off' } }
  *   | { kind: 'agent-outdated', payload: { message: string | null } }
  *   | { kind: 'session', payload: Session }
  * )} SessionEnvelope
@@ -192,6 +192,7 @@
  * @property {string} message
  * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
  * @property {SessionNotice} [under] `overlap`: the `info` / `outdated` notice it covers, back when it goes.
+ * @property {string} [offAgent] `error`: the user turned this agent off; Turn on starts the session again.
  */
 
 /**
@@ -201,6 +202,7 @@
  * @property {string} name
  * @property {'user' | 'project'} scope The agents.json that chose what it runs.
  * @property {string | null} version `agentInfo.version` from its last `initialize`.
+ * @property {boolean} enabled Not turned off by the user; only these are offered and started.
  * @property {string} command What it runs, for the edit form.
  * @property {string[]} args
  */
@@ -639,6 +641,7 @@
  * @property {string} name
  * @property {string} glyph One or two letters for its badge.
  * @property {boolean} [removed] No longer in agents.json (a started session's).
+ * @property {boolean} [off] Turned off by the user: not offered, not started.
  */
 
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */

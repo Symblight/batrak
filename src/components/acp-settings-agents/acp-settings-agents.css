@@ -57,6 +57,11 @@
     background: var(--state-hover);
   }
 }
+/* Off: its name and glyph fade; the switch and menu keep full contrast. */
+.acp-settings-agents__glyph_off,
+.acp-settings-agents__text_off {
+  opacity: 0.6;
+}
 .acp-settings-agents__glyph {
   flex: none;
   display: flex;
@@ -115,8 +120,12 @@
 .acp-settings-agents__dot_ready {
   background: var(--vcs-add);
 }
-.acp-settings-agents__dot_unknown {
+.acp-settings-agents__dot_unknown,
+.acp-settings-agents__dot_off {
   background: var(--md-outline);
+}
+.acp-settings-agents__switch {
+  flex: none;
 }
 /* Shown while its row is hovered or focused, or its menu is open; kept in the layout so rows don't shift. */
 .acp-settings-agents__more {

@@ -5,14 +5,14 @@ import styles from './acp-session-banner.css?inline';
 
 /** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
-/** @typedef {'open-log' | 'restart' | 'dismiss-notice'} SessionAction */
+/** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */
 const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log (Turn on for an agent the user turned off), stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
  * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
@@ -66,9 +66,13 @@ export class AcpSessionBanner extends LitElement {
         <md-button slot="actions" class="acp-session-banner__action" variant="text" @click=${() => this.#act('open-log')}>
           Open log
         </md-button>
-        <md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
-          Restart
-        </md-button>
+        ${notice.offAgent
+          ? html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('turn-on-agent')}>
+              Turn on
+            </md-button>`
+          : html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
+              Restart
+            </md-button>`}
       `;
     }
     if (notice.kind === 'outdated') {

@@ -328,6 +328,8 @@ export class AcpMainColumn extends LitElement {
         @acp-agents-import=${() => agentConfig.importUserAgents()}
         @acp-agent-add=${this.#onAgentSave}
         @acp-agent-update=${this.#onAgentSave}
+        @acp-agent-enable=${(/** @type {CustomEvent<{ agentId: string, enabled: boolean }>} */ e) =>
+          agentConfig.setEnabled(e.detail.agentId, e.detail.enabled)}
         @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
         @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
       ></acp-tab-view>

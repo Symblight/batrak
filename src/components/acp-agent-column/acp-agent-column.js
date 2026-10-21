@@ -10,6 +10,7 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
+import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
@@ -20,7 +21,7 @@ import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openSettings } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
-import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
+import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
@@ -149,6 +150,10 @@ export class AcpAgentColumn extends LitElement {
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
     else if (action === 'restart') sessionController.restart(id);
+    else if (action === 'turn-on-agent') {
+      const agentId = $sessionNotices.get()[id]?.offAgent;
+      if (agentId) agentConfig.setEnabled(agentId, true);
+    }
     else sessionController.dismissNotice(id);
   }
 
