@@ -378,6 +378,15 @@ export function openWorkspace(path) {
 }
 
 /**
+ * Scans a worktree session's folder for the Files tree and starts watching it.
+ * @param {string} sessionId
+ * @returns {Promise<OpenedRoot>}
+ */
+export function openSessionRoot(sessionId) {
+  return invoke('open_session_root', { sessionId });
+}
+
+/**
  * @param {string} rootId
  * @returns {Promise<void>}
  */

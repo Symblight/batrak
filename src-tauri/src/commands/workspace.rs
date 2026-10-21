@@ -52,6 +52,23 @@ pub async fn open_workspace(
     Ok(OpenedRoot { root_id: root.id.clone(), path: root.path.to_string_lossy().into_owned() })
 }
 
+/// Scans a worktree session's folder for the Files tree and starts watching it. Refused for a
+/// local session, or a worktree not checked out yet.
+#[tauri::command]
+pub async fn open_session_root(
+    app: AppHandle,
+    window: Window,
+    workspaces: State<'_, Workspaces>,
+    sessions: State<'_, crate::session::Sessions>,
+    session_id: String,
+) -> Result<OpenedRoot, String> {
+    let folder = sessions.worktree_folder(&session_id)?;
+    let workspaces = workspaces.inner().clone();
+    let group = window.label().to_owned();
+    let root = blocking(move || workspaces.open_session(app, &folder, &group)).await??;
+    Ok(OpenedRoot { root_id: root.id.clone(), path: root.path.to_string_lossy().into_owned() })
+}
+
 #[tauri::command]
 pub async fn close_workspace(workspaces: State<'_, Workspaces>, root_id: String) -> Result<(), String> {
     workspaces.close(&root_id);

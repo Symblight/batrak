@@ -246,6 +246,19 @@ impl Sessions {
         })
     }
 
+    /// A worktree session's folder (its agent's cwd), once it's checked out; the Files tree lists it.
+    pub fn worktree_folder(&self, id: &str) -> Result<PathBuf, String> {
+        let state = self.get(id)?;
+        let record = lock(&state.record);
+        if record.mode != Mode::Worktree {
+            return Err(format!("session {id} doesn't run in a worktree"));
+        }
+        if !record.agent_cwd.is_dir() {
+            return Err(format!("{}: the worktree isn't checked out", record.agent_cwd.display()));
+        }
+        Ok(record.agent_cwd.clone())
+    }
+
     fn get(&self, id: &str) -> Result<Arc<SessionState>, String> {
         lock(&self.inner.sessions).get(id).cloned().ok_or_else(|| format!("unknown session {id}"))
     }

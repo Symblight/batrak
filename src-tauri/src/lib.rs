@@ -98,6 +98,7 @@ pub fn run() {
             commands::fs::open_url,
             commands::log::write_log,
             commands::workspace::open_workspace,
+            commands::workspace::open_session_root,
             commands::workspace::close_workspace,
             commands::workspace::close_window_workspaces,
             commands::workspace::list_dir,

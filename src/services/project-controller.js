@@ -51,6 +51,11 @@ export class ProjectController extends EventTarget {
     }).catch((err) => reportError('File watching unavailable', err));
   }
 
+  /** Settles once the roots this window's previous page load left open are closed; open nothing before. */
+  get ready() {
+    return this.#ready;
+  }
+
   /** @returns {string | null} Canonical absolute path of the opened folder. */
   get path() {
     return $workspace.get()?.path ?? null;

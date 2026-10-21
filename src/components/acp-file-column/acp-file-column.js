@@ -5,9 +5,11 @@ import { gitController } from '../../services/git-controller.js';
 import { gitLastCommitMessage, listDir } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
 import { projectController } from '../../services/project-controller.js';
+import { sessionRootController } from '../../services/session-root-controller.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git.js';
 import { notify } from '../../stores/notices.js';
+import { $sessionRootOpening, $treeRoot } from '../../stores/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-file-tree/acp-file-tree.js';
 import '../acp-search-panel/acp-search-panel.js';
@@ -35,6 +37,8 @@ export class AcpFileColumn extends LitElement {
   #rootId = new StoreController(this, { store: $rootId });
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
+  #treeRoot = new StoreController(this, { store: $treeRoot });
+  #sessionRootOpening = new StoreController(this, { store: $sessionRootOpening });
   #expandedFolders = new StoreController(this, { store: $expandedFolders });
   /** Picks of files no longer changed are forgotten; not while a scan is pending, when the list is empty. */
   #gitChanges = new StoreController(this, {
@@ -52,8 +56,8 @@ export class AcpFileColumn extends LitElement {
   #unwatch = null;
 
   #onFsChange = (/** @type {Event} */ e) => {
-    const { dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
-    this.renderRoot.querySelector('acp-file-tree')?.reload(dirs);
+    const { rootId, dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+    if (rootId === $treeRoot.get().rootId) this.renderRoot.querySelector('acp-file-tree')?.reload(dirs);
   };
 
   constructor() {
@@ -65,11 +69,13 @@ export class AcpFileColumn extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     projectController.addEventListener('fs-change', this.#onFsChange);
+    sessionRootController.addEventListener('fs-change', this.#onFsChange);
     this.#watchChanges(this.sideView === 'changes');
   }
 
   disconnectedCallback() {
     projectController.removeEventListener('fs-change', this.#onFsChange);
+    sessionRootController.removeEventListener('fs-change', this.#onFsChange);
     this.#watchChanges(false);
     super.disconnectedCallback();
   }
@@ -105,7 +111,7 @@ export class AcpFileColumn extends LitElement {
 
   /**
    * Switches to Files and selects a file or folder there.
-   * @param {string} rel Root-relative.
+   * @param {string} rel Relative to the folder the tree lists (`$treeRoot`).
    * @param {{ expand?: boolean }} [options] Expand the folder itself too.
    */
   async reveal(rel, options) {
@@ -154,16 +160,18 @@ export class AcpFileColumn extends LitElement {
   render() {
     const root = this.#workspace.value?.path ?? null;
     const search = this.#search;
+    const tree = this.#treeRoot.value;
     return html`
       <h2 class="acp-file-column__title">${SIDE_TITLES[this.sideView]}</h2>
       <acp-file-tree
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'files'}
-        .rootId=${this.#rootId.value}
-        .root=${root}
+        .rootId=${tree.rootId}
+        .root=${tree.path}
+        .rootLabel=${tree.label}
         .listDir=${listDir}
         .expanded=${this.#expandedFolders.value}
-        .opening=${this.#openingPath.value !== null}
+        .opening=${this.#openingPath.value !== null || this.#sessionRootOpening.value}
         @acp-expanded-change=${(/** @type {CustomEvent<{ paths: string[] }>} */ e) => setExpandedFolders(e.detail.paths)}
       ></acp-file-tree>
       <acp-search-panel

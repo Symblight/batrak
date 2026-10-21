@@ -297,6 +297,23 @@
  */
 
 /**
+ * A worktree session's folder, open as a backend root for the Files tree.
+ * @typedef {Object} SessionRoot
+ * @property {string} sessionId
+ * @property {string} rootId
+ * @property {string} path Canonical; the session's folder (`Session.folder`).
+ * @property {string} label The worktree's folder name, the tree's root row.
+ */
+
+/**
+ * The folder the Files tree lists.
+ * @typedef {Object} TreeRoot
+ * @property {string | null} rootId `null` while none is open.
+ * @property {string | null} path
+ * @property {string | null} label A root row's: the worktree's name; `null` for the project (no row).
+ */
+
+/**
  * What Apply Locally did with a worktree session's work.
  * @typedef {{ outcome: 'empty' | 'clean' } | { outcome: 'conflicts', conflicts: string[] }} ApplyResult
  *   `conflicts`: files (relative to the repository) left with conflict markers by a three-way merge.

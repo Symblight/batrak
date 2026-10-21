@@ -83,7 +83,7 @@ pub async fn read_file_bytes(
     .await?
 }
 
-/// Saves an agents.json from the editor: a project's `.brama/agents.json` inside an opened root, or
+/// Saves an agents.json from the editor: a project's `.brama/agents.json` inside an opened project, or
 /// the user's. Nothing else is writable from the page yet. The agent list is re-read right away
 /// (`agents://changed`; `projectPath: null` for the user's file, which affects every project).
 #[tauri::command]
@@ -100,7 +100,7 @@ pub async fn write_file(
         let canonical = dunce::canonicalize(Path::new(&path)).map_err(|e| format!("{path}: {e}"))?;
         let is_user = Some(&canonical) == user_agents_file(&configs).as_ref();
         let project = crate::config::project_of_agents_file(&canonical)
-            .filter(|_| workspaces.contains(&canonical))
+            .filter(|_| workspaces.contains_project(&canonical))
             .map(Path::to_path_buf);
         if !is_user && project.is_none() {
             return Err(format!("{path}: only agents.json can be edited"));

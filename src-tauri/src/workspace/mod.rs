@@ -70,6 +70,8 @@ pub struct Root {
     pub path: PathBuf,
     /// The window that opened it; its roots close with it.
     group: String,
+    /// A worktree session's folder for the Files tree, not a project: its `.brama/` configures nothing.
+    session: bool,
     pub snapshot: RwLock<Snapshot>,
     watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
     /// Most recent first, at most `quick_open::RECENT_CAPACITY`.
@@ -134,6 +136,11 @@ impl Root {
     }
 }
 
+/// Cancel key of a window's session-root scans, apart from its project scans.
+fn session_key(group: &str) -> String {
+    format!("{group}:session")
+}
+
 /// Error of an open whose scan was cancelled by a newer open in the same group.
 pub const SUPERSEDED: &str = "superseded by a newer open";
 
@@ -153,13 +160,26 @@ impl Workspaces {
     /// [`SUPERSEDED`]. Blocking: call off the main thread.
     pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
         let cancel = self.begin_open(group);
-        let result = self.open_with(path, group, &cancel, move |root, changes| {
+        let result = self.open_with(path, group, &cancel, false, move |root, changes| {
             if changes.config {
                 agents_changed(&app, &root.path);
             }
             let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
         });
         self.end_open(group, &cancel);
+        result
+    }
+
+    /// Opens a worktree session's folder for the Files tree, in `group` so it closes with the
+    /// window. Its scan has its own cancel key: it neither cancels nor is cancelled by a project's.
+    /// Its `.brama/agents.json` is the branch's copy, so a change there reloads no agents. Blocking.
+    pub fn open_session(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
+        let key = session_key(group);
+        let cancel = self.begin_open(&key);
+        let result = self.open_with(path, group, &cancel, true, move |root, changes| {
+            let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
+        });
+        self.end_open(&key, &cancel);
         result
     }
 
@@ -185,6 +205,7 @@ impl Workspaces {
         path: &Path,
         group: &str,
         cancel: &AtomicBool,
+        session: bool,
         on_change: impl Fn(&Root, Changes) + Send + 'static,
     ) -> Result<Arc<Root>, String> {
         // FSEvents reports canonical paths (e.g. /private/var), so the root must be canonical too.
@@ -210,6 +231,7 @@ impl Workspaces {
             snapshot: RwLock::new(snapshot),
             path,
             group: group.to_owned(),
+            session,
             watcher: Mutex::new(None),
             recent: Mutex::new(VecDeque::new()),
             quick_open_generation: AtomicU64::new(0),
@@ -253,6 +275,11 @@ impl Workspaces {
     pub fn contains(&self, path: &Path) -> bool {
         lock(&self.roots).values().any(|root| path.starts_with(&root.path))
     }
+
+    /// Whether a canonical `path` lies inside an opened project, a session root left out.
+    pub fn contains_project(&self, path: &Path) -> bool {
+        lock(&self.roots).values().any(|root| !root.session && path.starts_with(&root.path))
+    }
 }
 
 #[cfg(test)]
@@ -276,13 +303,40 @@ mod tests {
     }
 
     #[test]
+    fn a_session_roots_scan_and_the_projects_dont_cancel_each_other() {
+        let workspaces = Workspaces::default();
+        let project = workspaces.begin_open("main");
+        let session = workspaces.begin_open(&session_key("main"));
+        assert!(!project.load(Ordering::Relaxed));
+        let newer = workspaces.begin_open(&session_key("main"));
+        assert!(session.load(Ordering::Relaxed), "a newer session root cancels the older one");
+        assert!(!project.load(Ordering::Relaxed) && !newer.load(Ordering::Relaxed));
+    }
+
+    #[test]
     fn a_cancelled_open_fails_as_superseded_and_registers_nothing() {
         let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
         std::fs::create_dir_all(base.join("src")).unwrap();
         let workspaces = Workspaces::default();
-        let err = workspaces.open_with(&base, "main", &AtomicBool::new(true), |_, _| {}).err();
+        let err = workspaces.open_with(&base, "main", &AtomicBool::new(true), false, |_, _| {}).err();
         assert_eq!(err.as_deref(), Some(SUPERSEDED));
         assert!(!workspaces.contains(&dunce::canonicalize(&base).unwrap().join("src")));
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_session_root_is_no_project() {
+        let base = std::env::temp_dir().join(format!("brama-session-root-{}", std::process::id()));
+        std::fs::create_dir_all(base.join("proj")).unwrap();
+        std::fs::create_dir_all(base.join("worktree")).unwrap();
+        let workspaces = Workspaces::default();
+        let project = workspaces.open_with(&base.join("proj"), "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let session = workspaces.open_with(&base.join("worktree"), "main", &AtomicBool::new(false), true, |_, _| {}).unwrap();
+
+        let agents = |root: &Root| root.path.join(".brama/agents.json");
+        assert!(workspaces.contains_project(&agents(&project)));
+        assert!(workspaces.contains(&agents(&session)), "its files are readable");
+        assert!(!workspaces.contains_project(&agents(&session)), "but it isn't a project");
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -303,7 +357,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
         let workspaces = Workspaces::default();
-        let opened = workspaces.open_with(&root, "main", &AtomicBool::new(false), |_, _| {}).unwrap();
+        let opened = workspaces.open_with(&root, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
 
         assert!(workspaces.contains(&opened.path.join("src/main.rs")));
         assert!(!workspaces.contains(&opened.path.with_file_name("proj-other").join("x")));
@@ -321,7 +375,7 @@ mod tests {
         std::fs::create_dir_all(base.join("b")).unwrap();
         let workspaces = Workspaces::default();
         let open = |dir: &str, group: &str| {
-            workspaces.open_with(&base.join(dir), group, &AtomicBool::new(false), |_, _| {}).unwrap()
+            workspaces.open_with(&base.join(dir), group, &AtomicBool::new(false), false, |_, _| {}).unwrap()
         };
         let (a1, b1, a2) = (open("a", "main"), open("b", "main"), open("a", "second"));
 

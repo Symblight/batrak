@@ -4,12 +4,13 @@ import '@symblight/tree-view';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
+import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
 import { absPath } from '../../models/paths.js';
 import styles from './acp-file-tree.css?inline';
 
 /** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
-/** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean }} TreeItem */
+/** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean, path?: string }} TreeItem `path`: the root row's folder. */
 /** @typedef {(rootId: string, rel: string) => Promise<WorkspaceEntry[]>} ListDir A folder's entries; `''` is the root. */
 
 /**
@@ -20,11 +21,15 @@ function toItem(e) {
   return { id: e.path, label: e.name, isDir: e.isDir, ignored: e.ignored };
 }
 
+/** Id of the root row; no root-relative path is `/`. Its children are the root's entries (`''`). */
+const ROOT_ID = '/';
+
 /**
- * Tooltip of a row's icon and label: its project-relative path.
+ * Tooltip of a row's icon and label: its project-relative path, or the root row's folder.
  * @param {TreeItem} item
  */
 function tooltipFor(item) {
+  if (item.path !== undefined) return item.path;
   return item.ignored ? `${item.id} (ignored)` : item.id;
 }
 
@@ -40,7 +45,7 @@ function parentOf(path) {
 /**
  * @tag acp-file-tree
  * @summary Lazy file tree of the opened project, a folder listed as it expands; controlled by its
- *   `expanded` folders.
+ *   `expanded` folders. With a `rootLabel`, its entries sit under one root row.
  * @fires acp-file-open `{ path }`
  * @fires acp-expanded-change `{ paths }` Root-relative folders to keep expanded.
  */
@@ -48,6 +53,7 @@ export class AcpFileTree extends LitElement {
   static properties = {
     rootId: { attribute: false },
     root: { attribute: false },
+    rootLabel: { attribute: false },
     listDir: { attribute: false },
     expanded: { attribute: false },
     opening: { type: Boolean },
@@ -61,6 +67,8 @@ export class AcpFileTree extends LitElement {
     this.rootId = null;
     /** @type {string | null} The project's path. */
     this.root = null;
+    /** @type {string | null} The root row's label (a worktree's name); `null`: no root row. */
+    this.rootLabel = null;
     /** @type {ListDir} */
     this.listDir = async () => [];
     /** @type {string[]} Root-relative folders to keep expanded, loaded or not. */
@@ -75,7 +83,10 @@ export class AcpFileTree extends LitElement {
     getTreeItems: async (parent) => {
       const rootId = this.rootId;
       if (rootId === null) return [];
-      const items = await this.listDir(rootId, parent?.id ?? '');
+      if (!parent && this.rootLabel !== null) {
+        return [{ id: ROOT_ID, label: this.rootLabel, isDir: true, ignored: false, path: this.root ?? '' }];
+      }
+      const items = await this.listDir(rootId, !parent || parent.id === ROOT_ID ? '' : parent.id);
       // A branch still loading when the project switched would land in the new project's folder of
       // the same name: fail it, so the tree drops it.
       if (this.rootId !== rootId) {
@@ -105,6 +116,8 @@ export class AcpFileTree extends LitElement {
   #listedFolders = new Set();
   /** Set while `reveal()` selects a row, so the selection doesn't open it. */
   #revealing = false;
+  /** The root row is expanded; the user may collapse it, which isn't stored. */
+  #rootExpanded = true;
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
@@ -113,8 +126,12 @@ export class AcpFileTree extends LitElement {
 
   /** @param {import('lit').PropertyValues<this>} changed */
   updated(changed) {
-    // A new root lists different files; not on the first render, when the tree lists it anyway.
-    if (changed.has('rootId') && changed.get('rootId') !== undefined) this.#switchProject();
+    // A new root, or a root row coming or going, lists different files; not on the first render,
+    // when the tree lists it anyway.
+    const relist =
+      (changed.has('rootId') && changed.get('rootId') !== undefined) ||
+      (changed.has('rootLabel') && changed.get('rootLabel') !== undefined);
+    if (relist) this.#switchProject();
     if (changed.has('expanded')) this.#applyExpansion(this.#expanded);
   }
 
@@ -124,7 +141,7 @@ export class AcpFileTree extends LitElement {
    */
   reload(dirs) {
     for (const dir of dirs) {
-      if (dir === '') this.#tree?.loading.reload();
+      if (dir === '') this.#tree?.loading.reload(this.rootLabel === null ? undefined : ROOT_ID);
       else this.#tree?.loading.reload(dir);
     }
   }
@@ -140,6 +157,7 @@ export class AcpFileTree extends LitElement {
     this.#listedRoot = null;
     this.#pendingReveal = null;
     this.#listedFolders.clear();
+    this.#rootExpanded = true;
     const tree = this.#tree;
     if (!tree) return;
     // Ids are relative paths, so the previous project's `src` must not stay expanded here.
@@ -158,7 +176,7 @@ export class AcpFileTree extends LitElement {
     if (!tree || (!force && this.#listedRoot !== this.rootId)) return;
     this.#applying = true;
     try {
-      tree.expansion.set(paths);
+      tree.expansion.set(this.rootLabel !== null && this.#rootExpanded ? [ROOT_ID, ...paths] : paths);
     } finally {
       this.#applying = false;
     }
@@ -173,7 +191,8 @@ export class AcpFileTree extends LitElement {
     const tree = this.#tree;
     if (this.#applying || !tree || this.#listedRoot !== this.rootId) return;
     const { expandedItems } = /** @type {CustomEvent<{ expandedItems: Set<PropertyKey> }>} */ (e).detail;
-    const next = new Set(/** @type {string[]} */ ([...expandedItems].filter((id) => typeof id === 'string')));
+    this.#rootExpanded = expandedItems.has(ROOT_ID);
+    const next = new Set(/** @type {string[]} */ ([...expandedItems].filter((id) => typeof id === 'string' && id !== ROOT_ID)));
     for (const path of this.#expanded) {
       if (tree.nodes.getItem(path) === null) next.add(path);
     }
@@ -192,7 +211,13 @@ export class AcpFileTree extends LitElement {
     // every stored folder being gone.
     if (rootId === null) return;
     if (id === null) this.#listedRoot = rootId;
-    const parent = id ?? '';
+    // The root row alone: expanding it lists the root's entries, which land below.
+    if (id === null && this.rootLabel !== null) {
+      await this.#tree?.updateComplete;
+      if (this.rootId === rootId) this.#applyExpansion(this.#expanded);
+      return;
+    }
+    const parent = id === null || id === ROOT_ID ? '' : id;
     const present = new Set(items.map((item) => item.id));
     const stored = this.#expanded;
     const gone = stored.filter((path) => parentOf(path) === parent && !present.has(path));
@@ -222,6 +247,10 @@ export class AcpFileTree extends LitElement {
     const stored = this.#expanded;
     const collapsed = folders.filter((dir) => !stored.includes(dir));
     this.#pendingReveal = rel;
+    if (!this.#rootExpanded) {
+      this.#rootExpanded = true;
+      this.#applyExpansion(stored);
+    }
     if (collapsed.length) this.#setExpanded([...stored, ...collapsed]);
     this.#selectPending();
   }
@@ -266,7 +295,9 @@ export class AcpFileTree extends LitElement {
    */
   #renderLeading(item, { expanded }) {
     const id = `acp-file-tree-icon:${item.id}`;
-    const icon = item.isDir
+    const icon = item.id === ROOT_ID
+      ? html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(branchIcon)}</md-icon>`
+      : item.isDir
       ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
       : html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
     return html`${icon}<md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;

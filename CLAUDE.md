@@ -256,8 +256,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
   (`folderOf()`, `$activeFolder`). A worktree session's files open as tabs of its project
   (`$worktrees`; `read_file` reads its folder through `Sessions::contains`), marked with a branch
-  icon, no diff gutter, re-read when its turn ends (nothing watches a worktree); its folder refs
-  reveal the project's same folder. A prompt path that is relative is the session's own copy; an
+  icon, no diff gutter, re-read when its turn ends; its folder refs
+  reveal the project's same folder. While a worktree session is active, the Files tree lists its
+  folder under a root row named after the worktree (`$treeRoot`, `stores/session-root.js`): the
+  session root (`open_session_root`, its own scan and watcher, at most one per window) that
+  `sessionRootController` keeps open; Search, Changes and Quick Open stay on the project
+  (spec: `docs/specs/worktree-default.md`). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
   A session's own Changes tab (`view:session-changes:<id>`, `models/tab-ids.js`, opened by
   `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no

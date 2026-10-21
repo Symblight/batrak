@@ -26,7 +26,9 @@ import {
   setConfigOption,
   startComposer,
 } from '../stores/composer.js';
+import { sessionRootController } from './session-root-controller.js';
 import { forgetContextUsage } from '../stores/context-usage.js';
+import { removeProjectExpandedFolders } from '../stores/file-tree.js';
 import {
   $activeSessionId,
   $draftSessions,
@@ -306,6 +308,9 @@ export class SessionController {
    * @returns {Promise<void>}
    */
   async remove(id) {
+    const worktree = $sessions.get().find((s) => s.id === id && s.mode === 'worktree')?.folder ?? null;
+    // Nothing may watch the worktree while it's deleted (Windows refuses a watched folder).
+    await sessionRootController.forget(id);
     try {
       await sessionRemove(id);
     } catch (err) {
@@ -317,6 +322,7 @@ export class SessionController {
     forgetSession(id);
     forgetComposer(id);
     forgetContextUsage(id);
+    if (worktree !== null) removeProjectExpandedFolders(worktree);
     this.#historyLoaded.delete(id);
     removeSession(id);
   }

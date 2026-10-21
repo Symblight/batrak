@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { agentConfig } from '../../services/agent-config.js';
 import { sessionController } from '../../services/session-controller.js';
 import { projectController } from '../../services/project-controller.js';
+import { sessionRootController } from '../../services/session-root-controller.js';
 import { gitController } from '../../services/git-controller.js';
 import { trustController } from '../../services/trust-controller.js';
 import { loadAbout } from '../../services/about.js';
@@ -13,8 +14,11 @@ import { $activePath } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices.js';
+import { $treeRoot } from '../../stores/session-root.js';
+import { $worktrees } from '../../stores/sessions.js';
 import { $trustPrompt } from '../../stores/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace.js';
+import { projectPathOf, relPath } from '../../models/paths.js';
 import { trustConfirm } from '../../models/trust.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
@@ -103,6 +107,7 @@ export class AcpApp extends LitElement {
     trustController.start();
     sessionController.init().catch((err) => reportError('Loading sessions failed', err));
     gitController.start();
+    sessionRootController.start();
     projectController.restore().catch((err) => reportError('Reopening folder failed', err));
   }
 
@@ -250,11 +255,12 @@ export class AcpApp extends LitElement {
   }
 
   /**
-   * @param {string} path Absolute; outside the project there's no row to show.
+   * @param {string} path Absolute; outside the project and its worktrees there's no row to show.
    * @param {{ expand?: boolean }} [options] Expand a folder itself too.
    */
   async #revealInTree(path, options) {
-    const rel = projectController.relPath(path);
+    // The tree lists a worktree's folder or the project; a path of the other is shown by its twin.
+    const rel = relPath($treeRoot.get().path, path) ?? relPath(projectController.path, projectPathOf($worktrees.get(), path));
     if (rel === null) return;
     this.sideView = 'files';
     showColumn('side');
