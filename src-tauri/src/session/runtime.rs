@@ -14,13 +14,14 @@ use serde_json::{json, Value};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::task::AbortHandle;
 
+use self::slots::{Entry, Turn, TurnPermit, TurnSlots};
 use super::env::{self, Access, Launch, Mode, SessionEnv};
 use super::transcript::{self, Transcript};
 use super::{iso_now, AgentLaunch, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::acp::process::AgentProcess;
 use crate::acp::{self, ClientHost, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
 use crate::config::env::SecretStore;
-use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, Merged};
+use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, LocalTurns, Merged};
 use crate::storage::JsonFile;
 
 /// The most of a file an agent read (or a selection) holds; larger files are read in parts (`line` / `limit`).
@@ -213,6 +214,8 @@ struct Inner {
     opts: SessionsOptions,
     store: JsonFile,
     sessions: Mutex<HashMap<String, Arc<SessionState>>>,
+    /// Local sessions' turns, one at a time per project.
+    slots: TurnSlots,
 }
 
 impl Sessions {
@@ -227,7 +230,7 @@ impl Sessions {
                 (record.session_id.clone(), Arc::new(new_state(record, &opts.data_dir)))
             })
             .collect();
-        Sessions { inner: Arc::new(Inner { opts, store, sessions: Mutex::new(sessions) }) }
+        Sessions { inner: Arc::new(Inner { opts, store, sessions: Mutex::new(sessions), slots: TurnSlots::default() }) }
     }
 
     /// Most recently active first.
@@ -310,7 +313,6 @@ impl Sessions {
             if sessions.contains_key(&req.session_id) {
                 return Err(format!("session {} exists already", req.session_id));
             }
-            self.inner.check_slot(&sessions, &record)?;
             let state = Arc::new(new_state(record, self.inner.data_dir()));
             lock(&state.sinks).insert(sink_key.to_owned(), sink);
             sessions.insert(req.session_id.clone(), Arc::clone(&state));
@@ -410,11 +412,12 @@ impl Sessions {
     }
 
     /// `session/cancel` for the running turn; pending permission requests are answered
-    /// `cancelled`. The turn ends with `turn-end` `cancelled` once the agent stopped.
+    /// `cancelled`. The turn ends with `turn-end` `cancelled` once the agent stopped; a queued one
+    /// at once, without reaching the agent.
     pub fn cancel(&self, id: &str) -> Result<(), String> {
         let state = self.get(id)?;
         state.cancel_requested.store(true, Ordering::SeqCst);
-        if !state.turn_running.load(Ordering::SeqCst) {
+        if !state.turn_running.load(Ordering::SeqCst) || self.inner.leave_queue(&state) {
             return Ok(());
         }
         match state.conn() {
@@ -574,8 +577,8 @@ impl Sessions {
 
     /// Starts a stopped session's agent, continuing its ACP session where the agent supports
     /// `session/load`; a running or starting one is left as it is. `false`, quietly, when it
-    /// can't start where it is: another local session runs in the project, or the project has its
-    /// worktree's branch checked out (Restart then says why).
+    /// can't start where it is: the project has its worktree's branch checked out (Restart then
+    /// says why).
     pub async fn resume(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
         let record = state.record();
@@ -588,18 +591,12 @@ impl Sessions {
             return Ok(false);
         }
         {
-            // Claimed under the sessions lock, so a second resume, or one of another local session
-            // of the project, sees it starting.
-            // `check_slot` locks every record, this one too: not held across it.
-            let sessions = lock(&self.inner.sessions);
-            let current = state.record();
+            // Claimed under the record's lock, so a second resume sees it starting.
+            let mut current = lock(&state.record);
             if current.status != SessionStatus::Stopped {
                 return Ok(current.status.is_active());
             }
-            if self.inner.check_slot(&sessions, &current).is_err() {
-                return Ok(false);
-            }
-            lock(&state.record).status = SessionStatus::Preparing;
+            current.status = SessionStatus::Preparing;
         }
         self.inner.set_status(&state, SessionStatus::Preparing, None);
         let inner = Arc::clone(&self.inner);
@@ -864,6 +861,10 @@ impl Inner {
         let records: Vec<SessionRecord> = {
             let sessions = lock(&self.sessions);
             let mut records: Vec<_> = sessions.values().map(|s| s.record()).collect();
+            for record in records.iter_mut().filter(|r| r.status == SessionStatus::Queued) {
+                // The turn waits only in this process.
+                record.status = SessionStatus::Idle;
+            }
             records.sort_by(|a, b| a.created_at.cmp(&b.created_at));
             records
         };
@@ -890,27 +891,6 @@ impl Inner {
 
     fn data_dir(&self) -> &Path {
         &self.opts.data_dir
-    }
-
-    /// At most one active local session per project: two agents editing the same checkout
-    /// would trample each other.
-    fn check_slot(&self, sessions: &HashMap<String, Arc<SessionState>>, record: &SessionRecord) -> Result<(), String> {
-        if record.mode != Mode::Local {
-            return Ok(());
-        }
-        let busy = sessions.values().map(|s| s.record()).find(|other| {
-            other.session_id != record.session_id
-                && other.mode == Mode::Local
-                && other.project_path == record.project_path
-                && other.status.is_active()
-        });
-        match busy {
-            Some(other) => Err(format!(
-                "A local session is already running in this project (\"{}\"). Stop it first, or run this one in a worktree.",
-                other.title
-            )),
-            None => Ok(()),
-        }
     }
 
     /// The session's connection, starting the agent if it isn't running. `attempts` is
@@ -954,8 +934,6 @@ impl Inner {
     async fn attempt_start(self: &Arc<Self>, state: &Arc<SessionState>) -> Result<(StartedAgent, Arc<dyn SessionEnv>), String> {
         // A new attempt: whatever happens now isn't the earlier Stop's doing.
         state.stopping.store(false, Ordering::SeqCst);
-        let record = state.record();
-        self.check_slot(&lock(&self.sessions), &record)?;
         // In a task of its own, so Stop can abort it: dropping it drops the process, which kills
         // the group.
         let task = tokio::spawn(Arc::clone(self).start_agent(Arc::clone(state)));
@@ -1126,6 +1104,11 @@ impl Inner {
                 }
             }
             (true, None) if state.conn().is_some() => self.check_launch(state, &merged),
+            // A queued turn ends (`cancelled`) without reaching the agent; its end checks again.
+            (false, None) if record.status == SessionStatus::Queued => {
+                state.cancel_requested.store(true, Ordering::SeqCst);
+                self.leave_queue(state);
+            }
             (false, None) if !state.turn_running.load(Ordering::SeqCst) => {
                 let ran = record.launch.as_ref().map(|l| format!("{} {}", l.command, l.args.join(" ")));
                 tracing::info!(session = %state.id, agent = %record.agent_id, "its agent left agents.json: stopped");
@@ -1213,6 +1196,11 @@ impl Inner {
         if state.cancel_requested.load(Ordering::SeqCst) {
             return Ok("cancelled".to_owned());
         }
+        // Held until the turn returns.
+        let _slot = self.take_slot(state).await?;
+        if state.cancel_requested.load(Ordering::SeqCst) {
+            return Ok("cancelled".to_owned());
+        }
         let env = lock(&state.env).clone().ok_or("the agent is not running")?;
         let blocks = tokio::task::spawn_blocking(move || prompt_blocks(&*env, prompt))
             .await
@@ -1227,8 +1215,56 @@ impl Inner {
         Ok(stop_reason)
     }
 
+    /// A local session's turn slot in its project, waited for (`queued`) while another session's
+    /// turn has it. `None` when the turn needs none: a worktree session, or `localTurns:
+    /// "parallel"` (read at each turn, so a change applies to the next one), or it was cancelled.
+    async fn take_slot(&self, state: &SessionState) -> Result<Option<TurnPermit>, String> {
+        let record = state.record();
+        if record.mode != Mode::Local {
+            return Ok(None);
+        }
+        let project = record.project_path.clone();
+        let turns = tokio::task::spawn_blocking(move || crate::config::workspace_settings(&project).local_turns)
+            .await
+            .map_err(|e| e.to_string())?;
+        if turns == LocalTurns::Parallel {
+            return Ok(None);
+        }
+        let (mut holder, mut ticket) = match self.slots.enter(&record.project_path, &state.id) {
+            Entry::Granted(permit) => return Ok(Some(permit)),
+            Entry::Queued { holder, ticket } => (holder, ticket),
+        };
+        // A cancel that came before it queued (dropping the ticket leaves the queue).
+        if state.cancel_requested.load(Ordering::SeqCst) {
+            return Ok(None);
+        }
+        tracing::info!(session = %state.id, %holder, "turn queued behind another local session's");
+        self.set_status(state, SessionStatus::Queued, None);
+        loop {
+            state.emit("queued", json!({ "holder": { "id": holder, "title": self.title_of(&holder) } }));
+            match ticket.next().await {
+                Turn::Granted(permit) => return Ok(Some(permit)),
+                Turn::Behind(next) => holder = next,
+                Turn::Left if state.cancel_requested.load(Ordering::SeqCst) => return Ok(None),
+                Turn::Left => return Err("The agent stopped before the turn's start".to_owned()),
+            }
+        }
+    }
+
+    /// Drops the session's queued turn, if it has one.
+    fn leave_queue(&self, state: &SessionState) -> bool {
+        let project = lock(&state.record).project_path.clone();
+        self.slots.leave(&project, &state.id)
+    }
+
+    fn title_of(&self, id: &str) -> Option<String> {
+        let state = lock(&self.sessions).get(id).cloned()?;
+        Some(state.record().title)
+    }
+
     async fn stop(&self, state: &SessionState) {
         state.stopping.store(true, Ordering::SeqCst);
+        self.leave_queue(state);
         if let Some(cancel) = lock(&state.prepare_cancel).take() {
             cancel.store(true, Ordering::SeqCst);
         }
@@ -1260,6 +1296,7 @@ impl Inner {
         drop(live);
         lock(&state.conn).take();
         lock(&state.env).take();
+        self.leave_queue(state);
         if let Some(mut process) = taken.and_then(|l| l.process) {
             process.stop().await;
         }
@@ -1508,6 +1545,7 @@ impl ClientHost for SessionHost {
     }
 }
 
+mod slots;
 #[cfg(test)]
 mod tests;
 

@@ -42,6 +42,8 @@ pub struct FakeAgentState {
     pub cancelled: AtomicBool,
     pub cancel_count: AtomicUsize,
     pub loads: AtomicUsize,
+    /// Prompts it got, in order.
+    pub prompts: std::sync::Mutex<Vec<String>>,
     pub crash: Notify,
 }
 
@@ -209,6 +211,7 @@ async fn run_turn(
         })
         .collect::<Vec<_>>()
         .join(" ");
+    state.prompts.lock().unwrap().push(prompt.clone());
     let mut words = prompt.split_whitespace();
     match words.next().unwrap_or_default() {
         "hello" => {
@@ -268,6 +271,16 @@ async fn run_turn(
                 say(cx, &sid, &format!("{i} "))?;
                 tokio::time::sleep(Duration::from_millis(20)).await;
             }
+        }
+        "sleep" => {
+            let ms: u64 = words.next().and_then(|w| w.parse().ok()).unwrap_or(100);
+            for _ in 0..ms.div_ceil(10) {
+                if state.cancelled.load(Ordering::SeqCst) {
+                    return Ok(StopReason::Cancelled);
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+            say(cx, &sid, "slept")?;
         }
         "crash" => {
             say(cx, &sid, "about to crash")?;

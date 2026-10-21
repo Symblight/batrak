@@ -38,6 +38,8 @@ pub enum SessionStatus {
     Idle,
     /// A turn is running.
     Working,
+    /// A local turn waits for another local session's turn in the same checkout. Saved as `idle`.
+    Queued,
     /// Blocked on the user (a permission request).
     Waiting,
     /// No agent process; the next message starts one.
@@ -49,7 +51,7 @@ pub enum SessionStatus {
 impl SessionStatus {
     /// Whether the session holds (or is getting) an agent process.
     pub fn is_active(self) -> bool {
-        matches!(self, Self::Preparing | Self::Starting | Self::Idle | Self::Working | Self::Waiting)
+        matches!(self, Self::Preparing | Self::Starting | Self::Idle | Self::Working | Self::Queued | Self::Waiting)
     }
 }
 
@@ -181,6 +183,14 @@ fn iso_from_millis(ms: i64) -> String {
 
 #[cfg(test)]
 mod tests {
+    use super::SessionStatus;
+
+    #[test]
+    fn queued_is_active() {
+        assert_eq!(serde_json::to_value(SessionStatus::Queued).unwrap(), "queued");
+        assert!(SessionStatus::Queued.is_active());
+    }
+
     #[test]
     fn iso_timestamps() {
         assert_eq!(super::iso_from_millis(0), "1970-01-01T00:00:00.000Z");

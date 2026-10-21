@@ -217,6 +217,14 @@ fn text(s: &str) -> Vec<PromptInput> {
     vec![PromptInput::Text { text: s.to_owned() }]
 }
 
+fn has(events: &Recorder, kind: &str) -> bool {
+    lock(&events.events).iter().any(|e| e.kind == kind)
+}
+
+fn status_of(f: &Fixture, id: &str) -> SessionStatus {
+    f.sessions.list().into_iter().find(|s| s.id == id).map(|s| s.status).unwrap()
+}
+
 #[tokio::test]
 async fn a_turn_streams_updates_in_order_between_turn_start_and_turn_end() {
     let f = fixture("turn", FakeAgentOptions::default());
@@ -253,21 +261,179 @@ async fn a_turn_streams_updates_in_order_between_turn_start_and_turn_end() {
 }
 
 #[tokio::test]
-async fn a_second_local_session_in_the_same_project_is_refused() {
+async fn local_sessions_of_one_project_all_run_and_their_turns_queue() {
     let f = fixture("slot", FakeAgentOptions::default());
-    let (_, events) = f.create("first", "fake").unwrap();
-    events.wait_status("idle").await;
-    let err = f.create("second", "fake").unwrap_err();
-    assert!(err.contains("already running in this project (\"Session first\")"), "{err}");
-    assert!(f.sessions.list().iter().all(|s| s.id != "second"));
-
-    f.sessions.stop("first").await.unwrap();
+    let (_, first) = f.create("first", "fake").unwrap();
+    first.wait_status("idle").await;
     let (_, second) = f.create("second", "fake").unwrap();
     second.wait_status("idle").await;
-    // The stopped one can't come back while the other runs.
-    f.sessions.send_prompt("first", text("hello")).unwrap();
-    let refused = events.wait_for("refusal", |e| e.kind == "error").await;
-    assert!(refused.payload["message"].as_str().unwrap().contains("already running"));
+
+    f.sessions.send_prompt("first", text("sleep 300")).unwrap();
+    first.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    let queued = second.wait_for("queued", |e| e.kind == "queued").await;
+    assert_eq!(queued.payload["holder"], json!({ "id": "first", "title": "Session first" }));
+    second.wait_status("queued").await;
+    assert_eq!(status_of(&f, "second"), SessionStatus::Queued);
+    let stored = std::fs::read_to_string(f.dir.join("data/sessions.json")).unwrap();
+    assert!(!stored.contains("queued"), "saved as idle: {stored}");
+    assert!(f.sessions.send_prompt("second", text("hello")).unwrap_err().contains("still working"), "one prompt at a time");
+
+    assert_eq!(first.wait_turn_end().await, "end_turn");
+    assert!(!has(&second, "turn-start") || has(&first, "turn-end"));
+    assert_eq!(second.wait_turn_end().await, "end_turn");
+    assert_eq!(second.texts(), ["Hello", ", world"]);
+}
+
+#[tokio::test]
+async fn queued_turns_start_in_the_order_they_were_sent() {
+    let f = fixture("slot-order", FakeAgentOptions::default());
+    let events = Arc::new(Recorder::default());
+    for id in ["a", "b", "c"] {
+        f.sessions.create(f.request(id, "fake", Mode::Local, None), "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    }
+    for id in ["a", "b", "c"] {
+        events.wait_for("idle", |e| e.session_id == id && e.kind == "status" && e.payload["status"] == "idle").await;
+    }
+    f.sessions.send_prompt("a", text("sleep 200")).unwrap();
+    events.wait_for("a's turn", |e| e.session_id == "a" && e.kind == "turn-start").await;
+    for id in ["b", "c"] {
+        f.sessions.send_prompt(id, text("sleep 20")).unwrap();
+        events.wait_for("queued", |e| e.session_id == id && e.kind == "queued").await;
+    }
+    events.wait_for("c's turn end", |e| e.session_id == "c" && e.kind == "turn-end").await;
+    let all = lock(&events.events).clone();
+    let starts: Vec<_> = all.iter().filter(|e| e.kind == "turn-start").map(|e| e.session_id.as_str()).collect();
+    assert_eq!(starts, ["a", "b", "c"]);
+    let behind: Vec<_> = all.iter().filter(|e| e.session_id == "c" && e.kind == "queued").map(|e| &e.payload["holder"]["id"]).collect();
+    assert_eq!(behind, ["a", "b"], "c hears who it waits for");
+}
+
+#[tokio::test]
+async fn cancelling_a_queued_turn_ends_it_without_reaching_the_agent() {
+    let f = fixture("slot-cancel", FakeAgentOptions::default());
+    let (_, first) = f.create("first", "fake").unwrap();
+    first.wait_status("idle").await;
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+    f.sessions.send_prompt("first", text("sleep 200")).unwrap();
+    first.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    second.wait_status("queued").await;
+
+    f.sessions.cancel("second").unwrap();
+    assert_eq!(second.wait_turn_end().await, "cancelled");
+    second.wait_for("idle after it", |e| e.kind == "status" && e.payload["status"] == "idle" && e.seq > 5).await;
+    let agent = Arc::clone(&lock(&f.launcher.agents)[1]);
+    assert!(lock(&agent.prompts).is_empty());
+    assert_eq!(agent.cancel_count.load(Ordering::SeqCst), 0, "nothing to cancel in the agent");
+    assert_eq!(first.wait_turn_end().await, "end_turn", "the holder goes on");
+    second.clear();
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    assert_eq!(second.wait_turn_end().await, "end_turn", "and the slot is free");
+}
+
+#[tokio::test]
+async fn stopping_or_crashing_the_holder_hands_the_slot_on() {
+    let f = fixture("slot-stop", FakeAgentOptions::default());
+    let mut events = Vec::new();
+    for id in ["a", "b", "c"] {
+        let (_, e) = f.create(id, "fake").unwrap();
+        e.wait_status("idle").await;
+        events.push(e);
+    }
+    let [a, b, c] = &events[..] else { unreachable!() };
+    f.sessions.send_prompt("a", text("slow")).unwrap();
+    a.wait_for("first chunk", |e| e.kind == "update").await;
+    f.sessions.send_prompt("b", text("crash")).unwrap();
+    b.wait_status("queued").await;
+    f.sessions.send_prompt("c", text("hello")).unwrap();
+    c.wait_status("queued").await;
+
+    f.sessions.stop("a").await.unwrap();
+    assert_eq!(a.wait_turn_end().await, "cancelled");
+    b.wait_for("b's turn", |e| e.kind == "turn-start").await;
+    b.wait_status("error").await;
+    assert_eq!(c.wait_turn_end().await, "end_turn", "b's crash freed it too");
+}
+
+#[tokio::test]
+async fn stopping_or_removing_a_queued_session_drops_its_turn() {
+    let f = fixture("slot-leave", FakeAgentOptions::default());
+    let mut events = Vec::new();
+    for id in ["a", "b", "c", "d"] {
+        let (_, e) = f.create(id, "fake").unwrap();
+        e.wait_status("idle").await;
+        events.push(e);
+    }
+    let [a, b, c, d] = &events[..] else { unreachable!() };
+    f.sessions.send_prompt("a", text("sleep 300")).unwrap();
+    a.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    for (id, e) in [("b", b), ("c", c), ("d", d)] {
+        f.sessions.send_prompt(id, text("hello")).unwrap();
+        e.wait_status("queued").await;
+    }
+    f.sessions.stop("b").await.unwrap();
+    assert_eq!(b.wait_turn_end().await, "cancelled");
+    b.wait_status("stopped").await;
+    f.sessions.remove("c").await.unwrap();
+    assert_eq!(a.wait_turn_end().await, "end_turn");
+    assert_eq!(d.wait_turn_end().await, "end_turn");
+    for agent in [1, 2] {
+        assert!(lock(&lock(&f.launcher.agents)[agent].prompts).is_empty(), "agent {agent}");
+    }
+}
+
+#[tokio::test]
+async fn a_queued_turn_whose_agent_leaves_agents_json_leaves_the_queue() {
+    let f = fixture("slot-unconfigured", FakeAgentOptions::default());
+    let (_, first) = f.create("first", "fake").unwrap();
+    first.wait_status("idle").await;
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+    f.sessions.send_prompt("first", text("sleep 300")).unwrap();
+    first.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    second.wait_status("queued").await;
+
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    f.sessions.sync_agents(&f.project).await;
+    assert_eq!(second.wait_turn_end().await, "cancelled");
+    second.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert!(!has(&first, "turn-end"), "the holder's turn goes on");
+    assert_eq!(first.wait_turn_end().await, "end_turn");
+    assert!(lock(&lock(&f.launcher.agents)[1].prompts).is_empty());
+}
+
+#[tokio::test]
+async fn a_worktree_session_never_queues_behind_a_local_one() {
+    let f = git_fixture("slot-worktree");
+    let (_, local) = f.create("local", "fake").unwrap();
+    local.wait_status("idle").await;
+    let (_, tree) = f.create_in("tree", "fake", Mode::Worktree, None).unwrap();
+    tree.wait_status("idle").await;
+    f.sessions.send_prompt("local", text("sleep 500")).unwrap();
+    local.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    f.sessions.send_prompt("tree", text("hello")).unwrap();
+    assert_eq!(tree.wait_turn_end().await, "end_turn");
+    assert!(!has(&tree, "queued"));
+    assert!(!has(&local, "turn-end"), "while the local turn still runs");
+}
+
+#[tokio::test]
+async fn with_parallel_local_turns_two_turns_run_at_once() {
+    let f = fixture("slot-parallel", FakeAgentOptions::default());
+    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    let (_, first) = f.create("first", "fake").unwrap();
+    first.wait_status("idle").await;
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+    f.sessions.send_prompt("first", text("sleep 500")).unwrap();
+    first.wait_for("turn-start", |e| e.kind == "turn-start").await;
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    assert_eq!(second.wait_turn_end().await, "end_turn");
+    assert!(!has(&second, "queued"));
+    assert!(!has(&first, "turn-end"), "both turns ran at once");
 }
 
 #[tokio::test]
@@ -390,7 +556,7 @@ async fn resume_starts_a_stopped_agent_once_without_reporting_it_stopped() {
 }
 
 #[tokio::test]
-async fn resume_leaves_a_local_session_stopped_while_another_runs_in_the_project() {
+async fn resume_starts_a_local_session_while_another_runs_in_the_project() {
     let f = fixture("resume-slot", FakeAgentOptions::default());
     let (_, first) = f.create("first", "fake").unwrap();
     first.wait_status("idle").await;
@@ -399,11 +565,8 @@ async fn resume_leaves_a_local_session_stopped_while_another_runs_in_the_project
     second.wait_status("idle").await;
 
     first.clear();
-    assert!(!f.sessions.resume("first").await.unwrap());
-    tokio::time::sleep(Duration::from_millis(50)).await;
-    assert!(lock(&first.events).is_empty(), "quietly: {:#?}", lock(&first.events));
-    let listed = f.sessions.list().into_iter().find(|s| s.id == "first").unwrap();
-    assert_eq!(listed.status, SessionStatus::Stopped);
+    assert!(f.sessions.resume("first").await.unwrap());
+    first.wait_status("idle").await;
 }
 
 #[tokio::test]

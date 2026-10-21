@@ -31,8 +31,8 @@ pub async fn list_sessions(sessions: State<'_, Sessions>) -> Result<Vec<Session>
 }
 
 /// A draft's first message: creates the session under the draft's id and starts its workspace
-/// and agent in the background. Refused when a local session already runs in the project, or a
-/// worktree one has no repository or `base_branch` to start from.
+/// and agent in the background. Refused when a worktree one has no repository or `base_branch` to
+/// start from.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn session_create(

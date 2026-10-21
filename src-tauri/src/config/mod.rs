@@ -54,6 +54,18 @@ pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
 pub struct WorkspaceSettings {
     /// Run target a new session starts with: `local` or `worktree`.
     pub default_mode: String,
+    pub local_turns: LocalTurns,
+}
+
+/// How turns of a project's local sessions share its checkout.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum LocalTurns {
+    /// One at a time; the others wait for it.
+    #[default]
+    Queue,
+    /// At once, in the same checkout.
+    Parallel,
 }
 
 /// The project's workspace.json; a missing, invalid or unknown setting is the default (`worktree`).
@@ -64,26 +76,34 @@ pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
     struct File {
         version: u32,
         default_mode: Option<String>,
+        // Any JSON, so an odd value of it doesn't lose the other settings.
+        local_turns: Option<serde_json::Value>,
     }
+    let unset = || File { version: 1, default_mode: None, local_turns: None };
     let path = project.join(DIR).join(WORKSPACE_FILE);
     let parsed = match fs::read_to_string(&path) {
-        Ok(text) if text == LEGACY_DEFAULT_WORKSPACE => Ok(File { version: 1, default_mode: None }),
+        Ok(text) if text == LEGACY_DEFAULT_WORKSPACE => Ok(unset()),
         Ok(text) => serde_json::from_str::<File>(&text).map_err(|e| format!("{}:{}:{}: {e}", path.display(), e.line(), e.column())),
-        Err(e) if e.kind() == ErrorKind::NotFound => Ok(File { version: 1, default_mode: None }),
+        Err(e) if e.kind() == ErrorKind::NotFound => Ok(unset()),
         Err(e) => Err(format!("{}: {e}", path.display())),
     };
-    let default_mode = match parsed {
-        Ok(File { version: 1, default_mode }) => default_mode.filter(|m| m == "local" || m == "worktree"),
+    let file = match parsed {
+        Ok(file) if file.version == 1 => file,
         Ok(File { version, .. }) => {
             tracing::info!("{}: unsupported version {version} (expected 1)", path.display());
-            None
+            unset()
         }
         Err(e) => {
             tracing::info!("{e}");
-            None
+            unset()
         }
     };
-    WorkspaceSettings { default_mode: default_mode.unwrap_or_else(|| "worktree".to_owned()) }
+    let default_mode = file.default_mode.filter(|m| m == "local" || m == "worktree");
+    let local_turns = match file.local_turns {
+        Some(serde_json::Value::String(s)) if s == "parallel" => LocalTurns::Parallel,
+        _ => LocalTurns::Queue,
+    };
+    WorkspaceSettings { default_mode: default_mode.unwrap_or_else(|| "worktree".to_owned()), local_turns }
 }
 
 /// One agent as configured. `env` values are templates (`${env:NAME}`, `${keychain:name}`),
@@ -911,6 +931,24 @@ mod tests {
         for invalid in [r#"{"version":1,"defaultMode":"cloud"}"#, "{ not json", r#"{"version":2,"defaultMode":"local"}"#] {
             fs::write(&file, invalid).unwrap();
             assert_eq!(workspace_settings(&project).default_mode, "worktree", "{invalid}");
+        }
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn local_turns_queue_unless_the_project_says_parallel() {
+        let project = temp_project("local-turns");
+        assert_eq!(workspace_settings(&project).local_turns, LocalTurns::Queue, "no file");
+        ensure_project_dir(&project).unwrap();
+        assert_eq!(workspace_settings(&project).local_turns, LocalTurns::Queue, "the default file");
+        let file = project.join(".brama/workspace.json");
+        fs::write(&file, r#"{"version":1,"defaultMode":"local","localTurns":"parallel"}"#).unwrap();
+        assert_eq!(workspace_settings(&project), WorkspaceSettings { default_mode: "local".into(), local_turns: LocalTurns::Parallel });
+        for other in [r#""queue""#, r#""both""#, "3", "null"] {
+            fs::write(&file, format!(r#"{{"version":1,"defaultMode":"local","localTurns":{other}}}"#)).unwrap();
+            let settings = workspace_settings(&project);
+            assert_eq!(settings.local_turns, LocalTurns::Queue, "{other}");
+            assert_eq!(settings.default_mode, "local", "{other} keeps the rest");
         }
         fs::remove_dir_all(project).unwrap();
     }
