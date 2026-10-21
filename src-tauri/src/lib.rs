@@ -106,6 +106,7 @@ pub fn run() {
             commands::agents::agents_registry_check,
             commands::agents::agents_update_version,
             commands::agents::agents_update_all,
+            commands::agents::agents_view,
             commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,

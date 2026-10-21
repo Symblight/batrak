@@ -2,7 +2,7 @@
 //! tell everyone the agents changed (running sessions hear their launch is outdated), then download
 //! the new version into npm's cache, so the next start isn't a cold download. Nothing restarts.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::path::{Path, PathBuf};
 use std::pin::Pin;
@@ -47,11 +47,18 @@ pub struct Updater {
     changed: OnChanged,
     /// A single agent's update, which a second Update of it joins.
     running: Arc<Mutex<HashMap<Key, Running>>>,
+    /// Agents being updated (one or all), for "Updating…".
+    updating: Arc<Mutex<HashSet<Key>>>,
 }
 
 impl Updater {
     pub fn new(configs: AgentConfigs, prefetch: Arc<dyn Prefetch>, changed: OnChanged) -> Updater {
-        Updater { configs, prefetch, changed, running: Arc::default() }
+        Updater { configs, prefetch, changed, running: Arc::default(), updating: Arc::default() }
+    }
+
+    /// Whether an update of the agent runs: from its write to the end of its download.
+    pub fn is_updating(&self, project: Option<&Path>, agent_id: &str) -> bool {
+        lock(&self.updating).contains(&(project.map(Path::to_path_buf), agent_id.to_owned()))
     }
 
     /// Updates one agent; returns once its download ended. A second call while one runs gets the
@@ -88,9 +95,11 @@ impl Updater {
         if pinned.is_empty() {
             return Ok(Vec::new());
         }
+        let keys: Vec<Key> = pinned.iter().map(|p| (project.clone(), p.agent_id.clone())).collect();
+        lock(&self.updating).extend(keys.iter().cloned());
         (self.changed)(project.as_deref());
         let mut updated = Vec::new();
-        for pin in pinned {
+        for (pin, key) in pinned.into_iter().zip(&keys) {
             let downloaded = match self.prefetch.prefetch(pin.spec.clone()).await {
                 Ok(()) => true,
                 Err(e) => {
@@ -99,6 +108,7 @@ impl Updater {
                     false
                 }
             };
+            lock(&self.updating).remove(key);
             updated.push(Updated { agent_id: pin.agent_id, version: pin.version, downloaded });
         }
         Ok(updated)
@@ -248,10 +258,12 @@ mod tests {
         let first = f.updater.update(None, "claude".into());
         let second = async {
             tokio::time::sleep(Duration::from_millis(30)).await;
+            assert!(f.updater.is_updating(None, "claude"), "Updating… while it downloads");
             f.updater.update(None, "claude".into()).await
         };
         let (first, second) = tokio::join!(first, second);
         assert_eq!(first.unwrap(), second.unwrap(), "the same answer");
+        assert!(!f.updater.is_updating(None, "claude"));
         assert_eq!(lock(&f.prefetch.specs).len(), 1, "one download");
     }
 

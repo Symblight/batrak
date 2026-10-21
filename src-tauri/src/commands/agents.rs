@@ -2,6 +2,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::config::registry::{Registry, RegistryState};
 use crate::config::update::{Updated, Updater};
+use crate::config::view::{AgentsView, Filter};
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -236,6 +237,24 @@ pub async fn agents_update_version(
 #[tauri::command]
 pub async fn agents_update_all(updater: State<'_, Updater>, project_path: Option<String>) -> Result<Vec<Updated>, String> {
     updater.inner().clone().update_all(project_of(project_path)?).await
+}
+
+/// The Agents tab's data: the project's agents (the user's without one) and the registry's,
+/// searched (`query`) and filtered, with counts, highlights and update states.
+#[tauri::command]
+pub async fn agents_view(
+    configs: State<'_, AgentConfigs>,
+    updater: State<'_, Updater>,
+    project_path: Option<String>,
+    query: String,
+    filter: Filter,
+) -> Result<AgentsView, String> {
+    let (configs, updater) = (configs.inner().clone(), updater.inner().clone());
+    blocking(move || {
+        let project = project_of(project_path)?;
+        Ok(configs.view(project.as_deref(), &query, filter, &|id| updater.is_updating(project.as_deref(), id)))
+    })
+    .await?
 }
 
 /// Asks the ACP registry now (Check now); every window hears when its agents changed. Returns how

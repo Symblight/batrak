@@ -48,6 +48,8 @@ portable-pty = "0.9"
 # The ACP agent registry (config/registry.rs only): fetched over rustls, versions compared by semver
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 semver = "1"
+# Accent-insensitive agent search (NFD); already in the tree through url/idna
+icu_normalizer = "2"
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]
