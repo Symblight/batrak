@@ -5,6 +5,7 @@ import { projectController } from '../../services/project-controller.js';
 import { sessionRootController } from '../../services/session-root-controller.js';
 import { gitController } from '../../services/git-controller.js';
 import { trustController } from '../../services/trust-controller.js';
+import { terminalController } from '../../services/terminals.js';
 import { loadAbout } from '../../services/about.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
@@ -72,13 +73,23 @@ export class AcpApp extends LitElement {
   /** @type {Promise<() => void> | null} */
   #menuListener = null;
 
-  #onMenuAction = (/** @type {'about' | 'settings'} */ id) => {
+  #onMenuAction = (/** @type {import('../../services/ipc.js').MenuAction} */ id) => {
     if (id === 'about') this.#showAbout();
+    else if (id === 'new-terminal') this.#newTerminal();
     else this.#showSettings();
   };
 
-  /** Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: Find in Files. */
+  #newTerminal() {
+    terminalController.newTerminal().catch((err) => reportError('Opening a terminal failed', err));
+  }
+
+  /** Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: Find in Files. Ctrl+`: New Terminal. */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
+    if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
+      e.preventDefault();
+      this.#newTerminal();
+      return;
+    }
     if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
     const key = e.key.toLowerCase();
     if (key === 'p' && !e.shiftKey) {
@@ -107,6 +118,7 @@ export class AcpApp extends LitElement {
     trustController.start();
     sessionController.init().catch((err) => reportError('Loading sessions failed', err));
     gitController.start();
+    terminalController.start();
     sessionRootController.start();
     projectController.restore().catch((err) => reportError('Reopening folder failed', err));
   }

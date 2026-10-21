@@ -1,12 +1,14 @@
 //! The macOS menu bar: Tauri's default menu, whose app menu opens our own About dialog and
-//! Settings instead of the native About panel. Other platforms have no menu bar.
+//! Settings instead of the native About panel, plus a Terminal menu. Other platforms have no menu
+//! bar.
 
-use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem};
+use tauri::menu::{Menu, MenuEvent, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::{AppHandle, Emitter, Manager, Runtime};
 
-/// Tauri event to the focused window; payload is the item's id (`about`, `settings`).
+/// Tauri event to the focused window; payload is the item's id (`about`, `settings`,
+/// `new-terminal`).
 pub const MENU_EVENT: &str = "menu://action";
-const ACTIONS: &[&str] = &["about", "settings"];
+const ACTIONS: &[&str] = &["about", "settings", "new-terminal"];
 
 #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
 pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
@@ -24,6 +26,11 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             0,
         )?;
     }
+    let new_terminal = MenuItem::with_id(app, "new-terminal", "New Terminal", true, Some("Ctrl+Backquote"))?;
+    let terminal = Submenu::with_items(app, "Terminal", true, &[&new_terminal])?;
+    // Before Window and Help, which close the default menu.
+    let at = menu.items()?.len().saturating_sub(2);
+    menu.insert(&terminal, at)?;
     Ok(menu)
 }
 

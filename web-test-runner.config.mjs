@@ -37,6 +37,8 @@ const litCssInline = {
   name: 'brama:lit-css-inline',
   resolveImport({ source, context }) {
     if (!source.endsWith('.css?inline')) return undefined;
+    // A package's stylesheet (`@xterm/xterm/css/xterm.css?inline`) is served from node_modules.
+    if (source.startsWith('@')) return `/node_modules/${source}`;
     return new URL(source, `http://localhost${context.path}`).pathname + '?inline';
   },
   async serve(context) {
@@ -70,7 +72,14 @@ const rawText = {
 export default {
   files: 'src/**/*.test.js',
   nodeResolve: true,
-  browsers: [chromeLauncher({ launchOptions: { channel: 'chrome' } })],
+  browsers: [
+    chromeLauncher({
+      launchOptions: { channel: 'chrome' },
+      // Each test file in a window of its own: a background tab draws no frames, so xterm (and
+      // anything else that renders or observes resizes) would stall while files run in parallel.
+      createPage: async ({ browser }) => (await browser.createBrowserContext()).newPage(),
+    }),
+  ],
   plugins: [litCssInline, rawText, bindEventListener],
   // nanostores reads `process.env.NODE_ENV`, which the bundler defines.
   testRunnerHtml: (testFramework) => `<!doctype html>

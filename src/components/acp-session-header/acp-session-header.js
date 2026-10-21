@@ -16,10 +16,11 @@ import styles from './acp-session-header.css?inline';
 
 /**
  * @tag acp-session-header
- * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, delete), and a new-session button.
+ * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, open in a terminal, delete), and a new-session button.
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
+ * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
  * @fires acp-session-new `null`
  */
@@ -126,7 +127,7 @@ export class AcpSessionHeader extends LitElement {
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const sessionId = this.sessionId;
     if (value === 'rename') this.#startRename();
-    else if (value === 'reset-title' || value === 'reveal' || value === 'delete')
+    else if (value === 'reset-title' || value === 'reveal' || value === 'open-terminal' || value === 'delete')
       this.#emit(`acp-session-${value}`, { sessionId });
   };
 

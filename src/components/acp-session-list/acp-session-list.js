@@ -56,6 +56,7 @@ function age(iso) {
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
+ * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
  */
 export class AcpSessionList extends LitElement {
@@ -186,7 +187,7 @@ export class AcpSessionList extends LitElement {
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const sessionId = session.id;
     if (value === 'rename') this.#startRename(session);
-    else if (value === 'reset-title' || value === 'reveal' || value === 'delete')
+    else if (value === 'reset-title' || value === 'reveal' || value === 'open-terminal' || value === 'delete')
       this.#emit(`acp-session-${value}`, { sessionId });
   }
 

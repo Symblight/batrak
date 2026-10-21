@@ -25,6 +25,9 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').TranscriptEntry} TranscriptEntry */
 /** @typedef {import('../models/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../models/types.js').WorkspaceSettings} WorkspaceSettings */
+/** @typedef {import('../models/types.js').TerminalBusy} TerminalBusy */
+/** @typedef {import('../models/types.js').TerminalExit} TerminalExit */
+/** @typedef {import('../models/types.js').TerminalOpened} TerminalOpened */
 
 /** The only module that knows Rust command names. */
 
@@ -420,13 +423,15 @@ export function onWorkspaceChanged(callback) {
   return listen('workspace://changed', (event) => callback(/** @type {WorkspaceChanges} */ (event.payload)));
 }
 
+/** @typedef {'about' | 'settings' | 'new-terminal'} MenuAction */
+
 /**
  * Clicks on the app's own menu bar items (macOS), sent to the focused window.
- * @param {(id: 'about' | 'settings') => void} callback
+ * @param {(id: MenuAction) => void} callback
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onMenuAction(callback) {
-  return listen('menu://action', (event) => callback(/** @type {'about' | 'settings'} */ (event.payload)));
+  return listen('menu://action', (event) => callback(/** @type {MenuAction} */ (event.payload)));
 }
 
 /**
@@ -624,4 +629,89 @@ export function getHomeDir() {
 export async function pickFolder() {
   const result = await open({ directory: true, multiple: false });
   return typeof result === 'string' ? result : null;
+}
+
+/**
+ * Starts a terminal's shell in `cwd`, or in `fallback` when `cwd` doesn't exist; a running one
+ * answers with what it runs, an exited one starts afresh.
+ * @param {string} id
+ * @param {string} cwd
+ * @param {string | null} fallback
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {Promise<TerminalOpened>}
+ */
+export function terminalOpen(id, cwd, fallback, cols, rows) {
+  return invoke('terminal_open', { id, cwd, fallback, cols, rows });
+}
+
+/**
+ * Streams a terminal: first its kept output, then what follows; replaces an earlier attachment.
+ * @param {string} id
+ * @param {(bytes: Uint8Array) => void} onOutput
+ * @param {(exit: TerminalExit) => void} onExit
+ * @returns {Promise<void>}
+ */
+export function terminalAttach(id, onOutput, onExit) {
+  /** @type {Channel<ArrayBuffer>} */
+  const output = new Channel();
+  output.onmessage = (buffer) => onOutput(new Uint8Array(buffer));
+  /** @type {Channel<{ kind: 'exit', code: number | null, signal: string | null }>} */
+  const events = new Channel();
+  events.onmessage = ({ code, signal }) => onExit({ code, signal });
+  return invoke('terminal_attach', { id, output, events });
+}
+
+/**
+ * @param {string} id
+ * @param {Uint8Array} data Input for the shell, sent as the raw body.
+ * @returns {Promise<void>}
+ */
+export function terminalWrite(id, data) {
+  return invoke('terminal_write', data, { headers: { 'terminal-id': id } });
+}
+
+/**
+ * The page has drawn `bytes` of a terminal's output; the backend pauses reading while too much isn't.
+ * @param {string} id
+ * @param {number} bytes
+ * @returns {Promise<void>}
+ */
+export function terminalAck(id, bytes) {
+  return invoke('terminal_ack', { id, bytes });
+}
+
+/**
+ * @param {string} id
+ * @param {number} cols
+ * @param {number} rows
+ * @returns {Promise<void>}
+ */
+export function terminalResize(id, cols, rows) {
+  return invoke('terminal_resize', { id, cols, rows });
+}
+
+/**
+ * @param {string[]} ids
+ * @returns {Promise<TerminalBusy[]>} Those running a program other than their shell.
+ */
+export function terminalBusy(ids) {
+  return invoke('terminal_busy', { ids });
+}
+
+/**
+ * Hangs up the terminals' shells and what runs in their foreground.
+ * @param {string[]} ids
+ * @returns {Promise<void>}
+ */
+export function terminalClose(ids) {
+  return invoke('terminal_close', { ids });
+}
+
+/**
+ * Closes every terminal this window opened, e.g. ones a previous load of the page left running.
+ * @returns {Promise<void>}
+ */
+export function closeWindowTerminals() {
+  return invoke('close_window_terminals');
 }

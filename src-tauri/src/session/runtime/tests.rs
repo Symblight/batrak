@@ -800,6 +800,20 @@ async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable()
 }
 
 #[tokio::test]
+async fn a_sessions_folder_contains_its_project_or_its_worktree_folder() {
+    let f = git_fixture("contains-folder");
+    let (_local, events) = f.create("l", "fake").unwrap();
+    let (wt, other) = f.create_in("w", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    other.wait_status("idle").await;
+    assert!(f.sessions.contains_folder(&f.project), "a local session's folder is its project");
+    assert!(f.sessions.contains_folder(&f.project.join("src")));
+    assert!(f.sessions.contains_folder(Path::new(&wt.folder)));
+    assert!(!f.sessions.contains_folder(&f.dir.join("data")));
+    assert!(!f.sessions.contains_folder(&f.project.with_file_name("projectx")));
+}
+
+#[tokio::test]
 async fn a_worktree_sessions_folder_is_given_only_once_checked_out() {
     let f = git_fixture("wt-tree-folder");
     let (local, events) = f.create("l", "fake").unwrap();

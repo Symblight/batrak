@@ -7,6 +7,7 @@ pub mod fs;
 pub mod git;
 pub mod log;
 pub mod sessions;
+pub mod terminal;
 pub mod workspace;
 
 /// Runs blocking work (disk IO, scans) off the async runtime's threads.

@@ -3,8 +3,10 @@ import { classMap } from 'lit/directives/class-map.js';
 import { commentAuthor } from '../../models/editor-plugins.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { copyText } from '../../services/clipboard.js';
-import { listDir } from '../../services/ipc.js';
+import { listDir, openUrl } from '../../services/ipc.js';
 import { loadSystemFonts } from '../../services/fonts.js';
+import { reportError } from '../../services/notices.js';
+import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -54,6 +56,7 @@ import {
   setEditorFontSize,
 } from '../../stores/settings.js';
 import { $worktrees } from '../../stores/sessions.js';
+import { $terminals, setTerminalTitle } from '../../stores/terminals.js';
 import { $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import '../acp-comment-bar/acp-comment-bar.js';
@@ -70,7 +73,7 @@ import styles from './acp-main-column.css?inline';
 
 /**
  * @tag acp-main-column
- * @summary The main column: everything opens in its tabs (files, Changes, Settings).
+ * @summary The main column: everything opens in its tabs (files, Changes, Settings, terminals).
  */
 export class AcpMainColumn extends LitElement {
   static styles = styles;
@@ -92,6 +95,7 @@ export class AcpMainColumn extends LitElement {
   #gitChanges = new StoreController(this, { store: $gitChanges });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #commitSelection = new StoreController(this, { store: $commitSelection });
+  #terminals = new StoreController(this, { store: $terminals });
 
   /** A comment to reveal: show its file; the editor that shows it then reveals it. */
   #commentFocus = new StoreController(this, {
@@ -254,6 +258,9 @@ export class AcpMainColumn extends LitElement {
         .root=${this.#workspace.value?.path ?? null}
         .rootId=${this.#rootId.value}
         .listDir=${listDir}
+        .terminals=${this.#terminals.value}
+        .terminalConnect=${terminalController.connect}
+        .terminalBusy=${terminalController.busy}
         .worktrees=${this.#worktrees.value}
         .sessionReview=${this.#sessionReview.view}
         .languages=${this.#fileLanguages.value}
@@ -283,6 +290,14 @@ export class AcpMainColumn extends LitElement {
         @acp-tab-save=${this.#onTabSave}
         @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
+        @acp-terminal-copy=${(/** @type {CustomEvent<{ text: string }>} */ e) =>
+          copyText(e.detail.text, 'Copying failed')}
+        @acp-terminal-restart=${(/** @type {CustomEvent<{ terminalId: string }>} */ e) =>
+          terminalController.restart(e.detail.terminalId)}
+        @acp-terminal-title=${(/** @type {CustomEvent<{ terminalId: string, title: string }>} */ e) =>
+          setTerminalTitle(e.detail.terminalId, e.detail.title)}
+        @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
+          openUrl(e.detail.url).catch((err) => reportError('Opening link failed', err))}
         @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
           setFileLanguage(e.detail.path, e.detail.language)}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>

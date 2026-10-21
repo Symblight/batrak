@@ -43,6 +43,8 @@ tokio-util = { version = "0.7", features = ["compat"] }
 futures = "0.3"
 # `${keychain:name}` in agents.json env values
 keyring = "4.2"
+# Terminal tabs: the user's shell in a pseudo-terminal
+portable-pty = "0.9"
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]
@@ -52,7 +54,6 @@ libc = "0.2"
 # rusqlite = { version = "0.32", features = ["bundled"] }
 # git2 = "0.19"
 # similar = "2"
-# portable-pty = "0.8"
 
 # Optimize dependencies in dev builds: fuzzy matching, regex and directory walking are
 # 10x slower unoptimized, which makes Quick Open lag in `tauri dev`. Our own crate stays debug.

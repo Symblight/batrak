@@ -54,18 +54,33 @@ describe('acp-session-menu', () => {
     const { el } = await render(html`<acp-session-menu></acp-session-menu>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const disabled = [...root.querySelectorAll('md-menu-item[disabled]')].map((i) => i.getAttribute('value'));
-    expect(disabled).to.deep.equal(['open-in', 'open-terminal', 'export', 'archive']);
+    expect(disabled).to.deep.equal(['export', 'archive']);
   });
 
   it('reports the picked action', async () => {
     const { el, menu } = await render(html`<acp-session-menu></acp-session-menu>`);
     const events = record(el, 'acp-session-menu-select');
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    for (const value of ['rename', 'reveal', 'delete']) {
+    for (const value of ['rename', 'reveal', 'open-terminal', 'delete']) {
       const item = /** @type {HTMLElement} */ (root.querySelector(`md-menu-item[value="${value}"]`));
       menu.dispatchEvent(new CustomEvent('select', { detail: { value, item } }));
     }
-    expect(events.map((e) => e.detail)).to.deep.equal([{ value: 'rename' }, { value: 'reveal' }, { value: 'delete' }]);
+    expect(events.map((e) => e.detail)).to.deep.equal([
+      { value: 'rename' },
+      { value: 'reveal' },
+      { value: 'open-terminal' },
+      { value: 'delete' },
+    ]);
+  });
+
+  it('reports a pick in the Open in submenu once', async () => {
+    const { el } = await render(html`<acp-session-menu></acp-session-menu>`);
+    const events = record(el, 'acp-session-menu-select');
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[value="open-terminal"]'));
+    // What a click on it fires; both menus pass it on.
+    item.dispatchEvent(new CustomEvent('select', { detail: { value: 'open-terminal', item }, bubbles: true, composed: true }));
+    expect(events.map((e) => e.detail)).to.deep.equal([{ value: 'open-terminal' }]);
   });
 
   it('reports opening and closing', async () => {

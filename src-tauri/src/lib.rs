@@ -6,6 +6,7 @@ mod logging;
 mod menu;
 mod session;
 mod storage;
+mod terminal;
 mod workspace;
 
 use tauri::Manager;
@@ -49,12 +50,17 @@ pub fn run() {
             app.manage(UserAgentsWatch(std::sync::Mutex::new(user_watch)));
             app.manage(sessions);
             app.manage(configs);
+            app.manage(terminal::Terminals::new(terminal::TerminalsOptions {
+                shell: None,
+                version: app.package_info().version.to_string(),
+            }));
             Ok(())
         })
         .on_window_event(|window, event| {
             if let tauri::WindowEvent::Destroyed = event {
                 window.state::<workspace::Workspaces>().close_group(window.label());
                 window.state::<session::Sessions>().detach_all(window.label());
+                window.state::<terminal::Terminals>().close_group(window.label());
             }
         })
         .invoke_handler(tauri::generate_handler![
@@ -112,13 +118,23 @@ pub fn run() {
             commands::git::git_last_commit_message,
             commands::git::git_branches,
             commands::git::git_commit,
+            commands::terminal::terminal_open,
+            commands::terminal::terminal_attach,
+            commands::terminal::terminal_write,
+            commands::terminal::terminal_ack,
+            commands::terminal::terminal_resize,
+            commands::terminal::terminal_busy,
+            commands::terminal::terminal_close,
+            commands::terminal::close_window_terminals,
         ])
         .build(tauri::generate_context!())
         .expect("error while building Brama")
         .run(|app, event| {
-            // No agent process outlives the app: every session's process group is stopped.
+            // No agent process or shell outlives the app: every session's and terminal's process
+            // group is stopped.
             if let tauri::RunEvent::Exit = event {
                 app.state::<session::Sessions>().shutdown();
+                app.state::<terminal::Terminals>().stop_all(std::time::Duration::from_millis(200));
             }
         });
 }

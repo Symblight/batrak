@@ -200,6 +200,12 @@ describe('acp-session-list', () => {
       const reveals = record(el, 'acp-session-reveal');
       menuEl.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value: 'reveal' }, bubbles: true, composed: true }));
       expect(reveals.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }]);
+
+      const terminals = record(el, 'acp-session-open-terminal');
+      menuEl.dispatchEvent(
+        new CustomEvent('acp-session-menu-select', { detail: { value: 'open-terminal' }, bubbles: true, composed: true }),
+      );
+      expect(terminals.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }]);
     });
 
     it('offers Reset to agent title for a session the user renamed after the agent named it', async () => {
