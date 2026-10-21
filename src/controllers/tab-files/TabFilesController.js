@@ -5,7 +5,7 @@ import { imageTypeOf } from '../../models/image-types.js';
 import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
-import { $editorTabs, parseTabId } from '../../stores/editor.js';
+import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor.js';
 import { $gitHead } from '../../stores/git.js';
 import { $sessions } from '../../stores/sessions.js';
 import { $rootId } from '../../stores/workspace.js';
@@ -25,7 +25,8 @@ function basename(path) {
 /**
  * The open tabs (`$editorTabs`) with what they show: reads the active tab's file and its text at HEAD
  * (the diff gutter), or an image tab's bytes, re-reads after a change on disk or a HEAD move, keeps an editable file's unsaved
- * draft and saves it, unless the file changed on disk since (`changedOnDisk`). The host renders `tabs`.
+ * draft (also while another project is shown) and saves it, unless the file changed on disk since
+ * (`changedOnDisk`). The host renders `tabs`.
  * @implements {ReactiveController}
  */
 export class TabFilesController {
@@ -47,6 +48,8 @@ export class TabFilesController {
   #editorTabs;
   /** @type {Set<string>} Worktree sessions whose agent is mid-turn. */
   #busyWorktrees = new Set();
+  /** @type {Map<string, EditorTab>} Tabs with unsaved edits of projects not shown now, by id. */
+  #away = new Map();
 
   /** @param {ReactiveControllerHost & HTMLElement} host */
   constructor(host) {
@@ -222,9 +225,23 @@ export class TabFilesController {
    */
   #syncTabs({ paths, active }) {
     const known = new Map(this.#tabs.map((t) => [t.id, t]));
+    const open = new Set(Object.values($projectTabs.get()).flatMap((tabs) => tabs?.paths ?? []));
+    // Gone from the strip but still open in another project: shown again when that project is.
+    for (const tab of this.#tabs) {
+      if (tab.draft !== null && !paths.includes(tab.id) && open.has(tab.id)) this.#away.set(tab.id, tab);
+    }
+    for (const id of this.#away.keys()) {
+      if (!open.has(id)) this.#away.delete(id);
+    }
     this.#tabs = paths.map((id) => {
       const existing = known.get(id);
       if (existing) return existing;
+      const kept = this.#away.get(id);
+      if (kept) {
+        this.#away.delete(id);
+        // Read again on show; `#load` keeps the draft and marks a file that changed meanwhile.
+        return { ...kept, loaded: false };
+      }
       const target = parseTabId(id);
       // A view has nothing to read.
       const loaded = !readsFile(target);

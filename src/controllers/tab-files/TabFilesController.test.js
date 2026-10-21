@@ -3,7 +3,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../test/fixture.js';
 import { TabFilesController } from './TabFilesController.js';
 import { projectController } from '../../services/project-controller.js';
-import { closeAllTabs, openTab } from '../../stores/editor.js';
+import { closeAllTabs, closeTab, openTab } from '../../stores/editor.js';
 import { $workspace } from '../../stores/workspace.js';
 
 /** @typedef {import('../../models/types.js').EditorTab} EditorTab */
@@ -148,5 +148,37 @@ describe('TabFilesController', () => {
     expect(await files.save(PATH)).to.equal(false);
     expect(writes).to.deep.equal([]);
     expect(tab().changedOnDisk).to.equal(true);
+  });
+
+  describe('switching projects', () => {
+    const away = () => $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
+    const back = () => $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+
+    it('keeps unsaved edits while another project is shown', async () => {
+      const { files, tab } = await edited();
+      away();
+      expect(files.tabs.find((t) => t.id === PATH)).to.equal(undefined);
+      back();
+      await until(() => tab()?.loaded);
+      expect(tab()).to.include({ draft: '{ "mine": 1 }', changedOnDisk: false });
+    });
+
+    it('marks kept edits whose file changed meanwhile', async () => {
+      const { files, tab } = await edited();
+      away();
+      disk[PATH] = '{ "theirs": 1 }';
+      back();
+      await until(() => tab()?.loaded);
+      expect(tab()).to.include({ content: '{}', draft: '{ "mine": 1 }', changedOnDisk: true });
+      expect(await files.save(PATH)).to.equal(false);
+    });
+
+    it('drops the edits of a closed tab', async () => {
+      const { tab } = await edited();
+      closeTab(PATH);
+      openTab(PATH);
+      await until(() => tab()?.loaded);
+      expect(tab().draft).to.equal(null);
+    });
   });
 });
