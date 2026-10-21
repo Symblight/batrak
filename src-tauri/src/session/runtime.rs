@@ -264,6 +264,12 @@ impl Sessions {
         })
     }
 
+    /// Whether a canonical `path` lies in any session's folder: a local session's project, a
+    /// worktree session's folder in its worktree. A terminal may start there.
+    pub fn contains_folder(&self, path: &Path) -> bool {
+        lock(&self.inner.sessions).values().any(|s| path.starts_with(&lock(&s.record).agent_cwd))
+    }
+
     /// A worktree session's folder (its agent's cwd), once it's checked out; the Files tree lists it.
     pub fn worktree_folder(&self, id: &str) -> Result<PathBuf, String> {
         let state = self.get(id)?;

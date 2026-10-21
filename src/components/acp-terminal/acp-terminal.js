@@ -1,23 +1,247 @@
-import { LitElement, html } from 'lit';
-import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import '../acp-view-placeholder/acp-view-placeholder.js';
+import { LitElement, html, nothing } from 'lit';
+import { Terminal } from '@xterm/xterm';
+import { FitAddon } from '@xterm/addon-fit';
+import { WebglAddon } from '@xterm/addon-webgl';
+import { WebLinksAddon } from '@xterm/addon-web-links';
+import '@symblight/wc-material/button';
+import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
+import { terminalTheme } from '../../models/terminal-theme.js';
 import styles from './acp-terminal.css?inline';
+
+/** @typedef {import('../../models/types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('../../models/types.js').TerminalExit} TerminalExit */
+/** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../models/types.js').TerminalLink} TerminalLink */
+
+const MAC = /Mac/.test(navigator.userAgent);
+const MONO = 'ui-monospace, Menlo, monospace';
 
 /**
  * @tag acp-terminal
- * @summary The Terminal tab (mock).
+ * @summary A terminal tab: xterm.js streaming its shell through `connect`, sized to the tab.
+ * @fires acp-terminal-copy `{ text }`
+ * @fires acp-terminal-restart `{ terminalId }`
+ * @fires acp-terminal-title `{ terminalId, title }` A title the shell set.
+ * @fires acp-link-open `{ url }` A link ⌘-clicked (Ctrl-clicked elsewhere).
  */
 export class AcpTerminal extends LitElement {
-  static styles = styles;
+  static properties = {
+    terminalId: { attribute: 'terminal-id' },
+    connect: { attribute: false },
+    info: { attribute: false },
+    fontFamily: { attribute: false },
+    fontSize: { attribute: false },
+    gpu: { attribute: false },
+  };
+
+  static styles = [xtermStyles, styles];
+
+  /** @type {Terminal | null} */
+  #term = null;
+  /** @type {FitAddon | null} */
+  #fit = null;
+  /** @type {TerminalLink | null} */
+  #link = null;
+  /** @type {ResizeObserver | null} */
+  #resizes = null;
+  /** @type {MutationObserver | null} */
+  #themes = null;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #frame;
+  #visible = false;
+
+  constructor() {
+    super();
+    /** @type {string} */
+    this.terminalId = '';
+    /** @type {TerminalConnect | null} */
+    this.connect = null;
+    /** @type {TerminalInfo | null} */
+    this.info = null;
+    /** @type {string | null} The code editor's font family; `null` for the monospace stack. */
+    this.fontFamily = null;
+    /** @type {number} px */
+    this.fontSize = 13;
+    /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
+    this.gpu = true;
+  }
+
+  /**
+   * @param {string} type
+   * @param {object} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  #theme() {
+    const style = getComputedStyle(this);
+    const token = (/** @type {string} */ name) => style.getPropertyValue(name).trim();
+    const tokens = { background: token('--md-surface'), foreground: token('--md-on-surface'), primary: token('--md-primary') };
+    return terminalTheme(tokens, document.documentElement.dataset.theme === 'dark');
+  }
+
+  #font() {
+    return this.fontFamily ? `"${this.fontFamily}", ${MONO}` : MONO;
+  }
+
+  firstUpdated() {
+    this.#setUp();
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    // Moved (a tab reorder moves its panel): disconnecting disposed the screen.
+    if (this.hasUpdated && !this.#term) this.#setUp();
+  }
+
+  #setUp() {
+    const screen = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.acp-terminal__screen'));
+    screen.replaceChildren();
+    const term = new Terminal({
+      fontFamily: this.#font(),
+      fontSize: this.fontSize,
+      scrollback: 10000,
+      macOptionIsMeta: false,
+      theme: this.#theme(),
+    });
+    this.#term = term;
+    this.#fit = new FitAddon();
+    term.loadAddon(this.#fit);
+    term.loadAddon(
+      new WebLinksAddon((event, url) => {
+        if (MAC ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
+      }),
+    );
+    term.attachCustomKeyEventHandler(this.#onKey);
+    term.onData((data) => this.#link?.write(data));
+    // Bytes in a string (mouse reports past column 95), not text.
+    term.onBinary((data) => this.#link?.write(Uint8Array.from(data, (c) => c.charCodeAt(0))));
+    term.onTitleChange((title) => this.#emit('acp-terminal-title', { terminalId: this.terminalId, title }));
+    term.open(screen);
+    if (this.gpu) this.#loadWebgl(term);
+    this.#resizes = new ResizeObserver(() => this.#scheduleFit());
+    this.#resizes.observe(this);
+    this.#themes = new MutationObserver(() => {
+      if (this.#term) this.#term.options.theme = this.#theme();
+    });
+    this.#themes.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
+  }
+
+  /** @param {Terminal} term */
+  #loadWebgl(term) {
+    try {
+      const webgl = new WebglAddon();
+      // Too many contexts, or the GPU reset: back to the DOM renderer.
+      webgl.onContextLoss(() => webgl.dispose());
+      term.loadAddon(webgl);
+    } catch {
+      // No WebGL2: the DOM renderer stays.
+    }
+  }
+
+  /** @param {import('lit').PropertyValues<this>} changed */
+  updated(changed) {
+    const term = this.#term;
+    if (!term) return;
+    if (changed.has('fontFamily') || changed.has('fontSize')) {
+      term.options.fontFamily = this.#font();
+      term.options.fontSize = this.fontSize;
+      this.#scheduleFit();
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    clearTimeout(this.#frame);
+    this.#resizes?.disconnect();
+    this.#themes?.disconnect();
+    this.#link?.dispose();
+    this.#link = null;
+    this.#term?.dispose();
+    this.#term = null;
+    this.#fit = null;
+    this.#visible = false;
+  }
+
+  /**
+   * One fit per frame; none while the tab is hidden (0 × 0). A timer, not `requestAnimationFrame`,
+   * which a page in the background never runs: its terminal would never connect.
+   */
+  #scheduleFit() {
+    clearTimeout(this.#frame);
+    this.#frame = setTimeout(() => {
+      const term = this.#term;
+      const fit = this.#fit;
+      if (!term || !fit) return;
+      const visible = this.offsetWidth > 0 && this.offsetHeight > 0;
+      const shown = visible && !this.#visible;
+      this.#visible = visible;
+      if (!visible) return;
+      const { cols, rows } = term;
+      fit.fit();
+      if (!this.#link && this.connect) {
+        this.#link = this.connect(this.terminalId, { cols: term.cols, rows: term.rows }, {
+          output: (bytes, done) => term.write(bytes, done),
+          reset: () => term.reset(),
+          exit: (exit) => term.write(`\r\n\x1b[2m[Process exited with ${exitText(exit)}]\x1b[0m\r\n`),
+        });
+      } else if (term.cols !== cols || term.rows !== rows) {
+        this.#link?.resize(term.cols, term.rows);
+      }
+      if (shown) term.focus();
+    }, 16);
+  }
+
+  /**
+   * Keys for the shell, except the app's shortcuts (they bubble on) and copy, paste, clear, select all.
+   * @param {KeyboardEvent} e
+   * @returns {boolean} xterm handles it.
+   */
+  #onKey = (e) => {
+    const term = this.#term;
+    if (!term) return false;
+    const key = e.key.toLowerCase();
+    const down = e.type === 'keydown';
+    if (e.ctrlKey && !e.metaKey && e.key === '`') return false;
+    if (MAC) {
+      if (!e.metaKey) return true;
+      if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
+      else if (down && key === 'k') term.clear();
+      else if (down && key === 'a') term.selectAll();
+      if (down && (key === 'k' || key === 'a')) e.preventDefault();
+      return false;
+    }
+    if (e.ctrlKey && e.shiftKey && key === 'c') {
+      if (down && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
+      return false;
+    }
+    if (e.ctrlKey && e.shiftKey && (key === 'v' || key === 'f')) return false;
+    if (e.ctrlKey && !e.shiftKey && key === 'p') return false;
+    return true;
+  };
 
   render() {
-    return html`<acp-view-placeholder
-      class="acp-terminal__placeholder"
-      .icon=${terminalIcon}
-      heading="Terminal"
-      text="Not implemented yet."
-    ></acp-view-placeholder>`;
+    const info = this.info;
+    const ended = info?.status === 'exited' || info?.status === 'failed';
+    return html`${info?.status === 'failed'
+        ? html`<div class="acp-terminal__error" role="alert">${info.error}</div>`
+        : nothing}
+      <div class="acp-terminal__screen"></div>
+      ${ended
+        ? html`<md-button
+            class="acp-terminal__restart"
+            variant="tonal"
+            @click=${() => this.#emit('acp-terminal-restart', { terminalId: this.terminalId })}
+            >Restart</md-button
+          >`
+        : nothing}`;
   }
+}
+
+/** @param {TerminalExit} exit */
+function exitText({ code, signal }) {
+  return signal ?? `code ${code ?? '?'}`;
 }
 
 customElements.define('acp-terminal', AcpTerminal);

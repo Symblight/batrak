@@ -32,7 +32,7 @@ import '../acp-browser/acp-browser.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import { isAgentsFile } from '../../models/agents-file.js';
 import { absPath, projectPathOf, relPath, worktreeOf } from '../../models/paths.js';
-import { sessionOfTab } from '../../models/tab-ids.js';
+import { sessionOfTab, terminalOfTab } from '../../models/tab-ids.js';
 import { lineHeightFor } from '../../models/settings.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
@@ -48,6 +48,9 @@ import styles from './acp-tab-view.css?inline';
 /** @typedef {import('../../models/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../models/types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('../../models/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../acp-file-tree/acp-file-tree.js').ListDir} ListDir */
 /** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
 
@@ -121,6 +124,9 @@ export class AcpTabView extends LitElement {
     languages: { attribute: false },
     rootId: { attribute: false },
     listDir: { attribute: false },
+    terminals: { attribute: false },
+    terminalConnect: { attribute: false },
+    terminalBusy: { attribute: false },
   };
 
   static styles = styles;
@@ -156,7 +162,7 @@ export class AcpTabView extends LitElement {
         ></acp-settings>`,
       changes: () => this.#renderChanges(),
       'session-changes': (tab) => this.#renderSessionChanges(tab),
-      terminal: () => html`<acp-terminal class="acp-tab-view__view"></acp-terminal>`,
+      terminal: (tab) => this.#renderTerminal(tab),
       browser: () => html`<acp-browser class="acp-tab-view__view"></acp-browser>`,
     },
   });
@@ -257,6 +263,12 @@ export class AcpTabView extends LitElement {
     this.rootId = null;
     /** @type {ListDir} Lists a project folder for a footer crumb. */
     this.listDir = async () => [];
+    /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
+    this.terminals = {};
+    /** @type {TerminalConnect | null} Streams a terminal tab's shell. */
+    this.terminalConnect = null;
+    /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
+    this.terminalBusy = async () => [];
   }
 
   /**
@@ -294,7 +306,7 @@ export class AcpTabView extends LitElement {
    * @param {string[]} ids The tabs it closes.
    */
   async #close(id, scope, ids) {
-    if (!(await this.#confirmDiscard(ids))) return;
+    if (!(await this.#confirmDiscard(ids)) || !(await this.#confirmTerminate(ids))) return;
     if (this.active !== null && ids.includes(this.active)) this.#pendingLine = null;
     this.#emit('acp-tab-close', { id, scope });
   }
@@ -314,6 +326,30 @@ export class AcpTabView extends LitElement {
       message: dirty.map((t) => basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
       detail: 'Press ⌘S / Ctrl+S in the editor to save.',
       confirmLabel: 'Discard',
+      destructive: true,
+    });
+  }
+
+  /**
+   * Asks before closing terminals that run a program other than their shell; `true` when none does,
+   * or the user terminates them.
+   * @param {string[]} ids Tabs about to close.
+   */
+  async #confirmTerminate(ids) {
+    const terminals = ids.map(terminalOfTab).filter(/** @returns {t is string} */ (t) => t !== null);
+    if (!terminals.length) return true;
+    const busy = await this.terminalBusy(terminals);
+    if (!busy.length) return true;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    return dialog.confirm({
+      headline: busy.length === 1 ? `Terminate ${busy[0].process}?` : `Terminate ${busy.length} running programs?`,
+      message:
+        busy.length === 1
+          ? `${busy[0].process} is still running in the terminal.`
+          : `${busy.map((b) => b.process).join(', ')} are still running in their terminals.`,
+      confirmLabel: 'Terminate',
       destructive: true,
     });
   }
@@ -551,7 +587,10 @@ export class AcpTabView extends LitElement {
       const branch = worktree?.branch ?? 'its worktree';
       return { title: worktree?.title ?? 'Changes', icon: differenceIcon, tooltip: `Changes on ${branch} since the session started` };
     }
-    if (tab.kind === 'terminal') return { title: 'Terminal', icon: terminalIcon, tooltip: 'Terminal' };
+    if (tab.kind === 'terminal') {
+      const info = this.terminals[terminalOfTab(tab.id) ?? ''];
+      return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, tooltip: info?.cwd ?? 'Terminal' };
+    }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
     const name = basename(tab.path);
     const worktree = worktreeOf(this.worktrees, tab.path);
@@ -794,6 +833,21 @@ export class AcpTabView extends LitElement {
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
     ></acp-changes-review>`;
+  }
+
+  /** @param {EditorTab} tab */
+  #renderTerminal(tab) {
+    const id = terminalOfTab(tab.id);
+    const info = id === null ? undefined : this.terminals[id];
+    if (!info) return nothing;
+    return html`<acp-terminal
+      class="acp-tab-view__view"
+      terminal-id=${id}
+      .connect=${this.terminalConnect}
+      .info=${info}
+      .fontFamily=${this.editorFont}
+      .fontSize=${this.editorFontSize}
+    ></acp-terminal>`;
   }
 
   /** @param {EditorTab} tab */

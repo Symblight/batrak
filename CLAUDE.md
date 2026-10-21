@@ -99,13 +99,14 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor, Agents) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
   and the tab scrolls there and answers `acp-settings-revealed`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
-  click in the Changes side pane opens, expands and scrolls to; `TERMINAL_TAB_ID`, `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
+  click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids.js`), one per
+  terminal, see "Terminals"; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
   (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its
   kind) and renders it with the host's view for that kind; only `readsFile()` tabs are read from disk:
   text, or an image's bytes (`read_file_bytes`, at most 64 MB) as `EditorTab.image`, a `Blob` that
   `<acp-image-preview>` shows centered (never scaled up) over a checkerboard (`background="auto"`: the
-  column's), with a footer of resolution, type and size. Markdown, terminal and browser views are mocks
+  column's), with a footer of resolution, type and size. Markdown and browser views are mocks
   for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
@@ -314,6 +315,32 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   so a session shows its last report after a reload or restart (no agent reports on
   `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
   ring until there is one.
+
+### Terminals
+
+Spec: `docs/specs/terminal-tab.md`. A Terminal tab runs the user's default shell
+(`terminal::shell::default_shell()`: `$SHELL`, the account's shell, `/bin/zsh`; agents' login-shell
+environment uses the same) as a login shell in a PTY (`src-tauri/src/terminal/`, `portable-pty`),
+started in the active session's folder, else the project, else home (New Terminal: ⌃\`, the macOS
+*Terminal* menu), or a session's folder (session menu → Open in → Terminal). The backend refuses a
+cwd outside open roots, session folders (`Sessions::contains_folder`) and home; a missing one falls
+back to the project. `Terminals` owns every shell by window (closed on window destroy, page load
+(`close_window_terminals`) and app exit); a reader thread keeps the last 1 MiB of output (cut at a
+line start) and streams raw bytes to the attached channel (`terminal_attach`, which replays it
+first), pausing once `FLOW_PAUSE_AT` is sent and not yet drawn (the page acknowledges in
+`ACK_EVERY` steps, `terminal_ack`). A waiter thread reports the shell's exit, without waiting for
+a background job that still holds the PTY. Input goes as raw bytes (`terminal_write`, id in the
+`terminal-id` header), so xterm's binary mouse reports arrive intact. Input and output are never
+logged. Keep it portable: unix-only parts behind `cfg(unix)` with a Windows path (ConPTY,
+`ChildKiller`). Frontend: `$terminals` (`stores/terminals.js`, in
+memory; `$projectTabs`' `parse` drops terminal tabs) and `terminalController`
+(`services/terminals.js`): `connect()` (the tab view's `terminalConnect`) starts a shell when its
+tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
+while its tab or project isn't shown; a terminal's shell is closed once its tab leaves its project's
+tabs (any close, its project removed); exit 0 closes the tab (`closeProjectTab()`), any other exit
+keeps it with Restart. The tab view asks before closing a terminal whose foreground program isn't
+its shell (`terminal_busy`). xterm draws nothing out of view: frontend tests give each test file its
+own browser window (`web-test-runner.config.mjs`) and remove their terminals after each test.
 
 ### Background work
 

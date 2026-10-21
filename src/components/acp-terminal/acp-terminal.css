@@ -1,9 +1,23 @@
 :host {
+  position: relative;
   display: flex;
+  flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
-  background: var(--column-background);
+  background: var(--md-surface);
 }
-.acp-terminal__placeholder {
+.acp-terminal__screen {
   flex: 1;
+  min-height: 0;
+  padding: var(--space-1) var(--space-2);
+}
+.acp-terminal__error {
+  padding: var(--space-2);
+  color: var(--md-error);
+  font-size: var(--font-size-sm);
+}
+.acp-terminal__restart {
+  position: absolute;
+  inset-block-end: var(--space-3);
+  inset-inline-end: var(--space-3);
 }

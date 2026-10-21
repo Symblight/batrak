@@ -16,7 +16,7 @@ import styles from './acp-session-menu.css?inline';
 /**
  * @tag acp-session-menu
  * @summary A session's menu, shared by its header and its list row: opens from `anchor`, at a point, or driven through `menu`; one menu shows at a time, app-wide; items whose backend isn't there yet are disabled.
- * @fires acp-session-menu-select `{ value }` `rename`, `reset-title`, `reveal` or `delete`.
+ * @fires acp-session-menu-select `{ value }` `rename`, `reset-title`, `reveal`, `open-terminal` or `delete`.
  * @fires acp-session-menu-toggle `{ open }` As it starts opening or closing.
  * @fires acp-session-menu-closed `null` Once closed, after its animation (it may have reopened since).
  */
@@ -31,6 +31,8 @@ export class AcpSessionMenu extends LitElement {
 
   /** The anchor whose clicks open the menu. @type {HTMLElement | null} */
   #wired = null;
+  /** @type {WeakSet<object>} Picks reported, by their event detail. */
+  #picked = new WeakSet();
 
   constructor() {
     super();
@@ -111,10 +113,14 @@ export class AcpSessionMenu extends LitElement {
   }
 
   #onSelect = (/** @type {Event} */ e) => {
-    // A submenu's pick reaches the outer menu too; md-menu re-dispatches it as its own.
+    // A submenu's pick reaches the outer menu too; md-menu re-dispatches it as its own. It does so
+    // twice (wc-material 0.5.0: for the item's event and again for the submenu's re-dispatch), both
+    // with the item's own detail.
     if (e.target !== e.currentTarget) return;
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    this.#emit('acp-session-menu-select', { value });
+    const detail = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    if (this.#picked.has(detail)) return;
+    this.#picked.add(detail);
+    this.#emit('acp-session-menu-select', { value: detail.value });
   };
 
   render() {
@@ -129,11 +135,11 @@ export class AcpSessionMenu extends LitElement {
       @closed=${() => this.#emit('acp-session-menu-closed', null)}
     >
       <md-item-group>
-        <md-menu-item class="acp-session-menu__item" value="open-in" disabled>
+        <md-menu-item class="acp-session-menu__item" value="open-in">
           <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(openInIcon)}</md-icon>
           Open in
           <md-menu slot="submenu" class="acp-session-menu__menu" aria-label="Open in">
-            <md-menu-item class="acp-session-menu__item" value="open-terminal" disabled>
+            <md-menu-item class="acp-session-menu__item" value="open-terminal">
               <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(terminalIcon)}</md-icon>
               Terminal
             </md-menu-item>

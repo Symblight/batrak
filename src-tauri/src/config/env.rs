@@ -33,7 +33,7 @@ fn read_login_shell_env() -> Result<HashMap<String, String>, String> {
 
     const MARKER: &str = "__BRAMA_ENV_7f3a__";
     const TIMEOUT: Duration = Duration::from_secs(10);
-    let shell = std::env::var("SHELL").ok().filter(|s| !s.is_empty()).unwrap_or_else(|| "/bin/zsh".to_owned());
+    let shell = crate::terminal::shell::default_shell().to_string_lossy().into_owned();
     // Interactive too: version managers (nvm, fnm, asdf) usually set PATH in the rc file.
     let script = format!("printf '%s' {MARKER}; env -0; printf '%s' {MARKER}");
     let mut child = Command::new(&shell)

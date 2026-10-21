@@ -21,7 +21,83 @@ const fileTab = (path) => ({
   deletedOnDisk: false,
 });
 
+/**
+ * @param {string} terminalId
+ * @returns {EditorTab}
+ */
+const terminalTab = (terminalId) => ({ ...fileTab(''), id: `view:terminal:${terminalId}`, kind: 'terminal' });
+
+/** @type {import('../../../models/types.js').TerminalInfo} */
+const terminalInfo = {
+  cwd: '/p',
+  fallback: '/p',
+  label: 'zsh — p',
+  title: null,
+  projectPath: '/p',
+  status: 'running',
+  exit: null,
+  error: null,
+};
+
 describe('acp-tab-view', () => {
+  describe('terminal tabs', () => {
+    /** @param {import('../../../models/types.js').TerminalBusy[]} busy */
+    async function render(busy) {
+      /** @type {string[][]} */
+      const asked = [];
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+        await fixture(html`<acp-tab-view
+          .tabs=${[terminalTab('t1')]}
+          .active=${'view:terminal:t1'}
+          .root=${'/p'}
+          .terminals=${{ t1: terminalInfo }}
+          .terminalConnect=${() => ({ write() {}, resize() {}, dispose() {} })}
+          .terminalBusy=${async (/** @type {string[]} */ ids) => {
+            asked.push(ids);
+            return busy;
+          }}
+        ></acp-tab-view>`)
+      );
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      /** @type {unknown[]} */
+      const closes = [];
+      el.addEventListener('acp-tab-close', (e) => closes.push(/** @type {CustomEvent} */ (e).detail));
+      const close = () => /** @type {HTMLElement} */ (root.querySelector('.acp-tab-view__close')).click();
+      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
+      return { el, root, asked, closes, close, dialog };
+    }
+
+    const settle = () => new Promise((r) => setTimeout(r, 20));
+
+    it('is titled from its terminal, or the title its shell set', async () => {
+      const { el, root } = await render([]);
+      const label = () => root.querySelector('.acp-tab-view__tab-label')?.textContent?.replace(/\s+/g, ' ').trim();
+      expect(label()).to.include('zsh — p');
+      el.terminals = { t1: { ...terminalInfo, title: 'vim a.txt' } };
+      await el.updateComplete;
+      expect(label()).to.include('vim a.txt');
+      expect(root.querySelector('acp-terminal')?.terminalId).to.equal('t1');
+    });
+
+    it('closes an idle terminal at once', async () => {
+      const { asked, closes, close } = await render([]);
+      close();
+      await settle();
+      expect(asked).to.deep.equal([['t1']]);
+      expect(closes).to.deep.equal([{ id: 'view:terminal:t1', scope: 'tab' }]);
+    });
+
+    it('asks before closing a busy terminal; Cancel keeps it', async () => {
+      const { closes, close, dialog } = await render([{ id: 't1', process: 'vim' }]);
+      close();
+      await settle();
+      expect(dialog.options?.headline).to.equal('Terminate vim?');
+      dialog.close();
+      await settle();
+      expect(closes).to.deep.equal([]);
+    });
+  });
+
   describe('saving a file changed on disk', () => {
     const path = '/p/.brama/agents.json';
     /** @type {EditorTab} */

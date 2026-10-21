@@ -99,13 +99,14 @@ describe('acp-session-header', () => {
 
   it('asks the column for the menu’s actions, naming the session', async () => {
     const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
-    const types = ['acp-session-reveal', 'acp-session-delete'];
+    const types = ['acp-session-reveal', 'acp-session-open-terminal', 'acp-session-delete'];
     /** @type {[string, unknown][]} */
     const seen = [];
     for (const type of types) el.addEventListener(type, (e) => seen.push([type, /** @type {CustomEvent} */ (e).detail]));
-    for (const value of ['reveal', 'delete']) pick(root, value);
+    for (const value of ['reveal', 'open-terminal', 'delete']) pick(root, value);
     expect(seen).to.deep.equal([
       ['acp-session-reveal', { sessionId: 's1' }],
+      ['acp-session-open-terminal', { sessionId: 's1' }],
       ['acp-session-delete', { sessionId: 's1' }],
     ]);
   });

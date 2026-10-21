@@ -3,7 +3,7 @@ import { isRecord, persistentMapStore } from './persistent.js';
 import { $sessionsLoaded, $worktrees } from './sessions.js';
 import { $workspace } from './workspace.js';
 import { isUserAgentsFile } from '../models/agents-file.js';
-import { sessionChangesTabId, sessionOfTab } from '../models/tab-ids.js';
+import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../models/tab-ids.js';
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../models/types.js').SettingsReveal} SettingsReveal */
@@ -14,8 +14,6 @@ import { sessionChangesTabId, sessionOfTab } from '../models/tab-ids.js';
 export const SETTINGS_TAB_ID = 'view:settings';
 /** Id of the Changes tab: every changed file, each expanding into its diff. */
 export const CHANGES_TAB_ID = 'view:changes';
-/** Id of the Terminal tab. */
-export const TERMINAL_TAB_ID = 'view:terminal';
 /** Id of the Browser tab. */
 export const BROWSER_TAB_ID = 'view:browser';
 
@@ -23,7 +21,6 @@ export const BROWSER_TAB_ID = 'view:browser';
 const VIEW_TABS = new Map([
   [SETTINGS_TAB_ID, 'settings'],
   [CHANGES_TAB_ID, 'changes'],
-  [TERMINAL_TAB_ID, 'terminal'],
   [BROWSER_TAB_ID, 'browser'],
 ]);
 
@@ -36,7 +33,9 @@ const NO_PROJECT = '';
  *   view, like Settings).
  */
 export function parseTabId(id) {
-  const view = VIEW_TABS.get(id) ?? (sessionOfTab(id) !== null ? 'session-changes' : undefined);
+  const view =
+    VIEW_TABS.get(id) ??
+    (sessionOfTab(id) !== null ? 'session-changes' : terminalOfTab(id) !== null ? 'terminal' : undefined);
   return view ? { kind: view, path: '' } : { kind: 'file', path: id };
 }
 
@@ -77,13 +76,19 @@ function tabsOf(paths, active, pinned = []) {
 /** @type {EditorTabs} */
 const NO_TABS = { paths: [], active: null, pinned: [] };
 
+/** The Terminal tab before terminals had ids. */
+const OLD_TERMINAL_TAB_ID = 'view:terminal';
+
 /**
+ * Stored tabs; terminal tabs are dropped, since their shells didn't outlive the page.
  * @param {unknown} raw
  * @returns {EditorTabs | null}
  */
-function parseTabs(raw) {
+export function parseTabs(raw) {
   if (!isRecord(raw) || !Array.isArray(raw.paths)) return null;
-  const paths = [...new Set(raw.paths)].filter((path) => typeof path === 'string');
+  const paths = [...new Set(raw.paths)].filter(
+    (path) => typeof path === 'string' && path !== OLD_TERMINAL_TAB_ID && terminalOfTab(path) === null,
+  );
   const pinned = Array.isArray(raw.pinned) ? raw.pinned.filter((id) => typeof id === 'string') : [];
   return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null, pinned);
 }
@@ -184,19 +189,44 @@ export function openTab(path) {
 }
 
 /**
+ * @param {EditorTabs} tabs
+ * @param {string} path Tab id.
+ * @returns {EditorTabs | null} `tabs` without it, a neighbour active if it was; `null` when it isn't open.
+ */
+function without({ paths, active, pinned }, path) {
+  const index = paths.indexOf(path);
+  if (index === -1) return null;
+  const rest = paths.filter((p) => p !== path);
+  return {
+    paths: rest,
+    active: active === path ? (rest[Math.min(index, rest.length - 1)] ?? null) : active,
+    pinned: pinned.filter((p) => p !== path),
+  };
+}
+
+/**
  * Closes a tab, activating a neighbour if it was the active one.
  * @param {string} path Tab id.
  */
 export function closeTab(path) {
-  const { paths, active, pinned } = $editorTabs.get();
-  const index = paths.indexOf(path);
-  if (index === -1) return;
-  const rest = paths.filter((p) => p !== path);
-  setTabs({
-    paths: rest,
-    active: active === path ? (rest[Math.min(index, rest.length - 1)] ?? null) : active,
-    pinned: pinned.filter((p) => p !== path),
-  });
+  const rest = without($editorTabs.get(), path);
+  if (rest) setTabs(rest);
+}
+
+/**
+ * Closes a tab of any project, shown or not, e.g. a terminal whose shell exited.
+ * @param {string | null} root Project path; `null` for the tabs open with no project.
+ * @param {string} path Tab id.
+ */
+export function closeProjectTab(root, path) {
+  const key = root ?? NO_PROJECT;
+  if (key === ($workspace.get()?.path ?? NO_PROJECT)) {
+    closeTab(path);
+    return;
+  }
+  const tabs = $projectTabs.get()[key];
+  const rest = tabs && without(tabs, path);
+  if (rest) $projectTabs.setKey(key, rest);
 }
 
 /**
@@ -290,11 +320,6 @@ export function openChanges() {
  */
 export function openSessionChanges(sessionId) {
   openTab(sessionChangesTabId(sessionId));
-}
-
-/** Opens the Terminal tab, or switches to it. */
-export function openTerminal() {
-  openTab(TERMINAL_TAB_ID);
 }
 
 /** Opens the Browser tab, or switches to it. */
