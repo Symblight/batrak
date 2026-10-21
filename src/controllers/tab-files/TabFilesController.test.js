@@ -150,6 +150,30 @@ describe('TabFilesController', () => {
     expect(writes).to.deep.equal([]);
   });
 
+  it('takes a save that lands while another save checks the disk for no change on disk', async () => {
+    const { files, tab } = await edited();
+    let reads = 0;
+    mockIPC(async (cmd, args) => {
+      const { path, content } = /** @type {{ path: string, content: string }} */ (args);
+      if (cmd === 'read_file') {
+        // The second save's check reads only after the first save wrote.
+        if (++reads === 2) await until(() => writes.length > 0);
+        return disk[path];
+      }
+      if (cmd === 'write_file') {
+        disk[path] = content;
+        writes.push(content);
+      }
+      return null;
+    });
+    const first = files.save(PATH);
+    const second = files.save(PATH);
+    expect(await first).to.equal(true);
+    expect(await second).to.equal(true);
+    expect(writes).to.deep.equal(['{ "mine": 1 }']);
+    expect(tab()).to.include({ content: '{ "mine": 1 }', draft: null, changedOnDisk: false });
+  });
+
   it("asks before saving over a file it can't read", async () => {
     const { files, tab } = await edited();
     readError = `${PATH}: stream did not contain valid UTF-8`;
@@ -190,29 +214,54 @@ describe('TabFilesController', () => {
     });
   });
 
-  describe('a file deleted and created again', () => {
+  describe('a file deleted on disk', () => {
     const REL = '.brama/agents.json';
 
-    it('shows the edits again, marked when the new file differs', async () => {
-      const { files, tab } = await edited();
+    function deleted() {
       delete disk[PATH];
       report({ removed: [REL] });
-      expect(tab().error).to.not.equal('');
+    }
+
+    it('keeps showing the file and its edits, marked deleted', async () => {
+      const { tab } = await edited();
+      deleted();
+      expect(tab()).to.include({ error: '', content: '{}', draft: '{ "mine": 1 }', deletedOnDisk: true });
+    });
+
+    it('saves the edits without asking, creating the file again', async () => {
+      const { files, tab } = await edited();
+      deleted();
+      expect(await files.save(PATH)).to.equal(true);
+      expect(disk[PATH]).to.equal('{ "mine": 1 }');
+      expect(tab()).to.include({ draft: null, deletedOnDisk: false });
+    });
+
+    it('saves an unedited file again too', async () => {
+      const { files, tab } = await edited();
+      files.edit(PATH, '{}');
+      deleted();
+      expect(await files.save(PATH)).to.equal(true);
+      expect(disk[PATH]).to.equal('{}');
+      expect(tab().deletedOnDisk).to.equal(false);
+    });
+
+    it('shows the edits as before when the file is created again, marked when it differs', async () => {
+      const { files, tab } = await edited();
+      deleted();
       disk[PATH] = '{ "theirs": 1 }';
       report({ added: [REL] });
       await until(() => tab().changedOnDisk);
-      expect(tab()).to.include({ error: '', content: '{}', draft: '{ "mine": 1 }' });
+      expect(tab()).to.include({ deletedOnDisk: false, content: '{}', draft: '{ "mine": 1 }' });
       expect(await files.save(PATH)).to.equal(false);
     });
 
-    it('shows the edits again, unmarked when it is the same file', async () => {
+    it('unmarks it when the same file is created again', async () => {
       const { tab } = await edited();
-      delete disk[PATH];
-      report({ removed: [REL] });
+      deleted();
       disk[PATH] = '{}';
       report({ added: [REL] });
       await new Promise((r) => setTimeout(r, 50));
-      expect(tab()).to.include({ error: '', draft: '{ "mine": 1 }', changedOnDisk: false });
+      expect(tab()).to.include({ deletedOnDisk: false, draft: '{ "mine": 1 }', changedOnDisk: false });
     });
   });
 });

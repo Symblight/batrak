@@ -133,12 +133,14 @@ export class TabFilesController {
     for (const tab of this.#tabs) {
       const rel = projectController.relPath(tab.path);
       if (rel === null) continue;
-      if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
-      else if (!readsFile(tab) || !(modified.includes(rel) || added.includes(rel))) continue;
+      if (removed.includes(rel)) {
+        // A shown text stays, like the edits on it; anything else has nothing left to show.
+        if (readsText(tab) && tab.loaded && !tab.error) this.#patch(tab.id, { deletedOnDisk: true, changedOnDisk: false });
+        else this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
+      } else if (!readsFile(tab) || !(modified.includes(rel) || added.includes(rel))) continue;
       // Unsaved edits are kept; a save then asks.
       else if (tab.draft !== null) {
-        // Created again after a delete: show the edits again.
-        if (tab.error) this.#patch(tab.id, { error: '' });
+        if (tab.deletedOnDisk) this.#patch(tab.id, { deletedOnDisk: false });
         this.#checkDisk(tab.id);
       } else if (tab.id === this.#activeId) this.#load(tab.id);
       else if (tab.loaded) this.#patch(tab.id, { loaded: false });
@@ -161,25 +163,29 @@ export class TabFilesController {
   }
 
   /**
-   * Writes an edited tab's draft to its file. Unless `force`, refused when the file changed on disk
-   * since the draft started (checked again now: the watcher may not have reported it yet).
+   * Writes an edited tab's draft to its file, or a deleted file's text to create it again. Unless
+   * `force`, refused when the file changed on disk since the draft started (checked again now: the
+   * watcher may not have reported it yet).
    * @param {string} id
    * @param {{ force?: boolean }} [options]
    * @returns {Promise<boolean>} `false` when it was refused for that; nothing was written.
    */
   async save(id, { force = false } = {}) {
     const tab = this.#find(id);
-    if (!tab || tab.draft === null) return true;
-    if (!force && (tab.changedOnDisk || (await this.#diskDiffers(tab)))) {
-      if (this.#find(id)?.changedOnDisk === false) this.#patch(id, { changedOnDisk: true });
+    if (!tab || (tab.draft === null && !tab.deletedOnDisk)) return true;
+    if (!force && !tab.deletedOnDisk && (tab.changedOnDisk || (await this.#diskDiffers(tab)))) {
+      const now = this.#find(id);
+      // Saved meanwhile (another save, or a reload): the disk was checked against old text.
+      if (now && now.content !== tab.content) return this.save(id);
+      if (now?.changedOnDisk === false) this.#patch(id, { changedOnDisk: true });
       return false;
     }
-    const content = tab.draft;
+    const content = tab.draft ?? tab.content;
     try {
       await writeFile(tab.path, content);
       // Edits typed while saving stay a draft.
       const now = this.#find(id);
-      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false });
+      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false, deletedOnDisk: false });
     } catch (err) {
       reportError(`Saving ${basename(tab.path)} failed`, err);
     }
@@ -192,7 +198,7 @@ export class TabFilesController {
    */
   reload(id) {
     if (!this.#find(id)) return;
-    this.#patch(id, { draft: null, changedOnDisk: false, loaded: false });
+    this.#patch(id, { draft: null, changedOnDisk: false, deletedOnDisk: false, loaded: false });
     if (id === this.#activeId) this.#load(id);
   }
 
@@ -248,7 +254,7 @@ export class TabFilesController {
       const target = parseTabId(id);
       // A view has nothing to read.
       const loaded = !readsFile(target);
-      return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, changedOnDisk: false, image: null };
+      return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, changedOnDisk: false, deletedOnDisk: false, image: null };
     });
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
@@ -302,8 +308,8 @@ export class TabFilesController {
     let changes;
     try {
       changes = image
-        ? { image: new Blob([await readFileBytes(path)], { type: imageTypeOf(path).mime }), error: '' }
-        : { content: await readFile(path), error: '' };
+        ? { image: new Blob([await readFileBytes(path)], { type: imageTypeOf(path).mime }), error: '', deletedOnDisk: false }
+        : { content: await readFile(path), error: '', deletedOnDisk: false };
     } catch (err) {
       changes = { content: '', image: null, error: String(err) };
     }

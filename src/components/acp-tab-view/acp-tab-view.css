@@ -90,6 +90,10 @@
   align-items: center;
   gap: var(--space-1);
 }
+/* Deleted on disk, still open. */
+.acp-tab-view__tab-label_deleted {
+  text-decoration: line-through;
+}
 /* A path on one line: md-tooltip caps its own width (`max-inline-size` on its host), which wraps it. */
 .acp-tab-view__tooltip {
   width: max-content;
@@ -149,6 +153,13 @@
 }
 .acp-tab-view__editor::part(container) {
   border-radius: 0;
+}
+/* A file deleted on disk, still shown: a strip over its editor. */
+.acp-tab-view__notice {
+  padding: var(--space-1) var(--space-4);
+  background: color-mix(in srgb, var(--md-error) 12%, transparent);
+  color: var(--md-on-surface);
+  font-size: var(--font-size-sm);
 }
 .acp-tab-view__error {
   margin: 0;

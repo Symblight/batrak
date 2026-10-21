@@ -58,7 +58,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `TabFilesController` (open tabs' files: reads, baselines, drafts, kept in memory while another
   project is shown, saves; a save over a file
   changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
-  Overwrite / Reload dialog answers) and `ChangesReviewController`
+  Overwrite / Reload dialog answers; a text file deleted on disk stays shown, `deletedOnDisk`, and
+  a save creates it again, like VS Code) and `ChangesReviewController`
   (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,

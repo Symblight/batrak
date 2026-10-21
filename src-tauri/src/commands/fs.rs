@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use tauri::ipc::Response;
@@ -83,9 +83,43 @@ pub async fn read_file_bytes(
     .await?
 }
 
+/// A path in canonical form though the file itself may be gone: its folder canonical, then its name.
+fn canonical_or_missing(path: &Path) -> std::io::Result<PathBuf> {
+    match dunce::canonicalize(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            let (Some(dir), Some(name)) = (path.parent(), path.file_name()) else {
+                return Err(e);
+            };
+            Ok(dunce::canonicalize(dir)?.join(name))
+        }
+        resolved => resolved,
+    }
+}
+
+/// Where a save of `path` writes (canonical; a deleted file is created again) and the project
+/// whose `.brama/agents.json` it is, `None` for the user's agents.json. Nothing else is writable.
+fn writable(
+    path: &str,
+    user_file: Option<&Path>,
+    contains_project: impl Fn(&Path) -> bool,
+) -> Result<(PathBuf, Option<PathBuf>), String> {
+    let canonical = canonical_or_missing(Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
+    if user_file.and_then(|f| canonical_or_missing(f).ok()).as_ref() == Some(&canonical) {
+        return Ok((canonical, None));
+    }
+    let project = crate::config::project_of_agents_file(&canonical)
+        .filter(|_| contains_project(&canonical))
+        .map(Path::to_path_buf);
+    match project {
+        Some(project) => Ok((canonical, Some(project))),
+        None => Err(format!("{path}: only agents.json can be edited")),
+    }
+}
+
 /// Saves an agents.json from the editor: a project's `.brama/agents.json` inside an opened project, or
-/// the user's. Nothing else is writable from the page yet. The agent list is re-read right away
-/// (`agents://changed`; `projectPath: null` for the user's file, which affects every project).
+/// the user's, created again if it was deleted. Nothing else is writable from the page yet. The agent
+/// list is re-read right away (`agents://changed`; `projectPath: null` for the user's file, which
+/// affects every project).
 #[tauri::command]
 pub async fn write_file(
     app: AppHandle,
@@ -97,14 +131,8 @@ pub async fn write_file(
     let workspaces = workspaces.inner().clone();
     let configs = configs.inner().clone();
     blocking(move || {
-        let canonical = dunce::canonicalize(Path::new(&path)).map_err(|e| format!("{path}: {e}"))?;
-        let is_user = Some(&canonical) == user_agents_file(&configs).as_ref();
-        let project = crate::config::project_of_agents_file(&canonical)
-            .filter(|_| workspaces.contains_project(&canonical))
-            .map(Path::to_path_buf);
-        if !is_user && project.is_none() {
-            return Err(format!("{path}: only agents.json can be edited"));
-        }
+        let (canonical, project) =
+            writable(&path, configs.user_file(), |p| workspaces.contains_project(p))?;
         crate::session::env::write_atomic(&canonical, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
         let changed = match &project {
             Some(project) => configs.reload(project),
@@ -179,7 +207,70 @@ pub async fn open_url(url: String) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_url, read_capped};
+    use super::{checked_url, read_capped, writable};
+    use std::path::{Path, PathBuf};
+
+    /// A temp folder (canonical) with a project at `p/` holding `.brama/`; removed on drop.
+    struct Tmp(PathBuf);
+
+    impl Tmp {
+        fn new(name: &str) -> Tmp {
+            let dir = std::env::temp_dir().join(format!("brama-writable-{name}-{}", std::process::id()));
+            let _ = std::fs::remove_dir_all(&dir);
+            std::fs::create_dir_all(dir.join("p/.brama")).unwrap();
+            Tmp(dunce::canonicalize(dir).unwrap())
+        }
+
+        fn project(&self) -> PathBuf {
+            self.0.join("p")
+        }
+
+        fn in_project(&self) -> impl Fn(&Path) -> bool + '_ {
+            move |path: &Path| path.starts_with(self.project())
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_project_agents_file_is_writable_existing_or_deleted() {
+        let tmp = Tmp::new("project");
+        let file = tmp.project().join(".brama/agents.json");
+        let expected = Ok((file.clone(), Some(tmp.project())));
+        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project()), expected, "deleted");
+        std::fs::write(&file, "{}").unwrap();
+        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project()), expected, "existing");
+    }
+
+    #[test]
+    fn the_user_agents_file_is_writable_existing_or_deleted() {
+        let tmp = Tmp::new("user");
+        let file = tmp.0.join("agents.json");
+        let expected = Ok((file.clone(), None));
+        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false), expected, "deleted");
+        std::fs::write(&file, "{}").unwrap();
+        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false), expected, "existing");
+    }
+
+    #[test]
+    fn nothing_else_is_writable() {
+        let tmp = Tmp::new("other");
+        let project = tmp.project();
+        std::fs::write(project.join("a.txt"), "").unwrap();
+        std::fs::create_dir(tmp.0.join(".brama")).unwrap();
+        for (path, why) in [
+            (project.join("a.txt"), "another file"),
+            (project.join(".brama/other.json"), "another missing file"),
+            (project.join("gone/.brama/agents.json"), "a missing folder"),
+            (tmp.0.join(".brama/agents.json"), "outside the project"),
+        ] {
+            assert!(writable(path.to_str().unwrap(), None, tmp.in_project()).is_err(), "{why}");
+        }
+    }
 
     #[test]
     fn reads_bytes_up_to_the_cap() {

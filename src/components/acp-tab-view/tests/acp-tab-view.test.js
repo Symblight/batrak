@@ -18,6 +18,7 @@ const fileTab = (path) => ({
   baseline: null,
   draft: null,
   changedOnDisk: false,
+  deletedOnDisk: false,
 });
 
 describe('acp-tab-view', () => {
@@ -80,6 +81,19 @@ describe('acp-tab-view', () => {
       await click('Overwrite');
       expect(fired).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path, force: true } }]);
     });
+  });
+
+  it('says when a file was deleted on disk, still showing it', async () => {
+    const path = '/p/.brama/agents.json';
+    /** @type {EditorTab} */
+    const tab = { ...fileTab(path), loaded: true, content: '{}', deletedOnDisk: true };
+    const el = await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('.acp-tab-view__notice')?.textContent).to.match(/deleted on disk/i);
+    expect(root.querySelector('cdx-code-editor')).to.exist;
+    el.tabs = [{ ...tab, deletedOnDisk: false }];
+    await el.updateComplete;
+    expect(root.querySelector('.acp-tab-view__notice')).to.equal(null);
   });
 
   it("shows a file tab's path relative to the project in its tooltip", async () => {

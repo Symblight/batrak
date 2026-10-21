@@ -589,7 +589,9 @@ export class AcpTabView extends LitElement {
       @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(tab, e)}
     >
       <md-tooltip class="acp-tab-view__tooltip" for=${id} placement="bottom" show-delay="800">${tooltip}</md-tooltip>
-      <span class="acp-tab-view__tab-label">
+      <span
+        class=${classMap({ 'acp-tab-view__tab-label': true, 'acp-tab-view__tab-label_deleted': tab.deletedOnDisk })}
+      >
         <md-icon class="acp-tab-view__file-icon">${unsafeSVG(icon)}</md-icon>
         ${title}
         ${tab.draft !== null ? html`<span class="acp-tab-view__unsaved" title="Unsaved changes">●</span>` : nothing}
@@ -729,7 +731,11 @@ export class AcpTabView extends LitElement {
   /** @param {EditorTab} tab */
   #renderCode(tab) {
     const editable = isAgentsFile(tab.path);
-    return html`<cdx-code-editor
+    return html`${tab.deletedOnDisk
+        ? html`<div class="acp-tab-view__notice" role="status">
+            Deleted on disk.${editable ? ' Save to create it again.' : ''}
+          </div>`
+        : nothing}<cdx-code-editor
         class="acp-tab-view__editor"
         style=${this.#editorStyle()}
         .readOnly=${!editable}

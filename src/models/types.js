@@ -650,6 +650,8 @@
  *   the editor shows what's on disk. A change on disk doesn't replace it.
  * @property {boolean} changedOnDisk With a draft: the file on disk is no longer `content`, the text the
  *   draft started from. Save then asks before writing over it.
+ * @property {boolean} deletedOnDisk The file was deleted since it was read; the tab still shows it,
+ *   and a save creates it again.
  */
 
 /**
