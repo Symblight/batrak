@@ -1,7 +1,8 @@
 import { expect } from '@esm-bundle/chai';
 import { $agentList } from './agents.js';
-import { $agents, $composer, agentInfo, selectAgent, setRunTarget, startComposer } from './composer.js';
+import { $agents, $composer, agentInfo, applyAgentOptions, selectAgent, setRunTarget, startComposer } from './composer.js';
 import { $activeSessionId, $sessions, newSession, startSession, upsertSession } from './sessions.js';
+import { setWorkspaceSettings } from './workspace.js';
 
 /**
  * @param {string} id
@@ -14,6 +15,7 @@ describe('composer', () => {
   afterEach(() => {
     $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     $activeSessionId.set(null);
+    setWorkspaceSettings(null);
   });
 
   it('has no agent while the project configures none', () => {
@@ -50,6 +52,31 @@ describe('composer', () => {
     expect($composer.get().agentId, 'removed from the file').to.equal('a');
     expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
     expect($agents.get().map((x) => x.id)).to.deep.equal(['a']);
+  });
+
+  it("gives a draft the project's run target once workspace.json is read, until the user picks one", () => {
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    const id = newSession('/settings');
+    // The agent's options arrive before the project's workspace.json is read.
+    applyAgentOptions(id, []);
+    expect($composer.get().runTarget.kind).to.equal('local');
+
+    setWorkspaceSettings({ defaultMode: 'worktree' });
+    expect($composer.get().runTarget.kind).to.equal('worktree');
+
+    setRunTarget({ kind: 'local' });
+    setWorkspaceSettings({ defaultMode: 'worktree' });
+    expect($composer.get().runTarget.kind).to.equal('local', 'keeps what the user picked');
+  });
+
+  it('counts a base branch pick as picking the run target', () => {
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    setWorkspaceSettings({ defaultMode: 'worktree' });
+    newSession('/branch-pick');
+    setRunTarget({ branch: 'dev' });
+
+    setWorkspaceSettings({ defaultMode: 'local' });
+    expect($composer.get().runTarget).to.deep.equal({ kind: 'worktree', branch: 'dev' });
   });
 
   it("follows a started session's agent to the id the backend moved it to", () => {

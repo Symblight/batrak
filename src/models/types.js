@@ -593,6 +593,8 @@
  * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
  *   (picked before it started, or on their way), by config option id.
  * @property {RunTarget} runTarget
+ * @property {boolean} [runTargetPicked] The user picked the run target; until then a draft's is the
+ *   project's default (`$workspaceSettings`).
  * @property {boolean} started After the first message: the agent and run target are fixed.
  */
 

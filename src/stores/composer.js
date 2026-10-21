@@ -194,15 +194,27 @@ export function composerOf(id) {
   // one a new session would, keeping where it runs.
   const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId);
   if (stored && gone && stored.agentId !== $newSessionAgentId.get()) {
-    return { ...freshState($newSessionAgentId.get()), runTarget: stored.runTarget };
+    return withDefaultTarget({ ...freshState($newSessionAgentId.get()), runTarget: stored.runTarget, runTargetPicked: stored.runTargetPicked });
   }
   const session = $sessions.get().find((s) => s.id === id);
   // The backend moved the session to another id for its agent (removed and added again).
   if (stored?.started && session && session.agentId !== stored.agentId) {
     return { ...stored, agentId: session.agentId, configOptions: withValues(agentOf(session.agentId).configOptions, session.config) };
   }
-  if (stored) return stored;
+  if (stored) return withDefaultTarget(stored);
   return session ? listedState(session) : freshState($newSessionAgentId.get());
+}
+
+/**
+ * A draft's run target is the project's default until the user picks one: `workspace.json` is read
+ * after the draft may already have been written (the agent's options, a pick).
+ * @param {ComposerState} state
+ * @returns {ComposerState}
+ */
+function withDefaultTarget(state) {
+  const kind = $workspaceSettings.get().defaultMode;
+  if (state.started || state.runTargetPicked || state.runTarget.kind === kind) return state;
+  return { ...state, runTarget: { ...state.runTarget, kind } };
 }
 
 /**
@@ -242,7 +254,7 @@ export function selectAgent(agentId) {
   const state = $composer.get();
   if (state.started || state.agentId === agentId) return;
   $lastAgentId.set(agentId);
-  updateActive((s) => ({ ...freshState(agentId), runTarget: s.runTarget }));
+  updateActive((s) => ({ ...freshState(agentId), runTarget: s.runTarget, runTargetPicked: s.runTargetPicked }));
 }
 
 /**
@@ -322,7 +334,11 @@ export function applyAgentOptions(id, agentOptions) {
 
 /** @param {Partial<RunTarget>} patch Ignored once the session started. */
 export function setRunTarget(patch) {
-  updateActive((state) => (state.started ? state : { ...state, runTarget: { ...state.runTarget, ...patch } }));
+  updateActive((state) =>
+    state.started
+      ? state
+      : { ...state, runTarget: { ...state.runTarget, ...patch }, runTargetPicked: state.runTargetPicked || patch.kind !== undefined || patch.branch !== undefined },
+  );
 }
 
 /**
