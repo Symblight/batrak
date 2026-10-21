@@ -144,7 +144,6 @@ function freshState(agentId) {
     agentId,
     configOptions: withValues(options, chosen),
     chosen,
-    usage: null,
     runTarget: { kind: $workspaceSettings.get().defaultMode, branch: null },
     started: false,
   };
@@ -160,7 +159,6 @@ function listedState(session) {
     agentId: session.agentId,
     configOptions: withValues(agentOf(session.agentId).configOptions, session.config),
     chosen: {},
-    usage: null,
     runTarget: { kind: session.mode, branch: session.mode === 'worktree' ? session.branch : null },
     started: true,
   };
@@ -180,7 +178,7 @@ const $newSessionAgentId = computed([$lastAgentId, $agentList], (last, list) => 
 /** Each session's composer by session id, once it differs from a fresh one. In memory. */
 const $composers = atom(/** @type {Readonly<Record<string, ComposerState>>} */ ({}));
 
-/** The active session's composer: agent, its ACP config options, context usage, where it runs. */
+/** The active session's composer: agent, its ACP config options, where it runs. */
 export const $composer = computed(
   [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $workspaceSettings, $lastPicks],
   (_composers, id, _sessions, agentId) => (id === null ? freshState(agentId) : composerOf(id)),
@@ -333,15 +331,6 @@ export function setRunTarget(patch) {
  */
 export function startComposer(id) {
   updateComposer(id, (state) => (state.started ? state : { ...state, started: true }));
-}
-
-/**
- * The agent's `usage_update`: context used and its size in tokens, and the session's cost so far.
- * @param {string} id A session's.
- * @param {import('../models/types.js').ContextUsage} usage
- */
-export function setUsage(id, usage) {
-  updateComposer(id, (state) => ({ ...state, usage }));
 }
 
 /**

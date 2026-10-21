@@ -8,7 +8,6 @@ const NO_AGENT = {
   agentId: null,
   configOptions: [],
   chosen: {},
-  usage: null,
   runTarget: { kind: 'local', branch: null },
   started: false,
 };

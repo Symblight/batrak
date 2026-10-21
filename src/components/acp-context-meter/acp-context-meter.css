@@ -21,14 +21,6 @@
   --md-progress-circular-active-indicator-color: var(--md-error);
 }
 
-.acp-context-meter__percent {
-  font-variant-numeric: tabular-nums;
-
-  /* A narrow composer shows the ring only. */
-  @container acp-composer (width <= 440px) {
-    display: none;
-  }
-}
 
 /* An auto popover in the top layer; FloatingController writes `left` / `top`. */
 .acp-context-meter__popover {
@@ -61,10 +53,6 @@
   font-weight: var(--font-weight-medium);
 }
 
-.acp-context-meter__label {
-  font-size: var(--font-size-sm);
-  color: var(--md-on-surface-variant);
-}
 
 .acp-context-meter__value {
   font-weight: var(--font-weight-medium);
@@ -82,6 +70,13 @@
 .acp-context-meter__bar_critical {
   --md-progress-linear-active-indicator-color: var(--md-error);
   --md-progress-linear-stop-indicator-color: var(--md-error);
+}
+
+.acp-context-meter__pending {
+  margin: var(--space-1) 0 0;
+  font-size: var(--font-size-sm);
+  line-height: 16px;
+  color: var(--md-on-surface-variant);
 }
 
 .acp-context-meter__note {

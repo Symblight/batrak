@@ -16,6 +16,7 @@ import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
+import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openSettings } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/sessions.js';
@@ -44,6 +45,7 @@ export class AcpAgentColumn extends LitElement {
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
   #composer = new StoreController(this, { store: $composer });
+  #contextUsage = new StoreController(this, { store: $activeContextUsage });
   #agents = new StoreController(this, { store: $agents });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #rootId = new StoreController(this, { store: $rootId });
@@ -219,6 +221,7 @@ export class AcpAgentColumn extends LitElement {
             .root=${this.#activeFolder.value ?? workspace.path}
             .fileOptions=${this.fileOptions}
             .composer=${composer}
+            .usage=${this.#contextUsage.value}
             .agents=${this.#agents.value}
             .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
             .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}

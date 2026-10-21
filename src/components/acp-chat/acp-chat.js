@@ -24,6 +24,7 @@ import '../acp-session-banner/acp-session-banner.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
+/** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
@@ -187,6 +188,7 @@ export class AcpChat extends LitElement {
     /** Matches for the last `acp-chat-file-query`. */
     fileOptions: { attribute: false },
     composer: { attribute: false },
+    usage: { attribute: false },
     agents: { attribute: false },
     agent: { attribute: false },
     branches: { attribute: false },
@@ -215,6 +217,8 @@ export class AcpChat extends LitElement {
     this.fileOptions = [];
     /** @type {ComposerState | null} */
     this.composer = null;
+    /** @type {ContextUsage | null} The session's context usage as its agent last reported it. */
+    this.usage = null;
     /** @type {readonly CatalogAgent[]} */
     this.agents = [];
     /** @type {AgentInfo | null} */
@@ -469,7 +473,9 @@ export class AcpChat extends LitElement {
             @chx-command-picked=${this.#onCommandPicked}
           ></chx-command-picker>
           <acp-mode-picker slot="actions" .options=${this.composer?.configOptions ?? []}></acp-mode-picker>
-          <acp-context-meter slot="actions" .usage=${this.composer?.usage ?? null}></acp-context-meter>
+          ${this.composer?.agentId
+            ? html`<acp-context-meter slot="actions" .usage=${this.usage}></acp-context-meter>`
+            : nothing}
           <!-- Where the session runs is picked before the first message; the footer goes with it. -->
           ${empty
             ? html`<acp-run-target

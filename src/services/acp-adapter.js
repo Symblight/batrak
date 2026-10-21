@@ -2,7 +2,8 @@ import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
 import { MESSAGE_PART_RULES, fenceCode, splitFencedCode } from '../models/chat-parts.js';
-import { applyAgentOptions, setUsage } from '../stores/composer.js';
+import { applyAgentOptions } from '../stores/composer.js';
+import { setContextUsage } from '../stores/context-usage.js';
 import { folderOf, setSessionStatus, touchSession, upsertSession } from '../stores/sessions.js';
 import {
   $sessionNotices,
@@ -350,7 +351,7 @@ export function handleSessionEvent(event) {
     case 'update': {
       const update = event.payload;
       if (update.sessionUpdate === 'usage_update' && typeof update.used === 'number' && typeof update.size === 'number') {
-        setUsage(sessionId, { used: update.used, size: update.size, ...(update.cost ? { cost: update.cost } : {}) });
+        setContextUsage(sessionId, { used: update.used, size: update.size });
         return;
       }
       if (stopped.has(sessionId)) return;

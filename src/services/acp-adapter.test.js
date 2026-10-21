@@ -3,6 +3,7 @@ import { handleSessionEvent } from './acp-adapter.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
 import { $sessionNotices } from '../stores/session-runtime.js';
 import { $awaitingTrust } from '../stores/trust.js';
+import { $contextUsage, forgetContextUsage } from '../stores/context-usage.js';
 
 describe('acp-adapter', () => {
   afterEach(() => $sessions.set([]));
@@ -51,5 +52,14 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 5, kind: 'agent-outdated', payload: { message } });
     handleSessionEvent({ sessionId: id, seq: 6, kind: 'status', payload: { status: 'starting' } });
     expect($sessionNotices.get()[id]?.kind, 'a restart replaces it').to.equal('progress');
+  });
+
+  it("keeps a running session's context usage, without its cost", () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    const cost = { amount: 0.04, currency: 'USD' };
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'update', payload: { sessionUpdate: 'usage_update', used: 24000, size: 200000, cost } });
+    expect($contextUsage.get()[id]).to.deep.equal({ used: 24000, size: 200000 });
+    forgetContextUsage(id);
   });
 });

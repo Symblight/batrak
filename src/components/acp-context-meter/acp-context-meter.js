@@ -3,10 +3,19 @@ import { flip, offset, shift } from '@floating-ui/dom';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/progress-linear';
+import '@symblight/wc-material/tooltip';
 import { FloatingController } from '../../controllers/floating/FloatingController.js';
 import styles from './acp-context-meter.css?inline';
 
 /** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
+
+/**
+ * How the meter is coloured for a share of the window used.
+ * @param {number} share 0 to 1.
+ */
+function levelOf(share) {
+  return share >= 0.9 ? 'critical' : share >= 0.7 ? 'warning' : 'normal';
+}
 
 /** @param {number} tokens */
 function formatTokens(tokens) {
@@ -16,7 +25,7 @@ function formatTokens(tokens) {
 
 /**
  * @tag acp-context-meter
- * @summary How full the agent's context window is (ACP `usage_update`): a ring and percent, tokens and cost in a popover on click.
+ * @summary How full the agent's context window is (ACP `usage_update`): a ring with the percentage in its tooltip, the tokens in a popover on click; an empty ring until the agent reports it.
  */
 export class AcpContextMeter extends LitElement {
   static properties = {
@@ -64,47 +73,51 @@ export class AcpContextMeter extends LitElement {
     if (!this.open) this.#closedAt = performance.now();
   };
 
+  /** @param {ContextUsage} usage */
+  #renderDetails(usage) {
+    const share = usage.size > 0 ? Math.min(1, usage.used / usage.size) : 0;
+    const level = levelOf(share);
+    return html`
+      <div class="acp-context-meter__row">
+        <span class="acp-context-meter__title">Context</span>
+        <span class="acp-context-meter__value">${formatTokens(usage.used)} / ${formatTokens(usage.size)}</span>
+      </div>
+      <md-progress-linear class="acp-context-meter__bar acp-context-meter__bar_${level}" .value=${share}></md-progress-linear>
+    `;
+  }
+
   render() {
     const usage = this.usage;
-    if (!usage) return nothing;
-    const share = usage.size > 0 ? Math.min(1, usage.used / usage.size) : 0;
+    const share = usage && usage.size > 0 ? Math.min(1, usage.used / usage.size) : 0;
     const percent = Math.round(share * 100);
-    const level = percent >= 90 ? 'critical' : percent >= 70 ? 'warning' : 'normal';
+    const tooltip = usage
+      ? `Context: ${percent}% used (${formatTokens(usage.used)} of ${formatTokens(usage.size)} tokens)`
+      : 'Context usage: not reported yet';
     return html`
       <md-button
+        id="acp-context-meter-button"
         class="acp-context-meter__button"
         variant="text"
-        title="Context: ${percent}% used"
+        aria-label=${tooltip}
         aria-haspopup="dialog"
         aria-expanded=${this.open ? 'true' : 'false'}
         @click=${this.#onClick}
       >
         <md-progress-circular
           slot="icon"
-          class="acp-context-meter__ring acp-context-meter__ring_${level}"
+          class="acp-context-meter__ring acp-context-meter__ring_${levelOf(share)}"
           .value=${share}
         ></md-progress-circular>
-        <span class="acp-context-meter__percent">${percent}%</span>
       </md-button>
+      <md-tooltip for="acp-context-meter-button" show-delay="500" placement="top">${tooltip}</md-tooltip>
       <div class="acp-context-meter__popover" popover="auto" role="dialog" aria-label="Context usage" @beforetoggle=${this.#onToggle}>
-        <div class="acp-context-meter__row">
-          <span class="acp-context-meter__title">Context</span>
-          <span class="acp-context-meter__value">${formatTokens(usage.used)} / ${formatTokens(usage.size)}</span>
-        </div>
-        <md-progress-linear
-          class="acp-context-meter__bar acp-context-meter__bar_${level}"
-          .value=${share}
-        ></md-progress-linear>
-        ${usage.cost
-          ? html`<div class="acp-context-meter__row">
-              <span class="acp-context-meter__label">Session cost</span>
-              <span class="acp-context-meter__value">
-                ${new Intl.NumberFormat(undefined, { style: 'currency', currency: usage.cost.currency }).format(
-                  usage.cost.amount,
-                )}
-              </span>
-            </div>`
-          : nothing}
+        ${usage
+          ? this.#renderDetails(usage)
+          : html`<div class="acp-context-meter__row">
+                <span class="acp-context-meter__title">Context</span>
+                <span class="acp-context-meter__value">Not reported yet</span>
+              </div>
+              <p class="acp-context-meter__pending">The agent reports it with its replies.</p>`}
         <p class="acp-context-meter__note">Plan limits aren’t reported over ACP. Check them in the agent’s own app.</p>
       </div>
     `;

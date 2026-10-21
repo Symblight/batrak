@@ -108,6 +108,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
   stored folders as their parents load),
+  `$contextUsage` (`brama:sessions:context-usage:<session id>`, see "History"),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
   shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
@@ -284,7 +285,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
 - **History**: each session's conversation is appended to `sessions/<id>/transcript.jsonl` (prompts,
   the turn's updates, turn ends; not `usage_update`, not a `session/load` replay); `session_history`
   returns it and `restoreHistory()` rebuilds the chat the first time a session is shown after a
-  reload. Context usage comes from `usage_update` (`setUsage()`).
+  reload. Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
+  `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`
+  (`stores/context-usage.js`, `brama:sessions:context-usage:<session id>`, one item per session),
+  so a session shows its last report after a reload or restart (no agent reports on
+  `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
+  ring until there is one.
 
 ### Background work
 

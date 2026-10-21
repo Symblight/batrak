@@ -26,6 +26,7 @@ import {
   setConfigOption,
   startComposer,
 } from '../stores/composer.js';
+import { forgetContextUsage } from '../stores/context-usage.js';
 import {
   $activeSessionId,
   $draftSessions,
@@ -315,6 +316,7 @@ export class SessionController {
     this.#idleStops.delete(id);
     forgetSession(id);
     forgetComposer(id);
+    forgetContextUsage(id);
     this.#historyLoaded.delete(id);
     removeSession(id);
   }

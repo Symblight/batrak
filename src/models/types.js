@@ -568,11 +568,10 @@
  */
 
 /**
- * The context window as ACP's last `usage_update` reported it.
+ * The context window as ACP's last `usage_update` reported it (its cost isn't kept).
  * @typedef {Object} ContextUsage
  * @property {number} used Tokens.
  * @property {number} size Tokens.
- * @property {{ amount: number, currency: string }} [cost] The session's so far.
  */
 
 /**
@@ -593,7 +592,6 @@
  * @property {ConfigOption[]} configOptions The agent's, as it last reported them (shown with `chosen` applied).
  * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
  *   (picked before it started, or on their way), by config option id.
- * @property {ContextUsage | null} usage `null` until the agent reports one.
  * @property {RunTarget} runTarget
  * @property {boolean} started After the first message: the agent and run target are fixed.
  */
