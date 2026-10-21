@@ -38,6 +38,15 @@ pub fn run() {
             let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir, configs.clone()));
             let tidy = sessions.clone();
             tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
+            let emitter = app.handle().clone();
+            let user_watch = config::watch::watch_user_file(configs.clone(), move || {
+                commands::agents::emit_changed(&emitter, None);
+            })
+            .unwrap_or_else(|e| {
+                tracing::warn!("not watching the user's agents.json: {e}");
+                None
+            });
+            app.manage(UserAgentsWatch(std::sync::Mutex::new(user_watch)));
             app.manage(sessions);
             app.manage(configs);
             Ok(())
@@ -69,6 +78,12 @@ pub fn run() {
             commands::sessions::session_history,
             commands::sessions::session_set_config_option,
             commands::agents::agents_list,
+            commands::agents::agents_add,
+            commands::agents::agents_update,
+            commands::agents::agents_set_default,
+            commands::agents::agents_remove,
+            commands::agents::agents_restore,
+            commands::agents::agents_import_user,
             commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
@@ -106,3 +121,11 @@ pub fn run() {
             }
         });
 }
+
+/// Keeps the user's agents.json watched for the app's lifetime.
+struct UserAgentsWatch(
+    #[allow(dead_code)]
+    std::sync::Mutex<
+        Option<notify_debouncer_full::Debouncer<notify_debouncer_full::notify::RecommendedWatcher, notify_debouncer_full::NoCache>>,
+    >,
+);

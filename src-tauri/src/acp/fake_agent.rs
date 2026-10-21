@@ -12,7 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1::{
-    AgentCapabilities, CancelNotification, ContentBlock, ContentChunk, InitializeRequest, InitializeResponse,
+    AgentCapabilities, CancelNotification, ContentBlock, ContentChunk, Implementation, InitializeRequest, InitializeResponse,
     LoadSessionRequest, LoadSessionResponse, NewSessionRequest, NewSessionResponse, PermissionOption,
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
@@ -76,7 +76,8 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
             async move |request: InitializeRequest, responder: Responder<InitializeResponse>, _cx| {
                 responder.respond(
                     InitializeResponse::new(request.protocol_version)
-                        .agent_capabilities(AgentCapabilities::new().load_session(options.load_session)),
+                        .agent_capabilities(AgentCapabilities::new().load_session(options.load_session))
+                        .agent_info(Implementation::new("fake-agent", "1.2.3")),
                 )
             },
             agent_client_protocol::on_receive_request!(),

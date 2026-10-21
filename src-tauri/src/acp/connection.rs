@@ -43,6 +43,8 @@ pub struct Started {
     pub history_restored: bool,
     /// The session's config options (model, thought level, mode…) as ACP `SessionConfigOption`s.
     pub config_options: Vec<serde_json::Value>,
+    /// `agentInfo.version` from `initialize`, when the agent sends it.
+    pub agent_version: Option<String>,
 }
 
 /// Id of the option standing in for an agent's legacy `modes` when it has no config options.
@@ -254,6 +256,7 @@ impl Connection {
             load_supported,
             history_restored,
             config_options: config_options.clone(),
+            agent_version: init.agent_info.map(|info| info.version),
         };
         let options = Mutex::new(config_options);
         Ok((Connection { cx, session_id, shared, closed: closed_rx, driver, options }, started))

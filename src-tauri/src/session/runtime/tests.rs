@@ -109,14 +109,6 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
     std::fs::write(project.join(".git/config"), "[core]\n").unwrap();
     std::fs::write(project.join("a.txt"), "one\ntwo\nthree\n").unwrap();
     crate::config::ensure_project_dir(&project).unwrap();
-    // The user's own agents: the project's file needs trust to run anything.
-    std::fs::create_dir_all(dir.join("config")).unwrap();
-    std::fs::write(
-        dir.join("config/agents.json"),
-        r#"{"version":1,"agents":{"fake":{"name":"Fake","command":"fake-agent","env":{"TOKEN":"${keychain:token}"}},
-            "locked":{"name":"Locked","command":"x","env":{"KEY":"${keychain:missing}"}}}}"#,
-    )
-    .unwrap();
     let project = dunce::canonicalize(project).unwrap();
     let launcher = Arc::new(FakeLauncher {
         options,
@@ -125,7 +117,19 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
         env: Mutex::default(),
     });
     let sessions = Sessions::new(options_for(&dir, &launcher));
-    Fixture { dir, project, sessions, launcher }
+    let f = Fixture { dir, project, sessions, launcher };
+    f.give_agents(&f.project);
+    f
+}
+
+/// The fixture's agents: the project's own, trusted as Settings does for the agents it adds.
+const AGENTS: &str = r#"{"version":1,"agents":{"fake":{"name":"Fake","command":"fake-agent","env":{"TOKEN":"${keychain:token}"}},
+    "locked":{"name":"Locked","command":"x","env":{"KEY":"${keychain:missing}"}}}}"#;
+
+/// An agent's version as the agent list shows it, read back from app data.
+fn listed_version(f: &Fixture, agent: &str) -> Option<String> {
+    let configs = AgentConfigs::new(Some(f.dir.join("config/agents.json")), Some(f.dir.join("data/trusted-agents.json")));
+    configs.list(Some(&f.project)).agents.into_iter().find(|a| a.id == agent)?.version
 }
 
 /// A fixture whose project is a real repository: `a.txt` and `.brama/` committed on `main`.
@@ -155,6 +159,21 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
 }
 
 impl Fixture {
+    /// Writes `project`'s agents.json with the fixture's agents and trusts them.
+    fn give_agents(&self, project: &Path) {
+        self.set_agents(project, AGENTS);
+        let configs = &self.sessions.inner.opts.configs;
+        let launches: Vec<_> = configs.untrusted(project).into_iter().map(|u| u.launch).collect();
+        configs.trust(project, &launches).unwrap();
+    }
+
+    /// Replaces `project`'s agents.json, as the watcher would report it.
+    fn set_agents(&self, project: &Path, json: &str) {
+        crate::config::ensure_project_dir(project).unwrap();
+        std::fs::write(project.join(".brama/agents.json"), json).unwrap();
+        self.sessions.inner.opts.configs.reload(project);
+    }
+
     fn create(&self, id: &str, agent: &str) -> Result<(Session, Arc<Recorder>), String> {
         self.create_in(id, agent, Mode::Local, None)
     }
@@ -205,6 +224,7 @@ async fn a_turn_streams_updates_in_order_between_turn_start_and_turn_end() {
     assert_eq!(session.status, SessionStatus::Preparing);
     events.wait_status("starting").await;
     events.wait_status("idle").await;
+    assert_eq!(listed_version(&f, "fake").as_deref(), Some("1.2.3"), "a start keeps the agent's version");
 
     f.sessions.send_prompt("s1", text("hello")).unwrap();
     assert_eq!(events.wait_turn_end().await, "end_turn");
@@ -669,6 +689,7 @@ async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree()
     run_in(&f.project, &["add", "."]);
     run_in(&f.project, &["commit", "-qm", "app"]);
     f.project = app;
+    f.give_agents(&f.project);
 
     let (session, events) = f.create_in("s", "fake", Mode::Worktree, None).unwrap();
     events.wait_status("idle").await;
@@ -997,6 +1018,7 @@ async fn probing_an_agent_returns_its_options_and_leaves_nothing_behind() {
     let ids: Vec<_> = options.iter().map(|o| o["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["model", "effort"]);
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+    assert_eq!(listed_version(&f, "fake").as_deref(), Some("1.2.3"), "the agent's version is kept");
     assert!(f.sessions.list().is_empty(), "no session is listed");
     assert!(f.create("s", "fake").is_ok(), "no local slot is taken");
     assert!(f.sessions.probe_options(Some(&f.project), "nope").await.unwrap_err().contains("Unknown agent"));
@@ -1005,13 +1027,169 @@ async fn probing_an_agent_returns_its_options_and_leaves_nothing_behind() {
 }
 
 #[tokio::test]
+async fn an_agent_gone_from_agents_json_fails_the_start_and_starts_once_it_is_back() {
+    let f = fixture("unconfigured", FakeAgentOptions::default());
+    let (_, events) = f.create("u", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("u").await.unwrap();
+
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    events.clear();
+    f.sessions.restart("u").await.unwrap();
+    let gone = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(gone.payload["agentId"], "fake");
+    assert_eq!(gone.payload["message"], "Agent \"fake\" is no longer configured");
+    assert_eq!(gone.payload["ran"], "fake-agent ", "what it ran, as its log shows it");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "nothing ran");
+
+    f.give_agents(&f.project);
+    events.clear();
+    f.sessions.restart("u").await.unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
+}
+
+#[tokio::test]
+async fn a_session_follows_its_agent_to_another_id_that_runs_the_same() {
+    let f = fixture("rebind", FakeAgentOptions::default());
+    let (_, events) = f.create("r", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("r").await.unwrap();
+
+    // Removed, then added again (Settings gives it a new id).
+    f.set_agents(&f.project, &AGENTS.replace("\"fake\":", "\"fake-2\":"));
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    events.clear();
+    f.sessions.restart("r").await.unwrap();
+    let moved = events.wait_for("session", |e| e.kind == "session").await;
+    assert_eq!(moved.payload["agentId"], "fake-2");
+    events.wait_status("idle").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake-2", "kept");
+
+    // A session from before launches were kept: its log says what it ran.
+    f.sessions.stop("r").await.unwrap();
+    f.sessions.get("r").unwrap().record.lock().unwrap().launch = None;
+    f.set_agents(&f.project, &AGENTS.replace("\"fake\":", "\"fake-3\":"));
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    events.clear();
+    f.sessions.restart("r").await.unwrap();
+    events.wait_status("idle").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake-3");
+
+    // Something else under its id is not its agent.
+    f.sessions.stop("r").await.unwrap();
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"other":{"command":"other-agent"}}}"#);
+    events.clear();
+    f.sessions.restart("r").await.unwrap();
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+}
+
+#[tokio::test]
+async fn agents_json_losing_a_sessions_agent_stops_it_and_getting_it_back_restores_it() {
+    let f = git_fixture("sync");
+    let (_, running) = f.create("s", "fake").unwrap();
+    running.wait_status("idle").await;
+    let (_, stopped) = f.create_in("t", "fake", Mode::Worktree, None).unwrap();
+    stopped.wait_status("idle").await;
+    f.sessions.stop("t").await.unwrap();
+    let launched = f.launcher.launches.load(Ordering::SeqCst);
+
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    running.clear();
+    stopped.clear();
+    f.sessions.sync_agents(&f.project).await;
+    for events in [&running, &stopped] {
+        let gone = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+        assert_eq!(gone.payload["message"], "Agent \"fake\" is no longer configured");
+        events.wait_status("error").await;
+    }
+    assert!(f.sessions.list().iter().all(|s| s.status == SessionStatus::Error), "at once, shown or not");
+    f.sessions.sync_agents(&f.project).await;
+    let reported = lock(&running.events).iter().filter(|e| e.kind == "unconfigured").count();
+    assert_eq!(reported, 1, "said once");
+
+    f.give_agents(&f.project);
+    running.clear();
+    stopped.clear();
+    f.sessions.sync_agents(&f.project).await;
+    running.wait_status("idle").await;
+    stopped.wait_status("stopped").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launched + 1, "only the one that ran starts again");
+}
+
+#[tokio::test]
+async fn a_turn_running_when_its_agent_leaves_agents_json_finishes_first() {
+    let f = fixture("sync-turn", FakeAgentOptions::default());
+    let (_, events) = f.create("w", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("w", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    f.sessions.sync_agents(&f.project).await;
+    assert!(!lock(&events.events).iter().any(|e| e.kind == "unconfigured"), "not mid-turn");
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    events.wait_status("error").await;
+}
+
+#[tokio::test]
+async fn a_running_session_hears_when_agents_json_changes_what_its_agent_runs() {
+    let f = fixture("outdated", FakeAgentOptions::default());
+    let (session, events) = f.create("o", "fake").unwrap();
+    assert_eq!(session.agent_name.as_deref(), Some("Fake"), "its agent's name, for when the agent is gone");
+    events.wait_status("idle").await;
+
+    f.set_agents(&f.project, &AGENTS.replace("\"command\":\"fake-agent\"", "\"command\":\"fake-agent\",\"args\":[\"--v2\"]"));
+    events.clear();
+    f.sessions.sync_agents(&f.project).await;
+    let outdated = events.wait_for("agent-outdated", |e| e.kind == "agent-outdated").await;
+    assert_eq!(outdated.payload["message"], "agents.json changed what Fake runs. Restart to use it.");
+    f.sessions.sync_agents(&f.project).await;
+    assert_eq!(lock(&events.events).iter().filter(|e| e.kind == "agent-outdated").count(), 1, "said once");
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Idle, "it keeps running");
+
+    f.set_agents(&f.project, AGENTS);
+    events.clear();
+    f.sessions.sync_agents(&f.project).await;
+    let current = events.wait_for("agent-outdated", |e| e.kind == "agent-outdated").await;
+    assert!(current.payload["message"].is_null(), "changed back: nothing to say");
+
+    f.set_agents(&f.project, &AGENTS.replace("\"name\":\"Fake\"", "\"name\":\"Faker\""));
+    events.clear();
+    f.sessions.sync_agents(&f.project).await;
+    assert!(!lock(&events.events).iter().any(|e| e.kind == "agent-outdated"), "a new name runs nothing new");
+}
+
+#[tokio::test]
+async fn a_session_started_again_without_a_sync_stays_running_after_its_turn() {
+    let f = fixture("stale-flag", FakeAgentOptions::default());
+    let (_, events) = f.create("f", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("f").await.unwrap();
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    events.clear();
+    f.sessions.restart("f").await.unwrap();
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+
+    // Back without the sync (a change no watcher saw), then a Restart.
+    f.give_agents(&f.project);
+    events.clear();
+    f.sessions.restart("f").await.unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("f", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Idle, "not marked stopped while its agent runs");
+}
+
+#[tokio::test]
 async fn an_agent_the_project_defines_runs_only_once_trusted() {
     let f = fixture("trust", FakeAgentOptions::default());
-    std::fs::write(
-        f.project.join(".brama/agents.json"),
-        r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent","args":["--acp"]}}}"#,
-    )
-    .unwrap();
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent","args":["--acp"]}}}"#);
     let (_, events) = f.create("t", "repo").unwrap();
     let untrusted = events.wait_for("untrusted", |e| e.kind == "untrusted").await;
     assert_eq!(untrusted.payload["launch"]["command"], "./agent");
@@ -1136,7 +1314,7 @@ fn prompt_input_from_the_page() {
 }
 
 /// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, from a
-/// user-level agents.json): needs network, Node and a signed-in Claude Code. Run with
+/// project's agents.json, trusted): needs network, Node and a signed-in Claude Code. Run with
 /// `cargo test --lib real_claude -- --ignored --nocapture`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
@@ -1147,14 +1325,15 @@ async fn real_claude_agent_end_to_end() {
     std::fs::create_dir_all(&project).unwrap();
     crate::config::ensure_project_dir(&project).unwrap();
     let project = dunce::canonicalize(project).unwrap();
-    let user_file = dir.join("config/agents.json");
-    std::fs::create_dir_all(user_file.parent().unwrap()).unwrap();
     std::fs::write(
-        &user_file,
+        project.join(".brama/agents.json"),
         r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#,
     )
     .unwrap();
-    let mut opts = SessionsOptions::for_app(dir.join("data"), AgentConfigs::new(Some(user_file), None));
+    let configs = AgentConfigs::new(None, None);
+    let launches: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&project, &launches).unwrap();
+    let mut opts = SessionsOptions::for_app(dir.join("data"), configs);
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
     let probed = sessions.probe_options(Some(&project), "claude").await.unwrap();

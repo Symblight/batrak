@@ -16,11 +16,11 @@ use tokio::task::AbortHandle;
 
 use super::env::{self, Access, Launch, Mode, SessionEnv};
 use super::transcript::{self, Transcript};
-use super::{iso_now, Session, SessionRecord, SessionStatus, TitleSource};
+use super::{iso_now, AgentLaunch, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::acp::process::AgentProcess;
 use crate::acp::{self, ClientHost, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
 use crate::config::env::SecretStore;
-use crate::config::{AgentConfig, AgentConfigs, Merged};
+use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, Merged};
 use crate::storage::JsonFile;
 
 /// The most of a file an agent read (or a selection) holds; larger files are read in parts (`line` / `limit`).
@@ -169,6 +169,13 @@ struct SessionState {
     /// Between `turn-start` and the turn's end: the agent's updates go into the transcript. History
     /// an agent replays while starting (`session/load`) is in it already.
     recording: AtomicBool,
+    /// agents.json no longer has the session's agent (reported, status `error`); `Some(true)`: it
+    /// was running or asked to start, so it starts again once the agent is back.
+    unconfigured: Mutex<Option<bool>>,
+    /// What the running agent was started with, and whether the page was told agents.json now
+    /// says otherwise (`agent-outdated`).
+    running: Mutex<Option<LaunchConfig>>,
+    outdated: AtomicBool,
 }
 
 impl SessionState {
@@ -257,9 +264,9 @@ impl Sessions {
             return Err(format!("{}: not a folder", project.display()));
         }
         let merged = self.inner.opts.configs.merged(Some(&project));
-        if merged.agent(&req.agent_id).is_none() {
+        let Some(agent_name) = merged.agent(&req.agent_id).map(|a| a.name.clone()) else {
             return Err(format!("Unknown agent \"{}\": add it to .brama/agents.json", req.agent_id));
-        }
+        };
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
@@ -282,6 +289,8 @@ impl Sessions {
             worktree_path: placed.worktree_path,
             branch: placed.branch,
             base_commit: placed.base_commit,
+            launch: None,
+            agent_name: Some(agent_name),
         };
         let state = {
             let mut sessions = lock(&self.inner.sessions);
@@ -370,8 +379,21 @@ impl Sessions {
                     }
                 }
             }
+            // agents.json may have lost the agent during the turn.
+            inner.check_agent(&state).await;
         });
         Ok(())
+    }
+
+    /// The project's agents.json changed: each of its sessions whose agent left it is stopped and
+    /// in `error` at once, a running turn finished first; one whose agent is back (or one that
+    /// runs the same) is put back as it was, started if it ran.
+    pub async fn sync_agents(&self, project: &Path) {
+        let states: Vec<_> =
+            lock(&self.inner.sessions).values().filter(|s| lock(&s.record).project_path == project).cloned().collect();
+        for state in states {
+            self.inner.check_agent(&state).await;
+        }
     }
 
     /// `session/cancel` for the running turn; pending permission requests are answered
@@ -483,6 +505,9 @@ impl Sessions {
         }
         let (conn, started) = started?;
         drop(conn);
+        if let Some(version) = &started.agent_version {
+            inner.opts.configs.note_version(&agent.id, version);
+        }
         tracing::info!(agent = %agent.id, options = started.config_options.len(), "probed the agent's options");
         Ok(started.config_options)
     }
@@ -754,6 +779,9 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
     SessionState {
         transcript: Transcript::new(transcript_path(data_dir, &record.session_id)),
         recording: AtomicBool::new(false),
+        unconfigured: Mutex::new(None),
+        running: Mutex::new(None),
+        outdated: AtomicBool::new(false),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),
@@ -929,6 +957,10 @@ impl Inner {
                 state.emit("untrusted", json!({ "launch": untrusted.launch, "message": untrusted.message }));
                 Err(untrusted.message)
             }
+            Ok(Err(StartFailure::Unconfigured { agent_id, ran })) => {
+                tracing::info!(session = %state.id, agent = %agent_id, "agent not started: not in agents.json");
+                Err(self.report_unconfigured(state, &agent_id, ran.as_deref(), true))
+            }
             Ok(Err(StartFailure::Failed(e))) => {
                 tracing::warn!(session = %state.id, "agent failed to start: {e}");
                 self.set_status(state, SessionStatus::Error, Some(&e));
@@ -972,10 +1004,10 @@ impl Inner {
 
         self.set_status(&state, SessionStatus::Starting, Some("Starting agent…"));
         let merged = self.opts.configs.merged(Some(&record.project_path));
-        let agent = merged
-            .agent(&record.agent_id)
-            .cloned()
-            .ok_or_else(|| format!("Agent \"{}\" is no longer configured", record.agent_id))?;
+        let agent = match merged.agent(&record.agent_id) {
+            Some(agent) => agent.clone(),
+            None => self.follow_agent(&state, &record, &merged)?,
+        };
         self.check_trust(&record.project_path, &merged, &agent.id).map_err(StartFailure::Untrusted)?;
         let base_env = Arc::clone(&self.opts.base_env);
         let secrets = Arc::clone(&self.opts.secrets);
@@ -987,6 +1019,18 @@ impl Inner {
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("{}: {e}", agent.name))?;
 
+        *lock(&state.running) = merged.launch(&agent.id);
+        state.outdated.store(false, Ordering::SeqCst);
+        // Its agent is there: whatever said it was gone is over.
+        lock(&state.unconfigured).take();
+        let launch = AgentLaunch { command: agent.command.clone(), args: agent.args.clone() };
+        if record.launch.as_ref() != Some(&launch) || record.agent_name.as_ref() != Some(&agent.name) {
+            let mut record = lock(&state.record);
+            record.launch = Some(launch);
+            record.agent_name = Some(agent.name.clone());
+            drop(record);
+            self.persist();
+        }
         let log = self.open_log(&state.id, &agent)?;
         let launched = self.opts.launcher.launch(&*env, &agent, &process_env, log)?;
         drop(process_env);
@@ -1019,6 +1063,9 @@ impl Inner {
             history_restored = started.history_restored,
             "agent ready"
         );
+        if let Some(version) = &started.agent_version {
+            self.opts.configs.note_version(&agent.id, version);
+        }
         // Still in the task Stop aborts, and before anyone gets the connection: the first prompt
         // runs with the session's choices.
         let options = apply_config(&conn, &record.config, started.config_options, self.opts.initialize_timeout).await;
@@ -1039,6 +1086,99 @@ impl Inner {
 
     /// Appends a start marker to the session's log and returns the file for the agent's stderr.
     /// The command line is from the config (no resolved env), so it holds no secret.
+    /// Brings one session in line with its project's agents.json (see `Sessions::sync_agents`).
+    async fn check_agent(self: &Arc<Self>, state: &Arc<SessionState>) {
+        let record = state.record();
+        // A start checks for itself.
+        if matches!(record.status, SessionStatus::Preparing | SessionStatus::Starting) {
+            return;
+        }
+        let merged = self.opts.configs.merged(Some(&record.project_path));
+        let found = merged.agent(&record.agent_id).is_some() || self.follow_agent(state, &record, &merged).is_ok();
+        let reported = *lock(&state.unconfigured);
+        match (found, reported) {
+            (true, Some(was_active)) => {
+                lock(&state.unconfigured).take();
+                tracing::info!(session = %state.id, "its agent is in agents.json again");
+                self.set_status(state, SessionStatus::Stopped, None);
+                if was_active {
+                    let inner = Arc::clone(self);
+                    let state = Arc::clone(state);
+                    let attempts = state.start_attempts.load(Ordering::SeqCst);
+                    tokio::spawn(async move {
+                        if let Err(e) = inner.ensure_started(&state, attempts).await {
+                            state.emit("error", json!({ "message": e }));
+                        }
+                    });
+                }
+            }
+            (true, None) if state.conn().is_some() => self.check_launch(state, &merged),
+            (false, None) if !state.turn_running.load(Ordering::SeqCst) => {
+                let ran = record.launch.as_ref().map(|l| format!("{} {}", l.command, l.args.join(" ")));
+                tracing::info!(session = %state.id, agent = %record.agent_id, "its agent left agents.json: stopped");
+                self.stop(state).await;
+                self.report_unconfigured(state, &record.agent_id, ran.as_deref(), record.status.is_active());
+            }
+            _ => {}
+        }
+    }
+
+    /// Tells the page, once, when agents.json now gives the running agent another command, args,
+    /// env or MCP servers than it was started with (a Restart picks them up), and again (`null`)
+    /// when it's back to those.
+    fn check_launch(&self, state: &SessionState, merged: &Merged) {
+        let record = state.record();
+        let Some(running) = lock(&state.running).clone() else { return };
+        let changed = merged.launch(&record.agent_id).is_none_or(|now| LaunchConfig { agent_id: running.agent_id.clone(), ..now } != running);
+        if state.outdated.swap(changed, Ordering::SeqCst) == changed {
+            return;
+        }
+        let name = merged.agent(&record.agent_id).map_or(record.agent_id.as_str(), |a| a.name.as_str());
+        let message = changed.then(|| format!("agents.json changed what {name} runs. Restart to use it."));
+        tracing::info!(session = %state.id, changed, "the running agent's launch in agents.json");
+        state.emit("agent-outdated", json!({ "message": message }));
+    }
+
+    /// The session's agent isn't in agents.json: `error` with a message that says so, and an
+    /// `unconfigured` event. Returns the message.
+    fn report_unconfigured(&self, state: &SessionState, agent_id: &str, ran: Option<&str>, was_active: bool) -> String {
+        let message = format!("Agent \"{agent_id}\" is no longer configured");
+        *lock(&state.unconfigured) = Some(was_active);
+        self.set_status(state, SessionStatus::Error, Some(&message));
+        state.emit("unconfigured", json!({ "agentId": agent_id, "message": message, "ran": ran }));
+        message
+    }
+
+    /// The agent that runs what the session's agent ran, its id gone from agents.json (removed and
+    /// added again under another): the session takes it, and the page hears of it.
+    fn follow_agent(&self, state: &SessionState, record: &SessionRecord, merged: &Merged) -> Result<AgentConfig, StartFailure> {
+        // A session from before launches were kept: its log's last start line says what it ran.
+        let ran = match &record.launch {
+            Some(launch) => Some(format!("{} {}", launch.command, launch.args.join(" "))),
+            None => self.logged_launch(&state.id, &record.agent_id),
+        };
+        let agent = ran
+            .as_ref()
+            .and_then(|ran| merged.agents.iter().find(|a| log_line(a) == *ran))
+            .ok_or_else(|| StartFailure::Unconfigured { agent_id: record.agent_id.clone(), ran: ran.clone() })?;
+        tracing::info!(session = %state.id, from = %record.agent_id, to = %agent.id, "session follows its agent to a new id");
+        let session = {
+            let mut record = lock(&state.record);
+            record.agent_id.clone_from(&agent.id);
+            Session::from(&*record)
+        };
+        self.persist();
+        state.emit("session", serde_json::to_value(session).unwrap_or_default());
+        Ok(agent.clone())
+    }
+
+    /// What the last start of `agent_id` in the session's log ran, as `log_line` wrote it.
+    fn logged_launch(&self, id: &str, agent_id: &str) -> Option<String> {
+        let log = std::fs::read_to_string(self.log_path(id)).ok()?;
+        let marker = format!(" starting {agent_id}: ");
+        log.lines().rev().filter(|l| l.starts_with("--- ")).find_map(|l| l.split_once(&marker).map(|(_, ran)| ran.to_owned()))
+    }
+
     fn open_log(&self, id: &str, agent: &AgentConfig) -> Result<File, String> {
         let path = self.log_path(id);
         if let Some(dir) = path.parent() {
@@ -1046,7 +1186,7 @@ impl Inner {
         }
         let mut file =
             OpenOptions::new().create(true).append(true).open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
-        let _ = writeln!(file, "--- {} starting {}: {} {}", iso_now(), agent.id, agent.command, agent.args.join(" "));
+        let _ = writeln!(file, "--- {} starting {}: {}", iso_now(), agent.id, log_line(agent));
         Ok(file)
     }
 
@@ -1132,6 +1272,9 @@ impl Drop for SlotGuard {
 
 enum StartFailure {
     Untrusted(Untrusted),
+    /// The session's agent isn't in the project's agents.json; `ran` is
+    /// what it ran (`log_line`), which an agent under another id may run again.
+    Unconfigured { agent_id: String, ran: Option<String> },
     Failed(String),
 }
 
@@ -1354,3 +1497,8 @@ impl ClientHost for SessionHost {
 
 #[cfg(test)]
 mod tests;
+
+/// An agent's command line as its session log's start line shows it.
+fn log_line(agent: &AgentConfig) -> String {
+    format!("{} {}", agent.command, agent.args.join(" "))
+}

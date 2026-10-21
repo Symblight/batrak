@@ -3,7 +3,7 @@ use std::path::Path;
 use std::process::Command;
 
 use tauri::ipc::Response;
-use tauri::{AppHandle, Emitter, State};
+use tauri::{AppHandle, State};
 
 use crate::config::AgentConfigs;
 use crate::session::Sessions;
@@ -111,8 +111,7 @@ pub async fn write_file(
             None => configs.reload_user(),
         };
         if changed {
-            let project_path = project.map(|p| p.to_string_lossy().into_owned());
-            let _ = app.emit(crate::config::AGENTS_CHANGED_EVENT, serde_json::json!({ "projectPath": project_path }));
+            super::agents::emit_changed(&app, project.as_deref());
         }
         Ok(())
     })

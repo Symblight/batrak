@@ -61,8 +61,7 @@ fn agents_changed(app: &AppHandle, project: &Path) {
     use tauri::Manager;
     let Some(configs) = app.try_state::<crate::config::AgentConfigs>() else { return };
     if configs.reload(project) {
-        let payload = serde_json::json!({ "projectPath": project.to_string_lossy() });
-        let _ = app.emit(crate::config::AGENTS_CHANGED_EVENT, payload);
+        crate::commands::agents::emit_changed(app, Some(project));
     }
 }
 

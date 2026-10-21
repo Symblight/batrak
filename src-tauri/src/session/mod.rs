@@ -89,6 +89,20 @@ pub struct SessionRecord {
     pub branch: Option<String>,
     #[serde(default)]
     pub base_commit: Option<String>,
+    /// What its agent ran at its last start: when agents.json no longer has `agent_id`, an agent
+    /// that runs the same (added again under another id) takes over.
+    #[serde(default)]
+    pub launch: Option<AgentLaunch>,
+    /// Its agent's name as agents.json last gave it, shown once the agent is gone from it.
+    #[serde(default)]
+    pub agent_name: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentLaunch {
+    pub command: String,
+    pub args: Vec<String>,
 }
 
 /// A session as the frontend lists it; mirrors `Session` in `src/models/types.js`.
@@ -102,6 +116,7 @@ pub struct Session {
     pub agent_title: Option<String>,
     pub status: SessionStatus,
     pub agent_id: String,
+    pub agent_name: Option<String>,
     pub config: BTreeMap<String, String>,
     pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
@@ -124,6 +139,7 @@ impl From<&SessionRecord> for Session {
             agent_title: r.agent_title.clone(),
             status: r.status,
             agent_id: r.agent_id.clone(),
+            agent_name: r.agent_name.clone(),
             config: r.config.clone(),
             mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),
