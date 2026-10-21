@@ -31,10 +31,18 @@ async function until(pred) {
   }
 }
 
+/**
+ * The watcher reports changes.
+ * @param {{ added?: string[], removed?: string[], modified?: string[] }} changes Root-relative paths.
+ */
+function report({ added = [], removed = [], modified = [] }) {
+  const detail = { rootId: 'r', dirs: [], added, removed, modified, git: false };
+  projectController.dispatchEvent(new CustomEvent('fs-change', { detail }));
+}
+
 /** The watcher reports the file changed. */
 function changedOnDisk() {
-  const detail = { rootId: 'r', dirs: [], added: [], removed: [], modified: ['.brama/agents.json'], git: false };
-  projectController.dispatchEvent(new CustomEvent('fs-change', { detail }));
+  report({ modified: ['.brama/agents.json'] });
 }
 
 describe('TabFilesController', () => {
@@ -179,6 +187,32 @@ describe('TabFilesController', () => {
       openTab(PATH);
       await until(() => tab()?.loaded);
       expect(tab().draft).to.equal(null);
+    });
+  });
+
+  describe('a file deleted and created again', () => {
+    const REL = '.brama/agents.json';
+
+    it('shows the edits again, marked when the new file differs', async () => {
+      const { files, tab } = await edited();
+      delete disk[PATH];
+      report({ removed: [REL] });
+      expect(tab().error).to.not.equal('');
+      disk[PATH] = '{ "theirs": 1 }';
+      report({ added: [REL] });
+      await until(() => tab().changedOnDisk);
+      expect(tab()).to.include({ error: '', content: '{}', draft: '{ "mine": 1 }' });
+      expect(await files.save(PATH)).to.equal(false);
+    });
+
+    it('shows the edits again, unmarked when it is the same file', async () => {
+      const { tab } = await edited();
+      delete disk[PATH];
+      report({ removed: [REL] });
+      disk[PATH] = '{}';
+      report({ added: [REL] });
+      await new Promise((r) => setTimeout(r, 50));
+      expect(tab()).to.include({ error: '', draft: '{ "mine": 1 }', changedOnDisk: false });
     });
   });
 });

@@ -136,8 +136,11 @@ export class TabFilesController {
       if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
       else if (!readsFile(tab) || !(modified.includes(rel) || added.includes(rel))) continue;
       // Unsaved edits are kept; a save then asks.
-      else if (tab.draft !== null) this.#checkDisk(tab.id);
-      else if (tab.id === this.#activeId) this.#load(tab.id);
+      else if (tab.draft !== null) {
+        // Created again after a delete: show the edits again.
+        if (tab.error) this.#patch(tab.id, { error: '' });
+        this.#checkDisk(tab.id);
+      } else if (tab.id === this.#activeId) this.#load(tab.id);
       else if (tab.loaded) this.#patch(tab.id, { loaded: false });
     }
   };
