@@ -13,6 +13,8 @@ pnpm test            # frontend tests: @web/test-runner in Chrome; must pass
 cd src-tauri && cargo test --lib      # backend tests; must pass
 cd src-tauri && cargo clippy --all-targets   # no warnings
 cd src-tauri && cargo test --lib real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
+cd src-tauri && cargo test --lib real_registry -- --ignored   # the real ACP registry and its ETag (network)
+cd src-tauri && cargo test --lib real_npm -- --ignored        # a real `npm cache add` prefetch (network, npm)
 ```
 
 ## Architecture
@@ -44,15 +46,15 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
   from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass
   data down as properties, through their children to the leaves (`<acp-chat>` hands the composer's
-  pickers theirs, `<acp-tab-view>` the Settings and Changes tabs theirs).
+  pickers theirs, `<acp-tab-view>` the Settings, Agents and Changes tabs theirs).
 - **Every other component is presentational:** data in through properties, intents out as `acp-*`
   events that the column handles (they bubble, composed, through the components in between). No
   imports from `stores/` or `services/`, no `StoreController`, no storage, network or clipboard APIs.
   A child that needs data gets a property; one that must change data fires an event. Where an answer
   belongs to one request, the container calls the child back (`<acp-changes-panel>`'s
-  `commitFinished()`, `fillAmendMessage()`); a lazy loader is a property (`<acp-file-tree>`'s
+  `commitFinished()`, `fillAmendMessage()`; `saveFinished()` of `<acp-agent-form>` and `<acp-agents-view>`); a lazy loader is a property (`<acp-file-tree>`'s
   `listDir`); a query is an event answered by a property (`acp-quick-open-query` → `files`,
-  `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`).
+  `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`, `acp-agents-query` → `view`).
 - A controller counts as part of its host. The data controllers (they read stores or call services)
   are hosted only by a container: `ChatSessionController`, `ChatPartsController` (agent column),
   `TabFilesController` (open tabs' files: reads, baselines, drafts, kept in memory while another
@@ -96,9 +98,11 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$workspace` (`brama:workspace`, reopened
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
-  or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor, Agents) with a list
+  or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
-  and the tab scrolls there and answers `acp-settings-revealed`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
+  and the tab scrolls there and answers `acp-settings-revealed`; `AGENTS_TAB_ID`, the Agents tab
+  (see "Agents over ACP"), opened by `openAgents(reveal)` (`$agentsReveal`: its add form, or an
+  agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
   click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids.js`), one per
   terminal, see "Terminals"; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
@@ -166,52 +170,89 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
   base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
   `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
-  project (Settings with no project open). There is no on/off: an agent is in the file or not
-  (an old `"disabled"` is read, ignored and reported as a problem). With a project open, Settings
-  lists the user's own agents it lacks (`AgentList.userAgents`) and copies them in on request
-  (`agents_import_user`, whole entries, trusted unless the project's MCP servers start with them). Nothing is built in, so a new project has no
-  agent (the composer's picker offers only Add ACP agent…, which opens Settings at Agents with the
-  add form, and a draft's send is refused with a notice). Settings' Agents section lists them
-  (`agentInfo.version` from each one's last `initialize`, kept in `<app data>/agent-versions.json`)
-  and changes that one file (the user's with no project open), keeping its other content and key
-  order (`serde_json` `preserve_order`) and refusing a file that doesn't parse; a launch is
-  trusted at once only when it is exactly what the user chose there (that command and args, no
-  `env`, no project `mcpServers`), else the trust dialog asks. It adds an ACP agent
-  (`agents_add`): one of the well-known agents (`config/known.rs`, `AgentList.known`: the ACP
-  registry's `npx` launches, its own id when free) with that launch or a custom command line, or
-  any command (id from the name). A row's menu edits it in place (`agents_update`), makes it the
-  default (`agents_set_default`) or removes its entry at once (`agents_remove`) with Undo on the
-  snackbar (`agents_restore`, the entry back where it was; `notify()` takes an `action` and a
-  `timeout`). An invalid file keeps its last valid version and is reported as `file:line:col`.
-  The watcher flags `.brama/agents.json` (`Changes.config`) → reload → `agents://changed`; the
-  user's file has its own watcher (`config/watch.rs`, its folder, `projectPath: null`). The
-  composer and Settings follow the list: a draft whose agent left it gets
-  the one a new session would, an edit form for it closes; sessions follow in the backend: every change that reaches
-  `agents://changed` goes through `commands::agents::emit_changed`, which runs
-  `Sessions::sync_agents` for the project. A session whose agent left the file is stopped at
-  once, a running turn finished first, and is in `error` ("no longer
-  configured", plus an `unconfigured` event), shown or not; a start that finds it gone does the
-  same. When the agent is back, or one that runs the same (`SessionRecord.launch`, kept at each
-  start; for older sessions the last start line of its `agent.log`, and the session takes that
-  agent's id, a `session` event), it is put back as it was: started again if it ran, else
-  stopped. A running agent whose launch (command, args, env, MCP servers) the file changes keeps
-  running; the page hears it once (`agent-outdated`, the banner's `outdated` notice with
-  Restart, kept through turns; `null` when changed back). `Session.agentName` (kept at each
-  start) names a started session's agent once it's gone ("Claude Code (removed)" in the picker,
-  `agentInfo(id, name)`); `.brama/local/` is never in the snapshot. `env` values take
-  `${env:NAME}` (login-shell env) and `${keychain:name}` (service `brama`), resolved only at spawn:
-  secrets never reach logs, IPC or files. The project's file is the repository's, so it can't make
-  the app run anything on its own: an agent whose `command` / `args` / `env` it sets, or any start
-  while it lists `mcpServers`, needs the user's trust in that exact `LaunchConfig` for that project
-  (`agents_trust`, kept in `<app data>/trusted-agents.json`; a changed launch needs trust again).
-  Untrusted, a start fails with an `untrusted` event and a probe is refused. `trustController`
-  (`services/trust-controller.js`) asks in a confirm dialog at the top of `<acp-app>` when a project
-  opens, its agents.json changes or a start is refused (`agents_untrusted` lists every launch
-  waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all (`agents_trust`) and
-  restarts the sessions it held back; Not now holds until what they run changes or a start is
-  refused again (the session keeps its error notice, whose Restart asks again). A launch's
-  `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't write
-  `agents.json`.
+  project (the Agents tab with no project open). Nothing is built in, so a new project has no
+  agent (the composer's picker offers Add ACP agent…, which opens the Agents tab with its add form,
+  and Manage agents…; a draft's send is refused with a notice).
+  - **The Agents tab** (`<acp-agents-view>`, presentational; spec: `docs/specs/agents-tab.md`) renders
+    `agents_view { projectPath, query, filter }` (`config/view.rs`) as is: the backend matches
+    (case- and accent-insensitive, NFD via `icu_normalizer`; every term in the name, id, vendor,
+    description or command line), ranks (name starts with it > a word of it does > it contains it >
+    another field; with no query the default first, then by name), filters (`all` / `updates` /
+    `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). `agentConfig`
+    keeps `$agentsView` for `$agentsQuery` (in memory; the latest answer only), asked again on
+    `agents://changed`, a project switch and when the tab shows. Rows: installed agents (switch,
+    Update, menu: Edit, Set as default, Remove), the user's own agents the project lacks
+    (`AgentRow` from `AgentList.userAgents`, Add to project: `agents_import_user`, whole entries
+    or `agentIds`, trusted unless the project's MCP servers start with them), and the registry's
+    not installed (one-click Add; binary agents listed, not addable). `<acp-agent-form>` adds and
+    edits. `agentsList` stays for the composer, the trust dialog and session names.
+  - **Writing agents.json:** the tab changes that one file (the user's with no project open),
+    keeping its other content and key order (`serde_json` `preserve_order`) and refusing a file that
+    doesn't parse; a launch is trusted at once only when it is exactly what the user chose there
+    (that command and args, no `env`, no project `mcpServers`), else the trust dialog asks.
+    `agents_add` takes a registry agent (`known`, alias `registry`: its pinned launch, under its
+    id, `<id>-2`… when taken) with that launch or a custom command line, or any command (id from the
+    name). Edit is `agents_update`, Set as default `agents_set_default` (refused for an agent that's
+    off), Remove `agents_remove` with Undo on the snackbar (`agents_restore`, the entry back where
+    it was, its switch too; `notify()` takes an `action` and a `timeout`). An invalid file keeps its
+    last valid version and is reported as `file:line:col`.
+  - **On/off** (`config/switches.rs`): per user, never in agents.json (the repository's), in
+    `<app data>/agent-switches.json` by scope (canonical project path, `""` for the user's file;
+    entries of agents the file no longer has are pruned on reload, a file that never parsed prunes
+    nothing). An old `"disabled"` key is read, ignored and reported as a problem. An agent that's off
+    is listed (`AgentSummary.enabled: false`), not offered by the picker, never started or probed,
+    and waits for no trust; `defaultAgent` is the effective one (the file's if it's on, else the
+    first that's on). `agents_set_enabled` goes through `emit_changed` and returns how many
+    sessions turning off stops (the snackbar counts them).
+  - **The ACP registry** (`config/registry.rs`, the only user of `ureq`; spec as above): a snapshot
+    is bundled (`config/registry.json`, refreshed by hand at release), the last answer kept in
+    `<app data>/acp-registry.json` with its `ETag` and checked again when a day old (launch, an
+    hourly look, Check now: `agents_registry_check`), one check at a time, 15 s; a failure keeps
+    what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
+    `projectPath: null`. `npx` agents can be added (`AgentList.known`, pinned launches); `binary`
+    ones are listed only, `uvx` skipped. An installed agent is matched by what it runs
+    (`match_launch`: `npx` and the entry's package, with or without `@version`), not by id;
+    `AgentSummary.version` is the version its args pin, else `agentInfo.version` from its last
+    `initialize` (`<app data>/agent-versions.json`); `update` (semver) is a newer registry
+    version, `pin: true` when the installed one is unknown ("Pin latest").
+  - **Updates** (`config/update.rs`, `Updater`): `agents_update_version` / `agents_update_all`
+    pin the registry's version in place (`AgentConfigs::pin_versions`, one write; a trusted launch
+    stays trusted when the pin is all that changed), emit `agents://changed` (running sessions get
+    `agent-outdated`; nothing restarts), then `npm cache add <pkg>@<version>` (login-shell env, own
+    process group, 5 min; a failure keeps the pin and `warn`s). A second Update of an agent joins
+    the running one. The tab shows "Updating…" from the call until it returns (`$agentsPending`)
+    and while the backend says an update runs (another window's).
+  - **Following the list:** the watcher flags `.brama/agents.json` (`Changes.config`) → reload →
+    `agents://changed`; the user's file has its own watcher (`config/watch.rs`, its folder,
+    `projectPath: null`). The composer and the tab follow the list: a draft whose agent left it or
+    was turned off gets the one a new session would, an edit form for it closes; sessions follow
+    in the backend: every change that reaches `agents://changed` goes through
+    `commands::agents::emit_changed`, which runs `Sessions::sync_agents` for the project. A
+    session whose agent left the file, or was turned off, is stopped at once, a running turn
+    finished first, and is in `error` ("no longer configured" / "Codex is off", plus an
+    `unconfigured { reason: removed | off }` event; the banner offers Turn on for `off`), shown
+    or not; a start that finds it so does the same.
+    When the agent is back, or one that runs the same (`SessionRecord.launch`, kept at each start; for
+    older sessions the last start line of its `agent.log`, and the session takes that agent's id, a
+    `session` event), it is put back as it was: started again if it ran, else stopped. A running agent
+    whose launch (command, args, env, MCP servers) the file changes keeps running; the page hears it
+    once (`agent-outdated`, the banner's `outdated` notice with Restart, kept through turns; `null` when
+    changed back). `Session.agentName` (kept at each start) names a started session's agent once it's
+    gone ("Claude Code (removed)" in the picker, `agentInfo(id, name)`); `.brama/local/` is never in the
+    snapshot.
+  - **Secrets and trust:** `env` values take `${env:NAME}` (login-shell env) and `${keychain:name}`
+    (service `brama`), resolved only at spawn: secrets never reach logs, IPC or files. The project's
+    file is the repository's, so it can't make the app run anything on its own: an agent whose `command`
+    / `args` / `env` it sets, or any start while it lists `mcpServers`, needs the user's trust in that
+    exact `LaunchConfig` for that project (`agents_trust`, kept in `<app data>/trusted-agents.json`; a
+    changed launch needs trust again). Untrusted, a start fails with an `untrusted` event and a probe is
+    refused. `trustController` (`services/trust-controller.js`) asks in a confirm dialog at the top of
+    `<acp-app>` when a project opens, its agents.json changes or a start is refused (`agents_untrusted`
+    lists every launch waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all
+    (`agents_trust`) and restarts the sessions it held back; Not now holds until what they run changes
+    or a start is refused again (the session keeps its error notice, whose Restart asks again). A
+    launch's `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't
+    write `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
