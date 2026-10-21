@@ -1,4 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
@@ -14,6 +15,10 @@ import colorizeIcon from '@material-design-icons/svg/outlined/colorize.svg?raw';
 import removeIcon from '@material-design-icons/svg/outlined/remove.svg?raw';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
+import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
+import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
+import smartToyIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
+import '../acp-settings-agents/acp-settings-agents.js';
 import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts.js';
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings.js';
 import styles from './acp-settings.css?inline';
@@ -22,6 +27,19 @@ import styles from './acp-settings.css?inline';
 /** @typedef {import('../../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../../models/types.js').Settings} Settings */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../../models/types.js').AgentList} AgentList */
+/** @typedef {import('../../models/types.js').SettingsAnchor} SettingsAnchor */
+/** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
+
+/** @type {{ id: SettingsAnchor, label: string, icon: string }[]} The sections, top to bottom. */
+const SECTIONS = [
+  { id: 'theme', label: 'Theme', icon: paletteIcon },
+  { id: 'editor', label: 'Editor', icon: codeIcon },
+  { id: 'agents', label: 'Agents', icon: smartToyIcon },
+];
+
+/** How far below the scroller's top a section counts as the one being read. */
+const SPY_OFFSET = 24;
 
 /** @type {{ value: Appearance, label: string, icon: string }[]} */
 const APPEARANCES = [
@@ -32,14 +50,19 @@ const APPEARANCES = [
 
 /**
  * @tag acp-settings
- * @summary App settings, shown as a tab in the main column: Theme and Editor.
+ * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor, Agents) and a list that scrolls to them.
  * @fires acp-settings-change `{ patch }` A `Partial<Settings>`; the accent as typed, the font size unclamped.
  * @fires acp-settings-reset `{ section }`
+ * @fires acp-settings-revealed `{ reveal }` The `reveal` asked for was shown.
+ * @fires acp-agents-file-open `null`
  */
 export class AcpSettings extends LitElement {
   static properties = {
     settings: { attribute: false },
     fonts: { attribute: false },
+    agents: { attribute: false },
+    reveal: { attribute: false },
+    current: { state: true },
     accentDraft: { state: true },
     fontSizeDraft: { state: true },
   };
@@ -52,6 +75,12 @@ export class AcpSettings extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} Installed fonts, sorted; `null` until listed. */
     this.fonts = null;
+    /** @type {AgentList | null} */
+    this.agents = null;
+    /** @type {SettingsReveal | null} A section to scroll to; `acp-settings-revealed` once it has. */
+    this.reveal = null;
+    /** @type {SettingsAnchor} The section being read, marked in the list. */
+    this.current = 'theme';
     /** @type {string | null} Accent HEX being typed; `null` shows the stored one. */
     this.accentDraft = null;
     /** @type {string | null} Font size being typed; `null` shows the stored one. */
@@ -66,7 +95,9 @@ export class AcpSettings extends LitElement {
   /** Whether the font menu's height is set; the select renders once `settings` arrive. */
   #menuSized = false;
 
-  async updated() {
+  /** @param {import('lit').PropertyValues<this>} changed */
+  async updated(changed) {
+    if ((changed.has('reveal') || changed.has('settings')) && this.reveal && this.settings) this.#reveal(this.reveal);
     const select = this.renderRoot.querySelector('md-select');
     if (!select || this.#menuSized) return;
     this.#menuSized = true;
@@ -75,6 +106,44 @@ export class AcpSettings extends LitElement {
     // an inline style beats that. The value stays in acp-settings.css.
     select.menuEl?.style.setProperty('--md-menu-max-height', 'var(--_acp-settings-menu-max-height)');
   }
+
+  get #scroller() {
+    return /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-settings__scroller'));
+  }
+
+  /**
+   * Scrolls the card so a section starts at the top.
+   * @param {SettingsAnchor} id
+   * @param {ScrollBehavior} behavior
+   */
+  #scrollTo(id, behavior) {
+    const scroller = this.#scroller;
+    const section = this.renderRoot.querySelector(`[data-section="${id}"]`);
+    if (!scroller || !section) return;
+    const top = section.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    scroller.scrollTo({ top: top - parseFloat(getComputedStyle(scroller).paddingTop), behavior: reduced ? 'instant' : behavior });
+  }
+
+  /** @param {SettingsReveal} reveal */
+  #reveal(reveal) {
+    this.#scrollTo(reveal.section, 'instant');
+    if (reveal.addAgent) this.renderRoot.querySelector('acp-settings-agents')?.startAdding();
+    this.dispatchEvent(new CustomEvent('acp-settings-revealed', { detail: { reveal }, bubbles: true, composed: true }));
+  }
+
+  /** Marks the section being read: the last one whose top has passed the scroller's, or the last at the end. */
+  #onScroll = () => {
+    const scroller = /** @type {HTMLElement} */ (this.#scroller);
+    const top = scroller.getBoundingClientRect().top + SPY_OFFSET;
+    const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+    let current = SECTIONS[0].id;
+    for (const { id } of SECTIONS) {
+      const section = this.renderRoot.querySelector(`[data-section="${id}"]`);
+      if (atEnd || (section && section.getBoundingClientRect().top <= top)) current = id;
+    }
+    this.current = current;
+  };
 
   /** Opens the system color panel of the swatch, a native color input. */
   #openColorPicker = () => {
@@ -136,7 +205,7 @@ export class AcpSettings extends LitElement {
     return html`<div class="acp-settings__group-header">
       <h3 class="acp-settings__group-title">${title}</h3>
       <md-button
-        class="acp-settings__reset"
+        class="acp-settings__header-button"
         variant="text"
         ?disabled=${isSectionDefault(settings, section)}
         @click=${() => {
@@ -152,7 +221,7 @@ export class AcpSettings extends LitElement {
   #renderTheme(settings) {
     const { appearance, accent } = settings;
     const accentError = this.accentDraft !== null && normalizeHex(this.accentDraft) === null;
-    return html`<section class="acp-settings__group" aria-label="Theme">
+    return html`<section class="acp-settings__group" aria-label="Theme" data-section="theme">
       ${this.#renderGroupHeader('Theme', 'theme', settings)}
       <div class="acp-settings__field">
         <span class="acp-settings__label" id="acp-settings-appearance">Appearance</span>
@@ -231,7 +300,7 @@ export class AcpSettings extends LitElement {
     const font = fonts === null || fonts.some(({ family }) => family === editorFont) ? editorFont : null;
     const fontFamily = font ? fontStack(font) : null;
     const lineHeight = lineHeightFor(editorFontSize);
-    return html`<section class="acp-settings__group" aria-label="Editor">
+    return html`<section class="acp-settings__group" aria-label="Editor" data-section="editor">
       ${this.#renderGroupHeader('Editor', 'editor', settings)}
       <div class="acp-settings__field">
         <md-select
@@ -305,22 +374,63 @@ export class AcpSettings extends LitElement {
     </section>`;
   }
 
+  #renderAgents() {
+    return html`<section class="acp-settings__group" aria-label="Agents" data-section="agents">
+      <div class="acp-settings__group-header">
+        <h3 class="acp-settings__group-title">Agents</h3>
+        <md-button
+          class="acp-settings__header-button"
+          variant="text"
+          @click=${() =>
+            this.dispatchEvent(new CustomEvent('acp-agents-file-open', { detail: null, bubbles: true, composed: true }))}
+        >
+          <md-icon slot="icon" class="acp-settings__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
+          Edit agents.json
+        </md-button>
+      </div>
+      <acp-settings-agents .agents=${this.agents}></acp-settings-agents>
+    </section>`;
+  }
+
+  #renderNav() {
+    return html`<nav class="acp-settings__nav" aria-label="Settings sections">
+      ${SECTIONS.map(
+        ({ id, label, icon }) => html`<button
+          class=${classMap({ 'acp-settings__nav-item': true, 'acp-settings__nav-item_active': id === this.current })}
+          type="button"
+          title=${label}
+          aria-label=${label}
+          aria-current=${id === this.current ? 'true' : 'false'}
+          @click=${() => this.#scrollTo(id, 'smooth')}
+        >
+          <md-icon class="acp-settings__nav-icon">${unsafeSVG(icon)}</md-icon>
+          <span class="acp-settings__nav-label">${label}</span>
+        </button>`,
+      )}
+    </nav>`;
+  }
+
   render() {
     const settings = this.settings;
     if (!settings) return nothing;
-    return html`<div class="acp-settings__panel">
-      <div class="acp-settings__body">
-        ${this.#renderTheme(settings)}
-        <hr class="acp-settings__divider" />
-        ${this.#renderEditor(settings)}
-      </div>
-      <footer class="acp-settings__footer">
-        <span class="acp-settings__link" aria-disabled="true" title="Not available yet">
-          <md-icon class="acp-settings__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
-          Edit in settings.json
-        </span>
-      </footer>
-    </div>`;
+    return html`${this.#renderNav()}
+      <div class="acp-settings__scroller" @scroll=${this.#onScroll}>
+        <div class="acp-settings__panel">
+          <div class="acp-settings__body">
+            ${this.#renderTheme(settings)}
+            <hr class="acp-settings__divider" />
+            ${this.#renderEditor(settings)}
+            <hr class="acp-settings__divider" />
+            ${this.#renderAgents()}
+          </div>
+          <footer class="acp-settings__footer">
+            <span class="acp-settings__link" aria-disabled="true" title="Not available yet">
+              <md-icon class="acp-settings__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
+              Edit in settings.json
+            </span>
+          </footer>
+        </div>
+      </div>`;
   }
 }
 

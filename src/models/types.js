@@ -27,6 +27,14 @@
  * @property {NoticeLevel} level
  * @property {string} message
  * @property {number} count Times the same message came in while shown.
+ * @property {NoticeAction} [action] A button on it (Undo); running it dismisses the notice.
+ * @property {number} [timeout] How long it stays, in ms, instead of its level's.
+ */
+
+/**
+ * @typedef {Object} NoticeAction
+ * @property {string} label
+ * @property {() => void} run
  */
 
 /**
@@ -56,6 +64,7 @@
  * @property {string | null} agentTitle The title the agent last gave it, kept under a user's title.
  * @property {SessionStatus} status
  * @property {string} agentId
+ * @property {string | null} [agentName] Its agent's name as agents.json last gave it.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
@@ -115,6 +124,8 @@
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
  *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
+ *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null } }
+ *   | { kind: 'agent-outdated', payload: { message: string | null } }
  *   | { kind: 'session', payload: Session }
  * )} SessionEnvelope
  */
@@ -172,15 +183,58 @@
  * What the chat says about a session above its composer: the agent starting, an error (with
  * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'info'} kind
+ * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated'} kind `outdated`: agents.json changed what
+ *   the running agent runs; Restart picks it up.
  * @property {string} message
  */
 
 /**
- * `agents_list`: the agents configured for a project, no command or environment.
+ * An agent as `agents_list` shows it: no environment.
+ * @typedef {Object} AgentSummary
+ * @property {string} id
+ * @property {string} name
+ * @property {'user' | 'project'} scope The agents.json that chose what it runs.
+ * @property {string | null} version `agentInfo.version` from its last `initialize`.
+ * @property {string} command What it runs, for the edit form.
+ * @property {string[]} args
+ */
+
+/**
+ * A well-known ACP agent Settings offers to add, with the registry's launch.
+ * @typedef {Object} KnownAgent
+ * @property {string} id Its id in agents.json, when that's free.
+ * @property {string} name
+ * @property {string} command
+ * @property {string[]} args
+ */
+
+/**
+ * An ACP agent added in Settings (`agents_add`), written to the user's agents.json. A `known` one
+ * runs its registry launch unless `command` replaces it.
+ * @typedef {Object} NewAgent
+ * @property {string} name
+ * @property {string} [known] A `KnownAgent` id.
+ * @property {string} [command]
+ * @property {string[]} [args]
+ */
+
+/**
+ * Where the Settings tab is to scroll, and whether Agents opens its add form there.
+ * @typedef {Object} SettingsReveal
+ * @property {SettingsAnchor} section
+ * @property {boolean} addAgent
+ */
+
+/** @typedef {'theme' | 'editor' | 'agents'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
+
+/**
+ * `agents_list`: the agents configured for a project, the disabled too.
  * @typedef {Object} AgentList
- * @property {{ id: string, name: string }[]} agents
+ * @property {AgentSummary[]} agents
  * @property {string | null} defaultAgent
+ * @property {KnownAgent[]} known The well-known agents Settings offers to add.
+ * @property {AgentSummary[]} userAgents With a project open: the user's own agents it lacks, which apply only
+ *   with no project open; Settings offers to copy them in.
  * @property {string[]} errors Files that don't parse (`file:line:column: message`); their last valid version is used.
  */
 
@@ -487,6 +541,7 @@
  * @property {string} id
  * @property {string} name
  * @property {string} glyph One or two letters for its badge.
+ * @property {boolean} [removed] No longer in agents.json (a started session's).
  */
 
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */

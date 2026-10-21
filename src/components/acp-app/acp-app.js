@@ -12,7 +12,7 @@ import { $about } from '../../stores/about.js';
 import { $activePath } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout.js';
-import { $notices, dismissNotice, holdNotices } from '../../stores/notices.js';
+import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices.js';
 import { $trustPrompt } from '../../stores/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace.js';
 import { trustConfirm } from '../../models/trust.js';
@@ -356,6 +356,7 @@ export class AcpApp extends LitElement {
         class="acp-app__snackbars"
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}
+        @acp-notice-action=${(/** @type {CustomEvent<{ id: number }>} */ e) => runNoticeAction(e.detail.id)}
         @acp-notices-hold=${(/** @type {CustomEvent<{ held: boolean }>} */ e) => holdNotices(e.detail.held)}
       ></acp-snackbars>
     `;

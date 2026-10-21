@@ -36,14 +36,24 @@ describe('acp-agent-picker', () => {
     expect(menu.open).to.equal(true);
   });
 
-  it('opens the agents file from its only item', async () => {
+  it('asks to add an agent from its only item', async () => {
     const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
     const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item'));
     let opened = false;
-    el.addEventListener('acp-agents-file-open', () => (opened = true));
+    el.addEventListener('acp-agent-add-open', () => (opened = true));
     menu.dispatchEvent(new CustomEvent('select', { detail: { value: '', item } }));
     expect(opened).to.equal(true);
+  });
+
+  it('says when a started session\'s agent is gone from agents.json', async () => {
+    const agent = { id: 'claude', name: 'Claude Code', glyph: 'CC', removed: true };
+    const composer = { ...NO_AGENT, agentId: 'claude', started: true };
+    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('.acp-agent-picker__agent')?.textContent?.trim()).to.equal('Claude Code (removed)');
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[disabled]'));
+    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('No longer in agents.json');
   });
 });

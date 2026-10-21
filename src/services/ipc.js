@@ -209,13 +209,73 @@ export function workspaceSettings(projectPath) {
 }
 
 /**
- * Agents configured for a project: built-in, `<config dir>/brama/agents.json` and
+ * Agents configured for a project, the disabled too: `<config dir>/brama/agents.json` and
  * `.brama/agents.json` merged.
  * @param {string | null} projectPath `null`: no project open.
  * @returns {Promise<AgentList>}
  */
 export function agentsList(projectPath) {
   return invoke('agents_list', { projectPath });
+}
+
+/**
+ * Adds an ACP agent to the project's `.brama/agents.json`, trusting its launch, or to the user's
+ * agents.json without a project.
+ * @param {string | null} projectPath
+ * @param {import('../models/types.js').NewAgent} agent
+ * @returns {Promise<string>} Its id.
+ */
+export function agentsAdd(projectPath, agent) {
+  return invoke('agents_add', { projectPath, agent });
+}
+
+/**
+ * Rewrites an agent's name and launch in the project's agents.json (the user's without a project).
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @param {import('../models/types.js').NewAgent} agent
+ * @returns {Promise<void>}
+ */
+export function agentsUpdate(projectPath, agentId, agent) {
+  return invoke('agents_update', { projectPath, agentId, agent });
+}
+
+/**
+ * Makes an agent the default for new sessions (the project's agents.json, else the user's).
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<void>}
+ */
+export function agentsSetDefault(projectPath, agentId) {
+  return invoke('agents_set_default', { projectPath, agentId });
+}
+
+/**
+ * Removes an agent's entry from the project's agents.json (the user's without a project).
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<{ token: number }>} What `agentsRestore()` undoes it with.
+ */
+export function agentsRemove(projectPath, agentId) {
+  return invoke('agents_remove', { projectPath, agentId });
+}
+
+/**
+ * Copies the user's own agents the project lacks into its agents.json, trusted.
+ * @param {string} projectPath
+ * @returns {Promise<string[]>} The ids copied.
+ */
+export function agentsImportUser(projectPath) {
+  return invoke('agents_import_user', { projectPath });
+}
+
+/**
+ * Puts back what an `agentsRemove()` took out.
+ * @param {number} token
+ * @returns {Promise<void>}
+ */
+export function agentsRestore(token) {
+  return invoke('agents_restore', { token });
 }
 
 /**

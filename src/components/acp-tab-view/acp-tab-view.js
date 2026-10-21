@@ -113,6 +113,8 @@ export class AcpTabView extends LitElement {
     commentFocus: { attribute: false },
     settings: { attribute: false },
     fonts: { attribute: false },
+    agents: { attribute: false },
+    settingsReveal: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
     languages: { attribute: false },
@@ -144,7 +146,13 @@ export class AcpTabView extends LitElement {
           () => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path} .image=${tab.image}></acp-image-preview>`,
         ),
       settings: () =>
-        html`<acp-settings class="acp-tab-view__view" .settings=${this.settings} .fonts=${this.fonts}></acp-settings>`,
+        html`<acp-settings
+          class="acp-tab-view__view"
+          .settings=${this.settings}
+          .fonts=${this.fonts}
+          .agents=${this.agents}
+          .reveal=${this.settingsReveal}
+        ></acp-settings>`,
       changes: () => this.#renderChanges(),
       'session-changes': (tab) => this.#renderSessionChanges(tab),
       terminal: () => html`<acp-terminal class="acp-tab-view__view"></acp-terminal>`,
@@ -234,6 +242,10 @@ export class AcpTabView extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} For the Settings tab. */
     this.fonts = null;
+    /** @type {import('../../models/types.js').AgentList | null} For the Settings tab. */
+    this.agents = null;
+    /** @type {import('../../models/types.js').SettingsReveal | null} For the Settings tab. */
+    this.settingsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;
     /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */

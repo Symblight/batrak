@@ -1,6 +1,7 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { commentAuthor } from '../../models/editor-plugins.js';
+import { agentConfig } from '../../services/agent-config.js';
 import { copyText } from '../../services/clipboard.js';
 import { listDir } from '../../services/ipc.js';
 import { loadSystemFonts } from '../../services/fonts.js';
@@ -14,6 +15,7 @@ import {
   $activePath,
   $editorTabs,
   $fileLanguages,
+  $settingsReveal,
   CHANGES_TAB_ID,
   SETTINGS_TAB_ID,
   activateTab,
@@ -27,7 +29,9 @@ import {
   openTab,
   setFileLanguage,
   setTabPinned,
+  settingsRevealed,
 } from '../../stores/editor.js';
+import { $agentList } from '../../stores/agents.js';
 import { addToChat } from '../../stores/chat.js';
 import {
   $commentFocus,
@@ -56,6 +60,8 @@ import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types.js').NewAgent} NewAgent */
+/** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').Settings} Settings */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
@@ -79,6 +85,8 @@ export class AcpMainColumn extends LitElement {
   #worktrees = new StoreController(this, { store: $worktrees });
   #settings = new StoreController(this, { store: $settings });
   #systemFonts = new StoreController(this, { store: $systemFonts });
+  #agentList = new StoreController(this, { store: $agentList });
+  #settingsReveal = new StoreController(this, { store: $settingsReveal });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #gitChanges = new StoreController(this, { store: $gitChanges });
@@ -93,11 +101,16 @@ export class AcpMainColumn extends LitElement {
     },
   });
 
-  /** The bar sits lower in the Changes tab, which has no footer. Settings lists the fonts. */
+  /**
+   * The bar sits lower in the Changes tab, which has no footer. Settings lists the fonts, and the
+   * agents with the versions they reported since.
+   */
   #activePath = new StoreController(this, {
     store: $activePath,
     onChange: (path) => {
-      if (path === SETTINGS_TAB_ID) loadSystemFonts();
+      if (path !== SETTINGS_TAB_ID) return;
+      loadSystemFonts();
+      agentConfig.refresh();
     },
   });
 
@@ -211,6 +224,19 @@ export class AcpMainColumn extends LitElement {
     if (patch.editorFontSize !== undefined) setEditorFontSize(patch.editorFontSize);
   }
 
+  /** @param {Event} e An `acp-agent-add` or `acp-agent-update`. */
+  async #onAgentSave(e) {
+    const { agentId, agent } = /** @type {CustomEvent<{ agentId?: string, agent: NewAgent }>} */ (e).detail;
+    // Retargeted to the tab view out here; the form that asked is where the event began.
+    const form = /** @type {HTMLElementTagNameMap['acp-settings-agents']} */ (e.composedPath()[0]);
+    try {
+      await (agentId ? agentConfig.update(agentId, agent) : agentConfig.add(agent));
+      form.saveFinished(null);
+    } catch (err) {
+      form.saveFinished(err instanceof Error ? err.message : String(err));
+    }
+  }
+
   render() {
     const { active, pinned } = this.#editorTabs.value;
     const settings = this.#settings.value;
@@ -231,6 +257,8 @@ export class AcpMainColumn extends LitElement {
         .commentFocus=${this.#commentFocus.value}
         .settings=${settings}
         .fonts=${this.#systemFonts.value}
+        .agents=${this.#agentList.value}
+        .settingsReveal=${this.#settingsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
           repo: this.#gitRepo.value,
@@ -272,6 +300,14 @@ export class AcpMainColumn extends LitElement {
         @acp-settings-change=${this.#onSettingsChange}
         @acp-settings-reset=${(/** @type {CustomEvent<{ section: SettingsSection }>} */ e) =>
           resetSection(e.detail.section)}
+        @acp-settings-revealed=${(/** @type {CustomEvent<{ reveal: SettingsReveal }>} */ e) =>
+          settingsRevealed(e.detail.reveal)}
+        @acp-agents-file-open=${() => agentConfig.openFile()}
+        @acp-agents-import=${() => agentConfig.importUserAgents()}
+        @acp-agent-add=${this.#onAgentSave}
+        @acp-agent-update=${this.#onAgentSave}
+        @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
+        @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
       ></acp-tab-view>
       <acp-comment-bar
         class=${classMap({

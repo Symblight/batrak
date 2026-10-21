@@ -12,7 +12,7 @@ const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
  */
@@ -70,6 +70,11 @@ export class AcpSessionBanner extends LitElement {
         </md-button>
       `;
     }
+    if (notice.kind === 'outdated') {
+      return html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
+        Restart
+      </md-button>`;
+    }
     if (notice.kind === 'stopped') {
       return html`<md-button
         slot="actions"
@@ -95,7 +100,7 @@ export class AcpSessionBanner extends LitElement {
       ?hidden=${!shown}
       .label=${label}
       .variant=${variant}
-      ?dismissible=${!request && notice?.kind === 'info'}
+      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated')}
       @chx-input-mode-banner-dismiss=${() => this.#act('dismiss-notice')}
     >
       ${request ? this.#renderPermission(request) : notice ? this.#renderNoticeActions(notice) : nothing}

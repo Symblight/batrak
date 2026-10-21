@@ -1,34 +1,78 @@
 import { expect } from '@esm-bundle/chai';
 import { $agentList } from './agents.js';
-import { $composer, agentInfo, setRunTarget } from './composer.js';
-import { $activeSessionId, newSession } from './sessions.js';
+import { $agents, $composer, agentInfo, selectAgent, setRunTarget, startComposer } from './composer.js';
+import { $activeSessionId, $sessions, newSession, startSession, upsertSession } from './sessions.js';
+
+/**
+ * @param {string} id
+ * @param {string} name
+ * @returns {import('../models/types.js').AgentSummary}
+ */
+const agent = (id, name) => ({ id, name, scope: 'user', version: null, command: id, args: [] });
 
 describe('composer', () => {
   afterEach(() => {
-    $agentList.set({ agents: [], defaultAgent: null, errors: [] });
+    $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     $activeSessionId.set(null);
   });
 
   it('has no agent while the project configures none', () => {
-    $agentList.set({ agents: [], defaultAgent: null, errors: [] });
+    $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId).to.equal(null);
     expect(agentInfo(null)).to.equal(null);
   });
 
   it("starts with the project's default agent", () => {
-    $agentList.set({ agents: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], defaultAgent: 'b', errors: [] });
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'b', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId).to.equal('b');
     expect(agentInfo('b')?.name).to.equal('B');
   });
 
   it('gives a draft changed before any agent existed the agent added later', () => {
-    $agentList.set({ agents: [], defaultAgent: null, errors: [] });
+    $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     newSession('/p');
     setRunTarget({ kind: 'worktree' });
     expect($composer.get().agentId).to.equal(null);
 
-    $agentList.set({ agents: [{ id: 'a', name: 'A' }], defaultAgent: 'a', errors: [] });
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId).to.equal('a');
     expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
+  });
+
+  it('moves a draft off an agent agents.json no longer has', () => {
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    newSession('/p');
+    selectAgent('b');
+    setRunTarget({ kind: 'worktree' });
+    expect($composer.get().agentId).to.equal('b');
+
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    expect($composer.get().agentId, 'removed from the file').to.equal('a');
+    expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
+    expect($agents.get().map((x) => x.id)).to.deep.equal(['a']);
+  });
+
+  it("follows a started session's agent to the id the backend moved it to", () => {
+    $agentList.set({ agents: [agent('claude', 'Claude'), agent('claude-code', 'Claude Code')], defaultAgent: null, known: [], userAgents: [], errors: [] });
+    const id = newSession('/started');
+    $activeSessionId.set(id);
+    selectAgent('claude');
+    setRunTarget({ kind: 'worktree' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startComposer(id);
+    expect($composer.get().agentId).to.equal('claude');
+
+    $agentList.set({ agents: [agent('claude-code', 'Claude Code')], defaultAgent: null, known: [], userAgents: [], errors: [] });
+    upsertSession({ ...$sessions.get()[0], agentId: 'claude-code' });
+    expect($composer.get().agentId).to.equal('claude-code');
+    expect($composer.get().started).to.equal(true);
+    $sessions.set([]);
+  });
+
+  it('names an agent agents.json no longer has as the session knew it', () => {
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: null, known: [], userAgents: [], errors: [] });
+    expect(agentInfo('a')).to.deep.include({ name: 'A', removed: false });
+    expect(agentInfo('claude', 'Claude Code')).to.deep.include({ id: 'claude', name: 'Claude Code', glyph: 'CC', removed: true });
+    expect(agentInfo('claude')).to.deep.include({ name: 'claude', removed: true });
   });
 });

@@ -3,7 +3,9 @@ import { $activeSessionId, $sessions } from './sessions.js';
 import { $agentList } from './agents.js';
 import { $workspaceSettings } from './workspace.js';
 import { isRecord, persistentStore } from './persistent.js';
+import { glyphOf } from '../models/agents.js';
 
+/** @typedef {import('../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
 /** @typedef {import('../models/types.js').ComposerState} ComposerState */
 /** @typedef {import('../models/types.js').RunTarget} RunTarget */
@@ -106,24 +108,17 @@ export function normalizeOptions(options) {
 }
 
 /**
- * One or two letters for an agent's badge.
- * @param {string} name
- */
-function glyphOf(name) {
-  const words = name.split(/[\s-]+/).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
-}
-
-/**
  * @param {{ id: string, name: string }} agent
  * @returns {CatalogAgent}
  */
 function catalogEntry({ id, name }) {
-  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [] };
+  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false };
 }
 
 /** The agents the project can run (`$agentList`), each with its config options as last seen. */
-export const $agents = computed([$agentList, $agentOptions], (list) => list.agents.map(catalogEntry));
+export const $agents = computed([$agentList, $agentOptions], (list) =>
+  list.agents.map(catalogEntry),
+);
 
 /**
  * An agent of the catalogue; one that isn't configured (any more) shows by its id.
@@ -176,8 +171,10 @@ const $lastAgentId = atom(/** @type {string | null} */ (null));
 
 /** The agent a new session starts with: the last picked, else the config's default, else the first, else none. */
 const $newSessionAgentId = computed([$lastAgentId, $agentList], (last, list) => {
-  if (last !== null && list.agents.some((a) => a.id === last)) return last;
-  return list.defaultAgent ?? list.agents[0]?.id ?? null;
+  const runnable = list.agents.map((a) => a.id);
+  if (last !== null && runnable.includes(last)) return last;
+  if (list.defaultAgent !== null && runnable.includes(list.defaultAgent)) return list.defaultAgent;
+  return runnable[0] ?? null;
 });
 
 /** Each session's composer by session id, once it differs from a fresh one. In memory. */
@@ -195,11 +192,18 @@ export const $composer = computed(
  */
 export function composerOf(id) {
   const stored = $composers.get()[id];
-  // A draft kept from before the project had an agent gets the one it has now.
-  const agentId = stored && !stored.started && stored.agentId === null ? $newSessionAgentId.get() : null;
-  if (stored && agentId !== null) return { ...freshState(agentId), runTarget: stored.runTarget };
-  if (stored) return stored;
+  // A draft whose agent is gone (none yet, or removed from agents.json since) gets the
+  // one a new session would, keeping where it runs.
+  const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId);
+  if (stored && gone && stored.agentId !== $newSessionAgentId.get()) {
+    return { ...freshState($newSessionAgentId.get()), runTarget: stored.runTarget };
+  }
   const session = $sessions.get().find((s) => s.id === id);
+  // The backend moved the session to another id for its agent (removed and added again).
+  if (stored?.started && session && session.agentId !== stored.agentId) {
+    return { ...stored, agentId: session.agentId, configOptions: withValues(agentOf(session.agentId).configOptions, session.config) };
+  }
+  if (stored) return stored;
   return session ? listedState(session) : freshState($newSessionAgentId.get());
 }
 
@@ -219,9 +223,17 @@ function updateActive(update) {
   if (id !== null) updateComposer(id, update);
 }
 
-/** @param {string | null} agentId */
-export function agentInfo(agentId) {
-  return agentId === null ? null : agentOf(agentId);
+/**
+ * @param {string | null} agentId
+ * @param {string | null} [knownName] A started session's name for it, shown once agents.json no longer has it.
+ * @returns {AgentInfo | null}
+ */
+export function agentInfo(agentId, knownName = null) {
+  if (agentId === null) return null;
+  const agent = $agents.get().find((a) => a.id === agentId);
+  if (agent) return agent;
+  const name = knownName ?? agentId;
+  return { id: agentId, name, glyph: glyphOf(name), removed: true };
 }
 
 /**

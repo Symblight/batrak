@@ -48,6 +48,10 @@
   overflow: hidden;
   user-select: text;
 }
+.acp-snackbars__action {
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
+}
 .acp-snackbars__count {
   flex: none;
   color: color-mix(in srgb, currentColor 72%, transparent);

@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/snackbar';
 import errorIcon from '@material-design-icons/svg/outlined/error.svg?raw';
@@ -18,6 +19,7 @@ const ICONS = { error: errorIcon, warn: warningIcon, info: infoIcon };
  * @tag acp-snackbars
  * @summary Stack of notice snackbars (backend warnings, failed actions), newest at the bottom.
  * @fires acp-notice-dismiss `{ id }`
+ * @fires acp-notice-action `{ id }` Its action button was clicked.
  * @fires acp-notices-hold `{ held }` While the pointer is over the stack.
  */
 export class AcpSnackbars extends LitElement {
@@ -69,6 +71,15 @@ export class AcpSnackbars extends LitElement {
         <span class="acp-snackbars__message">${notice.message}</span>
         ${notice.count > 1 ? html`<span class="acp-snackbars__count">×${notice.count}</span>` : nothing}
       </span>
+      ${notice.action
+        ? html`<md-button
+            slot="action"
+            class="acp-snackbars__action"
+            variant="text"
+            @click=${() => this.#emit('acp-notice-action', { id: notice.id })}
+            >${notice.action.label}</md-button
+          >`
+        : nothing}
     </md-snackbar>`;
   }
 

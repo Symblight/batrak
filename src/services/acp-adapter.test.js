@@ -26,4 +26,30 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id]).to.include({ kind: 'error', message: 'Not trusted' });
     $awaitingTrust.set([]);
   });
+
+  it('shows why a session stopped when agents.json lost its agent', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    const message = 'Agent "claude" is no longer configured';
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'claude', message, ran: 'npx -y x' } });
+    expect($sessionNotices.get()[id]).to.include({ kind: 'error', message });
+  });
+
+  it('keeps the notice that agents.json changed the running agent until it is restarted or changed back', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    const message = 'agents.json changed what Fake runs. Restart to use it.';
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message } });
+    expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'outdated', message });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'working' } });
+    handleSessionEvent({ sessionId: id, seq: 3, kind: 'status', payload: { status: 'idle' } });
+    expect($sessionNotices.get()[id]?.kind, 'through its turns').to.equal('outdated');
+    handleSessionEvent({ sessionId: id, seq: 4, kind: 'agent-outdated', payload: { message: null } });
+    expect($sessionNotices.get()[id] ?? null).to.equal(null);
+
+    handleSessionEvent({ sessionId: id, seq: 5, kind: 'agent-outdated', payload: { message } });
+    handleSessionEvent({ sessionId: id, seq: 6, kind: 'status', payload: { status: 'starting' } });
+    expect($sessionNotices.get()[id]?.kind, 'a restart replaces it').to.equal('progress');
+  });
 });

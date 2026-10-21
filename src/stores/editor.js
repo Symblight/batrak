@@ -6,6 +6,7 @@ import { isUserAgentsFile } from '../models/agents-file.js';
 import { sessionChangesTabId, sessionOfTab } from '../models/tab-ids.js';
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../models/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../models/types.js').TabKind} TabKind */
 /** @typedef {import('../models/types.js').WorktreeFolder} WorktreeFolder */
 
@@ -258,9 +259,24 @@ export function setTabPinned(path, pin) {
   setTabs({ paths: [...pins, ...(pin ? [] : [path]), ...rest], active, pinned: pins });
 }
 
-/** Opens the Settings tab, or switches to it. */
-export function openSettings() {
+/**
+ * Opens the Settings tab, or switches to it.
+ * @param {SettingsReveal | null} [reveal] A section to scroll to.
+ */
+export function openSettings(reveal = null) {
+  if (reveal) $settingsReveal.set(reveal);
   openTab(SETTINGS_TAB_ID);
+}
+
+/** A section the Settings tab is to scroll to (and what to open there), until it has. */
+export const $settingsReveal = atom(/** @type {SettingsReveal | null} */ (null));
+
+/**
+ * The Settings tab showed `reveal`; a newer request stays.
+ * @param {SettingsReveal} reveal
+ */
+export function settingsRevealed(reveal) {
+  if ($settingsReveal.get() === reveal) $settingsReveal.set(null);
 }
 
 /** Opens the Changes tab, or switches to it. */

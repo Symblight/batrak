@@ -1,14 +1,31 @@
-import { agentsConfigFile, agentsList, agentsProbeOptions, onAgentsChanged } from './ipc.js';
+import {
+  agentsAdd,
+  agentsConfigFile,
+  agentsImportUser,
+  agentsList,
+  agentsProbeOptions,
+  agentsRemove,
+  agentsRestore,
+  agentsSetDefault,
+  agentsUpdate,
+  onAgentsChanged,
+} from './ipc.js';
 import { log } from './logger.js';
 import { reportError } from './notices.js';
 import { $agentList } from '../stores/agents.js';
+import { notify } from '../stores/notices.js';
 import { cacheAgentOptions, hasAgentOptions } from '../stores/composer.js';
 import { openTab } from '../stores/editor.js';
 import { $workspacePath } from '../stores/workspace.js';
 
+/** @typedef {import('../models/types.js').NewAgent} NewAgent */
+
+/** How long a removed agent's Undo stays offered, in ms. */
+const UNDO_MS = 8000;
+
 /**
  * Keeps `$agentList` on the open project's agents, re-read when an agents.json changes, asks each
- * agent whose models aren't known yet for them, and opens the file to add an agent.
+ * agent whose models aren't known yet for them, and adds, switches and edits agents for Settings.
  */
 export class AgentConfig {
   /** Sequence of loads; only the latest answer is kept. */
@@ -38,6 +55,8 @@ export class AgentConfig {
     this.#probing = this.#probing.then(async () => {
       try {
         cacheAgentOptions(agentId, await agentsProbeOptions(projectPath, agentId));
+        // The probe learned the agent's version.
+        this.refresh();
       } catch (err) {
         log('info', `couldn't ask ${agentId} for its options: ${err}`);
       }
@@ -51,6 +70,74 @@ export class AgentConfig {
     } catch (err) {
       reportError('Opening agents.json failed', err);
     }
+  }
+
+  /**
+   * Adds an ACP agent to the open project's agents.json (the user's without a project); the list
+   * follows through `agents://changed`.
+   * @param {NewAgent} agent
+   * @returns {Promise<string>} Its id; rejects with the reason it wasn't added.
+   */
+  async add(agent) {
+    const id = await agentsAdd($workspacePath.get(), agent);
+    log('info', `agent ${id} added`);
+    return id;
+  }
+
+  /**
+   * Rewrites an agent from Settings' edit form; the list follows through `agents://changed`.
+   * @param {string} agentId
+   * @param {NewAgent} agent
+   * @returns {Promise<void>} Rejects with the reason it wasn't saved.
+   */
+  async update(agentId, agent) {
+    await agentsUpdate($workspacePath.get(), agentId, agent);
+  }
+
+  /** @param {string} agentId */
+  async setDefault(agentId) {
+    try {
+      await agentsSetDefault($workspacePath.get(), agentId);
+    } catch (err) {
+      reportError('Setting the default agent failed', err);
+    }
+  }
+
+  /**
+   * Removes an agent at once, with Undo on the snackbar that says so.
+   * @param {string} agentId
+   */
+  async remove(agentId) {
+    const name = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? agentId;
+    try {
+      const { token } = await agentsRemove($workspacePath.get(), agentId);
+      notify('info', `${name} removed`, {
+        timeout: UNDO_MS,
+        action: {
+          label: 'Undo',
+          run: () => agentsRestore(token).catch((err) => reportError(`Restoring ${name} failed`, err)),
+        },
+      });
+    } catch (err) {
+      reportError(`Removing ${name} failed`, err);
+    }
+  }
+
+  /** Copies the user's own agents into the open project's agents.json; the list follows. */
+  async importUserAgents() {
+    const projectPath = $workspacePath.get();
+    if (projectPath === null) return;
+    try {
+      const ids = await agentsImportUser(projectPath);
+      log('info', `agents added to the project: ${ids.join(', ')}`);
+    } catch (err) {
+      reportError('Adding your agents to the project failed', err);
+    }
+  }
+
+  /** Re-reads the open project's agents (versions an agent reported since, too). */
+  refresh() {
+    this.#refresh($workspacePath.get());
   }
 
   /** @param {string | null} projectPath */

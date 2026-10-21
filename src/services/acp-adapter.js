@@ -408,6 +408,15 @@ export function handleSessionEvent(event) {
       // After the `error` status, whose notice stays: the trust dialog asks, and starts it once trusted.
       awaitTrust(sessionId);
       return;
+    case 'agent-outdated': {
+      const { message } = event.payload;
+      if (message !== null) setSessionNotice(sessionId, { kind: 'outdated', message });
+      else if ($sessionNotices.get()[sessionId]?.kind === 'outdated') setSessionNotice(sessionId, null);
+      return;
+    }
+    case 'unconfigured':
+      // After the `error` status, whose notice says so: the backend starts it again once agents.json has the agent.
+      return;
     case 'error':
       if (event.payload.turn) {
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.
@@ -435,8 +444,9 @@ function noticeOf(sessionId, status, message) {
   if (status === 'error') return { kind: 'error', message: message ?? 'The agent failed' };
   if (status === 'stopped') return { kind: 'stopped', message: 'The agent is not running; your next message starts it.' };
   if (message) return { kind: 'info', message };
+  // Information and a changed launch stay through the session's turns.
   const current = $sessionNotices.get()[sessionId] ?? null;
-  return current?.kind === 'info' ? current : null;
+  return current?.kind === 'info' || current?.kind === 'outdated' ? current : null;
 }
 
 /**

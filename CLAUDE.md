@@ -92,7 +92,9 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$workspace` (`brama:workspace`, reopened
   on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
-  or a view's id (`SETTINGS_TAB_ID`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
+  or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor, Agents) with a list
+  beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
+  and the tab scrolls there and answers `acp-settings-revealed`; `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
   click in the Changes side pane opens, expands and scrolls to; `TERMINAL_TAB_ID`, `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
   (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its
@@ -156,12 +158,41 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
   a commit, since older projects got it written whether git or not) is the run target a new session's
   composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
-  base from `git_branches` (local branches, sessions' `brama/…` left out). Agents merge by id:
-  `<config dir>/brama/agents.json` < `.brama/agents.json` (`"disabled": true` hides one); nothing is
-  built in, so a new project has no agent (the composer's picker offers only Add ACP agent…, and a
-  draft's send is refused with a notice). An invalid file keeps its last valid version
-  and is reported as `file:line:col`. The watcher flags `.brama/agents.json` (`Changes.config`) →
-  reload → `agents://changed`; `.brama/local/` is never in the snapshot. `env` values take
+  base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
+  `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
+  project (Settings with no project open). There is no on/off: an agent is in the file or not
+  (an old `"disabled"` is read, ignored and reported as a problem). With a project open, Settings
+  lists the user's own agents it lacks (`AgentList.userAgents`) and copies them in on request
+  (`agents_import_user`, whole entries, trusted unless the project's MCP servers start with them). Nothing is built in, so a new project has no
+  agent (the composer's picker offers only Add ACP agent…, which opens Settings at Agents with the
+  add form, and a draft's send is refused with a notice). Settings' Agents section lists them
+  (`agentInfo.version` from each one's last `initialize`, kept in `<app data>/agent-versions.json`)
+  and changes that one file (the user's with no project open), keeping its other content and key
+  order (`serde_json` `preserve_order`) and refusing a file that doesn't parse; a launch is
+  trusted at once only when it is exactly what the user chose there (that command and args, no
+  `env`, no project `mcpServers`), else the trust dialog asks. It adds an ACP agent
+  (`agents_add`): one of the well-known agents (`config/known.rs`, `AgentList.known`: the ACP
+  registry's `npx` launches, its own id when free) with that launch or a custom command line, or
+  any command (id from the name). A row's menu edits it in place (`agents_update`), makes it the
+  default (`agents_set_default`) or removes its entry at once (`agents_remove`) with Undo on the
+  snackbar (`agents_restore`, the entry back where it was; `notify()` takes an `action` and a
+  `timeout`). An invalid file keeps its last valid version and is reported as `file:line:col`.
+  The watcher flags `.brama/agents.json` (`Changes.config`) → reload → `agents://changed`; the
+  user's file has its own watcher (`config/watch.rs`, its folder, `projectPath: null`). The
+  composer and Settings follow the list: a draft whose agent left it gets
+  the one a new session would, an edit form for it closes; sessions follow in the backend: every change that reaches
+  `agents://changed` goes through `commands::agents::emit_changed`, which runs
+  `Sessions::sync_agents` for the project. A session whose agent left the file is stopped at
+  once, a running turn finished first, and is in `error` ("no longer
+  configured", plus an `unconfigured` event), shown or not; a start that finds it gone does the
+  same. When the agent is back, or one that runs the same (`SessionRecord.launch`, kept at each
+  start; for older sessions the last start line of its `agent.log`, and the session takes that
+  agent's id, a `session` event), it is put back as it was: started again if it ran, else
+  stopped. A running agent whose launch (command, args, env, MCP servers) the file changes keeps
+  running; the page hears it once (`agent-outdated`, the banner's `outdated` notice with
+  Restart, kept through turns; `null` when changed back). `Session.agentName` (kept at each
+  start) names a started session's agent once it's gone ("Claude Code (removed)" in the picker,
+  `agentInfo(id, name)`); `.brama/local/` is never in the snapshot. `env` values take
   `${env:NAME}` (login-shell env) and `${keychain:name}` (service `brama`), resolved only at spawn:
   secrets never reach logs, IPC or files. The project's file is the repository's, so it can't make
   the app run anything on its own: an agent whose `command` / `args` / `env` it sets, or any start
@@ -172,7 +203,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   opens, its agents.json changes or a start is refused (`agents_untrusted` lists every launch
   waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all (`agents_trust`) and
   restarts the sessions it held back; Not now holds until what they run changes or a start is
-  refused again (the session keeps its error notice, whose Restart asks again). `${keychain:…}` works only in the user's file, and agents can't write `agents.json`.
+  refused again (the session keeps its error notice, whose Restart asks again). A launch's
+  `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't write
+  `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while another local

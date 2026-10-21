@@ -10,13 +10,13 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
-import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
+import { openSettings } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
@@ -220,7 +220,7 @@ export class AcpAgentColumn extends LitElement {
             .fileOptions=${this.fileOptions}
             .composer=${composer}
             .agents=${this.#agents.value}
-            .agent=${agentInfo(composer.agentId)}
+            .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
             .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}
             .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
             .permission=${hasSession ? this.#permission.value : null}
@@ -228,7 +228,7 @@ export class AcpAgentColumn extends LitElement {
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
-            @acp-agents-file-open=${() => agentConfig.openFile()}
+            @acp-agent-add-open=${() => openSettings({ section: 'agents', addAgent: true })}
             @acp-agent-select=${this.#onAgentSelect}
             @acp-config-option=${this.#onConfigOption}
             @acp-run-target-change=${this.#onRunTargetChange}

@@ -2,30 +2,90 @@
   display: flex;
   box-sizing: border-box;
   min-height: 0;
+  width: 100%;
   background: var(--column-background);
   color: var(--md-on-surface);
-  width: 100%;
-  justify-content: center;
-
-  padding: var(--space-4);
+  container: acp-settings / inline-size;
 }
 
-/* A side-panel-width column at the tab's start, as in the design. */
+/* Sections at the start, the card scrolling beside them. */
+.acp-settings__nav {
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  width: 184px;
+  box-sizing: border-box;
+  padding: var(--space-4) var(--space-2) var(--space-4) var(--space-3);
+
+  @container acp-settings (width < 520px) {
+    width: 56px;
+    padding-inline: var(--space-2);
+  }
+}
+.acp-settings__nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: 40px;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--shape-corner-full);
+  background: none;
+  color: var(--md-on-surface-variant);
+  font: var(--font-weight-medium) 14px/20px var(--font-family);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--state-hover);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--md-secondary);
+    outline-offset: -2px;
+  }
+  @container acp-settings (width < 520px) {
+    justify-content: center;
+    width: 40px;
+    padding: 0;
+  }
+}
+.acp-settings__nav-item_active {
+  background: var(--md-secondary-container);
+  color: var(--md-on-secondary-container);
+
+  &:hover {
+    background: color-mix(in srgb, var(--md-on-secondary-container) 8%, var(--md-secondary-container));
+  }
+}
+.acp-settings__nav-icon {
+  font-size: var(--icon-size-lg);
+}
+.acp-settings__nav-label {
+  @container acp-settings (width < 520px) {
+    display: none;
+  }
+}
+
+.acp-settings__scroller {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: var(--space-4) var(--space-4) var(--space-4) var(--space-1);
+}
+
+/* One long card of every section. */
 .acp-settings__panel {
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  width: min(100%, 360px);
-  min-height: 0;
+  max-width: 520px;
   background: var(--md-surface-container-low);
   border-radius: var(--shape-corner-medium);
   overflow: hidden;
 }
 
 .acp-settings__body {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
   padding: var(--space-1) var(--space-4) var(--space-4);
 }
 .acp-settings__footer {
@@ -56,7 +116,7 @@
   text-transform: uppercase;
   color: var(--md-primary);
 }
-.acp-settings__reset {
+.acp-settings__header-button {
   --md-button-block-start-space: var(--button-block-space-compact);
   --md-button-block-end-space: var(--button-block-space-compact);
   --md-button-inline-start-space: var(--space-3);

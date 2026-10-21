@@ -8,14 +8,25 @@
  */
 export function trustConfirm(prompt) {
   const project = prompt.projectPath.split(/[\\/]/).pop() || prompt.projectPath;
+  const secrets = keychainItems(prompt);
+  const asks = secrets.length ? `Its agents would read these keychain items: ${secrets.join(', ')}. ` : '';
   return {
     headline: 'Trust this project?',
     message: `Brama provides features that may run potentially malicious code from "${project}".`,
-    detail: "If you don't trust the source, choose Not now to only browse its code: its agents won't start.",
+    detail: `${asks}If you don't trust the source, choose Not now to only browse its code: its agents won't start.`,
     confirmLabel: 'Trust project',
     cancelLabel: 'Not now',
     placement: 'top',
   };
+}
+
+/**
+ * The keychain items (`${keychain:name}`) the prompt's launches would read, each once.
+ * @param {TrustPrompt} prompt
+ */
+function keychainItems(prompt) {
+  const names = prompt.agents.flatMap((a) => Object.values(a.launch.env).flatMap((v) => [...v.matchAll(/\$\{keychain:([^}]+)\}/g)].map((m) => m[1])));
+  return [...new Set(names)];
 }
 
 /**

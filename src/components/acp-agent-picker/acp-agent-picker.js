@@ -21,7 +21,7 @@ import styles from './acp-agent-picker.css?inline';
  * @summary The composer's agent · model · thinking button and its menu; the agent is fixed once the session started.
  * @fires acp-agent-select `{ agentId }`
  * @fires acp-config-option `{ agentId, configId, value }` A model or level, of that agent (picked first).
- * @fires acp-agents-file-open `null`
+ * @fires acp-agent-add-open `null` Add ACP agent…: Settings opens at Agents with the add form.
  */
 export class AcpAgentPicker extends LitElement {
   static properties = {
@@ -139,7 +139,7 @@ export class AcpAgentPicker extends LitElement {
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" disabled>
           ${this.#renderGlyph(agent)} ${agent.name}
-          <span slot="supporting-text">Fixed for this session</span>
+          <span slot="supporting-text">${agent.removed ? 'No longer in agents.json' : 'Fixed for this session'}</span>
           <md-icon slot="trailing" class="acp-agent-picker__lock">${unsafeSVG(lockIcon)}</md-icon>
         </md-menu-item>
       </md-item-group>
@@ -157,7 +157,7 @@ export class AcpAgentPicker extends LitElement {
     this.#handled.add(detail);
     const { item } = detail;
     if (item.dataset.action === 'add-agent') {
-      this.#emit('acp-agents-file-open', null);
+      this.#emit('acp-agent-add-open', null);
       return;
     }
     const { agent, config } = item.dataset;
@@ -190,7 +190,7 @@ export class AcpAgentPicker extends LitElement {
     return html`
       ${this.#renderGlyph(agent, 'icon')}
       <span class="acp-agent-picker__label">
-        <span class="acp-agent-picker__agent">${agent.name}${model ? ' ·' : ''}</span>
+        <span class="acp-agent-picker__agent">${agent.name}${agent.removed ? ' (removed)' : ''}${model ? ' ·' : ''}</span>
         <span class="acp-agent-picker__model">${model}</span>
         ${level
           ? html`<span class="acp-agent-picker__level">

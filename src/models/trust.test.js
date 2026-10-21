@@ -23,6 +23,18 @@ describe('trust', () => {
     expect(options).not.to.have.property('items');
   });
 
+  it('names the keychain items the agents would read', () => {
+    /** @type {UntrustedAgent} */
+    const secret = {
+      name: 'Codex',
+      launch: { agentId: 'codex', command: 'npx', args: [], env: { A: '${keychain:openai}', B: 'x-${keychain:github}-${env:HOME}' }, mcpServers: [] },
+    };
+    const options = trustConfirm({ projectPath: '/work/demo', agents: [REPO, secret, { ...secret, name: 'Again' }] });
+    expect(options.detail).to.equal(
+      "Its agents would read these keychain items: openai, github. If you don't trust the source, choose Not now to only browse its code: its agents won't start.",
+    );
+  });
+
   it('keys a prompt by its project and launches, so a changed launch asks again', () => {
     const key = trustKey({ projectPath: '/p', agents: [REPO] });
     expect(trustKey({ projectPath: '/p', agents: [REPO] })).to.equal(key);

@@ -3,7 +3,7 @@ import { atom } from 'nanostores';
 /** @typedef {import('../models/types.js').AgentList} AgentList */
 
 /**
- * The agents configured for the open project (built-in, user-level and `.brama/agents.json`), kept
+ * The agents of the open project (its `.brama/agents.json`; the user's file with none), kept
  * current by `agentConfig` as the file changes.
  */
-export const $agentList = atom(/** @type {AgentList} */ ({ agents: [], defaultAgent: null, errors: [] }));
+export const $agentList = atom(/** @type {AgentList} */ ({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] }));
