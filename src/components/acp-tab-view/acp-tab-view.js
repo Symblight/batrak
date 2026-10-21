@@ -163,7 +163,6 @@ export class AcpTabView extends LitElement {
           class="acp-tab-view__view"
           .settings=${this.settings}
           .fonts=${this.fonts}
-          .agents=${this.agents}
           .reveal=${this.settingsReveal}
         ></acp-settings>`,
       agents: () =>
@@ -264,7 +263,7 @@ export class AcpTabView extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} For the Settings tab. */
     this.fonts = null;
-    /** @type {import('../../models/types.js').AgentList | null} For the Settings tab. */
+    /** @type {import('../../models/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
     this.agents = null;
     /** @type {import('../../models/types.js').SettingsReveal | null} For the Settings tab. */
     this.settingsReveal = null;

@@ -47,12 +47,12 @@ describe('editor', () => {
   });
 
   it('opens Settings at a section until the tab has shown it', () => {
-    openSettings({ section: 'agents', addAgent: true });
+    openSettings({ section: 'editor' });
     expect($activePath.get()).to.equal(SETTINGS_TAB_ID);
     const reveal = $settingsReveal.get();
-    expect(reveal).to.deep.equal({ section: 'agents', addAgent: true });
+    expect(reveal).to.deep.equal({ section: 'editor' });
 
-    settingsRevealed({ section: 'agents', addAgent: true });
+    settingsRevealed({ section: 'editor' });
     expect($settingsReveal.get(), 'an equal but newer request stays').to.equal(reveal);
     settingsRevealed(/** @type {import('../models/types.js').SettingsReveal} */ (reveal));
     expect($settingsReveal.get()).to.equal(null);

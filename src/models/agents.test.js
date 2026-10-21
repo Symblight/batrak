@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { agentStatus, commandLine, glyphOf, parseCommandLine, splitArgs } from './agents.js';
+import { commandLine, glyphOf, parseCommandLine, splitArgs } from './agents.js';
 
 describe('agents', () => {
   it('makes a glyph of one or two letters', () => {
@@ -21,20 +21,5 @@ describe('agents', () => {
     const line = commandLine('my agent', ['--x', "it's a b", '']);
     expect(parseCommandLine(line)).to.deep.equal({ command: 'my agent', args: ['--x', "it's a b", ''] });
     expect(parseCommandLine('  ')).to.deep.equal({ command: '', args: [] });
-  });
-
-  it('says whether an agent has run, or has not yet, or is off', () => {
-    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: '1.0.0', registryId: null, update: null, enabled: true, command: 'a', args: [] })).to.deep.equal({
-      kind: 'ready',
-      label: 'Ready',
-    });
-    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: null, registryId: null, update: null, enabled: true, command: 'a', args: [] })).to.deep.equal({
-      kind: 'unknown',
-      label: 'Not started yet',
-    });
-    expect(agentStatus({ id: 'a', name: 'A', scope: 'user', version: '1.0.0', registryId: null, update: null, enabled: false, command: 'a', args: [] })).to.deep.equal({
-      kind: 'off',
-      label: 'Off',
-    });
   });
 });

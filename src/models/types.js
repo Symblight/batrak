@@ -302,13 +302,12 @@
  */
 
 /**
- * Where the Settings tab is to scroll, and whether Agents opens its add form there.
+ * Where the Settings tab is to scroll.
  * @typedef {Object} SettingsReveal
  * @property {SettingsAnchor} section
- * @property {boolean} addAgent
  */
 
-/** @typedef {'theme' | 'editor' | 'agents'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
+/** @typedef {'theme' | 'editor'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
 
 /**
  * `agents_list`: the agents configured for a project, the disabled too.

@@ -1,5 +1,3 @@
-/** @typedef {import('./types.js').AgentSummary} AgentSummary */
-
 /**
  * One or two letters for an agent's badge.
  * @param {string} name
@@ -64,14 +62,4 @@ export function commandLine(command, args) {
 export function parseCommandLine(line) {
   const [command = '', ...args] = splitArgs(line);
   return { command, args };
-}
-
-/**
- * What Settings says of an agent: off, ready (it has answered `initialize`), or not started yet.
- * @param {AgentSummary} agent
- * @returns {{ kind: 'off' | 'ready' | 'unknown', label: string }}
- */
-export function agentStatus(agent) {
-  if (!agent.enabled) return { kind: 'off', label: 'Off' };
-  return agent.version ? { kind: 'ready', label: 'Ready' } : { kind: 'unknown', label: 'Not started yet' };
 }
