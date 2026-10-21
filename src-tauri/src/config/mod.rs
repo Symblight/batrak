@@ -756,8 +756,8 @@ impl AgentConfigs {
 
     /// Copies the user's own agents the project lacks (by id), whole entries, into its
     /// agents.json, and trusts them: the user wrote them. One that the project's MCP servers would
-    /// start with is left for the trust dialog. Returns the ids copied.
-    pub fn import_user_agents(&self, project: &Path) -> Result<Vec<String>, String> {
+    /// start with is left for the trust dialog. `ids`: only those. Returns the ids copied.
+    pub fn import_user_agents(&self, project: &Path, ids: Option<&[String]>) -> Result<Vec<String>, String> {
         let user_file = self.user_file.clone().ok_or("this system has no config folder")?;
         let text = fs::read_to_string(&user_file).map_err(|e| format!("{}: {e}", user_file.display()))?;
         parse(&user_file, &text)?;
@@ -767,7 +767,7 @@ impl AgentConfigs {
         edit_file(&self.file_of(Some(project))?, |root| {
             let agents = agents_of(root)?;
             for (id, entry) in own {
-                if !agents.contains_key(&id) {
+                if !agents.contains_key(&id) && ids.is_none_or(|ids| ids.contains(&id)) {
                     agents.insert(id.clone(), entry);
                     copied.push(id);
                 }
@@ -1488,14 +1488,16 @@ mod tests {
         assert_eq!(offered(Some(&project)), ["mine"], "only those the project lacks");
         assert!(offered(None).is_empty(), "nothing to offer without a project");
 
-        assert_eq!(configs.import_user_agents(&project).unwrap(), ["mine"]);
+        fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"mine","env":{"K":"${keychain:k}"}},"both":{"command":"user"},"other":{"command":"other"}}}"#).unwrap();
+        assert_eq!(configs.import_user_agents(&project, Some(&["other".to_owned()])).unwrap(), ["other"], "only the one asked for");
+        assert_eq!(configs.import_user_agents(&project, None).unwrap(), ["mine"]);
         let merged = configs.merged(Some(&project));
         let mine = merged.agent("mine").unwrap();
         assert_eq!((mine.name.as_str(), mine.env["K"].as_str()), ("Mine", "${keychain:k}"), "the whole entry");
         assert_eq!(merged.agent("both").unwrap().command, "project", "the project's own stays");
         assert!(configs.untrusted(&project).iter().all(|u| u.launch.agent_id != "mine"), "the user's own: trusted");
         assert!(offered(Some(&project)).is_empty());
-        assert!(configs.import_user_agents(&project).unwrap().is_empty(), "nothing left to copy");
+        assert!(configs.import_user_agents(&project, None).unwrap().is_empty(), "nothing left to copy");
         fs::remove_dir_all(base).unwrap();
     }
 

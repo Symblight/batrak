@@ -8,6 +8,7 @@ import agentIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
+import tuneIcon from '@material-design-icons/svg/outlined/tune.svg?raw';
 import { configOf, currentName } from '../../models/config-options.js';
 import styles from './acp-agent-picker.css?inline';
 
@@ -21,7 +22,8 @@ import styles from './acp-agent-picker.css?inline';
  * @summary The composer's agent · model · thinking button and its menu; the agent is fixed once the session started.
  * @fires acp-agent-select `{ agentId }`
  * @fires acp-config-option `{ agentId, configId, value }` A model or level, of that agent (picked first).
- * @fires acp-agent-add-open `null` Add ACP agent…: Settings opens at Agents with the add form.
+ * @fires acp-agent-add-open `null` Add ACP agent…: the Agents tab opens with the add form.
+ * @fires acp-agents-manage `null` Manage agents…: the Agents tab opens.
  */
 export class AcpAgentPicker extends LitElement {
   static properties = {
@@ -104,6 +106,10 @@ export class AcpAgentPicker extends LitElement {
           <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
           Add ACP agent…
         </md-menu-item>
+        <md-menu-item class="acp-agent-picker__item" value="" data-action="manage-agents">
+          <md-icon slot="leading">${unsafeSVG(tuneIcon)}</md-icon>
+          Manage agents…
+        </md-menu-item>
       </md-item-group>
     `;
   }
@@ -165,6 +171,10 @@ export class AcpAgentPicker extends LitElement {
     const { item } = detail;
     if (item.dataset.action === 'add-agent') {
       this.#emit('acp-agent-add-open', null);
+      return;
+    }
+    if (item.dataset.action === 'manage-agents') {
+      this.#emit('acp-agents-manage', null);
       return;
     }
     const { agent, config } = item.dataset;

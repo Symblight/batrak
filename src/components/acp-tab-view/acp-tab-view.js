@@ -14,6 +14,7 @@ import pushPinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
+import smartToyIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
@@ -25,6 +26,7 @@ import { TabContentController } from '../../controllers/tab-content/TabContentCo
 import { fileIconFor } from '../../models/file-icons.js';
 import { fontStack } from '../../models/editor-fonts.js';
 import '../acp-settings/acp-settings.js';
+import '../acp-agents-view/acp-agents-view.js';
 import '../acp-changes-review/acp-changes-review.js';
 import '../acp-image-preview/acp-image-preview.js';
 import '../acp-terminal/acp-terminal.js';
@@ -119,6 +121,10 @@ export class AcpTabView extends LitElement {
     fonts: { attribute: false },
     agents: { attribute: false },
     settingsReveal: { attribute: false },
+    agentsView: { attribute: false },
+    agentsQuery: { attribute: false },
+    agentsPending: { attribute: false },
+    agentsReveal: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
     languages: { attribute: false },
@@ -160,6 +166,15 @@ export class AcpTabView extends LitElement {
           .agents=${this.agents}
           .reveal=${this.settingsReveal}
         ></acp-settings>`,
+      agents: () =>
+        html`<acp-agents-view
+          class="acp-tab-view__view"
+          .view=${this.agentsView}
+          .query=${this.agentsQuery}
+          .known=${this.agents?.known ?? []}
+          .pending=${this.agentsPending}
+          .reveal=${this.agentsReveal}
+        ></acp-agents-view>`,
       changes: () => this.#renderChanges(),
       'session-changes': (tab) => this.#renderSessionChanges(tab),
       terminal: (tab) => this.#renderTerminal(tab),
@@ -253,6 +268,14 @@ export class AcpTabView extends LitElement {
     this.agents = null;
     /** @type {import('../../models/types.js').SettingsReveal | null} For the Settings tab. */
     this.settingsReveal = null;
+    /** @type {import('../../models/types.js').AgentsView | null} For the Agents tab. */
+    this.agentsView = null;
+    /** @type {import('../../models/types.js').AgentsQuery} For the Agents tab. */
+    this.agentsQuery = { query: '', filter: 'all' };
+    /** @type {{ updating: readonly string[], checking: boolean }} For the Agents tab: calls this window waits for. */
+    this.agentsPending = { updating: [], checking: false };
+    /** @type {import('../../models/types.js').AgentsReveal | null} For the Agents tab. */
+    this.agentsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;
     /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */
@@ -579,6 +602,7 @@ export class AcpTabView extends LitElement {
    */
   #describe(tab) {
     if (tab.kind === 'settings') return { title: 'Settings', icon: settingsIcon, tooltip: 'Settings' };
+    if (tab.kind === 'agents') return { title: 'Agents', icon: smartToyIcon, tooltip: 'ACP agents: switch, update and add' };
     if (tab.kind === 'changes') {
       return { title: 'Changes', icon: differenceIcon, tooltip: 'Changed files and their diffs against HEAD' };
     }

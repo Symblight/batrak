@@ -12,12 +12,14 @@ const LIST = {
       name: 'Claude Code',
       scope: 'user',
       version: '0.9.2',
+      registryId: null,
+      update: null,
       enabled: true,
       command: 'npx',
       args: ['-y', '@agentclientprotocol/claude-agent-acp'],
     },
-    { id: 'repo', name: 'Repo agent', scope: 'project', version: null, enabled: true, command: './run', args: ['--acp'] },
-    { id: 'local', name: 'Local', scope: 'user', version: null, enabled: true, command: 'local', args: [] },
+    { id: 'repo', name: 'Repo agent', scope: 'project', version: null, registryId: null, update: null, enabled: true, command: './run', args: ['--acp'] },
+    { id: 'local', name: 'Local', scope: 'user', version: null, registryId: null, update: null, enabled: true, command: 'local', args: [] },
   ],
   defaultAgent: 'claude-code',
   known: [
@@ -315,7 +317,7 @@ describe('acp-settings-agents', () => {
   });
 
   it('offers to add the agents of the user\'s own agents.json to the project', async () => {
-    const mine = { id: 'mine', name: 'Mine', scope: /** @type {const} */ ('user'), version: null, enabled: true, command: 'mine', args: [] };
+    const mine = { id: 'mine', name: 'Mine', scope: /** @type {const} */ ('user'), version: null, registryId: null, update: null, enabled: true, command: 'mine', args: [] };
     const { el, root } = await render({ ...LIST, userAgents: [mine] });
     const box = /** @type {HTMLElement} */ (root.querySelector('.acp-settings-agents__elsewhere'));
     expect(box.textContent?.replace(/\s+/g, ' ')).to.contain('Mine is in your own agents.json');

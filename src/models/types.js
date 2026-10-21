@@ -201,16 +201,91 @@
  * @property {string} id
  * @property {string} name
  * @property {'user' | 'project'} scope The agents.json that chose what it runs.
- * @property {string | null} version `agentInfo.version` from its last `initialize`.
+ * @property {string | null} version The version installed: the one its args pin, else `agentInfo.version`
+ *   from its last `initialize`.
+ * @property {string | null} registryId The ACP registry entry it runs; `null`: a custom agent.
+ * @property {AgentUpdate | null} update A newer version the registry has.
  * @property {boolean} enabled Not turned off by the user; only these are offered and started.
  * @property {string} command What it runs, for the edit form.
  * @property {string[]} args
  */
 
 /**
- * A well-known ACP agent Settings offers to add, with the registry's launch.
+ * A newer version of an agent in the ACP registry.
+ * @typedef {Object} AgentUpdate
+ * @property {string} to
+ * @property {boolean} pin The installed version isn't known: Update pins the registry's ("Pin latest").
+ */
+
+/** @typedef {'all' | 'updates' | 'off'} AgentsFilter The Agents tab's filter chip. */
+
+/**
+ * What the Agents tab asks the backend for (`agents_view`). In memory.
+ * @typedef {Object} AgentsQuery
+ * @property {string} query
+ * @property {AgentsFilter} filter
+ */
+
+/**
+ * An installed agent as the Agents tab shows it.
+ * @typedef {Object} AgentRow
+ * @property {string} id
+ * @property {string} name
+ * @property {'user' | 'project'} scope
+ * @property {boolean} enabled
+ * @property {boolean} isDefault
+ * @property {string} command
+ * @property {string[]} args
+ * @property {string | null} version
+ * @property {AgentUpdate | null} update
+ * @property {boolean} updating An update runs: from its write to the end of its download.
+ * @property {'ready' | 'notStarted' | 'off'} status
+ * @property {[number, number][]} nameMatches Where the search matched the name, `[start, end)` in UTF-16 units.
+ */
+
+/**
+ * A registry agent that isn't installed.
+ * @typedef {Object} RegistryRow
+ * @property {string} id
+ * @property {string} name
+ * @property {string} vendor
+ * @property {string} description
+ * @property {string | null} commandLine What Add writes; `null` for a binary agent.
+ * @property {boolean} addable Binary agents can't be added yet.
+ * @property {[number, number][]} nameMatches
+ */
+
+/**
+ * The last check of the ACP registry.
+ * @typedef {Object} RegistryState
+ * @property {string | null} checkedAt ISO 8601; `null`: never, the bundled list is in use.
+ * @property {boolean} offline The last check failed.
+ * @property {boolean} checking
+ */
+
+/**
+ * `agents_view`: the Agents tab's data, searched and filtered by the backend.
+ * @typedef {Object} AgentsView
+ * @property {AgentRow[]} installed
+ * @property {AgentRow[]} userAgents With a project: the user's own agents it lacks (All only).
+ * @property {RegistryRow[]} registry Registry agents not installed (All only).
+ * @property {{ all: number, updates: number, off: number }} counts Ignore the search.
+ * @property {string | null} defaultAgent
+ * @property {string[]} errors
+ * @property {RegistryState} registryState
+ */
+
+/**
+ * What the Agents tab is to show once open: the add form, or an agent's row.
+ * @typedef {Object} AgentsReveal
+ * @property {boolean} [add]
+ * @property {string} [agentId]
+ */
+
+/**
+ * An ACP registry agent the add form offers, with its pinned `npx` launch.
  * @typedef {Object} KnownAgent
- * @property {string} id Its id in agents.json, when that's free.
+ * @property {string} id Its registry id, also its id in agents.json when that's free.
  * @property {string} name
  * @property {string} command
  * @property {string[]} args
@@ -342,13 +417,13 @@
 /**
  * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff;
  * Terminal; Browser).
- * @typedef {'file' | 'settings' | 'changes' | 'session-changes' | 'terminal' | 'browser'} TabKind
+ * @typedef {'file' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} TabKind
  */
 
 /**
  * Which view renders a tab's content: a file's by its extension (`code` for any other), a view tab's
  * by its kind. Picked by `TabContentController`.
- * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'changes' | 'session-changes' | 'terminal' | 'browser'} ContentKind
+ * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} ContentKind
  */
 
 /**

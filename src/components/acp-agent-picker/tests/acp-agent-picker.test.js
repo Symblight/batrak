@@ -18,7 +18,7 @@ describe('acp-agent-picker', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(root.querySelector('.acp-agent-picker__button')?.textContent).to.contain('Add agent');
     const items = [...root.querySelectorAll('md-menu-item')];
-    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent']);
+    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent', 'manage-agents']);
     expect(root.querySelector('md-menu-group')).to.equal(null);
   });
 
@@ -35,7 +35,19 @@ describe('acp-agent-picker', () => {
     expect(menu.open).to.equal(true);
   });
 
-  it('asks to add an agent from its only item', async () => {
+  it('asks to manage the agents', async () => {
+    const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[data-action="manage-agents"]'));
+    expect(item.textContent?.trim()).to.equal('Manage agents…');
+    let asked = false;
+    el.addEventListener('acp-agents-manage', () => (asked = true));
+    menu.dispatchEvent(new CustomEvent('select', { detail: { value: '', item } }));
+    expect(asked).to.equal(true);
+  });
+
+  it('asks to add an agent from its first item', async () => {
     const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));

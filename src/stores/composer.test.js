@@ -9,7 +9,7 @@ import { setWorkspaceSettings } from './workspace.js';
  * @param {string} name
  * @returns {import('../models/types.js').AgentSummary}
  */
-const agent = (id, name) => ({ id, name, scope: 'user', version: null, enabled: true, command: id, args: [] });
+const agent = (id, name) => ({ id, name, scope: 'user', version: null, registryId: null, update: null, enabled: true, command: id, args: [] });
 
 describe('composer', () => {
   afterEach(() => {

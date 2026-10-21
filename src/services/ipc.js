@@ -277,10 +277,56 @@ export function agentsRemove(projectPath, agentId) {
 /**
  * Copies the user's own agents the project lacks into its agents.json, trusted.
  * @param {string} projectPath
+ * @param {string[] | null} [agentIds] Only these; `null`: all of them.
  * @returns {Promise<string[]>} The ids copied.
  */
-export function agentsImportUser(projectPath) {
-  return invoke('agents_import_user', { projectPath });
+export function agentsImportUser(projectPath, agentIds = null) {
+  return invoke('agents_import_user', { projectPath, agentIds });
+}
+
+/**
+ * The Agents tab's data: the agents searched and filtered by the backend.
+ * @param {string | null} projectPath
+ * @param {string} query
+ * @param {import('../models/types.js').AgentsFilter} filter
+ * @returns {Promise<import('../models/types.js').AgentsView>}
+ */
+export function agentsView(projectPath, query, filter) {
+  return invoke('agents_view', { projectPath, query, filter });
+}
+
+/**
+ * @typedef {Object} UpdatedAgent
+ * @property {string} agentId
+ * @property {string} version
+ * @property {boolean} downloaded Whether npm got the new version ahead of the next start.
+ */
+
+/**
+ * Pins an agent to the registry's newer version and downloads it; resolves once the download ended.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<UpdatedAgent[]>} Empty: it was up to date.
+ */
+export function agentsUpdateVersion(projectPath, agentId) {
+  return invoke('agents_update_version', { projectPath, agentId });
+}
+
+/**
+ * `agentsUpdateVersion()` for every agent with an update.
+ * @param {string | null} projectPath
+ * @returns {Promise<UpdatedAgent[]>}
+ */
+export function agentsUpdateAll(projectPath) {
+  return invoke('agents_update_all', { projectPath });
+}
+
+/**
+ * Asks the ACP registry now.
+ * @returns {Promise<import('../models/types.js').RegistryState>}
+ */
+export function agentsRegistryCheck() {
+  return invoke('agents_registry_check');
 }
 
 /**

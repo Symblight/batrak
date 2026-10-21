@@ -4,22 +4,27 @@ import {
   agentsImportUser,
   agentsList,
   agentsProbeOptions,
+  agentsRegistryCheck,
   agentsRemove,
   agentsRestore,
   agentsSetDefault,
   agentsSetEnabled,
   agentsUpdate,
+  agentsUpdateAll,
+  agentsUpdateVersion,
+  agentsView,
   onAgentsChanged,
 } from './ipc.js';
 import { log } from './logger.js';
 import { reportError } from './notices.js';
-import { $agentList } from '../stores/agents.js';
+import { $agentList, $agentsPending, $agentsQuery, $agentsView, whileUpdating } from '../stores/agents.js';
 import { notify } from '../stores/notices.js';
 import { cacheAgentOptions, hasAgentOptions } from '../stores/composer.js';
 import { openTab } from '../stores/editor.js';
 import { $workspacePath } from '../stores/workspace.js';
 
 /** @typedef {import('../models/types.js').NewAgent} NewAgent */
+/** @typedef {import('../models/types.js').AgentsQuery} AgentsQuery */
 
 /** How long a removed agent's Undo stays offered, in ms. */
 const UNDO_MS = 8000;
@@ -31,6 +36,8 @@ const UNDO_MS = 8000;
 export class AgentConfig {
   /** Sequence of loads; only the latest answer is kept. */
   #load = 0;
+  /** Sequence of `agents_view` calls; only the latest answer is kept. */
+  #search = 0;
   /** @type {Set<string>} Agents asked this launch (a failed probe isn't retried until the next). */
   #probed = new Set();
   /** Probes run one at a time: each starts an agent process. */
@@ -38,11 +45,75 @@ export class AgentConfig {
 
   /** Follows the open project: loads its agents now and when an agents.json changes. */
   start() {
-    $workspacePath.subscribe((path) => this.#refresh(path));
+    $workspacePath.subscribe((path) => {
+      this.#refresh(path);
+      this.search();
+    });
     onAgentsChanged((projectPath) => {
-      // `null`: the user's file, which every project merges.
-      if (projectPath === null || projectPath === $workspacePath.get()) this.#refresh($workspacePath.get());
+      // `null`: the user's file, which every project merges, or the registry.
+      if (projectPath === null || projectPath === $workspacePath.get()) {
+        this.#refresh($workspacePath.get());
+        this.search();
+      }
     }).catch((err) => reportError('Watching agents.json failed', err));
+  }
+
+  /**
+   * Asks the backend for the Agents tab's data: the search and filter given, else the current ones.
+   * An answer that comes after a newer question's is dropped.
+   * @param {AgentsQuery} [query]
+   */
+  async search(query = $agentsQuery.get()) {
+    $agentsQuery.set(query);
+    const search = ++this.#search;
+    try {
+      const view = await agentsView($workspacePath.get(), query.query, query.filter);
+      if (search === this.#search) $agentsView.set(view);
+    } catch (err) {
+      if (search === this.#search) reportError('Loading agents failed', err);
+    }
+  }
+
+  /**
+   * Updates an agent to the registry's version; the list shows "Updating…" until its download ends.
+   * @param {string} agentId
+   */
+  async updateVersion(agentId) {
+    try {
+      await whileUpdating([agentId], () => agentsUpdateVersion($workspacePath.get(), agentId));
+    } catch (err) {
+      reportError(`Updating ${this.#nameOf(agentId)} failed`, err);
+    }
+    // Its download ended: the backend no longer says it's updating.
+    this.search();
+  }
+
+  /** Updates every agent that has an update. */
+  async updateAll() {
+    const ids = ($agentsView.get()?.installed ?? []).filter((a) => a.update).map((a) => a.id);
+    try {
+      await whileUpdating(ids, () => agentsUpdateAll($workspacePath.get()));
+    } catch (err) {
+      reportError('Updating agents failed', err);
+    }
+    this.search();
+  }
+
+  /** Asks the ACP registry now; the tab shows the answer. */
+  async checkRegistry() {
+    $agentsPending.set({ ...$agentsPending.get(), checking: true });
+    try {
+      await agentsRegistryCheck();
+    } catch (err) {
+      reportError('Checking the ACP registry failed', err);
+    }
+    $agentsPending.set({ ...$agentsPending.get(), checking: false });
+    this.search();
+  }
+
+  /** @param {string} agentId */
+  #nameOf(agentId) {
+    return $agentList.get().agents.find((a) => a.id === agentId)?.name ?? agentId;
   }
 
   /**
@@ -140,12 +211,15 @@ export class AgentConfig {
     }
   }
 
-  /** Copies the user's own agents into the open project's agents.json; the list follows. */
-  async importUserAgents() {
+  /**
+   * Copies the user's own agents into the open project's agents.json; the list follows.
+   * @param {string[] | null} [agentIds] Only these; `null`: all of them.
+   */
+  async importUserAgents(agentIds = null) {
     const projectPath = $workspacePath.get();
     if (projectPath === null) return;
     try {
-      const ids = await agentsImportUser(projectPath);
+      const ids = await agentsImportUser(projectPath, agentIds);
       log('info', `agents added to the project: ${ids.join(', ')}`);
     } catch (err) {
       reportError('Adding your agents to the project failed', err);

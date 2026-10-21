@@ -18,7 +18,7 @@ import { sessionController } from '../../services/session-controller.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
-import { openSettings } from '../../stores/editor.js';
+import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
@@ -246,7 +246,8 @@ export class AcpAgentColumn extends LitElement {
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
             @acp-session-select=${this.#onSessionSelect}
-            @acp-agent-add-open=${() => openSettings({ section: 'agents', addAgent: true })}
+            @acp-agent-add-open=${() => openAgents({ add: true })}
+            @acp-agents-manage=${() => openAgents()}
             @acp-agent-select=${this.#onAgentSelect}
             @acp-config-option=${this.#onConfigOption}
             @acp-run-target-change=${this.#onRunTargetChange}

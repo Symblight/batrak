@@ -288,13 +288,18 @@ pub(crate) fn check_registry_daily(app: AppHandle, registry: Registry) {
 }
 
 /// Copies the user's own agents the project lacks into its agents.json (trusted: the user wrote
-/// them); returns their ids.
+/// them), `agent_ids` only when given; returns their ids.
 #[tauri::command]
-pub async fn agents_import_user(app: AppHandle, configs: State<'_, AgentConfigs>, project_path: String) -> Result<Vec<String>, String> {
+pub async fn agents_import_user(
+    app: AppHandle,
+    configs: State<'_, AgentConfigs>,
+    project_path: String,
+    agent_ids: Option<Vec<String>>,
+) -> Result<Vec<String>, String> {
     let configs = configs.inner().clone();
     let (ids, project) = blocking(move || {
         let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
-        configs.import_user_agents(&project).map(|ids| (ids, project))
+        configs.import_user_agents(&project, agent_ids.as_deref()).map(|ids| (ids, project))
     })
     .await??;
     emit_changed(&app, Some(&project));
