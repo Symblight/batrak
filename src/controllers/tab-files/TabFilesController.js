@@ -205,14 +205,14 @@ export class TabFilesController {
 
   /**
    * Whether the file on disk is no longer the text `tab`'s draft started from; a failed read
-   * (the file is gone) counts as not.
+   * (not text any more, unreadable, gone) counts as so.
    * @param {EditorTab} tab
    */
   async #diskDiffers(tab) {
     try {
       return (await readFile(tab.path)) !== tab.content;
     } catch {
-      return false;
+      return true;
     }
   }
 

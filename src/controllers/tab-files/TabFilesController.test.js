@@ -44,15 +44,19 @@ describe('TabFilesController', () => {
   let writes;
   /** @type {Promise<void> | null} Reads wait for it while set. */
   let readGate;
+  /** @type {string | null} Reads fail with it while set. */
+  let readError;
 
   beforeEach(() => {
     disk = { [PATH]: '{}' };
     writes = [];
     readGate = null;
+    readError = null;
     mockIPC(async (cmd, args) => {
       const { path, content } = /** @type {{ path: string, content: string }} */ (args);
       if (cmd === 'read_file') {
         await readGate;
+        if (readError) throw new Error(readError);
         if (!(path in disk)) throw new Error(`${path}: not found`);
         return disk[path];
       }
@@ -136,5 +140,13 @@ describe('TabFilesController', () => {
     expect(tab()).to.include({ content: '{}', draft: '{ "mine": 2 }', changedOnDisk: true });
     expect(await files.save(PATH)).to.equal(false);
     expect(writes).to.deep.equal([]);
+  });
+
+  it("asks before saving over a file it can't read", async () => {
+    const { files, tab } = await edited();
+    readError = `${PATH}: stream did not contain valid UTF-8`;
+    expect(await files.save(PATH)).to.equal(false);
+    expect(writes).to.deep.equal([]);
+    expect(tab().changedOnDisk).to.equal(true);
   });
 });
