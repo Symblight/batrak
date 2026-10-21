@@ -4,9 +4,10 @@
 
 pub mod env;
 pub mod known;
+pub mod switches;
 pub mod watch;
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io::ErrorKind;
 use std::path::{Path, PathBuf};
@@ -165,6 +166,8 @@ pub struct AgentSummary {
     pub scope: Scope,
     /// `agentInfo.version` from the agent's last `initialize`.
     pub version: Option<String>,
+    /// Not turned off by the user (`switches`): only these are offered and started.
+    pub enabled: bool,
     /// What it runs, for Settings' edit form; never its environment.
     pub command: String,
     pub args: Vec<String>,
@@ -190,6 +193,7 @@ pub struct NewAgent {
 #[serde(rename_all = "camelCase")]
 pub struct AgentList {
     pub agents: Vec<AgentSummary>,
+    /// The file's default when it's on, else the first agent that's on.
     pub default_agent: Option<String>,
     /// The well-known agents Settings offers to add.
     pub known: &'static [known::KnownAgent],
@@ -209,11 +213,27 @@ pub struct Merged {
     /// One of `mcp_servers` comes from the project's file.
     pub project_mcp: bool,
     pub errors: Vec<String>,
+    /// Agents the user turned off in this scope: listed, never started.
+    pub off: BTreeSet<String>,
 }
 
 impl Merged {
+    /// An agent of the file, on or off.
     pub fn agent(&self, id: &str) -> Option<&AgentConfig> {
         self.agents.iter().find(|a| a.id == id)
+    }
+
+    /// An agent that may be started: in the file and not turned off.
+    pub fn enabled(&self, id: &str) -> Option<&AgentConfig> {
+        self.agent(id).filter(|a| !self.off.contains(&a.id))
+    }
+
+    /// Turns `off` off; a default that's off gives way to the first agent that's on.
+    fn turn_off(&mut self, off: BTreeSet<String>) {
+        self.off = off;
+        if self.default_agent.as_ref().is_none_or(|id| self.off.contains(id)) {
+            self.default_agent = self.agents.iter().find(|a| !self.off.contains(&a.id)).map(|a| a.id.clone());
+        }
     }
 
     /// Whether starting the agent runs something the project's file chose.
@@ -238,6 +258,7 @@ impl Merged {
             name: a.name.clone(),
             scope: if a.from_project { Scope::Project } else { Scope::User },
             version: None,
+            enabled: !self.off.contains(&a.id),
             command: a.command.clone(),
             args: a.args.clone(),
         };
@@ -361,7 +382,7 @@ fn merge(layers: &[&AgentsFile], project: Option<&AgentsFile>) -> Merged {
         .or_else(|| agents.first().map(|a| a.id.clone()));
     let project_mcp = mcp.iter().any(|(_, from_project)| *from_project);
     let mcp_servers = mcp.into_iter().map(|(server, _)| server).collect();
-    Merged { agents, default_agent, mcp_servers, project_mcp, errors }
+    Merged { agents, default_agent, mcp_servers, project_mcp, errors, off: BTreeSet::new() }
 }
 
 /// Changes an agents.json as JSON, keeping the rest of it and its key order. Refused while the
@@ -444,6 +465,8 @@ pub struct AgentConfigs {
     trust_file: Option<Arc<crate::storage::JsonFile>>,
     /// `agent-versions.json` beside `trust_file`.
     versions_file: Option<Arc<crate::storage::JsonFile>>,
+    /// `agent-switches.json` beside `trust_file`.
+    switches_file: Option<Arc<crate::storage::JsonFile>>,
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -454,6 +477,7 @@ struct Inner {
     trusted: Vec<TrustedLaunch>,
     /// Agent id → `agentInfo.version` from its last `initialize`.
     versions: BTreeMap<String, String>,
+    switches: switches::Switches,
     /// What `remove_agent` took out, by token, until `restore_agent` puts it back.
     removed: HashMap<u64, Removed>,
     next_token: u64,
@@ -466,6 +490,8 @@ struct Removed {
     id: String,
     entry: serde_json::Value,
     position: usize,
+    /// It was turned off; it comes back off.
+    off: bool,
 }
 
 /// A removal `restore_agent` can undo with `token`; `project` is whose file changed (`None`: the user's).
@@ -523,15 +549,17 @@ fn set_launch(entry: &mut serde_json::Map<String, serde_json::Value>, agent: &Re
 
 impl AgentConfigs {
     pub fn new(user_file: Option<PathBuf>, trust_file: Option<PathBuf>) -> AgentConfigs {
-        let versions_file = trust_file
-            .as_ref()
-            .and_then(|path| path.parent())
-            .map(|dir| Arc::new(crate::storage::JsonFile::new(dir.join("agent-versions.json"))));
+        let beside = |name: &str| {
+            trust_file.as_ref().and_then(|path| path.parent()).map(|dir| Arc::new(crate::storage::JsonFile::new(dir.join(name))))
+        };
+        let versions_file = beside("agent-versions.json");
+        let switches_file = beside("agent-switches.json");
         let versions = versions_file.as_ref().map(|file| file.load()).unwrap_or_default();
+        let switches = switches_file.as_ref().map(|file| file.load::<switches::Switches>().loaded()).unwrap_or_default();
         let trust_file = trust_file.map(|path| Arc::new(crate::storage::JsonFile::new(path)));
         let trusted = trust_file.as_ref().map(|file| file.load()).unwrap_or_default();
-        let inner = Inner { trusted, versions, ..Inner::default() };
-        AgentConfigs { user_file, trust_file, versions_file, inner: Arc::new(Mutex::new(inner)) }
+        let inner = Inner { trusted, versions, switches, ..Inner::default() };
+        AgentConfigs { user_file, trust_file, versions_file, switches_file, inner: Arc::new(Mutex::new(inner)) }
     }
 
     /// The agent list of `project` (`None`: the user's agents only), with their versions.
@@ -564,6 +592,29 @@ impl AgentConfigs {
             }
         }
         true
+    }
+
+    /// Turns an agent of the project's agents.json (the user's without a project) on or off for
+    /// this user; the file isn't touched. Returns the project whose agents changed.
+    pub fn set_enabled(&self, project: Option<&Path>, agent_id: &str, enabled: bool) -> Result<Option<PathBuf>, String> {
+        if self.merged(project).agent(agent_id).is_none() {
+            return Err(format!("unknown agent \"{agent_id}\""));
+        }
+        let changed = self.lock().switches.set(project, agent_id, enabled);
+        if changed {
+            tracing::info!(agent = %agent_id, enabled, "agent switched");
+            self.save_switches();
+        }
+        Ok(project.map(Path::to_path_buf))
+    }
+
+    fn save_switches(&self) {
+        let switches = self.lock().switches.clone();
+        if let Some(file) = &self.switches_file {
+            if let Err(e) = file.save(&switches) {
+                tracing::warn!("agent switches not kept: {e}");
+            }
+        }
     }
 
     /// Adds an agent to the open project's `.brama/agents.json`, trusting the launch the user just
@@ -689,8 +740,10 @@ impl AgentConfigs {
     /// Makes an agent the default for new sessions: in the project's agents.json, or the user's
     /// without a project. Returns the project whose file changed.
     pub fn set_default(&self, project: Option<&Path>, agent_id: &str) -> Result<Option<PathBuf>, String> {
-        if self.merged(project).agent(agent_id).is_none() {
-            return Err(format!("unknown agent \"{agent_id}\""));
+        let merged = self.merged(project);
+        let Some(agent) = merged.agent(agent_id) else { return Err(format!("unknown agent \"{agent_id}\"")) };
+        if merged.enabled(agent_id).is_none() {
+            return Err(format!("{} is off; turn it on first", agent.name));
         }
         let file = self.file_of(project)?;
         edit_file(&file, |root| {
@@ -712,6 +765,7 @@ impl AgentConfigs {
     /// `restore_agent(token)` puts it back.
     pub fn remove_agent(&self, project: Option<&Path>, agent_id: &str) -> Result<Removal, String> {
         let file = self.file_of(project)?;
+        let off = self.lock().switches.is_off(project, agent_id);
         let mut before = None;
         edit_file(&file, |root| {
             let agents = agents_of(root)?;
@@ -723,7 +777,7 @@ impl AgentConfigs {
         self.reload_file(project);
         let (entry, position) = before.ok_or_else(|| format!("unknown agent \"{agent_id}\""))?;
         let project = project.map(Path::to_path_buf);
-        let removed = Removed { file, project: project.clone(), id: agent_id.to_owned(), entry, position };
+        let removed = Removed { file, project: project.clone(), id: agent_id.to_owned(), entry, position, off };
         let mut inner = self.lock();
         inner.next_token += 1;
         let token = inner.next_token;
@@ -742,6 +796,9 @@ impl AgentConfigs {
             Ok(())
         })?;
         tracing::info!(agent = %removed.id, "agent restored");
+        if removed.off && self.lock().switches.set(removed.project.as_deref(), &removed.id, false) {
+            self.save_switches();
+        }
         self.reload_file(removed.project.as_deref());
         Ok(removed.project)
     }
@@ -758,7 +815,7 @@ impl AgentConfigs {
         merged
             .agents
             .iter()
-            .filter(|a| merged.needs_trust(&a.id))
+            .filter(|a| merged.enabled(&a.id).is_some() && merged.needs_trust(&a.id))
             .filter_map(|a| merged.launch(&a.id).map(|launch| UntrustedAgent { name: a.name.clone(), launch }))
             .filter(|u| !self.is_trusted(project, &u.launch))
             .collect()
@@ -828,6 +885,11 @@ impl AgentConfigs {
             if let Some(error) = &inner.user.error {
                 tracing::warn!("agents.json: {error}");
             }
+            let pruned = inner.prune(None);
+            drop(inner);
+            if pruned {
+                self.save_switches();
+            }
         }
         changed
     }
@@ -851,6 +913,11 @@ impl AgentConfigs {
             for error in [&inner.user.error, &inner.projects[project].error].into_iter().flatten() {
                 tracing::warn!("agents.json: {error}");
             }
+            let pruned = inner.prune(None) | inner.prune(Some(project));
+            drop(inner);
+            if pruned {
+                self.save_switches();
+            }
         }
         changed
     }
@@ -863,9 +930,7 @@ impl AgentConfigs {
                 self.reload(project);
             }
             None => {
-                if let Some(user_file) = &self.user_file {
-                    self.lock().user.reload(user_file);
-                }
+                self.reload_user();
             }
             Some(_) => {}
         }
@@ -882,7 +947,22 @@ impl AgentConfigs {
             None => inner.user.error.as_ref(),
         };
         merged.errors.splice(0..0, error.cloned());
+        merged.turn_off(inner.switches.off(project));
         merged
+    }
+}
+
+impl Inner {
+    /// Drops the switches of agents that left the scope's file (its last valid version). A file
+    /// that never parsed says nothing about its agents.
+    fn prune(&mut self, project: Option<&Path>) -> bool {
+        let state = match project {
+            Some(project) => self.projects.get(project),
+            None => Some(&self.user),
+        };
+        let Some(state) = state.filter(|s| s.last_valid.is_some() || s.error.is_none()) else { return false };
+        let ids: BTreeSet<String> = state.last_valid.as_ref().map(|file| file.agents.keys().cloned().collect()).unwrap_or_default();
+        self.switches.prune(project, |id| ids.contains(id))
     }
 }
 
@@ -1456,6 +1536,76 @@ mod tests {
         let again = AgentConfigs::new(Some(user_file), Some(trust_file));
         assert_eq!(again.list(None).agents[0].version.as_deref(), Some("0.9.2"), "kept on disk");
         fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn an_agent_turned_off_is_listed_off_and_never_the_default() {
+        let base = temp_project("switch");
+        let user_file = base.join("user.json");
+        fs::write(&user_file, r#"{"version":1,"defaultAgent":"b","agents":{"a":{"command":"a"},"b":{"command":"b"},"c":{"command":"c"}}}"#).unwrap();
+        let trust_file = base.join("data/trusted-agents.json");
+        let configs = AgentConfigs::new(Some(user_file.clone()), Some(trust_file.clone()));
+        let enabled = |configs: &AgentConfigs| configs.list(None).agents.into_iter().map(|a| (a.id, a.enabled)).collect::<Vec<_>>();
+
+        assert_eq!(configs.set_enabled(None, "b", false).unwrap(), None);
+        assert_eq!(enabled(&configs), [("a".into(), true), ("b".into(), false), ("c".into(), true)], "listed, off");
+        let merged = configs.merged(None);
+        assert!(merged.agent("b").is_some() && merged.enabled("b").is_none(), "kept, not to be started");
+        assert_eq!(merged.default_agent.as_deref(), Some("a"), "the first agent that's on");
+        assert!(fs::read_to_string(&user_file).unwrap().contains("\"defaultAgent\":\"b\""), "agents.json isn't touched");
+        assert!(configs.set_default(None, "b").is_err(), "an agent that's off can't be the default");
+
+        let again = AgentConfigs::new(Some(user_file), Some(trust_file));
+        assert_eq!(enabled(&again)[1], ("b".into(), false), "kept in app data");
+        configs.set_enabled(None, "a", false).unwrap();
+        configs.set_enabled(None, "c", false).unwrap();
+        assert_eq!(configs.list(None).default_agent, None, "all off: no default");
+        configs.set_enabled(None, "b", true).unwrap();
+        assert_eq!(configs.list(None).default_agent.as_deref(), Some("b"), "the file's default once it's on");
+        assert!(configs.set_enabled(None, "nope", false).is_err());
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn a_switch_is_per_project_and_goes_with_its_agent() {
+        let base = temp_project("switch-prune");
+        let project = base.join("p");
+        ensure_project_dir(&project).unwrap();
+        let project_file = project.join(".brama/agents.json");
+        let both = r#"{"version":1,"agents":{"repo":{"command":"./run"},"other":{"command":"./other"}}}"#;
+        fs::write(&project_file, both).unwrap();
+        let user_file = base.join("user.json");
+        fs::write(&user_file, r#"{"version":1,"agents":{"repo":{"command":"./run"}}}"#).unwrap();
+        let configs = AgentConfigs::new(Some(user_file), None);
+        let is_on = |project: Option<&Path>, id: &str| configs.list(project).agents.into_iter().find(|a| a.id == id).unwrap().enabled;
+
+        assert_eq!(configs.set_enabled(Some(&project), "repo", false).unwrap(), Some(project.clone()));
+        assert!(!is_on(Some(&project), "repo"));
+        assert!(is_on(None, "repo"), "the user's file is another scope");
+
+        fs::write(&project_file, r#"{"version":1,"agents":{"other":{"command":"./other"}}}"#).unwrap();
+        configs.reload(&project);
+        fs::write(&project_file, both).unwrap();
+        configs.reload(&project);
+        assert!(is_on(Some(&project), "repo"), "an id that left the file keeps no switch");
+
+        configs.set_enabled(Some(&project), "repo", false).unwrap();
+        let removed = configs.remove_agent(Some(&project), "repo").unwrap();
+        configs.restore_agent(removed.token).unwrap();
+        assert!(!is_on(Some(&project), "repo"), "Undo brings the switch back with the entry");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn an_agent_that_is_off_waits_for_no_trust() {
+        let project = temp_project("switch-trust");
+        ensure_project_dir(&project).unwrap();
+        fs::write(project.join(".brama/agents.json"), r#"{"version":1,"agents":{"repo":{"command":"./run"},"other":{"command":"./other"}}}"#).unwrap();
+        let configs = AgentConfigs::new(None, None);
+        configs.set_enabled(Some(&project), "repo", false).unwrap();
+        let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
+        assert_eq!(waiting, ["other"]);
+        fs::remove_dir_all(project).unwrap();
     }
 
     #[test]

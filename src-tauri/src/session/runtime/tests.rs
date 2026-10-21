@@ -1458,6 +1458,54 @@ async fn a_turn_running_when_its_agent_leaves_agents_json_finishes_first() {
 }
 
 #[tokio::test]
+async fn turning_an_agent_off_stops_its_sessions_and_turning_it_on_puts_them_back() {
+    let f = fixture("switch-off", FakeAgentOptions::default());
+    let configs = &f.sessions.inner.opts.configs;
+    let (_, running) = f.create("s", "fake").unwrap();
+    running.wait_status("idle").await;
+    f.sessions.send_prompt("s", text("slow")).unwrap();
+    running.wait_for("first chunk", |e| e.kind == "update").await;
+    let launched = f.launcher.launches.load(Ordering::SeqCst);
+    assert_eq!(f.sessions.active_of(&f.project, "fake"), 1, "what turning it off stops");
+    assert_eq!(f.sessions.active_of(&f.project, "locked"), 0);
+
+    configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+    f.sessions.sync_agents(&f.project).await;
+    assert!(!lock(&running.events).iter().any(|e| e.kind == "unconfigured"), "not mid-turn");
+    assert_eq!(running.wait_turn_end().await, "end_turn");
+    let off = running.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(off.payload["reason"], "off");
+    assert_eq!(off.payload["message"], "Fake is off");
+    running.wait_status("error").await;
+
+    assert!(f.create("t", "fake").unwrap_err().contains("Fake is off"), "no new session of it");
+    running.clear();
+    f.sessions.restart("s").await.unwrap();
+    let refused = running.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(refused.payload["reason"], "off", "a start is refused");
+    let probe = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap_err();
+    assert!(probe.contains("off"), "{probe}");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launched, "nothing ran");
+
+    configs.set_enabled(Some(&f.project), "fake", true).unwrap();
+    running.clear();
+    f.sessions.sync_agents(&f.project).await;
+    running.wait_status("idle").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launched + 1, "back as it was: running");
+}
+
+#[tokio::test]
+async fn a_removed_agent_is_reported_as_removed() {
+    let f = fixture("switch-removed", FakeAgentOptions::default());
+    let (_, events) = f.create("r", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    f.sessions.sync_agents(&f.project).await;
+    let gone = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(gone.payload["reason"], "removed");
+}
+
+#[tokio::test]
 async fn a_running_session_hears_when_agents_json_changes_what_its_agent_runs() {
     let f = fixture("outdated", FakeAgentOptions::default());
     let (session, events) = f.create("o", "fake").unwrap();

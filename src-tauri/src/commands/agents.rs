@@ -194,6 +194,29 @@ pub async fn agents_restore(app: AppHandle, configs: State<'_, AgentConfigs>, to
     Ok(())
 }
 
+/// Turns an agent of the project's agents.json (the user's without one) on or off for this user;
+/// the file isn't touched. Returns how many of the project's sessions turning it off stops (each
+/// after its running turn).
+#[tauri::command]
+pub async fn agents_set_enabled(
+    app: AppHandle,
+    configs: State<'_, AgentConfigs>,
+    sessions: State<'_, crate::session::Sessions>,
+    project_path: Option<String>,
+    agent_id: String,
+    enabled: bool,
+) -> Result<usize, String> {
+    let configs = configs.inner().clone();
+    let project = project_of(project_path)?;
+    let stopped = match (&project, enabled) {
+        (Some(project), false) => sessions.active_of(project, &agent_id),
+        _ => 0,
+    };
+    let changed = blocking(move || configs.set_enabled(project.as_deref(), &agent_id, enabled)).await??;
+    emit_changed(&app, changed.as_deref());
+    Ok(stopped)
+}
+
 /// Copies the user's own agents the project lacks into its agents.json (trusted: the user wrote
 /// them); returns their ids.
 #[tauri::command]

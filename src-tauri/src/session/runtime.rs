@@ -249,6 +249,17 @@ impl Sessions {
     }
 
     /// Most recently active first.
+    /// How many of the project's sessions run `agent_id` now (or are about to).
+    pub fn active_of(&self, project: &Path, agent_id: &str) -> usize {
+        lock(&self.inner.sessions)
+            .values()
+            .filter(|s| {
+                let record = lock(&s.record);
+                record.project_path == project && record.agent_id == agent_id && record.status.is_active()
+            })
+            .count()
+    }
+
     pub fn list(&self) -> Vec<Session> {
         let mut sessions: Vec<Session> =
             lock(&self.inner.sessions).values().map(|s| Session::from(&*lock(&s.record))).collect();
@@ -304,6 +315,9 @@ impl Sessions {
         let Some(agent_name) = merged.agent(&req.agent_id).map(|a| a.name.clone()) else {
             return Err(format!("Unknown agent \"{}\": add it to .brama/agents.json", req.agent_id));
         };
+        if merged.enabled(&req.agent_id).is_none() {
+            return Err(Absence::Off.message(&merged, &req.agent_id));
+        }
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
@@ -541,6 +555,9 @@ impl Sessions {
         let inner = &self.inner;
         let merged = inner.opts.configs.merged(project);
         let agent = merged.agent(agent_id).cloned().ok_or_else(|| format!("Unknown agent \"{agent_id}\""))?;
+        if merged.enabled(agent_id).is_none() {
+            return Err(Absence::Off.message(&merged, agent_id));
+        }
         if let Some(project) = project {
             inner.check_trust(project, &merged, agent_id).map_err(|untrusted| untrusted.message)?;
         }
@@ -1009,9 +1026,9 @@ impl Inner {
                 state.emit("untrusted", json!({ "launch": untrusted.launch, "message": untrusted.message }));
                 Err(untrusted.message)
             }
-            Ok(Err(StartFailure::Unconfigured { agent_id, ran })) => {
-                tracing::info!(session = %state.id, agent = %agent_id, "agent not started: not in agents.json");
-                Err(self.report_unconfigured(state, &agent_id, ran.as_deref(), true))
+            Ok(Err(StartFailure::Unconfigured { agent_id, ran, absence })) => {
+                tracing::info!(session = %state.id, agent = %agent_id, ?absence, "agent not started");
+                Err(self.report_unconfigured(state, &agent_id, ran.as_deref(), absence, true))
             }
             Ok(Err(StartFailure::Failed(e))) => {
                 tracing::warn!(session = %state.id, "agent failed to start: {e}");
@@ -1056,7 +1073,7 @@ impl Inner {
 
         self.set_status(&state, SessionStatus::Starting, Some("Starting agent…"));
         let merged = self.opts.configs.merged(Some(&record.project_path));
-        let agent = match merged.agent(&record.agent_id) {
+        let agent = match merged.enabled(&record.agent_id) {
             Some(agent) => agent.clone(),
             None => self.follow_agent(&state, &record, &merged)?,
         };
@@ -1146,7 +1163,7 @@ impl Inner {
             return;
         }
         let merged = self.opts.configs.merged(Some(&record.project_path));
-        let found = merged.agent(&record.agent_id).is_some() || self.follow_agent(state, &record, &merged).is_ok();
+        let found = merged.enabled(&record.agent_id).is_some() || self.follow_agent(state, &record, &merged).is_ok();
         let reported = *lock(&state.unconfigured);
         match (found, reported) {
             (true, Some(was_active)) => {
@@ -1172,9 +1189,10 @@ impl Inner {
             }
             (false, None) if !state.turn_running.load(Ordering::SeqCst) => {
                 let ran = record.launch.as_ref().map(|l| format!("{} {}", l.command, l.args.join(" ")));
-                tracing::info!(session = %state.id, agent = %record.agent_id, "its agent left agents.json: stopped");
+                let absence = Absence::of(&merged, &record.agent_id);
+                tracing::info!(session = %state.id, agent = %record.agent_id, ?absence, "its agent can't run: stopped");
                 self.stop(state).await;
-                self.report_unconfigured(state, &record.agent_id, ran.as_deref(), record.status.is_active());
+                self.report_unconfigured(state, &record.agent_id, ran.as_deref(), absence, record.status.is_active());
             }
             _ => {}
         }
@@ -1196,13 +1214,13 @@ impl Inner {
         state.emit("agent-outdated", json!({ "message": message }));
     }
 
-    /// The session's agent isn't in agents.json: `error` with a message that says so, and an
-    /// `unconfigured` event. Returns the message.
-    fn report_unconfigured(&self, state: &SessionState, agent_id: &str, ran: Option<&str>, was_active: bool) -> String {
-        let message = format!("Agent \"{agent_id}\" is no longer configured");
+    /// The session's agent isn't in agents.json, or is turned off: `error` with a message that
+    /// says so, and an `unconfigured` event (`reason`: `removed` / `off`). Returns the message.
+    fn report_unconfigured(&self, state: &SessionState, agent_id: &str, ran: Option<&str>, absence: Absence, was_active: bool) -> String {
+        let message = absence.message(&self.opts.configs.merged(Some(&state.record().project_path)), agent_id);
         *lock(&state.unconfigured) = Some(was_active);
         self.set_status(state, SessionStatus::Error, Some(&message));
-        state.emit("unconfigured", json!({ "agentId": agent_id, "message": message, "ran": ran }));
+        state.emit("unconfigured", json!({ "agentId": agent_id, "message": message, "ran": ran, "reason": absence.reason() }));
         message
     }
 
@@ -1216,8 +1234,12 @@ impl Inner {
         };
         let agent = ran
             .as_ref()
-            .and_then(|ran| merged.agents.iter().find(|a| log_line(a) == *ran))
-            .ok_or_else(|| StartFailure::Unconfigured { agent_id: record.agent_id.clone(), ran: ran.clone() })?;
+            .and_then(|ran| merged.agents.iter().filter(|a| merged.enabled(&a.id).is_some()).find(|a| log_line(a) == *ran))
+            .ok_or_else(|| StartFailure::Unconfigured {
+                agent_id: record.agent_id.clone(),
+                ran: ran.clone(),
+                absence: Absence::of(merged, &record.agent_id),
+            })?;
         tracing::info!(session = %state.id, from = %record.agent_id, to = %agent.id, "session follows its agent to a new id");
         let session = {
             let mut record = lock(&state.record);
@@ -1389,10 +1411,39 @@ impl Drop for SlotGuard {
 
 enum StartFailure {
     Untrusted(Untrusted),
-    /// The session's agent isn't in the project's agents.json; `ran` is
+    /// The session's agent isn't in the project's agents.json, or is off; `ran` is
     /// what it ran (`log_line`), which an agent under another id may run again.
-    Unconfigured { agent_id: String, ran: Option<String> },
+    Unconfigured { agent_id: String, ran: Option<String>, absence: Absence },
     Failed(String),
+}
+
+/// Why a session's agent can't run.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Absence {
+    /// Not in agents.json.
+    Removed,
+    /// Turned off by the user.
+    Off,
+}
+
+impl Absence {
+    fn of(merged: &Merged, agent_id: &str) -> Absence {
+        if merged.agent(agent_id).is_some() { Absence::Off } else { Absence::Removed }
+    }
+
+    fn message(self, merged: &Merged, agent_id: &str) -> String {
+        match (self, merged.agent(agent_id)) {
+            (Absence::Off, Some(agent)) => format!("{} is off", agent.name),
+            _ => format!("Agent \"{agent_id}\" is no longer configured"),
+        }
+    }
+
+    fn reason(self) -> &'static str {
+        match self {
+            Absence::Removed => "removed",
+            Absence::Off => "off",
+        }
+    }
 }
 
 impl From<String> for StartFailure {
