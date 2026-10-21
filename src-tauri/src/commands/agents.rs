@@ -1,5 +1,6 @@
 use tauri::{AppHandle, Emitter, State};
 
+use crate::config::registry::{Registry, RegistryState};
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -215,6 +216,36 @@ pub async fn agents_set_enabled(
     let changed = blocking(move || configs.set_enabled(project.as_deref(), &agent_id, enabled)).await??;
     emit_changed(&app, changed.as_deref());
     Ok(stopped)
+}
+
+/// Asks the ACP registry now (Check now); every window hears when its agents changed. Returns how
+/// the check went.
+#[tauri::command]
+pub async fn agents_registry_check(app: AppHandle, configs: State<'_, AgentConfigs>) -> Result<RegistryState, String> {
+    let registry = configs.registry().clone();
+    check_registry(&app, &registry).await;
+    Ok(registry.state())
+}
+
+async fn check_registry(app: &AppHandle, registry: &Registry) {
+    // The registry is the same for every project: one `null` change has every window re-read its list.
+    if registry.check().await {
+        emit_changed(app, None);
+    }
+}
+
+/// Checks the registry in the background whenever the last answer is a day old: at launch, then
+/// as the app keeps running (asleep or not, a check is never more than an hour late).
+pub(crate) fn check_registry_daily(app: AppHandle, registry: Registry) {
+    tauri::async_runtime::spawn(async move {
+        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        loop {
+            tick.tick().await;
+            if registry.due() {
+                check_registry(&app, &registry).await;
+            }
+        }
+    });
 }
 
 /// Copies the user's own agents the project lacks into its agents.json (trusted: the user wrote

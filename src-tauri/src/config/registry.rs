@@ -1,0 +1,613 @@
+//! The ACP agent registry (`cdn.agentclientprotocol.com`): the agents Settings offers to add and
+//! the versions installed agents are checked against. A snapshot is bundled (refreshed by hand at
+//! release), so the list is there offline; the last fetched body is kept in app data
+//! (`acp-registry.json`) and checked again daily, with its `ETag`.
+
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
+use std::time::Duration;
+
+use serde::{Deserialize, Serialize};
+
+/// The only URL this module fetches.
+pub const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
+/// How old the last check may be before the next.
+pub const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+const TIMEOUT: Duration = Duration::from_secs(15);
+const BUNDLED: &str = include_str!("registry.json");
+
+/// One agent of the registry that Brama can run or show.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryAgent {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub description: String,
+    /// Its authors, joined.
+    pub vendor: String,
+    pub repository: Option<String>,
+    pub website: Option<String>,
+    pub distribution: Distribution,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum Distribution {
+    /// `npx -y <package>@<version> <args>`.
+    Npx { package: String, version: String, args: Vec<String>, env: BTreeMap<String, String> },
+    /// Archives per platform; listed, not yet installable.
+    Binary,
+}
+
+/// A registry agent Settings offers to add, with its pinned `npx` launch.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct KnownAgent {
+    /// Its registry id, also its id in agents.json when that's free.
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+}
+
+impl RegistryAgent {
+    /// What `npx` runs it with, pinned to the registry's version.
+    pub fn npx_launch(&self) -> Option<KnownAgent> {
+        let Distribution::Npx { package, version, args, .. } = &self.distribution else { return None };
+        let args = ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect();
+        Some(KnownAgent { id: self.id.clone(), name: self.name.clone(), command: "npx".to_owned(), args })
+    }
+}
+
+/// `<package>@<version>` (a scope's leading `@` is not the separator).
+fn split_spec(spec: &str) -> (&str, Option<&str>) {
+    match spec.rfind('@') {
+        Some(at) if at > 0 => (&spec[..at], Some(&spec[at + 1..])),
+        _ => (spec, None),
+    }
+}
+
+/// The registry's agents: `npx` and `binary` ones; an agent of another kind (`uvx`) or that doesn't
+/// read is left out.
+pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
+    #[derive(Deserialize)]
+    struct File {
+        version: String,
+        agents: Vec<serde_json::Value>,
+    }
+    #[derive(Deserialize)]
+    struct Agent {
+        id: String,
+        name: String,
+        version: String,
+        #[serde(default)]
+        description: String,
+        #[serde(default)]
+        authors: Vec<String>,
+        repository: Option<String>,
+        website: Option<String>,
+        distribution: Dist,
+    }
+    #[derive(Deserialize)]
+    struct Dist {
+        npx: Option<Npx>,
+        binary: Option<serde_json::Value>,
+    }
+    #[derive(Deserialize)]
+    struct Npx {
+        package: String,
+        #[serde(default)]
+        args: Vec<String>,
+        #[serde(default)]
+        env: BTreeMap<String, String>,
+    }
+    let file: File = serde_json::from_str(text).map_err(|e| format!("registry.json:{}:{}: {e}", e.line(), e.column()))?;
+    if !file.version.starts_with("1.") {
+        return Err(format!("registry.json: unsupported version {}", file.version));
+    }
+    let mut agents = Vec::new();
+    for value in file.agents {
+        let agent: Agent = match serde_json::from_value(value) {
+            Ok(agent) => agent,
+            Err(e) => {
+                tracing::debug!("registry agent skipped: {e}");
+                continue;
+            }
+        };
+        let distribution = match agent.distribution {
+            Dist { npx: Some(npx), .. } => {
+                let (package, version) = split_spec(&npx.package);
+                Distribution::Npx {
+                    package: package.to_owned(),
+                    version: version.unwrap_or(&agent.version).to_owned(),
+                    args: npx.args,
+                    env: npx.env,
+                }
+            }
+            Dist { binary: Some(_), .. } => Distribution::Binary,
+            _ => continue,
+        };
+        agents.push(RegistryAgent {
+            id: agent.id,
+            name: agent.name,
+            version: agent.version,
+            description: agent.description,
+            vendor: agent.authors.join(", "),
+            repository: agent.repository,
+            website: agent.website,
+            distribution,
+        });
+    }
+    Ok(agents)
+}
+
+/// An installed agent's registry entry, found by what it runs.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Matched<'a> {
+    pub agent: &'a RegistryAgent,
+    /// The version its args pin, when that's a version (`@latest` isn't).
+    pub pinned: Option<String>,
+}
+
+/// The registry agent a launch runs: `npx` with an argument that is the entry's package, with or
+/// without `@version`. Ids aren't compared: agents.json names its agents as it likes.
+pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[String]) -> Option<Matched<'a>> {
+    if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
+        return None;
+    }
+    args.iter().find_map(|arg| {
+        let (package, version) = split_spec(arg);
+        let agent = agents.iter().find(|a| matches!(&a.distribution, Distribution::Npx { package: p, .. } if p == package))?;
+        let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
+        Some(Matched { agent, pinned })
+    })
+}
+
+fn parse_version(version: &str) -> Option<semver::Version> {
+    semver::Version::parse(version.strip_prefix('v').unwrap_or(version)).ok()
+}
+
+/// A newer version the registry has for an installed agent.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentUpdate {
+    pub to: String,
+    /// The installed version isn't known (an unpinned launch that never reported one): the update
+    /// pins the registry's, offered as "Pin latest".
+    pub pin: bool,
+}
+
+/// Whether the registry's version of `matched` is newer than the one installed: the version its
+/// args pin, else `reported` (`agentInfo.version` from its last `initialize`).
+pub fn update_of(matched: &Matched<'_>, reported: Option<&str>) -> Option<AgentUpdate> {
+    let Distribution::Npx { version: latest, .. } = &matched.agent.distribution else { return None };
+    let newest = parse_version(latest)?;
+    match matched.pinned.as_deref().or(reported) {
+        Some(installed) => {
+            let installed = parse_version(installed)?;
+            (newest > installed).then(|| AgentUpdate { to: latest.clone(), pin: false })
+        }
+        None => Some(AgentUpdate { to: latest.clone(), pin: true }),
+    }
+}
+
+/// What the last check of the registry found.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct RegistryState {
+    /// When it last answered (ISO 8601), `None`: never, the bundled snapshot is in use.
+    pub checked_at: Option<String>,
+    /// The last check failed.
+    pub offline: bool,
+    pub checking: bool,
+}
+
+/// What a fetch of `REGISTRY_URL` got.
+pub enum Fetched {
+    NotModified,
+    Body { text: String, etag: Option<String> },
+}
+
+/// Fetches the registry; blocking. Tests replace it, so they never reach the network.
+pub trait Fetch: Send + Sync {
+    fn fetch(&self, etag: Option<&str>) -> Result<Fetched, String>;
+}
+
+/// The registry over HTTPS (`ureq`, rustls).
+pub struct Http;
+
+impl Fetch for Http {
+    fn fetch(&self, etag: Option<&str>) -> Result<Fetched, String> {
+        let agent: ureq::Agent = ureq::Agent::config_builder()
+            .timeout_global(Some(TIMEOUT))
+            .http_status_as_error(false)
+            .max_redirects(0)
+            .build()
+            .into();
+        let mut request = agent.get(REGISTRY_URL);
+        if let Some(etag) = etag {
+            request = request.header("If-None-Match", etag);
+        }
+        let mut response = request.call().map_err(|e| e.to_string())?;
+        match response.status().as_u16() {
+            304 => Ok(Fetched::NotModified),
+            200 => {
+                let etag = response.headers().get("etag").and_then(|v| v.to_str().ok()).map(str::to_owned);
+                let text = response.body_mut().read_to_string().map_err(|e| e.to_string())?;
+                Ok(Fetched::Body { text, etag })
+            }
+            status => Err(format!("HTTP {status}")),
+        }
+    }
+}
+
+/// No network: the bundled snapshot stays.
+struct Offline;
+
+impl Fetch for Offline {
+    fn fetch(&self, _etag: Option<&str>) -> Result<Fetched, String> {
+        Err("no registry fetch configured".to_owned())
+    }
+}
+
+/// `acp-registry.json` in app data.
+#[derive(Debug, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CacheFile {
+    body: String,
+    etag: Option<String>,
+    /// Unix milliseconds.
+    checked_at: Option<i64>,
+}
+
+struct State {
+    agents: Arc<Vec<RegistryAgent>>,
+    body: String,
+    etag: Option<String>,
+    checked_at: Option<i64>,
+    offline: bool,
+    checking: bool,
+}
+
+struct Inner {
+    cache: Option<crate::storage::JsonFile>,
+    fetch: Arc<dyn Fetch>,
+    state: Mutex<State>,
+    /// Held by the check running; a second caller waits for it and takes its answer.
+    check: tokio::sync::Mutex<()>,
+    /// Checks finished.
+    checks: AtomicU64,
+}
+
+/// The registry's agents and their last check. Cheap to clone.
+#[derive(Clone)]
+pub struct Registry {
+    inner: Arc<Inner>,
+}
+
+fn now_millis() -> i64 {
+    std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis() as i64
+}
+
+impl Registry {
+    /// A registry of `text`, never fetched.
+    #[cfg(test)]
+    pub fn of(text: &str) -> Registry {
+        let registry = Registry::bundled();
+        registry.lock().agents = Arc::new(parse(text).unwrap());
+        registry
+    }
+
+    /// The bundled snapshot, never fetched.
+    pub fn bundled() -> Registry {
+        Registry::new(None, Arc::new(Offline))
+    }
+
+    /// The registry kept in `cache` (the bundled snapshot until a check answers), fetched with `fetch`.
+    pub fn new(cache: Option<PathBuf>, fetch: Arc<dyn Fetch>) -> Registry {
+        let cache = cache.map(crate::storage::JsonFile::new);
+        let stored: CacheFile = cache.as_ref().map(|file| file.load()).unwrap_or_default();
+        let state = match parse(&stored.body) {
+            Ok(agents) => State {
+                agents: Arc::new(agents),
+                body: stored.body,
+                etag: stored.etag,
+                checked_at: stored.checked_at,
+                offline: false,
+                checking: false,
+            },
+            Err(_) => State {
+                agents: Arc::new(parse(BUNDLED).unwrap_or_default()),
+                body: BUNDLED.to_owned(),
+                etag: None,
+                checked_at: None,
+                offline: false,
+                checking: false,
+            },
+        };
+        let inner = Inner {
+            cache,
+            fetch,
+            state: Mutex::new(state),
+            check: tokio::sync::Mutex::new(()),
+            checks: AtomicU64::new(0),
+        };
+        Registry { inner: Arc::new(inner) }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, State> {
+        self.inner.state.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    pub fn agents(&self) -> Arc<Vec<RegistryAgent>> {
+        Arc::clone(&self.lock().agents)
+    }
+
+    /// The registry agents Settings can add: those with an `npx` launch.
+    pub fn known(&self) -> Vec<KnownAgent> {
+        self.agents().iter().filter_map(RegistryAgent::npx_launch).collect()
+    }
+
+    pub fn state(&self) -> RegistryState {
+        let state = self.lock();
+        RegistryState {
+            checked_at: state.checked_at.map(crate::session::iso_from_millis),
+            offline: state.offline,
+            checking: state.checking,
+        }
+    }
+
+    /// Whether the last answer is older than `CHECK_EVERY` (or there was none).
+    pub fn due(&self) -> bool {
+        self.lock().checked_at.is_none_or(|at| now_millis() - at >= CHECK_EVERY.as_millis() as i64)
+    }
+
+    /// Asks the registry whether it changed since the last answer. Returns whether the list did;
+    /// a caller that came while another check ran gets `false` once that one ends (it has said so).
+    /// A failure keeps what's there and marks the registry offline.
+    pub async fn check(&self) -> bool {
+        let seen = self.inner.checks.load(Ordering::SeqCst);
+        let _running = self.inner.check.lock().await;
+        if self.inner.checks.load(Ordering::SeqCst) != seen {
+            return false;
+        }
+        let etag = {
+            let mut state = self.lock();
+            state.checking = true;
+            state.etag.clone()
+        };
+        let fetch = Arc::clone(&self.inner.fetch);
+        let fetched = tokio::task::spawn_blocking(move || fetch.fetch(etag.as_deref()))
+            .await
+            .unwrap_or_else(|e| Err(e.to_string()));
+        let changed = self.take(fetched);
+        self.inner.checks.fetch_add(1, Ordering::SeqCst);
+        changed
+    }
+
+    fn take(&self, fetched: Result<Fetched, String>) -> bool {
+        let mut state = self.lock();
+        state.checking = false;
+        let (agents, body, etag) = match fetched.and_then(|f| match f {
+            Fetched::NotModified => Ok(None),
+            Fetched::Body { text, etag } => parse(&text).map(|agents| Some((agents, text, etag))),
+        }) {
+            Ok(None) => {
+                tracing::debug!("ACP registry unchanged");
+                (None, None, state.etag.clone())
+            }
+            Ok(Some((agents, text, etag))) => (Some(agents), Some(text), etag),
+            Err(e) => {
+                // A laptop offline isn't a failure to show.
+                tracing::info!("ACP registry not checked: {e}");
+                state.offline = true;
+                return false;
+            }
+        };
+        state.offline = false;
+        state.checked_at = Some(now_millis());
+        state.etag = etag;
+        let changed = agents.as_ref().is_some_and(|agents| **agents != *state.agents);
+        if let Some(agents) = agents {
+            state.agents = Arc::new(agents);
+        }
+        if let Some(body) = body {
+            state.body = body;
+        }
+        if changed {
+            tracing::info!(agents = state.agents.len(), "ACP registry changed");
+        }
+        let stored = CacheFile { body: state.body.clone(), etag: state.etag.clone(), checked_at: state.checked_at };
+        drop(state);
+        if let Some(file) = &self.inner.cache {
+            if let Err(e) = file.save(&stored) {
+                tracing::info!("ACP registry not kept: {e}");
+            }
+        }
+        changed
+    }
+}
+
+#[cfg(test)]
+pub(crate) mod tests {
+    use super::*;
+    use std::collections::VecDeque;
+
+    /// A registry of three agents: two `npx`, one `binary`.
+    pub(crate) const FIXTURE: &str = r#"{"version":"1.0.0","agents":[
+        {"id":"claude-acp","name":"Claude Agent","version":"0.94.0","description":"ACP wrapper for Anthropic's Claude",
+         "authors":["Anthropic","Zed Industries"],"distribution":{"npx":{"package":"@agentclientprotocol/claude-agent-acp@0.94.0"}}},
+        {"id":"gemini","name":"Gemini CLI","version":"0.65.0","authors":["Google"],
+         "distribution":{"npx":{"package":"@google/gemini-cli@0.65.0","args":["--acp"]}}},
+        {"id":"goose","name":"goose","version":"1.55.0","authors":["Block"],
+         "distribution":{"binary":{"darwin-aarch64":{"archive":"https://x/goose.tar.gz","cmd":"./goose"}}}},
+        {"id":"fast-agent","name":"fast-agent","version":"0.10.1","distribution":{"uvx":{"package":"fast-agent-acp"}}},
+        {"id":"broken","distribution":{}}
+    ],"extensions":[]}"#;
+
+    /// A registry that answers with `answers`, one per check, recording the `ETag`s it was sent.
+    #[derive(Default)]
+    pub(crate) struct Script {
+        answers: Mutex<VecDeque<Result<Fetched, String>>>,
+        pub(crate) etags: Mutex<Vec<Option<String>>>,
+        delay: Duration,
+    }
+
+    impl Script {
+        pub(crate) fn new(answers: Vec<Result<Fetched, String>>) -> Arc<Script> {
+            Arc::new(Script { answers: Mutex::new(answers.into()), ..Script::default() })
+        }
+    }
+
+    impl Fetch for Script {
+        fn fetch(&self, etag: Option<&str>) -> Result<Fetched, String> {
+            std::thread::sleep(self.delay);
+            self.etags.lock().unwrap().push(etag.map(str::to_owned));
+            self.answers.lock().unwrap().pop_front().unwrap_or_else(|| Err("no answer scripted".to_owned()))
+        }
+    }
+
+    pub(crate) fn body(text: &str, etag: &str) -> Result<Fetched, String> {
+        Ok(Fetched::Body { text: text.to_owned(), etag: Some(etag.to_owned()) })
+    }
+
+    fn temp(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("brama-registry-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        dir
+    }
+
+    fn ids(registry: &Registry) -> Vec<String> {
+        registry.agents().iter().map(|a| a.id.clone()).collect()
+    }
+
+    #[test]
+    fn parses_npx_and_binary_agents_and_skips_the_rest() {
+        let agents = parse(FIXTURE).unwrap();
+        assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "goose"]);
+        assert_eq!(
+            agents[0].distribution,
+            Distribution::Npx {
+                package: "@agentclientprotocol/claude-agent-acp".into(),
+                version: "0.94.0".into(),
+                args: vec![],
+                env: BTreeMap::new()
+            }
+        );
+        assert_eq!(agents[0].vendor, "Anthropic, Zed Industries");
+        assert_eq!(agents[2].distribution, Distribution::Binary);
+        assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
+    }
+
+    #[test]
+    fn the_bundled_snapshot_parses() {
+        let agents = parse(BUNDLED).unwrap();
+        let claude = agents.iter().find(|a| a.id == "claude-acp").expect("Claude in the snapshot");
+        assert!(matches!(&claude.distribution, Distribution::Npx { package, .. } if package == "@agentclientprotocol/claude-agent-acp"));
+        assert!(agents.iter().any(|a| a.distribution == Distribution::Binary));
+        assert!(Registry::bundled().known().iter().all(|k| k.command == "npx"));
+    }
+
+    #[test]
+    fn known_agents_are_pinned_to_the_registrys_version() {
+        let agents = parse(FIXTURE).unwrap();
+        let known: Vec<_> = agents.iter().filter_map(RegistryAgent::npx_launch).collect();
+        assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini"], "no binary agent");
+        assert_eq!(known[1].args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+    }
+
+    #[test]
+    fn an_installed_agent_is_matched_by_what_it_runs() {
+        let agents = parse(FIXTURE).unwrap();
+        let args = |a: &[&str]| a.iter().map(|&s| s.to_owned()).collect::<Vec<_>>();
+        let matched = |command: &str, a: &[&str]| match_launch(&agents, command, &args(a)).map(|m| (m.agent.id.clone(), m.pinned));
+
+        assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.90.0"]), Some(("claude-acp".into(), Some("0.90.0".into()))));
+        assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp"]), Some(("claude-acp".into(), None)), "unpinned");
+        assert_eq!(matched("/usr/local/bin/npx", &["@google/gemini-cli", "--acp"]), Some(("gemini".into(), None)));
+        assert_eq!(matched("npx", &["-y", "@google/gemini-cli@latest"]), Some(("gemini".into(), None)), "a tag pins nothing");
+        assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"]), None, "another package");
+        assert_eq!(matched("gemini", &["--acp"]), None, "custom");
+        assert_eq!(matched("npx", &["-y", "goose"]), None, "not an npx agent");
+    }
+
+    #[test]
+    fn an_update_is_a_newer_version_than_the_one_installed() {
+        let agents = parse(FIXTURE).unwrap();
+        let claude = |pinned: Option<&str>| Matched { agent: &agents[0], pinned: pinned.map(str::to_owned) };
+        let to = |pin| Some(AgentUpdate { to: "0.94.0".into(), pin });
+
+        assert_eq!(update_of(&claude(Some("0.90.0")), None), to(false));
+        assert_eq!(update_of(&claude(Some("0.94.0")), None), None, "current");
+        assert_eq!(update_of(&claude(Some("1.0.0")), Some("0.1.0")), None, "newer than the registry; the pin wins over the report");
+        assert_eq!(update_of(&claude(None), Some("0.93.1")), to(false), "unpinned: what it reported");
+        assert_eq!(update_of(&claude(None), Some("0.94.0")), None);
+        assert_eq!(update_of(&claude(None), None), to(true), "nothing known: pin the latest");
+        assert_eq!(update_of(&claude(None), Some("nightly")), None, "a version that doesn't parse");
+    }
+
+    #[tokio::test]
+    async fn a_check_takes_a_changed_registry_and_keeps_it() {
+        let dir = temp("change");
+        let cache = dir.join("acp-registry.json");
+        let script = Script::new(vec![body(FIXTURE, "\"a\""), Ok(Fetched::NotModified)]);
+        let registry = Registry::new(Some(cache.clone()), script.clone());
+        assert!(registry.due(), "never checked");
+        assert_eq!(registry.state().checked_at, None);
+        assert!(ids(&registry).contains(&"claude-acp".to_owned()), "the bundled snapshot meanwhile");
+
+        assert!(registry.check().await, "changed");
+        assert_eq!(ids(&registry), ["claude-acp", "gemini", "goose"]);
+        assert!(!registry.due());
+        assert!(registry.state().checked_at.is_some());
+
+        assert!(!registry.check().await, "unchanged");
+        assert_eq!(*script.etags.lock().unwrap(), [None, Some("\"a\"".to_owned())], "asked with the ETag it got");
+
+        let again = Registry::new(Some(cache), Script::new(vec![]));
+        assert_eq!(ids(&again), ["claude-acp", "gemini", "goose"], "kept in app data");
+        assert!(!again.due());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[tokio::test]
+    async fn offline_keeps_what_is_there() {
+        let script = Script::new(vec![body(FIXTURE, "\"a\""), Err("dns error".into()), body("{oops", "\"b\""), Ok(Fetched::NotModified)]);
+        let registry = Registry::new(None, script);
+        registry.check().await;
+        assert!(!registry.check().await);
+        assert!(registry.state().offline);
+        assert_eq!(ids(&registry), ["claude-acp", "gemini", "goose"], "the last answer stays");
+        assert!(!registry.check().await, "a body that doesn't parse is kept out");
+        assert_eq!(ids(&registry).len(), 3);
+        registry.check().await;
+        assert!(!registry.state().offline, "back");
+    }
+
+    /// Network: `cargo test --lib real_registry -- --ignored`.
+    #[test]
+    #[ignore]
+    fn real_registry_answers_and_honours_its_etag() {
+        let Fetched::Body { text, etag } = Http.fetch(None).unwrap() else { panic!("no body") };
+        assert!(parse(&text).unwrap().iter().any(|a| a.id == "claude-acp"));
+        let etag = etag.expect("an ETag");
+        assert!(matches!(Http.fetch(Some(&etag)).unwrap(), Fetched::NotModified));
+    }
+
+    #[tokio::test]
+    async fn a_second_check_waits_for_the_first() {
+        let script = Arc::new(Script {
+            answers: Mutex::new(vec![body(FIXTURE, "\"a\"")].into()),
+            delay: Duration::from_millis(100),
+            ..Script::default()
+        });
+        let registry = Registry::new(None, script.clone());
+        let (first, second) = tokio::join!(registry.check(), registry.check());
+        assert!(first && !second, "one says it changed");
+        assert_eq!(script.etags.lock().unwrap().len(), 1, "one fetch");
+        assert!(!registry.state().checking);
+    }
+}

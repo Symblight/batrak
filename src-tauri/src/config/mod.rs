@@ -3,7 +3,7 @@
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
 pub mod env;
-pub mod known;
+pub mod registry;
 pub mod switches;
 pub mod watch;
 
@@ -164,8 +164,13 @@ pub struct AgentSummary {
     pub id: String,
     pub name: String,
     pub scope: Scope,
-    /// `agentInfo.version` from the agent's last `initialize`.
+    /// The version installed: the one its args pin, else `agentInfo.version` from its last
+    /// `initialize` (the latter only for an agent the registry doesn't list).
     pub version: Option<String>,
+    /// The ACP registry's entry it runs (`registry::match_launch`), `None`: a custom agent.
+    pub registry_id: Option<String>,
+    /// A newer version the registry has.
+    pub update: Option<registry::AgentUpdate>,
     /// Not turned off by the user (`switches`): only these are offered and started.
     pub enabled: bool,
     /// What it runs, for Settings' edit form; never its environment.
@@ -180,7 +185,7 @@ pub struct AgentSummary {
 pub struct NewAgent {
     #[serde(default)]
     pub name: String,
-    /// A `KnownAgent` id.
+    /// A registry agent's id (`KnownAgent`).
     #[serde(default)]
     pub known: Option<String>,
     #[serde(default)]
@@ -195,8 +200,8 @@ pub struct AgentList {
     pub agents: Vec<AgentSummary>,
     /// The file's default when it's on, else the first agent that's on.
     pub default_agent: Option<String>,
-    /// The well-known agents Settings offers to add.
-    pub known: &'static [known::KnownAgent],
+    /// The registry's agents Settings offers to add, pinned to its versions.
+    pub known: Vec<registry::KnownAgent>,
     /// With a project open: the agents of the user's own file it lacks, which only apply with no
     /// project open; Settings offers to copy them in (`import_user_agents`).
     pub user_agents: Vec<AgentSummary>,
@@ -258,6 +263,8 @@ impl Merged {
             name: a.name.clone(),
             scope: if a.from_project { Scope::Project } else { Scope::User },
             version: None,
+            registry_id: None,
+            update: None,
             enabled: !self.off.contains(&a.id),
             command: a.command.clone(),
             args: a.args.clone(),
@@ -267,7 +274,7 @@ impl Merged {
         AgentList {
             agents,
             default_agent: self.default_agent.clone(),
-            known: known::KNOWN_AGENTS,
+            known: Vec::new(),
             user_agents: Vec::new(),
             errors: self.errors.clone(),
         }
@@ -467,6 +474,8 @@ pub struct AgentConfigs {
     versions_file: Option<Arc<crate::storage::JsonFile>>,
     /// `agent-switches.json` beside `trust_file`.
     switches_file: Option<Arc<crate::storage::JsonFile>>,
+    /// The ACP registry: the agents to add, and the versions to update to.
+    registry: registry::Registry,
     inner: Arc<Mutex<Inner>>,
 }
 
@@ -504,28 +513,28 @@ pub struct Removal {
 }
 
 /// A `NewAgent` with its launch decided.
-struct Resolved<'a> {
-    name: &'a str,
-    command: &'a str,
+struct Resolved {
+    name: String,
+    command: String,
     args: Vec<String>,
-    known: Option<&'static known::KnownAgent>,
+    known: Option<registry::KnownAgent>,
 }
 
-/// A known agent runs its registry launch unless `command` replaces it, and takes its name when
+/// A registry agent runs its pinned launch unless `command` replaces it, and takes its name when
 /// none is given.
-fn resolve(agent: &NewAgent) -> Result<Resolved<'_>, String> {
+fn resolve(agent: &NewAgent, known: &[registry::KnownAgent]) -> Result<Resolved, String> {
     let known = match agent.known.as_deref() {
-        Some(id) => Some(known::known_agent(id).ok_or_else(|| format!("no known agent {id}"))?),
+        Some(id) => Some(known.iter().find(|k| k.id == id).cloned().ok_or_else(|| format!("no known agent {id}"))?),
         None => None,
     };
-    let name = match (agent.name.trim(), known) {
-        ("", Some(known)) => known.name,
-        (name, _) => name,
+    let name = match (agent.name.trim(), &known) {
+        ("", Some(known)) => known.name.clone(),
+        (name, _) => name.to_owned(),
     };
-    let (command, args): (&str, Vec<String>) = match (agent.command.as_deref(), known) {
-        (Some(command), _) => (command.trim(), agent.args.clone()),
-        (None, Some(known)) => (known.command, known.args.iter().map(|&a| a.to_owned()).collect()),
-        (None, None) => ("", Vec::new()),
+    let (command, args) = match (agent.command.as_deref(), &known) {
+        (Some(command), _) => (command.trim().to_owned(), agent.args.clone()),
+        (None, Some(known)) => (known.command.clone(), known.args.clone()),
+        (None, None) => (String::new(), Vec::new()),
     };
     if name.is_empty() {
         return Err("an agent needs a name".to_owned());
@@ -537,9 +546,9 @@ fn resolve(agent: &NewAgent) -> Result<Resolved<'_>, String> {
 }
 
 /// Writes an entry's name and launch, keeping its other fields.
-fn set_launch(entry: &mut serde_json::Map<String, serde_json::Value>, agent: &Resolved<'_>) {
-    entry.insert("name".to_owned(), agent.name.into());
-    entry.insert("command".to_owned(), agent.command.into());
+fn set_launch(entry: &mut serde_json::Map<String, serde_json::Value>, agent: &Resolved) {
+    entry.insert("name".to_owned(), agent.name.as_str().into());
+    entry.insert("command".to_owned(), agent.command.as_str().into());
     if agent.args.is_empty() {
         entry.remove("args");
     } else {
@@ -559,19 +568,47 @@ impl AgentConfigs {
         let trust_file = trust_file.map(|path| Arc::new(crate::storage::JsonFile::new(path)));
         let trusted = trust_file.as_ref().map(|file| file.load()).unwrap_or_default();
         let inner = Inner { trusted, versions, switches, ..Inner::default() };
-        AgentConfigs { user_file, trust_file, versions_file, switches_file, inner: Arc::new(Mutex::new(inner)) }
+        AgentConfigs {
+            user_file,
+            trust_file,
+            versions_file,
+            switches_file,
+            registry: registry::Registry::bundled(),
+            inner: Arc::new(Mutex::new(inner)),
+        }
     }
 
-    /// The agent list of `project` (`None`: the user's agents only), with their versions.
+    /// Checks versions against `registry` and offers its agents (the bundled snapshot by default).
+    pub fn with_registry(mut self, registry: registry::Registry) -> AgentConfigs {
+        self.registry = registry;
+        self
+    }
+
+    pub fn registry(&self) -> &registry::Registry {
+        &self.registry
+    }
+
+    /// The agent list of `project` (`None`: the user's agents only), with their versions and the
+    /// registry's updates.
     pub fn list(&self, project: Option<&Path>) -> AgentList {
         let mut list = self.merged(project).list();
         if project.is_some() {
             let own = self.merged(None).list().agents;
             list.user_agents = own.into_iter().filter(|a| !list.agents.iter().any(|p| p.id == a.id)).collect();
         }
+        let entries = self.registry.agents();
+        list.known = entries.iter().filter_map(registry::RegistryAgent::npx_launch).collect();
         let inner = self.lock();
-        for agent in &mut list.agents {
-            agent.version = inner.versions.get(&agent.id).cloned();
+        for agent in list.agents.iter_mut().chain(&mut list.user_agents) {
+            let reported = inner.versions.get(&agent.id).map(String::as_str);
+            match registry::match_launch(&entries, &agent.command, &agent.args) {
+                Some(matched) => {
+                    agent.update = registry::update_of(&matched, reported);
+                    agent.version = matched.pinned.clone().or_else(|| reported.map(str::to_owned));
+                    agent.registry_id = Some(matched.agent.id.clone());
+                }
+                None => agent.version = reported.map(str::to_owned),
+            }
         }
         list
     }
@@ -621,15 +658,14 @@ impl AgentConfigs {
     /// chose, or without a project to the user's agents.json. Returns its id, unique in that file:
     /// a known agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
-        let chosen = resolve(agent)?;
-        let (name, known) = (chosen.name, chosen.known);
+        let chosen = resolve(agent, &self.registry.known())?;
         let file = self.file_of(project)?;
-        let mut base = slug(name);
+        let mut base = slug(&chosen.name);
         let mut id = base.clone();
         edit_file(&file, |root| {
             let agents = agents_of(root)?;
-            if let Some(known) = known.filter(|k| !agents.contains_key(k.id)) {
-                base = known.id.to_owned();
+            if let Some(known) = chosen.known.as_ref().filter(|k| !agents.contains_key(&k.id)) {
+                base.clone_from(&known.id);
                 id = base.clone();
             }
             let mut n = 1;
@@ -651,7 +687,7 @@ impl AgentConfigs {
     /// runs now only when that is exactly what the user chose in Settings: `chosen`'s command and
     /// args, with no env and no project MCP servers. Anything else the file adds (an `env` the entry
     /// kept, the repository's `mcpServers`) is left for the trust dialog.
-    fn reload_and_trust(&self, project: Option<&Path>, agent_id: &str, chosen: &Resolved<'_>) -> Result<(), String> {
+    fn reload_and_trust(&self, project: Option<&Path>, agent_id: &str, chosen: &Resolved) -> Result<(), String> {
         let Some(project) = project else {
             self.reload_user();
             return Ok(());
@@ -722,7 +758,7 @@ impl AgentConfigs {
     /// Rewrites an agent's name and launch, keeping the rest of its entry; a project's new launch
     /// is trusted. Returns the project whose file changed.
     pub fn update_agent(&self, project: Option<&Path>, agent_id: &str, agent: &NewAgent) -> Result<Option<PathBuf>, String> {
-        let resolved = resolve(agent)?;
+        let resolved = resolve(agent, &self.registry.known())?;
         let file = self.file_of(project)?;
         edit_file(&file, |root| {
             let entry = agents_of(root)?
@@ -989,6 +1025,11 @@ pub fn is_local_path(rel: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Agent configs whose registry is `registry::tests::FIXTURE`.
+    fn with_fixture(user_file: Option<PathBuf>, trust_file: Option<PathBuf>) -> AgentConfigs {
+        AgentConfigs::new(user_file, trust_file).with_registry(registry::Registry::of(registry::tests::FIXTURE))
+    }
 
     fn temp_project(name: &str) -> PathBuf {
         let dir = std::env::temp_dir().join(format!("brama-config-{name}-{}", std::process::id()));
@@ -1306,15 +1347,15 @@ mod tests {
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
         let user_file = base.join("user.json");
-        let configs = AgentConfigs::new(Some(user_file.clone()), None);
-        let pick = NewAgent { known: Some("claude-code".into()), ..Default::default() };
+        let configs = with_fixture(Some(user_file.clone()), None);
+        let pick = NewAgent { known: Some("claude-acp".into()), ..Default::default() };
 
-        assert_eq!(configs.add_agent(Some(&project), &pick).unwrap(), "claude-code");
+        assert_eq!(configs.add_agent(Some(&project), &pick).unwrap(), "claude-acp");
         let text = fs::read_to_string(project.join(".brama/agents.json")).unwrap();
-        assert!(text.contains("\"claude-code\"") && text.contains("@agentclientprotocol/claude-agent-acp"), "{text}");
+        assert!(text.contains("\"claude-acp\"") && text.contains("@agentclientprotocol/claude-agent-acp@0.94.0"), "pinned: {text}");
         assert!(!user_file.exists(), "the user's file is left alone");
         let merged = configs.merged(Some(&project));
-        assert!(merged.needs_trust("claude-code"));
+        assert!(merged.needs_trust("claude-acp"));
         assert!(configs.untrusted(&project).is_empty(), "the user chose what it runs");
         fs::remove_dir_all(base).unwrap();
     }
@@ -1361,7 +1402,7 @@ mod tests {
                 "mcpServers":[{"name":"evil","command":"curl","args":[],"env":[]}]}"#,
         )
         .unwrap();
-        let configs = AgentConfigs::new(None, None);
+        let configs = with_fixture(None, None);
         let waiting = |configs: &AgentConfigs| configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect::<Vec<_>>();
 
         let pick = NewAgent { known: Some("gemini".into()), ..Default::default() };
@@ -1388,14 +1429,14 @@ mod tests {
         fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"command":"old","args":["-x"],"env":{"K":"${env:K}"}}}}"#).unwrap();
         let project_file = project.join(".brama/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"repo":{"command":"./run","env":{"K":"${env:K}"}}}}"#).unwrap();
-        let configs = AgentConfigs::new(Some(user_file.clone()), None);
+        let configs = with_fixture(Some(user_file.clone()), None);
 
-        let repo = NewAgent { name: "Repo".into(), known: Some("codex".into()), ..Default::default() };
+        let repo = NewAgent { name: "Repo".into(), known: Some("gemini".into()), ..Default::default() };
         assert_eq!(configs.update_agent(Some(&project), "repo", &repo).unwrap(), Some(project.clone()));
         let merged = configs.merged(Some(&project));
         let edited = merged.agent("repo").unwrap();
         assert_eq!(edited.name, "Repo");
-        assert_eq!(edited.args, known::known_agent("codex").unwrap().args);
+        assert_eq!(edited.args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
         assert_eq!(edited.env.get("K").map(String::as_str), Some("${env:K}"), "the rest is kept");
         let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
         assert_eq!(waiting, ["repo"], "its env wasn't the user's choice: the trust dialog asks");
@@ -1465,14 +1506,13 @@ mod tests {
     }
 
     #[test]
-    fn a_known_agent_is_added_with_its_own_launch_unless_the_command_replaces_it() {
+    fn a_registry_agent_is_added_with_its_pinned_launch_unless_the_command_replaces_it() {
         let base = temp_project("known");
         let user_file = base.join("agents.json");
-        let configs = AgentConfigs::new(Some(user_file.clone()), None);
-        let gemini = known::known_agent("gemini").unwrap();
+        let configs = with_fixture(Some(user_file.clone()), None);
         let listed = configs.list(None).known;
-        assert_eq!(listed.len(), 5, "offered in Settings");
-        assert!(listed.contains(gemini));
+        assert_eq!(listed.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini"], "the registry's npx agents");
+        let gemini = &listed[1];
 
         let pick = NewAgent { known: Some("gemini".into()), ..Default::default() };
         assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini", "its own id, its own name");
@@ -1606,6 +1646,38 @@ mod tests {
         let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
         assert_eq!(waiting, ["other"]);
         fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn registry_agents_show_the_version_installed_and_the_update_there_is() {
+        let base = temp_project("updates");
+        let user_file = base.join("user.json");
+        fs::write(
+            &user_file,
+            r#"{"version":1,"agents":{
+                "old":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]},
+                "current":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.94.0"]},
+                "loose":{"command":"npx","args":["-y","@google/gemini-cli","--acp"]},
+                "ran":{"command":"npx","args":["-y","@google/gemini-cli","--acp"]},
+                "custom":{"command":"./agent"}
+            }}"#,
+        )
+        .unwrap();
+        let configs = with_fixture(Some(user_file), None);
+        configs.note_version("ran", "0.65.0");
+        configs.note_version("custom", "3.1.0");
+        configs.note_version("old", "0.1.0");
+        let list = configs.list(None);
+        let shown: BTreeMap<_, _> =
+            list.agents.iter().map(|a| (a.id.as_str(), (a.registry_id.as_deref(), a.version.as_deref(), a.update.clone()))).collect();
+        let update = |to: &str, pin| Some(registry::AgentUpdate { to: to.into(), pin });
+
+        assert_eq!(shown["old"], (Some("claude-acp"), Some("0.90.0"), update("0.94.0", false)), "the pin, not what it reported");
+        assert_eq!(shown["current"], (Some("claude-acp"), Some("0.94.0"), None));
+        assert_eq!(shown["loose"], (Some("gemini"), None, update("0.65.0", true)), "unpinned, never ran: pin the latest");
+        assert_eq!(shown["ran"], (Some("gemini"), Some("0.65.0"), None), "what it reported");
+        assert_eq!(shown["custom"], (None, Some("3.1.0"), None), "not in the registry: no update");
+        fs::remove_dir_all(base).unwrap();
     }
 
     #[test]

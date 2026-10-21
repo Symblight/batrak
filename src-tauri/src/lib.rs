@@ -35,7 +35,12 @@ pub fn run() {
             }
             let user_agents = app.path().config_dir().ok().map(|dir| dir.join("brama").join(config::AGENTS_FILE));
             let data_dir = app.path().app_data_dir()?;
-            let configs = config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json")));
+            let registry = config::registry::Registry::new(
+                Some(data_dir.join("acp-registry.json")),
+                std::sync::Arc::new(config::registry::Http),
+            );
+            let configs =
+                config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json"))).with_registry(registry.clone());
             let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir, configs.clone()));
             let tidy = sessions.clone();
             tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
@@ -48,6 +53,7 @@ pub fn run() {
                 None
             });
             app.manage(UserAgentsWatch(std::sync::Mutex::new(user_watch)));
+            commands::agents::check_registry_daily(app.handle().clone(), registry);
             app.manage(sessions);
             app.manage(configs);
             app.manage(terminal::Terminals::new(terminal::TerminalsOptions {
@@ -91,6 +97,7 @@ pub fn run() {
             commands::agents::agents_restore,
             commands::agents::agents_import_user,
             commands::agents::agents_set_enabled,
+            commands::agents::agents_registry_check,
             commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
