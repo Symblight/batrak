@@ -5,10 +5,11 @@ import '@symblight/wc-material/dialog';
 import styles from './acp-confirm-dialog.css?inline';
 
 /** @typedef {import('../../models/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('../../models/types.js').ConfirmChoice} ConfirmChoice */
 
 /**
  * @tag acp-confirm-dialog
- * @summary Modal yes/no question; `confirm()` resolves `true` only when the confirm action is chosen.
+ * @summary Modal question; `confirm()` resolves `true` only when the confirm action is chosen, `choose()` names the action (a third one with `extraLabel`).
  */
 export class AcpConfirmDialog extends LitElement {
   static properties = {
@@ -17,7 +18,7 @@ export class AcpConfirmDialog extends LitElement {
 
   static styles = styles;
 
-  /** @type {((confirmed: boolean) => void) | null} */
+  /** @type {((choice: ConfirmChoice) => void) | null} */
   #resolve = null;
 
   constructor() {
@@ -36,36 +37,47 @@ export class AcpConfirmDialog extends LitElement {
    * @returns {Promise<boolean>}
    */
   async confirm(options) {
-    this.#settle(false);
+    return (await this.choose(options)) === 'confirm';
+  }
+
+  /**
+   * Asks; a question still open is answered `cancel` first.
+   * @param {ConfirmOptions} options
+   * @returns {Promise<ConfirmChoice>}
+   */
+  async choose(options) {
+    this.#settle('cancel');
     this.options = options;
     await this.updateComplete;
     const answer = new Promise((resolve) => (this.#resolve = resolve));
     await this.#dialog.show();
-    return /** @type {Promise<boolean>} */ (answer);
+    return /** @type {Promise<ConfirmChoice>} */ (answer);
   }
 
-  /** Answers the open question `false`, as when its asker no longer needs the answer. */
+  /** Answers the open question `cancel`, as when its asker no longer needs the answer. */
   close() {
-    this.#settle(false);
+    this.#settle('cancel');
   }
 
-  /** @param {boolean} confirmed */
-  #settle(confirmed) {
+  /** @param {ConfirmChoice} choice */
+  #settle(choice) {
     const resolve = this.#resolve;
     if (!resolve) return;
     this.#resolve = null;
     this.#dialog.close();
-    resolve(confirmed);
+    resolve(choice);
   }
 
-  #onCancel = () => this.#settle(false);
+  #onCancel = () => this.#settle('cancel');
 
-  #onConfirm = () => this.#settle(true);
+  #onExtra = () => this.#settle('extra');
+
+  #onConfirm = () => this.#settle('confirm');
 
   // The native <dialog> closes itself on Escape, and its `close` event doesn't leave md-dialog's shadow root.
   /** @param {KeyboardEvent} e */
   #onKeydown = (e) => {
-    if (e.key === 'Escape') this.#settle(false);
+    if (e.key === 'Escape') this.#settle('cancel');
   };
 
   render() {
@@ -87,6 +99,11 @@ export class AcpConfirmDialog extends LitElement {
         <md-button class="acp-confirm-dialog__action" variant="text" autofocus @click=${this.#onCancel}
           >${options?.cancelLabel ?? 'Cancel'}</md-button
         >
+        ${options?.extraLabel
+          ? html`<md-button class="acp-confirm-dialog__action" variant="text" @click=${this.#onExtra}
+              >${options.extraLabel}</md-button
+            >`
+          : nothing}
         <md-button
           class=${classMap({
             'acp-confirm-dialog__action': true,

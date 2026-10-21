@@ -560,8 +560,14 @@
  * @property {string} [detail] Secondary line under the message.
  * @property {string} [confirmLabel] Defaults to `OK`.
  * @property {string} [cancelLabel] Defaults to `Cancel`.
+ * @property {string} [extraLabel] A third action, between the other two; only `choose()` tells it apart.
  * @property {boolean} [destructive] Colors the confirm action as an error.
  * @property {'center' | 'top'} [placement] Where in the window; defaults to `center`.
+ */
+
+/**
+ * What `<acp-confirm-dialog>`'s `choose()` resolves to: the confirm action, the extra one, or neither.
+ * @typedef {'confirm' | 'extra' | 'cancel'} ConfirmChoice
  */
 
 /**
@@ -642,6 +648,8 @@
  * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
  * @property {string | null} draft Unsaved edits (only editable files, `isAgentsFile()`); `null` when
  *   the editor shows what's on disk. A change on disk doesn't replace it.
+ * @property {boolean} changedOnDisk With a draft: the file on disk is no longer `content`, the text the
+ *   draft started from. Save then asks before writing over it.
  */
 
 /**

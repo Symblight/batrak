@@ -94,7 +94,8 @@ function basename(path) {
  * @fires acp-tab-pin `{ id, pinned }`
  * @fires acp-tab-move `{ id, index }`
  * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
- * @fires acp-tab-save `{ id }`
+ * @fires acp-tab-save `{ id, force? }` `force`: write over the file although it changed on disk (asked first).
+ * @fires acp-tab-reload `{ id }` Drop the tab's edits for the file on disk (asked first).
  * @fires acp-copy-path `{ path }`
  * @fires acp-tab-language `{ path, language }` A language picked in a file's footer; `''` for its extension's.
  * @fires acp-file-reveal `{ path, expand }` Reveal in Files, or a folder picked in a footer crumb's list.
@@ -325,7 +326,31 @@ export class AcpTabView extends LitElement {
   #onEditorKeydown(id, e) {
     if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 's') return;
     e.preventDefault();
-    this.#emit('acp-tab-save', { id });
+    if (this.tabs.find((t) => t.id === id)?.changedOnDisk) this.confirmOverwrite(id);
+    else this.#emit('acp-tab-save', { id });
+  }
+
+  /**
+   * Asks whether to save an edited tab over its file, which changed on disk, or reload the file;
+   * the container calls it when it finds the change only as it saves.
+   * @param {string} id
+   */
+  async confirmOverwrite(id) {
+    const tab = this.tabs.find((t) => t.id === id);
+    if (!tab) return;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
+      this.renderRoot.querySelector('acp-confirm-dialog')
+    );
+    const choice = await dialog.choose({
+      headline: `${basename(tab.path)} changed on disk`,
+      message: 'It was changed since you started editing it, by an agent or another program.',
+      detail: 'Overwrite replaces that change with your edits; Reload drops your edits.',
+      confirmLabel: 'Overwrite',
+      extraLabel: 'Reload',
+      destructive: true,
+    });
+    if (choice === 'confirm') this.#emit('acp-tab-save', { id, force: true });
+    else if (choice === 'extra') this.#emit('acp-tab-reload', { id });
   }
 
   disconnectedCallback() {

@@ -209,6 +209,12 @@ export class AcpMainColumn extends LitElement {
     else closeAllTabs();
   }
 
+  /** A save refused because the file changed on disk asks the tab view whether to overwrite it. */
+  #onTabSave = async (/** @type {Event} */ e) => {
+    const { id, force } = /** @type {CustomEvent<{ id: string, force?: boolean }>} */ (e).detail;
+    if (!(await this.#files.save(id, { force }))) this.#tabView.confirmOverwrite(id);
+  };
+
   /** @param {Event} e */
   #onCopyPath(e) {
     const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
@@ -274,7 +280,8 @@ export class AcpMainColumn extends LitElement {
           moveTab(e.detail.id, e.detail.index)}
         @acp-tab-edit=${(/** @type {CustomEvent<{ id: string, value: string }>} */ e) =>
           this.#files.edit(e.detail.id, e.detail.value)}
-        @acp-tab-save=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.save(e.detail.id)}
+        @acp-tab-save=${this.#onTabSave}
+        @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
         @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
           setFileLanguage(e.detail.path, e.detail.language)}

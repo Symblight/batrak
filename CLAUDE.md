@@ -55,7 +55,9 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`).
 - A controller counts as part of its host. The data controllers (they read stores or call services)
   are hosted only by a container: `ChatSessionController`, `ChatPartsController` (agent column),
-  `TabFilesController` (open tabs' files: reads, baselines, drafts, saves) and `ChangesReviewController`
+  `TabFilesController` (open tabs' files: reads, baselines, drafts, saves; a save over a file
+  changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
+  Overwrite / Reload dialog answers) and `ChangesReviewController`
   (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,

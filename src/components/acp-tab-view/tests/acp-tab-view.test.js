@@ -17,9 +17,71 @@ const fileTab = (path) => ({
   image: null,
   baseline: null,
   draft: null,
+  changedOnDisk: false,
 });
 
 describe('acp-tab-view', () => {
+  describe('saving a file changed on disk', () => {
+    const path = '/p/.brama/agents.json';
+    /** @type {EditorTab} */
+    const changed = { ...fileTab(path), loaded: true, content: '{}', draft: '{ "x": 1 }', changedOnDisk: true };
+
+    /** @param {EditorTab} tab */
+    async function render(tab) {
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+      );
+      /** @type {{ type: string, detail: unknown }[]} */
+      const fired = [];
+      for (const type of ['acp-tab-save', 'acp-tab-reload']) {
+        el.addEventListener(type, (e) => fired.push({ type, detail: /** @type {CustomEvent} */ (e).detail }));
+      }
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
+      /** @param {string} label */
+      const click = async (label) => {
+        await dialog.updateComplete;
+        const actions = [...(dialog.shadowRoot?.querySelectorAll('.acp-confirm-dialog__action') ?? [])];
+        /** @type {HTMLElement} */ (actions.find((a) => a.textContent?.trim() === label)).click();
+        await new Promise((r) => setTimeout(r));
+      };
+      const save = () =>
+        root
+          .querySelector('cdx-code-editor')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, composed: true }));
+      return { el, fired, click, save };
+    }
+
+    it('saves at once when nothing changed on disk', async () => {
+      const { fired, save } = await render({ ...changed, changedOnDisk: false });
+      save();
+      expect(fired).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path } }]);
+    });
+
+    it('asks first, then overwrites or reloads as chosen', async () => {
+      const { fired, click, save } = await render(changed);
+      save();
+      expect(fired, 'nothing before the answer').to.deep.equal([]);
+      await click('Overwrite');
+      expect(fired).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path, force: true } }]);
+      fired.length = 0;
+      save();
+      await click('Reload');
+      expect(fired).to.deep.equal([{ type: 'acp-tab-reload', detail: { id: path } }]);
+      fired.length = 0;
+      save();
+      await click('Cancel');
+      expect(fired).to.deep.equal([]);
+    });
+
+    it('asks when the container found the change at save time', async () => {
+      const { el, fired, click } = await render({ ...changed, changedOnDisk: false });
+      el.confirmOverwrite(path);
+      await click('Overwrite');
+      expect(fired).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path, force: true } }]);
+    });
+  });
+
   it("shows a file tab's path relative to the project in its tooltip", async () => {
     const el = await fixture(html`<acp-tab-view
       .tabs=${[fileTab('/work/app/src/main.js')]}

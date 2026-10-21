@@ -25,7 +25,7 @@ function basename(path) {
 /**
  * The open tabs (`$editorTabs`) with what they show: reads the active tab's file and its text at HEAD
  * (the diff gutter), or an image tab's bytes, re-reads after a change on disk or a HEAD move, keeps an editable file's unsaved
- * draft and saves it. The host renders `tabs`.
+ * draft and saves it, unless the file changed on disk since (`changedOnDisk`). The host renders `tabs`.
  * @implements {ReactiveController}
  */
 export class TabFilesController {
@@ -131,11 +131,11 @@ export class TabFilesController {
       const rel = projectController.relPath(tab.path);
       if (rel === null) continue;
       if (removed.includes(rel)) this.#patch(tab.id, { error: `${tab.path}: deleted on disk` });
-      else if (!readsFile(tab) || tab.draft !== null) continue; // keep unsaved edits
-      else if (modified.includes(rel) || added.includes(rel)) {
-        if (tab.id === this.#activeId) this.#load(tab.id);
-        else if (tab.loaded) this.#patch(tab.id, { loaded: false });
-      }
+      else if (!readsFile(tab) || !(modified.includes(rel) || added.includes(rel))) continue;
+      // Unsaved edits are kept; a save then asks.
+      else if (tab.draft !== null) this.#checkDisk(tab.id);
+      else if (tab.id === this.#activeId) this.#load(tab.id);
+      else if (tab.loaded) this.#patch(tab.id, { loaded: false });
     }
   };
 
@@ -148,21 +148,71 @@ export class TabFilesController {
     const tab = this.#find(id);
     if (!tab) return;
     const draft = value === tab.content ? null : value;
-    if (draft !== tab.draft) this.#patch(id, { draft });
+    if (draft === tab.draft) return;
+    // Back to the text it started from, which is no longer the file's: show the file.
+    if (draft === null && tab.changedOnDisk) this.reload(id);
+    else this.#patch(id, { draft });
   }
 
-  /** @param {string} id */
-  async save(id) {
+  /**
+   * Writes an edited tab's draft to its file. Unless `force`, refused when the file changed on disk
+   * since the draft started (checked again now: the watcher may not have reported it yet).
+   * @param {string} id
+   * @param {{ force?: boolean }} [options]
+   * @returns {Promise<boolean>} `false` when it was refused for that; nothing was written.
+   */
+  async save(id, { force = false } = {}) {
     const tab = this.#find(id);
-    if (!tab || tab.draft === null) return;
+    if (!tab || tab.draft === null) return true;
+    if (!force && (tab.changedOnDisk || (await this.#diskDiffers(tab)))) {
+      if (this.#find(id)?.changedOnDisk === false) this.#patch(id, { changedOnDisk: true });
+      return false;
+    }
     const content = tab.draft;
     try {
       await writeFile(tab.path, content);
       // Edits typed while saving stay a draft.
       const now = this.#find(id);
-      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft });
+      if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false });
     } catch (err) {
       reportError(`Saving ${basename(tab.path)} failed`, err);
+    }
+    return true;
+  }
+
+  /**
+   * Drops a tab's edits and shows its file as it is on disk.
+   * @param {string} id
+   */
+  reload(id) {
+    if (!this.#find(id)) return;
+    this.#patch(id, { draft: null, changedOnDisk: false, loaded: false });
+    if (id === this.#activeId) this.#load(id);
+  }
+
+  /**
+   * An edited tab's file changed on disk: marked unless it's still the text the draft started from
+   * (the tab's own save, or a write of the same text).
+   * @param {string} id
+   */
+  async #checkDisk(id) {
+    const tab = this.#find(id);
+    if (!tab || tab.changedOnDisk || !(await this.#diskDiffers(tab))) return;
+    const now = this.#find(id);
+    // Saved or reloaded meanwhile: `content` is what's on disk now.
+    if (now && now.draft !== null && now.content === tab.content) this.#patch(id, { changedOnDisk: true });
+  }
+
+  /**
+   * Whether the file on disk is no longer the text `tab`'s draft started from; a failed read
+   * (the file is gone) counts as not.
+   * @param {EditorTab} tab
+   */
+  async #diskDiffers(tab) {
+    try {
+      return (await readFile(tab.path)) !== tab.content;
+    } catch {
+      return false;
     }
   }
 
@@ -178,7 +228,7 @@ export class TabFilesController {
       const target = parseTabId(id);
       // A view has nothing to read.
       const loaded = !readsFile(target);
-      return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, image: null };
+      return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, changedOnDisk: false, image: null };
     });
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
@@ -239,6 +289,13 @@ export class TabFilesController {
     }
     if (this.#loads.get(id) !== load) return; // closed, or read again, meanwhile
     this.#reading.delete(id);
+    const tab = this.#find(id);
+    // Edited meanwhile (typed during a reload, or a re-read after a HEAD move): `content` stays the
+    // text the draft started from, so a save over a different file still asks.
+    if (tab && tab.draft !== null && changes.content !== undefined && !changes.error) {
+      const { content, ...rest } = changes;
+      changes = content === tab.content ? rest : { ...rest, changedOnDisk: true };
+    }
     this.#patch(id, { ...changes, loaded: true });
   }
 
