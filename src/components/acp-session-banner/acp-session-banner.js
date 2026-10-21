@@ -12,8 +12,9 @@ const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
+ * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
  */
 export class AcpSessionBanner extends LitElement {
@@ -74,6 +75,16 @@ export class AcpSessionBanner extends LitElement {
       return html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
         Restart
       </md-button>`;
+    }
+    const holder = notice.kind === 'queued' ? notice.holder : undefined;
+    if (holder) {
+      return html`<md-button
+        slot="actions"
+        class="acp-session-banner__action"
+        variant="text"
+        @click=${() => this.#emit('acp-session-select', { sessionId: holder.id })}
+        >Show session</md-button
+      >`;
     }
     if (notice.kind === 'stopped') {
       return html`<md-button

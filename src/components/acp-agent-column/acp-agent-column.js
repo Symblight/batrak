@@ -19,9 +19,9 @@ import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../
 import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openSettings } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
-import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/sessions.js';
+import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
-import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
+import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
@@ -54,6 +54,8 @@ export class AcpAgentColumn extends LitElement {
   #notice = new StoreController(this, { store: $activeNotice });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
+  #localShared = new StoreController(this, { store: $localShared });
+  #workspaceSettings = new StoreController(this, { store: $workspaceSettings });
   /** The header's rename, reset title, reveal and delete. */
   #sessionActions = new SessionActionsController(this, {
     confirm: () => this.renderRoot.querySelector('acp-confirm-dialog'),
@@ -150,6 +152,11 @@ export class AcpAgentColumn extends LitElement {
     else sessionController.dismissNotice(id);
   }
 
+  /** The session a queued turn waits for, from the banner. */
+  #onSessionSelect = (/** @type {Event} */ e) => {
+    sessionController.select(/** @type {CustomEvent<{ sessionId: string }>} */ (e).detail.sessionId);
+  };
+
   /** @param {Event} e */
   #onAgentSelect(e) {
     selectAgent(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
@@ -226,11 +233,14 @@ export class AcpAgentColumn extends LitElement {
             .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
             .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}
             .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
+            .localShared=${this.#localShared.value}
+            .localTurns=${this.#workspaceSettings.value.localTurns}
             .permission=${hasSession ? this.#permission.value : null}
             .notice=${hasSession ? this.#notice.value : null}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
+            @acp-session-select=${this.#onSessionSelect}
             @acp-agent-add-open=${() => openSettings({ section: 'agents', addAgent: true })}
             @acp-agent-select=${this.#onAgentSelect}
             @acp-config-option=${this.#onConfigOption}

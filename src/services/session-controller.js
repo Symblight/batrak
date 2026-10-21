@@ -161,8 +161,8 @@ export class SessionController {
 
   /**
    * A draft's first message: it's listed at once, and the backend creates it (workspace, agent)
-   * meanwhile; the send waits for that. Refused (e.g. a local session already runs in the
-   * project, or a worktree one's base is gone), it's a draft again with the reason above its
+   * meanwhile; the send waits for that. Refused (e.g. an untrusted launch, or a worktree one's
+   * base is gone), it's a draft again with the reason above its
    * composer. With no agent configured nothing starts, and the notice says how to add one.
    * @param {string} id
    * @param {string} title

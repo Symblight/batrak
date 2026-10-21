@@ -54,6 +54,22 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id]?.kind, 'a restart replaces it').to.equal('progress');
   });
 
+  it('says which session a queued turn waits for until the turn starts', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'queued' } });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'queued', payload: { holder: { id: 'a', title: 'Fix the tree' } } });
+    const notice = { kind: 'queued', message: 'Waiting for "Fix the tree" to finish', holder: { id: 'a', title: 'Fix the tree' } };
+    expect($sessionNotices.get()[id]).to.deep.equal(notice);
+    expect($sessions.get()[0].status).to.equal('queued');
+    handleSessionEvent({ sessionId: id, seq: 3, kind: 'status', payload: { status: 'queued' } });
+    expect($sessionNotices.get()[id], 'while it waits').to.deep.equal(notice);
+    handleSessionEvent({ sessionId: id, seq: 4, kind: 'queued', payload: { holder: { id: 'b', title: null } } });
+    expect($sessionNotices.get()[id]?.message, 'a holder without a title').to.equal('Waiting for another session to finish');
+    handleSessionEvent({ sessionId: id, seq: 5, kind: 'status', payload: { status: 'working' } });
+    expect($sessionNotices.get()[id] ?? null).to.equal(null);
+  });
+
   it("keeps a running session's context usage, without its cost", () => {
     const id = newSession('/p');
     startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });

@@ -61,21 +61,21 @@ describe('composer', () => {
     applyAgentOptions(id, []);
     expect($composer.get().runTarget.kind).to.equal('local');
 
-    setWorkspaceSettings({ defaultMode: 'worktree' });
+    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
     expect($composer.get().runTarget.kind).to.equal('worktree');
 
     setRunTarget({ kind: 'local' });
-    setWorkspaceSettings({ defaultMode: 'worktree' });
+    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
     expect($composer.get().runTarget.kind).to.equal('local', 'keeps what the user picked');
   });
 
   it('counts a base branch pick as picking the run target', () => {
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
-    setWorkspaceSettings({ defaultMode: 'worktree' });
+    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
     newSession('/branch-pick');
     setRunTarget({ branch: 'dev' });
 
-    setWorkspaceSettings({ defaultMode: 'local' });
+    setWorkspaceSettings({ defaultMode: 'local', localTurns: 'queue' });
     expect($composer.get().runTarget).to.deep.equal({ kind: 'worktree', branch: 'dev' });
   });
 

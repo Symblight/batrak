@@ -39,8 +39,9 @@
 
 /**
  * Mirrors `SessionStatus` in src-tauri/src/session/mod.rs. `waiting`: blocked on the user (a
- * permission request); `stopped`: no agent process, the next message starts one.
- * @typedef {'preparing' | 'starting' | 'idle' | 'working' | 'waiting' | 'stopped' | 'error'} SessionStatus
+ * permission request); `queued`: a local turn waits for another local session's turn in the same
+ * checkout; `stopped`: no agent process, the next message starts one.
+ * @typedef {'preparing' | 'starting' | 'idle' | 'working' | 'queued' | 'waiting' | 'stopped' | 'error'} SessionStatus
  */
 
 /**
@@ -52,7 +53,7 @@
 
 /**
  * The status icon a session shows in its header and list row (`sessionIndicator()`).
- * @typedef {'permission' | 'error' | 'running' | 'unread'} SessionIndicator
+ * @typedef {'permission' | 'error' | 'running' | 'queued' | 'unread'} SessionIndicator
  */
 
 /**
@@ -120,6 +121,7 @@
  *   | { kind: 'permission-request',
  *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }
  *   | { kind: 'turn-start', payload: Record<string, never> }
+ *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
  *   | { kind: 'turn-end', payload: { stopReason: string } }
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
@@ -183,9 +185,10 @@
  * What the chat says about a session above its composer: the agent starting, an error (with
  * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated'} kind `outdated`: agents.json changed what
- *   the running agent runs; Restart picks it up.
+ * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued'} kind `outdated`: agents.json
+ *   changed what the running agent runs; Restart picks it up. `queued`: the turn waits for `holder`'s.
  * @property {string} message
+ * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
  */
 
 /**
@@ -320,9 +323,15 @@
  */
 
 /**
+ * How turns of a project's local sessions share its checkout: one at a time, or at once.
+ * @typedef {'queue' | 'parallel'} LocalTurns
+ */
+
+/**
  * The open project's `.brama/workspace.json`.
  * @typedef {Object} WorkspaceSettings
  * @property {'local' | 'worktree'} defaultMode The run target a new session starts with.
+ * @property {LocalTurns} localTurns
  */
 
 /**

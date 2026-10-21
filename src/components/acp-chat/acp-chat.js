@@ -193,6 +193,8 @@ export class AcpChat extends LitElement {
     agent: { attribute: false },
     branches: { attribute: false },
     currentBranch: { attribute: false },
+    localShared: { attribute: false },
+    localTurns: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
   };
@@ -227,6 +229,10 @@ export class AcpChat extends LitElement {
     this.branches = [];
     /** @type {string | null} */
     this.currentBranch = null;
+    /** @type {number} Other local sessions of the project with a running agent, for the run target. */
+    this.localShared = 0;
+    /** @type {import('../../models/types.js').LocalTurns} */
+    this.localTurns = 'queue';
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
@@ -484,6 +490,8 @@ export class AcpChat extends LitElement {
                 .composer=${this.composer}
                 .branches=${this.branches}
                 .currentBranch=${this.currentBranch}
+                .localShared=${this.localShared}
+                .localTurns=${this.localTurns}
               ></acp-run-target>`
             : nothing}
         </chx-message-composer>

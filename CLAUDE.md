@@ -209,9 +209,15 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `agents.json`.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
-  shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while another local
-  session holds the project or the project has its worktree's branch); at most one active
-  `local` session per project. Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
+  shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
+  has its worktree's branch). Any number of `local` sessions of a project run; their turns share
+  the checkout through a turn slot (`session/runtime/slots.rs`, spec:
+  `docs/specs/parallel-sessions.md`): a turn takes it after `ensure_started` and holds it until it
+  returns, a prompt sent meanwhile is `queued` (a `queued { holder }` event; saved as `idle`)
+  and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
+  agents.json drop it from the queue (cancelled, never reaching the agent). Worktree sessions
+  never queue, and neither do local ones with `.brama/workspace.json` `"localTurns":
+  "parallel"` (read at each turn). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
   `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
   builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
   branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`
@@ -237,7 +243,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/acp-adapter.js`), which
   maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
   or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
-  notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>`; `$agentList`
+  notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>` (a queued
+  turn's names the session it waits for, with Show session, and says when that one waits for
+  your answer; the run-target picker's Local says how many local sessions share the checkout,
+  `$localShared`); `$agentList`
   (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
   width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in

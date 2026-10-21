@@ -34,6 +34,11 @@ describe('sessionIndicator', () => {
     }
   });
 
+  it('shows a queued turn as queued, not working', () => {
+    expect(sessionIndicator('queued', false)).to.equal('queued');
+    expect(sessionIndicator('queued', false, true)).to.equal('queued');
+  });
+
   it('shows a failed session as an error', () => {
     expect(sessionIndicator('error', false)).to.equal('error');
   });

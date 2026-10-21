@@ -1,4 +1,5 @@
 import { atom, computed } from 'nanostores';
+import { RUNNING } from '../models/sessions.js';
 import { persistentMapStore, persistentStore } from './persistent.js';
 
 /** @typedef {import('../models/types.js').Session} Session */
@@ -53,6 +54,12 @@ export const $activeSession = computed([$sessions, $activeSessionId], (sessions,
 export const $activeFolder = computed([$sessions, $draftSessions, $activeSessionId], (sessions, drafts, id) =>
   id === null ? null : (sessions.find((s) => s.id === id)?.folder ?? drafts[id] ?? null),
 );
+
+/** How many other local sessions of the active session's project have a running agent (they share its checkout). */
+export const $localShared = computed([$sessions, $draftSessions, $activeSessionId], (sessions, drafts, id) => {
+  const project = sessions.find((s) => s.id === id)?.projectId ?? (id === null ? undefined : drafts[id]);
+  return sessions.filter((s) => s.id !== id && s.projectId === project && s.mode === 'local' && RUNNING.has(s.status)).length;
+});
 
 /** Every worktree session's folder. */
 export const $worktrees = computed($sessions, (sessions) =>

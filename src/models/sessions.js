@@ -4,13 +4,14 @@
 /** @typedef {import('./types.js').SessionStatus} SessionStatus */
 
 /** Statuses in which a session holds (or is getting) an agent process. */
-export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'waiting']);
+export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
 
 /** What a session's status icon says, also its tooltip. */
 export const INDICATOR_LABELS = /** @type {const} */ ({
   permission: 'Waiting for your permission',
   error: 'Last turn failed',
   running: 'Agent is working',
+  queued: 'Waiting for the project',
   unread: 'New output',
 });
 
@@ -25,6 +26,7 @@ export function sessionIndicator(status, permissionPending, unread = false) {
   if (permissionPending || status === 'waiting') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
+  if (status === 'queued') return 'queued';
   return unread ? 'unread' : null;
 }
 

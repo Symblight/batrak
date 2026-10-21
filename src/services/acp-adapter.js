@@ -388,6 +388,12 @@ export function handleSessionEvent(event) {
         );
       }
       return;
+    case 'queued': {
+      const { holder } = event.payload;
+      const message = holder.title === null ? 'Waiting for another session to finish' : `Waiting for "${holder.title}" to finish`;
+      setSessionNotice(sessionId, { kind: 'queued', message, holder });
+      return;
+    }
     case 'turn-start': {
       endReplay(sessionId);
       const turn = turns.get(sessionId);
@@ -445,8 +451,10 @@ function noticeOf(sessionId, status, message) {
   if (status === 'error') return { kind: 'error', message: message ?? 'The agent failed' };
   if (status === 'stopped') return { kind: 'stopped', message: 'The agent is not running; your next message starts it.' };
   if (message) return { kind: 'info', message };
-  // Information and a changed launch stay through the session's turns.
   const current = $sessionNotices.get()[sessionId] ?? null;
+  // The `queued` event says what it waits for.
+  if (status === 'queued' && current?.kind === 'queued') return current;
+  // Information and a changed launch stay through the session's turns.
   return current?.kind === 'info' || current?.kind === 'outdated' ? current : null;
 }
 

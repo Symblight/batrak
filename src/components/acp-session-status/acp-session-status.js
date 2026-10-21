@@ -4,16 +4,17 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/progress-circular';
 import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
+import queuedIcon from '@material-design-icons/svg/outlined/hourglass_empty.svg?raw';
 import { INDICATOR_LABELS } from '../../models/sessions.js';
 import styles from './acp-session-status.css?inline';
 
 /** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
 
-const ICONS = { permission: permissionIcon, error: errorIcon };
+const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon };
 
 /**
  * @tag acp-session-status
- * @summary A session's status icon, the same in its header and its list row: permission, error, a spinner while the agent works, a dot for new output.
+ * @summary A session's status icon, the same in its header and its list row: permission, error, a spinner while the agent works, an hourglass while its turn waits for the project, a dot for new output.
  */
 export class AcpSessionStatus extends LitElement {
   static properties = {
@@ -36,6 +37,7 @@ export class AcpSessionStatus extends LitElement {
         return html`<span class="acp-session-status__dot"></span>`;
       case 'permission':
       case 'error':
+      case 'queued':
         return html`<md-icon class="acp-session-status__glyph">${unsafeSVG(ICONS[this.indicator])}</md-icon>`;
       default:
         return nothing;

@@ -35,8 +35,7 @@ export function listSessions() {
 
 /**
  * A draft's first message: creates the session (under the draft's id) and starts its agent in the
- * background. Rejects when a local session already runs in the project, or a worktree one has no
- * repository or base to start from.
+ * background. Rejects when a worktree one has no repository or base to start from.
  * @param {Object} session
  * @param {string} session.sessionId
  * @param {string} session.projectPath
@@ -162,8 +161,8 @@ export function sessionRestart(sessionId) {
 /**
  * Starts a stopped session's agent, continuing its ACP session where the agent supports it.
  * @param {string} sessionId
- * @returns {Promise<boolean>} `false` when it stays stopped: another local session runs in the
- *   project, or the project has its worktree's branch checked out.
+ * @returns {Promise<boolean>} `false` when it stays stopped: the project has its worktree's
+ *   branch checked out.
  */
 export function sessionResume(sessionId) {
   return invoke('session_resume', { sessionId });

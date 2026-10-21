@@ -1,10 +1,42 @@
 import { expect } from '@esm-bundle/chai';
-import { $pinnedSessions, $sessions, newSession, removeSession, setSessionPinned, startSession, touchSession } from './sessions.js';
+import {
+  $activeSessionId,
+  $localShared,
+  $pinnedSessions,
+  $sessions,
+  newSession,
+  removeSession,
+  setSessionPinned,
+  setSessionStatus,
+  startSession,
+  touchSession,
+} from './sessions.js';
 
 describe('sessions', () => {
   afterEach(() => {
     $sessions.set([]);
     $pinnedSessions.set([]);
+    $activeSessionId.set(null);
+  });
+
+  it("counts the other local sessions running in the active session's project", () => {
+    /** @param {string} project @param {'local' | 'worktree'} mode @param {import('../models/types.js').SessionStatus} status */
+    const add = (project, mode, status) => {
+      const id = newSession(project);
+      startSession(id, { title: 'T', agentId: 'a', config: {}, mode });
+      setSessionStatus(id, status);
+      return id;
+    };
+    add('/p', 'local', 'working');
+    add('/p', 'local', 'idle');
+    add('/p', 'local', 'stopped');
+    add('/p', 'worktree', 'working');
+    add('/q', 'local', 'working');
+    const draft = newSession('/p');
+    $activeSessionId.set(draft);
+    expect($localShared.get(), 'from a draft').to.equal(2);
+    $activeSessionId.set(add('/p', 'local', 'queued'));
+    expect($localShared.get(), 'not counting itself').to.equal(2);
   });
 
   it('starts a session active as of its creation', () => {

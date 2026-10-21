@@ -32,10 +32,13 @@ export const $activePermission = computed([$permissionRequests, $activeSessionId
   id === null ? null : (requests[id]?.[0] ?? null),
 );
 
-/** The active session's notice. */
-export const $activeNotice = computed([$sessionNotices, $activeSessionId], (notices, id) =>
-  id === null ? null : (notices[id] ?? null),
-);
+/** The active session's notice; a queued turn's says when what it waits for waits for the user. */
+export const $activeNotice = computed([$sessionNotices, $activeSessionId, $permissionRequests], (notices, id, requests) => {
+  const notice = id === null ? null : (notices[id] ?? null);
+  const holder = notice?.kind === 'queued' ? notice.holder : undefined;
+  if (!holder?.title || !requests[holder.id]?.length) return notice;
+  return { ...notice, message: `"${holder.title}" is waiting for your answer` };
+});
 
 /**
  * @param {string} sessionId
@@ -74,7 +77,7 @@ export function setSessionNotice(sessionId, notice) {
   const { [sessionId]: current, ...rest } = $sessionNotices.get();
   if (notice === null) {
     if (current) $sessionNotices.set(rest);
-  } else if (current?.kind !== notice.kind || current.message !== notice.message) {
+  } else if (current?.kind !== notice.kind || current.message !== notice.message || current.holder?.id !== notice.holder?.id) {
     $sessionNotices.set({ ...rest, [sessionId]: notice });
   }
 }

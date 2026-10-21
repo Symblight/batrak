@@ -30,7 +30,7 @@ export const $rootId = computed($workspace, (workspace) => workspace?.rootId ?? 
 export const $workspacePath = computed($workspace, (workspace) => workspace?.path ?? null);
 
 /** @type {WorkspaceSettings} */
-const DEFAULT_SETTINGS = { defaultMode: 'local' };
+const DEFAULT_SETTINGS = { defaultMode: 'local', localTurns: 'queue' };
 
 /** The opened folder's `.brama/workspace.json`, read when it opens; the defaults until then. */
 export const $workspaceSettings = atom(DEFAULT_SETTINGS);

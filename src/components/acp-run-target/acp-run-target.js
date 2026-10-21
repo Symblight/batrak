@@ -15,6 +15,7 @@ import styles from './acp-run-target.css?inline';
 /** @typedef {import('../../models/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../../models/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../models/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../models/types.js').LocalTurns} LocalTurns */
 
 /** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string, disabled?: boolean }[]} */
 const KINDS = [
@@ -34,6 +35,8 @@ export class AcpRunTarget extends LitElement {
     composer: { attribute: false },
     branches: { attribute: false },
     currentBranch: { attribute: false },
+    localShared: { attribute: false },
+    localTurns: { attribute: false },
   };
 
   static styles = styles;
@@ -46,6 +49,18 @@ export class AcpRunTarget extends LitElement {
     this.branches = [];
     /** @type {string | null} The project's checked-out branch. */
     this.currentBranch = null;
+    /** @type {number} Other local sessions of the project with a running agent. */
+    this.localShared = 0;
+    /** @type {LocalTurns} */
+    this.localTurns = 'queue';
+  }
+
+  /** @param {typeof KINDS[number]} kind */
+  #description(kind) {
+    if (kind.kind !== 'local' || this.localShared === 0) return kind.description;
+    const n = this.localShared;
+    const turns = this.localTurns === 'parallel' ? 'Turns run at once' : 'Turns wait for each other';
+    return `Shared with ${n} running session${n === 1 ? '' : 's'}. ${turns}`;
   }
 
   /** @param {Partial<RunTarget>} patch */
@@ -154,7 +169,7 @@ export class AcpRunTarget extends LitElement {
             >
               <md-icon slot="leading">${unsafeSVG(k.icon)}</md-icon>
               ${k.label}
-              <span slot="supporting-text">${k.description}</span>
+              <span slot="supporting-text">${this.#description(k)}</span>
             </md-menu-item>
           `,
         )}
