@@ -260,8 +260,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   Stop, cancel or the agent leaving drop it (`prompt-returned`, back into the composer). The banner
   offers the agent's `agent` methods and Retry (`agents_sign_in`, `methodId: null` only checks, for
   a login done in a terminal); once a sign-in, Retry or probe works, every session waiting on that
-  launch starts again and sends its held prompt. Terminal / command methods aren't run from the app
-  yet (Open terminal, then Retry).
+  launch starts again and sends its held prompt. A `terminal` / `command` method (`acp/auth.rs`
+  `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
+  terminal the backend opens for the calling window (`Terminals::open_program`, cwd
+  `<app data>/probe`); `agents_sign_in` returns its `LoginTab` for the page to show, exit 0 signs
+  in (`Sessions::login_ended`), another exit fails, closing it cancels. The page doesn't open that
+  tab yet (the banner offers Open terminal, then Retry).
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project

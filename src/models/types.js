@@ -269,6 +269,15 @@
  */
 
 /**
+ * A sign-in's login running in a terminal the backend started (`agents_sign_in` of a `terminal` /
+ * `command` method): exit 0 signs in, closing its tab cancels.
+ * @typedef {Object} LoginTab
+ * @property {string} terminalId
+ * @property {string} title The method's label, else its name.
+ * @property {string} commandLine What it runs, without its environment: the tab's tooltip.
+ */
+
+/**
  * An agent that asked to sign in, or is signing in.
  * @typedef {Object} AgentSignIn
  * @property {SignInMethod[]} methods

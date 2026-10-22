@@ -88,6 +88,28 @@ pub fn parse_methods(methods: &[Value]) -> Vec<SignInMethod> {
     methods.iter().filter_map(parse_method).collect()
 }
 
+/// A login to run in a terminal: its program, arguments and whole environment.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LoginCommand {
+    pub program: String,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+}
+
+/// What a terminal sign-in runs, given the agent's launch (`env`: its resolved environment). A
+/// `terminal` method runs the launch plus its args, its env over the launch's; a `command` one
+/// runs the agent's command with the launch's env.
+pub fn login_command(command: &str, args: &[String], env: &[(String, String)], login: &Login) -> LoginCommand {
+    match login {
+        Login::Terminal { args: extra, env: overrides } => {
+            let mut env: Vec<(String, String)> = env.iter().filter(|(k, _)| !overrides.contains_key(k)).cloned().collect();
+            env.extend(overrides.iter().map(|(k, v)| (k.clone(), v.clone())));
+            LoginCommand { program: command.to_owned(), args: args.iter().chain(extra).cloned().collect(), env }
+        }
+        Login::Command { command, args } => LoginCommand { program: command.clone(), args: args.clone(), env: env.to_vec() },
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -182,6 +204,28 @@ mod tests {
             })
         );
         assert_eq!(methods[1].label, None);
+    }
+
+    #[test]
+    fn a_terminal_login_reruns_the_launch_with_its_args_and_env() {
+        let launch = ["-y".to_owned(), "@agentclientprotocol/claude-agent-acp@0.94.0".to_owned()];
+        let env = [("PATH".to_owned(), "/usr/bin".to_owned()), ("MODE".to_owned(), "acp".to_owned())];
+        let login = Login::Terminal {
+            args: vec!["--cli".into(), "auth".into(), "login".into(), "--claudeai".into()],
+            env: BTreeMap::from([("MODE".into(), "login".into())]),
+        };
+        let command = login_command("npx", &launch, &env, &login);
+        assert_eq!(command.program, "npx");
+        assert_eq!(command.args, ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0", "--cli", "auth", "login", "--claudeai"]);
+        assert_eq!(command.env, [("PATH".to_owned(), "/usr/bin".to_owned()), ("MODE".to_owned(), "login".to_owned())]);
+    }
+
+    #[test]
+    fn a_command_login_runs_the_agents_command_with_the_launch_env() {
+        let env = [("PATH".to_owned(), "/usr/bin".to_owned())];
+        let login = Login::Command { command: "/opt/copilot".into(), args: vec!["login".into()] };
+        let command = login_command("npx", &["-y".to_owned(), "@github/copilot".to_owned()], &env, &login);
+        assert_eq!(command, LoginCommand { program: "/opt/copilot".into(), args: vec!["login".into()], env: env.to_vec() });
     }
 
     #[test]

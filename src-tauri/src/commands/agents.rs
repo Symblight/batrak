@@ -70,19 +70,32 @@ pub async fn agents_probe_options(
     sessions.probe_options(project.as_deref(), &agent_id).await
 }
 
-/// Signs an agent in with one of the methods it offered (`agent` methods: the agent opens the
-/// browser). Returns once it started; how it went comes as `agents://sign-in` (`state`:
+/// Signs an agent in with one of the methods it offered: an `agent` method in the backend (the
+/// agent opens the browser), a `terminal` / `command` one as a login in a terminal this window
+/// owns, whose tab the page opens (the returned `LoginTab`); exit 0 there signs it in, closing
+/// it cancels. Returns once it started; how it went comes as `agents://sign-in` (`state`:
 /// `waiting`, then `done` / `failed` / `cancelled`), and a success also as `agents://changed`.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn agents_sign_in(
     app: AppHandle,
+    window: tauri::Window,
     sessions: State<'_, crate::session::Sessions>,
+    terminals: State<'_, crate::terminal::Terminals>,
     project_path: Option<String>,
     agent_id: String,
     method_id: Option<String>,
-) -> Result<(), String> {
+) -> Result<Option<crate::session::LoginTab>, String> {
     let project = project_of(project_path)?;
-    let sign_in = sessions.sign_in(project.as_deref(), &agent_id, method_id.as_deref())?;
+    let sessions = sessions.inner().clone();
+    let mut sign_in = sessions.sign_in(project.as_deref(), &agent_id, method_id.as_deref()).await?;
+    let tab = sign_in.tab.clone();
+    if let (Some(tab), Some(login)) = (&tab, sign_in.login.take()) {
+        if let Err(e) = open_login(&window, terminals.inner().clone(), sessions.clone(), tab, login).await {
+            sessions.cancel_sign_in(project.as_deref(), &agent_id);
+            return Err(e);
+        }
+    }
     let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
     let event = move |state: &str, message: Option<&str>| {
         serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message })
@@ -100,17 +113,51 @@ pub async fn agents_sign_in(
         };
         let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, payload);
     });
-    Ok(())
+    Ok(tab)
 }
 
-/// Stops an agent's sign-in; `false` when none ran.
+/// Starts a login's terminal (the page attaches to it as a Terminal tab); its end goes to
+/// `Sessions::login_ended`.
+async fn open_login(
+    window: &tauri::Window,
+    terminals: crate::terminal::Terminals,
+    sessions: crate::session::Sessions,
+    tab: &crate::session::LoginTab,
+    login: crate::session::Login,
+) -> Result<(), String> {
+    use crate::session::LoginExit;
+    use crate::terminal::{OpenRequest, Program, TerminalEvent};
+    let (id, group) = (tab.terminal_id.clone(), window.label().to_owned());
+    blocking(move || {
+        let req = OpenRequest { id: &id, group: &group, cwd: &login.cwd, fallback: None, cols: 80, rows: 24 };
+        let program = Program { program: login.command.program, args: login.command.args, env: login.command.env };
+        let ended = id.clone();
+        let on_exit = Box::new(move |exit: Option<&TerminalEvent>| {
+            let exit = match exit {
+                None => LoginExit::Closed,
+                Some(TerminalEvent::Exit { code: Some(code), .. }) => LoginExit::Code(*code),
+                Some(TerminalEvent::Exit { signal, .. }) => LoginExit::Signal(signal.clone().unwrap_or_else(|| "a signal".to_owned())),
+            };
+            sessions.login_ended(&ended, exit);
+        });
+        terminals.open_program(&req, program, on_exit).map(drop)
+    })
+    .await?
+}
+
+/// Stops an agent's sign-in (closing its login's terminal); `false` when none ran.
 #[tauri::command]
 pub async fn agents_sign_in_cancel(
     sessions: State<'_, crate::session::Sessions>,
+    terminals: State<'_, crate::terminal::Terminals>,
     project_path: Option<String>,
     agent_id: String,
 ) -> Result<bool, String> {
-    Ok(sessions.cancel_sign_in(project_of(project_path)?.as_deref(), &agent_id))
+    let Some(cancelled) = sessions.cancel_sign_in(project_of(project_path)?.as_deref(), &agent_id) else { return Ok(false) };
+    if let Some(id) = cancelled.terminal_id {
+        terminals.close(&[id]);
+    }
+    Ok(true)
 }
 
 /// The project's agents that run what its agents.json chose and wait for the user's trust, as the

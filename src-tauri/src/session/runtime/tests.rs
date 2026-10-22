@@ -1974,7 +1974,7 @@ async fn a_prompt_to_an_agent_that_asks_to_sign_in_is_held_not_lost() {
     assert_eq!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().methods.len(), 1);
 
     events.clear();
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
     assert_eq!(sign_in.end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world", "the held prompt was answered");
@@ -1997,8 +1997,8 @@ async fn signing_in_brings_back_every_waiting_session_of_the_agent() {
 
     first.clear();
     second.clear();
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap();
-    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
     assert_eq!(sign_in.end().await, SignInEnd::Done);
     assert_eq!(joined.end().await, SignInEnd::Done, "a second call joins the first");
     assert_eq!(first.wait_turn_end().await, "end_turn");
@@ -2049,7 +2049,7 @@ async fn a_failed_sign_in_keeps_the_prompt_waiting() {
     events.wait_status("error").await;
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
-    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap().end().await else {
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await else {
         panic!("signed in")
     };
     assert!(message.contains("login failed"), "{message}");
@@ -2062,10 +2062,10 @@ async fn a_failed_sign_in_keeps_the_prompt_waiting() {
 async fn a_sign_in_runs_only_a_trusted_launch_and_can_be_cancelled() {
     let f = fixture("sign-in-trust", needing_sign_in());
     f.set_agents(&f.project, r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent"}}}"#);
-    let refused = f.sessions.sign_in(Some(&f.project), "repo", Some("browser")).err().unwrap();
+    let refused = f.sessions.sign_in(Some(&f.project), "repo", Some("browser")).await.err().unwrap();
     assert!(refused.contains("trust"), "{refused}");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "nothing ran");
-    assert!(!f.sessions.cancel_sign_in(Some(&f.project), "repo"), "none runs");
+    assert!(f.sessions.cancel_sign_in(Some(&f.project), "repo").is_none(), "none runs");
 }
 
 #[tokio::test]
@@ -2082,7 +2082,7 @@ async fn a_login_that_ran_out_mid_session_holds_the_prompt_until_signed_in_again
     events.wait_for("held", |e| e.kind == "held").await;
     assert_eq!(f.sessions.list()[0].status, SessionStatus::Error);
 
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 3, "the session's, the sign-in's, the session's again");
@@ -2112,7 +2112,7 @@ async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
 
-    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", None).unwrap().end().await else {
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await else {
         panic!("signed in")
     };
     assert!(message.contains("still asks to sign in"), "{message}");
@@ -2121,7 +2121,7 @@ async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
 
     // A login in a terminal, which the app doesn't see.
     signed_in.store(true, Ordering::SeqCst);
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world");
     let authenticated: usize = lock(&f.launcher.agents).iter().map(|a| a.authenticated.lock().unwrap().len()).sum();
@@ -2136,12 +2136,12 @@ async fn a_cancelled_sign_in_ends_cancelled_and_keeps_the_prompt_held() {
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
 
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
     while lock(&f.launcher.agents).iter().all(|a| a.authenticated.lock().unwrap().is_empty()) {
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
     assert!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().pending);
-    assert!(f.sessions.cancel_sign_in(Some(&f.project), "fake"));
+    assert!(f.sessions.cancel_sign_in(Some(&f.project), "fake").is_some());
     assert_eq!(sign_in.end().await, SignInEnd::Cancelled);
     let state = f.sessions.sign_in_state(Some(&f.project), "fake").unwrap();
     assert!(!state.pending && state.methods.len() == 1, "it still needs one");
@@ -2175,6 +2175,82 @@ async fn a_session_waiting_under_an_earlier_launch_comes_back_after_signing_in_t
     f.sessions.sync_agents(&f.project).await;
 
     events.clear();
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
     events.wait_status("idle").await;
+}
+
+/// An agent whose only way in is a login in a terminal: Claude's `terminal` type, or Copilot's
+/// `terminal-auth` command.
+fn needing_a_terminal_login() -> FakeAgentOptions {
+    FakeAgentOptions {
+        require_auth: true,
+        auth_methods: vec![
+            json!({ "type": "terminal", "id": "tui", "name": "Subscription", "args": ["auth", "login"], "env": { "MODE": "login" } }),
+            json!({ "id": "cli", "name": "CLI", "_meta": { "terminal-auth": { "command": "/opt/cli", "args": ["login"], "label": "CLI Login" } } }),
+        ],
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn a_terminal_method_gives_a_login_to_run_and_its_exit_signs_in() {
+    let options = needing_a_terminal_login();
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-terminal", options);
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    let launches = f.launcher.launches.load(Ordering::SeqCst);
+
+    let mut sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    let tab = sign_in.tab.clone().unwrap();
+    assert_eq!(tab.title, "Subscription");
+    assert_eq!(tab.command_line, "fake-agent auth login");
+    let login = sign_in.login.take().unwrap();
+    assert_eq!(login.command.program, "fake-agent");
+    assert!(login.command.env.contains(&("MODE".to_owned(), "login".to_owned())), "the method's env");
+    assert!(login.command.env.contains(&("TOKEN".to_owned(), "s3cret-value".to_owned())), "the launch's, resolved");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launches, "nothing ran yet");
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().pending);
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    assert_eq!(joined.tab.as_ref(), Some(&tab), "a second call shows the same tab");
+    assert!(joined.login.is_none(), "and runs nothing");
+
+    // The login wrote its credentials, then exited 0.
+    signed_in.store(true, Ordering::SeqCst);
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(0));
+    assert_eq!(sign_in.end().await, SignInEnd::Done);
+    assert_eq!(joined.end().await, SignInEnd::Done);
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts().join(""), "Hello, world", "the held prompt was answered");
+}
+
+#[tokio::test]
+async fn a_failed_or_closed_login_keeps_the_prompt_held() {
+    let f = fixture("sign-in-terminal-fail", needing_a_terminal_login());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let tab = sign_in.tab.clone().unwrap();
+    assert_eq!(tab.title, "CLI Login");
+    assert_eq!(sign_in.login.as_ref().unwrap().command.program, "/opt/cli");
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(1));
+    assert_eq!(sign_in.end().await, SignInEnd::Failed("CLI Login exited with 1".to_owned()));
+
+    let again = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let tab = again.tab.clone().unwrap();
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Closed);
+    assert_eq!(again.end().await, SignInEnd::Cancelled);
+
+    let third = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let cancelled = f.sessions.cancel_sign_in(Some(&f.project), "fake").unwrap();
+    assert_eq!(cancelled.terminal_id, third.tab.as_ref().map(|t| t.terminal_id.clone()), "its terminal is the caller's to close");
+    assert_eq!(third.end().await, SignInEnd::Cancelled);
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
 }

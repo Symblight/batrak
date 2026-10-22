@@ -402,3 +402,39 @@ fn closing_doesnt_wait_for_a_write_the_shell_doesnt_read() {
     wait_until("the job killed", || !alive(deaf), String::new);
     assert!(writing.join().unwrap().is_err(), "the write fails once the terminal is gone");
 }
+
+/// Runs `/bin/sh -c script` as a terminal's program; returns its output and how it ended.
+fn run_program(f: &Fixture, id: &str, script: &str) -> (Arc<Recorder>, mpsc::Receiver<Option<TerminalEvent>>) {
+    let (tx, rx) = mpsc::channel();
+    let req = OpenRequest { id, group: "main", cwd: &f.project(), fallback: None, cols: 80, rows: 24 };
+    let program = Program {
+        program: "/bin/sh".to_owned(),
+        args: vec!["-c".to_owned(), script.to_owned()],
+        env: vec![("PATH".to_owned(), "/usr/bin:/bin".to_owned()), ("LOGIN_SAYS".to_owned(), "hi".to_owned())],
+    };
+    let opened = f.terminals.open_program(&req, program, Box::new(move |exit| tx.send(exit.cloned()).unwrap())).unwrap();
+    assert_eq!(opened.shell, "sh");
+    let out = Arc::new(Recorder::default());
+    f.terminals.attach(id, out.clone()).unwrap();
+    (out, rx)
+}
+
+#[test]
+fn a_program_runs_with_its_env_and_reports_its_exit() {
+    let f = fixture("program");
+    let (out, ended) = run_program(&f, "login", "echo \"says:$LOGIN_SAYS:$TERM\"; read answer; exit $answer");
+    out.wait_for("says:hi:xterm-256color");
+    f.run("login", "3");
+    let exit = ended.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(exit, Some(TerminalEvent::Exit { code: Some(3), signal: None }));
+    assert_eq!(out.wait_exit(), TerminalEvent::Exit { code: Some(3), signal: None }, "the page hears it too");
+}
+
+#[test]
+fn closing_a_programs_terminal_reports_no_exit() {
+    let f = fixture("program-close");
+    let (out, ended) = run_program(&f, "login", "echo waiting; sleep 30");
+    out.wait_for("waiting");
+    f.terminals.close(&["login".to_owned()]);
+    assert_eq!(ended.recv_timeout(Duration::from_secs(5)).unwrap(), None);
+}

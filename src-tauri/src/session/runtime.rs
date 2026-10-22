@@ -248,6 +248,8 @@ struct Inner {
     sign_ins_needed: Mutex<HashMap<LaunchKey, SignInNeed>>,
     /// Sign-ins running, one per launch.
     signing_in: Mutex<HashMap<LaunchKey, SignInRun>>,
+    /// Numbers login terminals (`sign-in-<n>`).
+    next_login: AtomicU64,
 }
 
 /// An agent's launch as far as its login goes: the same command line and env names (not values)
@@ -279,8 +281,42 @@ struct SignInNeed {
 }
 
 struct SignInRun {
-    abort: AbortHandle,
+    /// An `authenticate` sign-in's task.
+    abort: Option<AbortHandle>,
+    /// A terminal sign-in's login, which the user runs to its end.
+    login: Option<LoginTab>,
     done: Arc<watch::Sender<Option<SignInEnd>>>,
+}
+
+/// A login that runs in a Terminal tab (`terminal` / `command` methods): the page opens the tab
+/// `terminal_id`, titled `title`, with `command_line` (no env) as its tooltip.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoginTab {
+    pub terminal_id: String,
+    pub title: String,
+    pub command_line: String,
+}
+
+/// What a login tab's terminal runs: only for the call that started it. Its env holds the
+/// agent's resolved secrets, so it never leaves the backend.
+pub struct Login {
+    pub cwd: PathBuf,
+    pub command: acp::auth::LoginCommand,
+}
+
+/// How a login's terminal ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum LoginExit {
+    Code(i32),
+    Signal(String),
+    /// Its tab was closed first: a cancel.
+    Closed,
+}
+
+/// A cancelled sign-in; a login's terminal is the caller's to close.
+pub struct Cancelled {
+    pub terminal_id: Option<String>,
 }
 
 /// How a sign-in ended.
@@ -294,6 +330,10 @@ pub enum SignInEnd {
 /// A sign-in started (or joined) by `Sessions::sign_in`.
 pub struct SignIn {
     pub agent_name: String,
+    /// A login to show in a Terminal tab (also for a call that joined it).
+    pub tab: Option<LoginTab>,
+    /// What that tab runs, for the call that started it.
+    pub login: Option<Login>,
     done: watch::Receiver<Option<SignInEnd>>,
 }
 
@@ -335,6 +375,7 @@ impl Sessions {
                 slots: TurnSlots::default(),
                 sign_ins_needed: Mutex::default(),
                 signing_in: Mutex::default(),
+                next_login: AtomicU64::new(0),
             }),
         }
     }
@@ -663,32 +704,77 @@ impl Sessions {
     /// process of its own (the agent opens the browser), confirmed by a `session/new`; no method
     /// (Retry, after a login in a terminal) only checks with a `session/new`. One runs per
     /// launch; a second call joins it. The launch must be trusted, as for a start. Once it
-    /// worked, every session waiting for it starts again and sends its held prompt.
-    pub fn sign_in(&self, project: Option<&Path>, agent_id: &str, method_id: Option<&str>) -> Result<SignIn, String> {
+    /// worked, every session waiting for it starts again and sends its held prompt. A `terminal`
+    /// or `command` method isn't run here: the result's `login` is for a Terminal tab, whose end
+    /// the caller reports (`login_ended`).
+    pub async fn sign_in(&self, project: Option<&Path>, agent_id: &str, method_id: Option<&str>) -> Result<SignIn, String> {
         let agent = self.inner.startable(project, agent_id)?;
         let key = LaunchKey::of(&agent);
-        let mut running = lock(&self.inner.signing_in);
-        if let Some(run) = running.get(&key) {
-            return Ok(SignIn { agent_name: agent.name, done: run.done.subscribe() });
+        if let Some(joined) = self.inner.join_sign_in(&key, &agent.name) {
+            return Ok(joined);
         }
-        tracing::info!(agent = %agent.id, method = ?method_id, "signing in");
+        let method = method_id.and_then(|id| {
+            let needed = lock(&self.inner.sign_ins_needed);
+            needed.get(&key)?.methods.iter().find(|m| m.id == id).cloned()
+        });
+        let login = match method.as_ref().and_then(|m| m.login.clone().map(|login| (m, login))) {
+            Some((method, login)) => Some(self.inner.login_for(&agent, method, &login).await?),
+            None => None,
+        };
+        // Joined meanwhile (the env took a while).
+        if let Some(joined) = self.inner.join_sign_in(&key, &agent.name) {
+            return Ok(joined);
+        }
+        tracing::info!(agent = %agent.id, method = ?method_id, terminal = login.is_some(), "signing in");
         let (done, receiver) = watch::channel(None);
         let done = Arc::new(done);
         let agent_name = agent.name.clone();
-        let task = tokio::spawn(Arc::clone(&self.inner).run_sign_in(agent, key.clone(), method_id.map(str::to_owned), Arc::clone(&done)));
-        running.insert(key, SignInRun { abort: task.abort_handle(), done });
-        Ok(SignIn { agent_name, done: receiver })
+        let mut running = lock(&self.inner.signing_in);
+        if let Some((tab, login)) = login {
+            running.insert(key, SignInRun { abort: None, login: Some(tab.clone()), done });
+            return Ok(SignIn { agent_name, tab: Some(tab), login: Some(login), done: receiver });
+        }
+        let method = method_id.map(str::to_owned);
+        let task = tokio::spawn(Arc::clone(&self.inner).run_sign_in(agent, key.clone(), method, Arc::clone(&done)));
+        running.insert(key, SignInRun { abort: Some(task.abort_handle()), login: None, done });
+        Ok(SignIn { agent_name, tab: None, login: None, done: receiver })
     }
 
-    /// Stops an agent's running sign-in (its process group); `false` when none runs.
-    pub fn cancel_sign_in(&self, project: Option<&Path>, agent_id: &str) -> bool {
+    /// A login's terminal ended: exit 0 signed the agent in (its waiting sessions start again);
+    /// another exit failed, a closed tab cancelled.
+    pub fn login_ended(&self, terminal_id: &str, exit: LoginExit) {
+        let found = {
+            let mut running = lock(&self.inner.signing_in);
+            let key = running.iter().find(|(_, run)| run.login.as_ref().is_some_and(|l| l.terminal_id == terminal_id)).map(|(k, _)| k.clone());
+            key.and_then(|key| running.remove(&key).map(|run| (key, run)))
+        };
+        let Some((key, run)) = found else { return };
+        let title = run.login.map(|l| l.title).unwrap_or_default();
+        let end = match exit {
+            LoginExit::Code(0) => SignInEnd::Done,
+            LoginExit::Code(code) => SignInEnd::Failed(format!("{title} exited with {code}")),
+            LoginExit::Signal(signal) => SignInEnd::Failed(format!("{title} was ended by {signal}")),
+            LoginExit::Closed => SignInEnd::Cancelled,
+        };
+        tracing::info!(terminal = %terminal_id, ?end, "login ended");
+        if end == SignInEnd::Done {
+            self.inner.signed_in(&key);
+        }
+        run.done.send_replace(Some(end));
+    }
+
+    /// Stops an agent's running sign-in (its process group); `None` when none runs. A login's
+    /// terminal is the caller's to close.
+    pub fn cancel_sign_in(&self, project: Option<&Path>, agent_id: &str) -> Option<Cancelled> {
         let merged = self.inner.opts.configs.merged(project);
-        let Some(agent) = merged.agent(agent_id) else { return false };
-        let Some(run) = lock(&self.inner.signing_in).remove(&LaunchKey::of(agent)) else { return false };
+        let agent = merged.agent(agent_id)?;
+        let run = lock(&self.inner.signing_in).remove(&LaunchKey::of(agent))?;
         tracing::info!(agent = %agent_id, "sign-in cancelled");
-        run.abort.abort();
+        if let Some(abort) = &run.abort {
+            abort.abort();
+        }
         run.done.send_replace(Some(SignInEnd::Cancelled));
-        true
+        Some(Cancelled { terminal_id: run.login.map(|l| l.terminal_id) })
     }
 
     /// Whether an agent asked for a sign-in (at a start, a prompt or a probe), or one runs.
@@ -1218,6 +1304,38 @@ impl Inner {
             process.stop().await;
         }
         started.map(|(_, started)| started)
+    }
+
+    /// The sign-in already running for `key`, joined.
+    fn join_sign_in(&self, key: &LaunchKey, agent_name: &str) -> Option<SignIn> {
+        let running = lock(&self.signing_in);
+        let run = running.get(key)?;
+        Some(SignIn { agent_name: agent_name.to_owned(), tab: run.login.clone(), login: None, done: run.done.subscribe() })
+    }
+
+    /// The Terminal tab and command of a `terminal` / `command` method: the agent's launch with
+    /// its env resolved, in the probe folder.
+    async fn login_for(&self, agent: &AgentConfig, method: &SignInMethod, login: &acp::auth::Login) -> Result<(LoginTab, Login), String> {
+        let base_env = Arc::clone(&self.opts.base_env);
+        let secrets = Arc::clone(&self.opts.secrets);
+        let agent_env = agent.env.clone();
+        let env = tokio::task::spawn_blocking(move || {
+            crate::config::env::agent_env(&base_env(), crate::git::exec::SCRUBBED_ENV, &agent_env, &*secrets)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{}: {e}", agent.name))?;
+        let command = acp::auth::login_command(&agent.command, &agent.args, &env, login);
+        let cwd = self.data_dir().join("probe");
+        std::fs::create_dir_all(&cwd).map_err(|e| format!("{}: {e}", cwd.display()))?;
+        let cwd = dunce::canonicalize(&cwd).map_err(|e| format!("{}: {e}", cwd.display()))?;
+        let n = self.next_login.fetch_add(1, Ordering::SeqCst) + 1;
+        let tab = LoginTab {
+            terminal_id: format!("sign-in-{n}"),
+            title: method.label.clone().unwrap_or_else(|| method.name.clone()),
+            command_line: std::iter::once(command.program.as_str()).chain(command.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "),
+        };
+        Ok((tab, Login { cwd, command }))
     }
 
     /// One sign-in of `Sessions::sign_in`, to its end (at most `SIGN_IN_LIMIT`).

@@ -372,13 +372,14 @@ export function agentsProbeOptions(projectPath, agentId) {
 }
 
 /**
- * Signs an agent in: `methodId` one of its `agent` methods (it opens the browser), or `null` to
- * check whether it's signed in now (after a login in a terminal). Returns once it started; how it
- * goes comes as `agents://sign-in`.
+ * Signs an agent in: `methodId` one of its methods, or `null` to check whether it's signed in now
+ * (after a login in a terminal). An `agent` method runs in the backend (it opens the browser); a
+ * `terminal` / `command` one runs in a terminal the backend started, whose tab the page opens.
+ * Returns once it started; how it goes comes as `agents://sign-in`.
  * @param {string | null} projectPath
  * @param {string} agentId
  * @param {string | null} methodId
- * @returns {Promise<void>}
+ * @returns {Promise<import('../models/types.js').LoginTab | null>} The login's terminal, for a terminal method.
  */
 export function agentsSignIn(projectPath, agentId, methodId) {
   return invoke('agents_sign_in', { projectPath, agentId, methodId });
