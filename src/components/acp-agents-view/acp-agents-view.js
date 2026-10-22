@@ -9,6 +9,7 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/switch';
+import '@symblight/wc-material/tooltip';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import cloudOffIcon from '@material-design-icons/svg/outlined/cloud_off.svg?raw';
@@ -34,6 +35,19 @@ import styles from './acp-agents-view.css?inline';
 
 /** @type {Record<AgentRow['status'], string>} */
 const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off' };
+
+/**
+ * The anchor id of a tooltip: unique in the shadow root.
+ * @param {string} part What it's on (`switch`, `update`…).
+ * @param {string} [id] The agent or registry entry it's of.
+ */
+const tipId = (part, id = '') => `acp-agents-view-${part}${id ? `-${id}` : ''}`;
+
+/**
+ * @param {string} anchor An element's id.
+ * @param {string} text
+ */
+const tooltip = (anchor, text) => html`<md-tooltip for=${anchor} show-delay="800">${text}</md-tooltip>`;
 
 /** @type {{ filter: AgentsFilter, label: string, count?: 'updates' | 'off' }[]} */
 const CHIPS = [
@@ -255,9 +269,10 @@ export class AcpAgentsView extends LitElement {
         @keydown=${this.#onSearchKeydown}
       />
       ${query
-        ? html`<md-icon-button class="acp-agents-view__clear" title="Clear" aria-label="Clear search" @click=${() => this.#ask({ query: '' })}>
-            <md-icon class="acp-agents-view__icon">${unsafeSVG(closeIcon)}</md-icon>
-          </md-icon-button>`
+        ? html`<md-icon-button id=${tipId('clear')} class="acp-agents-view__clear" aria-label="Clear search" @click=${() => this.#ask({ query: '' })}>
+              <md-icon class="acp-agents-view__icon">${unsafeSVG(closeIcon)}</md-icon>
+            </md-icon-button>
+            ${tooltip(tipId('clear'), 'Clear')}`
         : nothing}
     </div>`;
   }
@@ -286,12 +301,13 @@ export class AcpAgentsView extends LitElement {
       </md-button>`;
     }
     return html`<md-button
-      class="acp-agents-view__button"
-      variant="text"
-      title=${agent.update.pin ? 'Its version is unknown: pin the registry’s in agents.json' : `Pin ${agent.update.to} in agents.json`}
-      @click=${() => this.#emit('acp-agent-version-update', { agentId: agent.id })}
-      >${agent.update.pin ? `Pin latest (${agent.update.to})` : 'Update'}</md-button
-    >`;
+        id=${tipId('update', agent.id)}
+        class="acp-agents-view__button"
+        variant="text"
+        @click=${() => this.#emit('acp-agent-version-update', { agentId: agent.id })}
+        >${agent.update.pin ? `Pin latest (${agent.update.to})` : 'Update'}</md-button
+      >
+      ${tooltip(tipId('update', agent.id), agent.update.pin ? 'Its version is unknown: pin the registry’s in agents.json' : `Pin ${agent.update.to} in agents.json`)}`;
   }
 
   /** @param {AgentRow} agent */
@@ -322,28 +338,31 @@ export class AcpAgentsView extends LitElement {
       <div class=${classMap({ 'acp-agents-view__text': true, 'acp-agents-view__text_off': !agent.enabled })}>
         <div class="acp-agents-view__title">
           <span class="acp-agents-view__name">${this.#renderName(agent.name, agent.nameMatches)}</span>
-          ${agent.isDefault ? html`<span class="acp-agents-view__default" title="New sessions start with it">Default</span>` : nothing}
+          ${agent.isDefault ? html`<span id=${tipId('default', agent.id)} class="acp-agents-view__default">Default</span>` : nothing}
         </div>
         <div class="acp-agents-view__details">${this.#renderDetails(agent)}</div>
       </div>
       ${this.#renderUpdate(agent)}
       <md-switch
+        id=${tipId('switch', agent.id)}
         class="acp-agents-view__switch"
         aria-label=${`${agent.name} on`}
-        title=${agent.enabled ? 'Turn off: no new sessions, and its sessions stop' : 'Turn on'}
         .selected=${live(agent.enabled)}
         @change=${(/** @type {Event} */ e) =>
           this.#emit('acp-agent-enable', { agentId: agent.id, enabled: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.currentTarget).selected })}
       ></md-switch>
       <md-icon-button
+        id=${tipId('more', agent.id)}
         class="acp-agents-view__more"
-        title="Agent menu"
         aria-label=${`Agent menu: ${agent.name}`}
         aria-expanded=${menuOpen ? 'true' : 'false'}
         @click=${(/** @type {Event} */ e) => this.#menu.openFrom(agent, /** @type {HTMLElement} */ (e.currentTarget))}
       >
         <md-icon class="acp-agents-view__icon">${unsafeSVG(moreIcon)}</md-icon>
       </md-icon-button>
+      ${agent.isDefault ? tooltip(tipId('default', agent.id), 'New sessions start with it') : nothing}
+      ${tooltip(tipId('switch', agent.id), agent.enabled ? 'Turn off: no new sessions, and its sessions stop' : 'Turn on')}
+      ${tooltip(tipId('more', agent.id), 'Agent menu')}
     </li>`;
   }
 
@@ -403,9 +422,9 @@ export class AcpAgentsView extends LitElement {
     const adding = this.addingFromRegistry === entry.id;
     const error = this.registryError?.id === entry.id ? this.registryError.message : null;
     const details = [entry.vendor, entry.commandLine ?? 'Binary'].filter(Boolean).join(' · ');
-    return html`<li class="acp-agents-view__row" data-agent-id=${entry.id} title=${entry.description}>
+    return html`<li class="acp-agents-view__row" data-agent-id=${entry.id}>
       <span class="acp-agents-view__glyph" aria-hidden="true">${glyphOf(entry.name)}</span>
-      <div class="acp-agents-view__text">
+      <div id=${tipId('registry', entry.id)} class="acp-agents-view__text">
         <div class="acp-agents-view__title">
           <span class="acp-agents-view__name">${this.#renderName(entry.name, entry.nameMatches)}</span>
         </div>
@@ -413,13 +432,15 @@ export class AcpAgentsView extends LitElement {
         ${error ? html`<div class="acp-agents-view__error" role="alert">${error}</div>` : nothing}
       </div>
       <md-button
+        id=${tipId('add', entry.id)}
         class="acp-agents-view__button"
         variant="text"
         ?disabled=${!entry.addable || this.addingFromRegistry !== null}
-        title=${entry.addable ? `Add ${entry.name}, pinned to the registry's version` : "Binary agents aren't supported yet"}
         @click=${() => this.#addFromRegistry(entry)}
         >${adding ? 'Adding…' : 'Add'}</md-button
       >
+      ${entry.description ? tooltip(tipId('registry', entry.id), entry.description) : nothing}
+      ${tooltip(tipId('add', entry.id), entry.addable ? `Add ${entry.name}, pinned to the registry's version` : "Binary agents aren't supported yet")}
     </li>`;
   }
 
@@ -458,7 +479,10 @@ export class AcpAgentsView extends LitElement {
         Versions are checked against the ACP registry daily. Running sessions keep their version until restarted.
       </p>
       <div class="acp-agents-view__footer-state">
-        ${offline ? html`<md-icon class="acp-agents-view__icon" title="The last check failed">${unsafeSVG(cloudOffIcon)}</md-icon>` : nothing}
+        ${offline
+          ? html`<md-icon id=${tipId('offline')} class="acp-agents-view__icon">${unsafeSVG(cloudOffIcon)}</md-icon>
+              ${tooltip(tipId('offline'), 'The last check failed')}`
+          : nothing}
         <span>${when}${offline ? ' · offline' : ''}</span>
         <md-button class="acp-agents-view__button" variant="text" ?disabled=${checking} @click=${() => this.#emit('acp-agents-registry-check', null)}
           >${checking ? 'Checking…' : 'Check now'}</md-button

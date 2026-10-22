@@ -81,6 +81,16 @@ function row(root, id) {
 const text = (el) => el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
 
 /**
+ * The text of the `md-tooltip` anchored to `el`.
+ * @param {ShadowRoot} root
+ * @param {Element} el
+ */
+const tooltipOf = (root, el) => {
+  const tooltip = el.id ? root.querySelector(`md-tooltip[for="${CSS.escape(el.id)}"]`) : null;
+  return tooltip ? text(tooltip) : null;
+};
+
+/**
  * Collects an event's details.
  * @param {HTMLElement} el
  * @param {string} type
@@ -111,7 +121,11 @@ describe('acp-agents-view', () => {
       'Cline Bot Inc. · npx -y cline@3.0.73 --acp',
     );
     const goose = button(row(root, 'goose'), 'Add');
-    expect(goose.disabled && goose.title).to.equal("Binary agents aren't supported yet");
+    expect(goose.disabled && tooltipOf(root, goose)).to.equal("Binary agents aren't supported yet");
+    expect(tooltipOf(root, /** @type {Element} */ (claude.querySelector('md-switch')))).to.equal('Turn off: no new sessions, and its sessions stop');
+    expect(tooltipOf(root, /** @type {Element} */ (row(root, 'codex').querySelector('md-switch')))).to.equal('Turn on');
+    expect(tooltipOf(root, button(claude, 'Update'))).to.equal('Pin 0.94.0 in agents.json');
+    expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
     expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer')))).to.contain('Versions are checked against the ACP registry daily');
   });
 

@@ -44,14 +44,14 @@
   overflow-wrap: anywhere;
 }
 
-/* The MD3 search bar: 56px, full corners. */
+/* A compact search bar: full corners, the app's type and icon sizes. */
 .acp-agents-view__search {
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 56px;
+  height: 36px;
   box-sizing: border-box;
-  padding-inline: var(--space-4) var(--space-1);
+  padding-inline: var(--space-3) var(--space-0-5);
   border-radius: var(--shape-corner-full);
   background: var(--md-surface-container-high);
 
@@ -62,7 +62,7 @@
 }
 .acp-agents-view__search-icon {
   flex: none;
-  font-size: var(--icon-size-lg);
+  font-size: var(--icon-size-md);
   color: var(--md-on-surface-variant);
 }
 .acp-agents-view__search-input {
@@ -73,7 +73,7 @@
   outline: none;
   background: none;
   color: var(--md-on-surface);
-  font: 400 16px/24px var(--font-family);
+  font: 400 var(--font-size-lg) / 20px var(--font-family);
   caret-color: var(--md-primary);
 
   &::placeholder {
@@ -93,6 +93,8 @@
   gap: var(--space-2);
 }
 .acp-agents-view__count {
+  /* The chip's label is a flex row, which drops the space before it. */
+  margin-inline-start: var(--space-1);
   color: var(--md-on-surface-variant);
 }
 
@@ -207,6 +209,12 @@
 }
 .acp-agents-view__switch {
   flex: none;
+  /* Compact: a handle sits half the state layer from the track's end, so the layer is the track's height. */
+  --md-switch-track-width: 2.25rem;
+  --md-switch-track-height: 1.25rem;
+  --md-switch-state-layer-size: 1.25rem;
+  --md-switch-unselected-handle-size: 0.625rem;
+  --md-switch-selected-handle-size: 0.875rem;
 }
 .acp-agents-view__more {
   flex: none;
