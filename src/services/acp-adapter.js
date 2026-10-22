@@ -2,6 +2,7 @@ import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
 import { MESSAGE_PART_RULES, fenceCode, splitFencedCode } from '../models/chat-parts.js';
+import { returnPrompt } from '../stores/chat.js';
 import { applyAgentOptions } from '../stores/composer.js';
 import { setContextUsage } from '../stores/context-usage.js';
 import { folderOf, setSessionStatus, touchSession, upsertSession } from '../stores/sessions.js';
@@ -445,6 +446,26 @@ export function handleSessionEvent(event) {
       if (reason === 'off' && current?.kind === 'error') setSessionNotice(sessionId, { ...current, offAgent: agentId });
       return;
     }
+    case 'sign-in': {
+      // After the `error` status: the agent asks for a sign-in (`null`: a start worked, or Stop).
+      const signIn = event.payload;
+      if (signIn) {
+        setSessionNotice(sessionId, { kind: 'sign-in', message: `Sign in to ${signIn.agentName} to continue.`, signIn });
+      } else if ($sessionNotices.get()[sessionId]?.kind === 'sign-in') {
+        setSessionNotice(sessionId, null);
+      }
+      return;
+    }
+    case 'held': {
+      // The turn waits for the sign-in; the agent that starts after it may replay its history first,
+      // which isn't this reply. The next `turn-start` opens it again.
+      const turn = turns.get(sessionId);
+      if (turn) turn.started = false;
+      return;
+    }
+    case 'prompt-returned':
+      returnPrompt(sessionId, promptText(event.payload.prompt));
+      return;
     case 'error':
       if (event.payload.turn) {
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.

@@ -254,6 +254,14 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     or a start is refused again (the session keeps its error notice, whose Restart asks again). A
     launch's `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't
     write `agents.json`.
+- **Signing in** (spec: `docs/specs/agent-sign-in.md`): an agent's AuthRequired (start, prompt or
+  probe) puts the session in `error` with a `sign-in` event (its methods), and notes the launch as
+  needing one (`AgentRow.status: signIn`). A prompt sent meanwhile is held (`held`), not failed:
+  Stop, cancel or the agent leaving drop it (`prompt-returned`, back into the composer). The banner
+  offers the agent's `agent` methods and Retry (`agents_sign_in`, `methodId: null` only checks, for
+  a login done in a terminal); once a sign-in, Retry or probe works, every session waiting on that
+  launch starts again and sends its held prompt. Terminal / command methods aren't run from the app
+  yet (Open terminal, then Retry).
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project

@@ -19,6 +19,8 @@ use serde::{Deserialize, Serialize};
 
 /// Tauri event after a project's agents.json changed on disk: `{ projectPath }`.
 pub const AGENTS_CHANGED_EVENT: &str = "agents://changed";
+/// How a sign-in goes (`agents_sign_in`): `{ projectPath, agentId, state, message }`.
+pub const AGENTS_SIGN_IN_EVENT: &str = "agents://sign-in";
 
 pub const DIR: &str = ".brama";
 pub const AGENTS_FILE: &str = "agents.json";
@@ -639,7 +641,7 @@ impl AgentConfigs {
 
     /// The Agents tab's data for `project` (`None`: the user's agents): `query` and `filter`
     /// applied, `updating` telling which agents an update is running for.
-    pub fn view(&self, project: Option<&Path>, query: &str, filter: view::Filter, updating: &dyn Fn(&str) -> bool) -> view::AgentsView {
+    pub fn view(&self, project: Option<&Path>, query: &str, filter: view::Filter, state: view::RowState<'_>) -> view::AgentsView {
         let list = self.list(project);
         let reported = self.lock().versions.keys().cloned().collect::<BTreeSet<_>>();
         view::build(view::Inputs {
@@ -647,7 +649,8 @@ impl AgentConfigs {
             registry: &self.registry.agents(),
             registry_state: self.registry.state(),
             reported: &|id| reported.contains(id),
-            updating,
+            updating: state.updating,
+            sign_in: state.sign_in,
             query,
             filter,
         })
@@ -1891,7 +1894,7 @@ mod tests {
         let configs = with_fixture(Some(user_file), None);
         configs.note_version("x", "1.0.0");
         configs.set_enabled(None, "mine", false).unwrap();
-        let v = configs.view(None, "", view::Filter::All, &|id| id == "mine");
+        let v = configs.view(None, "", view::Filter::All, view::RowState { updating: &|id| id == "mine", sign_in: &|_| None });
         let rows: Vec<_> = v.installed.iter().map(|r| (r.id.as_str(), r.status, r.updating)).collect();
         assert_eq!(rows, [("x", view::Status::Ready, false), ("mine", view::Status::Off, true)], "default first");
         assert_eq!(v.registry.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "goose"], "Gemini is installed as Mine");

@@ -34,7 +34,7 @@ import styles from './acp-agents-view.css?inline';
 /** @typedef {import('../acp-agent-form/acp-agent-form.js').FormPreset} FormPreset */
 
 /** @type {Record<AgentRow['status'], string>} */
-const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off' };
+const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off', signIn: 'Needs sign-in' };
 
 /**
  * The anchor id of a tooltip: unique in the shadow root.

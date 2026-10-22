@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $agentsPending, whileUpdating } from './agents.js';
+import { $agentsPending, $signIns, noteSignIn, signInOf, whileUpdating } from './agents.js';
 
 describe('agents', () => {
   it('shows agents as updating while their call runs, a failed one too', async () => {
@@ -12,5 +12,18 @@ describe('agents', () => {
     finish('done');
     expect(await first).to.equal('done');
     expect($agentsPending.get().updating).to.deep.equal([]);
+  });
+
+  it("keeps a project's running or failed sign-ins until one ends", () => {
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'waiting', message: null });
+    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'waiting', message: null });
+    expect(signInOf('/q', 'codex'), "another project's agent").to.equal(null);
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'failed', message: 'login failed' });
+    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'failed', message: 'login failed' });
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'done', message: 'Signed in to Codex' });
+    expect(signInOf('/p', 'codex')).to.equal(null);
+    noteSignIn({ projectPath: null, agentId: 'codex', state: 'waiting', message: null });
+    noteSignIn({ projectPath: null, agentId: 'codex', state: 'cancelled', message: null });
+    expect($signIns.get()).to.deep.equal({});
   });
 });

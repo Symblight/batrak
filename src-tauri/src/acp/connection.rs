@@ -684,8 +684,9 @@ mod tests {
     #[tokio::test]
     async fn a_prompt_answered_auth_required_asks_to_sign_in() {
         let options = FakeAgentOptions { signed_in: Arc::new(true.into()), ..needing_sign_in() };
-        let (conn, _, _, _) = connect(options, None).await.unwrap();
-        let err = conn.prompt(text("signout")).await.unwrap_err();
+        let (conn, _, _, _) = connect(options.clone(), None).await.unwrap();
+        options.signed_in.store(false, Ordering::SeqCst);
+        let err = conn.prompt(text("hello")).await.unwrap_err();
         assert_eq!(method_ids(&err), ["browser", "tui"]);
     }
 

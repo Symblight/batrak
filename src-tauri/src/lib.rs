@@ -110,6 +110,8 @@ pub fn run() {
             commands::agents::workspace_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
+            commands::agents::agents_sign_in,
+            commands::agents::agents_sign_in_cancel,
             commands::agents::agents_trust,
             commands::agents::agents_untrusted,
             commands::about::about,

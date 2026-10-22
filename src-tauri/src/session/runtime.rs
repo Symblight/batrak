@@ -12,6 +12,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::sync::{oneshot, watch};
 use tokio::task::AbortHandle;
 
 use self::slots::{Entry, Turn, TurnPermit, TurnSlots};
@@ -19,8 +20,10 @@ use super::env::{self, Access, Launch, Mode, SessionEnv};
 use super::transcript::{self, Transcript};
 use super::{iso_now, AgentLaunch, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::acp::process::AgentProcess;
-use crate::acp::{self, ClientHost, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
+use crate::acp::auth::SignInMethod;
+use crate::acp::{self, ClientHost, ConnectError, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
 use crate::config::env::SecretStore;
+use crate::config::view::SignInState;
 use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, LocalTurns, Merged};
 use crate::storage::JsonFile;
 
@@ -40,7 +43,9 @@ pub struct Envelope {
     /// `update` (payload: ACP `SessionUpdate`), `status`, `permission-request`, `turn-start`,
     /// `turn-end` (`{ stopReason }`), `error`, `config-options` (`{ configOptions }`: the
     /// agent's model, thought level and mode options as they are now), or `session` (the `Session`
-    /// after the agent named it).
+    /// after the agent named it), `sign-in` (`{ agentId, agentName, methods }`: the agent asks
+    /// for a sign-in; `null` once a start works or Stop), `held` (`{ prompt }`: the turn's prompt
+    /// waits for that sign-in) or `prompt-returned` (`{ prompt }`: a held prompt was dropped).
     pub kind: &'static str,
     pub payload: Value,
 }
@@ -95,6 +100,9 @@ pub struct SessionsOptions {
 
 /// Several watcher debounces (150 ms), FSEvents' latency included.
 const OVERLAP_GRACE: Duration = Duration::from_secs(1);
+
+/// The longest a sign-in may wait for the user in the browser.
+const SIGN_IN_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 impl SessionsOptions {
     pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
@@ -166,7 +174,7 @@ struct SessionState {
     /// Starts attempted so far. A caller notes it before waiting for a start in progress; when that
     /// start failed, the caller fails with it (`start_error`) instead of starting again.
     start_attempts: AtomicU64,
-    start_error: Mutex<Option<String>>,
+    start_error: Mutex<Option<StartError>>,
     generation: AtomicU64,
     /// A turn is running, its startup included. The git layer will gate mutations on it.
     turn_running: AtomicBool,
@@ -192,6 +200,11 @@ struct SessionState {
     tool_kinds: Mutex<HashMap<String, String>>,
     /// When the last turn ended (`None` while one runs): its `touched` still count for a while.
     turn_ended: Mutex<Option<Instant>>,
+    /// The agent asked for a sign-in at its last start or prompt (the page was sent `sign-in`);
+    /// a start that works, or a Stop, clears it (`sign-in: null`).
+    sign_in: Mutex<Option<SignInNeed>>,
+    /// The turn whose prompt waits for that sign-in: `true` sends it, `false` drops it.
+    held: Mutex<Option<oneshot::Sender<bool>>>,
 }
 
 impl SessionState {
@@ -231,6 +244,75 @@ struct Inner {
     sessions: Mutex<HashMap<String, Arc<SessionState>>>,
     /// Local sessions' turns, one at a time per project.
     slots: TurnSlots,
+    /// Launches that answered AuthRequired, until one signs in or starts.
+    sign_ins_needed: Mutex<HashMap<LaunchKey, SignInNeed>>,
+    /// Sign-ins running, one per launch.
+    signing_in: Mutex<HashMap<LaunchKey, SignInRun>>,
+}
+
+/// An agent's launch as far as its login goes: the same command line and env names (not values)
+/// sign in to the same account.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct LaunchKey {
+    command: String,
+    args: Vec<String>,
+    env: Vec<String>,
+}
+
+impl LaunchKey {
+    fn new(command: &str, args: &[String], env: &BTreeMap<String, String>) -> LaunchKey {
+        LaunchKey { command: command.to_owned(), args: args.to_vec(), env: env.keys().cloned().collect() }
+    }
+
+    fn of(agent: &AgentConfig) -> LaunchKey {
+        LaunchKey::new(&agent.command, &agent.args, &agent.env)
+    }
+}
+
+/// A launch that answered AuthRequired, and how it can sign in.
+#[derive(Debug, Clone)]
+struct SignInNeed {
+    key: LaunchKey,
+    agent_id: String,
+    agent_name: String,
+    methods: Vec<SignInMethod>,
+}
+
+struct SignInRun {
+    abort: AbortHandle,
+    done: Arc<watch::Sender<Option<SignInEnd>>>,
+}
+
+/// How a sign-in ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum SignInEnd {
+    Done,
+    Failed(String),
+    Cancelled,
+}
+
+/// A sign-in started (or joined) by `Sessions::sign_in`.
+pub struct SignIn {
+    pub agent_name: String,
+    done: watch::Receiver<Option<SignInEnd>>,
+}
+
+impl SignIn {
+    pub async fn end(mut self) -> SignInEnd {
+        match self.done.wait_for(Option::is_some).await {
+            Ok(end) => end.clone().unwrap_or(SignInEnd::Cancelled),
+            Err(_) => SignInEnd::Cancelled,
+        }
+    }
+}
+
+/// What a probe learned: the agent's options, or that it wants a sign-in first.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum Probed {
+    Options(Vec<Value>),
+    #[serde(rename_all = "camelCase")]
+    SignIn { sign_in: Vec<SignInMethod> },
 }
 
 impl Sessions {
@@ -245,7 +327,16 @@ impl Sessions {
                 (record.session_id.clone(), Arc::new(new_state(record, &opts.data_dir)))
             })
             .collect();
-        Sessions { inner: Arc::new(Inner { opts, store, sessions: Mutex::new(sessions), slots: TurnSlots::default() }) }
+        Sessions {
+            inner: Arc::new(Inner {
+                opts,
+                store,
+                sessions: Mutex::new(sessions),
+                slots: TurnSlots::default(),
+                sign_ins_needed: Mutex::default(),
+                signing_in: Mutex::default(),
+            }),
+        }
     }
 
     /// Most recently active first.
@@ -356,14 +447,7 @@ impl Sessions {
         self.inner.persist();
         let record = state.record();
         tracing::info!(session = %state.id, agent = %record.agent_id, mode = ?req.mode, branch = ?record.branch, "session created");
-        let inner = Arc::clone(&self.inner);
-        let starting = Arc::clone(&state);
-        let attempts = state.start_attempts.load(Ordering::SeqCst);
-        tokio::spawn(async move {
-            if let Err(e) = inner.ensure_started(&starting, attempts).await {
-                starting.emit("error", json!({ "message": e }));
-            }
-        });
+        self.inner.start_in_background(&state);
         Ok(Session::from(&state.record()))
     }
 
@@ -488,6 +572,7 @@ impl Sessions {
     pub fn cancel(&self, id: &str) -> Result<(), String> {
         let state = self.get(id)?;
         state.cancel_requested.store(true, Ordering::SeqCst);
+        self.inner.drop_held(&state);
         if !state.turn_running.load(Ordering::SeqCst) || self.inner.leave_queue(&state) {
             return Ok(());
         }
@@ -550,57 +635,69 @@ impl Sessions {
 
     /// Asks an agent for its config options (models, thought levels, modes) without a session:
     /// it starts in a scratch folder in app data, answers `initialize` and `session/new` (no prompt,
-    /// so no model call), and is stopped. For the pickers before the agent's first session.
-    pub async fn probe_options(&self, project: Option<&Path>, agent_id: &str) -> Result<Vec<Value>, String> {
-        let inner = &self.inner;
-        let merged = inner.opts.configs.merged(project);
-        let agent = merged.agent(agent_id).cloned().ok_or_else(|| format!("Unknown agent \"{agent_id}\""))?;
-        if merged.enabled(agent_id).is_none() {
-            return Err(Absence::Off.message(&merged, agent_id));
+    /// so no model call), and is stopped. For the pickers before the agent's first session. One
+    /// that answers AuthRequired is noted as needing a sign-in ([`Probed::SignIn`]).
+    pub async fn probe_options(&self, project: Option<&Path>, agent_id: &str) -> Result<Probed, String> {
+        let agent = self.inner.startable(project, agent_id)?;
+        match self.inner.scratch_start(&agent, None).await {
+            Ok(started) => {
+                if let Some(version) = &started.agent_version {
+                    self.inner.opts.configs.note_version(&agent.id, version);
+                }
+                tracing::info!(agent = %agent.id, options = started.config_options.len(), "probed the agent's options");
+                // It's signed in (a login elsewhere): whatever waited for that needn't.
+                self.inner.signed_in(&LaunchKey::of(&agent));
+                Ok(Probed::Options(started.config_options))
+            }
+            Err(ConnectError::SignIn { methods, .. }) => {
+                tracing::info!(agent = %agent.id, methods = methods.len(), "the probed agent asks to sign in");
+                let need = SignInNeed { key: LaunchKey::of(&agent), agent_id: agent.id.clone(), agent_name: agent.name.clone(), methods };
+                lock(&self.inner.sign_ins_needed).insert(need.key.clone(), need.clone());
+                Ok(Probed::SignIn { sign_in: need.methods })
+            }
+            Err(ConnectError::Failed(e)) => Err(e),
         }
-        if let Some(project) = project {
-            inner.check_trust(project, &merged, agent_id).map_err(|untrusted| untrusted.message)?;
+    }
+
+    /// Signs an agent in with one of its methods: an `agent` method goes to `authenticate` in a
+    /// process of its own (the agent opens the browser), confirmed by a `session/new`; no method
+    /// (Retry, after a login in a terminal) only checks with a `session/new`. One runs per
+    /// launch; a second call joins it. The launch must be trusted, as for a start. Once it
+    /// worked, every session waiting for it starts again and sends its held prompt.
+    pub fn sign_in(&self, project: Option<&Path>, agent_id: &str, method_id: Option<&str>) -> Result<SignIn, String> {
+        let agent = self.inner.startable(project, agent_id)?;
+        let key = LaunchKey::of(&agent);
+        let mut running = lock(&self.inner.signing_in);
+        if let Some(run) = running.get(&key) {
+            return Ok(SignIn { agent_name: agent.name, done: run.done.subscribe() });
         }
-        let dir = inner.data_dir().join("probe");
-        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let base_env = Arc::clone(&inner.opts.base_env);
-        let secrets = Arc::clone(&inner.opts.secrets);
-        let agent_env = agent.env.clone();
-        let process_env = tokio::task::spawn_blocking(move || {
-            crate::config::env::agent_env(&base_env(), crate::git::exec::SCRUBBED_ENV, &agent_env, &*secrets)
-        })
-        .await
-        .map_err(|e| e.to_string())?
-        .map_err(|e| format!("{}: {e}", agent.name))?;
-        let log_path = dir.join(format!("{}.log", agent.id.replace(['/', '\\'], "_")));
-        let log = OpenOptions::new()
-            .create(true)
-            .append(true)
-            .open(&log_path)
-            .map_err(|e| format!("{}: {e}", log_path.display()))?;
-        let env = env::LocalEnv::new(dir.clone());
-        let Launched { mut process, writer, reader } = inner.opts.launcher.launch(&env, &agent, &process_env, log)?;
-        drop(process_env);
-        let opts = StartOptions {
-            cwd: dir,
-            mcp_servers: Vec::new(),
-            resume: None,
-            agent_name: agent.name.clone(),
-            initialize_timeout: inner.opts.initialize_timeout,
-            authenticate: None,
-        };
-        let started = Connection::start(writer, reader, Arc::new(ProbeHost), opts).await;
-        if let Some(process) = process.as_mut() {
-            process.stop().await;
-        }
-        let (conn, started) = started.map_err(|e| e.to_string())?;
-        drop(conn);
-        if let Some(version) = &started.agent_version {
-            inner.opts.configs.note_version(&agent.id, version);
-        }
-        tracing::info!(agent = %agent.id, options = started.config_options.len(), "probed the agent's options");
-        Ok(started.config_options)
+        tracing::info!(agent = %agent.id, method = ?method_id, "signing in");
+        let (done, receiver) = watch::channel(None);
+        let done = Arc::new(done);
+        let agent_name = agent.name.clone();
+        let task = tokio::spawn(Arc::clone(&self.inner).run_sign_in(agent, key.clone(), method_id.map(str::to_owned), Arc::clone(&done)));
+        running.insert(key, SignInRun { abort: task.abort_handle(), done });
+        Ok(SignIn { agent_name, done: receiver })
+    }
+
+    /// Stops an agent's running sign-in (its process group); `false` when none runs.
+    pub fn cancel_sign_in(&self, project: Option<&Path>, agent_id: &str) -> bool {
+        let merged = self.inner.opts.configs.merged(project);
+        let Some(agent) = merged.agent(agent_id) else { return false };
+        let Some(run) = lock(&self.inner.signing_in).remove(&LaunchKey::of(agent)) else { return false };
+        tracing::info!(agent = %agent_id, "sign-in cancelled");
+        run.abort.abort();
+        run.done.send_replace(Some(SignInEnd::Cancelled));
+        true
+    }
+
+    /// Whether an agent asked for a sign-in (at a start, a prompt or a probe), or one runs.
+    pub fn sign_in_state(&self, project: Option<&Path>, agent_id: &str) -> Option<SignInState> {
+        let merged = self.inner.opts.configs.merged(project);
+        let key = LaunchKey::of(merged.agent(agent_id)?);
+        let pending = lock(&self.inner.signing_in).contains_key(&key);
+        let methods = lock(&self.inner.sign_ins_needed).get(&key).map(|need| need.methods.clone());
+        (pending || methods.is_some()).then(|| SignInState { methods: methods.unwrap_or_default(), pending })
     }
 
     /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's no
@@ -640,13 +737,7 @@ impl Sessions {
         let state = self.get(id)?;
         self.inner.stop(&state).await;
         self.inner.set_status(&state, SessionStatus::Stopped, None);
-        let inner = Arc::clone(&self.inner);
-        let attempts = state.start_attempts.load(Ordering::SeqCst);
-        tokio::spawn(async move {
-            if let Err(e) = inner.ensure_started(&state, attempts).await {
-                state.emit("error", json!({ "message": e }));
-            }
-        });
+        self.inner.start_in_background(&state);
         Ok(())
     }
 
@@ -674,13 +765,7 @@ impl Sessions {
             current.status = SessionStatus::Preparing;
         }
         self.inner.set_status(&state, SessionStatus::Preparing, None);
-        let inner = Arc::clone(&self.inner);
-        let attempts = state.start_attempts.load(Ordering::SeqCst);
-        tokio::spawn(async move {
-            if let Err(e) = inner.ensure_started(&state, attempts).await {
-                state.emit("error", json!({ "message": e }));
-            }
-        });
+        self.inner.start_in_background(&state);
         Ok(true)
     }
 
@@ -871,6 +956,8 @@ fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
         overlaps: Mutex::default(),
         tool_kinds: Mutex::default(),
         turn_ended: Mutex::default(),
+        sign_in: Mutex::default(),
+        held: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),
@@ -975,13 +1062,14 @@ impl Inner {
     /// The session's connection, starting the agent if it isn't running. `attempts` is
     /// `start_attempts` as the caller saw it: a start that ran since (while this call waited) and
     /// failed is this call's failure too, so one message never starts the agent twice.
-    async fn ensure_started(self: &Arc<Self>, state: &Arc<SessionState>, attempts: u64) -> Result<Arc<Connection>, String> {
+    async fn ensure_started(self: &Arc<Self>, state: &Arc<SessionState>, attempts: u64) -> Result<Arc<Connection>, StartError> {
         let mut live = state.live.lock().await;
         if let Some(live) = live.as_ref() {
             return Ok(Arc::clone(&live.conn));
         }
         if state.start_attempts.load(Ordering::SeqCst) != attempts {
-            return Err(lock(&state.start_error).clone().unwrap_or_else(|| "the agent stopped".to_owned()));
+            let failed = lock(&state.start_error).clone();
+            return Err(failed.unwrap_or_else(|| StartError::Failed("the agent stopped".to_owned())));
         }
         let result = self.attempt_start(state).await;
         *lock(&state.start_error) = result.as_ref().err().cloned();
@@ -1003,14 +1091,37 @@ impl Inner {
             inner.on_agent_exit(&watched, generation, reason).await;
         });
 
+        if let Some(launch) = lock(&state.running).as_ref() {
+            lock(&self.sign_ins_needed).remove(&LaunchKey::new(&launch.command, &launch.args, &launch.env));
+        }
+        if lock(&state.sign_in).take().is_some() {
+            state.emit("sign-in", Value::Null);
+        }
+        // A turn that held its prompt for this start (one that began while it was getting there).
+        if let Some(held) = lock(&state.held).take() {
+            let _ = held.send(true);
+        }
         state.emit("config-options", json!({ "configOptions": started.config_options }));
         let message = (started.resumed && !started.history_restored).then_some("Agent history not restored");
         self.set_status(state, SessionStatus::Idle, message);
         Ok(conn)
     }
 
+    /// Starts the session's agent in the background; a failure reaches the page as `error` (or
+    /// `sign-in`, sent by the start).
+    fn start_in_background(self: &Arc<Self>, state: &Arc<SessionState>) {
+        let inner = Arc::clone(self);
+        let state = Arc::clone(state);
+        let attempts = state.start_attempts.load(Ordering::SeqCst);
+        tokio::spawn(async move {
+            if let Err(StartError::Failed(e)) = inner.ensure_started(&state, attempts).await {
+                state.emit("error", json!({ "message": e }));
+            }
+        });
+    }
+
     /// One start, with the session's `live` lock held.
-    async fn attempt_start(self: &Arc<Self>, state: &Arc<SessionState>) -> Result<(StartedAgent, Arc<dyn SessionEnv>), String> {
+    async fn attempt_start(self: &Arc<Self>, state: &Arc<SessionState>) -> Result<(StartedAgent, Arc<dyn SessionEnv>), StartError> {
         // A new attempt: whatever happens now isn't the earlier Stop's doing.
         state.stopping.store(false, Ordering::SeqCst);
         // In a task of its own, so Stop can abort it: dropping it drops the process, which kills
@@ -1025,19 +1136,170 @@ impl Inner {
                 tracing::info!(session = %state.id, "agent not started: the project's launch isn't trusted");
                 self.set_status(state, SessionStatus::Error, Some(&untrusted.message));
                 state.emit("untrusted", json!({ "launch": untrusted.launch, "message": untrusted.message }));
-                Err(untrusted.message)
+                Err(StartError::Failed(untrusted.message))
             }
             Ok(Err(StartFailure::Unconfigured { agent_id, ran, absence })) => {
                 tracing::info!(session = %state.id, agent = %agent_id, ?absence, "agent not started");
-                Err(self.report_unconfigured(state, &agent_id, ran.as_deref(), absence, true))
+                Err(StartError::Failed(self.report_unconfigured(state, &agent_id, ran.as_deref(), absence, true)))
+            }
+            Ok(Err(StartFailure::SignIn(need))) => {
+                tracing::info!(session = %state.id, agent = %need.agent_id, "agent not started: it asks to sign in");
+                self.report_sign_in(state, *need);
+                Err(StartError::SignIn)
             }
             Ok(Err(StartFailure::Failed(e))) => {
                 tracing::warn!(session = %state.id, "agent failed to start: {e}");
                 self.set_status(state, SessionStatus::Error, Some(&e));
-                Err(e)
+                Err(StartError::Failed(e))
             }
-            Err(_) => Err("stopped while starting".to_owned()),
+            Err(_) => Err(StartError::Failed("stopped while starting".to_owned())),
         }
+    }
+
+    /// The session's agent asks for a sign-in: `error` with "Sign in to …", and `sign-in` with
+    /// its methods; the launch is noted as needing one.
+    fn report_sign_in(&self, state: &SessionState, need: SignInNeed) {
+        let message = format!("Sign in to {}", need.agent_name);
+        lock(&self.sign_ins_needed).insert(need.key.clone(), need.clone());
+        self.set_status(state, SessionStatus::Error, Some(&message));
+        state.emit("sign-in", json!({ "agentId": need.agent_id, "agentName": need.agent_name, "methods": need.methods }));
+        *lock(&state.sign_in) = Some(need);
+    }
+
+    /// An agent that may run for `project` (the user's agents without one): in its agents.json,
+    /// on, and trusted.
+    fn startable(&self, project: Option<&Path>, agent_id: &str) -> Result<AgentConfig, String> {
+        let merged = self.opts.configs.merged(project);
+        let agent = merged.agent(agent_id).cloned().ok_or_else(|| format!("Unknown agent \"{agent_id}\""))?;
+        if merged.enabled(agent_id).is_none() {
+            return Err(Absence::Off.message(&merged, agent_id));
+        }
+        if let Some(project) = project {
+            self.check_trust(project, &merged, agent_id).map_err(|untrusted| untrusted.message)?;
+        }
+        Ok(agent)
+    }
+
+    /// Starts `agent` in a scratch folder in app data (`initialize`, then `authenticate` with
+    /// `authenticate` if given, then `session/new`; no prompt) and stops it again.
+    async fn scratch_start(&self, agent: &AgentConfig, authenticate: Option<String>) -> Result<acp::Started, ConnectError> {
+        let dir = self.data_dir().join("probe");
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        let base_env = Arc::clone(&self.opts.base_env);
+        let secrets = Arc::clone(&self.opts.secrets);
+        let agent_env = agent.env.clone();
+        let process_env = tokio::task::spawn_blocking(move || {
+            crate::config::env::agent_env(&base_env(), crate::git::exec::SCRUBBED_ENV, &agent_env, &*secrets)
+        })
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| format!("{}: {e}", agent.name))?;
+        let log_path = dir.join(format!("{}.log", agent.id.replace(['/', '\\'], "_")));
+        let log = OpenOptions::new()
+            .create(true)
+            .append(true)
+            .open(&log_path)
+            .map_err(|e| format!("{}: {e}", log_path.display()))?;
+        let env = env::LocalEnv::new(dir.clone());
+        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, agent, &process_env, log)?;
+        drop(process_env);
+        let opts = StartOptions {
+            cwd: dir,
+            mcp_servers: Vec::new(),
+            resume: None,
+            agent_name: agent.name.clone(),
+            initialize_timeout: self.opts.initialize_timeout,
+            authenticate,
+        };
+        // Dropping `process` (a cancelled sign-in) kills its group too.
+        let started = Connection::start(writer, reader, Arc::new(ProbeHost), opts).await;
+        if let Some(process) = process.as_mut() {
+            process.stop().await;
+        }
+        started.map(|(_, started)| started)
+    }
+
+    /// One sign-in of `Sessions::sign_in`, to its end (at most `SIGN_IN_LIMIT`).
+    async fn run_sign_in(self: Arc<Self>, agent: AgentConfig, key: LaunchKey, method: Option<String>, done: Arc<watch::Sender<Option<SignInEnd>>>) {
+        let end = match tokio::time::timeout(SIGN_IN_LIMIT, self.scratch_start(&agent, method)).await {
+            Err(_) => SignInEnd::Failed(format!("Signing in to {} took over {} minutes", agent.name, SIGN_IN_LIMIT.as_secs() / 60)),
+            Ok(Ok(_)) => SignInEnd::Done,
+            Ok(Err(ConnectError::SignIn { .. })) => SignInEnd::Failed(format!("{} still asks to sign in", agent.name)),
+            Ok(Err(ConnectError::Failed(e))) => SignInEnd::Failed(e),
+        };
+        {
+            let mut running = lock(&self.signing_in);
+            if !running.get(&key).is_some_and(|run| Arc::ptr_eq(&run.done, &done)) {
+                // Cancelled after it ended, past the abort's last chance: Cancel said so already.
+                return;
+            }
+            running.remove(&key);
+        }
+        match &end {
+            SignInEnd::Done => {
+                tracing::info!(agent = %agent.id, "signed in");
+                self.signed_in(&key);
+            }
+            SignInEnd::Failed(e) => tracing::info!(agent = %agent.id, "sign-in failed: {e}"),
+            SignInEnd::Cancelled => {}
+        }
+        done.send_replace(Some(end));
+    }
+
+    /// A launch signed in: it no longer needs to, and every session waiting for it starts again,
+    /// sending its held prompt (one without goes `idle`).
+    /// A session counts when its agent asked under that launch, or runs it now (agents.json
+    /// changed it since).
+    fn signed_in(self: &Arc<Self>, key: &LaunchKey) {
+        lock(&self.sign_ins_needed).remove(key);
+        let sessions: Vec<_> = lock(&self.sessions).values().cloned().collect();
+        let waiting = sessions.into_iter().filter(|s| {
+            let Some(asked) = lock(&s.sign_in).as_ref().map(|need| need.key.clone()) else { return false };
+            asked == *key || {
+                let record = s.record();
+                let merged = self.opts.configs.merged(Some(&record.project_path));
+                merged.agent(&record.agent_id).is_some_and(|agent| LaunchKey::of(agent) == *key)
+            }
+        });
+        for state in waiting {
+            tracing::info!(session = %state.id, "signed in: starting the agent again");
+            match lock(&state.held).take() {
+                Some(held) => {
+                    let _ = held.send(true);
+                }
+                None => self.start_in_background(&state),
+            }
+        }
+    }
+
+    /// Drops the prompt a turn holds for a sign-in, if any; the turn then ends `cancelled`.
+    fn drop_held(&self, state: &SessionState) {
+        if let Some(held) = lock(&state.held).take() {
+            let _ = held.send(false);
+        }
+    }
+
+    /// Holds a turn's prompt until its agent signed in (`true`) or it's dropped (`false`: Stop,
+    /// cancel, Remove, its agent gone), which gives the page the prompt back (`prompt-returned`).
+    async fn hold(&self, state: &SessionState, prompt: &[PromptInput]) -> bool {
+        let (held, answer) = oneshot::channel();
+        *lock(&state.held) = Some(held);
+        // A Stop or cancel that came first.
+        if state.cancel_requested.load(Ordering::SeqCst) || state.stopping.load(Ordering::SeqCst) {
+            lock(&state.held).take();
+        } else if lock(&state.sign_in).is_none() && lock(&state.held).take().is_some() {
+            // A start worked between the failure and now (a sign-in that just ended).
+            return true;
+        } else {
+            tracing::info!(session = %state.id, "prompt held until the agent is signed in");
+            state.emit("held", json!({ "prompt": prompt }));
+        }
+        let send = answer.await.unwrap_or(false);
+        if !send {
+            state.emit("prompt-returned", json!({ "prompt": prompt }));
+        }
+        send
     }
 
     /// Refuses an agent whose launch the project's agents.json chose until the user trusted it.
@@ -1124,7 +1386,15 @@ impl Inner {
                 if let Some(process) = process.as_mut() {
                     process.stop().await;
                 }
-                return Err(e.to_string().into());
+                return Err(match e {
+                    ConnectError::SignIn { methods, .. } => StartFailure::SignIn(Box::new(SignInNeed {
+                        key: LaunchKey::of(&agent),
+                        agent_id: agent.id.clone(),
+                        agent_name: agent.name.clone(),
+                        methods,
+                    })),
+                    ConnectError::Failed(e) => StartFailure::Failed(e),
+                });
             }
         };
         tracing::info!(
@@ -1173,14 +1443,7 @@ impl Inner {
                 tracing::info!(session = %state.id, "its agent is in agents.json again");
                 self.set_status(state, SessionStatus::Stopped, None);
                 if was_active {
-                    let inner = Arc::clone(self);
-                    let state = Arc::clone(state);
-                    let attempts = state.start_attempts.load(Ordering::SeqCst);
-                    tokio::spawn(async move {
-                        if let Err(e) = inner.ensure_started(&state, attempts).await {
-                            state.emit("error", json!({ "message": e }));
-                        }
-                    });
+                    self.start_in_background(state);
                 }
             }
             (true, None) if state.conn().is_some() => self.check_launch(state, &merged),
@@ -1188,6 +1451,11 @@ impl Inner {
             (false, None) if record.status == SessionStatus::Queued => {
                 state.cancel_requested.store(true, Ordering::SeqCst);
                 self.leave_queue(state);
+            }
+            // So does a turn holding its prompt for a sign-in.
+            (false, None) if lock(&state.held).is_some() => {
+                state.cancel_requested.store(true, Ordering::SeqCst);
+                self.drop_held(state);
             }
             (false, None) if !state.turn_running.load(Ordering::SeqCst) => {
                 let ran = record.launch.as_ref().map(|l| format!("{} {}", l.command, l.args.join(" ")));
@@ -1270,12 +1538,34 @@ impl Inner {
         Ok(file)
     }
 
+    /// A turn; one its agent wants a sign-in for (at the start, or answering the prompt) holds
+    /// the prompt until then, and is run again.
     async fn run_turn(
         self: &Arc<Self>,
         state: &Arc<SessionState>,
         prompt: Vec<PromptInput>,
-        attempts: u64,
+        mut attempts: u64,
     ) -> Result<String, String> {
+        loop {
+            match self.try_turn(state, prompt.clone(), attempts).await {
+                Ok(stop_reason) => return Ok(stop_reason),
+                Err(StartError::Failed(e)) => return Err(e),
+                Err(StartError::SignIn) => {
+                    if !self.hold(state, &prompt).await {
+                        return Ok("cancelled".to_owned());
+                    }
+                    attempts = state.start_attempts.load(Ordering::SeqCst);
+                }
+            }
+        }
+    }
+
+    async fn try_turn(
+        self: &Arc<Self>,
+        state: &Arc<SessionState>,
+        prompt: Vec<PromptInput>,
+        attempts: u64,
+    ) -> Result<String, StartError> {
         let conn = self.ensure_started(state, attempts).await?;
         if state.cancel_requested.load(Ordering::SeqCst) {
             return Ok("cancelled".to_owned());
@@ -1285,7 +1575,7 @@ impl Inner {
         if state.cancel_requested.load(Ordering::SeqCst) {
             return Ok("cancelled".to_owned());
         }
-        let env = lock(&state.env).clone().ok_or("the agent is not running")?;
+        let env = lock(&state.env).clone().ok_or_else(|| "the agent is not running".to_owned())?;
         let blocks = tokio::task::spawn_blocking(move || prompt_blocks(&*env, prompt))
             .await
             .map_err(|e| e.to_string())??;
@@ -1300,9 +1590,38 @@ impl Inner {
         // snapshot the session's folder here and refuse user mutations until the turn ends. Not
         // for a local session without a slot (`_slot` is `None`: `localTurns: "parallel"`): other
         // turns write the same checkout meanwhile, so a checkpoint couldn't say whose change is whose.
-        let stop_reason = conn.prompt(blocks).await.map_err(|e| e.to_string())?;
+        let stop_reason = match conn.prompt(blocks).await {
+            Ok(stop_reason) => stop_reason,
+            Err(ConnectError::SignIn { methods, .. }) => return Err(self.prompt_wants_sign_in(state, methods).await),
+            Err(ConnectError::Failed(e)) => return Err(e.into()),
+        };
         // HOOK(git): checkpoint after the turn, while `turn_running` is still set.
         Ok(stop_reason)
+    }
+
+    /// The running agent answered a prompt with AuthRequired (its login ran out): it's stopped,
+    /// so the start after the sign-in finds the new login, and the session asks for one.
+    async fn prompt_wants_sign_in(&self, state: &SessionState, methods: Vec<SignInMethod>) -> StartError {
+        state.recording.store(false, Ordering::SeqCst);
+        let taken = state.live.lock().await.take();
+        lock(&state.conn).take();
+        lock(&state.env).take();
+        if let Some(process) = taken.and_then(|live| live.process).as_mut() {
+            process.stop().await;
+        }
+        let record = state.record();
+        let Some(launch) = lock(&state.running).clone() else {
+            return StartError::Failed("the agent asks to sign in".to_owned());
+        };
+        tracing::info!(session = %state.id, agent = %record.agent_id, "the agent asks to sign in: stopped");
+        let need = SignInNeed {
+            key: LaunchKey::new(&launch.command, &launch.args, &launch.env),
+            agent_name: record.agent_name.unwrap_or_else(|| record.agent_id.clone()),
+            agent_id: record.agent_id,
+            methods,
+        };
+        self.report_sign_in(state, need);
+        StartError::SignIn
     }
 
     /// A local session's turn slot in its project, waited for (`queued`) while another session's
@@ -1355,6 +1674,10 @@ impl Inner {
     async fn stop(&self, state: &SessionState) {
         state.stopping.store(true, Ordering::SeqCst);
         self.leave_queue(state);
+        self.drop_held(state);
+        if lock(&state.sign_in).take().is_some() {
+            state.emit("sign-in", Value::Null);
+        }
         if let Some(cancel) = lock(&state.prepare_cancel).take() {
             cancel.store(true, Ordering::SeqCst);
         }
@@ -1415,7 +1738,22 @@ enum StartFailure {
     /// The session's agent isn't in the project's agents.json, or is off; `ran` is
     /// what it ran (`log_line`), which an agent under another id may run again.
     Unconfigured { agent_id: String, ran: Option<String>, absence: Absence },
+    SignIn(Box<SignInNeed>),
     Failed(String),
+}
+
+/// A start or turn that failed, as the callers waiting for it see it.
+#[derive(Debug, Clone)]
+enum StartError {
+    /// The agent asks for a sign-in (the page was sent `sign-in`).
+    SignIn,
+    Failed(String),
+}
+
+impl From<String> for StartError {
+    fn from(e: String) -> StartError {
+        StartError::Failed(e)
+    }
 }
 
 /// Why a session's agent can't run.

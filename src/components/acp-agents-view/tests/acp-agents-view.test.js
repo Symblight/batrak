@@ -10,7 +10,7 @@ import '../acp-agents-view.js';
  * @param {Partial<AgentRow> & { id: string, name: string }} row
  * @returns {AgentRow}
  */
-const agent = (row) => ({
+const agent = (row) => /** @type {AgentRow} */ ({
   scope: 'project',
   enabled: true,
   isDefault: false,
@@ -20,6 +20,7 @@ const agent = (row) => ({
   update: null,
   updating: false,
   status: 'notStarted',
+  signIn: null,
   nameMatches: [],
   ...row,
 });

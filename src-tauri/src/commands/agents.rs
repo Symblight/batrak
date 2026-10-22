@@ -2,7 +2,7 @@ use tauri::{AppHandle, Emitter, State};
 
 use crate::config::registry::{Registry, RegistryState};
 use crate::config::update::{Updated, Updater};
-use crate::config::view::{AgentsView, Filter};
+use crate::config::view::{AgentsView, Filter, RowState};
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -62,12 +62,55 @@ pub async fn agents_probe_options(
     sessions: State<'_, crate::session::Sessions>,
     project_path: Option<String>,
     agent_id: String,
-) -> Result<Vec<serde_json::Value>, String> {
+) -> Result<crate::session::Probed, String> {
     let project = match project_path {
         Some(path) => Some(dunce::canonicalize(&path).map_err(|e| format!("{path}: {e}"))?),
         None => None,
     };
     sessions.probe_options(project.as_deref(), &agent_id).await
+}
+
+/// Signs an agent in with one of the methods it offered (`agent` methods: the agent opens the
+/// browser). Returns once it started; how it went comes as `agents://sign-in` (`state`:
+/// `waiting`, then `done` / `failed` / `cancelled`), and a success also as `agents://changed`.
+#[tauri::command]
+pub async fn agents_sign_in(
+    app: AppHandle,
+    sessions: State<'_, crate::session::Sessions>,
+    project_path: Option<String>,
+    agent_id: String,
+    method_id: Option<String>,
+) -> Result<(), String> {
+    let project = project_of(project_path)?;
+    let sign_in = sessions.sign_in(project.as_deref(), &agent_id, method_id.as_deref())?;
+    let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
+    let event = move |state: &str, message: Option<&str>| {
+        serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message })
+    };
+    let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, event("waiting", None));
+    tauri::async_runtime::spawn(async move {
+        let name = sign_in.agent_name.clone();
+        let payload = match sign_in.end().await {
+            crate::session::SignInEnd::Done => {
+                emit_changed(&app, project.as_deref());
+                event("done", Some(&format!("Signed in to {name}")))
+            }
+            crate::session::SignInEnd::Failed(e) => event("failed", Some(&e)),
+            crate::session::SignInEnd::Cancelled => event("cancelled", None),
+        };
+        let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, payload);
+    });
+    Ok(())
+}
+
+/// Stops an agent's sign-in; `false` when none ran.
+#[tauri::command]
+pub async fn agents_sign_in_cancel(
+    sessions: State<'_, crate::session::Sessions>,
+    project_path: Option<String>,
+    agent_id: String,
+) -> Result<bool, String> {
+    Ok(sessions.cancel_sign_in(project_of(project_path)?.as_deref(), &agent_id))
 }
 
 /// The project's agents that run what its agents.json chose and wait for the user's trust, as the
@@ -245,14 +288,19 @@ pub async fn agents_update_all(updater: State<'_, Updater>, project_path: Option
 pub async fn agents_view(
     configs: State<'_, AgentConfigs>,
     updater: State<'_, Updater>,
+    sessions: State<'_, crate::session::Sessions>,
     project_path: Option<String>,
     query: String,
     filter: Filter,
 ) -> Result<AgentsView, String> {
-    let (configs, updater) = (configs.inner().clone(), updater.inner().clone());
+    let (configs, updater, sessions) = (configs.inner().clone(), updater.inner().clone(), sessions.inner().clone());
     blocking(move || {
         let project = project_of(project_path)?;
-        Ok(configs.view(project.as_deref(), &query, filter, &|id| updater.is_updating(project.as_deref(), id)))
+        let state = RowState {
+            updating: &|id| updater.is_updating(project.as_deref(), id),
+            sign_in: &|id| sessions.sign_in_state(project.as_deref(), id),
+        };
+        Ok(configs.view(project.as_deref(), &query, filter, state))
     })
     .await?
 }

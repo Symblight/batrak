@@ -5,6 +5,7 @@
 use serde::{Deserialize, Serialize};
 
 use super::registry::{AgentUpdate, Distribution, RegistryAgent, RegistryState};
+use crate::acp::auth::SignInMethod;
 use super::{AgentList, AgentSummary, Scope};
 
 /// The filter chip picked.
@@ -26,6 +27,16 @@ pub enum Status {
     Ready,
     NotStarted,
     Off,
+    /// It answered AuthRequired (a start, a prompt or a probe), or a sign-in runs.
+    SignIn,
+}
+
+/// An agent's sign-in: the methods it offered, and whether one runs.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SignInState {
+    pub methods: Vec<SignInMethod>,
+    pub pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -42,6 +53,8 @@ pub struct AgentRow {
     pub update: Option<AgentUpdate>,
     pub updating: bool,
     pub status: Status,
+    /// With status `signIn`.
+    pub sign_in: Option<SignInState>,
     /// `[start, end)` in UTF-16 code units of `name`.
     pub name_matches: Vec<[usize; 2]>,
 }
@@ -82,6 +95,12 @@ pub struct AgentsView {
     pub registry_state: RegistryState,
 }
 
+/// What runs for an agent, besides its config: an update, a sign-in.
+pub struct RowState<'a> {
+    pub updating: &'a dyn Fn(&str) -> bool,
+    pub sign_in: &'a dyn Fn(&str) -> Option<SignInState>,
+}
+
 /// What the page asked for and what the backend knows besides the list.
 pub struct Inputs<'a> {
     pub list: AgentList,
@@ -90,12 +109,13 @@ pub struct Inputs<'a> {
     /// Whether the agent answered `initialize` once.
     pub reported: &'a dyn Fn(&str) -> bool,
     pub updating: &'a dyn Fn(&str) -> bool,
+    pub sign_in: &'a dyn Fn(&str) -> Option<SignInState>,
     pub query: &'a str,
     pub filter: Filter,
 }
 
 pub fn build(inputs: Inputs<'_>) -> AgentsView {
-    let Inputs { list, registry: entries, registry_state, reported, updating, query, filter } = inputs;
+    let Inputs { list, registry: entries, registry_state, reported, updating, sign_in, query, filter } = inputs;
     let query = Query::new(query);
     let counts = Counts {
         all: list.agents.len(),
@@ -109,8 +129,11 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
         let command_line = std::iter::once(a.command.as_str()).chain(a.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ");
         let (vendor, description) = entry.map_or(("", ""), |e| (e.vendor.as_str(), e.description.as_str()));
         let rank = query.rank(&a.name, &[&a.id, vendor, description, &command_line])?;
+        let sign_in = if a.enabled { sign_in(&a.id) } else { None };
         let status = if !a.enabled {
             Status::Off
+        } else if sign_in.is_some() {
+            Status::SignIn
         } else if reported(&a.id) {
             Status::Ready
         } else {
@@ -121,6 +144,7 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
             updating: updating(&a.id),
             name_matches: query.highlights(&a.name),
             status,
+            sign_in,
             id: a.id,
             name: a.name,
             scope: a.scope,
@@ -323,9 +347,25 @@ mod tests {
             registry_state: RegistryState { checked_at: None, offline: true, checking: false },
             reported: &|id| id == "repo",
             updating: &|id| id == "claude",
+            sign_in: &|id| {
+                let method = crate::acp::auth::parse_method(&serde_json::json!({ "id": "login", "name": "Log in" }));
+                ["zed", "codex"].contains(&id).then(|| SignInState { methods: method.into_iter().collect(), pending: false })
+            },
             query,
             filter,
         })
+    }
+
+    #[test]
+    fn an_agent_that_asked_to_sign_in_says_so_unless_it_is_off() {
+        let all = view("", Filter::All);
+        let zed = all.installed.iter().find(|r| r.id == "zed").unwrap();
+        assert_eq!(zed.status, Status::SignIn);
+        let methods = &zed.sign_in.as_ref().unwrap().methods;
+        assert_eq!(methods.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["login"]);
+        let codex = all.installed.iter().find(|r| r.id == "codex").unwrap();
+        assert!(codex.status == Status::Off && codex.sign_in.is_none());
+        assert!(all.installed.iter().filter(|r| !["zed", "codex"].contains(&r.id.as_str())).all(|r| r.sign_in.is_none()));
     }
 
     fn names(view: &AgentsView) -> (Vec<&str>, Vec<&str>) {

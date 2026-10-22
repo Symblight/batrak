@@ -13,8 +13,10 @@ import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
+import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
+import { $signIns, signInOf } from '../../stores/agents.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
@@ -53,6 +55,8 @@ export class AcpAgentColumn extends LitElement {
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
+  /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
+  #signIns = new StoreController(this, { store: $signIns });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #localShared = new StoreController(this, { store: $localShared });
@@ -149,12 +153,30 @@ export class AcpAgentColumn extends LitElement {
     const id = $activeSessionId.get();
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
+    else if (action === 'open-terminal') terminalController.sessionTerminal(id);
     else if (action === 'restart') sessionController.restart(id);
     else if (action === 'turn-on-agent') {
       const agentId = $sessionNotices.get()[id]?.offAgent;
       if (agentId) agentConfig.setEnabled(agentId, true);
     }
     else sessionController.dismissNotice(id);
+  }
+
+  /** @param {Event} e */
+  #onSignIn(e) {
+    const { agentId, methodId } = /** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ (e).detail;
+    agentConfig.signIn(agentId, methodId);
+  }
+
+  /** @param {Event} e */
+  #onSignInCancel(e) {
+    agentConfig.cancelSignIn(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
+  }
+
+  /** The sign-in running or failed for the active notice's agent. */
+  #signInRun() {
+    const agentId = this.#notice.value?.signIn?.agentId;
+    return agentId ? signInOf($workspace.get()?.path ?? null, agentId) : null;
   }
 
   /** The session a queued turn waits for, from the banner. */
@@ -242,10 +264,13 @@ export class AcpAgentColumn extends LitElement {
             .localTurns=${this.#workspaceSettings.value.localTurns}
             .permission=${hasSession ? this.#permission.value : null}
             .notice=${hasSession ? this.#notice.value : null}
+            .signInRun=${hasSession ? this.#signInRun() : null}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
             @acp-session-select=${this.#onSessionSelect}
+            @acp-agent-sign-in=${this.#onSignIn}
+            @acp-agent-sign-in-cancel=${this.#onSignInCancel}
             @acp-agent-add-open=${() => openAgents({ add: true })}
             @acp-agents-manage=${() => openAgents()}
             @acp-agent-select=${this.#onAgentSelect}

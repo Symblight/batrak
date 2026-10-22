@@ -46,4 +46,83 @@ describe('acp-session-banner', () => {
     /** @type {HTMLElement} */ (buttons[0]).click();
     expect(selected).to.deep.equal([{ sessionId: 'a' }]);
   });
+
+  describe('sign-in', () => {
+    /** @param {Partial<import('../../../models/types.js').SignInMethod> & { id: string, name: string }} method */
+    const method = (method) => ({ description: null, kind: /** @type {const} */ ('agent'), label: null, apiKey: null, ...method });
+    /** @param {import('../../../models/types.js').SignInMethod[]} methods */
+    const notice = (methods) => ({
+      kind: /** @type {const} */ ('sign-in'),
+      message: 'Sign in to Codex to continue.',
+      signIn: { agentId: 'codex', agentName: 'Codex', methods },
+    });
+
+    /** @param {Element} el */
+    const view = (el) => {
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const banner = /** @type {HTMLElement & { label: string, variant: string }} */ (root.querySelector('chx-input-mode-banner'));
+      const buttons = /** @type {HTMLElement[]} */ ([...root.querySelectorAll('md-button')]);
+      return { banner, buttons, names: buttons.map((b) => b.textContent?.trim()) };
+    };
+
+    /** @param {Element} el */
+    const events = (el) => {
+      /** @type {[string, unknown][]} */
+      const seen = [];
+      for (const type of ['acp-agent-sign-in', 'acp-agent-sign-in-cancel', 'acp-session-action']) {
+        el.addEventListener(type, (/** @type {Event} */ e) => seen.push([type, /** @type {CustomEvent} */ (e).detail]));
+      }
+      return seen;
+    };
+
+    it("offers the agent's own sign-ins and Retry", async () => {
+      const methods = [method({ id: 'chat-gpt', name: 'ChatGPT' }), method({ id: 'api-key', name: 'API Key', apiKey: { provider: 'openai' } })];
+      const el = await fixture(html`<acp-session-banner .notice=${notice(methods)} .permission=${null}></acp-session-banner>`);
+      const { banner, buttons, names } = view(el);
+      expect(banner.label).to.equal('Sign in to Codex to continue.');
+      expect(names, 'an API key needs settings first').to.deep.equal(['ChatGPT', 'Retry']);
+      const seen = events(el);
+      buttons[0].click();
+      buttons[1].click();
+      expect(seen).to.deep.equal([
+        ['acp-agent-sign-in', { agentId: 'codex', methodId: 'chat-gpt' }],
+        ['acp-agent-sign-in', { agentId: 'codex', methodId: null }],
+      ]);
+    });
+
+    it('sends a terminal login to a terminal, then Retry', async () => {
+      const methods = [method({ id: 'claude-ai-login', name: 'Claude subscription', kind: 'terminal' })];
+      const el = await fixture(html`<acp-session-banner .notice=${notice(methods)} .permission=${null}></acp-session-banner>`);
+      const { banner, buttons, names } = view(el);
+      expect(banner.label).to.equal('Codex needs you to sign in. Run its login in a terminal, then Retry.');
+      expect(names).to.deep.equal(['Open terminal', 'Retry']);
+      const seen = events(el);
+      buttons[0].click();
+      expect(seen).to.deep.equal([['acp-session-action', { action: 'open-terminal' }]]);
+    });
+
+    it('says a sign-in runs, with Cancel', async () => {
+      const run = { state: /** @type {const} */ ('waiting'), message: null };
+      const el = await fixture(
+        html`<acp-session-banner .notice=${notice([method({ id: 'chat-gpt', name: 'ChatGPT' })])} .signInRun=${run} .permission=${null}></acp-session-banner>`,
+      );
+      const { banner, buttons, names } = view(el);
+      expect(banner.label).to.equal('Signing in to Codex… Finish in your browser if it opened.');
+      expect(names).to.deep.equal(['Cancel']);
+      const seen = events(el);
+      buttons[0].click();
+      expect(seen).to.deep.equal([['acp-agent-sign-in-cancel', { agentId: 'codex' }]]);
+    });
+
+    it('says why a sign-in failed and offers it again', async () => {
+      const run = { state: /** @type {const} */ ('failed'), message: 'login failed' };
+      const el = await fixture(
+        html`<acp-session-banner .notice=${notice([method({ id: 'chat-gpt', name: 'ChatGPT' })])} .signInRun=${run} .permission=${null}></acp-session-banner>`,
+      );
+      const { banner, names } = view(el);
+      expect(banner.label).to.equal('Signing in to Codex failed: login failed');
+      expect(banner.variant).to.equal('danger');
+      expect(names).to.deep.equal(['ChatGPT', 'Retry']);
+    });
+  });
 });

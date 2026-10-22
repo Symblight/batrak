@@ -10,7 +10,9 @@
 //!   disk as agents' own tools do; then like `sleep`
 //! - `look <path> <ms>` → a read tool call naming the file (location only); then like `sleep`
 //! - `crash` → one chunk, then the agent's side of the pipe closes mid-turn
-//! - `signout` → forgets the sign-in (`signed_in`) and answers AuthRequired
+//!
+//! With `require_auth`, any prompt is answered AuthRequired while `signed_in` is unset (a login
+//! that ran out).
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -33,15 +35,19 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 #[derive(Clone, Default)]
 pub struct FakeAgentOptions {
     pub load_session: bool,
-    /// `session/new` and `session/load` fail with AuthRequired until `signed_in`.
+    /// `session/new`, `session/load` and prompts fail with AuthRequired until `signed_in`.
     pub require_auth: bool,
+    /// `session/new` fails (not AuthRequired).
+    pub fail_new_session: bool,
     /// The agent's credential store: shared by every agent started with these options, so one
     /// that signed in is seen by the next.
     pub signed_in: Arc<AtomicBool>,
     /// `initialize`'s `authMethods`, as JSON.
     pub auth_methods: Vec<serde_json::Value>,
-    /// `authenticate` fails (with "login failed") instead of signing in.
+    /// `authenticate` fails ("login failed") instead of signing in.
     pub fail_authenticate: bool,
+    /// `authenticate` is never answered (a login the user hasn't finished).
+    pub hang_authenticate: bool,
     /// `session/set_config_option` is never answered.
     pub hang_set_config: bool,
 }
@@ -112,8 +118,15 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         .on_receive_request(
             async move |request: AuthenticateRequest, responder: Responder<AuthenticateResponse>, _cx| {
                 on_auth.authenticated.lock().unwrap().push(request.method_id.to_string());
+                if auth_options.hang_authenticate {
+                    tokio::spawn(async move {
+                        std::future::pending::<()>().await;
+                        drop(responder);
+                    });
+                    return Ok(());
+                }
                 if auth_options.fail_authenticate {
-                    return responder.respond_with_error(agent_client_protocol::Error::internal_error().data("login failed"));
+                    return responder.respond_with_error(agent_client_protocol::Error::new(-32603, "login failed"));
                 }
                 auth_options.signed_in.store(true, Ordering::SeqCst);
                 responder.respond(AuthenticateResponse::new())
@@ -124,6 +137,9 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
             async move |_request: NewSessionRequest, responder: Responder<NewSessionResponse>, _cx| {
                 if new_options.needs_sign_in() {
                     return responder.respond_with_error(agent_client_protocol::Error::auth_required());
+                }
+                if new_options.fail_new_session {
+                    return responder.respond_with_error(agent_client_protocol::Error::new(-32603, "no session today"));
                 }
                 responder.respond(NewSessionResponse::new("fake-session-1").config_options(config_options("smart")))
             },
@@ -182,9 +198,7 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         .on_receive_request(
             async move |request: PromptRequest, responder: Responder<PromptResponse>, cx: ConnectionTo<Client>| {
                 on_prompt.cancelled.store(false, Ordering::SeqCst);
-                let signout = request.prompt.iter().any(|b| matches!(b, ContentBlock::Text(t) if t.text.starts_with("signout")));
-                if signout {
-                    prompt_options.signed_in.store(false, Ordering::SeqCst);
+                if prompt_options.needs_sign_in() {
                     return responder.respond_with_error(agent_client_protocol::Error::auth_required());
                 }
                 let state = Arc::clone(&on_prompt);

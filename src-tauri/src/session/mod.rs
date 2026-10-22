@@ -6,7 +6,7 @@ pub mod env;
 mod runtime;
 mod transcript;
 
-pub use runtime::{CreateSession, Envelope, EventSink, PromptInput, Sessions, SessionsOptions};
+pub use runtime::{CreateSession, Envelope, EventSink, Probed, PromptInput, SignInEnd, Sessions, SessionsOptions};
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;

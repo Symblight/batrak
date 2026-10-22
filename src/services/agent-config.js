@@ -9,15 +9,18 @@ import {
   agentsRestore,
   agentsSetDefault,
   agentsSetEnabled,
+  agentsSignIn,
+  agentsSignInCancel,
   agentsUpdate,
   agentsUpdateAll,
   agentsUpdateVersion,
   agentsView,
   onAgentsChanged,
+  onAgentsSignIn,
 } from './ipc.js';
 import { log } from './logger.js';
 import { reportError } from './notices.js';
-import { $agentList, $agentsPending, $agentsQuery, $agentsView, whileUpdating } from '../stores/agents.js';
+import { $agentList, $agentsPending, $agentsQuery, $agentsView, noteSignIn, whileUpdating } from '../stores/agents.js';
 import { notify } from '../stores/notices.js';
 import { cacheAgentOptions, hasAgentOptions } from '../stores/composer.js';
 import { openTab } from '../stores/editor.js';
@@ -56,6 +59,35 @@ export class AgentConfig {
         this.search();
       }
     }).catch((err) => reportError('Watching agents.json failed', err));
+    onAgentsSignIn((event) => {
+      noteSignIn(event);
+      if (event.state === 'done' && event.message) notify('info', event.message);
+      // Its row says "Needs sign-in" until it's signed in.
+      if (event.projectPath === $workspacePath.get()) this.search();
+    }).catch((err) => reportError('Watching sign-ins failed', err));
+  }
+
+  /**
+   * Signs an agent of the open project in (`methodId: null` only checks); `agents://sign-in` says how it goes.
+   * @param {string} agentId
+   * @param {string | null} methodId
+   */
+  async signIn(agentId, methodId) {
+    const projectPath = $workspacePath.get();
+    try {
+      await agentsSignIn(projectPath, agentId, methodId);
+    } catch (err) {
+      reportError(`Signing in to ${this.#nameOf(agentId)} failed`, err);
+    }
+  }
+
+  /** @param {string} agentId */
+  async cancelSignIn(agentId) {
+    try {
+      await agentsSignInCancel($workspacePath.get(), agentId);
+    } catch (err) {
+      reportError('Cancelling the sign-in failed', err);
+    }
   }
 
   /**
@@ -126,8 +158,9 @@ export class AgentConfig {
     this.#probed.add(agentId);
     this.#probing = this.#probing.then(async () => {
       try {
-        cacheAgentOptions(agentId, await agentsProbeOptions(projectPath, agentId));
-        // The probe learned the agent's version.
+        const probed = await agentsProbeOptions(projectPath, agentId);
+        if (Array.isArray(probed)) cacheAgentOptions(agentId, probed);
+        // The probe learned the agent's version, or that it needs a sign-in.
         this.refresh();
       } catch (err) {
         log('info', `couldn't ask ${agentId} for its options: ${err}`);

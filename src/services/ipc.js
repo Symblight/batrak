@@ -364,10 +364,43 @@ export function agentsConfigFile(projectPath) {
  * folder, asked, and stopped (no prompt is sent).
  * @param {string | null} projectPath Its config comes from this project's agents.json.
  * @param {string} agentId
- * @returns {Promise<import('../models/types.js').AcpConfigOption[]>}
+ * @returns {Promise<import('../models/types.js').AcpConfigOption[] | { signIn: import('../models/types.js').SignInMethod[] }>}
+ *   `signIn`: it asks to sign in first.
  */
 export function agentsProbeOptions(projectPath, agentId) {
   return invoke('agents_probe_options', { projectPath, agentId });
+}
+
+/**
+ * Signs an agent in: `methodId` one of its `agent` methods (it opens the browser), or `null` to
+ * check whether it's signed in now (after a login in a terminal). Returns once it started; how it
+ * goes comes as `agents://sign-in`.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @param {string | null} methodId
+ * @returns {Promise<void>}
+ */
+export function agentsSignIn(projectPath, agentId, methodId) {
+  return invoke('agents_sign_in', { projectPath, agentId, methodId });
+}
+
+/**
+ * Stops an agent's running sign-in.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<boolean>} `false`: none ran.
+ */
+export function agentsSignInCancel(projectPath, agentId) {
+  return invoke('agents_sign_in_cancel', { projectPath, agentId });
+}
+
+/**
+ * How sign-ins go, this window's and others'.
+ * @param {(event: import('../models/types.js').SignInEvent) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onAgentsSignIn(callback) {
+  return listen('agents://sign-in', (event) => callback(/** @type {import('../models/types.js').SignInEvent} */ (event.payload)));
 }
 
 /**
