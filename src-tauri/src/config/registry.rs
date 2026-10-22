@@ -152,18 +152,37 @@ pub struct Matched<'a> {
     pub pinned: Option<String>,
 }
 
-/// The registry agent a launch runs: `npx` with an argument that is the entry's package, with or
+/// Where npx's args name the package it runs: the first `-p` / `--package` value, else the first
+/// argument that isn't a flag. Returns its index and the spec (`--package=` taken off).
+pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
+    let mut i = 0;
+    while let Some(arg) = args.get(i) {
+        match arg.as_str() {
+            "-p" | "--package" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
+            "--" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
+            _ => {}
+        }
+        if let Some(spec) = arg.strip_prefix("--package=") {
+            return Some((i, spec));
+        }
+        if !arg.starts_with('-') {
+            return Some((i, arg));
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The registry agent a launch runs: `npx` whose package (`package_arg`) is the entry's, with or
 /// without `@version`. Ids aren't compared: agents.json names its agents as it likes.
 pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[String]) -> Option<Matched<'a>> {
     if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
         return None;
     }
-    args.iter().find_map(|arg| {
-        let (package, version) = split_spec(arg);
-        let agent = agents.iter().find(|a| matches!(&a.distribution, Distribution::Npx { package: p, .. } if p == package))?;
-        let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
-        Some(Matched { agent, pinned })
-    })
+    let (package, version) = split_spec(package_arg(args)?.1);
+    let agent = agents.iter().find(|a| matches!(&a.distribution, Distribution::Npx { package: p, .. } if p == package))?;
+    let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
+    Some(Matched { agent, pinned })
 }
 
 fn parse_version(version: &str) -> Option<semver::Version> {
@@ -532,6 +551,10 @@ pub(crate) mod tests {
         assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"]), None, "another package");
         assert_eq!(matched("gemini", &["--acp"]), None, "custom");
         assert_eq!(matched("npx", &["-y", "goose"]), None, "not an npx agent");
+        assert_eq!(matched("npx", &["-y", "my-wrapper", "--agent", "@google/gemini-cli"]), None, "only the package npx runs");
+        assert_eq!(matched("npx", &["--yes", "--", "@google/gemini-cli@0.60.0"]), Some(("gemini".into(), Some("0.60.0".into()))));
+        assert_eq!(matched("npx", &["-p", "@google/gemini-cli@0.60.0", "gemini", "--acp"]), Some(("gemini".into(), Some("0.60.0".into()))));
+        assert_eq!(matched("npx", &["--package=@google/gemini-cli", "gemini"]), Some(("gemini".into(), None)));
     }
 
     #[test]

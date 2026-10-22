@@ -1232,14 +1232,13 @@ impl Inner {
             Some(launch) => Some(format!("{} {}", launch.command, launch.args.join(" "))),
             None => self.logged_launch(&state.id, &record.agent_id),
         };
+        let absence = Absence::of(merged, &record.agent_id);
+        // Only an agent that left the file is followed: one turned off stays the session's agent.
         let agent = ran
             .as_ref()
+            .filter(|_| absence == Absence::Removed)
             .and_then(|ran| merged.agents.iter().filter(|a| merged.enabled(&a.id).is_some()).find(|a| log_line(a) == *ran))
-            .ok_or_else(|| StartFailure::Unconfigured {
-                agent_id: record.agent_id.clone(),
-                ran: ran.clone(),
-                absence: Absence::of(merged, &record.agent_id),
-            })?;
+            .ok_or_else(|| StartFailure::Unconfigured { agent_id: record.agent_id.clone(), ran: ran.clone(), absence })?;
         tracing::info!(session = %state.id, from = %record.agent_id, to = %agent.id, "session follows its agent to a new id");
         let session = {
             let mut record = lock(&state.record);

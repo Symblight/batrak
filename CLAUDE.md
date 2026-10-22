@@ -211,7 +211,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
     `projectPath: null`. `npx` agents can be added (`AgentList.known`, pinned launches); `binary`
     ones are listed only, `uvx` skipped. An installed agent is matched by what it runs
-    (`match_launch`: `npx` and the entry's package, with or without `@version`), not by id;
+    (`match_launch`: `npx` running the entry's package, its first `-p` / `--package` value or
+    first non-flag argument, with or without `@version`), not by id;
     `AgentSummary.version` is the version its args pin, else `agentInfo.version` from its last
     `initialize` (`<app data>/agent-versions.json`); `update` (semver) is a newer registry
     version, `pin: true` when the installed one is unknown ("Pin latest").
@@ -232,8 +233,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     finished first, and is in `error` ("no longer configured" / "Codex is off", plus an
     `unconfigured { reason: removed | off }` event; the banner offers Turn on for `off`), shown
     or not; a start that finds it so does the same.
-    When the agent is back, or one that runs the same (`SessionRecord.launch`, kept at each start; for
-    older sessions the last start line of its `agent.log`, and the session takes that agent's id, a
+    When the agent is back, or (for one that left the file, not one turned off) one that runs the
+    same (`SessionRecord.launch`, kept at each start; for older sessions the last start line of its `agent.log`, and the session takes that agent's id, a
     `session` event), it is put back as it was: started again if it ran, else stopped. A running agent
     whose launch (command, args, env, MCP servers) the file changes keeps running; the page hears it
     once (`agent-outdated`, the banner's `outdated` notice with Restart, kept through turns; `null` when

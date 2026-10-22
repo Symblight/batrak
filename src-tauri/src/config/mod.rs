@@ -558,6 +558,17 @@ fn resolve(agent: &NewAgent, known: &[registry::KnownAgent]) -> Result<Resolved,
     Ok(Resolved { name, command, args, known })
 }
 
+/// The argument that pins npx's `package` (`registry::package_arg`) to `spec`, and where it goes;
+/// `None` when npx runs another package.
+fn pinned_arg(args: &[String], package: &str, spec: &str) -> Option<(usize, String)> {
+    let (at, current) = registry::package_arg(args)?;
+    if registry::split_spec(current).0 != package {
+        return None;
+    }
+    let arg = if args[at].starts_with("--package=") { format!("--package={spec}") } else { spec.to_owned() };
+    Some((at, arg))
+}
+
 /// Writes an entry's name and launch, keeping its other fields.
 fn set_launch(entry: &mut serde_json::Map<String, serde_json::Value>, agent: &Resolved) {
     entry.insert("name".to_owned(), agent.name.as_str().into());
@@ -825,11 +836,10 @@ impl AgentConfigs {
                     .and_then(|entry| entry.get_mut("args"))
                     .and_then(serde_json::Value::as_array_mut)
                     .ok_or_else(|| format!("agent \"{}\" has no args to pin", agent.id))?;
-                let arg = args
-                    .iter_mut()
-                    .find(|arg| arg.as_str().is_some_and(|a| registry::split_spec(a).0 == package))
+                let texts: Vec<String> = args.iter().map(|arg| arg.as_str().unwrap_or_default().to_owned()).collect();
+                let (at, arg) = pinned_arg(&texts, package, &spec_of(package, to))
                     .ok_or_else(|| format!("agent \"{}\" doesn't run {package}", agent.id))?;
-                *arg = spec_of(package, to).into();
+                args[at] = arg.into();
             }
             Ok(())
         })?;
@@ -849,11 +859,8 @@ impl AgentConfigs {
                 .zip(&pinned)
                 .filter_map(|(((_, package, _), before), pin)| {
                     let mut expected = before.clone()?;
-                    for arg in &mut expected.args {
-                        if registry::split_spec(arg).0 == package {
-                            arg.clone_from(&pin.spec);
-                        }
-                    }
+                    let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
+                    expected.args[at] = arg;
                     now.launch(&pin.agent_id).filter(|launch| *launch == expected)
                 })
                 .collect();
@@ -1814,6 +1821,21 @@ mod tests {
         let all = configs.pin_versions(None, None).unwrap();
         assert_eq!(all.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["@google/gemini-cli@0.65.0"], "every update: an unpinned one gets pinned");
         assert_eq!(configs.merged(None).agent("gem").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+
+        fs::write(
+            &user_file,
+            r#"{"version":1,"agents":{
+                "wrapper":{"command":"npx","args":["-y","my-wrapper","--agent","@google/gemini-cli"]},
+                "pkg":{"command":"npx","args":["--package=@google/gemini-cli@0.60.0","--","@google/gemini-cli","--acp"]}
+            }}"#,
+        )
+        .unwrap();
+        configs.reload_file(None);
+        let all = configs.pin_versions(None, None).unwrap();
+        assert_eq!(all.iter().map(|p| p.agent_id.as_str()).collect::<Vec<_>>(), ["pkg"], "a custom agent's argument isn't the package npx runs");
+        let merged = configs.merged(None);
+        assert_eq!(merged.agent("wrapper").unwrap().args, ["-y", "my-wrapper", "--agent", "@google/gemini-cli"], "left alone");
+        assert_eq!(merged.agent("pkg").unwrap().args, ["--package=@google/gemini-cli@0.65.0", "--", "@google/gemini-cli", "--acp"], "the package pinned, the command not");
 
         fs::remove_dir_all(base).unwrap();
     }

@@ -1496,6 +1496,30 @@ async fn turning_an_agent_off_stops_its_sessions_and_turning_it_on_puts_them_bac
 }
 
 #[tokio::test]
+async fn an_agent_turned_off_stops_its_sessions_even_when_another_runs_the_same() {
+    let f = fixture("switch-twin", FakeAgentOptions::default());
+    // Added twice from the registry: `fake-2` runs exactly what `fake` does.
+    f.set_agents(&f.project, &AGENTS.replace("\"locked\":", "\"fake-2\":{\"name\":\"Fake\",\"command\":\"fake-agent\",\"env\":{\"TOKEN\":\"${keychain:token}\"}},\"locked\":"));
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+
+    configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+    f.sessions.sync_agents(&f.project).await;
+    let off = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(off.payload["reason"], "off");
+    events.wait_status("error").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake", "not moved to its twin");
+
+    events.clear();
+    f.sessions.restart("s").await.unwrap();
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake", "a start doesn't move it either");
+}
+
+#[tokio::test]
 async fn a_removed_agent_is_reported_as_removed() {
     let f = fixture("switch-removed", FakeAgentOptions::default());
     let (_, events) = f.create("r", "fake").unwrap();
