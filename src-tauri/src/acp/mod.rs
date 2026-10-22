@@ -3,6 +3,7 @@
 //! app sees [`Connection`], [`PromptBlock`], [`ClientHost`] and session updates as JSON (the ACP
 //! `SessionUpdate`, serialized by the crate, forwarded to the frontend as is).
 
+pub mod auth;
 mod connection;
 pub mod process;
 

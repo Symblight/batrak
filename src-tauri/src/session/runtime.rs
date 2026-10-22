@@ -588,12 +588,13 @@ impl Sessions {
             resume: None,
             agent_name: agent.name.clone(),
             initialize_timeout: inner.opts.initialize_timeout,
+            authenticate: None,
         };
         let started = Connection::start(writer, reader, Arc::new(ProbeHost), opts).await;
         if let Some(process) = process.as_mut() {
             process.stop().await;
         }
-        let (conn, started) = started?;
+        let (conn, started) = started.map_err(|e| e.to_string())?;
         drop(conn);
         if let Some(version) = &started.agent_version {
             inner.opts.configs.note_version(&agent.id, version);
@@ -1114,6 +1115,7 @@ impl Inner {
             resume: record.acp_session_id.clone(),
             agent_name: agent.name.clone(),
             initialize_timeout: self.opts.initialize_timeout,
+            authenticate: None,
         };
         let Launched { mut process, writer, reader } = launched;
         let (conn, started) = match Connection::start(writer, reader, host, opts).await {
@@ -1122,7 +1124,7 @@ impl Inner {
                 if let Some(process) = process.as_mut() {
                     process.stop().await;
                 }
-                return Err(e.into());
+                return Err(e.to_string().into());
             }
         };
         tracing::info!(
@@ -1298,7 +1300,7 @@ impl Inner {
         // snapshot the session's folder here and refuse user mutations until the turn ends. Not
         // for a local session without a slot (`_slot` is `None`: `localTurns: "parallel"`): other
         // turns write the same checkout meanwhile, so a checkpoint couldn't say whose change is whose.
-        let stop_reason = conn.prompt(blocks).await?;
+        let stop_reason = conn.prompt(blocks).await.map_err(|e| e.to_string())?;
         // HOOK(git): checkpoint after the turn, while `turn_running` is still set.
         Ok(stop_reason)
     }
