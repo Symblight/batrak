@@ -15,15 +15,17 @@ describe('agents', () => {
   });
 
   it("keeps a project's running or failed sign-ins until one ends", () => {
-    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'waiting', message: null });
-    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'waiting', message: null });
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'waiting', message: null, terminal: null });
+    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'waiting', message: null, terminal: null });
     expect(signInOf('/q', 'codex'), "another project's agent").to.equal(null);
-    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'failed', message: 'login failed' });
-    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'failed', message: 'login failed' });
-    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'done', message: 'Signed in to Codex' });
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'failed', message: 'login failed', terminal: null });
+    expect(signInOf('/p', 'codex')).to.deep.equal({ state: 'failed', message: 'login failed', terminal: null });
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'done', message: 'Signed in to Codex', terminal: null });
     expect(signInOf('/p', 'codex')).to.equal(null);
-    noteSignIn({ projectPath: null, agentId: 'codex', state: 'waiting', message: null });
-    noteSignIn({ projectPath: null, agentId: 'codex', state: 'cancelled', message: null });
+    const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
+    noteSignIn({ projectPath: null, agentId: 'codex', state: 'waiting', message: null, terminal });
+    expect(signInOf(null, 'codex')?.terminal, "a login's terminal").to.deep.equal(terminal);
+    noteSignIn({ projectPath: null, agentId: 'codex', state: 'cancelled', message: null, terminal });
     expect($signIns.get()).to.deep.equal({});
   });
 });

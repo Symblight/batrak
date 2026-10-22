@@ -90,9 +90,21 @@ describe('acp-session-banner', () => {
       ]);
     });
 
-    it('sends a terminal login to a terminal, then Retry', async () => {
-      const methods = [method({ id: 'claude-ai-login', name: 'Claude subscription', kind: 'terminal' })];
+    it('offers terminal logins as sign-ins too', async () => {
+      const methods = [
+        method({ id: 'claude-ai-login', name: 'Claude subscription', kind: 'terminal' }),
+        method({ id: 'copilot-login', name: 'Log in with Copilot CLI', kind: 'command', label: 'Copilot Login' }),
+      ];
       const el = await fixture(html`<acp-session-banner .notice=${notice(methods)} .permission=${null}></acp-session-banner>`);
+      const { buttons, names } = view(el);
+      expect(names).to.deep.equal(['Claude subscription', 'Log in with Copilot CLI', 'Retry']);
+      const seen = events(el);
+      buttons[1].click();
+      expect(seen).to.deep.equal([['acp-agent-sign-in', { agentId: 'codex', methodId: 'copilot-login' }]]);
+    });
+
+    it('with no way to sign in, sends the user to a terminal, then Retry', async () => {
+      const el = await fixture(html`<acp-session-banner .notice=${notice([])} .permission=${null}></acp-session-banner>`);
       const { banner, buttons, names } = view(el);
       expect(banner.label).to.equal('Codex needs you to sign in. Run its login in a terminal, then Retry.');
       expect(names).to.deep.equal(['Open terminal', 'Retry']);
@@ -101,8 +113,20 @@ describe('acp-session-banner', () => {
       expect(seen).to.deep.equal([['acp-session-action', { action: 'open-terminal' }]]);
     });
 
+    it("points at a login's terminal while it runs", async () => {
+      const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
+      const run = { state: /** @type {const} */ ('waiting'), message: null, terminal };
+      const el = await fixture(html`<acp-session-banner .notice=${notice([])} .signInRun=${run} .permission=${null}></acp-session-banner>`);
+      const { banner, buttons, names } = view(el);
+      expect(banner.label).to.equal('Signing in to Codex… Finish in the Copilot Login terminal.');
+      expect(names).to.deep.equal(['Show terminal', 'Cancel']);
+      const seen = events(el);
+      buttons[0].click();
+      expect(seen).to.deep.equal([['acp-session-action', { action: 'show-login' }]]);
+    });
+
     it('says a sign-in runs, with Cancel', async () => {
-      const run = { state: /** @type {const} */ ('waiting'), message: null };
+      const run = { state: /** @type {const} */ ('waiting'), message: null, terminal: null };
       const el = await fixture(
         html`<acp-session-banner .notice=${notice([method({ id: 'chat-gpt', name: 'ChatGPT' })])} .signInRun=${run} .permission=${null}></acp-session-banner>`,
       );
@@ -115,7 +139,7 @@ describe('acp-session-banner', () => {
     });
 
     it('says why a sign-in failed and offers it again', async () => {
-      const run = { state: /** @type {const} */ ('failed'), message: 'login failed' };
+      const run = { state: /** @type {const} */ ('failed'), message: 'login failed', terminal: null };
       const el = await fixture(
         html`<acp-session-banner .notice=${notice([method({ id: 'chat-gpt', name: 'ChatGPT' })])} .signInRun=${run} .permission=${null}></acp-session-banner>`,
       );

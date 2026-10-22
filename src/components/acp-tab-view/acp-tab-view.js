@@ -612,7 +612,7 @@ export class AcpTabView extends LitElement {
     }
     if (tab.kind === 'terminal') {
       const info = this.terminals[terminalOfTab(tab.id) ?? ''];
-      return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, tooltip: info?.cwd ?? 'Terminal' };
+      return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, tooltip: info?.login ?? info?.cwd ?? 'Terminal' };
     }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
     const name = basename(tab.path);

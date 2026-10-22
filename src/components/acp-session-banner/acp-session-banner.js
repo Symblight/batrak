@@ -7,7 +7,7 @@ import styles from './acp-session-banner.css?inline';
 /** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('../../models/types.js').SessionSignIn} SessionSignIn */
 /** @typedef {import('../../models/types.js').SignInRun} SignInRun */
-/** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice' | 'open-terminal'} SessionAction */
+/** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice' | 'open-terminal' | 'show-login'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */
 const VARIANTS = OPTION_VARIANTS;
@@ -70,13 +70,18 @@ export class AcpSessionBanner extends LitElement {
   #renderSignIn(signIn) {
     const { agentId } = signIn;
     if (this.signInRun?.state === 'waiting') {
-      return html`<md-button
-        slot="actions"
-        class="acp-session-banner__action"
-        variant="text"
-        @click=${() => this.#emit('acp-agent-sign-in-cancel', { agentId })}
-        >Cancel</md-button
-      >`;
+      return html`${this.signInRun.terminal
+          ? html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('show-login')}>
+              Show terminal
+            </md-button>`
+          : nothing}
+        <md-button
+          slot="actions"
+          class="acp-session-banner__action"
+          variant="text"
+          @click=${() => this.#emit('acp-agent-sign-in-cancel', { agentId })}
+          >Cancel</md-button
+        >`;
     }
     const own = ownSignIns(signIn);
     const signInWith = (/** @type {string | null} */ methodId) => this.#emit('acp-agent-sign-in', { agentId, methodId });
@@ -114,6 +119,7 @@ export class AcpSessionBanner extends LitElement {
   #signInLabel(notice) {
     const signIn = /** @type {SessionSignIn} */ (notice.signIn);
     const run = this.signInRun;
+    if (run?.state === 'waiting' && run.terminal) return `Signing in to ${signIn.agentName}… Finish in the ${run.terminal.title} terminal.`;
     if (run?.state === 'waiting') return `Signing in to ${signIn.agentName}… Finish in your browser if it opened.`;
     if (run?.state === 'failed') return `Signing in to ${signIn.agentName} failed: ${run.message ?? 'unknown error'}`;
     if (!ownSignIns(signIn).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
@@ -188,12 +194,12 @@ export class AcpSessionBanner extends LitElement {
 }
 
 /**
- * The ways the agent signs in by itself (`authenticate`). A terminal login isn't run from here yet,
- * and an API key needs the agent's settings first.
+ * The ways to sign in from here: the agent's own (`authenticate`) and logins run in a terminal. An
+ * API key needs the agent's settings first.
  * @param {SessionSignIn} signIn
  */
 function ownSignIns(signIn) {
-  return signIn.methods.filter((m) => m.kind === 'agent' && m.apiKey === null);
+  return signIn.methods.filter((m) => m.apiKey === null);
 }
 
 customElements.define('acp-session-banner', AcpSessionBanner);

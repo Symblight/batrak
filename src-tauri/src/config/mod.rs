@@ -19,7 +19,7 @@ use serde::{Deserialize, Serialize};
 
 /// Tauri event after a project's agents.json changed on disk: `{ projectPath }`.
 pub const AGENTS_CHANGED_EVENT: &str = "agents://changed";
-/// How a sign-in goes (`agents_sign_in`): `{ projectPath, agentId, state, message }`.
+/// How a sign-in goes (`agents_sign_in`): `{ projectPath, agentId, state, message, terminal }`.
 pub const AGENTS_SIGN_IN_EVENT: &str = "agents://sign-in";
 
 pub const DIR: &str = ".brama";

@@ -214,6 +214,7 @@
  * @typedef {Object} SignInRun
  * @property {'waiting' | 'failed'} state
  * @property {string | null} message `failed`: why.
+ * @property {LoginTab | null} terminal The login's terminal, for a terminal method.
  */
 
 /**
@@ -223,6 +224,7 @@
  * @property {string} agentId
  * @property {'waiting' | 'done' | 'failed' | 'cancelled'} state
  * @property {string | null} message `done`: "Signed in to …"; `failed`: why.
+ * @property {LoginTab | null} terminal The login's terminal, for a terminal method.
  */
 
 /**
@@ -514,6 +516,8 @@
  * @property {TerminalStatus} status
  * @property {TerminalExit | null} exit Set once `exited`.
  * @property {string | null} error Why it didn't start, once `failed`.
+ * @property {string | null} login A sign-in's login (what it runs, the tab's tooltip): the backend
+ *   started it, and the sign-in, not Restart, runs it again.
  */
 
 /**

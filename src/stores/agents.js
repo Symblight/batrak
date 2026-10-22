@@ -59,9 +59,10 @@ function signInKey(projectPath, agentId) {
  * How a sign-in goes: a running or failed one is kept, a done or cancelled one forgotten.
  * @param {SignInEvent} event
  */
-export function noteSignIn({ projectPath, agentId, state, message }) {
+export function noteSignIn({ projectPath, agentId, state, message, terminal }) {
   const { [signInKey(projectPath, agentId)]: _, ...rest } = $signIns.get();
-  $signIns.set(state === 'waiting' || state === 'failed' ? { ...rest, [signInKey(projectPath, agentId)]: { state, message } } : rest);
+  const kept = state === 'waiting' || state === 'failed';
+  $signIns.set(kept ? { ...rest, [signInKey(projectPath, agentId)]: { state, message, terminal } } : rest);
 }
 
 /**

@@ -263,9 +263,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   launch starts again and sends its held prompt. A `terminal` / `command` method (`acp/auth.rs`
   `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd
-  `<app data>/probe`); `agents_sign_in` returns its `LoginTab` for the page to show, exit 0 signs
-  in (`Sessions::login_ended`), another exit fails, closing it cancels. The page doesn't open that
-  tab yet (the banner offers Open terminal, then Retry).
+  `<app data>/probe`); `agents_sign_in` returns its `LoginTab` (also in `agents://sign-in`'s
+  `terminal`), which `openLoginTerminal()` shows as a running terminal tab (`TerminalInfo.login`:
+  its command line as tooltip, no Restart: the sign-in runs it again); exit 0 signs in
+  (`Sessions::login_ended`), another exit fails, closing the tab cancels. The banner offers every
+  method but API keys, says which terminal to finish in (Show terminal), and with no method at all
+  offers Open terminal, then Retry.
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project

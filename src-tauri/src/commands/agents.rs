@@ -74,7 +74,8 @@ pub async fn agents_probe_options(
 /// agent opens the browser), a `terminal` / `command` one as a login in a terminal this window
 /// owns, whose tab the page opens (the returned `LoginTab`); exit 0 there signs it in, closing
 /// it cancels. Returns once it started; how it went comes as `agents://sign-in` (`state`:
-/// `waiting`, then `done` / `failed` / `cancelled`), and a success also as `agents://changed`.
+/// `waiting`, then `done` / `failed` / `cancelled`; `terminal`: the login's tab), and a success
+/// also as `agents://changed`.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn agents_sign_in(
@@ -97,8 +98,9 @@ pub async fn agents_sign_in(
         }
     }
     let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
+    let terminal = tab.clone();
     let event = move |state: &str, message: Option<&str>| {
-        serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message })
+        serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message, "terminal": terminal })
     };
     let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, event("waiting", None));
     tauri::async_runtime::spawn(async move {

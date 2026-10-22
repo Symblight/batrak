@@ -33,10 +33,26 @@ export function openTerminal(cwd, fallback, label) {
   const projectPath = $workspace.get()?.path ?? null;
   $terminals.set({
     ...$terminals.get(),
-    [id]: { cwd, fallback, label, title: null, projectPath, status: 'starting', exit: null, error: null },
+    [id]: { cwd, fallback, label, title: null, projectPath, status: 'starting', exit: null, error: null, login: null },
   });
   openTab(terminalTabId(id));
   return id;
+}
+
+/**
+ * Shows a sign-in's login, which the backend started, as a terminal tab in the shown project
+ * (once: it's shown again as it is).
+ * @param {import('../models/types.js').LoginTab} tab
+ */
+export function openLoginTerminal({ terminalId, title, commandLine }) {
+  if (!$terminals.get()[terminalId]) {
+    const projectPath = $workspace.get()?.path ?? null;
+    $terminals.set({
+      ...$terminals.get(),
+      [terminalId]: { cwd: '', fallback: null, label: title, title: null, projectPath, status: 'running', exit: null, error: null, login: commandLine },
+    });
+  }
+  openTab(terminalTabId(terminalId));
 }
 
 /**

@@ -24,6 +24,7 @@ import { $agentList, $agentsPending, $agentsQuery, $agentsView, noteSignIn, whil
 import { notify } from '../stores/notices.js';
 import { cacheAgentOptions, hasAgentOptions } from '../stores/composer.js';
 import { openTab } from '../stores/editor.js';
+import { openLoginTerminal } from '../stores/terminals.js';
 import { $workspacePath } from '../stores/workspace.js';
 
 /** @typedef {import('../models/types.js').NewAgent} NewAgent */
@@ -75,7 +76,8 @@ export class AgentConfig {
   async signIn(agentId, methodId) {
     const projectPath = $workspacePath.get();
     try {
-      await agentsSignIn(projectPath, agentId, methodId);
+      const login = await agentsSignIn(projectPath, agentId, methodId);
+      if (login) openLoginTerminal(login);
     } catch (err) {
       reportError(`Signing in to ${this.#nameOf(agentId)} failed`, err);
     }

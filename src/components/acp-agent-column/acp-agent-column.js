@@ -24,6 +24,7 @@ import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
+import { openLoginTerminal } from '../../stores/terminals.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
@@ -154,6 +155,10 @@ export class AcpAgentColumn extends LitElement {
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
     else if (action === 'open-terminal') terminalController.sessionTerminal(id);
+    else if (action === 'show-login') {
+      const terminal = this.#signInRun()?.terminal;
+      if (terminal) openLoginTerminal(terminal);
+    }
     else if (action === 'restart') sessionController.restart(id);
     else if (action === 'turn-on-agent') {
       const agentId = $sessionNotices.get()[id]?.offAgent;
