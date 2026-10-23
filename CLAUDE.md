@@ -206,10 +206,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     and waits for no trust; `defaultAgent` is the effective one (the file's if it's on, else the
     first that's on). `agents_set_enabled` goes through `emit_changed` and returns how many
     sessions turning off stops (the snackbar counts them).
-  - **The ACP registry** (`config/registry.rs`, the only user of `ureq`; spec as above): a snapshot
-    is bundled (`config/registry.json`, refreshed by hand at release), the last answer kept in
-    `<app data>/acp-registry.json` with its `ETag` and checked again when a day old (launch, an
-    hourly look, Check now: `agents_registry_check`), one check at a time, 15 s; a failure keeps
+  - **The ACP registry** (`config/registry.rs`, the only user of `ureq`; spec as above): nothing
+    is bundled; it is fetched at the first launch, the last answer kept in
+    `<app data>/acp-registry.json` with its `ETag` and checked again when a day old (launch, a
+    look every minute, Check now: `agents_registry_check`); until it first answers no agent is
+    known (the tab lists nothing and says so) and it is tried every minute (`RETRY_EVERY`).
+    One check at a time, 15 s; a failure keeps
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
     `projectPath: null`. Only Claude, Codex, Copilot and Antigravity are read from it
     (`registry::SUPPORTED`; the rest are left out), and can be added (`AgentList.known`, pinned

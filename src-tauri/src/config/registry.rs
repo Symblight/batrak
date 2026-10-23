@@ -1,7 +1,7 @@
 //! The ACP agent registry (`cdn.agentclientprotocol.com`): the agents Settings offers to add and
-//! the versions installed agents are checked against. A snapshot is bundled (refreshed by hand at
-//! release), so the list is there offline; the last fetched body is kept in app data
-//! (`acp-registry.json`) and checked again daily, with its `ETag`.
+//! the versions installed agents are checked against. Nothing is bundled: it is fetched at the
+//! first launch, the last body kept in app data (`acp-registry.json`) and checked again daily, with
+//! its `ETag`; until it first answers the list is empty and a check is tried again every minute.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -15,8 +15,9 @@ use serde::{Deserialize, Serialize};
 pub const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 /// How old the last check may be before the next.
 pub const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
+/// How soon a registry that never answered is asked again.
+pub const RETRY_EVERY: Duration = Duration::from_secs(60);
 const TIMEOUT: Duration = Duration::from_secs(15);
-const BUNDLED: &str = include_str!("registry.json");
 
 /// One agent of the registry that Brama can run or show.
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -310,7 +311,7 @@ pub fn update_of(matched: &Matched<'_>, reported: Option<&str>) -> Option<AgentU
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryState {
-    /// When it last answered (ISO 8601), `None`: never, the bundled snapshot is in use.
+    /// When it last answered (ISO 8601), `None`: never.
     pub checked_at: Option<String>,
     /// The last check failed.
     pub offline: bool,
@@ -356,7 +357,7 @@ impl Fetch for Http {
     }
 }
 
-/// No network: the bundled snapshot stays.
+/// No network: nothing is fetched.
 struct Offline;
 
 impl Fetch for Offline {
@@ -380,6 +381,8 @@ struct State {
     body: String,
     etag: Option<String>,
     checked_at: Option<i64>,
+    /// When the last check ended, answered or not (Unix milliseconds).
+    tried_at: Option<i64>,
     offline: bool,
     checking: bool,
 }
@@ -408,17 +411,17 @@ impl Registry {
     /// A registry of `text`, never fetched.
     #[cfg(test)]
     pub fn of(text: &str) -> Registry {
-        let registry = Registry::bundled();
+        let registry = Registry::empty();
         registry.lock().agents = Arc::new(parse(text).unwrap());
         registry
     }
 
-    /// The bundled snapshot, never fetched.
-    pub fn bundled() -> Registry {
+    /// No agents, never fetched.
+    pub fn empty() -> Registry {
         Registry::new(None, Arc::new(Offline))
     }
 
-    /// The registry kept in `cache` (the bundled snapshot until a check answers), fetched with `fetch`.
+    /// The registry kept in `cache` (empty until a check answers), fetched with `fetch`.
     pub fn new(cache: Option<PathBuf>, fetch: Arc<dyn Fetch>) -> Registry {
         let cache = cache.map(crate::storage::JsonFile::new);
         let stored: CacheFile = cache.as_ref().map(|file| file.load()).unwrap_or_default();
@@ -428,14 +431,16 @@ impl Registry {
                 body: stored.body,
                 etag: stored.etag,
                 checked_at: stored.checked_at,
+                tried_at: None,
                 offline: false,
                 checking: false,
             },
             Err(_) => State {
-                agents: Arc::new(parse(BUNDLED).unwrap_or_default()),
-                body: BUNDLED.to_owned(),
+                agents: Arc::default(),
+                body: String::new(),
                 etag: None,
                 checked_at: None,
+                tried_at: None,
                 offline: false,
                 checking: false,
             },
@@ -472,9 +477,19 @@ impl Registry {
         }
     }
 
-    /// Whether the last answer is older than `CHECK_EVERY` (or there was none).
+    /// Whether the last answer is older than `CHECK_EVERY`, or, with none yet, the last try is
+    /// older than `RETRY_EVERY`.
     pub fn due(&self) -> bool {
-        self.lock().checked_at.is_none_or(|at| now_millis() - at >= CHECK_EVERY.as_millis() as i64)
+        self.due_at(now_millis())
+    }
+
+    fn due_at(&self, now: i64) -> bool {
+        let state = self.lock();
+        match (state.checked_at, state.tried_at) {
+            (Some(at), _) => now - at >= CHECK_EVERY.as_millis() as i64,
+            (None, Some(at)) => now - at >= RETRY_EVERY.as_millis() as i64,
+            (None, None) => true,
+        }
     }
 
     /// Asks the registry whether it changed since the last answer. Returns whether the list did;
@@ -503,6 +518,7 @@ impl Registry {
     fn take(&self, fetched: Result<Fetched, String>) -> bool {
         let mut state = self.lock();
         state.checking = false;
+        state.tried_at = Some(now_millis());
         let (agents, body, etag) = match fetched.and_then(|f| match f {
             Fetched::NotModified => Ok(None),
             Fetched::Body { text, etag } => parse(&text).map(|agents| Some((agents, text, etag))),
@@ -630,18 +646,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn the_bundled_snapshot_parses() {
-        let agents = parse(BUNDLED).unwrap();
-        let mut ids: Vec<_> = agents.iter().map(|a| a.id.as_str()).collect();
-        ids.sort_unstable();
-        assert_eq!(ids, ["antigravity-acp", "claude-acp", "codex-acp", "github-copilot-cli"], "every supported agent, nothing else");
-        let claude = agents.iter().find(|a| a.id == "claude-acp").unwrap();
-        assert!(matches!(&claude.launch, Launch::Npx(npx) if npx.package == "@agentclientprotocol/claude-agent-acp"));
-        let antigravity = agents.iter().find(|a| a.id == "antigravity-acp").unwrap();
-        assert!(matches!(&antigravity.launch, Launch::Program(p) if p.command.starts_with("agy_acp_server.")));
-    }
-
-    #[test]
     fn known_agents_are_pinned_to_the_registrys_version() {
         let agents = parse(FIXTURE).unwrap();
         let known: Vec<_> = agents.iter().map(RegistryAgent::known).collect();
@@ -704,7 +708,7 @@ pub(crate) mod tests {
         let registry = Registry::new(Some(cache.clone()), script.clone());
         assert!(registry.due(), "never checked");
         assert_eq!(registry.state().checked_at, None);
-        assert!(ids(&registry).contains(&"claude-acp".to_owned()), "the bundled snapshot meanwhile");
+        assert!(ids(&registry).is_empty(), "nothing until the registry answers");
 
         assert!(registry.check().await, "changed");
         assert_eq!(ids(&registry), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
@@ -732,6 +736,23 @@ pub(crate) mod tests {
         assert_eq!(ids(&registry).len(), 4);
         registry.check().await;
         assert!(!registry.state().offline, "back");
+    }
+
+    #[tokio::test]
+    async fn a_registry_that_never_answered_is_tried_again_soon() {
+        let script = Script::new(vec![Err("dns error".into()), body(FIXTURE, "\"a\""), Err("dns error".into())]);
+        let registry = Registry::new(None, script);
+        let now = now_millis();
+        assert!(registry.due_at(now), "first launch");
+        assert!(!registry.check().await);
+        assert!(registry.state().offline);
+        assert!(!registry.due_at(now), "not at once");
+        assert!(registry.due_at(now + RETRY_EVERY.as_millis() as i64 + 1), "but well before a day");
+
+        assert!(registry.check().await);
+        assert!(!registry.check().await);
+        assert!(!registry.due_at(now + RETRY_EVERY.as_millis() as i64 + 1), "once it answered, a failure waits a day");
+        assert_eq!(ids(&registry).len(), 4, "the last answer stays");
     }
 
     /// Network: `cargo test --lib real_registry -- --ignored`.

@@ -249,6 +249,18 @@ describe('acp-agents-view', () => {
     expect(none.querySelector('md-button.acp-agents-view__empty-add'), 'no custom agent').to.equal(null);
   });
 
+  it('says when the registry has not answered yet', async () => {
+    const never = { ...VIEW, installed: [], userAgents: [], registry: [], registryState: { checkedAt: null, offline: false, checking: true } };
+    const { root } = await render({ view: never });
+    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__empty')))).to.equal('Getting the agents from the ACP registry…');
+    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer-state')))).to.contain('Not checked yet');
+    const offline = { ...never, registryState: { checkedAt: null, offline: true, checking: false } };
+    const { root: away } = await render({ view: offline });
+    expect(text(/** @type {Element} */ (away.querySelector('.acp-agents-view__empty')))).to.equal(
+      'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.',
+    );
+  });
+
   it('shows the registry or an agent when asked, and says when it has', async () => {
     const { el, root } = await render();
     const revealed = heard(el, 'acp-agents-revealed');

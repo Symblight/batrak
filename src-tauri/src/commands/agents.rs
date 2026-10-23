@@ -373,11 +373,11 @@ async fn check_registry(app: &AppHandle, registry: &Registry) {
     }
 }
 
-/// Checks the registry in the background whenever the last answer is a day old: at launch, then
-/// as the app keeps running (asleep or not, a check is never more than an hour late).
+/// Checks the registry in the background whenever it is due (`Registry::due`): at launch, then
+/// as the app keeps running (asleep or not, a check is never more than a minute late).
 pub(crate) fn check_registry_daily(app: AppHandle, registry: Registry) {
     tauri::async_runtime::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_secs(60 * 60));
+        let mut tick = tokio::time::interval(crate::config::registry::RETRY_EVERY);
         loop {
             tick.tick().await;
             if registry.due() {

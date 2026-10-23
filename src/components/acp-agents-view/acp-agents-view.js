@@ -496,9 +496,19 @@ export class AcpAgentsView extends LitElement {
   /** @param {AgentsView} view */
   #renderEmpty(view) {
     const query = this.query.query.trim();
-    if (!query || view.installed.length || view.userAgents.length || view.registry.length) return nothing;
+    if (view.installed.length || view.userAgents.length || view.registry.length) return nothing;
+    const { checkedAt, offline } = view.registryState;
+    // Agents are known only from the registry, so before its first answer nothing is listed.
+    const note = !checkedAt
+      ? offline
+        ? 'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.'
+        : 'Getting the agents from the ACP registry…'
+      : query
+        ? `No agents match “${query}”.`
+        : null;
+    if (!note) return nothing;
     return html`<div class="acp-agents-view__empty">
-      <p class="acp-agents-view__note">No agents match “${query}”.</p>
+      <p class="acp-agents-view__note">${note}</p>
     </div>`;
   }
 
@@ -508,7 +518,7 @@ export class AcpAgentsView extends LitElement {
     const checking = view.registryState.checking || this.pending.checking;
     const when = checkedAt
       ? `Last checked ${new Date(checkedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
-      : 'Not checked yet: the list shipped with Brama is in use';
+      : 'Not checked yet';
     return html`<footer class="acp-agents-view__footer">
       <p class="acp-agents-view__footer-text">
         Versions are checked against the ACP registry daily. Running sessions keep their version until restarted.

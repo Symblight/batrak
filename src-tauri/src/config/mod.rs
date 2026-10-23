@@ -606,13 +606,13 @@ impl AgentConfigs {
             trust_file,
             versions_file,
             switches_file,
-            registry: registry::Registry::bundled(),
+            registry: registry::Registry::empty(),
             inner: Arc::new(Mutex::new(inner)),
             edits: Arc::default(),
         }
     }
 
-    /// Checks versions against `registry` and offers its agents (the bundled snapshot by default).
+    /// Checks versions against `registry` and offers its agents (none by default).
     pub fn with_registry(mut self, registry: registry::Registry) -> AgentConfigs {
         self.registry = registry;
         self
