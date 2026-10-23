@@ -285,7 +285,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   window's `$signIns`) and why one failed; an agent added there is probed at once and the snackbar
   offers Sign in when it asks for one; the picker says "Needs sign-in" (`AgentSummary.signIn`,
   from `Sessions::agent_list`).
-- **Sessions** (`src-tauri/src/session/`): the agents own the sessions (spec:
+- **Sessions** (`src-tauri/src/session/`; `runtime.rs` holds `Sessions` and the lifecycle calls,
+  `runtime/` one module per concern, each adding to `Sessions` / `Inner`: `api`, `state`, `start`,
+  `turn`, `sign_in`, `agents`, `host`, `worktree`, `sync`, `slots`): the agents own the sessions (spec:
   `docs/specs/session-sync.md`). `Sessions::sync` (`session/runtime/sync.rs`, `sessions_sync` →
   `sessions://synced` to every window) asks each agent of a project that's on, trusted and not
   waiting for a sign-in for its sessions there (`acp::Catalog`: `initialize` + `session/list` of
@@ -320,7 +322,7 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   interrupted in, sets `prepare_cancel` and `prepare` undoes it); its cwd is the project's folder in it. No
   repository, no commit or an unknown base refuses the create. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
-  `HOOK(git)` comments in `run_turn` mark the checkpoint points. `Sessions::remove` (session row
+  `HOOK(git)` comments in `try_turn` (`session/runtime/turn.rs`) mark the checkpoint points. `Sessions::remove` (session row
   menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or
   keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
   (its log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
