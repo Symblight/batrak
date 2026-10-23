@@ -1,9 +1,14 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
+import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import '@symblight/wc-material/icon';
+import '@symblight/wc-material/icon-button';
+import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { gitController } from '../../services/git-controller.js';
-import { gitLastCommitMessage, listDir } from '../../services/ipc.js';
+import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc.js';
 import { log } from '../../services/logger.js';
+import { reportError } from '../../services/notices.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionRootController } from '../../services/session-root-controller.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
@@ -30,6 +35,7 @@ const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };
 export class AcpFileColumn extends LitElement {
   static properties = {
     sideView: { state: true },
+    refreshing: { state: true },
   };
 
   static styles = styles;
@@ -64,6 +70,8 @@ export class AcpFileColumn extends LitElement {
     super();
     /** @type {SideView} */
     this.sideView = 'files';
+    /** A Refresh of the tree is running. */
+    this.refreshing = false;
   }
 
   connectedCallback() {
@@ -125,6 +133,23 @@ export class AcpFileColumn extends LitElement {
     this.sideView = 'changes';
   }
 
+  /** Scans the tree's root again, then lists its open folders again: for changes the watcher missed. */
+  async #refreshTree() {
+    const { rootId } = $treeRoot.get();
+    if (rootId === null || this.refreshing) return;
+    this.refreshing = true;
+    try {
+      await rescanWorkspace(rootId);
+      if ($treeRoot.get().rootId === rootId) {
+        this.renderRoot.querySelector('acp-file-tree')?.reload(['', ...$expandedFolders.get()]);
+      }
+    } catch (err) {
+      reportError('Refresh failed', err);
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
   /** @param {Event} e */
   #onSearch(e) {
     const { options, delay } = /** @type {CustomEvent<{ options: SearchOptions, delay: number }>} */ (e).detail;
@@ -162,7 +187,20 @@ export class AcpFileColumn extends LitElement {
     const search = this.#search;
     const tree = this.#treeRoot.value;
     return html`
-      <h2 class="acp-file-column__title">${SIDE_TITLES[this.sideView]}</h2>
+      <div class="acp-file-column__header">
+        <h2 class="acp-file-column__title">${SIDE_TITLES[this.sideView]}</h2>
+        ${this.sideView === 'files' && tree.rootId !== null
+          ? html`<md-icon-button
+              class="acp-file-column__refresh"
+              title="Refresh"
+              aria-label="Refresh files"
+              ?disabled=${this.refreshing}
+              @click=${this.#refreshTree}
+            >
+              <md-icon class="acp-file-column__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
+            </md-icon-button>`
+          : nothing}
+      </div>
       <acp-file-tree
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'files'}

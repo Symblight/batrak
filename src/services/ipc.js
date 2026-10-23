@@ -506,6 +506,15 @@ export function listDir(rootId, path) {
 }
 
 /**
+ * Scans a root again from disk, for changes its watcher missed; they arrive as `workspace://changed`.
+ * @param {string} rootId
+ * @returns {Promise<void>}
+ */
+export function rescanWorkspace(rootId) {
+  return invoke('rescan_workspace', { rootId });
+}
+
+/**
  * Subscribes to snapshot changes made by the file watcher.
  * @param {(changes: WorkspaceChanges) => void} callback
  * @returns {Promise<() => void>} Unsubscribe.

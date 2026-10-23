@@ -18,12 +18,9 @@ const DEBOUNCE: Duration = Duration::from_millis(150);
 /// Files whose change can flip the ignore status of anything below them.
 const IGNORE_FILES: &[&str] = &[".gitignore", ".ignore"];
 
-/// Watches the root recursively; `on_change` runs on the debouncer thread after each batch
+/// Watches the root recursively; its `on_change` runs on the debouncer thread after each batch
 /// that changed the snapshot.
-pub fn start(
-    root: &Arc<Root>,
-    on_change: impl Fn(&Root, Changes) + Send + 'static,
-) -> Result<Debouncer<RecommendedWatcher, NoCache>, String> {
+pub fn start(root: &Arc<Root>) -> Result<Debouncer<RecommendedWatcher, NoCache>, String> {
     let weak: Weak<Root> = Arc::downgrade(root);
     // NoCache: we never match renames by file id, and the default cache would walk
     // the whole tree (node_modules included) up front.
@@ -39,9 +36,10 @@ pub fn start(
                     return;
                 }
             };
+            let _batch = super::lock(&root.batch);
             let changes = apply(&root, &events);
             if !changes.is_empty() {
-                on_change(&root, changes);
+                (root.on_change)(&root, changes);
             }
         },
         NoCache,

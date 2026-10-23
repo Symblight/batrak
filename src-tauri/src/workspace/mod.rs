@@ -75,6 +75,9 @@ fn sessions_changed(app: &AppHandle, project: &Path, changes: &Changes) {
     }
 }
 
+/// Hears a root's changed snapshot, on the watcher's thread or a rescan's.
+type OnChange = Box<dyn Fn(&Root, Changes) + Send + Sync>;
+
 pub struct Root {
     pub id: String,
     pub path: PathBuf,
@@ -83,6 +86,12 @@ pub struct Root {
     /// A worktree session's folder for the Files tree, not a project: its `.brama/` configures nothing.
     session: bool,
     pub snapshot: RwLock<Snapshot>,
+    /// Hears every batch that changed the snapshot: the watcher's and a `rescan`'s.
+    on_change: OnChange,
+    /// Held through a whole batch (scan, patch, `on_change`) by the watcher and by `rescan`, which
+    /// run on different threads: a rescan's older scan must not replace what the watcher applied
+    /// meanwhile, and batches reach `on_change` in order.
+    batch: Mutex<()>,
     watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
     /// Most recent first, at most `quick_open::RECENT_CAPACITY`.
     recent: Mutex<VecDeque<String>>,
@@ -143,6 +152,20 @@ impl Root {
 
     pub fn cancel_search(&self) {
         lock(&self.search_cancel).store(true, Ordering::Relaxed);
+    }
+
+    /// Scans the whole root again (the Files column's Refresh), for changes the watcher missed,
+    /// and reports them as the watcher would. Blocking.
+    pub fn rescan(&self) {
+        let _batch = lock(&self.batch);
+        let Some(fresh) = Snapshot::scan_until(&self.path, &self.closed) else { return };
+        let mut changes = Changes::default();
+        self.write().replace_with(fresh, &mut changes);
+        // Whatever was missed may have changed git's answers too.
+        self.bump_epoch();
+        if !changes.is_empty() {
+            (self.on_change)(self, changes);
+        }
     }
 }
 
@@ -217,7 +240,7 @@ impl Workspaces {
         group: &str,
         cancel: &AtomicBool,
         session: bool,
-        on_change: impl Fn(&Root, Changes) + Send + 'static,
+        on_change: impl Fn(&Root, Changes) + Send + Sync + 'static,
     ) -> Result<Arc<Root>, String> {
         // FSEvents reports canonical paths (e.g. /private/var), so the root must be canonical too.
         // `dunce` keeps it a plain `C:\…` on Windows: relative paths are joined to it with `/`.
@@ -240,6 +263,8 @@ impl Workspaces {
         let root = Arc::new(Root {
             id: id.clone(),
             snapshot: RwLock::new(snapshot),
+            on_change: Box::new(on_change),
+            batch: Mutex::new(()),
             path,
             group: group.to_owned(),
             session,
@@ -252,7 +277,7 @@ impl Workspaces {
             git: GitCache::default(),
         });
         // Started after the scan: a change in between is picked up by the next event in that folder.
-        let watcher = watcher::start(&root, on_change)?;
+        let watcher = watcher::start(&root)?;
         *lock(&root.watcher) = Some(watcher);
         lock(&self.roots).insert(id, Arc::clone(&root));
         Ok(root)
@@ -322,6 +347,70 @@ mod tests {
         let newer = workspaces.begin_open(&session_key("main"));
         assert!(session.load(Ordering::Relaxed), "a newer session root cancels the older one");
         assert!(!project.load(Ordering::Relaxed) && !newer.load(Ordering::Relaxed));
+    }
+
+    #[test]
+    fn a_rescan_finds_what_the_watcher_missed_and_reports_it() {
+        let base = std::env::temp_dir().join(format!("brama-rescan-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("src")).unwrap();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let workspaces = Workspaces::default();
+        let root =
+            workspaces.open_with(&base, "main", &AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap()).unwrap();
+        // No watcher: every change from here on is one it missed.
+        lock(&root.watcher).take();
+        std::fs::write(base.join("src/missed.rs"), "").unwrap();
+        let epoch = root.epoch();
+
+        root.rescan();
+
+        assert!(root.read().files().any(|e| e.path == "src/missed.rs"));
+        assert!(root.epoch() > epoch, "cached git state is computed again");
+        let changes = rx.try_recv().expect("the rescan's changes are reported");
+        assert_eq!(changes.added, ["src/missed.rs"]);
+        assert!(changes.dirs.contains("src"));
+
+        root.rescan();
+        assert!(rx.try_recv().is_err(), "nothing changed, nothing reported");
+        workspaces.close(&root.id);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn a_watcher_batch_waits_for_a_rescan_in_progress() {
+        let base = std::env::temp_dir().join(format!("brama-rescan-race-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("src")).unwrap();
+        let rescanning = std::thread::current().id();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let workspaces = Workspaces::default();
+        let root = workspaces
+            .open_with(&base, "main", &AtomicBool::new(false), false, {
+                let base = base.clone();
+                move |root, _| {
+                    if std::thread::current().id() != rescanning {
+                        return;
+                    }
+                    // A change the watcher hears while the rescan is still reporting its own.
+                    std::fs::write(base.join("src/during.rs"), "").unwrap();
+                    std::thread::sleep(std::time::Duration::from_millis(800));
+                    tx.send(root.read().files().any(|e| e.path == "src/during.rs")).unwrap();
+                }
+            })
+            .unwrap();
+        std::fs::write(base.join("src/before.rs"), "").unwrap();
+
+        root.rescan();
+
+        assert!(!rx.try_recv().unwrap(), "the watcher's batch didn't patch the snapshot mid-rescan");
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        while !root.read().files().any(|e| e.path == "src/during.rs") {
+            assert!(Instant::now() < deadline, "the watcher's batch applies after the rescan");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        workspaces.close(&root.id);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]

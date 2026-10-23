@@ -127,6 +127,7 @@ pub fn run() {
             commands::workspace::close_workspace,
             commands::workspace::close_window_workspaces,
             commands::workspace::list_dir,
+            commands::workspace::rescan_workspace,
             commands::workspace::quick_open,
             commands::workspace::note_file_opened,
             commands::workspace::find_in_files,

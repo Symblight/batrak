@@ -197,7 +197,18 @@ impl Snapshot {
     }
 
     /// Diffs a fresh full scan against this snapshot, then becomes it.
-    pub fn replace_with(&mut self, fresh: Snapshot, changes: &mut Changes) {
+    pub fn replace_with(&mut self, mut fresh: Snapshot, changes: &mut Changes) {
+        // A full scan doesn't enter ignored folders: load again the ones the tree loaded (one level
+        // each, parents first), so their files aren't reported removed.
+        let mut loaded: Vec<&String> =
+            self.children.keys().filter(|dir| self.entries.get(*dir).is_some_and(|e| e.ignored)).collect();
+        loaded.sort_by_key(|dir| dir.matches('/').count());
+        for dir in loaded {
+            let still = fresh.entries.get(dir).is_some_and(|e| e.is_dir && e.ignored);
+            if still && fresh.is_loaded(parent_of(dir)) && !fresh.is_loaded(dir) {
+                let _ = fresh.load_ignored_dir(dir);
+            }
+        }
         for (path, old) in &self.entries {
             match fresh.entries.get(path) {
                 None => {
@@ -479,6 +490,31 @@ mod tests {
 
         snap.load_ignored_dir("node_modules").unwrap();
         assert_eq!(snap.list_dir("node_modules").unwrap()[0].name, "pkg");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_full_scan_keeps_the_ignored_folders_the_tree_loaded() {
+        let root = temp_root("replace-ignored");
+        fs::write(root.join("node_modules/pkg/gone.js"), "").unwrap();
+        let mut snap = Snapshot::scan(&root);
+        snap.load_ignored_dir("node_modules").unwrap();
+        snap.load_ignored_dir("node_modules/pkg").unwrap();
+
+        fs::write(root.join("node_modules/pkg/index.js"), "changed").unwrap();
+        fs::remove_file(root.join("node_modules/pkg/gone.js")).unwrap();
+        let mut changes = Changes::default();
+        snap.replace_with(Snapshot::scan(&root), &mut changes);
+
+        assert_eq!(changes.removed, ["node_modules/pkg/gone.js"], "only what left the disk");
+        assert_eq!(changes.modified, ["node_modules/pkg/index.js"]);
+        assert_eq!(snap.list_dir("node_modules/pkg").unwrap().len(), 1, "still loaded");
+
+        fs::remove_dir_all(root.join("node_modules")).unwrap();
+        let mut changes = Changes::default();
+        snap.replace_with(Snapshot::scan(&root), &mut changes);
+        assert!(changes.removed.contains(&"node_modules/pkg/index.js".to_owned()));
+        assert!(!snap.is_loaded("node_modules"));
         fs::remove_dir_all(root).unwrap();
     }
 }

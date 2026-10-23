@@ -83,6 +83,15 @@ pub async fn close_window_workspaces(window: Window, workspaces: State<'_, Works
     Ok(())
 }
 
+/// Scans a root again from disk (the Files column's Refresh); what changed goes out as
+/// `workspace://changed`, like the watcher's batches.
+#[tauri::command]
+pub async fn rescan_workspace(workspaces: State<'_, Workspaces>, root_id: String) -> Result<(), String> {
+    let root = workspaces.get(&root_id)?;
+    tracing::info!(path = %root.path.display(), "rescan root");
+    blocking(move || root.rescan()).await
+}
+
 /// Children of a directory (`""` = the root). Ignored directories are read on first request.
 #[tauri::command]
 pub async fn list_dir(workspaces: State<'_, Workspaces>, root_id: String, path: String) -> Result<Vec<Entry>, String> {
