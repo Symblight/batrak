@@ -303,6 +303,16 @@ export class AcpAgentsView extends LitElement {
       ${tooltip(tipId('update', agent.id), agent.update.pin ? 'Its version is unknown: pin the registry’s in agents.json' : `Pin ${agent.update.to} in agents.json`)}`;
   }
 
+  /**
+   * A row's error: one line, the whole of it in a tooltip.
+   * @param {string} id
+   * @param {string} message
+   */
+  #renderError(id, message) {
+    return html`<div id=${id} class="acp-agents-view__error" role="alert">${message}</div>
+      ${tooltip(id, message)}`;
+  }
+
   /** @param {AgentRow} agent */
   #renderSignIn(agent) {
     if (agent.status !== 'signIn' || !agent.signIn) return nothing;
@@ -368,9 +378,7 @@ export class AcpAgentsView extends LitElement {
           ${agent.isDefault ? html`<span id=${tipId('default', agent.id)} class="acp-agents-view__default">Default</span>` : nothing}
         </div>
         <div class="acp-agents-view__details">${this.#renderDetails(agent)}</div>
-        ${failed?.state === 'failed'
-          ? html`<div class="acp-agents-view__error" role="alert">Signing in failed: ${failed.message ?? 'unknown error'}</div>`
-          : nothing}
+        ${failed?.state === 'failed' ? this.#renderError(tipId('sign-in-error', agent.id), `Signing in failed: ${failed.message ?? 'unknown error'}`) : nothing}
       </div>
       ${this.#renderSignIn(agent)} ${this.#renderUpdate(agent)}
       <md-switch
@@ -459,7 +467,7 @@ export class AcpAgentsView extends LitElement {
           <span class="acp-agents-view__name">${this.#renderName(entry.name, entry.nameMatches)}</span>
         </div>
         <div class="acp-agents-view__details">${details}</div>
-        ${error ? html`<div class="acp-agents-view__error" role="alert">${error}</div>` : nothing}
+        ${error ? this.#renderError(tipId('add-error', entry.id), error) : nothing}
       </div>
       <md-button
         id=${tipId('add', entry.id)}

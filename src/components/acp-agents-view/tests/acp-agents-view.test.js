@@ -207,7 +207,9 @@ describe('acp-agents-view', () => {
     expect(button(row(root, 'github-copilot-cli'), 'Adding…').disabled).to.equal(true);
     el.saveFinished('npx not found');
     await el.updateComplete;
-    expect(text(/** @type {Element} */ (row(root, 'github-copilot-cli').querySelector('.acp-agents-view__error')))).to.equal('npx not found');
+    const error = /** @type {Element} */ (row(root, 'github-copilot-cli').querySelector('.acp-agents-view__error'));
+    expect(text(error)).to.equal('npx not found');
+    expect(tooltipOf(root, error)).to.equal('npx not found');
 
     button(row(root, 'mine'), 'Add to project').click();
     button(root, 'Add all').click();
@@ -329,7 +331,9 @@ describe('acp-agents-view', () => {
       expect(signingIn.querySelector('md-progress-circular'), id).to.be.ok;
     }
     const codex = row(root, 'codex');
-    expect(text(/** @type {Element} */ (codex.querySelector('.acp-agents-view__error')))).to.equal('Signing in failed: Copilot Login exited with 1');
+    const failure = /** @type {Element} */ (codex.querySelector('.acp-agents-view__error'));
+    expect(text(failure)).to.equal('Signing in failed: Copilot Login exited with 1');
+    expect(tooltipOf(root, failure), 'one line: the whole of it in a tooltip').to.equal('Signing in failed: Copilot Login exited with 1');
     expect(button(codex, 'Sign in').disabled).to.equal(false);
   });
 
