@@ -2,15 +2,15 @@
 //! agent's requests (permissions, files).
 
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1::{
-    AuthCapabilities, AuthenticateRequest, CancelNotification, ClientCapabilities, ContentBlock, EmbeddedResource, EmbeddedResourceResource,
-    ErrorCode, FileSystemCapabilities, Implementation, InitializeRequest, LoadSessionRequest, McpServer,
-    NewSessionRequest, PromptRequest, ReadTextFileRequest, SessionConfigOption, SessionModeState,
+    AgentCapabilities, AuthCapabilities, AuthenticateRequest, CancelNotification, ClientCapabilities, ContentBlock, DeleteSessionRequest,
+    EmbeddedResource, EmbeddedResourceResource, ErrorCode, FileSystemCapabilities, Implementation, InitializeRequest,
+    InitializeResponse, ListSessionsRequest, LoadSessionRequest, McpServer, NewSessionRequest, ResumeSessionRequest, PromptRequest, ReadTextFileRequest, SessionConfigOption, SessionModeState,
     SetSessionConfigOptionRequest, SetSessionModeRequest, ReadTextFileResponse, RequestPermissionOutcome,
     RequestPermissionRequest, RequestPermissionResponse, ResourceLink, SelectedPermissionOutcome, SessionId,
     SessionNotification, TextContent, TextResourceContents, WriteTextFileRequest, WriteTextFileResponse,
@@ -68,10 +68,56 @@ pub struct Started {
     pub load_supported: bool,
     /// `resume` was asked for and the agent replayed it; `false` means a new ACP session.
     pub history_restored: bool,
+    /// `resume` was asked for and the agent continues it (`session/load`, or `session/resume`,
+    /// which replays nothing).
+    pub continued: bool,
     /// The session's config options (model, thought level, mode…) as ACP `SessionConfigOption`s.
     pub config_options: Vec<serde_json::Value>,
     /// `agentInfo.version` from `initialize`, when the agent sends it.
     pub agent_version: Option<String>,
+}
+
+/// What an agent can do with sessions besides `session/new`, from `initialize`.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct SessionCaps {
+    pub list: bool,
+    pub load: bool,
+    pub resume: bool,
+    pub delete: bool,
+}
+
+impl SessionCaps {
+    fn of(capabilities: &AgentCapabilities) -> SessionCaps {
+        let session = &capabilities.session_capabilities;
+        SessionCaps {
+            list: session.list.is_some(),
+            load: capabilities.load_session,
+            resume: session.resume.is_some(),
+            delete: session.delete.is_some(),
+        }
+    }
+}
+
+/// A session of the agent's, from `session/list`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ListedSession {
+    pub session_id: String,
+    pub cwd: PathBuf,
+    pub title: Option<String>,
+    /// ISO 8601, as the agent wrote it.
+    pub updated_at: Option<String>,
+}
+
+/// A folder's sessions; `complete` when every page was read (not cut at the cap).
+#[derive(Debug, Clone, PartialEq)]
+pub struct Listed {
+    pub sessions: Vec<ListedSession>,
+    pub complete: bool,
+}
+
+pub struct CatalogOptions {
+    pub agent_name: String,
+    pub initialize_timeout: Duration,
 }
 
 /// Id of the option standing in for an agent's legacy `modes` when it has no config options.
@@ -114,7 +160,8 @@ impl Drop for Connection {
 
 impl Connection {
     /// Handshake (`initialize`), then `session/load` of `resume` when the agent supports it, else
-    /// `session/new`. Updates replayed by a load reach `host` before this returns.
+    /// `session/resume` (nothing replayed), else `session/new`. Updates replayed by a load reach
+    /// `host` before this returns.
     pub async fn start<W, R>(
         writer: W,
         reader: R,
@@ -125,143 +172,11 @@ impl Connection {
         W: AsyncWrite + Send + Unpin + 'static,
         R: AsyncRead + Send + Unpin + 'static,
     {
-        let shared = Arc::new(Shared { host, pending: Mutex::default(), next_request: AtomicU64::new(0) });
-        let (cx_tx, cx_rx) = oneshot::channel();
-        let (closed_tx, closed_rx) = watch::channel(None);
-
-        let on_update = Arc::clone(&shared);
-        let on_permission = Arc::clone(&shared);
-        let on_read = Arc::clone(&shared);
-        let on_write = Arc::clone(&shared);
-        // Every callback returns quickly: they run inside the dispatch loop, which holds later
-        // messages (and the updates' order) until they finish. A permission waits for the user
-        // outside it, its responder parked in `pending`.
-        let builder = Client
-            .builder()
-            .name("brama")
-            .on_receive_notification(
-                async move |notification: SessionNotification, _cx| {
-                    match serde_json::to_value(&notification.update) {
-                        Ok(update) => on_update.host.on_update(update),
-                        Err(e) => tracing::warn!("unserializable session update: {e}"),
-                    }
-                    Ok(())
-                },
-                agent_client_protocol::on_receive_notification!(),
-            )
-            .on_receive_request(
-                async move |request: RequestPermissionRequest, responder: Responder<RequestPermissionResponse>, _cx| {
-                    let n = on_permission.next_request.fetch_add(1, Ordering::Relaxed) + 1;
-                    let request_id = format!("permission-{n}");
-                    let to_json = |value: Result<serde_json::Value, serde_json::Error>| value.unwrap_or_default();
-                    let tool_call = to_json(serde_json::to_value(&request.tool_call));
-                    let options = to_json(serde_json::to_value(&request.options));
-                    on_permission.pending().insert(request_id.clone(), responder);
-                    on_permission.host.on_permission_request(PermissionRequest { request_id, tool_call, options });
-                    Ok(())
-                },
-                agent_client_protocol::on_receive_request!(),
-            )
-            .on_receive_request(
-                async move |request: ReadTextFileRequest, responder: Responder<ReadTextFileResponse>, _cx| {
-                    let host = Arc::clone(&on_read.host);
-                    let read = tokio::task::spawn_blocking(move || {
-                        host.read_text_file(request.path, request.line, request.limit)
-                    })
-                    .await
-                    .unwrap_or_else(|e| Err(FsError::Io(e.to_string())));
-                    match read {
-                        Ok(content) => responder.respond(ReadTextFileResponse::new(content)),
-                        Err(e) => responder.respond_with_error(fs_error(e)),
-                    }
-                },
-                agent_client_protocol::on_receive_request!(),
-            )
-            .on_receive_request(
-                async move |request: WriteTextFileRequest, responder: Responder<WriteTextFileResponse>, _cx| {
-                    let host = Arc::clone(&on_write.host);
-                    let written = tokio::task::spawn_blocking(move || host.write_text_file(request.path, request.content))
-                        .await
-                        .unwrap_or_else(|e| Err(FsError::Io(e.to_string())));
-                    match written {
-                        Ok(()) => responder.respond(WriteTextFileResponse::new()),
-                        Err(e) => responder.respond_with_error(fs_error(e)),
-                    }
-                },
-                agent_client_protocol::on_receive_request!(),
-            );
-        // Anything else the agent asks (`terminal/*`, which we don't advertise, or a newer method)
-        // is answered with MethodNotFound by the dispatch loop itself.
-
-        let transport = ByteStreams::new(writer.compat_write(), reader.compat());
-        let driver = tokio::spawn(async move {
-            let result = builder
-                .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
-                    let _ = cx_tx.send(cx.clone());
-                    cx.incoming_closed().await;
-                    Ok(())
-                })
-                .await;
-            let reason = match result {
-                Ok(()) => "the agent closed its connection".to_owned(),
-                Err(e) => format!("connection to the agent failed: {}", e.message),
-            };
-            let _ = closed_tx.send(Some(reason));
-        });
-
-        let mut closed = closed_rx.clone();
-        let cx = tokio::select! {
-            cx = cx_rx => cx.map_err(|_| "the agent connection ended before it started".to_owned())?,
-            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
-        };
-
-        let initialize = InitializeRequest::new(ProtocolVersion::V1)
-            .client_capabilities(
-                ClientCapabilities::new()
-                    .fs(FileSystemCapabilities::new().read_text_file(true).write_text_file(true))
-                    .terminal(false)
-                    // A `terminal` method reruns the agent's launch in a Terminal tab; the meta
-                    // flag is for agents that still read Zed's pre-standard one.
-                    .auth(AuthCapabilities::new().terminal(true))
-                    .meta(serde_json::Map::from_iter([("terminal-auth".to_owned(), serde_json::Value::Bool(true))])),
-            )
-            .client_info(Implementation::new("brama", env!("CARGO_PKG_VERSION")));
-        let init = match tokio::time::timeout(opts.initialize_timeout, cx.send_request(initialize).block_task()).await
-        {
-            Err(_) => {
-                driver.abort();
-                return Err(format!("{} did not answer within {}s", opts.agent_name, opts.initialize_timeout.as_secs()).into());
-            }
-            Ok(result) => result.map_err(|e| describe(&e, &opts.agent_name, &[], &closed_rx))?,
-        };
-        let load_supported = init.agent_capabilities.load_session;
-        let methods: Vec<serde_json::Value> =
-            init.auth_methods.iter().filter_map(|m| serde_json::to_value(m).ok()).collect();
-        let sign_in_methods = auth::parse_methods(&methods);
-        tracing::info!(
-            agent = %opts.agent_name,
-            agent_info = ?init.agent_info.as_ref().map(|i| format!("{} {}", i.name, i.version)),
-            load_supported,
-            auth_methods = init.auth_methods.len(),
-            "agent initialized"
-        );
+        let Handshake { cx, shared, closed: closed_rx, driver, init, sign_in_methods } =
+            handshake(writer, reader, host, &opts.agent_name, opts.initialize_timeout, opts.authenticate.as_deref()).await?;
+        let capabilities = SessionCaps::of(&init.agent_capabilities);
+        let load_supported = capabilities.load;
         let fail = |e: agent_client_protocol::Error| describe(&e, &opts.agent_name, &sign_in_methods, &closed_rx);
-        if let Some(method) = &opts.authenticate {
-            tracing::info!(agent = %opts.agent_name, method = %method, "signing in");
-            let mut closed = closed_rx.clone();
-            tokio::select! {
-                // A refusal here is the agent's answer, AuthRequired's code or not (Gemini CLI
-                // sends -32000 for an account Google no longer serves): say what it said.
-                answer = cx.send_request(AuthenticateRequest::new(method.clone())).block_task() => {
-                    answer.map_err(|e| match fail(e.clone()) {
-                        ConnectError::SignIn { .. } if !e.message.is_empty() => ConnectError::Failed(e.message),
-                        other => other,
-                    })?;
-                }
-                _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
-            }
-        }
-
         let mcp_servers: Vec<McpServer> = opts
             .mcp_servers
             .iter()
@@ -277,18 +192,33 @@ impl Connection {
         let mut history_restored = false;
         let mut session_id = None;
         let mut options = None;
-        if let (Some(resume), true) = (&opts.resume, load_supported) {
-            let load = LoadSessionRequest::new(resume.clone(), opts.cwd.clone()).mcp_servers(mcp_servers.clone());
-            match cx.send_request(load).block_task().await {
-                Ok(loaded) => {
-                    session_id = Some(SessionId::new(resume.clone()));
-                    history_restored = true;
-                    options = Some(config_options(loaded.config_options, loaded.modes));
+        match &opts.resume {
+            Some(resume) if load_supported => {
+                let load = LoadSessionRequest::new(resume.clone(), opts.cwd.clone()).mcp_servers(mcp_servers.clone());
+                match cx.send_request(load).block_task().await {
+                    Ok(loaded) => {
+                        session_id = Some(SessionId::new(resume.clone()));
+                        history_restored = true;
+                        options = Some(config_options(loaded.config_options, loaded.modes));
+                    }
+                    Err(e) if e.code == ErrorCode::AuthRequired => return Err(fail(e)),
+                    Err(e) => tracing::info!(agent = %opts.agent_name, "session/load failed, starting anew: {}", e.message),
                 }
-                Err(e) if e.code == ErrorCode::AuthRequired => return Err(fail(e)),
-                Err(e) => tracing::info!(agent = %opts.agent_name, "session/load failed, starting anew: {}", e.message),
             }
+            Some(resume) if capabilities.resume => {
+                let request = ResumeSessionRequest::new(resume.clone(), opts.cwd.clone()).mcp_servers(mcp_servers.clone());
+                match cx.send_request(request).block_task().await {
+                    Ok(resumed) => {
+                        session_id = Some(SessionId::new(resume.clone()));
+                        options = Some(config_options(resumed.config_options, resumed.modes));
+                    }
+                    Err(e) if e.code == ErrorCode::AuthRequired => return Err(fail(e)),
+                    Err(e) => tracing::info!(agent = %opts.agent_name, "session/resume failed, starting anew: {}", e.message),
+                }
+            }
+            _ => {}
         }
+        let continued = session_id.is_some();
         let session_id = match session_id {
             Some(id) => id,
             None => {
@@ -307,6 +237,7 @@ impl Connection {
             acp_session_id: session_id.to_string(),
             load_supported,
             history_restored,
+            continued,
             config_options: config_options.clone(),
             agent_version: init.agent_info.map(|info| info.version),
         };
@@ -413,6 +344,275 @@ impl Connection {
     }
 }
 
+
+/// A connection for the agent's session store only: `initialize`, then `session/list` and
+/// `session/delete`, no session of its own. Dropping it stops reading from the agent.
+pub struct Catalog {
+    cx: ConnectionTo<Agent>,
+    closed: watch::Receiver<Option<String>>,
+    driver: tokio::task::JoinHandle<()>,
+    capabilities: SessionCaps,
+    agent_version: Option<String>,
+    agent_name: String,
+    sign_in_methods: Vec<SignInMethod>,
+}
+
+impl Drop for Catalog {
+    fn drop(&mut self) {
+        self.driver.abort();
+    }
+}
+
+impl Catalog {
+    pub async fn open<W, R>(writer: W, reader: R, opts: CatalogOptions) -> Result<Catalog, ConnectError>
+    where
+        W: AsyncWrite + Send + Unpin + 'static,
+        R: AsyncRead + Send + Unpin + 'static,
+    {
+        let Handshake { cx, closed, driver, init, sign_in_methods, .. } =
+            handshake(writer, reader, Arc::new(NoSession), &opts.agent_name, opts.initialize_timeout, None).await?;
+        Ok(Catalog {
+            cx,
+            closed,
+            driver,
+            capabilities: SessionCaps::of(&init.agent_capabilities),
+            agent_version: init.agent_info.map(|info| info.version),
+            agent_name: opts.agent_name,
+            sign_in_methods,
+        })
+    }
+
+    pub fn capabilities(&self) -> SessionCaps {
+        self.capabilities
+    }
+
+    pub fn agent_version(&self) -> Option<&str> {
+        self.agent_version.as_deref()
+    }
+
+    /// The agent's sessions in `cwd`, page by page, at most `max`.
+    pub async fn list_sessions(&self, cwd: &Path, max: usize) -> Result<Listed, ConnectError> {
+        let mut sessions = Vec::new();
+        let mut cursor: Option<String> = None;
+        loop {
+            let request = ListSessionsRequest::new().cwd(cwd.to_path_buf()).cursor(cursor.clone());
+            let page = self.answer(self.cx.send_request(request).block_task()).await?;
+            sessions.extend(page.sessions.into_iter().map(|s| ListedSession {
+                session_id: s.session_id.to_string(),
+                cwd: s.cwd,
+                title: s.title,
+                updated_at: s.updated_at,
+            }));
+            if sessions.len() >= max {
+                let complete = sessions.len() == max && page.next_cursor.is_none();
+                sessions.truncate(max);
+                return Ok(Listed { sessions, complete });
+            }
+            match page.next_cursor {
+                // An agent that hands the same cursor back would page forever.
+                Some(next) if Some(&next) != cursor.as_ref() => cursor = Some(next),
+                Some(_) => return Ok(Listed { sessions, complete: false }),
+                None => return Ok(Listed { sessions, complete: true }),
+            }
+        }
+    }
+
+    pub async fn delete_session(&self, session_id: &str) -> Result<(), ConnectError> {
+        self.answer(self.cx.send_request(DeleteSessionRequest::new(session_id.to_owned())).block_task()).await?;
+        Ok(())
+    }
+
+    /// A request's answer, or why there is none (a sign-in, the agent gone).
+    async fn answer<T>(
+        &self,
+        request: impl std::future::Future<Output = Result<T, agent_client_protocol::Error>>,
+    ) -> Result<T, ConnectError> {
+        let mut closed = self.closed.clone();
+        tokio::select! {
+            answer = request => answer.map_err(|e| describe(&e, &self.agent_name, &self.sign_in_methods, &self.closed)),
+            _ = closed.wait_for(Option::is_some) => Err(closed_reason(&self.closed).into()),
+        }
+    }
+}
+
+/// The app's side of a [`Catalog`]: no session, so nothing to show and no files to give.
+struct NoSession;
+
+impl ClientHost for NoSession {
+    fn on_update(&self, _update: serde_json::Value) {}
+
+    fn on_permission_request(&self, _request: PermissionRequest) {}
+
+    fn read_text_file(&self, path: PathBuf, _line: Option<u32>, _limit: Option<u32>) -> Result<String, FsError> {
+        Err(FsError::Denied(format!("{}: no files without a session", path.display())))
+    }
+
+    fn write_text_file(&self, path: PathBuf, _content: String) -> Result<(), FsError> {
+        Err(FsError::Denied(format!("{}: no files without a session", path.display())))
+    }
+}
+
+/// A connection after `initialize` (and `authenticate` when asked), before any session.
+struct Handshake {
+    cx: ConnectionTo<Agent>,
+    shared: Arc<Shared>,
+    closed: watch::Receiver<Option<String>>,
+    driver: tokio::task::JoinHandle<()>,
+    init: InitializeResponse,
+    sign_in_methods: Vec<SignInMethod>,
+}
+
+async fn handshake<W, R>(
+    writer: W,
+    reader: R,
+    host: Arc<dyn ClientHost>,
+    agent_name: &str,
+    initialize_timeout: Duration,
+    authenticate: Option<&str>,
+) -> Result<Handshake, ConnectError>
+where
+    W: AsyncWrite + Send + Unpin + 'static,
+    R: AsyncRead + Send + Unpin + 'static,
+{
+    let shared = Arc::new(Shared { host, pending: Mutex::default(), next_request: AtomicU64::new(0) });
+    let (cx_tx, cx_rx) = oneshot::channel();
+    let (closed_tx, closed_rx) = watch::channel(None);
+
+    let on_update = Arc::clone(&shared);
+    let on_permission = Arc::clone(&shared);
+    let on_read = Arc::clone(&shared);
+    let on_write = Arc::clone(&shared);
+    // Every callback returns quickly: they run inside the dispatch loop, which holds later
+    // messages (and the updates' order) until they finish. A permission waits for the user
+    // outside it, its responder parked in `pending`.
+    let builder = Client
+        .builder()
+        .name("brama")
+        .on_receive_notification(
+            async move |notification: SessionNotification, _cx| {
+                match serde_json::to_value(&notification.update) {
+                    Ok(update) => on_update.host.on_update(update),
+                    Err(e) => tracing::warn!("unserializable session update: {e}"),
+                }
+                Ok(())
+            },
+            agent_client_protocol::on_receive_notification!(),
+        )
+        .on_receive_request(
+            async move |request: RequestPermissionRequest, responder: Responder<RequestPermissionResponse>, _cx| {
+                let n = on_permission.next_request.fetch_add(1, Ordering::Relaxed) + 1;
+                let request_id = format!("permission-{n}");
+                let to_json = |value: Result<serde_json::Value, serde_json::Error>| value.unwrap_or_default();
+                let tool_call = to_json(serde_json::to_value(&request.tool_call));
+                let options = to_json(serde_json::to_value(&request.options));
+                on_permission.pending().insert(request_id.clone(), responder);
+                on_permission.host.on_permission_request(PermissionRequest { request_id, tool_call, options });
+                Ok(())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: ReadTextFileRequest, responder: Responder<ReadTextFileResponse>, _cx| {
+                let host = Arc::clone(&on_read.host);
+                let read = tokio::task::spawn_blocking(move || {
+                    host.read_text_file(request.path, request.line, request.limit)
+                })
+                .await
+                .unwrap_or_else(|e| Err(FsError::Io(e.to_string())));
+                match read {
+                    Ok(content) => responder.respond(ReadTextFileResponse::new(content)),
+                    Err(e) => responder.respond_with_error(fs_error(e)),
+                }
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: WriteTextFileRequest, responder: Responder<WriteTextFileResponse>, _cx| {
+                let host = Arc::clone(&on_write.host);
+                let written = tokio::task::spawn_blocking(move || host.write_text_file(request.path, request.content))
+                    .await
+                    .unwrap_or_else(|e| Err(FsError::Io(e.to_string())));
+                match written {
+                    Ok(()) => responder.respond(WriteTextFileResponse::new()),
+                    Err(e) => responder.respond_with_error(fs_error(e)),
+                }
+            },
+            agent_client_protocol::on_receive_request!(),
+        );
+    // Anything else the agent asks (`terminal/*`, which we don't advertise, or a newer method)
+    // is answered with MethodNotFound by the dispatch loop itself.
+
+    let transport = ByteStreams::new(writer.compat_write(), reader.compat());
+    let driver = tokio::spawn(async move {
+        let result = builder
+            .connect_with(transport, async move |cx: ConnectionTo<Agent>| {
+                let _ = cx_tx.send(cx.clone());
+                cx.incoming_closed().await;
+                Ok(())
+            })
+            .await;
+        let reason = match result {
+            Ok(()) => "the agent closed its connection".to_owned(),
+            Err(e) => format!("connection to the agent failed: {}", e.message),
+        };
+        let _ = closed_tx.send(Some(reason));
+    });
+
+    let mut closed = closed_rx.clone();
+    let cx = tokio::select! {
+        cx = cx_rx => cx.map_err(|_| "the agent connection ended before it started".to_owned())?,
+        _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
+    };
+
+    let initialize = InitializeRequest::new(ProtocolVersion::V1)
+        .client_capabilities(
+            ClientCapabilities::new()
+                .fs(FileSystemCapabilities::new().read_text_file(true).write_text_file(true))
+                .terminal(false)
+                // A `terminal` method reruns the agent's launch in a Terminal tab; the meta
+                // flag is for agents that still read Zed's pre-standard one.
+                .auth(AuthCapabilities::new().terminal(true))
+                .meta(serde_json::Map::from_iter([("terminal-auth".to_owned(), serde_json::Value::Bool(true))])),
+        )
+        .client_info(Implementation::new("brama", env!("CARGO_PKG_VERSION")));
+    let init = match tokio::time::timeout(initialize_timeout, cx.send_request(initialize).block_task()).await
+    {
+        Err(_) => {
+            driver.abort();
+            return Err(format!("{} did not answer within {}s", agent_name, initialize_timeout.as_secs()).into());
+        }
+        Ok(result) => result.map_err(|e| describe(&e, agent_name, &[], &closed_rx))?,
+    };
+    let methods: Vec<serde_json::Value> =
+        init.auth_methods.iter().filter_map(|m| serde_json::to_value(m).ok()).collect();
+    let sign_in_methods = auth::parse_methods(&methods);
+    tracing::info!(
+        agent = %agent_name,
+        agent_info = ?init.agent_info.as_ref().map(|i| format!("{} {}", i.name, i.version)),
+        capabilities = ?SessionCaps::of(&init.agent_capabilities),
+        auth_methods = init.auth_methods.len(),
+        "agent initialized"
+    );
+    let fail = |e: agent_client_protocol::Error| describe(&e, agent_name, &sign_in_methods, &closed_rx);
+    if let Some(method) = authenticate {
+        tracing::info!(agent = %agent_name, method = %method, "signing in");
+        let mut closed = closed_rx.clone();
+        tokio::select! {
+            // A refusal here is the agent's answer, AuthRequired's code or not (Gemini CLI
+            // sends -32000 for an account Google no longer serves): say what it said.
+            answer = cx.send_request(AuthenticateRequest::new(method.to_owned())).block_task() => {
+                answer.map_err(|e| match fail(e.clone()) {
+                    ConnectError::SignIn { .. } if !e.message.is_empty() => ConnectError::Failed(e.message),
+                    other => other,
+                })?;
+            }
+            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
+        }
+    }
+
+    Ok(Handshake { cx, shared, closed: closed_rx, driver, init, sign_in_methods })
+}
+
 /// The session's options as JSON; an agent with only legacy `modes` gets one select option of
 /// category `mode` standing in for them ([`MODE_OPTION_ID`]).
 fn config_options(options: Option<Vec<SessionConfigOption>>, modes: Option<SessionModeState>) -> Vec<serde_json::Value> {
@@ -481,6 +681,7 @@ fn content_block(block: PromptBlock) -> ContentBlock {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
     use std::sync::atomic::Ordering;
 
     use tokio::sync::mpsc;
@@ -729,6 +930,81 @@ mod tests {
         assert!(!started.history_restored);
         assert_eq!(started.acp_session_id, "fake-session-1");
         assert_eq!(agent.loads.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn resume_without_load_continues_through_session_resume() {
+        let options = FakeAgentOptions { resume_session: true, ..Default::default() };
+        let (_, started, mut rx, agent) = connect(options, Some("old-session")).await.unwrap();
+        assert_eq!(started.acp_session_id, "old-session");
+        assert!(started.continued && !started.history_restored);
+        assert_eq!(agent.resumes.load(Ordering::SeqCst), 1);
+        assert_eq!(agent.new_sessions.load(Ordering::SeqCst), 0);
+        assert!(drain(&mut rx).is_empty(), "nothing replayed");
+    }
+
+    async fn open_catalog(options: FakeAgentOptions) -> Result<(Catalog, Arc<fake_agent::FakeAgentState>), ConnectError> {
+        let (writer, reader, state) = fake_agent::start(options);
+        let opts = CatalogOptions { agent_name: "Fake Agent".to_owned(), initialize_timeout: Duration::from_secs(5) };
+        Ok((Catalog::open(writer, reader, opts).await?, state))
+    }
+
+    fn stored(ids: &[(&str, &str)]) -> Arc<Mutex<Vec<fake_agent::FakeSession>>> {
+        let sessions = ids.iter().map(|(id, cwd)| fake_agent::FakeSession::new(id, Path::new(cwd), Some(id), Some("2026-10-20T10:00:00Z")));
+        Arc::new(Mutex::new(sessions.collect()))
+    }
+
+    #[tokio::test]
+    async fn a_catalog_lists_every_page_of_the_folder_without_starting_a_session() {
+        let stored = stored(&[("a", "/work"), ("b", "/work"), ("x", "/elsewhere"), ("c", "/work"), ("d", "/work"), ("e", "/work")]);
+        let options = FakeAgentOptions { list_sessions: true, page_size: 2, stored, ..Default::default() };
+        let (catalog, agent) = open_catalog(options).await.unwrap();
+        assert!(catalog.capabilities().list);
+        let listed = catalog.list_sessions(Path::new("/work"), 500).await.unwrap();
+        let ids: Vec<&str> = listed.sessions.iter().map(|s| s.session_id.as_str()).collect();
+        assert_eq!(ids, ["a", "b", "c", "d", "e"]);
+        assert!(listed.complete);
+        assert_eq!(listed.sessions[0].title.as_deref(), Some("a"));
+        assert_eq!(listed.sessions[0].updated_at.as_deref(), Some("2026-10-20T10:00:00Z"));
+        assert_eq!(listed.sessions[0].cwd, PathBuf::from("/work"));
+        assert_eq!(agent.lists.load(Ordering::SeqCst), 3);
+        assert_eq!(agent.new_sessions.load(Ordering::SeqCst), 0);
+    }
+
+    #[tokio::test]
+    async fn a_catalog_stops_listing_at_the_cap() {
+        let stored = stored(&[("a", "/work"), ("b", "/work"), ("c", "/work"), ("d", "/work")]);
+        let options = FakeAgentOptions { list_sessions: true, page_size: 2, stored, ..Default::default() };
+        let (catalog, _) = open_catalog(options).await.unwrap();
+        let listed = catalog.list_sessions(Path::new("/work"), 3).await.unwrap();
+        assert_eq!(listed.sessions.len(), 3);
+        assert!(!listed.complete);
+    }
+
+    #[tokio::test]
+    async fn a_catalog_says_what_the_agent_can() {
+        let (catalog, _) = open_catalog(FakeAgentOptions::default()).await.unwrap();
+        assert_eq!(catalog.capabilities(), SessionCaps::default());
+        let options = FakeAgentOptions { load_session: true, resume_session: true, delete_session: true, ..Default::default() };
+        let (catalog, _) = open_catalog(options).await.unwrap();
+        assert_eq!(catalog.capabilities(), SessionCaps { list: false, load: true, resume: true, delete: true });
+    }
+
+    #[tokio::test]
+    async fn a_catalog_deletes_a_session() {
+        let stored = stored(&[("a", "/work"), ("b", "/work")]);
+        let options = FakeAgentOptions { list_sessions: true, delete_session: true, stored: Arc::clone(&stored), ..Default::default() };
+        let (catalog, _) = open_catalog(options).await.unwrap();
+        catalog.delete_session("a").await.unwrap();
+        assert_eq!(stored.lock().unwrap().iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["b"]);
+    }
+
+    #[tokio::test]
+    async fn a_catalog_listing_answered_auth_required_asks_to_sign_in() {
+        let options = FakeAgentOptions { list_sessions: true, ..needing_sign_in() };
+        let (catalog, _) = open_catalog(options).await.unwrap();
+        let err = catalog.list_sessions(Path::new("/work"), 500).await.unwrap_err();
+        assert_eq!(method_ids(&err), ["browser", "tui"]);
     }
 
     #[tokio::test]

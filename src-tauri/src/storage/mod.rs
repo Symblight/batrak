@@ -1,5 +1,5 @@
-//! Persistence in app data. Today one JSON file of session records (`sessions.json`), rewritten
-//! atomically on change; a database can replace it once there is history to query.
+//! Persistence in app data: JSON files (the session list, trust, versions…), rewritten atomically
+//! on change.
 
 #[cfg(test)]
 use std::path::Path;

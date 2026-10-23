@@ -1,5 +1,6 @@
 //! Running sessions: lifecycle (draft → preparing → starting → idle ⇄ working → stopped, any →
-//! error), turns, permissions, and the event stream to the frontend.
+//! error), turns, permissions, and the event stream to the frontend. Which sessions there are is
+//! the agents' to say (`sync`).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
@@ -17,8 +18,7 @@ use tokio::task::AbortHandle;
 
 use self::slots::{Entry, Turn, TurnPermit, TurnSlots};
 use super::env::{self, Access, Launch, Mode, SessionEnv};
-use super::transcript::{self, Transcript};
-use super::{iso_now, AgentLaunch, Session, SessionRecord, SessionStatus, TitleSource};
+use super::{iso_now, parse_iso_millis, AgentLaunch, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::acp::process::AgentProcess;
 use crate::acp::auth::SignInMethod;
 use crate::acp::{self, ClientHost, ConnectError, Connection, FsError, PermissionRequest, PromptBlock, StartOptions};
@@ -96,6 +96,8 @@ pub struct SessionsOptions {
     /// How long after its end a turn's changes still count for an overlap: the watcher reports a
     /// write a debounce later, so the batch with a turn's last edits may come after it ended.
     pub overlap_grace: Duration,
+    /// How long one agent may take to list its sessions in a sync.
+    pub sync_timeout: Duration,
 }
 
 /// Several watcher debounces (150 ms), FSEvents' latency included.
@@ -114,6 +116,7 @@ impl SessionsOptions {
             launcher: Arc::new(ProcessLauncher),
             initialize_timeout: acp::INITIALIZE_TIMEOUT,
             overlap_grace: OVERLAP_GRACE,
+            sync_timeout: sync::SYNC_TIMEOUT,
         }
     }
 }
@@ -181,10 +184,13 @@ struct SessionState {
     cancel_requested: AtomicBool,
     /// Stop was asked for: the agent going away is not an error.
     stopping: AtomicBool,
-    transcript: Transcript,
-    /// Between `turn-start` and the turn's end: the agent's updates go into the transcript. History
-    /// an agent replays while starting (`session/load`) is in it already.
-    recording: AtomicBool,
+    /// Between `turn-start` and the turn's end.
+    in_turn: AtomicBool,
+    /// When Brama last saw activity in it (a prompt, a turn's end), in ms: later activity the agent
+    /// reports was another app's.
+    active_here: Mutex<Option<i64>>,
+    /// The last activity its agent listed (`updatedAt`), in ms.
+    listed_activity: Mutex<Option<i64>>,
     /// agents.json no longer has the session's agent (reported, status `error`); `Some(true)`: it
     /// was running or asked to start, so it starts again once the agent is back.
     unconfigured: Mutex<Option<bool>>,
@@ -240,8 +246,13 @@ pub struct Sessions {
 
 struct Inner {
     opts: SessionsOptions,
+    /// `sessions.json`: the sessions as last listed, and the hidden ones. No messages.
     store: JsonFile,
+    /// Every session listed: as last stored at launch, then as the agents say (`sync`), by id.
     sessions: Mutex<HashMap<String, Arc<SessionState>>>,
+    /// Sessions removed where their agent couldn't delete them, by ACP session id: never listed.
+    hidden: Mutex<HashMap<String, SessionRecord>>,
+    sync: sync::SyncState,
     /// Local sessions' turns, one at a time per project.
     slots: TurnSlots,
     /// Launches that answered AuthRequired, until one signs in or starts.
@@ -356,22 +367,18 @@ pub enum Probed {
 }
 
 impl Sessions {
-    /// Loads the stored sessions; none is running yet, so all of them are `stopped`.
+    /// Lists the sessions as last stored, all `stopped`, until a sync asks their agents (`sync`).
     pub fn new(opts: SessionsOptions) -> Sessions {
         let store = JsonFile::new(opts.data_dir.join("sessions.json"));
-        let records: Vec<SessionRecord> = store.load();
-        let sessions = records
-            .into_iter()
-            .map(|mut record| {
-                record.status = SessionStatus::Stopped;
-                (record.session_id.clone(), Arc::new(new_state(record, &opts.data_dir)))
-            })
-            .collect();
+        let (records, hidden) = sync::load(&store, &opts.data_dir);
+        let sessions = records.into_iter().map(|record| (record.session_id.clone(), Arc::new(new_state(record)))).collect();
         Sessions {
             inner: Arc::new(Inner {
                 opts,
                 store,
                 sessions: Mutex::new(sessions),
+                hidden: Mutex::new(hidden),
+                sync: sync::SyncState::default(),
                 slots: TurnSlots::default(),
                 sign_ins_needed: Mutex::default(),
                 signing_in: Mutex::default(),
@@ -393,24 +400,21 @@ impl Sessions {
     }
 
     pub fn list(&self) -> Vec<Session> {
-        let mut sessions: Vec<Session> =
-            lock(&self.inner.sessions).values().map(|s| Session::from(&*lock(&s.record))).collect();
+        let now = parse_iso_millis(&iso_now()).unwrap_or_default();
+        let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| sync::listed(s, now)).collect();
         sessions.sort_by(|a, b| (&b.last_activity_at, &b.created_at).cmp(&(&a.last_activity_at, &a.created_at)));
         sessions
     }
 
     /// Whether a canonical `path` lies in a worktree session's folder, which the page may read.
     pub fn contains(&self, path: &Path) -> bool {
-        lock(&self.inner.sessions).values().any(|s| {
-            let record = lock(&s.record);
-            record.mode == Mode::Worktree && path.starts_with(&record.agent_cwd)
-        })
+        self.inner.known().iter().any(|record| record.mode == Mode::Worktree && path.starts_with(&record.agent_cwd))
     }
 
     /// Whether a canonical `path` lies in any session's folder: a local session's project, a
     /// worktree session's folder in its worktree. A terminal may start there.
     pub fn contains_folder(&self, path: &Path) -> bool {
-        lock(&self.inner.sessions).values().any(|s| path.starts_with(&lock(&s.record).agent_cwd))
+        self.inner.known().iter().any(|record| path.starts_with(&record.agent_cwd))
     }
 
     /// A worktree session's folder (its agent's cwd), once it's checked out; the Files tree lists it.
@@ -474,13 +478,14 @@ impl Sessions {
             base_commit: placed.base_commit,
             launch: None,
             agent_name: Some(agent_name),
+            hidden: false,
         };
         let state = {
             let mut sessions = lock(&self.inner.sessions);
             if sessions.contains_key(&req.session_id) {
                 return Err(format!("session {} exists already", req.session_id));
             }
-            let state = Arc::new(new_state(record, self.inner.data_dir()));
+            let state = Arc::new(new_state(record));
             lock(&state.sinks).insert(sink_key.to_owned(), sink);
             sessions.insert(req.session_id.clone(), Arc::clone(&state));
             state
@@ -520,22 +525,15 @@ impl Sessions {
             return Err("The agent is still working on the previous message".to_owned());
         }
         state.cancel_requested.store(false, Ordering::SeqCst);
-        state.transcript.append(&json!({ "kind": "prompt", "prompt": prompt, "at": iso_now() }));
         self.inner.touch(&state);
         let inner = Arc::clone(&self.inner);
         let attempts = state.start_attempts.load(Ordering::SeqCst);
         tokio::spawn(async move {
             let result = inner.run_turn(&state, prompt, attempts).await;
             state.turn_running.store(false, Ordering::SeqCst);
-            if state.recording.swap(false, Ordering::SeqCst) {
+            if state.in_turn.swap(false, Ordering::SeqCst) {
                 *lock(&state.turn_ended) = Some(Instant::now());
             }
-            let ended = match &result {
-                Ok(stop_reason) => json!({ "kind": "turn-end", "stopReason": stop_reason }),
-                Err(_) if state.stopping.load(Ordering::SeqCst) => json!({ "kind": "turn-end", "stopReason": "cancelled" }),
-                Err(e) => json!({ "kind": "turn-end", "stopReason": "error", "message": e }),
-            };
-            state.transcript.append(&ended);
             inner.touch(&state);
             match result {
                 Ok(stop_reason) => {
@@ -584,7 +582,7 @@ impl Sessions {
             .filter(|s| {
                 let record = lock(&s.record);
                 let ended = || lock(&s.turn_ended).is_some_and(|at| at.elapsed() < grace);
-                record.mode == Mode::Local && record.project_path == project && (s.recording.load(Ordering::SeqCst) || ended())
+                record.mode == Mode::Local && record.project_path == project && (s.in_turn.load(Ordering::SeqCst) || ended())
             })
             .cloned()
             .collect();
@@ -597,7 +595,7 @@ impl Sessions {
             if by.len() < 2 {
                 continue;
             }
-            for state in by.iter().filter(|s| s.recording.load(Ordering::SeqCst)) {
+            for state in by.iter().filter(|s| s.in_turn.load(Ordering::SeqCst)) {
                 let Some(other) = by.iter().find(|o| o.id != state.id) else { continue };
                 if lock(&state.overlaps).insert(path.clone()) {
                     tracing::info!(session = %state.id, other = %other.id, path = %rel, "two running turns changed one file");
@@ -795,8 +793,9 @@ impl Sessions {
         (pending || methods.is_some()).then(|| SignInState { methods: methods.unwrap_or_default(), pending })
     }
 
-    /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's no
-    /// longer listed, and its transcript and log are deleted. Its folder is discarded by its
+    /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's
+    /// deleted in its agent (`session/delete`), or hidden in Brama where the agent can't, it's no
+    /// longer listed, and its log is deleted. Its folder is discarded by its
     /// environment: `local` keeps the project as it is, `worktree` keeps a worktree with
     /// uncommitted changes and a branch with commits.
     pub async fn remove(&self, id: &str) -> Result<(), String> {
@@ -805,9 +804,13 @@ impl Sessions {
         if lock(&self.inner.sessions).remove(id).is_none() {
             return Err(format!("unknown session {id}"));
         }
-        self.inner.persist();
-        state.transcript.close();
         let record = state.record();
+        if let Some(acp_id) = record.acp_session_id.clone() {
+            if !self.inner.delete_in_agent(&record, &acp_id).await {
+                lock(&self.inner.hidden).insert(acp_id, SessionRecord { hidden: true, ..sync::stored(record.clone()) });
+            }
+        }
+        self.inner.persist();
         let dir = self.inner.data_dir().join("sessions").join(id);
         tokio::task::spawn_blocking(move || {
             if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
@@ -862,12 +865,6 @@ impl Sessions {
         self.inner.set_status(&state, SessionStatus::Preparing, None);
         self.inner.start_in_background(&state);
         Ok(true)
-    }
-
-    /// The session's conversation as recorded (see `transcript`), oldest first. Blocking.
-    pub fn history(&self, id: &str) -> Result<Vec<Value>, String> {
-        self.get(id)?;
-        transcript::read(&transcript_path(self.inner.data_dir(), id))
     }
 
     /// Sets one of the agent's config options (model, thought level, mode); the options as they
@@ -974,7 +971,7 @@ impl Sessions {
     /// sessions, and removes the worktrees in app data no session owns (left by a removal that
     /// failed), unless they hold uncommitted work. Branches stay. Blocking.
     pub fn tidy_worktrees(&self) {
-        let records: Vec<SessionRecord> = lock(&self.inner.sessions).values().map(|s| s.record()).collect();
+        let records = self.inner.known();
         let worktrees: Vec<&SessionRecord> = records.iter().filter(|r| r.mode == Mode::Worktree).collect();
         let projects: std::collections::HashSet<&Path> = worktrees.iter().map(|r| r.project_path.as_path()).collect();
         if let Ok(git) = crate::git::binary::git() {
@@ -1006,9 +1003,9 @@ impl Sessions {
         }
     }
 
-    /// Whether a listed session's worktree is at `path`.
+    /// Whether a session's worktree is at `path`.
     fn owns_worktree(&self, path: &Path) -> bool {
-        lock(&self.inner.sessions).values().any(|s| lock(&s.record).worktree_path.as_deref() == Some(path))
+        self.inner.known().iter().any(|record| record.worktree_path.as_deref() == Some(path))
     }
 
     /// App exit: every agent process group is stopped, every session saved as `stopped`.
@@ -1035,15 +1032,11 @@ impl Sessions {
     }
 }
 
-/// The conversation of a session, kept next to its agent log.
-fn transcript_path(data_dir: &Path, id: &str) -> PathBuf {
-    data_dir.join("sessions").join(id).join("transcript.jsonl")
-}
-
-fn new_state(record: SessionRecord, data_dir: &Path) -> SessionState {
+fn new_state(record: SessionRecord) -> SessionState {
     SessionState {
-        transcript: Transcript::new(transcript_path(data_dir, &record.session_id)),
-        recording: AtomicBool::new(false),
+        in_turn: AtomicBool::new(false),
+        active_here: Mutex::new(None),
+        listed_activity: Mutex::new(None),
         unconfigured: Mutex::new(None),
         running: Mutex::new(None),
         outdated: AtomicBool::new(false),
@@ -1118,15 +1111,13 @@ fn remember_config(state: &SessionState, options: &[Value]) {
 }
 
 impl Inner {
+    /// Saves the sessions as listed (no status, no messages) and the hidden ones.
     fn persist(&self) {
         let records: Vec<SessionRecord> = {
             let sessions = lock(&self.sessions);
-            let mut records: Vec<_> = sessions.values().map(|s| s.record()).collect();
-            for record in records.iter_mut().filter(|r| r.status == SessionStatus::Queued) {
-                // The turn waits only in this process.
-                record.status = SessionStatus::Idle;
-            }
-            records.sort_by(|a, b| a.created_at.cmp(&b.created_at));
+            let hidden = lock(&self.hidden);
+            let mut records: Vec<_> = sessions.values().map(|s| sync::stored(s.record())).chain(hidden.values().cloned()).collect();
+            records.sort_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
             records
         };
         if let Err(e) = self.store.save(&records) {
@@ -1136,8 +1127,15 @@ impl Inner {
 
     /// Marks the session active now (a prompt, a turn's end), which orders the list.
     fn touch(&self, state: &SessionState) {
-        lock(&state.record).last_activity_at = Some(iso_now());
+        let now = iso_now();
+        *lock(&state.active_here) = parse_iso_millis(&now);
+        lock(&state.record).last_activity_at = Some(now);
         self.persist();
+    }
+
+    /// Every listed session's record.
+    fn known(&self) -> Vec<SessionRecord> {
+        lock(&self.sessions).values().map(|s| s.record()).collect()
     }
 
     fn set_status(&self, state: &SessionState, status: SessionStatus, message: Option<&str>) {
@@ -1197,7 +1195,11 @@ impl Inner {
             let _ = held.send(true);
         }
         state.emit("config-options", json!({ "configOptions": started.config_options }));
-        let message = (started.resumed && !started.history_restored).then_some("Agent history not restored");
+        let message = match (started.resumed, started.continued, started.history_restored) {
+            (true, false, _) => Some("Agent history not restored"),
+            (true, true, false) => Some("The agent continues this session but doesn't give its history"),
+            _ => None,
+        };
         self.set_status(state, SessionStatus::Idle, message);
         Ok(conn)
     }
@@ -1287,9 +1289,33 @@ impl Inner {
     }
 
     async fn scratch_start(&self, agent: &AgentConfig, authenticate: Option<String>) -> Result<acp::Started, ConnectError> {
+        let Launched { mut process, writer, reader } = self.scratch_launch(agent).await?;
+        let opts = StartOptions {
+            cwd: self.probe_dir()?,
+            mcp_servers: Vec::new(),
+            resume: None,
+            agent_name: agent.name.clone(),
+            initialize_timeout: self.opts.initialize_timeout,
+            authenticate,
+        };
+        // Dropping `process` (a cancelled sign-in) kills its group too.
+        let started = Connection::start(writer, reader, Arc::new(ProbeHost), opts).await;
+        if let Some(process) = process.as_mut() {
+            process.stop().await;
+        }
+        started.map(|(_, started)| started)
+    }
+
+    /// `<app data>/probe`, canonical: where agents run without a session.
+    fn probe_dir(&self) -> Result<PathBuf, String> {
         let dir = self.data_dir().join("probe");
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))
+    }
+
+    /// Starts `agent` in the probe folder, its stderr appended to `<agent id>.log` there.
+    async fn scratch_launch(&self, agent: &AgentConfig) -> Result<Launched, String> {
+        let dir = self.probe_dir()?;
         let base_env = Arc::clone(&self.opts.base_env);
         let secrets = Arc::clone(&self.opts.secrets);
         let agent_env = agent.env.clone();
@@ -1305,23 +1331,8 @@ impl Inner {
             .append(true)
             .open(&log_path)
             .map_err(|e| format!("{}: {e}", log_path.display()))?;
-        let env = env::LocalEnv::new(dir.clone());
-        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, agent, &process_env, log).map_err(|e| self.launch_error(agent, e))?;
-        drop(process_env);
-        let opts = StartOptions {
-            cwd: dir,
-            mcp_servers: Vec::new(),
-            resume: None,
-            agent_name: agent.name.clone(),
-            initialize_timeout: self.opts.initialize_timeout,
-            authenticate,
-        };
-        // Dropping `process` (a cancelled sign-in) kills its group too.
-        let started = Connection::start(writer, reader, Arc::new(ProbeHost), opts).await;
-        if let Some(process) = process.as_mut() {
-            process.stop().await;
-        }
-        started.map(|(_, started)| started)
+        let env = env::LocalEnv::new(dir);
+        self.opts.launcher.launch(&env, agent, &process_env, log).map_err(|e| self.launch_error(agent, e))
     }
 
     /// The sign-in already running for `key`, joined.
@@ -1543,17 +1554,20 @@ impl Inner {
         if let Some(version) = &started.agent_version {
             self.opts.configs.note_version(&agent.id, version);
         }
+        // Kept before anything else can fail: the agent has the session now.
+        lock(&state.record).acp_session_id = Some(started.acp_session_id.clone());
+        self.persist();
         // Still in the task Stop aborts, and before anyone gets the connection: the first prompt
         // runs with the session's choices.
         let options = apply_config(&conn, &record.config, started.config_options, self.opts.initialize_timeout).await;
         remember_config(&state, &options);
-        lock(&state.record).acp_session_id = Some(started.acp_session_id.clone());
         self.persist();
         Ok((
             StartedAgent {
                 conn: Arc::new(conn),
                 process,
                 resumed: record.acp_session_id.is_some(),
+                continued: started.continued,
                 history_restored: started.history_restored,
                 config_options: options,
             },
@@ -1719,7 +1733,7 @@ impl Inner {
         lock(&state.overlaps).clear();
         lock(&state.tool_kinds).clear();
         *lock(&state.turn_ended) = None;
-        state.recording.store(true, Ordering::SeqCst);
+        state.in_turn.store(true, Ordering::SeqCst);
         state.emit("turn-start", json!({}));
         self.set_status(state, SessionStatus::Working, None);
         // HOOK(git): checkpoint before the turn. `turn_running` is set, so the git layer can
@@ -1738,7 +1752,7 @@ impl Inner {
     /// The running agent answered a prompt with AuthRequired (its login ran out): it's stopped,
     /// so the start after the sign-in finds the new login, and the session asks for one.
     async fn prompt_wants_sign_in(&self, state: &SessionState, methods: Vec<SignInMethod>) -> StartError {
-        state.recording.store(false, Ordering::SeqCst);
+        state.in_turn.store(false, Ordering::SeqCst);
         let taken = state.live.lock().await.take();
         lock(&state.conn).take();
         lock(&state.env).take();
@@ -1835,7 +1849,7 @@ impl Inner {
     }
 
     /// The agent's side closed. Unless Stop did it, that's a crash: the session goes to `error`
-    /// with its transcript kept, and the leftovers of its process group are killed.
+    /// and the leftovers of its process group are killed.
     async fn on_agent_exit(&self, state: &Arc<SessionState>, generation: u64, reason: String) {
         let mut live = state.live.lock().await;
         if live.as_ref().map(|l| l.generation) != Some(generation) {
@@ -1937,6 +1951,7 @@ struct StartedAgent {
     conn: Arc<Connection>,
     process: Option<AgentProcess>,
     resumed: bool,
+    continued: bool,
     history_restored: bool,
     config_options: Vec<Value>,
 }
@@ -2134,9 +2149,6 @@ const LOOKING_TOOL_KINDS: [&str; 4] = ["read", "search", "fetch", "think"];
 impl ClientHost for SessionHost {
     fn on_update(&self, update: Value) {
         let Some(state) = self.state.upgrade() else { return };
-        if state.recording.load(Ordering::SeqCst) && update["sessionUpdate"] != "usage_update" {
-            state.transcript.append(&json!({ "kind": "update", "update": &update }));
-        }
         let options = state.conn().and_then(|conn| conn.note_update(&update));
         if update["sessionUpdate"] == "session_info_update" {
             if let Some(title) = update.get("title") {
@@ -2183,8 +2195,11 @@ impl ClientHost for SessionHost {
 }
 
 mod slots;
+mod sync;
 #[cfg(test)]
 mod tests;
+
+pub use sync::SyncReport;
 
 /// An agent's command line as its session log's start line shows it.
 fn log_line(agent: &AgentConfig) -> String {

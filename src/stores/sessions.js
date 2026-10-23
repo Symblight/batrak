@@ -6,7 +6,7 @@ import { persistentMapStore, persistentStore } from './persistent.js';
 /** @typedef {import('../models/types.js').SessionStatus} SessionStatus */
 /** @typedef {import('../models/types.js').WorktreeFolder} WorktreeFolder */
 
-/** Every agent session, as the backend lists them plus the ones started here; written by `sessionController`. */
+/** Every agent session, as the backend lists them (stored, then synced with the agents) plus the ones started here; written by `sessionController`. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
 
 /** Ids of the sessions pinned to the top of their project's list. Shared by every window. */
@@ -34,6 +34,22 @@ export const $sessionsLoaded = atom(false);
 export function setListedSessions(sessions) {
   $sessions.set(sessions);
   $sessionsLoaded.set(true);
+}
+
+/**
+ * A sync's sessions of a project replace its listed ones; a session started here that the backend
+ * doesn't list yet stays. When the project shows the draft it got for want of its last session, and
+ * that session is listed now, it's shown instead.
+ * @param {string} projectId
+ * @param {Session[]} sessions
+ */
+export function setProjectSessions(projectId, sessions) {
+  const ids = new Set(sessions.map((s) => s.id));
+  const creating = $sessions.get().filter((s) => s.projectId === projectId && !ids.has(s.id) && s.status === 'preparing');
+  $sessions.set([...$sessions.get().filter((s) => s.projectId !== projectId), ...creating, ...sessions]);
+  const active = $activeSessionId.get();
+  const last = $lastByProject.get()[projectId];
+  if (active !== null && active === stopgapDraft && last !== undefined && ids.has(last)) $activeSessionId.set(last);
 }
 
 /**
@@ -84,8 +100,14 @@ export const $worktrees = computed($sessions, (sessions) =>
  */
 const $lastByProject = persistentMapStore('brama:sessions:last:', (raw) => (typeof raw === 'string' ? raw : null));
 
+/** The draft `showProject()` opened because the project's last session wasn't listed (yet). */
+let stopgapDraft = /** @type {string | null} */ (null);
+
 $activeSessionId.listen((id) => {
-  const projectId = id === null ? null : projectOf(id);
+  if (id !== stopgapDraft) stopgapDraft = null;
+  // Listed sessions only: a draft doesn't outlive the launch, and one shown while the list loads
+  // mustn't replace the session to come back to.
+  const projectId = id === null ? null : ($sessions.get().find((s) => s.id === id)?.projectId ?? null);
   if (id !== null && projectId !== null) $lastByProject.setKey(projectId, id);
 });
 
@@ -145,7 +167,7 @@ export function showProject(projectId) {
     .filter((s) => s.projectId === projectId)
     .reduce((/** @type {Session | null} */ a, s) => (a === null || s.createdAt > a.createdAt ? s : a), null);
   if (newest) $activeSessionId.set(newest.id);
-  else newSession(projectId);
+  else stopgapDraft = newSession(projectId);
 }
 
 /**

@@ -296,4 +296,24 @@ describe('acp-session-list', () => {
     expect(reveals.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
     expect(removes.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
   });
+
+  it('marks a session another app may be running', async () => {
+    const { root } = await render({ sessions: [session('t', { status: 'stopped', activeElsewhere: true })] });
+    const status = /** @type {import('../../acp-session-status/acp-session-status.js').AcpSessionStatus | null} */ (
+      root.querySelector('[data-session-id="t"] acp-session-status')
+    );
+    expect(status?.indicator).to.equal('elsewhere');
+  });
+
+  it("shows the active project's sync beside the heading", async () => {
+    /** @type {import('../../../models/types.js').SessionSync} */
+    const sync = { running: true, report: null };
+    const { root } = await render({ sync });
+    const indicator = /** @type {import('../../acp-session-sync/acp-session-sync.js').AcpSessionSync | null} */ (
+      root.querySelector('.acp-session-list__top acp-session-sync')
+    );
+    expect(indicator?.sync).to.equal(sync);
+  });
+
 });
+

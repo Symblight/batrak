@@ -53,7 +53,7 @@
 
 /**
  * The status icon a session shows in its header and list row (`sessionIndicator()`).
- * @typedef {'permission' | 'error' | 'running' | 'queued' | 'unread'} SessionIndicator
+ * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'unread'} SessionIndicator
  */
 
 /**
@@ -66,6 +66,9 @@
  * @property {SessionStatus} status
  * @property {string} agentId
  * @property {string | null} [agentName] Its agent's name as agents.json last gave it.
+ * @property {string | null} [acpSessionId] The agent's own id of it; `null` until its agent first started.
+ * @property {boolean} [activeElsewhere] Not running here, and its agent saw activity in it within 2 min:
+ *   another app (a terminal) may be running it.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
@@ -164,10 +167,41 @@
  */
 
 /**
- * One line of a session's recorded conversation (`session_history`), oldest first.
- * @typedef {{ kind: 'prompt', prompt: PromptInput[], at: string }
- *   | { kind: 'update', update: AcpSessionUpdate }
- *   | { kind: 'turn-end', stopReason: string, message?: string }} TranscriptEntry
+ * How a sync went for one agent of the project (`sessions_sync`).
+ * @typedef {'listed' | 'unsupported' | 'off' | 'untrusted' | 'signIn' | 'failed'} SyncOutcome
+ */
+
+/**
+ * @typedef {Object} AgentSync
+ * @property {string} agentId
+ * @property {string} agentName
+ * @property {SyncOutcome} outcome
+ * @property {number | null} count `listed`: how many sessions it listed.
+ * @property {string | null} error `failed`: why.
+ */
+
+/**
+ * One sync of a project's sessions with its agents.
+ * @typedef {Object} SyncReport
+ * @property {string} projectPath
+ * @property {string} startedAt
+ * @property {string} endedAt
+ * @property {AgentSync[]} agents
+ */
+
+/**
+ * A project's sync as its session list shows it.
+ * @typedef {Object} SessionSync
+ * @property {boolean} running
+ * @property {SyncReport | null} report The last one this launch.
+ */
+
+/**
+ * `sessions://synced`: a project's sessions after a sync, for every window.
+ * @typedef {Object} SessionsSynced
+ * @property {string} projectPath
+ * @property {Session[]} sessions
+ * @property {SyncReport} report
  */
 
 /**

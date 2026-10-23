@@ -239,7 +239,7 @@ export class AcpAgentColumn extends LitElement {
       ?draft=${session === null}
       ?provisional=${session?.titleSource === 'prompt'}
       ?resettable=${session?.titleSource === 'user' && session.agentTitle !== null}
-      .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null) : null}
+      .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null, false, session.activeElsewhere ?? false) : null}
       @acp-session-new=${this.#onNewSession}
     ></acp-session-header>`;
   }

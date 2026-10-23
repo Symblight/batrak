@@ -10,7 +10,7 @@ pub mod process;
 #[cfg(test)]
 pub(crate) mod fake_agent;
 
-pub use connection::{ConnectError, Connection, StartOptions, Started};
+pub use connection::{Catalog, CatalogOptions, ConnectError, Connection, ListedSession, StartOptions, Started};
 
 use std::path::PathBuf;
 

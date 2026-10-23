@@ -22,7 +22,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').AgentList} AgentList */
 /** @typedef {import('../models/types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('../models/types.js').PromptInput} PromptInput */
-/** @typedef {import('../models/types.js').TranscriptEntry} TranscriptEntry */
+/** @typedef {import('../models/types.js').SyncReport} SyncReport */
+/** @typedef {import('../models/types.js').SessionsSynced} SessionsSynced */
 /** @typedef {import('../models/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../models/types.js').WorkspaceSettings} WorkspaceSettings */
 /** @typedef {import('../models/types.js').TerminalBusy} TerminalBusy */
@@ -31,9 +32,29 @@ import { open } from '@tauri-apps/plugin-dialog';
 
 /** The only module that knows Rust command names. */
 
-/** @returns {Promise<Session[]>} */
+/** @returns {Promise<Session[]>} The sessions as last stored or synced. */
 export function listSessions() {
   return invoke('list_sessions');
+}
+
+/**
+ * Asks a project's agents (`agentIds`, else all) for its sessions; every window then hears them
+ * (`onSessionsSynced`). Joins a sync of the project already running.
+ * @param {string} projectPath
+ * @param {string[] | null} [agentIds]
+ * @returns {Promise<SyncReport>}
+ */
+export function sessionsSync(projectPath, agentIds = null) {
+  return invoke('sessions_sync', { projectPath, agentIds });
+}
+
+/**
+ * A project's sessions after a sync, in any window.
+ * @param {(synced: SessionsSynced) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onSessionsSynced(callback) {
+  return listen('sessions://synced', (event) => callback(/** @type {SessionsSynced} */ (event.payload)));
 }
 
 /**
@@ -181,15 +202,6 @@ export function sessionResume(sessionId) {
  */
 export function sessionSetConfigOption(sessionId, configId, value) {
   return invoke('session_set_config_option', { sessionId, configId, value });
-}
-
-/**
- * A session's recorded conversation, oldest first, to show it again after a reload.
- * @param {string} sessionId
- * @returns {Promise<TranscriptEntry[]>}
- */
-export function sessionHistory(sessionId) {
-  return invoke('session_history', { sessionId });
 }
 
 /**

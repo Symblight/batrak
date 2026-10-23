@@ -139,7 +139,7 @@ agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The c
 the composer when the backend refuses the session), and each session's unsent composer text and files.
 Statuses come from the backend's session events. A draft shows only the composer, centered; the message
 list appears with the first message. Replies come over ACP (see "Agents over ACP"); messages live only
-in the chat element, and an agent with `session/load` replays them when it starts again.
+in the chat element and the agent, which replays them (`session/load`) when it starts again.
 
 **Agent comments:** line comments typed in any `cdx-code-editor` live in `$comments` (`stores/comments.js`,
 by absolute path, in memory). Every editor's `<cdx-comments>` is controlled through
@@ -285,8 +285,19 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   window's `$signIns`) and why one failed; an agent added there is probed at once and the snackbar
   offers Sign in when it asks for one; the picker says "Needs sign-in" (`AgentSummary.signIn`,
   from `Sessions::agent_list`).
-- **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
-  data; all `stopped` after a restart). The agent starts on the first message, or when its session is
+- **Sessions** (`src-tauri/src/session/`): the agents own the sessions (spec:
+  `docs/specs/session-sync.md`). `Sessions::sync` (`session/runtime/sync.rs`, `sessions_sync` →
+  `sessions://synced` to every window) asks each agent of a project that's on, trusted and not
+  waiting for a sign-in for its sessions there (`acp::Catalog`: `initialize` + `session/list` of
+  the project and its worktree folders, scratch process in `<app data>/probe`, two at a time, 15 s
+  each) and makes them the list (`SyncReport`: `listed` / `unsupported` / `off` / `untrusted` /
+  `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has. A
+  session first seen in a list gets the id `<agent id>~<acp id>`. `sessions.json` in app data
+  stores the list as last seen (no messages, all `stopped` after a restart) so it shows at once; a
+  sync runs at launch, when a project is shown (5 min stale), when a session is clicked (its agent,
+  every 30 s at most), for agents that didn't list once `$agentList` changes, and on Resync
+  (`<acp-session-sync>` in the session list). `Session.activeElsewhere`: not running here and its
+  agent saw activity within 2 min; showing one doesn't resume it (the banner's Resume does). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
   has its worktree's branch). Any number of `local` sessions of a project run; their turns share
   the checkout through a turn slot (`session/runtime/slots.rs`, spec:
@@ -310,8 +321,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   repository, no commit or an unknown base refuses the create. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
   `HOOK(git)` comments in `run_turn` mark the checkpoint points. `Sessions::remove` (session row
-  menu → Remove session) stops the agent, unlists the session, deletes `sessions/<id>/`
-  (transcript, log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
+  menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or
+  keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
+  (its log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
   uncommitted work onto its branch (`archive` → `git::apply::snapshot_commit`: scratch index, no
   hooks, CAS `update-ref`, Brama's identity when git has none), removes the worktree, and deletes
   the branch only when it has no commits past the base. A detached worktree (Check Out Branch)
@@ -379,10 +391,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
   every answer and update): a new start of its agent is set to them (`apply_config`, inside the
   start Stop aborts, each answer bounded by `initialize_timeout`) before anyone gets the connection, so an agent that forgets its model on restart or `session/load` doesn't drop it.
-- **History**: each session's conversation is appended to `sessions/<id>/transcript.jsonl` (prompts,
-  the turn's updates, turn ends; not `usage_update`, not a `session/load` replay); `session_history`
-  returns it and `restoreHistory()` rebuilds the chat the first time a session is shown after a
-  reload. Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
+- **History**: Brama stores no messages. A session's conversation is its agent's replay
+  (`session/load`, when it's shown), shown once per launch (`acp-adapter.js` `loaded`: a later load
+  after an idle stop adds nothing); an agent with only `session/resume` continues it without
+  history (the banner says so). Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
   `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`
   (`stores/context-usage.js`, `brama:sessions:context-usage:<session id>`, one item per session),
   so a session shows its last report after a reload or restart (no agent reports on

@@ -6,10 +6,10 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
-use tauri::{State, Window};
+use tauri::{AppHandle, Emitter, State, Window};
 
 use crate::session::env::Mode;
-use crate::session::{CreateSession, Envelope, EventSink, PromptInput, Session, Sessions};
+use crate::session::{CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
 use super::blocking;
 
@@ -25,9 +25,34 @@ fn sink(channel: Channel<Envelope>) -> Arc<dyn EventSink> {
     Arc::new(ChannelSink(channel))
 }
 
+/// The sessions listed so far this launch (a sync fills a project's: `sessions_sync`).
 #[tauri::command]
 pub async fn list_sessions(sessions: State<'_, Sessions>) -> Result<Vec<Session>, String> {
     Ok(sessions.list())
+}
+
+/// Every window hears a project's sessions after each sync.
+pub const SESSIONS_SYNCED_EVENT: &str = "sessions://synced";
+
+/// Asks the project's agents (`agent_ids`, else all) for its sessions; every window then hears
+/// the project's sessions and the report (`sessions://synced`). Joins a sync already running.
+#[tauri::command]
+pub async fn sessions_sync(
+    app: AppHandle,
+    sessions: State<'_, Sessions>,
+    project_path: String,
+    agent_ids: Option<Vec<String>>,
+) -> Result<SyncReport, String> {
+    let project = blocking({
+        let path = project_path.clone();
+        move || dunce::canonicalize(&path).map_err(|e| format!("{path}: {e}"))
+    })
+    .await??;
+    let report = sessions.sync(&project, agent_ids.as_deref()).await;
+    let project_id = project.to_string_lossy().into_owned();
+    let listed: Vec<Session> = sessions.list().into_iter().filter(|s| s.project_id == project_id).collect();
+    let _ = app.emit(SESSIONS_SYNCED_EVENT, serde_json::json!({ "projectPath": project_id, "sessions": listed, "report": report }));
+    Ok(report)
 }
 
 /// A draft's first message: creates the session under the draft's id and starts its workspace
@@ -95,7 +120,8 @@ pub async fn session_stop(sessions: State<'_, Sessions>, session_id: String) -> 
     sessions.stop(&session_id).await
 }
 
-/// Removes a session: stops its agent and deletes its transcript and log. The project's files stay.
+/// Removes a session: stops its agent, deletes it in the agent (or hides it where the agent can't)
+/// and deletes its log. The project's files stay.
 #[tauri::command]
 pub async fn session_remove(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
     sessions.remove(&session_id).await
@@ -134,14 +160,6 @@ pub async fn session_set_config_option(
     value: String,
 ) -> Result<(), String> {
     sessions.set_config_option(&session_id, &config_id, &value).await
-}
-
-/// The session's recorded conversation, oldest first (see `session::transcript`), for the chat to
-/// show again after a reload.
-#[tauri::command]
-pub async fn session_history(sessions: State<'_, Sessions>, session_id: String) -> Result<Vec<serde_json::Value>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.history(&session_id)).await?
 }
 
 /// A worktree session's changed files since it started (its commits and uncommitted work),

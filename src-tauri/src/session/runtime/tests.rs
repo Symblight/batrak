@@ -143,7 +143,7 @@ fn listed_version(f: &Fixture, agent: &str) -> Option<String> {
 
 /// A fixture whose project is a real repository: `a.txt` and `.brama/` committed on `main`.
 fn git_fixture(name: &str) -> Fixture {
-    let f = fixture(name, FakeAgentOptions::default());
+    let f = fixture(name, listing());
     std::fs::remove_dir_all(f.project.join(".git")).unwrap();
     for args in [&["init", "-q", "-b", "main"][..], &["add", "."], &["commit", "-qm", "init"]] {
         run_in(&f.project, args);
@@ -166,13 +166,30 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
         launcher: Arc::clone(launcher) as Arc<dyn Launcher>,
         initialize_timeout: Duration::from_secs(5),
         overlap_grace: OVERLAP_GRACE,
+        sync_timeout: Duration::from_secs(5),
     }
+}
+
+/// Lists the sessions the agents keep: the fake agent's store.
+fn listing() -> FakeAgentOptions {
+    FakeAgentOptions { list_sessions: true, ..Default::default() }
 }
 
 /// How long the fixture's ended turns still count for an overlap.
 const OVERLAP_GRACE: Duration = Duration::from_millis(200);
 
 impl Fixture {
+    /// The app launched again (after `shutdown`) and synced: its sessions are what the agents list.
+    async fn reopen(&self) -> Sessions {
+        self.reopen_with(options_for(&self.dir, &self.launcher)).await
+    }
+
+    async fn reopen_with(&self, options: SessionsOptions) -> Sessions {
+        let sessions = Sessions::new(options);
+        sessions.sync(&self.project, None).await;
+        sessions
+    }
+
     /// Writes `project`'s agents.json with the fixture's agents and trusts them.
     fn give_agents(&self, project: &Path) {
         self.set_agents(project, AGENTS);
@@ -290,7 +307,7 @@ async fn local_sessions_of_one_project_all_run_and_their_turns_queue() {
     second.wait_status("queued").await;
     assert_eq!(status_of(&f, "second"), SessionStatus::Queued);
     let stored = std::fs::read_to_string(f.dir.join("data/sessions.json")).unwrap();
-    assert!(!stored.contains("queued"), "saved as idle: {stored}");
+    assert!(!stored.contains("queued"), "no status is kept: {stored}");
     assert!(f.sessions.send_prompt("second", text("hello")).unwrap_err().contains("still working"), "one prompt at a time");
 
     assert_eq!(first.wait_turn_end().await, "end_turn");
@@ -1039,7 +1056,7 @@ async fn a_worktree_session_comes_back_after_a_restart_even_without_its_folder()
 
     f.sessions.shutdown();
     std::fs::remove_dir_all(&wt).unwrap();
-    let sessions = Sessions::new(options_for(&f.dir, &f.launcher));
+    let sessions = f.reopen().await;
     let listed = sessions.list().into_iter().find(|s| s.id == "r").unwrap();
     assert_eq!(listed.branch, session.branch);
     assert_eq!(listed.base_commit, session.base_commit);
@@ -1127,13 +1144,13 @@ async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work()
 
 #[tokio::test]
 async fn sessions_come_back_after_a_restart_and_load_their_acp_session() {
-    let options = FakeAgentOptions { load_session: true, ..Default::default() };
+    let options = FakeAgentOptions { load_session: true, ..listing() };
     let f = fixture("reload", options);
     let (_, events) = f.create("r", "fake").unwrap();
     events.wait_status("idle").await;
     f.sessions.shutdown();
 
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let reopened = f.reopen().await;
     let listed = reopened.list();
     assert_eq!(listed.len(), 1);
     assert_eq!((listed[0].id.as_str(), listed[0].status), ("r", SessionStatus::Stopped));
@@ -1141,7 +1158,7 @@ async fn sessions_come_back_after_a_restart_and_load_their_acp_session() {
     reopened.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     reopened.send_prompt("r", text("hello")).unwrap();
     assert_eq!(events.wait_turn_end().await, "end_turn");
-    let agent = Arc::clone(&lock(&f.launcher.agents)[1]);
+    let agent = Arc::clone(lock(&f.launcher.agents).last().unwrap());
     assert_eq!(agent.loads.load(Ordering::SeqCst), 1, "session/load was used");
     assert_eq!(events.texts(), ["earlier question", "earlier answer", "Hello", ", world"]);
     let idle = events.wait_status("idle").await;
@@ -1151,12 +1168,12 @@ async fn sessions_come_back_after_a_restart_and_load_their_acp_session() {
 
 #[tokio::test]
 async fn without_load_support_a_reopened_session_says_history_was_not_restored() {
-    let f = fixture("noload", FakeAgentOptions::default());
+    let f = fixture("noload", listing());
     let (_, events) = f.create("n", "fake").unwrap();
     events.wait_status("idle").await;
     f.sessions.shutdown();
 
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let reopened = f.reopen().await;
     let events = Arc::new(Recorder::default());
     reopened.attach("n", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     reopened.send_prompt("n", text("hello")).unwrap();
@@ -1167,38 +1184,20 @@ async fn without_load_support_a_reopened_session_says_history_was_not_restored()
 }
 
 #[tokio::test]
-async fn the_conversation_is_recorded_and_survives_a_restart() {
-    let options = FakeAgentOptions { load_session: true, ..Default::default() };
-    let f = fixture("history", options);
-    let (_, events) = f.create("h", "fake").unwrap();
+async fn resuming_without_load_continues_the_agents_session() {
+    let f = fixture("resume-only", FakeAgentOptions { resume_session: true, ..listing() });
+    let (_, events) = f.create("r", "fake").unwrap();
     events.wait_status("idle").await;
-    f.sessions.send_prompt("h", text("hello")).unwrap();
-    events.wait_turn_end().await;
     f.sessions.shutdown();
 
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
-    let summary = |sessions: &Sessions| -> Vec<String> {
-        sessions
-            .history("h")
-            .unwrap()
-            .iter()
-            .map(|e| match e["kind"].as_str().unwrap() {
-                "prompt" => format!("prompt:{}", e["prompt"][0]["text"].as_str().unwrap()),
-                "update" => format!("update:{}", e["update"]["content"]["text"].as_str().unwrap_or("")),
-                kind => format!("{kind}:{}", e["stopReason"].as_str().unwrap()),
-            })
-            .collect()
-    };
-    let first_turn = ["prompt:hello", "update:Hello", "update:, world", "turn-end:end_turn"];
-    assert_eq!(summary(&reopened), first_turn);
-
-    // The agent replays its history while starting (`session/load`): not recorded twice.
+    let reopened = f.reopen().await;
     let events = Arc::new(Recorder::default());
-    reopened.attach("h", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
-    reopened.send_prompt("h", text("hello")).unwrap();
-    events.wait_turn_end().await;
-    assert!(events.texts().contains(&"earlier question".to_owned()), "the replay did happen");
-    assert_eq!(summary(&reopened), [&first_turn[..], &first_turn[..]].concat());
+    reopened.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    assert!(reopened.resume("r").await.unwrap());
+    let idle = events.wait_status("idle").await;
+    assert_eq!(idle.payload["message"], "The agent continues this session but doesn't give its history");
+    let agent = Arc::clone(lock(&f.launcher.agents).last().unwrap());
+    assert_eq!((agent.resumes.load(Ordering::SeqCst), agent.new_sessions.load(Ordering::SeqCst)), (1, 0));
     reopened.shutdown();
 }
 
@@ -1233,7 +1232,7 @@ async fn config_options_arrive_at_start_and_follow_a_change() {
 
 #[tokio::test]
 async fn a_sessions_config_options_come_back_when_its_agent_starts_again() {
-    let f = fixture("keep-options", FakeAgentOptions { load_session: true, ..Default::default() });
+    let f = fixture("keep-options", FakeAgentOptions { load_session: true, ..listing() });
     let mut req = f.request("k", "fake", Mode::Local, None);
     // Picked in the draft; the fake refuses any effort, which doesn't stop the start.
     req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned()), ("effort".to_owned(), "low".to_owned())]);
@@ -1258,19 +1257,19 @@ async fn a_sessions_config_options_come_back_when_its_agent_starts_again() {
 
     // And after the app restarts.
     f.sessions.shutdown();
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let reopened = f.reopen().await;
     assert_eq!(reopened.list()[0].config["model"], "fast");
     let events = Arc::new(Recorder::default());
     reopened.attach("k", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     assert!(reopened.resume("k").await.unwrap());
     events.wait_status("idle").await;
-    assert_eq!(*lock(&lock(&f.launcher.agents)[2].model), "fast");
+    assert_eq!(*lock(&lock(&f.launcher.agents).last().unwrap().model), "fast");
     reopened.shutdown();
 }
 
 #[tokio::test]
 async fn an_agent_that_never_answers_a_config_option_neither_holds_up_its_start_nor_stop() {
-    let f = fixture("hang-options", FakeAgentOptions { hang_set_config: true, ..Default::default() });
+    let f = fixture("hang-options", FakeAgentOptions { hang_set_config: true, ..listing() });
     let mut req = f.request("h", "fake", Mode::Local, None);
     req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned())]);
     let (_, events) = f.create_from(req).unwrap();
@@ -1283,7 +1282,7 @@ async fn an_agent_that_never_answers_a_config_option_neither_holds_up_its_start_
     let mut options = options_for(&f.dir, &f.launcher);
     options.initialize_timeout = Duration::from_millis(100);
     f.sessions.shutdown();
-    let reopened = Sessions::new(options);
+    let reopened = f.reopen_with(options).await;
     let events = Arc::new(Recorder::default());
     reopened.attach("h", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     assert!(reopened.resume("h").await.unwrap());
@@ -1295,7 +1294,7 @@ async fn an_agent_that_never_answers_a_config_option_neither_holds_up_its_start_
 
 #[tokio::test]
 async fn a_renamed_session_keeps_its_title_after_a_restart() {
-    let f = fixture("rename", FakeAgentOptions::default());
+    let f = fixture("rename", listing());
     let (_, events) = f.create("n", "fake").unwrap();
     events.wait_status("idle").await;
 
@@ -1306,24 +1305,25 @@ async fn a_renamed_session_keeps_its_title_after_a_restart() {
     assert!(f.sessions.rename("missing", "x").is_err());
 
     f.sessions.shutdown();
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let reopened = f.reopen().await;
     assert_eq!(reopened.list()[0].title, "Fix the parser");
 }
 
 #[tokio::test]
-async fn removing_a_session_stops_its_agent_and_forgets_it() {
-    let f = fixture("remove", FakeAgentOptions::default());
+async fn removing_a_session_stops_its_agent_and_deletes_it_in_the_agent() {
+    let options = FakeAgentOptions { delete_session: true, ..listing() };
+    let f = fixture("remove", options.clone());
     let (_, events) = f.create("gone", "fake").unwrap();
     events.wait_status("idle").await;
     f.sessions.send_prompt("gone", text("slow")).unwrap();
     events.wait_for("first chunk", |e| e.kind == "update").await;
     let session_dir = f.dir.join("data/sessions/gone");
-    assert!(session_dir.join("transcript.jsonl").exists());
+    assert!(session_dir.join("agent.log").exists());
 
     f.sessions.remove("gone").await.unwrap();
     assert!(f.sessions.list().is_empty());
-    assert!(f.sessions.history("gone").is_err(), "unknown now");
-    assert!(!session_dir.exists(), "its transcript and log are deleted");
+    assert!(!session_dir.exists(), "its log is deleted");
+    assert!(options.stored.lock().unwrap().is_empty(), "deleted in the agent");
     assert_eq!(events.wait_turn_end().await, "cancelled", "the running turn ends");
     assert!(f.project.join("a.txt").exists(), "the project is untouched");
     assert!(f.sessions.remove("gone").await.is_err());
@@ -1332,9 +1332,23 @@ async fn removing_a_session_stops_its_agent_and_forgets_it() {
     let (_, other) = f.create("other", "fake").unwrap();
     other.wait_status("idle").await;
     f.sessions.shutdown();
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    let reopened = f.reopen().await;
     let ids: Vec<_> = reopened.list().into_iter().map(|s| s.id).collect();
     assert_eq!(ids, ["other"]);
+}
+
+#[tokio::test]
+async fn a_session_its_agent_cant_delete_is_hidden_instead() {
+    let options = listing();
+    let f = fixture("hide", options.clone());
+    let (_, events) = f.create("kept", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.remove("kept").await.unwrap();
+    assert_eq!(options.stored.lock().unwrap().len(), 1, "still in the agent");
+    f.sessions.sync(&f.project, None).await;
+    assert!(f.sessions.list().is_empty(), "not listed again");
+    f.sessions.shutdown();
+    assert!(f.reopen().await.list().is_empty(), "nor after a restart");
 }
 
 #[tokio::test]
@@ -1881,7 +1895,7 @@ async fn real_claude_agent_end_to_end() {
 
 #[tokio::test]
 async fn sessions_are_listed_by_last_activity_which_a_prompt_and_its_turn_end_set() {
-    let f = fixture("activity", FakeAgentOptions::default());
+    let f = fixture("activity", FakeAgentOptions { resume_session: true, ..listing() });
     let (first, events) = f.create("a", "fake").unwrap();
     events.wait_status("idle").await;
     assert_eq!(first.last_activity_at, first.created_at, "no activity yet: its creation");
@@ -1897,17 +1911,18 @@ async fn sessions_are_listed_by_last_activity_which_a_prompt_and_its_turn_end_se
     let listed = f.sessions.list();
     assert_eq!(listed.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["a", "b"]);
     assert!(listed[0].last_activity_at > second.created_at);
-    let active = listed[0].last_activity_at.clone();
     f.sessions.shutdown();
 
-    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    // After a restart the order is the agent's: its last activity in each.
+    let reopened = f.reopen().await;
     let listed = reopened.list();
-    assert_eq!(listed.iter().map(|s| (s.id.as_str(), s.last_activity_at.as_str())).next(), Some(("a", active.as_str())));
+    assert_eq!(listed.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["a", "b"]);
+    assert!(listed[0].last_activity_at > second.created_at);
 }
 
 #[tokio::test]
-async fn the_agents_title_replaces_the_prompts_and_is_kept_across_a_restart() {
-    let f = fixture("agent-title", FakeAgentOptions::default());
+async fn the_agents_title_replaces_the_prompts_and_comes_from_its_list_after_a_restart() {
+    let f = fixture("agent-title", listing());
     let (created, events) = f.create("t", "fake").unwrap();
     assert_eq!((created.title.as_str(), created.title_source), ("Session t", TitleSource::Prompt));
     assert_eq!(f.ask("t", &events, "title Tree view gaps").await, "titled");
@@ -1917,7 +1932,7 @@ async fn the_agents_title_replaces_the_prompts_and_is_kept_across_a_restart() {
     assert_eq!(changed.payload["titleSource"], "agent");
     f.sessions.shutdown();
 
-    let listed = Sessions::new(options_for(&f.dir, &f.launcher)).list();
+    let listed = f.reopen().await.list();
     assert_eq!((listed[0].title.as_str(), listed[0].title_source), ("Tree view gaps", TitleSource::Agent));
 }
 
@@ -2260,4 +2275,141 @@ async fn a_failed_or_closed_login_keeps_the_prompt_held() {
 
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
+}
+
+fn outcomes(report: &super::SyncReport) -> Vec<(&str, super::sync::SyncOutcome, Option<usize>)> {
+    report.agents.iter().map(|a| (a.agent_id.as_str(), a.outcome, a.count)).collect()
+}
+
+/// The fake agent's store, with sessions in `cwd`s.
+fn stored_in(options: &FakeAgentOptions, sessions: &[(&str, &Path, Option<&str>, Option<&str>)]) {
+    let mut stored = options.stored.lock().unwrap();
+    for (id, cwd, title, updated_at) in sessions {
+        stored.push(fake_agent::FakeSession::new(id, cwd, *title, *updated_at));
+    }
+}
+
+#[tokio::test]
+async fn a_sync_lists_the_agents_sessions_of_the_project_and_says_how_each_agent_did() {
+    use super::sync::SyncOutcome;
+    let options = listing();
+    let f = fixture("sync", options.clone());
+    let elsewhere = f.dir.join("elsewhere");
+    stored_in(&options, &[
+        ("t1", &f.project, Some("From a terminal"), Some("2026-10-20T10:00:00Z")),
+        ("t2", &f.project, None, Some("2026-10-21T10:00:00Z")),
+        ("x", &elsewhere, Some("Another project"), None),
+    ]);
+    let report = f.sessions.sync(&f.project, None).await;
+    assert_eq!(outcomes(&report), [("fake", SyncOutcome::Listed, Some(2)), ("locked", SyncOutcome::Failed, None)]);
+    assert!(report.agents[1].error.as_deref().unwrap().contains("missing"), "{:?}", report.agents[1].error);
+
+    let listed = f.sessions.list();
+    let rows: Vec<_> = listed.iter().map(|s| (s.id.as_str(), s.title.as_str(), s.status, s.last_activity_at.as_str())).collect();
+    assert_eq!(rows, [
+        ("fake~t2", "Untitled session", SessionStatus::Stopped, "2026-10-21T10:00:00.000Z"),
+        ("fake~t1", "From a terminal", SessionStatus::Stopped, "2026-10-20T10:00:00.000Z"),
+    ]);
+    assert_eq!(listed[0].acp_session_id.as_deref(), Some("t2"));
+    assert_eq!((listed[0].mode, listed[0].folder.as_str()), (Mode::Local, f.project.to_str().unwrap()));
+}
+
+#[tokio::test]
+async fn the_stored_list_shows_at_once_after_a_relaunch_and_a_sync_brings_it_up_to_date() {
+    let options = listing();
+    let f = fixture("sync-stored", options.clone());
+    stored_in(&options, &[("t1", &f.project, Some("First"), None), ("t2", &f.project, Some("Second"), None)]);
+    f.sessions.sync(&f.project, None).await;
+    f.sessions.shutdown();
+
+    let relaunched = Sessions::new(options_for(&f.dir, &f.launcher));
+    let mut ids: Vec<_> = relaunched.list().into_iter().map(|s| (s.id, s.title, s.status == SessionStatus::Stopped)).collect();
+    ids.sort();
+    assert_eq!(ids, [
+        ("fake~t1".to_owned(), "First".to_owned(), true),
+        ("fake~t2".to_owned(), "Second".to_owned(), true),
+    ], "before any sync");
+    let stored = std::fs::read_to_string(f.dir.join("data/sessions.json")).unwrap();
+    assert!(!stored.contains("earlier answer") && !f.dir.join("data/sessions/fake~t1/transcript.jsonl").exists(), "no messages");
+
+    // Deleted in a terminal, renamed by the agent.
+    options.stored.lock().unwrap().retain(|s| s.id != "t2");
+    options.stored.lock().unwrap()[0].title = Some("First, renamed".to_owned());
+    relaunched.sync(&f.project, None).await;
+    let ids: Vec<_> = relaunched.list().into_iter().map(|s| (s.id, s.title)).collect();
+    assert_eq!(ids, [("fake~t1".to_owned(), "First, renamed".to_owned())]);
+}
+
+#[tokio::test]
+async fn an_agent_that_cant_list_keeps_its_sessions() {
+    use super::sync::SyncOutcome;
+    let f = fixture("sync-unsupported", FakeAgentOptions::default());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+    let report = f.sessions.sync(&f.project, Some(&["fake".to_owned()])).await;
+    assert_eq!(outcomes(&report), [("fake", SyncOutcome::Unsupported, None)]);
+    assert_eq!(f.sessions.list().iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["s"]);
+}
+
+#[tokio::test]
+async fn a_running_session_its_agent_doesnt_list_yet_stays() {
+    let options = listing();
+    let f = fixture("sync-running", options.clone());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+    options.stored.lock().unwrap().clear();
+    f.sessions.sync(&f.project, Some(&["fake".to_owned()])).await;
+    assert_eq!(f.sessions.list().iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["s"]);
+    f.sessions.stop("s").await.unwrap();
+    f.sessions.sync(&f.project, Some(&["fake".to_owned()])).await;
+    assert!(f.sessions.list().is_empty(), "stopped, and gone from its agent");
+}
+
+#[tokio::test]
+async fn agents_that_are_off_or_wait_for_a_sign_in_are_skipped() {
+    use super::sync::SyncOutcome;
+    let options = FakeAgentOptions { require_auth: true, ..listing() };
+    let f = fixture("sync-skip", options);
+    let fake = Some(&["fake".to_owned()][..]);
+    assert_eq!(outcomes(&f.sessions.sync(&f.project, fake).await), [("fake", SyncOutcome::SignIn, None)]);
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").is_some(), "noted as a sign-in need");
+    assert_eq!(outcomes(&f.sessions.sync(&f.project, fake).await), [("fake", SyncOutcome::SignIn, None)]);
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "not started again while it waits");
+
+    f.sessions.inner.opts.configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+    assert_eq!(outcomes(&f.sessions.sync(&f.project, fake).await), [("fake", SyncOutcome::Off, None)]);
+}
+
+#[tokio::test]
+async fn an_agent_that_doesnt_answer_in_time_fails_and_two_syncs_of_a_project_join() {
+    use super::sync::SyncOutcome;
+    let f = fixture("sync-slow", FakeAgentOptions { hang_list: true, ..listing() });
+    let mut options = options_for(&f.dir, &f.launcher);
+    options.sync_timeout = Duration::from_millis(300);
+    let sessions = Sessions::new(options);
+    let fake = Some(&["fake".to_owned()][..]);
+    let (first, second) = tokio::join!(sessions.sync(&f.project, fake), sessions.sync(&f.project, fake));
+    assert_eq!(first, second);
+    assert_eq!(outcomes(&first), [("fake", SyncOutcome::Failed, None)]);
+    assert!(first.agents[0].error.as_deref().unwrap().contains("didn't answer"));
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "one agent for both");
+}
+
+#[tokio::test]
+async fn a_session_its_agent_saw_active_just_now_is_active_elsewhere_unless_it_was_here() {
+    let options = listing();
+    let f = fixture("sync-elsewhere", options.clone());
+    let now = crate::session::iso_now();
+    stored_in(&options, &[("busy", &f.project, None, Some(now.as_str())), ("old", &f.project, None, Some("2026-01-01T00:00:00Z"))]);
+    f.sessions.sync(&f.project, None).await;
+    let elsewhere = |sessions: &Sessions, id: &str| sessions.list().into_iter().find(|s| s.id == id).unwrap().active_elsewhere;
+    assert!(elsewhere(&f.sessions, "fake~busy"));
+    assert!(!elsewhere(&f.sessions, "fake~old"));
+
+    let (_, events) = f.create("here", "fake").unwrap();
+    assert_eq!(f.ask("here", &events, "hello").await, "Hello, world");
+    f.sessions.stop("here").await.unwrap();
+    f.sessions.sync(&f.project, None).await;
+    assert!(!elsewhere(&f.sessions, "here"), "its last activity was Brama's");
 }

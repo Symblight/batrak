@@ -77,6 +77,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::sessions::list_sessions,
+            commands::sessions::sessions_sync,
             commands::sessions::session_create,
             commands::sessions::session_open,
             commands::sessions::session_send_prompt,
@@ -93,7 +94,6 @@ pub fn run() {
             commands::sessions::session_rename,
             commands::sessions::session_reset_title,
             commands::sessions::session_open_log,
-            commands::sessions::session_history,
             commands::sessions::session_set_config_option,
             commands::agents::agents_list,
             commands::agents::agents_add,

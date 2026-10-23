@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { acpAdapter, handleSessionEvent } from './acp-adapter.js';
+import { USER_ID, acpAdapter, handleSessionEvent } from './acp-adapter.js';
 import { $returnedPrompts, takeReturnedPrompt } from '../stores/chat.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
 import { $sessionNotices, dismissSessionNotice } from '../stores/session-runtime.js';
@@ -9,6 +9,33 @@ import { $contextUsage, forgetContextUsage } from '../stores/context-usage.js';
 
 describe('acp-adapter', () => {
   afterEach(() => $sessions.set([]));
+
+  it("shows a session's history as its agent replays it, once: a later load (after an idle stop) adds nothing", () => {
+    /** @type {{ authorId?: string, delta?: { text?: string } }[]} */
+    const chunks = [];
+    const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+    try {
+      const id = 'replayed';
+      let seq = 0;
+      const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+        handleSessionEvent(/** @type {import('../models/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+      const load = () => {
+        send('status', { status: 'starting' });
+        send('update', { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'From a terminal' } });
+        send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Its answer' } });
+        send('status', { status: 'idle' });
+      };
+      load();
+      const texts = chunks.map((c) => c.delta?.text).filter(Boolean);
+      expect(texts).to.deep.equal(['From a terminal', 'Its answer']);
+      expect(chunks.find((c) => c.delta?.text === 'From a terminal')?.authorId).to.equal(USER_ID);
+      const shown = chunks.length;
+      load();
+      expect(chunks.length, 'not repeated').to.equal(shown);
+    } finally {
+      unsubscribe?.();
+    }
+  });
 
   it('takes the session the agent named as the backend reports it', () => {
     const id = newSession('/p');

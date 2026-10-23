@@ -9,13 +9,14 @@ import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime.js';
+import { $sessionSync } from '../../stores/session-sync.js';
 import { $activeSessionId, $pinnedSessions, $sessions } from '../../stores/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace.js';
 import styles from './acp-session-column.css?inline';
 
 /**
  * @tag acp-session-column
- * @summary The session list's container: projects and their sessions from the stores, and what the list asks for (open, select, start, rename, reveal, remove).
+ * @summary The session list's container: projects and their sessions from the stores, the active project's sync, and what the list asks for (open, select, start, rename, reveal, remove, resync).
  */
 export class AcpSessionColumn extends LitElement {
   static properties = {
@@ -34,6 +35,7 @@ export class AcpSessionColumn extends LitElement {
   #pinned = new StoreController(this, { store: $pinnedSessions });
   #unread = new StoreController(this, { store: $unreadSessions });
   #permissions = new StoreController(this, { store: $permissionRequests });
+  #sync = new StoreController(this, { store: $sessionSync });
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.#dialog });
 
@@ -152,7 +154,13 @@ export class AcpSessionColumn extends LitElement {
     sessionController.select(session.id);
   }
 
+  #onResync() {
+    const path = this.#workspace.value?.path;
+    if (path) sessionController.sync(path, { force: true });
+  }
+
   render() {
+    const path = this.#workspace.value?.path ?? null;
     return html`
       <acp-session-list
         class="acp-session-column__list"
@@ -166,6 +174,7 @@ export class AcpSessionColumn extends LitElement {
         .unread=${this.#unread.value}
         .waiting=${Object.keys(this.#permissions.value)}
         .failures=${this.failures}
+        .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}
         .home=${this.home}
         @acp-project-open-folder=${this.#onOpenFolder}
         @acp-project-select=${this.#onProjectSelect}
@@ -174,6 +183,7 @@ export class AcpSessionColumn extends LitElement {
         @acp-project-reveal=${this.#onProjectReveal}
         @acp-project-remove=${this.#onProjectRemove}
         @acp-session-select=${this.#onSessionSelect}
+        @acp-session-resync=${this.#onResync}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>
     `;

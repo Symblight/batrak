@@ -13,14 +13,20 @@
 //!
 //! With `require_auth`, any prompt is answered AuthRequired while `signed_in` is unset (a login
 //! that ran out).
+//!
+//! Its stored sessions (`stored`) answer `session/list` (by `cwd`, `page_size` a page) and
+//! `session/delete` when the options advertise them.
 
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1::{
-    AgentCapabilities, AuthMethod, AuthenticateRequest, AuthenticateResponse, CancelNotification, ContentBlock, ContentChunk, Implementation, InitializeRequest, InitializeResponse,
-    LoadSessionRequest, LoadSessionResponse, NewSessionRequest, NewSessionResponse, PermissionOption,
+    AgentCapabilities, AuthMethod, AuthenticateRequest, AuthenticateResponse, CancelNotification, ContentBlock, ContentChunk, DeleteSessionRequest,
+    DeleteSessionResponse, Implementation, InitializeRequest, InitializeResponse, ListSessionsRequest, ListSessionsResponse,
+    LoadSessionRequest, LoadSessionResponse, ResumeSessionRequest, ResumeSessionResponse, SessionCapabilities,
+    SessionDeleteCapabilities, SessionInfo, SessionListCapabilities, SessionResumeCapabilities, NewSessionRequest, NewSessionResponse, PermissionOption,
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
     SessionConfigSelectOption, SessionId, SessionInfoUpdate, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
@@ -50,6 +56,34 @@ pub struct FakeAgentOptions {
     pub hang_authenticate: bool,
     /// `session/set_config_option` is never answered.
     pub hang_set_config: bool,
+    /// `sessionCapabilities`: `list`, `resume`, `delete`.
+    pub list_sessions: bool,
+    pub resume_session: bool,
+    pub delete_session: bool,
+    /// `session/list` is never answered.
+    pub hang_list: bool,
+    /// Sessions a page of `session/list` holds; 0 is 50.
+    pub page_size: usize,
+    /// The agent's session store: shared by every agent started with these options. A
+    /// `session/new` adds to it.
+    pub stored: Arc<Mutex<Vec<FakeSession>>>,
+    /// Numbers new sessions (`fake-session-<n>`) across the agents started with these options.
+    pub created: Arc<AtomicUsize>,
+}
+
+/// A session in the fake agent's store.
+#[derive(Debug, Clone, PartialEq)]
+pub struct FakeSession {
+    pub id: String,
+    pub cwd: PathBuf,
+    pub title: Option<String>,
+    pub updated_at: Option<String>,
+}
+
+impl FakeSession {
+    pub fn new(id: &str, cwd: &std::path::Path, title: Option<&str>, updated_at: Option<&str>) -> FakeSession {
+        FakeSession { id: id.to_owned(), cwd: cwd.to_path_buf(), title: title.map(str::to_owned), updated_at: updated_at.map(str::to_owned) }
+    }
 }
 
 /// What the test can observe of the agent.
@@ -60,10 +94,15 @@ pub struct FakeAgentState {
     pub cancelled: AtomicBool,
     pub cancel_count: AtomicUsize,
     pub loads: AtomicUsize,
+    pub resumes: AtomicUsize,
+    pub lists: AtomicUsize,
+    pub new_sessions: AtomicUsize,
     /// Prompts it got, in order.
     pub prompts: std::sync::Mutex<Vec<String>>,
     /// `initialize`'s `clientCapabilities`, as JSON.
     pub client_capabilities: std::sync::Mutex<Option<serde_json::Value>>,
+    /// The title the running turn gave its session (`title …`).
+    pub title: std::sync::Mutex<Option<String>>,
     /// Methods `authenticate` was called with.
     pub authenticated: std::sync::Mutex<Vec<String>>,
     pub crash: Notify,
@@ -97,7 +136,16 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
     let prompt_options = options.clone();
     let on_init = Arc::clone(&state);
     let on_auth = Arc::clone(&state);
+    let on_new = Arc::clone(&state);
+    let on_resume = Arc::clone(&state);
+    let on_list = Arc::clone(&state);
+    let list_options = options.clone();
+    let delete_options = options.clone();
     let hang_set_config = options.hang_set_config;
+    let capabilities = SessionCapabilities::new()
+        .list(options.list_sessions.then(SessionListCapabilities::new))
+        .resume(options.resume_session.then(SessionResumeCapabilities::new))
+        .delete(options.delete_session.then(SessionDeleteCapabilities::new));
     let result = Agent
         .builder()
         .name("fake-agent")
@@ -108,7 +156,9 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
                     options.auth_methods.iter().filter_map(|m| serde_json::from_value(m.clone()).ok()).collect();
                 responder.respond(
                     InitializeResponse::new(request.protocol_version)
-                        .agent_capabilities(AgentCapabilities::new().load_session(options.load_session))
+                        .agent_capabilities(
+                            AgentCapabilities::new().load_session(options.load_session).session_capabilities(capabilities.clone()),
+                        )
                         .agent_info(Implementation::new("fake-agent", "1.2.3"))
                         .auth_methods(methods),
                 )
@@ -134,14 +184,17 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
             agent_client_protocol::on_receive_request!(),
         )
         .on_receive_request(
-            async move |_request: NewSessionRequest, responder: Responder<NewSessionResponse>, _cx| {
+            async move |request: NewSessionRequest, responder: Responder<NewSessionResponse>, _cx| {
+                on_new.new_sessions.fetch_add(1, Ordering::SeqCst);
                 if new_options.needs_sign_in() {
                     return responder.respond_with_error(agent_client_protocol::Error::auth_required());
                 }
                 if new_options.fail_new_session {
                     return responder.respond_with_error(agent_client_protocol::Error::new(-32603, "no session today"));
                 }
-                responder.respond(NewSessionResponse::new("fake-session-1").config_options(config_options("smart")))
+                let id = format!("fake-session-{}", new_options.created.fetch_add(1, Ordering::SeqCst) + 1);
+                new_options.stored.lock().unwrap().push(FakeSession { id: id.clone(), cwd: request.cwd, title: None, updated_at: None });
+                responder.respond(NewSessionResponse::new(id).config_options(config_options("smart")))
             },
             agent_client_protocol::on_receive_request!(),
         )
@@ -163,6 +216,47 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
                 ))?;
                 // A new process: the model is the default again.
                 responder.respond(LoadSessionResponse::new().config_options(config_options("smart")))
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |_request: ResumeSessionRequest, responder: Responder<ResumeSessionResponse>, _cx| {
+                on_resume.resumes.fetch_add(1, Ordering::SeqCst);
+                responder.respond(ResumeSessionResponse::new().config_options(config_options("smart")))
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: ListSessionsRequest, responder: Responder<ListSessionsResponse>, _cx| {
+                on_list.lists.fetch_add(1, Ordering::SeqCst);
+                if list_options.hang_list {
+                    tokio::spawn(async move {
+                        std::future::pending::<()>().await;
+                        drop(responder);
+                    });
+                    return Ok(());
+                }
+                if list_options.needs_sign_in() {
+                    return responder.respond_with_error(agent_client_protocol::Error::auth_required());
+                }
+                let in_cwd: Vec<FakeSession> = {
+                    let stored = list_options.stored.lock().unwrap();
+                    stored.iter().filter(|s| request.cwd.as_ref().is_none_or(|cwd| *cwd == s.cwd)).cloned().collect()
+                };
+                let size = if list_options.page_size == 0 { 50 } else { list_options.page_size };
+                let from: usize = request.cursor.as_deref().and_then(|c| c.parse().ok()).unwrap_or(0);
+                let page = in_cwd.iter().skip(from).take(size).map(|s| {
+                    SessionInfo::new(s.id.clone(), s.cwd.clone()).title(s.title.clone()).updated_at(s.updated_at.clone())
+                });
+                let next = (from + size < in_cwd.len()).then(|| (from + size).to_string());
+                responder.respond(ListSessionsResponse::new(page.collect()).next_cursor(next))
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
+            async move |request: DeleteSessionRequest, responder: Responder<DeleteSessionResponse>, _cx| {
+                delete_options.stored.lock().unwrap().retain(|s| s.id != request.session_id.to_string());
+                responder.respond(DeleteSessionResponse::new())
             },
             agent_client_protocol::on_receive_request!(),
         )
@@ -202,10 +296,20 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
                     return responder.respond_with_error(agent_client_protocol::Error::auth_required());
                 }
                 let state = Arc::clone(&on_prompt);
+                let stored = Arc::clone(&prompt_options.stored);
                 // The turn runs outside the dispatch loop, so cancel notifications and responses
                 // to our own requests keep flowing.
                 tokio::spawn(async move {
+                    let sid = request.session_id.to_string();
                     let stop = run_turn(&cx, request, &state).await.unwrap_or(StopReason::EndTurn);
+                    // Like an agent's store: the session's last activity, and the title it gave.
+                    let title = state.title.lock().unwrap().take();
+                    for session in stored.lock().unwrap().iter_mut().filter(|s| s.id == sid) {
+                        session.updated_at = Some(crate::session::iso_now());
+                        if title.is_some() {
+                            session.title.clone_from(&title);
+                        }
+                    }
                     let _ = responder.respond(PromptResponse::new(stop));
                 });
                 Ok(())
@@ -284,6 +388,7 @@ async fn run_turn(
         }
         "title" => {
             let title: Vec<&str> = words.collect();
+            *state.title.lock().unwrap() = Some(title.join(" "));
             cx.send_notification(SessionNotification::new(
                 sid.clone(),
                 SessionUpdate::SessionInfoUpdate(SessionInfoUpdate::new().title(title.join(" "))),

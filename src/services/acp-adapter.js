@@ -1,7 +1,7 @@
 import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
-import { MESSAGE_PART_RULES, fenceCode, splitFencedCode } from '../models/chat-parts.js';
+import { MESSAGE_PART_RULES, fenceCode } from '../models/chat-parts.js';
 import { returnPrompt } from '../stores/chat.js';
 import { applyAgentOptions } from '../stores/composer.js';
 import { setContextUsage } from '../stores/context-usage.js';
@@ -26,7 +26,6 @@ import { awaitTrust } from '../stores/trust.js';
 /** @typedef {import('../models/types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('../models/types.js').AcpSessionUpdate} AcpSessionUpdate */
 /** @typedef {import('../models/types.js').PromptInput} PromptInput */
-/** @typedef {import('../models/types.js').TranscriptEntry} TranscriptEntry */
 
 /** The chat's author ids: the user (`<chx-chat>`'s `userId`) and every agent. */
 export const USER_ID = 'me';
@@ -211,8 +210,13 @@ const creating = new Map();
 let handlers = null;
 /** @type {ChxChunk[]} Chunks to deliver once the chat subscribes (history restored before it's up). */
 const undelivered = [];
-/** Sessions whose history was restored from the transcript: an agent's own replay would repeat it. */
-const restored = new Set();
+/**
+ * Sessions whose chat has their history this launch (an agent's replay, or a turn of its own): a
+ * later load (after an idle stop) replays it again, which would repeat it.
+ */
+const loaded = new Set();
+/** Sessions whose agent is replaying their history now (`session/load`). */
+const replaying = new Set();
 
 /** @param {ChxChunk} chunk */
 function deliver(chunk) {
@@ -270,7 +274,8 @@ function endTurn(sessionId, { cancelled = false, error }) {
  * @param {AcpSessionUpdate} update
  */
 function replay(sessionId, update) {
-  if (restored.has(sessionId)) return;
+  if (loaded.has(sessionId)) return;
+  replaying.add(sessionId);
   const authorId = update.sessionUpdate === 'user_message_chunk' ? USER_ID : AGENT_ID;
   let builder = replays.get(sessionId);
   if (builder && builder.authorId !== authorId) builder = undefined;
@@ -305,44 +310,6 @@ function promptText(prompt) {
 }
 
 /**
- * Shows a session's recorded conversation (`session_history`) again: each prompt as your message,
- * each turn's updates as the agent's reply.
- * @param {string} sessionId
- * @param {TranscriptEntry[]} entries Oldest first.
- */
-export function restoreHistory(sessionId, entries) {
-  if (!entries.length) return;
-  restored.add(sessionId);
-  /** @type {MessageBuilder | null} */
-  let reply = null;
-  /** @param {boolean} cancelled */
-  const endReply = (cancelled = false) => {
-    if (reply) reply.finish(cancelled).forEach(deliver);
-    reply = null;
-  };
-  for (const entry of entries) {
-    if (entry.kind === 'prompt') {
-      endReply();
-      const message = new MessageBuilder(sessionId, USER_ID);
-      splitFencedCode(promptText(entry.prompt)).forEach(({ type, ...delta }, i) =>
-        deliver(message.chunk(`${message.messageId}-${type}${i + 1}`, type, delta)),
-      );
-      message.finish().forEach(deliver);
-    } else if (entry.kind === 'update') {
-      reply ??= new MessageBuilder(sessionId, AGENT_ID);
-      for (const chunk of reply.chunks(entry.update)) deliver(chunk);
-    } else {
-      if (entry.stopReason === 'error' && entry.message) {
-        reply ??= new MessageBuilder(sessionId, AGENT_ID);
-        deliver(reply.chunk(`${reply.messageId}-error`, 'text', { text: `\n\n_${entry.message}_` }));
-      }
-      endReply(entry.stopReason === 'cancelled');
-    }
-  }
-  endReply(); // a turn the app quit in the middle of
-}
-
-/**
  * Takes one event from a session's channel: updates into the turn's stream (or the replay),
  * status and notices into the stores, permission requests for the banner.
  * @param {SessionEnvelope} event
@@ -369,7 +336,10 @@ export function handleSessionEvent(event) {
       const { status, message } = event.payload;
       setSessionStatus(sessionId, status);
       setSessionNotice(sessionId, noticeOf(sessionId, status, message ?? null));
-      if (status !== 'preparing' && status !== 'starting') endReplay(sessionId);
+      if (status !== 'preparing' && status !== 'starting') {
+        endReplay(sessionId);
+        if (replaying.delete(sessionId)) loaded.add(sessionId);
+      }
       return;
     }
     case 'permission-request': {
@@ -411,6 +381,7 @@ export function handleSessionEvent(event) {
       return;
     }
     case 'turn-end':
+      loaded.add(sessionId);
       touchSession(sessionId);
       markUnread(sessionId);
       stopped.delete(sessionId);
@@ -507,7 +478,8 @@ function noticeOf(sessionId, status, message) {
 export function forgetSession(sessionId) {
   endTurn(sessionId, { cancelled: true });
   replays.delete(sessionId);
-  restored.delete(sessionId);
+  loaded.delete(sessionId);
+  replaying.delete(sessionId);
   stopped.delete(sessionId);
   creating.delete(sessionId);
   clearPermissionRequests(sessionId);

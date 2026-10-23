@@ -18,6 +18,7 @@ import openFolderIcon from '@material-design-icons/svg/outlined/create_new_folde
 import pinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
+import '../acp-session-sync/acp-session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { orderSessions, sessionIndicator } from '../../models/sessions.js';
 import styles from './acp-session-list.css?inline';
@@ -45,7 +46,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-list
- * @summary Projects, each expanding into its sessions (pinned first, then by last activity) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-project-open-folder `null`
  * @fires acp-project-select `{ projectId }`
  * @fires acp-project-toggle `{ projectId, expanded }`
@@ -58,6 +59,7 @@ function age(iso) {
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
+ * @fires acp-session-resync `null` From `<acp-session-sync>`.
  */
 export class AcpSessionList extends LitElement {
   static properties = {
@@ -71,6 +73,7 @@ export class AcpSessionList extends LitElement {
     unread: { attribute: false },
     waiting: { attribute: false },
     failures: { attribute: false },
+    sync: { attribute: false },
     home: {},
     renaming: { state: true },
     hovered: { state: true },
@@ -114,6 +117,8 @@ export class AcpSessionList extends LitElement {
     this.waiting = [];
     /** @type {Readonly<Record<string, string>>} Why a project's folder couldn't be opened, by project id. */
     this.failures = {};
+    /** @type {import('../../models/types.js').SessionSync | null} The active project's sync with its agents. */
+    this.sync = null;
     /** @type {string | null} Shown as `~` in project paths. */
     this.home = null;
     /** @type {string | null} The session whose title is being edited in its row. */
@@ -381,7 +386,7 @@ export class AcpSessionList extends LitElement {
    * @param {boolean} unread
    */
   #renderStatus(session, unread) {
-    const indicator = sessionIndicator(session.status, this.waiting.includes(session.id), unread);
+    const indicator = sessionIndicator(session.status, this.waiting.includes(session.id), unread, session.activeElsewhere ?? false);
     return indicator === null
       ? nothing
       : html`<acp-session-status class="acp-session-list__status" .indicator=${indicator}></acp-session-status>`;
@@ -415,6 +420,7 @@ export class AcpSessionList extends LitElement {
     return html`
       <div class="acp-session-list__top">
         <h2 class="acp-session-list__heading">Sessions</h2>
+        <acp-session-sync .sync=${this.sync}></acp-session-sync>
         <md-icon-button
           class="acp-session-list__open-folder"
           title="Open folder…"

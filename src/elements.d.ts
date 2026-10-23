@@ -37,6 +37,7 @@ import type { AcpSessionHeader } from './components/acp-session-header/acp-sessi
 import type { AcpSessionList } from './components/acp-session-list/acp-session-list.js';
 import type { AcpSessionMenu } from './components/acp-session-menu/acp-session-menu.js';
 import type { AcpSessionStatus } from './components/acp-session-status/acp-session-status.js';
+import type { AcpSessionSync } from './components/acp-session-sync/acp-session-sync.js';
 import type { AcpSessionColumn } from './components/acp-session-column/acp-session-column.js';
 import type { AcpTerminal } from './components/acp-terminal/acp-terminal.js';
 import type { AcpToolbar } from './components/acp-toolbar/acp-toolbar.js';
@@ -79,6 +80,7 @@ declare global {
     'acp-session-list': AcpSessionList;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;
+    'acp-session-sync': AcpSessionSync;
     'acp-session-column': AcpSessionColumn;
     'acp-settings': AcpSettings;
     'acp-agent-form': AcpAgentForm;

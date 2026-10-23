@@ -2,8 +2,8 @@ import {
   listSessions,
   sessionApplyLocally,
   sessionCheckOutBranch,
+  onSessionsSynced,
   sessionCreate,
-  sessionHistory,
   sessionOpen,
   sessionOpenLog,
   sessionRemove,
@@ -14,9 +14,10 @@ import {
   sessionResume,
   sessionSetConfigOption,
   sessionStop,
+  sessionsSync,
   workspaceSettings,
 } from './ipc.js';
-import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
+import { forgetSession, handleSessionEvent, trackCreate } from './acp-adapter.js';
 import { agentConfig } from './agent-config.js';
 import { reportError } from './notices.js';
 import { notify } from '../stores/notices.js';
@@ -28,7 +29,9 @@ import {
   startComposer,
 } from '../stores/composer.js';
 import { sessionRootController } from './session-root-controller.js';
+import { $agentList } from '../stores/agents.js';
 import { forgetContextUsage } from '../stores/context-usage.js';
+import { endSync, startSync, syncOf } from '../stores/session-sync.js';
 import { removeProjectExpandedFolders } from '../stores/file-tree.js';
 import {
   $activeSessionId,
@@ -39,6 +42,7 @@ import {
   revertToDraft,
   selectSession,
   setListedSessions,
+  setProjectSessions,
   showProject,
   startSession,
   upsertSession,
@@ -48,13 +52,21 @@ import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
 /** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
 const IDLE_STOP_MS = 10 * 60_000;
+/** A project shown again is synced with its agents when its last sync is older than this. */
+const SYNC_STALE_MS = 5 * 60_000;
+/** Clicking a session syncs its agent's sessions, at most this often per agent and project. */
+const SELECT_SYNC_MS = 30_000;
 
 /**
- * Loads sessions from the backend into `$sessions` / `$activeSessionId` and opens each one's event
- * channel, keeps the active session in the opened project, creates a draft's backend session on its
- * first message, resumes a shown session's stopped agent and stops hidden idle ones, and runs the
- * session actions (permissions, stop, restart, log).
+ * Loads the stored sessions from the backend into `$sessions` / `$activeSessionId` and opens each
+ * one's event channel, syncs a project's sessions with its agents (launch, a project shown, a
+ * session clicked, its agents changed, Resync), keeps the active session in the opened project,
+ * creates a draft's backend session on its first message, resumes a shown session's stopped agent
+ * (its history is the agent's replay) and stops hidden idle ones, and runs the session actions
+ * (permissions, stop, restart, log).
  */
+/** @typedef {import('../models/types.js').Session} Session */
+
 /**
  * A session's event; one asking to sign in (or done waiting) changes what the picker says of its agent.
  * @param {import('../models/types.js').SessionEnvelope} event
@@ -65,8 +77,12 @@ function onSessionEvent(event) {
 }
 
 export class SessionController {
-  /** @type {Set<string>} Listed sessions whose recorded conversation was asked for. */
-  #historyLoaded = new Set();
+  /** @type {Set<string>} Sessions whose event channel this window opened. */
+  #opened = new Set();
+  /** @type {Map<string, number>} When each project's last sync started, ms. */
+  #syncedAt = new Map();
+  /** @type {Map<string, number>} When a click last synced an agent of a project (`project\0agent`), ms. */
+  #selectSyncedAt = new Map();
   /** Sequence of workspace.json reads; only the latest answer is kept. */
   #settingsLoad = 0;
   /** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
@@ -74,13 +90,17 @@ export class SessionController {
 
   /** @returns {Promise<void>} */
   async init() {
+    onSessionsSynced(({ projectPath, sessions, report }) => {
+      endSync(projectPath, report);
+      setProjectSessions(projectPath, sessions);
+      this.#openAll(sessions);
+    }).catch((err) => reportError('Listening for session syncs failed', err));
     const sessions = await listSessions();
     setListedSessions(sessions);
-    for (const session of sessions) {
-      sessionOpen(session.id, onSessionEvent).catch((err) => reportError(`Opening "${session.title}" failed`, err));
-    }
-    // A session's conversation comes back the first time it's shown, not all at launch. Showing a
-    // session resumes its stopped agent; the one it replaces is stopped once idle for a while.
+    this.#openAll(sessions);
+    // A session's conversation is its agent's replay when it's shown: showing a session resumes its
+    // stopped agent (unless another app may be running it), and syncs its agent's list; the one it
+    // replaces is stopped once idle for a while.
     /** @type {string | null} */
     let shown = null;
     $activeSessionId.subscribe((id) => {
@@ -89,13 +109,73 @@ export class SessionController {
       if (id === null) return;
       clearTimeout(this.#idleStops.get(id));
       this.#idleStops.delete(id);
-      if (sessions.some((s) => s.id === id)) this.#loadHistory(id);
+      this.#syncAgentOf(id);
       this.#resume(id);
     });
     $workspacePath.subscribe((path) => {
       this.#loadSettings(path);
-      if (path !== null) showProject(path);
+      if (path === null) return;
+      showProject(path);
+      this.sync(path);
     });
+    // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
+    // last time are asked now.
+    $agentList.subscribe(({ agents }) => {
+      const path = $workspacePath.get();
+      const report = path === null ? null : syncOf(path).report;
+      if (path === null || report === null || syncOf(path).running) return;
+      const settled = new Set(
+        report.agents.filter((a) => a.outcome === 'listed' || a.outcome === 'unsupported').map((a) => a.agentId),
+      );
+      const due = agents.filter((a) => a.enabled && !settled.has(a.id)).map((a) => a.id);
+      if (due.length > 0) this.sync(path, { force: true, agentIds: due });
+    });
+  }
+
+  /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
+  #openAll(sessions) {
+    for (const session of sessions) {
+      if (this.#opened.has(session.id)) continue;
+      this.#opened.add(session.id);
+      sessionOpen(session.id, onSessionEvent).catch((err) => {
+        this.#opened.delete(session.id);
+        reportError(`Opening "${session.title}" failed`, err);
+      });
+    }
+  }
+
+  /**
+   * Asks a project's agents for its sessions; they arrive through `sessions://synced`. Skipped while
+   * the last sync is younger than `SYNC_STALE_MS`, unless `force`.
+   * @param {string} projectId
+   * @param {{ force?: boolean, agentIds?: string[] | null }} [options]
+   * @returns {Promise<void>}
+   */
+  async sync(projectId, { force = false, agentIds = null } = {}) {
+    const last = this.#syncedAt.get(projectId);
+    if (!force && agentIds === null && last !== undefined && Date.now() - last < SYNC_STALE_MS) return;
+    if (agentIds === null) this.#syncedAt.set(projectId, Date.now());
+    startSync(projectId);
+    try {
+      endSync(projectId, await sessionsSync(projectId, agentIds));
+    } catch (err) {
+      endSync(projectId, null);
+      reportError('Syncing sessions failed', err);
+    }
+  }
+
+  /**
+   * A click on a session syncs its agent's sessions of the project (at most every `SELECT_SYNC_MS`).
+   * @param {string} id
+   */
+  #syncAgentOf(id) {
+    const session = $sessions.get().find((s) => s.id === id);
+    if (!session) return;
+    const key = `${session.projectId}\0${session.agentId}`;
+    const last = this.#selectSyncedAt.get(key);
+    if (last !== undefined && Date.now() - last < SELECT_SYNC_MS) return;
+    this.#selectSyncedAt.set(key, Date.now());
+    this.sync(session.projectId, { agentIds: [session.agentId] });
   }
 
   /**
@@ -120,7 +200,14 @@ export class SessionController {
    * @param {string} id
    */
   #resume(id) {
-    if ($sessions.get().find((s) => s.id === id)?.status !== 'stopped') return;
+    const session = $sessions.get().find((s) => s.id === id);
+    if (session?.status !== 'stopped') return;
+    if (session.activeElsewhere) {
+      // Resume (the banner's) starts it anyway.
+      const message = 'Another app may be running this session now: two apps writing one session can lose messages. Resume to open it here.';
+      setSessionNotice(id, { kind: 'stopped', message });
+      return;
+    }
     sessionResume(id).catch((err) => reportError('Starting the agent failed', err));
   }
 
@@ -138,20 +225,6 @@ export class SessionController {
       else if (status !== undefined && status !== 'stopped' && status !== 'error') this.#stopWhenIdle(id);
     }, IDLE_STOP_MS);
     this.#idleStops.set(id, timer);
-  }
-
-  /**
-   * Shows a session's recorded conversation in the chat, once per launch.
-   * @param {string} id
-   */
-  async #loadHistory(id) {
-    if (this.#historyLoaded.has(id)) return;
-    this.#historyLoaded.add(id);
-    try {
-      restoreHistory(id, await sessionHistory(id));
-    } catch (err) {
-      reportError('Loading the conversation failed', err);
-    }
   }
 
   /**
@@ -312,8 +385,9 @@ export class SessionController {
   }
 
   /**
-   * Removes a session for good: its agent stops, its conversation and log are deleted, and the chat
-   * shows another session of the project. The project's files stay as they are.
+   * Removes a session for good: its agent stops, it's deleted in its agent (or hidden where the agent
+   * can't delete), its log is deleted, and the chat shows another session of the project. The
+   * project's files stay as they are.
    * @param {string} id
    * @returns {Promise<void>}
    */
@@ -333,7 +407,7 @@ export class SessionController {
     forgetComposer(id);
     forgetContextUsage(id);
     if (worktree !== null) removeProjectExpandedFolders(worktree);
-    this.#historyLoaded.delete(id);
+    this.#opened.delete(id);
     removeSession(id);
   }
 
