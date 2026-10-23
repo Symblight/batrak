@@ -41,12 +41,7 @@ pub fn run() {
             );
             let configs =
                 config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json"))).with_registry(registry.clone());
-            let installer: std::sync::Arc<dyn config::install::Installer> = std::sync::Arc::new(config::install::ArchiveInstaller::new(
-                data_dir.join("agents"),
-                registry.clone(),
-                std::sync::Arc::new(config::install::Https),
-            ));
-            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir.clone(), configs.clone(), installer.clone()));
+            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir.clone(), configs.clone()));
             let tidy = sessions.clone();
             tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
             let emitter = app.handle().clone();
@@ -62,7 +57,7 @@ pub fn run() {
             let emitter = app.handle().clone();
             app.manage(config::update::Updater::new(
                 configs.clone(),
-                std::sync::Arc::new(config::update::Download { npm: config::update::NpmPrefetch { dir: data_dir.join("npm") }, installer }),
+                std::sync::Arc::new(config::update::NpmPrefetch { dir: data_dir.join("npm") }),
                 std::sync::Arc::new(move |project: Option<&std::path::Path>| commands::agents::emit_changed(&emitter, project)),
             ));
             app.manage(sessions);

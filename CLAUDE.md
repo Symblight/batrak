@@ -213,25 +213,21 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
     `projectPath: null`. Only Claude, Codex, Copilot and Antigravity are read from it
     (`registry::SUPPORTED`; the rest are left out), and can be added (`AgentList.known`, pinned
-    launches). Claude, Codex and Copilot run with `npx`; Antigravity is a `binary` (`Launch`, this
-    platform's archive): agents.json runs it as `${agent:antigravity-acp@<version>}`
-    (`config/install.rs`), which becomes the program unpacked into
-    `<app data>/agents/<id>/<version>/` just before it's spawned (session, probe, sign-in login),
-    downloaded (HTTPS, at most 1 GiB; the registry has no checksum) and unpacked (no entry out of
-    the folder) the first time; only the registry's current version installs. An installed agent
-    is matched by what it runs (`match_launch`: that `${agent:…}`, or `npx` running the entry's
+    launches). Claude, Codex and Copilot run with `npx`; Antigravity, a `binary` in the registry,
+    runs `agy_acp_server` from PATH (`Launch::Program`, `registry::ON_PATH`, this platform's
+    args): the user installs and updates it, Brama never downloads an agent. An installed agent
+    is matched by what it runs (`match_launch`: that program's name, or `npx` running the entry's
     package, its first `-p` / `--package` value or first non-flag argument, with or without
     `@version`), not by id;
     `AgentSummary.version` is the version its args pin, else `agentInfo.version` from its last
-    `initialize` (`<app data>/agent-versions.json`); `update` (semver) is a newer registry
-    version, `pin: true` when the installed one is unknown ("Pin latest").
+    `initialize` (`<app data>/agent-versions.json`); `update` (semver, `npx` agents only) is a
+    newer registry version, `pin: true` when the installed one is unknown ("Pin latest").
   - **Updates** (`config/update.rs`, `Updater`): `agents_update_version` / `agents_update_all`
     pin the registry's version in place (`AgentConfigs::pin_versions`, one write; a trusted launch
     stays trusted when the pin is all that changed), emit `agents://changed` (running sessions get
     `agent-outdated`; nothing restarts), then `npm cache add <pkg>@<version>` (login-shell env, own
     process group, 5 min; a failure keeps the pin and `warn`s). A second Update of an agent joins
-    the running one; a downloaded agent's update pins `${agent:<id>@<new>}` and installs it
-    instead (`update::Download`). The tab shows "Updating…" from the call until it returns (`$agentsPending`)
+    the running one. The tab shows "Updating…" from the call until it returns (`$agentsPending`)
     and while the backend says an update runs (another window's).
   - **Following the list:** the watcher flags `.brama/agents.json` (`Changes.config`) → reload →
     `agents://changed`; the user's file has its own watcher (`config/watch.rs`, its folder,

@@ -3,7 +3,6 @@
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
 pub mod env;
-pub mod install;
 pub mod registry;
 pub mod switches;
 pub mod update;
@@ -486,6 +485,9 @@ pub struct AgentConfigs {
     /// The ACP registry: the agents to add, and the versions to update to.
     registry: registry::Registry,
     inner: Arc<Mutex<Inner>>,
+    /// Held by each change of an agents.json, from its read to its reload: two at once would
+    /// each write over the other's.
+    edits: Arc<Mutex<()>>,
 }
 
 #[derive(Default)]
@@ -518,8 +520,7 @@ struct Removed {
 pub struct Pinned {
     pub agent_id: String,
     pub name: String,
-    /// What the update downloads: `<package>@<version>` as `npm` takes it, or a downloaded
-    /// agent's `${agent:<id>@<version>}` (`install::reference`).
+    /// What the update downloads: `<package>@<version>` as `npm` takes it.
     pub spec: String,
     pub version: String,
 }
@@ -607,6 +608,7 @@ impl AgentConfigs {
             switches_file,
             registry: registry::Registry::bundled(),
             inner: Arc::new(Mutex::new(inner)),
+            edits: Arc::default(),
         }
     }
 
@@ -707,6 +709,7 @@ impl AgentConfigs {
     /// to the open project's `.brama/agents.json`, trusting it, or without a project to the user's
     /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
+        let _editing = self.editing();
         if agent.known.is_none() {
             return Err("only Claude, Codex, Copilot or Antigravity can be added".to_owned());
         }
@@ -785,6 +788,7 @@ impl AgentConfigs {
     /// project's MCP servers would start with is left for the trust dialog. `ids`: only those.
     /// Returns the ids copied.
     pub fn import_user_agents(&self, project: &Path, ids: Option<&[String]>) -> Result<Vec<String>, String> {
+        let _editing = self.editing();
         let supported: Vec<String> =
             self.list(Some(project)).user_agents.into_iter().filter(|a| a.registry_id.is_some()).map(|a| a.id).collect();
         let user_file = self.user_file.clone().ok_or("this system has no config folder")?;
@@ -819,10 +823,11 @@ impl AgentConfigs {
     /// refused while the file doesn't parse. A project's launch that was trusted stays trusted
     /// when the pin is all that changed. Returns what it pinned (nothing: up to date).
     pub fn pin_versions(&self, project: Option<&Path>, agent_id: Option<&str>) -> Result<Vec<Pinned>, String> {
+        let _editing = self.editing();
         let entries = self.registry.agents();
         let merged = self.merged(project);
-        // An `npx` agent's package gets the new version; `None`: a downloaded agent, whose command does.
-        let targets: Vec<(AgentSummary, Option<String>, String)> = self
+        // Only an `npx` agent has an update: its package gets the new version.
+        let targets: Vec<(AgentSummary, String, String)> = self
             .list(project)
             .agents
             .into_iter()
@@ -830,14 +835,9 @@ impl AgentConfigs {
             .filter_map(|a| {
                 let to = a.update.as_ref()?.to.clone();
                 let matched = registry::match_launch(&entries, &a.command, &a.args)?;
-                let package = match &matched.agent.launch {
-                    registry::Launch::Npx(npx) => Some(npx.package.clone()),
-                    registry::Launch::Binary(_) => None,
-                };
-                let spec = match &package {
-                    Some(package) => format!("{package}@{to}"),
-                    None => install::reference(&matched.agent.id, &to),
-                };
+                let registry::Launch::Npx(npx) = &matched.agent.launch else { return None };
+                let package = npx.package.clone();
+                let spec = format!("{package}@{to}");
                 Some((a, package, spec))
             })
             .collect();
@@ -855,11 +855,6 @@ impl AgentConfigs {
         edit_file(&self.file_of(project)?, |root| {
             let agents = agents_of(root)?;
             for (agent, package, spec) in &targets {
-                let Some(package) = package else {
-                    let entry = agents.get_mut(&agent.id).and_then(serde_json::Value::as_object_mut).ok_or_else(|| format!("unknown agent \"{}\"", agent.id))?;
-                    entry.insert("command".to_owned(), spec.as_str().into());
-                    continue;
-                };
                 let args = agents
                     .get_mut(&agent.id)
                     .and_then(|entry| entry.get_mut("args"))
@@ -892,13 +887,8 @@ impl AgentConfigs {
                 .zip(&pinned)
                 .filter_map(|(((_, package, _), before), pin)| {
                     let mut expected = before.clone()?;
-                    match package {
-                        Some(package) => {
-                            let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
-                            expected.args[at] = arg;
-                        }
-                        None => expected.command.clone_from(&pin.spec),
-                    }
+                    let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
+                    expected.args[at] = arg;
                     now.launch(&pin.agent_id).filter(|launch| *launch == expected)
                 })
                 .collect();
@@ -912,6 +902,7 @@ impl AgentConfigs {
     /// Rewrites an agent's name and launch, keeping the rest of its entry; a project's new launch
     /// is trusted. Returns the project whose file changed.
     pub fn update_agent(&self, project: Option<&Path>, agent_id: &str, agent: &NewAgent) -> Result<Option<PathBuf>, String> {
+        let _editing = self.editing();
         let resolved = resolve(agent, &self.registry.known())?;
         let file = self.file_of(project)?;
         edit_file(&file, |root| {
@@ -930,6 +921,7 @@ impl AgentConfigs {
     /// Makes an agent the default for new sessions: in the project's agents.json, or the user's
     /// without a project. Returns the project whose file changed.
     pub fn set_default(&self, project: Option<&Path>, agent_id: &str) -> Result<Option<PathBuf>, String> {
+        let _editing = self.editing();
         let merged = self.merged(project);
         let Some(agent) = merged.agent(agent_id) else { return Err(format!("unknown agent \"{agent_id}\"")) };
         if merged.enabled(agent_id).is_none() {
@@ -954,6 +946,7 @@ impl AgentConfigs {
     /// Removes an agent's entry from the project's agents.json (the user's without a project).
     /// `restore_agent(token)` puts it back.
     pub fn remove_agent(&self, project: Option<&Path>, agent_id: &str) -> Result<Removal, String> {
+        let _editing = self.editing();
         let file = self.file_of(project)?;
         let off = self.lock().switches.is_off(project, agent_id);
         let mut before = None;
@@ -978,6 +971,7 @@ impl AgentConfigs {
     /// Undoes a `remove_agent`: its entry back as it was, where it was. Returns the project whose
     /// file changed.
     pub fn restore_agent(&self, token: u64) -> Result<Option<PathBuf>, String> {
+        let _editing = self.editing();
         let removed = self.lock().removed.remove(&token).ok_or("nothing to restore")?;
         edit_file(&removed.file, |root| {
             let agents = agents_of(root)?;
@@ -1088,6 +1082,11 @@ impl AgentConfigs {
         self.inner.lock().unwrap_or_else(PoisonError::into_inner)
     }
 
+    /// One change of an agents.json at a time (`edits`).
+    fn editing(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.edits.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
     /// Re-reads both files for `project`. Returns whether anything changed; a newly invalid file
     /// is logged (and so shown) once.
     pub fn reload(&self, project: &Path) -> bool {
@@ -1144,14 +1143,15 @@ impl AgentConfigs {
 
 impl Inner {
     /// Drops the switches of agents that left the scope's file (its last valid version). A file
-    /// that never parsed says nothing about its agents.
+    /// that never parsed, or isn't there (a checkout of a branch without it), says nothing about
+    /// its agents.
     fn prune(&mut self, project: Option<&Path>) -> bool {
         let state = match project {
             Some(project) => self.projects.get(project),
             None => Some(&self.user),
         };
-        let Some(state) = state.filter(|s| s.last_valid.is_some() || s.error.is_none()) else { return false };
-        let ids: BTreeSet<String> = state.last_valid.as_ref().map(|file| file.agents.keys().cloned().collect()).unwrap_or_default();
+        let Some(file) = state.and_then(|s| s.last_valid.as_ref()) else { return false };
+        let ids: BTreeSet<String> = file.agents.keys().cloned().collect();
         self.switches.prune(project, |id| ids.contains(id))
     }
 }
@@ -1781,6 +1781,44 @@ mod tests {
     }
 
     #[test]
+    fn a_deleted_agents_file_keeps_the_switches() {
+        let project = temp_project("switch-deleted");
+        ensure_project_dir(&project).unwrap();
+        let project_file = project.join(".brama/agents.json");
+        let text = r#"{"version":1,"agents":{"repo":{"command":"./run"}}}"#;
+        fs::write(&project_file, text).unwrap();
+        let configs = AgentConfigs::new(None, None);
+        configs.set_enabled(Some(&project), "repo", false).unwrap();
+
+        // A checkout of a branch without the file, and back.
+        fs::remove_file(&project_file).unwrap();
+        configs.reload(&project);
+        fs::write(&project_file, text).unwrap();
+        configs.reload(&project);
+        assert!(configs.merged(Some(&project)).off.contains("repo"), "still off");
+        fs::remove_dir_all(project).unwrap();
+    }
+
+    #[test]
+    fn agents_added_at_once_are_all_kept() {
+        let base = temp_project("add-at-once");
+        let configs = with_fixture(Some(base.join("agents.json")), None);
+        let pick = NewAgent { known: Some("codex-acp".into()), ..Default::default() };
+        let threads: Vec<_> = (0..8)
+            .map(|_| {
+                let (configs, pick) = (configs.clone(), pick.clone());
+                std::thread::spawn(move || configs.add_agent(None, &pick).unwrap())
+            })
+            .collect();
+        let mut ids: Vec<String> = threads.into_iter().map(|t| t.join().unwrap()).collect();
+        ids.sort();
+        ids.dedup();
+        assert_eq!(ids.len(), 8, "each got its own id: {ids:?}");
+        assert_eq!(configs.merged(None).agents.len(), 8, "none lost");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
     fn an_agent_that_is_off_waits_for_no_trust() {
         let project = temp_project("switch-trust");
         ensure_project_dir(&project).unwrap();
@@ -1825,20 +1863,16 @@ mod tests {
     }
 
     #[test]
-    fn a_downloaded_agent_shows_its_version_and_an_update_pins_the_new_one_in_its_command() {
-        let base = temp_project("pin-download");
+    fn an_agent_run_from_path_is_the_users_to_update() {
+        let base = temp_project("on-path");
         let user_file = base.join("user.json");
-        fs::write(&user_file, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"${agent:antigravity-acp@1.4.0}"}}}"#).unwrap();
+        fs::write(&user_file, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"agy_acp_server"}}}"#).unwrap();
         let configs = with_fixture(Some(user_file), None);
+        configs.note_version("agy", "1.0.0");
         let agy = configs.list(None).agents.into_iter().find(|a| a.id == "agy").unwrap();
-        assert_eq!((agy.registry_id.as_deref(), agy.version.as_deref()), (Some("antigravity-acp"), Some("1.4.0")));
-        assert_eq!(agy.update, Some(registry::AgentUpdate { to: "1.4.1".into(), pin: false }));
-
-        let pinned = configs.pin_versions(None, Some("agy")).unwrap();
-        assert_eq!(pinned.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["${agent:antigravity-acp@1.4.1}"], "what the update downloads");
-        assert_eq!(pinned[0].version, "1.4.1");
-        assert_eq!(configs.merged(None).agent("agy").unwrap().command, "${agent:antigravity-acp@1.4.1}");
-        assert!(configs.list(None).agents.iter().all(|a| a.update.is_none()), "up to date");
+        assert_eq!((agy.registry_id.as_deref(), agy.version.as_deref()), (Some("antigravity-acp"), Some("1.0.0")));
+        assert_eq!(agy.update, None, "the user installed it: no update offered");
+        assert!(configs.pin_versions(None, Some("agy")).unwrap().is_empty());
         fs::remove_dir_all(base).unwrap();
     }
 

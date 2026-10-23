@@ -38,7 +38,7 @@ pub struct RegistryAgent {
 #[serde(rename_all = "camelCase", tag = "kind")]
 pub enum Launch {
     Npx(Npx),
-    Binary(Binary),
+    Program(Program),
 }
 
 /// `npx -y <package>@<version> <args>`.
@@ -51,17 +51,29 @@ pub struct Npx {
     pub env: BTreeMap<String, String>,
 }
 
-/// This platform's archive, unpacked into app data (`install`) and run as `<cmd> <args>`.
+/// A program the user installed, run from PATH as `<command> <args>` (the registry ships it as
+/// an archive, which Brama doesn't download).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct Binary {
-    pub archive: String,
-    pub cmd: String,
+pub struct Program {
+    pub command: String,
     pub args: Vec<String>,
 }
 
 /// The registry agents Brama offers; the registry's others are left out.
 pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"];
+
+/// What a supported `binary` agent runs: the program the user installs on PATH.
+const ON_PATH: [(&str, &str); 1] = [("antigravity-acp", "agy_acp_server")];
+
+/// This machine's key in the registry's `binary` map (`darwin-aarch64`, `windows-x86_64`…).
+fn platform() -> String {
+    let os = match std::env::consts::OS {
+        "macos" => "darwin",
+        other => other,
+    };
+    format!("{os}-{}", std::env::consts::ARCH)
+}
 
 /// A registry agent the Agents tab offers to add, with its pinned launch.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -75,36 +87,30 @@ pub struct KnownAgent {
 }
 
 impl RegistryAgent {
-    /// What agents.json runs it with, pinned to the registry's version: `npx` with the package,
-    /// or the downloaded program (`install::reference`).
+    /// What agents.json runs it with: `npx` with the package pinned to the registry's version, or
+    /// the program on PATH.
     pub fn known(&self) -> KnownAgent {
         let (command, args) = match &self.launch {
             Launch::Npx(Npx { package, version, args, .. }) => {
                 ("npx".to_owned(), ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect())
             }
-            Launch::Binary(binary) => (super::install::reference(&self.id, &self.version), binary.args.clone()),
+            Launch::Program(program) => (program.command.clone(), program.args.clone()),
         };
         KnownAgent { id: self.id.clone(), name: self.name.clone(), command, args }
     }
 
-    /// The registry's version of it.
-    pub fn latest(&self) -> &str {
+    /// The registry's version of an `npx` agent; `None` for a program the user installed and updates.
+    pub fn latest(&self) -> Option<&str> {
         match &self.launch {
-            Launch::Npx(npx) => &npx.version,
-            Launch::Binary(_) => &self.version,
+            Launch::Npx(npx) => Some(&npx.version),
+            Launch::Program(_) => None,
         }
     }
 
-    /// What Add writes, for people: the `npx` command line, or the program that's downloaded.
+    /// What Add writes, for people.
     pub fn command_line(&self) -> String {
         let known = self.known();
-        match &self.launch {
-            Launch::Npx(_) => std::iter::once(known.command.as_str()).chain(known.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "),
-            Launch::Binary(binary) => {
-                let program = binary.cmd.strip_prefix("./").unwrap_or(&binary.cmd);
-                format!("{program} {}, downloaded on its first start", self.version)
-            }
-        }
+        std::iter::once(known.command.as_str()).chain(known.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ")
     }
 }
 
@@ -144,8 +150,6 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     }
     #[derive(Deserialize)]
     struct BinaryDist {
-        archive: String,
-        cmd: String,
         #[serde(default)]
         args: Vec<String>,
     }
@@ -161,7 +165,7 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     if !file.version.starts_with("1.") {
         return Err(format!("registry.json: unsupported version {}", file.version));
     }
-    let platform = super::install::platform();
+    let platform = platform();
     let mut agents = Vec::new();
     for value in file.agents {
         if !value.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| SUPPORTED.contains(&id)) {
@@ -184,13 +188,16 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
                     env: npx.env,
                 })
             }
-            Dist { binary: Some(mut builds), .. } => match builds.remove(&platform) {
-                Some(build) => Launch::Binary(Binary { archive: build.archive, cmd: build.cmd, args: build.args }),
-                None => {
-                    tracing::debug!(agent = %agent.id, platform, "registry agent skipped: no build for this platform");
-                    continue;
+            Dist { binary: Some(mut builds), .. } => {
+                let Some(&(_, command)) = ON_PATH.iter().find(|(id, _)| *id == agent.id) else { continue };
+                match builds.remove(&platform) {
+                    Some(build) => Launch::Program(Program { command: command.to_owned(), args: build.args }),
+                    None => {
+                        tracing::debug!(agent = %agent.id, platform, "registry agent skipped: no build for this platform");
+                        continue;
+                    }
                 }
-            },
+            }
             _ => continue,
         };
         agents.push(RegistryAgent {
@@ -236,15 +243,15 @@ pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
     None
 }
 
-/// The registry agent a launch runs: a downloaded agent's `${agent:<id>@<version>}`, or `npx`
-/// whose package (`package_arg`) is the entry's, with or without `@version`. agents.json's ids
-/// aren't compared: it names its agents as it likes.
+/// The registry agent a launch runs: its program on PATH (by name), or `npx` whose package
+/// (`package_arg`) is the entry's, with or without `@version`. agents.json's ids aren't compared:
+/// it names its agents as it likes.
 pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[String]) -> Option<Matched<'a>> {
-    if let Some((id, version)) = super::install::parse_reference(command) {
-        let agent = agents.iter().find(|a| a.id == id && matches!(a.launch, Launch::Binary(_)))?;
-        return Some(Matched { agent, pinned: parse_version(version).map(|_| version.to_owned()) });
+    let stem = Path::new(command).file_stem()?;
+    if let Some(agent) = agents.iter().find(|a| matches!(&a.launch, Launch::Program(p) if stem == p.command.as_str())) {
+        return Some(Matched { agent, pinned: None });
     }
-    if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
+    if stem != "npx" {
         return None;
     }
     let (package, version) = split_spec(package_arg(args)?.1);
@@ -270,7 +277,7 @@ pub struct AgentUpdate {
 /// Whether the registry's version of `matched` is newer than the one installed: the version its
 /// args pin, else `reported` (`agentInfo.version` from its last `initialize`).
 pub fn update_of(matched: &Matched<'_>, reported: Option<&str>) -> Option<AgentUpdate> {
-    let latest = matched.agent.latest().to_owned();
+    let latest = matched.agent.latest()?.to_owned();
     let newest = parse_version(&latest)?;
     match matched.pinned.as_deref().or(reported) {
         Some(installed) => {
@@ -597,9 +604,9 @@ pub(crate) mod tests {
             })
         );
         assert_eq!(agents[0].vendor, "Anthropic, Zed Industries");
-        let Launch::Binary(antigravity) = &agents[3].launch else { panic!("{:?}", agents[3].launch) };
-        assert!(antigravity.archive.starts_with("https://dl.example.com/agy-") && antigravity.cmd == "./agy_acp_server.par", "this platform's");
-        assert_eq!(agents[3].latest(), "1.4.1");
+        let Launch::Program(antigravity) = &agents[3].launch else { panic!("{:?}", agents[3].launch) };
+        assert_eq!(antigravity.command, "agy_acp_server", "a program the user installed");
+        assert_eq!(agents[3].latest(), None, "the user updates it");
         assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
     }
 
@@ -612,7 +619,7 @@ pub(crate) mod tests {
         let claude = agents.iter().find(|a| a.id == "claude-acp").unwrap();
         assert!(matches!(&claude.launch, Launch::Npx(npx) if npx.package == "@agentclientprotocol/claude-agent-acp"));
         let antigravity = agents.iter().find(|a| a.id == "antigravity-acp").unwrap();
-        assert!(matches!(&antigravity.launch, Launch::Binary(b) if b.archive.starts_with("https://dl.google.com/")));
+        assert!(matches!(&antigravity.launch, Launch::Program(p) if p.command == "agy_acp_server"));
     }
 
     #[test]
@@ -621,8 +628,8 @@ pub(crate) mod tests {
         let known: Vec<_> = agents.iter().map(RegistryAgent::known).collect();
         assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
         assert_eq!(known[1].args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
-        assert_eq!(known[3].command, "${agent:antigravity-acp@1.4.1}", "downloaded on its first start");
-        assert_eq!(agents[3].command_line(), "agy_acp_server.par 1.4.1, downloaded on its first start");
+        assert_eq!(known[3].command, "agy_acp_server", "on PATH, never downloaded");
+        assert!(agents[3].command_line().starts_with("agy_acp_server"), "{}", agents[3].command_line());
     }
 
     #[test]
@@ -642,8 +649,8 @@ pub(crate) mod tests {
         assert_eq!(matched("npx", &["--yes", "--", "@agentclientprotocol/codex-acp@0.60.0"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
         assert_eq!(matched("npx", &["-p", "@agentclientprotocol/codex-acp@0.60.0", "codex-acp", "--acp"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
         assert_eq!(matched("npx", &["--package=@agentclientprotocol/codex-acp", "codex-acp"]), Some(("codex-acp".into(), None)));
-        assert_eq!(matched("${agent:antigravity-acp@1.4.0}", &[]), Some(("antigravity-acp".into(), Some("1.4.0".into()))), "downloaded");
-        assert_eq!(matched("${agent:claude-acp@0.94.0}", &[]), None, "an npx agent isn't downloaded");
+        assert_eq!(matched("agy_acp_server", &[]), Some(("antigravity-acp".into(), None)), "a program on PATH");
+        assert_eq!(matched("/opt/agy/agy_acp_server", &["--uid="]), Some(("antigravity-acp".into(), None)));
     }
 
     #[test]

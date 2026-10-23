@@ -76,8 +76,13 @@ impl Updater {
                 })
                 .clone()
         };
-        let result = running.await;
-        lock(&self.running).remove(&key);
+        let result = running.clone().await;
+        // Only this update's entry: another caller of it may have woken first, and an update
+        // started since has its own.
+        let mut entries = lock(&self.running);
+        if entries.get(&key).is_some_and(|entry| entry.ptr_eq(&running)) {
+            entries.remove(&key);
+        }
         result
     }
 
@@ -117,25 +122,6 @@ impl Updater {
 
 fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
-}
-
-/// An update's download: a downloaded agent's archive (`${agent:…}`, through `installer`), else
-/// the package into npm's cache.
-pub struct Download {
-    pub npm: NpmPrefetch,
-    pub installer: Arc<dyn super::install::Installer>,
-}
-
-impl Prefetch for Download {
-    fn prefetch(&self, spec: String) -> BoxFuture<Result<(), String>> {
-        let Some((id, version)) = super::install::parse_reference(&spec).map(|(id, v)| (id.to_owned(), v.to_owned())) else {
-            return self.npm.prefetch(spec);
-        };
-        let installer = Arc::clone(&self.installer);
-        Box::pin(async move {
-            tokio::task::spawn_blocking(move || installer.install(&id, &version).map(drop)).await.map_err(|e| e.to_string())?
-        })
-    }
 }
 
 /// `npm cache add <spec>` in the user's login-shell environment, in its own process group (stopped
@@ -306,24 +292,5 @@ mod tests {
         assert_eq!(lock(&f.changed).len(), 1, "one write");
         assert_eq!(lock(&f.prefetch.specs).len(), 2);
         assert!(f.configs.list(None).agents.iter().all(|a| a.update.is_none()));
-    }
-
-    /// Records what it was asked to install.
-    #[derive(Default)]
-    struct FakeInstaller(Mutex<Vec<String>>);
-
-    impl crate::config::install::Installer for FakeInstaller {
-        fn install(&self, id: &str, version: &str) -> Result<PathBuf, String> {
-            lock(&self.0).push(format!("{id}@{version}"));
-            Ok(PathBuf::from("/agents/program"))
-        }
-    }
-
-    #[tokio::test]
-    async fn a_downloaded_agents_update_installs_it_instead_of_asking_npm() {
-        let installer = Arc::new(FakeInstaller::default());
-        let download = Download { npm: NpmPrefetch { dir: PathBuf::from("/nonexistent") }, installer: installer.clone() };
-        download.prefetch("${agent:antigravity-acp@1.4.1}".to_owned()).await.unwrap();
-        assert_eq!(*lock(&installer.0), ["antigravity-acp@1.4.1"]);
     }
 }
