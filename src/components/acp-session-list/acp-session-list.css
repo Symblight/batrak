@@ -243,6 +243,13 @@
   font-size: var(--icon-size-sm);
 }
 
+.acp-session-list__show-more {
+  align-self: flex-start;
+  margin-inline-start: 22px;
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
+}
+
 .acp-session-list__empty {
   padding: var(--space-1) var(--space-3) 10px 30px;
   font-size: var(--font-size-sm);

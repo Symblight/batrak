@@ -45,6 +45,23 @@ export function orderSessions(sessions, pinned) {
   return [...sessions].sort((a, b) => rank(a) - rank(b) || b.lastActivityAt.localeCompare(a.lastActivityAt));
 }
 
+/** How many of a project's sessions its list shows at first, and adds with each Show more. */
+export const SESSIONS_PAGE = 5;
+
+/**
+ * The part of a project's ordered sessions its list shows: the first `limit`, or down to the selected
+ * session when it's further down.
+ * @param {readonly Session[]} sessions In list order.
+ * @param {number} limit
+ * @param {string | null} activeId
+ * @returns {{ shown: Session[], hidden: number }}
+ */
+export function visibleSessions(sessions, limit, activeId) {
+  const active = sessions.findIndex((s) => s.id === activeId);
+  const count = Math.min(sessions.length, Math.max(limit, active + 1));
+  return { shown: sessions.slice(0, count), hidden: sessions.length - count };
+}
+
 /**
  * What removing a session asks first; the project's files stay either way.
  * @param {Session} session

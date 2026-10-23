@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
@@ -20,7 +21,7 @@ import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import '../acp-session-sync/acp-session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { orderSessions, sessionIndicator } from '../../models/sessions.js';
+import { SESSIONS_PAGE, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions.js';
 import styles from './acp-session-list.css?inline';
 
 /** @typedef {import('../../models/types.js').Project} Project */
@@ -46,7 +47,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-list
- * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity; five, and five more with each Show more) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-project-open-folder `null`
  * @fires acp-project-select `{ projectId }`
  * @fires acp-project-toggle `{ projectId, expanded }`
@@ -76,6 +77,7 @@ export class AcpSessionList extends LitElement {
     sync: { attribute: false },
     home: {},
     renaming: { state: true },
+    limits: { state: true },
     hovered: { state: true },
     focused: { state: true },
   };
@@ -123,6 +125,8 @@ export class AcpSessionList extends LitElement {
     this.home = null;
     /** @type {string | null} The session whose title is being edited in its row. */
     this.renaming = null;
+    /** @type {Readonly<Record<string, number>>} How many sessions each project shows, by project id (`SESSIONS_PAGE` until Show more). */
+    this.limits = {};
     /** @type {string | null} The session row under the pointer. */
     this.hovered = null;
     /** @type {string | null} The session row with focus in it. */
@@ -303,9 +307,7 @@ export class AcpSessionList extends LitElement {
         : nothing}
       ${expanded
         ? sessions.length > 0
-          ? html`<div class="acp-session-list__sessions" role="group">
-              ${repeat(sessions, (s) => s.id, (s) => this.#renderSession(s))}
-            </div>`
+          ? this.#renderSessions(project, sessions)
           : html`<div class="acp-session-list__empty">
               No sessions yet. Press
               <md-icon class="acp-session-list__empty-icon">${unsafeSVG(addIcon)}</md-icon>
@@ -313,6 +315,28 @@ export class AcpSessionList extends LitElement {
             </div>`
         : nothing}
     `;
+  }
+
+  /**
+   * A project's sessions down to its limit, then Show more for the next `SESSIONS_PAGE`.
+   * @param {Project} project
+   * @param {Session[]} sessions In order.
+   */
+  #renderSessions(project, sessions) {
+    const limit = this.limits[project.id] ?? SESSIONS_PAGE;
+    const { shown, hidden } = visibleSessions(sessions, limit, this.activeSessionId);
+    return html`<div class="acp-session-list__sessions" role="group">
+      ${repeat(shown, (s) => s.id, (s) => this.#renderSession(s))}
+      ${hidden > 0
+        ? html`<md-button
+            class="acp-session-list__show-more"
+            variant="text"
+            aria-label=${`Show more sessions of ${project.name}`}
+            @click=${() => (this.limits = { ...this.limits, [project.id]: shown.length + SESSIONS_PAGE })}
+            >Show more…</md-button
+          >`
+        : nothing}
+    </div>`;
   }
 
   /** @param {Session} session */

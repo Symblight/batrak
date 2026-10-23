@@ -315,5 +315,29 @@ describe('acp-session-list', () => {
     expect(indicator?.sync).to.equal(sync);
   });
 
+  it("shows a project's five newest sessions, five more with each Show more", async () => {
+    const sessions = Array.from({ length: 12 }, (_, i) =>
+      session(`s${i}`, { lastActivityAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }),
+    );
+    const { root } = await render({ sessions });
+    expect(titles(root)).to.deep.equal(['Session s11', 'Session s10', 'Session s9', 'Session s8', 'Session s7']);
+    const more = () => /** @type {HTMLElement | null} */ (root.querySelector('.acp-session-list__show-more'));
+    expect(more()?.textContent?.trim()).to.equal('Show more…');
+    more()?.click();
+    await /** @type {AcpSessionList} */ (/** @type {ShadowRoot} */ (root).host).updateComplete;
+    expect(titles(root)).to.have.length(10);
+    more()?.click();
+    await /** @type {AcpSessionList} */ (/** @type {ShadowRoot} */ (root).host).updateComplete;
+    expect(titles(root)).to.have.length(12);
+    expect(more(), 'all shown').to.equal(null);
+  });
+
+  it('keeps the selected session in view past the first five', async () => {
+    const sessions = Array.from({ length: 8 }, (_, i) => session(`s${i}`, { lastActivityAt: `2026-01-0${i + 1}T00:00:00.000Z` }));
+    const { root } = await render({ sessions, activeSessionId: 's0' });
+    expect(titles(root).at(-1)).to.equal('Session s0');
+    expect(root.querySelector('.acp-session-list__show-more')).to.equal(null);
+  });
+
 });
 

@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { orderSessions, removeSessionConfirm, sessionIndicator, syncSummary } from './sessions.js';
+import { orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
 
 /** @typedef {import('./types.js').Session} Session */
 
@@ -132,5 +132,27 @@ describe('syncSummary', () => {
     const one = { ...report, agents: [{ ...report.agents[0], count: 1 }, report.agents[2]] };
     const summary = syncSummary({ running: false, report: one }, Date.parse(one.endedAt) + 5_000);
     expect(summary).to.deep.equal({ label: 'Synced just now', lines: ['Claude Code · 1 session', "Copilot · can't list sessions"], warn: false });
+  });
+});
+
+describe('visibleSessions', () => {
+  /** @param {string[]} ids */
+  const of = (ids) => ids.map((id) => ({ ...SESSION, id }));
+  const ten = of(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
+
+  it('shows the first `limit` and counts the rest', () => {
+    const { shown, hidden } = visibleSessions(ten, 5, null);
+    expect(shown.map((s) => s.id)).to.deep.equal(['a', 'b', 'c', 'd', 'e']);
+    expect(hidden).to.equal(5);
+  });
+
+  it('shows everything when it fits', () => {
+    expect(visibleSessions(of(['a', 'b']), 5, null)).to.deep.equal({ shown: of(['a', 'b']), hidden: 0 });
+  });
+
+  it('shows up to the selected session when it is further down', () => {
+    const { shown, hidden } = visibleSessions(ten, 5, 'g');
+    expect(shown.map((s) => s.id)).to.deep.equal(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
+    expect(hidden).to.equal(3);
   });
 });
