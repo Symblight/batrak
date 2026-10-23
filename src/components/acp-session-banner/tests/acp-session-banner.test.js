@@ -116,13 +116,24 @@ describe('acp-session-banner', () => {
     it("points at a login's terminal while it runs", async () => {
       const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
       const run = { state: /** @type {const} */ ('waiting'), message: null, terminal };
-      const el = await fixture(html`<acp-session-banner .notice=${notice([])} .signInRun=${run} .permission=${null}></acp-session-banner>`);
+      const el = await fixture(
+        html`<acp-session-banner .notice=${notice([])} .signInRun=${run} .loginHere=${true} .permission=${null}></acp-session-banner>`,
+      );
       const { banner, buttons, names } = view(el);
       expect(banner.label).to.equal('Signing in to Codex… Finish in the Copilot Login terminal.');
       expect(names).to.deep.equal(['Show terminal', 'Cancel']);
       const seen = events(el);
       buttons[0].click();
       expect(seen).to.deep.equal([['acp-session-action', { action: 'show-login' }]]);
+    });
+
+    it("doesn't offer a login's terminal another window started", async () => {
+      const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
+      const run = { state: /** @type {const} */ ('waiting'), message: null, terminal };
+      const el = await fixture(html`<acp-session-banner .notice=${notice([])} .signInRun=${run} .permission=${null}></acp-session-banner>`);
+      const { banner, names } = view(el);
+      expect(banner.label).to.equal('Signing in to Codex… Finish in the Copilot Login terminal of the window that started it.');
+      expect(names).to.deep.equal(['Cancel']);
     });
 
     it('says a sign-in runs, with Cancel', async () => {

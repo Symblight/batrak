@@ -24,7 +24,7 @@ import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
-import { openLoginTerminal } from '../../stores/terminals.js';
+import { $terminals, openLoginTerminal } from '../../stores/terminals.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
@@ -58,6 +58,8 @@ export class AcpAgentColumn extends LitElement {
   #notice = new StoreController(this, { store: $activeNotice });
   /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
   #signIns = new StoreController(this, { store: $signIns });
+  /** Whether a login's terminal is this window's; `#loginHere()` reads it. */
+  #terminals = new StoreController(this, { store: $terminals });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #localShared = new StoreController(this, { store: $localShared });
@@ -157,7 +159,7 @@ export class AcpAgentColumn extends LitElement {
     else if (action === 'open-terminal') terminalController.sessionTerminal(id);
     else if (action === 'show-login') {
       const terminal = this.#signInRun()?.terminal;
-      if (terminal) openLoginTerminal(terminal);
+      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $workspace.get()?.path ?? null);
     }
     else if (action === 'restart') sessionController.restart(id);
     else if (action === 'turn-on-agent') {
@@ -182,6 +184,12 @@ export class AcpAgentColumn extends LitElement {
   #signInRun() {
     const agentId = this.#notice.value?.signIn?.agentId;
     return agentId ? signInOf($workspace.get()?.path ?? null, agentId) : null;
+  }
+
+  /** Whether the active notice's sign-in runs its login in this window's terminal. */
+  #loginHere() {
+    const terminal = this.#signInRun()?.terminal;
+    return terminal !== undefined && terminal !== null && this.#terminals.value[terminal.terminalId] !== undefined;
   }
 
   /** The session a queued turn waits for, from the banner. */
@@ -270,6 +278,7 @@ export class AcpAgentColumn extends LitElement {
             .permission=${hasSession ? this.#permission.value : null}
             .notice=${hasSession ? this.#notice.value : null}
             .signInRun=${hasSession ? this.#signInRun() : null}
+            .loginHere=${hasSession && this.#loginHere()}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}

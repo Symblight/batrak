@@ -1,7 +1,11 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { ACK_EVERY, folderLabel, newTerminalFolder, sessionTerminalFolder, terminalController } from './terminals.js';
-import { $terminals, forgetTerminal, openTerminal } from '../stores/terminals.js';
+import { $terminals, forgetTerminal, openLoginTerminal, openTerminal } from '../stores/terminals.js';
+import { $editorTabs } from '../stores/editor.js';
+import { noteSignIn } from '../stores/agents.js';
+import { $workspace } from '../stores/workspace.js';
+import { terminalTabId } from '../models/tab-ids.js';
 
 /** @typedef {import('../models/types.js').Session} Session */
 
@@ -111,6 +115,19 @@ describe('terminalController', () => {
     const sink = { output: (_bytes, done) => pending.push(done), reset: () => {}, exit: () => {} };
     return { sink, pending };
   }
+
+  it("closes a login's tab when its sign-in is cancelled", async () => {
+    terminalController.start();
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
+    openLoginTerminal(terminal, '/p');
+    noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'waiting', message: null, terminal });
+    noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'cancelled', message: null, terminal });
+    expect($editorTabs.get().paths).to.not.include(terminalTabId('sign-in-1'));
+    expect($terminals.get()['sign-in-1']).to.equal(undefined);
+    await until(() => calls.some((c) => c.cmd === 'terminal_close'));
+    $workspace.set(null);
+  });
 
   it('starts a shell once when its view connects twice while it starts', async () => {
     const id = openTerminal('/p', '/p', 'p');

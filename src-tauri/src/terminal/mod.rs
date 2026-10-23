@@ -152,6 +152,17 @@ impl Terminals {
         lock(&self.inner.terminals).get(id).cloned().ok_or_else(|| format!("unknown terminal {id}"))
     }
 
+    /// Whether `id` is a terminal the window `group` opened: a window reaches only its own.
+    pub fn owns(&self, group: &str, id: &str) -> bool {
+        lock(&self.inner.terminals).get(id).is_some_and(|t| t.group == group)
+    }
+
+    /// The terminals among `ids` that the window `group` opened.
+    pub fn of_group(&self, group: &str, ids: &[String]) -> Vec<String> {
+        let terminals = lock(&self.inner.terminals);
+        ids.iter().filter(|id| terminals.get(id.as_str()).is_some_and(|t| t.group == group)).cloned().collect()
+    }
+
     /// Starts a shell in `req.cwd` (or the fallback when it doesn't exist), which `allowed` must
     /// accept. A running id answers with what it runs; an exited one starts a fresh shell.
     /// Blocking.
@@ -168,6 +179,9 @@ impl Terminals {
     fn start(&self, req: &OpenRequest, allowed: &dyn Fn(&Path) -> bool, program: Option<Program>, on_exit: Option<OnExit>) -> Result<Opened, String> {
         let _opening = lock(&self.inner.opening);
         if let Some(existing) = lock(&self.inner.terminals).get(req.id) {
+            if existing.group != req.group {
+                return Err(format!("terminal {} belongs to another window", req.id));
+            }
             if lock(&existing.stream).exit.is_none() {
                 return Ok(existing.opened.clone());
             }

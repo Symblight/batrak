@@ -264,10 +264,12 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd
   `<app data>/probe`); `agents_sign_in` returns its `LoginTab` (also in `agents://sign-in`'s
-  `terminal`), which `openLoginTerminal()` shows as a running terminal tab (`TerminalInfo.login`:
-  its command line as tooltip, no Restart: the sign-in runs it again); exit 0 signs in
-  (`Sessions::login_ended`), another exit fails, closing the tab cancels. The banner offers every
-  method but API keys, says which terminal to finish in (Show terminal), and with no method at all
+  `terminal`, which every window hears; a window joining another's login gets none back), which
+  `openLoginTerminal()` shows as a running terminal tab among the sign-in's project's tabs
+  (`TerminalInfo.login`: its command line as tooltip, no Restart: the sign-in runs it again); exit
+  0 signs in (`Sessions::login_ended`), another exit fails, closing the tab cancels, and a cancel
+  closes the tab (`noteSignIn()`). The banner offers every method but API keys, says which terminal
+  to finish in (Show terminal only for this window's, `loginHere`), and with no method at all
   offers Open terminal, then Retry. The Agents tab's row offers Sign in (one method runs it, more
   open a menu, none is Retry), "Signing in…" while one runs (`AgentSignIn.pending`, or this
   window's `$signIns`) and why one failed; an agent added there is probed at once and the snackbar
@@ -386,7 +388,8 @@ started in the active session's folder, else the project, else home (New Termina
 *Terminal* menu), or a session's folder (session menu → Open in → Terminal). The backend refuses a
 cwd outside open roots, session folders (`Sessions::contains_folder`) and home; a missing one falls
 back to the project. `Terminals` owns every shell by window (closed on window destroy, page load
-(`close_window_terminals`) and app exit); a reader thread keeps the last 1 MiB of output (cut at a
+(`close_window_terminals`) and app exit; the terminal commands refuse, or skip, another window's
+ids: `Terminals::owns` / `of_group`); a reader thread keeps the last 1 MiB of output (cut at a
 line start) and streams raw bytes to the attached channel (`terminal_attach`, which replays it
 first), pausing once `FLOW_PAUSE_AT` is sent and not yet drawn (the page acknowledges in
 `ACK_EVERY` steps, `terminal_ack`). A waiter thread reports the shell's exit, without waiting for

@@ -1,4 +1,7 @@
 import { atom } from 'nanostores';
+import { closeProjectTab } from './editor.js';
+import { $terminals } from './terminals.js';
+import { terminalTabId } from '../models/tab-ids.js';
 
 /** @typedef {import('../models/types.js').AgentList} AgentList */
 /** @typedef {import('../models/types.js').AgentsView} AgentsView */
@@ -56,10 +59,13 @@ function signInKey(projectPath, agentId) {
 }
 
 /**
- * How a sign-in goes: a running or failed one is kept, a done or cancelled one forgotten.
+ * How a sign-in goes: a running or failed one is kept, a done or cancelled one forgotten. A
+ * cancelled login's tab, this window's, closes: its terminal is gone and says so no more.
  * @param {SignInEvent} event
  */
 export function noteSignIn({ projectPath, agentId, state, message, terminal }) {
+  const login = terminal && $terminals.get()[terminal.terminalId];
+  if (state === 'cancelled' && terminal && login) closeProjectTab(login.projectPath, terminalTabId(terminal.terminalId));
   const { [signInKey(projectPath, agentId)]: _, ...rest } = $signIns.get();
   const kept = state === 'waiting' || state === 'failed';
   $signIns.set(kept ? { ...rest, [signInKey(projectPath, agentId)]: { state, message, terminal } } : rest);

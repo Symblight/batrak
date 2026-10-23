@@ -82,7 +82,7 @@ export class AgentConfig {
     const projectPath = $workspacePath.get();
     try {
       const login = await agentsSignIn(projectPath, agentId, methodId);
-      if (login) openLoginTerminal(login);
+      if (login) openLoginTerminal(login, projectPath);
     } catch (err) {
       reportError(`Signing in to ${this.#nameOf(agentId)} failed`, err);
     }

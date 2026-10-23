@@ -72,10 +72,11 @@ pub async fn agents_probe_options(
 
 /// Signs an agent in with one of the methods it offered: an `agent` method in the backend (the
 /// agent opens the browser), a `terminal` / `command` one as a login in a terminal this window
-/// owns, whose tab the page opens (the returned `LoginTab`); exit 0 there signs it in, closing
-/// it cancels. Returns once it started; how it went comes as `agents://sign-in` (`state`:
-/// `waiting`, then `done` / `failed` / `cancelled`; `terminal`: the login's tab), and a success
-/// also as `agents://changed`.
+/// owns, whose tab the page opens (the returned `LoginTab`; `None` to a window joining a login
+/// another one started); exit 0 there signs it in, closing it cancels. Returns once it started;
+/// how it went comes as `agents://sign-in` to every window (`state`: `waiting`, then `done` /
+/// `failed` / `cancelled`; `terminal`: the login's tab, which only its own window can reach),
+/// and a success also as `agents://changed`.
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn agents_sign_in(
@@ -97,8 +98,10 @@ pub async fn agents_sign_in(
             return Err(e);
         }
     }
+    // A sign-in joined from another window keeps its login in the window that started it.
+    let tab = tab.filter(|tab| terminals.owns(window.label(), &tab.terminal_id));
     let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
-    let terminal = tab.clone();
+    let terminal = sign_in.tab.clone();
     let event = move |state: &str, message: Option<&str>| {
         serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message, "terminal": terminal })
     };

@@ -1,5 +1,5 @@
 import { atom } from 'nanostores';
-import { openTab } from './editor.js';
+import { openProjectTab, openTab } from './editor.js';
 import { $workspace } from './workspace.js';
 import { terminalTabId } from '../models/tab-ids.js';
 
@@ -40,19 +40,20 @@ export function openTerminal(cwd, fallback, label) {
 }
 
 /**
- * Shows a sign-in's login, which the backend started, as a terminal tab in the shown project
- * (once: it's shown again as it is).
+ * Shows a sign-in's login, which the backend started, as a terminal tab among the tabs of the
+ * project the sign-in started in (once: it's shown again as it is, where it is).
  * @param {import('../models/types.js').LoginTab} tab
+ * @param {string | null} projectPath
  */
-export function openLoginTerminal({ terminalId, title, commandLine }) {
-  if (!$terminals.get()[terminalId]) {
-    const projectPath = $workspace.get()?.path ?? null;
+export function openLoginTerminal({ terminalId, title, commandLine }, projectPath) {
+  const known = $terminals.get()[terminalId];
+  if (!known) {
     $terminals.set({
       ...$terminals.get(),
       [terminalId]: { cwd: '', fallback: null, label: title, title: null, projectPath, status: 'running', exit: null, error: null, login: commandLine },
     });
   }
-  openTab(terminalTabId(terminalId));
+  openProjectTab(known ? known.projectPath : projectPath, terminalTabId(terminalId));
 }
 
 /**

@@ -27,6 +27,7 @@ export class AcpSessionBanner extends LitElement {
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
+    loginHere: { attribute: false },
   };
 
   static styles = styles;
@@ -39,6 +40,8 @@ export class AcpSessionBanner extends LitElement {
     this.notice = null;
     /** @type {SignInRun | null} The sign-in running or failed for the notice's agent. */
     this.signInRun = null;
+    /** @type {boolean} The run's login terminal is this window's (another window's it can't show). */
+    this.loginHere = false;
   }
 
   /**
@@ -71,7 +74,7 @@ export class AcpSessionBanner extends LitElement {
   #renderSignIn(signIn) {
     const { agentId } = signIn;
     if (this.signInRun?.state === 'waiting') {
-      return html`${this.signInRun.terminal
+      return html`${this.signInRun.terminal && this.loginHere
           ? html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('show-login')}>
               Show terminal
             </md-button>`
@@ -120,7 +123,10 @@ export class AcpSessionBanner extends LitElement {
   #signInLabel(notice) {
     const signIn = /** @type {SessionSignIn} */ (notice.signIn);
     const run = this.signInRun;
-    if (run?.state === 'waiting' && run.terminal) return `Signing in to ${signIn.agentName}… Finish in the ${run.terminal.title} terminal.`;
+    if (run?.state === 'waiting' && run.terminal) {
+      const where = this.loginHere ? '' : ' of the window that started it';
+      return `Signing in to ${signIn.agentName}… Finish in the ${run.terminal.title} terminal${where}.`;
+    }
     if (run?.state === 'waiting') return `Signing in to ${signIn.agentName}… Finish in your browser if it opened.`;
     if (run?.state === 'failed') return `Signing in to ${signIn.agentName} failed: ${run.message ?? 'unknown error'}`;
     if (!ownSignIns(signIn.methods).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;

@@ -218,6 +218,21 @@ export function closeTab(path) {
 }
 
 /**
+ * Opens a tab, active, among a project's tabs, shown or not.
+ * @param {string | null} root The project's path; `null`: no project.
+ * @param {string} path Tab id.
+ */
+export function openProjectTab(root, path) {
+  const key = root ?? NO_PROJECT;
+  if (key === ($workspace.get()?.path ?? NO_PROJECT)) {
+    openTab(path);
+    return;
+  }
+  const tabs = $projectTabs.get()[key] ?? NO_TABS;
+  $projectTabs.setKey(key, { ...tabs, paths: tabs.paths.includes(path) ? tabs.paths : [...tabs.paths, path], active: path });
+}
+
+/**
  * Closes a tab of any project, shown or not, e.g. a terminal whose shell exited.
  * @param {string | null} root Project path; `null` for the tabs open with no project.
  * @param {string} path Tab id.

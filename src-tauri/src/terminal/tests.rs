@@ -274,6 +274,18 @@ fn closing_a_windows_terminals_leaves_the_others() {
 }
 
 #[test]
+fn a_terminal_is_only_its_windows() {
+    let f = fixture("owner");
+    f.open_in("a", "one", &f.project(), None).unwrap();
+    f.open_in("b", "two", &f.project(), None).unwrap();
+    assert!(f.terminals.owns("one", "a") && !f.terminals.owns("two", "a") && !f.terminals.owns("one", "gone"));
+    let ids = ["a", "b", "gone"].map(String::from);
+    assert_eq!(f.terminals.of_group("one", &ids), ["a"], "the window's own, running");
+    let taken = f.open_in("a", "two", &f.project(), None).unwrap_err();
+    assert!(taken.contains("another window"), "{taken}");
+}
+
+#[test]
 fn opening_one_terminal_twice_at_once_starts_one_shell() {
     let f = fixture("race");
     // A shell that notes each start, then is `sh`.
