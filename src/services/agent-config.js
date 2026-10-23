@@ -166,8 +166,10 @@ export class AgentConfig {
       try {
         const probed = await agentsProbeOptions(projectPath, agentId);
         if (Array.isArray(probed)) cacheAgentOptions(agentId, probed);
-        // The probe learned the agent's version, or that it needs a sign-in.
+        // The probe learned the agent's version, or that it needs a sign-in: the picker and the
+        // Agents tab's row say so.
         this.refresh();
+        this.search();
         return probed;
       } catch (err) {
         log('info', `couldn't ask ${agentId} for its options: ${err}`);
