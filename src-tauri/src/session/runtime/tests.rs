@@ -2044,7 +2044,7 @@ async fn cancel_stop_or_the_agent_leaving_gives_a_held_prompt_back() {
 
 #[tokio::test]
 async fn a_failed_sign_in_keeps_the_prompt_waiting() {
-    let f = fixture("sign-in-fail", FakeAgentOptions { fail_authenticate: true, ..needing_sign_in() });
+    let f = fixture("sign-in-fail", FakeAgentOptions { fail_authenticate: Some((-32603, "login failed")), ..needing_sign_in() });
     let (_, events) = f.create("s", "fake").unwrap();
     events.wait_status("error").await;
     f.sessions.send_prompt("s", text("hello")).unwrap();

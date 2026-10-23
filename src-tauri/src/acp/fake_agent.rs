@@ -44,8 +44,8 @@ pub struct FakeAgentOptions {
     pub signed_in: Arc<AtomicBool>,
     /// `initialize`'s `authMethods`, as JSON.
     pub auth_methods: Vec<serde_json::Value>,
-    /// `authenticate` fails ("login failed") instead of signing in.
-    pub fail_authenticate: bool,
+    /// `authenticate` fails with this error code and message instead of signing in.
+    pub fail_authenticate: Option<(i32, &'static str)>,
     /// `authenticate` is never answered (a login the user hasn't finished).
     pub hang_authenticate: bool,
     /// `session/set_config_option` is never answered.
@@ -125,8 +125,8 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
                     });
                     return Ok(());
                 }
-                if auth_options.fail_authenticate {
-                    return responder.respond_with_error(agent_client_protocol::Error::new(-32603, "login failed"));
+                if let Some((code, message)) = auth_options.fail_authenticate {
+                    return responder.respond_with_error(agent_client_protocol::Error::new(code, message));
                 }
                 auth_options.signed_in.store(true, Ordering::SeqCst);
                 responder.respond(AuthenticateResponse::new())

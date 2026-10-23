@@ -250,7 +250,14 @@ impl Connection {
             tracing::info!(agent = %opts.agent_name, method = %method, "signing in");
             let mut closed = closed_rx.clone();
             tokio::select! {
-                answer = cx.send_request(AuthenticateRequest::new(method.clone())).block_task() => { answer.map_err(fail)?; }
+                // A refusal here is the agent's answer, AuthRequired's code or not (Gemini CLI
+                // sends -32000 for an account Google no longer serves): say what it said.
+                answer = cx.send_request(AuthenticateRequest::new(method.clone())).block_task() => {
+                    answer.map_err(|e| match fail(e.clone()) {
+                        ConnectError::SignIn { .. } if !e.message.is_empty() => ConnectError::Failed(e.message),
+                        other => other,
+                    })?;
+                }
                 _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
             }
         }
@@ -675,10 +682,20 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_authenticate_is_its_message() {
-        let options = FakeAgentOptions { fail_authenticate: true, ..needing_sign_in() };
+        let options = FakeAgentOptions { fail_authenticate: Some((-32603, "login failed")), ..needing_sign_in() };
         let err = connect_with(options, None, Some("browser")).await.err().unwrap();
         let ConnectError::Failed(message) = err else { panic!("{err:?}") };
-        assert!(!message.is_empty());
+        assert_eq!(message, "login failed");
+    }
+
+    #[tokio::test]
+    async fn an_authenticate_refused_as_auth_required_is_its_message_too() {
+        // Gemini CLI answers an account Google no longer serves with -32000 (AuthRequired).
+        let refused = "This client is no longer supported for Gemini Code Assist for individuals.";
+        let options = FakeAgentOptions { fail_authenticate: Some((-32000, refused)), ..needing_sign_in() };
+        let err = connect_with(options, None, Some("browser")).await.err().unwrap();
+        let ConnectError::Failed(message) = err else { panic!("not the agent's message: {err:?}") };
+        assert_eq!(message, refused);
     }
 
     #[tokio::test]
