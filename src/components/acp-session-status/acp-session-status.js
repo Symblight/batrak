@@ -3,7 +3,6 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/progress-circular';
 import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
-import elsewhereIcon from '@material-design-icons/svg/outlined/devices.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import queuedIcon from '@material-design-icons/svg/outlined/hourglass_empty.svg?raw';
 import { INDICATOR_LABELS } from '../../models/sessions.js';
@@ -11,11 +10,11 @@ import styles from './acp-session-status.css?inline';
 
 /** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
 
-const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon, elsewhere: elsewhereIcon };
+const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon };
 
 /**
  * @tag acp-session-status
- * @summary A session's status icon, the same in its header and its list row: permission, error, a spinner while the agent works, an hourglass while its turn waits for the project, devices while another app may be running it, a dot for new output.
+ * @summary A session's status icon, the same in its header and its list row: permission, error, a spinner while the agent works (here or in another app), an hourglass while its turn waits for the project, a dot for new output.
  */
 export class AcpSessionStatus extends LitElement {
   static properties = {
@@ -33,13 +32,13 @@ export class AcpSessionStatus extends LitElement {
   #renderGlyph() {
     switch (this.indicator) {
       case 'running':
+      case 'elsewhere':
         return html`<md-progress-circular class="acp-session-status__spinner"></md-progress-circular>`;
       case 'unread':
         return html`<span class="acp-session-status__dot"></span>`;
       case 'permission':
       case 'error':
       case 'queued':
-      case 'elsewhere':
         return html`<md-icon class="acp-session-status__glyph">${unsafeSVG(ICONS[this.indicator])}</md-icon>`;
       default:
         return nothing;

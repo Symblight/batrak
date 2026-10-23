@@ -12,7 +12,7 @@ describe('acp-session-status', () => {
       ['permission', 'Waiting for your permission', 'md-icon'],
       ['error', 'Last turn failed', 'md-icon'],
       ['running', 'Agent is working', 'md-progress-circular'],
-      ['elsewhere', 'Active in another app', 'md-icon'],
+      ['elsewhere', 'Active in another app', 'md-progress-circular'],
       ['unread', 'New output', '.acp-session-status__dot'],
     ];
     for (const [indicator, label, part] of cases) {
