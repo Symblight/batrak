@@ -1,12 +1,16 @@
 import { expect } from '@esm-bundle/chai';
 import {
   $activePath,
+  $agentsReveal,
   $editorTabs,
   $projectTabs,
   $settingsReveal,
+  AGENTS_TAB_ID,
   SETTINGS_TAB_ID,
+  agentsRevealed,
   closeProjectTab,
   closeTab,
+  openAgents,
   openSettings,
   openTab,
   parseTabId,
@@ -19,16 +23,36 @@ import { terminalTabId } from '../models/tab-ids.js';
 describe('editor', () => {
   afterEach(() => {
     closeTab(SETTINGS_TAB_ID);
+    closeTab(AGENTS_TAB_ID);
     $settingsReveal.set(null);
+    $agentsReveal.set(null);
+  });
+
+  it('opens the Agents tab, with no project too, at its add form or an agent until it has shown it', () => {
+    $workspace.set(null);
+    openAgents({ add: true });
+    expect($activePath.get()).to.equal(AGENTS_TAB_ID);
+    expect(parseTabId(AGENTS_TAB_ID)).to.deep.equal({ kind: 'agents', path: '' });
+    const reveal = $agentsReveal.get();
+    expect(reveal).to.deep.equal({ add: true });
+
+    agentsRevealed({ add: true });
+    expect($agentsReveal.get(), 'an equal but newer request stays').to.equal(reveal);
+    agentsRevealed(/** @type {import('../models/types.js').AgentsReveal} */ (reveal));
+    expect($agentsReveal.get()).to.equal(null);
+
+    openAgents();
+    expect($agentsReveal.get(), 'no reveal: where it was').to.equal(null);
+    expect(parseTabs({ paths: [AGENTS_TAB_ID], active: AGENTS_TAB_ID, pinned: [] })?.paths).to.deep.equal([AGENTS_TAB_ID], 'kept with the other view tabs');
   });
 
   it('opens Settings at a section until the tab has shown it', () => {
-    openSettings({ section: 'agents', addAgent: true });
+    openSettings({ section: 'editor' });
     expect($activePath.get()).to.equal(SETTINGS_TAB_ID);
     const reveal = $settingsReveal.get();
-    expect(reveal).to.deep.equal({ section: 'agents', addAgent: true });
+    expect(reveal).to.deep.equal({ section: 'editor' });
 
-    settingsRevealed({ section: 'agents', addAgent: true });
+    settingsRevealed({ section: 'editor' });
     expect($settingsReveal.get(), 'an equal but newer request stays').to.equal(reveal);
     settingsRevealed(/** @type {import('../models/types.js').SettingsReveal} */ (reveal));
     expect($settingsReveal.get()).to.equal(null);

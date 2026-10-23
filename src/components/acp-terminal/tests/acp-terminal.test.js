@@ -21,6 +21,7 @@ const running = {
   status: 'running',
   exit: null,
   error: null,
+  login: null,
 };
 
 /** A `connect` that records what the view does with the shell. */
@@ -158,6 +159,16 @@ describe('acp-terminal', () => {
     const restart = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-terminal__restart'));
     restart.click();
     expect(restarts).to.have.length(1);
+  });
+
+  it("offers no Restart for a sign-in's login: the sign-in runs it again", async () => {
+    const login = { ...running, login: 'copilot login' };
+    const { el, calls } = await render(login);
+    calls.sink?.exit({ code: 1, signal: null });
+    el.info = { ...login, status: 'exited', exit: { code: 1, signal: null } };
+    await until(() => text(el).includes('[Process exited with code 1]'));
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.equal(null);
   });
 
   it('names the signal that ended the shell', async () => {

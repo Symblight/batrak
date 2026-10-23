@@ -8,7 +8,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1::{
-    CancelNotification, ClientCapabilities, ContentBlock, EmbeddedResource, EmbeddedResourceResource,
+    AuthCapabilities, AuthenticateRequest, CancelNotification, ClientCapabilities, ContentBlock, EmbeddedResource, EmbeddedResourceResource,
     ErrorCode, FileSystemCapabilities, Implementation, InitializeRequest, LoadSessionRequest, McpServer,
     NewSessionRequest, PromptRequest, ReadTextFileRequest, SessionConfigOption, SessionModeState,
     SetSessionConfigOptionRequest, SetSessionModeRequest, ReadTextFileResponse, RequestPermissionOutcome,
@@ -21,6 +21,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::{oneshot, watch};
 use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 
+use super::auth::{self, SignInMethod};
 use super::{ClientHost, FsError, PermissionRequest, PromptBlock};
 
 pub struct StartOptions {
@@ -33,6 +34,32 @@ pub struct StartOptions {
     /// For "Sign in to <agent>".
     pub agent_name: String,
     pub initialize_timeout: Duration,
+    /// A sign-in: `authenticate` with this method after `initialize` (no answer timeout: the
+    /// user is in the browser), then `session/new` as usual.
+    pub authenticate: Option<String>,
+}
+
+/// Why a connection couldn't start, or a prompt failed.
+#[derive(Debug, Clone, PartialEq)]
+pub enum ConnectError {
+    /// The agent answered AuthRequired; `methods` are its `authMethods`.
+    SignIn { agent: String, methods: Vec<SignInMethod> },
+    Failed(String),
+}
+
+impl std::fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectError::SignIn { agent, .. } => write!(f, "Sign in to {agent}"),
+            ConnectError::Failed(message) => f.write_str(message),
+        }
+    }
+}
+
+impl From<String> for ConnectError {
+    fn from(message: String) -> ConnectError {
+        ConnectError::Failed(message)
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +102,8 @@ pub struct Connection {
     /// The options as last known, for an agent whose mode is set through `session/set_mode` (its
     /// answer carries no options to replace them with).
     options: Mutex<Vec<serde_json::Value>>,
+    agent_name: String,
+    sign_in_methods: Vec<SignInMethod>,
 }
 
 impl Drop for Connection {
@@ -91,7 +120,7 @@ impl Connection {
         reader: R,
         host: Arc<dyn ClientHost>,
         opts: StartOptions,
-    ) -> Result<(Connection, Started), String>
+    ) -> Result<(Connection, Started), ConnectError>
     where
         W: AsyncWrite + Send + Unpin + 'static,
         R: AsyncRead + Send + Unpin + 'static,
@@ -183,25 +212,32 @@ impl Connection {
         let mut closed = closed_rx.clone();
         let cx = tokio::select! {
             cx = cx_rx => cx.map_err(|_| "the agent connection ended before it started".to_owned())?,
-            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx)),
+            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
         };
 
         let initialize = InitializeRequest::new(ProtocolVersion::V1)
             .client_capabilities(
                 ClientCapabilities::new()
                     .fs(FileSystemCapabilities::new().read_text_file(true).write_text_file(true))
-                    .terminal(false),
+                    .terminal(false)
+                    // A `terminal` method reruns the agent's launch in a Terminal tab; the meta
+                    // flag is for agents that still read Zed's pre-standard one.
+                    .auth(AuthCapabilities::new().terminal(true))
+                    .meta(serde_json::Map::from_iter([("terminal-auth".to_owned(), serde_json::Value::Bool(true))])),
             )
             .client_info(Implementation::new("brama", env!("CARGO_PKG_VERSION")));
         let init = match tokio::time::timeout(opts.initialize_timeout, cx.send_request(initialize).block_task()).await
         {
             Err(_) => {
                 driver.abort();
-                return Err(format!("{} did not answer within {}s", opts.agent_name, opts.initialize_timeout.as_secs()));
+                return Err(format!("{} did not answer within {}s", opts.agent_name, opts.initialize_timeout.as_secs()).into());
             }
-            Ok(result) => result.map_err(|e| describe(&e, &opts.agent_name, &closed_rx))?,
+            Ok(result) => result.map_err(|e| describe(&e, &opts.agent_name, &[], &closed_rx))?,
         };
         let load_supported = init.agent_capabilities.load_session;
+        let methods: Vec<serde_json::Value> =
+            init.auth_methods.iter().filter_map(|m| serde_json::to_value(m).ok()).collect();
+        let sign_in_methods = auth::parse_methods(&methods);
         tracing::info!(
             agent = %opts.agent_name,
             agent_info = ?init.agent_info.as_ref().map(|i| format!("{} {}", i.name, i.version)),
@@ -209,6 +245,22 @@ impl Connection {
             auth_methods = init.auth_methods.len(),
             "agent initialized"
         );
+        let fail = |e: agent_client_protocol::Error| describe(&e, &opts.agent_name, &sign_in_methods, &closed_rx);
+        if let Some(method) = &opts.authenticate {
+            tracing::info!(agent = %opts.agent_name, method = %method, "signing in");
+            let mut closed = closed_rx.clone();
+            tokio::select! {
+                // A refusal here is the agent's answer, AuthRequired's code or not (Gemini CLI
+                // sends -32000 for an account Google no longer serves): say what it said.
+                answer = cx.send_request(AuthenticateRequest::new(method.clone())).block_task() => {
+                    answer.map_err(|e| match fail(e.clone()) {
+                        ConnectError::SignIn { .. } if !e.message.is_empty() => ConnectError::Failed(e.message),
+                        other => other,
+                    })?;
+                }
+                _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&closed_rx).into()),
+            }
+        }
 
         let mcp_servers: Vec<McpServer> = opts
             .mcp_servers
@@ -233,7 +285,7 @@ impl Connection {
                     history_restored = true;
                     options = Some(config_options(loaded.config_options, loaded.modes));
                 }
-                Err(e) if e.code == ErrorCode::AuthRequired => return Err(sign_in(&opts.agent_name)),
+                Err(e) if e.code == ErrorCode::AuthRequired => return Err(fail(e)),
                 Err(e) => tracing::info!(agent = %opts.agent_name, "session/load failed, starting anew: {}", e.message),
             }
         }
@@ -245,7 +297,7 @@ impl Connection {
                     .send_request(new)
                     .block_task()
                     .await
-                    .map_err(|e| describe(&e, &opts.agent_name, &closed_rx))?;
+                    .map_err(fail)?;
                 options = Some(config_options(created.config_options, created.modes));
                 created.session_id
             }
@@ -259,7 +311,8 @@ impl Connection {
             agent_version: init.agent_info.map(|info| info.version),
         };
         let options = Mutex::new(config_options);
-        Ok((Connection { cx, session_id, shared, closed: closed_rx, driver, options }, started))
+        let agent_name = opts.agent_name;
+        Ok((Connection { cx, session_id, shared, closed: closed_rx, driver, options, agent_name, sign_in_methods }, started))
     }
 
     /// Sets a config option (`session/set_config_option`, or `session/set_mode` for the legacy
@@ -300,13 +353,17 @@ impl Connection {
 
     /// Runs one turn: resolves with the response's `stopReason` (`"end_turn"`, `"cancelled"`, …)
     /// once the agent ends it; updates arrive through the host meanwhile.
-    pub async fn prompt(&self, blocks: Vec<PromptBlock>) -> Result<String, String> {
+    /// An agent whose login ran out answers AuthRequired: [`ConnectError::SignIn`].
+    pub async fn prompt(&self, blocks: Vec<PromptBlock>) -> Result<String, ConnectError> {
         let prompt = blocks.into_iter().map(content_block).collect();
         let request = PromptRequest::new(self.session_id.clone(), prompt);
         let mut closed = self.closed.clone();
         let response = tokio::select! {
-            response = self.cx.send_request(request).block_task() => response.map_err(|e| e.message)?,
-            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&self.closed)),
+            response = self.cx.send_request(request).block_task() => response.map_err(|e| match e.code {
+                ErrorCode::AuthRequired => self.sign_in(),
+                _ => ConnectError::Failed(e.message),
+            })?,
+            _ = closed.wait_for(Option::is_some) => return Err(closed_reason(&self.closed).into()),
         };
         Ok(serde_json::to_value(response.stop_reason)
             .ok()
@@ -342,6 +399,10 @@ impl Connection {
     /// Ids of the permission requests still waiting for an answer.
     pub fn pending_permissions(&self) -> Vec<String> {
         self.shared.pending().keys().cloned().collect()
+    }
+
+    fn sign_in(&self) -> ConnectError {
+        ConnectError::SignIn { agent: self.agent_name.clone(), methods: self.sign_in_methods.clone() }
     }
 
     /// Resolves with the reason once the agent's side is gone (exit, crash, closed pipe).
@@ -380,22 +441,24 @@ fn closed_reason(closed: &watch::Receiver<Option<String>>) -> String {
     closed.borrow().clone().unwrap_or_else(|| "the agent connection ended".to_owned())
 }
 
-fn sign_in(agent: &str) -> String {
-    format!("Sign in to {agent}")
-}
-
-/// A failed request as the user reads it: the agent wants a sign-in, it went away, or its message.
-fn describe(e: &agent_client_protocol::Error, agent: &str, closed: &watch::Receiver<Option<String>>) -> String {
+/// A failed request as the user reads it: the agent wants a sign-in (with `methods`), it went
+/// away, or its message.
+fn describe(
+    e: &agent_client_protocol::Error,
+    agent: &str,
+    methods: &[SignInMethod],
+    closed: &watch::Receiver<Option<String>>,
+) -> ConnectError {
     if e.code == ErrorCode::AuthRequired {
-        return sign_in(agent);
+        return ConnectError::SignIn { agent: agent.to_owned(), methods: methods.to_vec() };
     }
     if agent_client_protocol::is_incoming_transport_closed(e) {
-        return format!("{agent} exited during startup");
+        return ConnectError::Failed(format!("{agent} exited during startup"));
     }
     if let Some(reason) = closed.borrow().clone() {
-        return reason;
+        return ConnectError::Failed(reason);
     }
-    e.message.clone()
+    ConnectError::Failed(e.message.clone())
 }
 
 fn fs_error(e: FsError) -> agent_client_protocol::Error {
@@ -460,10 +523,17 @@ mod tests {
         }
     }
 
-    async fn connect(
+    type Connected = (Connection, Started, mpsc::UnboundedReceiver<Seen>, Arc<fake_agent::FakeAgentState>);
+
+    async fn connect(options: FakeAgentOptions, resume: Option<&str>) -> Result<Connected, ConnectError> {
+        connect_with(options, resume, None).await
+    }
+
+    async fn connect_with(
         options: FakeAgentOptions,
         resume: Option<&str>,
-    ) -> Result<(Connection, Started, mpsc::UnboundedReceiver<Seen>, Arc<fake_agent::FakeAgentState>), String> {
+        authenticate: Option<&str>,
+    ) -> Result<Connected, ConnectError> {
         let (writer, reader, state) = fake_agent::start(options);
         let (tx, rx) = mpsc::unbounded_channel();
         let opts = StartOptions {
@@ -472,6 +542,7 @@ mod tests {
             resume: resume.map(str::to_owned),
             agent_name: "Fake Agent".to_owned(),
             initialize_timeout: Duration::from_secs(5),
+            authenticate: authenticate.map(str::to_owned),
         };
         let (conn, started) = Connection::start(writer, reader, Arc::new(RecordingHost { tx }), opts).await?;
         Ok((conn, started, rx, state))
@@ -551,17 +622,89 @@ mod tests {
     async fn a_crash_mid_turn_fails_the_turn_and_closes() {
         let (conn, _, mut rx, _) = connect(FakeAgentOptions::default(), None).await.unwrap();
         let err = tokio::time::timeout(Duration::from_secs(2), conn.prompt(text("crash"))).await.unwrap().unwrap_err();
-        assert!(!err.is_empty());
+        assert!(!err.to_string().is_empty());
         assert_eq!(rx.recv().await, Some(Seen::Update("agent_message_chunk:about to crash".into())));
         let reason = tokio::time::timeout(Duration::from_secs(2), conn.closed()).await.unwrap();
         assert!(reason.contains("closed") || reason.contains("failed"), "{reason}");
     }
 
+    fn needing_sign_in() -> FakeAgentOptions {
+        FakeAgentOptions {
+            require_auth: true,
+            auth_methods: vec![
+                serde_json::json!({ "id": "browser", "name": "Log in", "description": "In your browser" }),
+                serde_json::json!({ "type": "terminal", "id": "tui", "name": "Terminal", "args": ["login"] }),
+            ],
+            ..Default::default()
+        }
+    }
+
+    fn method_ids(err: &ConnectError) -> Vec<&str> {
+        match err {
+            ConnectError::SignIn { methods, .. } => methods.iter().map(|m| m.id.as_str()).collect(),
+            ConnectError::Failed(e) => panic!("not a sign-in: {e}"),
+        }
+    }
+
     #[tokio::test]
-    async fn auth_required_asks_to_sign_in() {
-        let options = FakeAgentOptions { require_auth: true, ..Default::default() };
-        let err = connect(options, None).await.err().unwrap();
-        assert_eq!(err, "Sign in to Fake Agent");
+    async fn auth_required_asks_to_sign_in_with_the_agents_methods() {
+        let err = connect(needing_sign_in(), None).await.err().unwrap();
+        assert_eq!(err.to_string(), "Sign in to Fake Agent");
+        assert_eq!(method_ids(&err), ["browser", "tui"]);
+        let ConnectError::SignIn { methods, .. } = &err else { unreachable!() };
+        assert_eq!(methods[1].kind, auth::SignInKind::Terminal);
+    }
+
+    #[tokio::test]
+    async fn auth_required_from_a_load_asks_to_sign_in_too() {
+        let options = FakeAgentOptions { load_session: true, ..needing_sign_in() };
+        let err = connect(options, Some("old-session")).await.err().unwrap();
+        assert_eq!(method_ids(&err), ["browser", "tui"]);
+    }
+
+    #[tokio::test]
+    async fn the_client_offers_terminal_sign_ins() {
+        let (_, _, _, agent) = connect(FakeAgentOptions::default(), None).await.unwrap();
+        let capabilities = agent.client_capabilities.lock().unwrap().clone().unwrap();
+        assert_eq!(capabilities["auth"]["terminal"], true);
+        assert_eq!(capabilities["_meta"]["terminal-auth"], true);
+    }
+
+    #[tokio::test]
+    async fn authenticate_then_the_session_starts_and_the_next_agent_is_signed_in() {
+        let options = needing_sign_in();
+        let (_, started, _, agent) = connect_with(options.clone(), None, Some("browser")).await.unwrap();
+        assert_eq!(*agent.authenticated.lock().unwrap(), ["browser"]);
+        assert_eq!(started.acp_session_id, "fake-session-1");
+        let (_, _, _, again) = connect(options, None).await.unwrap();
+        assert!(again.authenticated.lock().unwrap().is_empty(), "no second sign-in");
+    }
+
+    #[tokio::test]
+    async fn a_failed_authenticate_is_its_message() {
+        let options = FakeAgentOptions { fail_authenticate: Some((-32603, "login failed")), ..needing_sign_in() };
+        let err = connect_with(options, None, Some("browser")).await.err().unwrap();
+        let ConnectError::Failed(message) = err else { panic!("{err:?}") };
+        assert_eq!(message, "login failed");
+    }
+
+    #[tokio::test]
+    async fn an_authenticate_refused_as_auth_required_is_its_message_too() {
+        // Gemini CLI answers an account Google no longer serves with -32000 (AuthRequired).
+        let refused = "This client is no longer supported for Gemini Code Assist for individuals.";
+        let options = FakeAgentOptions { fail_authenticate: Some((-32000, refused)), ..needing_sign_in() };
+        let err = connect_with(options, None, Some("browser")).await.err().unwrap();
+        let ConnectError::Failed(message) = err else { panic!("not the agent's message: {err:?}") };
+        assert_eq!(message, refused);
+    }
+
+    #[tokio::test]
+    async fn a_prompt_answered_auth_required_asks_to_sign_in() {
+        let options = FakeAgentOptions { signed_in: Arc::new(true.into()), ..needing_sign_in() };
+        let (conn, _, _, _) = connect(options.clone(), None).await.unwrap();
+        options.signed_in.store(false, Ordering::SeqCst);
+        let err = conn.prompt(text("hello")).await.unwrap_err();
+        assert_eq!(method_ids(&err), ["browser", "tui"]);
     }
 
     #[tokio::test]

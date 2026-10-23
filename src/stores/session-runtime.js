@@ -81,7 +81,9 @@ export function setSessionNotice(sessionId, notice) {
     current?.kind !== notice.kind ||
     current.message !== notice.message ||
     current.holder?.id !== notice.holder?.id ||
-    current.under !== notice.under
+    current.under !== notice.under ||
+    current.offAgent !== notice.offAgent ||
+    current.signIn !== notice.signIn
   ) {
     $sessionNotices.set({ ...rest, [sessionId]: notice });
   }

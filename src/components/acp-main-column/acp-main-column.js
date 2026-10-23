@@ -15,12 +15,15 @@ import { ChangesReviewController } from '../../controllers/changes-review/Change
 import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
 import {
   $activePath,
+  $agentsReveal,
   $editorTabs,
   $fileLanguages,
   $settingsReveal,
+  AGENTS_TAB_ID,
   CHANGES_TAB_ID,
   SETTINGS_TAB_ID,
   activateTab,
+  agentsRevealed,
   closeAllTabs,
   closeOtherTabs,
   closeTab,
@@ -33,7 +36,7 @@ import {
   setTabPinned,
   settingsRevealed,
 } from '../../stores/editor.js';
-import { $agentList } from '../../stores/agents.js';
+import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents.js';
 import { addToChat } from '../../stores/chat.js';
 import {
   $commentFocus,
@@ -65,6 +68,8 @@ import styles from './acp-main-column.css?inline';
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../models/types.js').NewAgent} NewAgent */
 /** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../models/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').Settings} Settings */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
@@ -90,6 +95,11 @@ export class AcpMainColumn extends LitElement {
   #systemFonts = new StoreController(this, { store: $systemFonts });
   #agentList = new StoreController(this, { store: $agentList });
   #settingsReveal = new StoreController(this, { store: $settingsReveal });
+  #agentsView = new StoreController(this, { store: $agentsView });
+  #agentsQuery = new StoreController(this, { store: $agentsQuery });
+  #agentsPending = new StoreController(this, { store: $agentsPending });
+  #agentsReveal = new StoreController(this, { store: $agentsReveal });
+  #signIns = new StoreController(this, { store: $signIns });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #gitChanges = new StoreController(this, { store: $gitChanges });
@@ -107,11 +117,12 @@ export class AcpMainColumn extends LitElement {
 
   /**
    * The bar sits lower in the Changes tab, which has no footer. Settings lists the fonts, and the
-   * agents with the versions they reported since.
+   * agents with the versions they reported since; the Agents tab asks again too.
    */
   #activePath = new StoreController(this, {
     store: $activePath,
     onChange: (path) => {
+      if (path === AGENTS_TAB_ID) agentConfig.search();
       if (path !== SETTINGS_TAB_ID) return;
       loadSystemFonts();
       agentConfig.refresh();
@@ -237,8 +248,8 @@ export class AcpMainColumn extends LitElement {
   /** @param {Event} e An `acp-agent-add` or `acp-agent-update`. */
   async #onAgentSave(e) {
     const { agentId, agent } = /** @type {CustomEvent<{ agentId?: string, agent: NewAgent }>} */ (e).detail;
-    // Retargeted to the tab view out here; the form that asked is where the event began.
-    const form = /** @type {HTMLElementTagNameMap['acp-settings-agents']} */ (e.composedPath()[0]);
+    // Retargeted to the tab view out here; the form (or the Agents tab's registry row) that asked is where the event began.
+    const form = /** @type {{ saveFinished(error: string | null): void }} */ (/** @type {unknown} */ (e.composedPath()[0]));
     try {
       await (agentId ? agentConfig.update(agentId, agent) : agentConfig.add(agent));
       form.saveFinished(null);
@@ -272,6 +283,11 @@ export class AcpMainColumn extends LitElement {
         .fonts=${this.#systemFonts.value}
         .agents=${this.#agentList.value}
         .settingsReveal=${this.#settingsReveal.value}
+        .agentsView=${this.#agentsView.value}
+        .agentsQuery=${this.#agentsQuery.value}
+        .agentsPending=${this.#agentsPending.value}
+        .agentsSignIns=${signInsOf(this.#signIns.value, this.#workspace.value?.path ?? null)}
+        .agentsReveal=${this.#agentsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
           repo: this.#gitRepo.value,
@@ -325,11 +341,21 @@ export class AcpMainColumn extends LitElement {
         @acp-settings-revealed=${(/** @type {CustomEvent<{ reveal: SettingsReveal }>} */ e) =>
           settingsRevealed(e.detail.reveal)}
         @acp-agents-file-open=${() => agentConfig.openFile()}
-        @acp-agents-import=${() => agentConfig.importUserAgents()}
+        @acp-agents-import=${(/** @type {CustomEvent<{ agentIds?: string[] } | null>} */ e) =>
+          agentConfig.importUserAgents(e.detail?.agentIds ?? null)}
+        @acp-agents-query=${(/** @type {CustomEvent<AgentsQuery>} */ e) => agentConfig.search(e.detail)}
+        @acp-agent-version-update=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.updateVersion(e.detail.agentId)}
+        @acp-agents-update-all=${() => agentConfig.updateAll()}
+        @acp-agents-registry-check=${() => agentConfig.checkRegistry()}
+        @acp-agents-revealed=${(/** @type {CustomEvent<{ reveal: AgentsReveal }>} */ e) => agentsRevealed(e.detail.reveal)}
         @acp-agent-add=${this.#onAgentSave}
         @acp-agent-update=${this.#onAgentSave}
+        @acp-agent-enable=${(/** @type {CustomEvent<{ agentId: string, enabled: boolean }>} */ e) =>
+          agentConfig.setEnabled(e.detail.agentId, e.detail.enabled)}
         @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
         @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
+        @acp-agent-sign-in=${(/** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ e) =>
+          agentConfig.signIn(e.detail.agentId, e.detail.methodId)}
       ></acp-tab-view>
       <acp-comment-bar
         class=${classMap({

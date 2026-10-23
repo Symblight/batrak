@@ -14,26 +14,26 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-0-5);
-  width: 184px;
+  width: 152px;
   box-sizing: border-box;
   padding: var(--space-4) var(--space-2) var(--space-4) var(--space-3);
 
   @container acp-settings (width < 520px) {
-    width: 56px;
+    width: 48px;
     padding-inline: var(--space-2);
   }
 }
 .acp-settings__nav-item {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  height: 40px;
+  gap: var(--space-2);
+  height: 32px;
   padding: 0 var(--space-3);
   border: none;
   border-radius: var(--shape-corner-full);
   background: none;
   color: var(--md-on-surface-variant);
-  font: var(--font-weight-medium) 14px/20px var(--font-family);
+  font: var(--font-weight-medium) var(--font-size-md)/20px var(--font-family);
   white-space: nowrap;
   cursor: pointer;
 
@@ -46,7 +46,7 @@
   }
   @container acp-settings (width < 520px) {
     justify-content: center;
-    width: 40px;
+    width: 32px;
     padding: 0;
   }
 }
@@ -59,7 +59,7 @@
   }
 }
 .acp-settings__nav-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--icon-size-md);
 }
 .acp-settings__nav-label {
   @container acp-settings (width < 520px) {
@@ -100,8 +100,8 @@
 .acp-settings__group {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding-block: var(--space-2);
+  gap: 20px;
+  padding-block: var(--space-3);
 }
 .acp-settings__group-header {
   display: flex;
@@ -126,7 +126,7 @@
 }
 .acp-settings__divider {
   height: 1px;
-  margin: var(--space-2) 0;
+  margin: var(--space-3) 0;
   border: none;
   background: var(--md-outline-variant);
 }
@@ -134,7 +134,11 @@
 .acp-settings__field {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1-5);
+  gap: var(--space-2);
+}
+/* Its floating label sits on the outline, so the gap above it reads smaller than the others. */
+.acp-settings__field_accent {
+  margin-block-start: var(--space-2);
 }
 .acp-settings__label {
   font: 500 13px/20px var(--font-family);
@@ -145,14 +149,17 @@
   color: var(--md-on-surface-variant);
 }
 
-/* Dense MD3 segmented button: 32px instead of 40px for the narrow column. */
+/* Dense MD3 segmented button: 28px instead of 40px for the narrow column. */
 .acp-settings__segments {
-  --md-segmented-button-group-height: 32px;
-  --md-segmented-button-label-text-size: 13px;
-  --md-segmented-button-icon-size: var(--icon-size-md);
+  --md-segmented-button-group-height: 28px;
+  --md-segmented-button-block-space: var(--space-1);
+  --md-segmented-button-inline-space: var(--space-3);
+  --md-segmented-button-label-text-size: var(--font-size-sm);
+  --md-segmented-button-label-text-line-height: 16px;
+  --md-segmented-button-icon-size: var(--icon-size-sm);
 }
 .acp-settings__segment-icon {
-  font-size: var(--icon-size-md);
+  font-size: var(--icon-size-sm);
 }
 
 /* Dense MD3 outlined field, shared by every field here: 40px (8 + 24 + 8). Text starts 16px in, where
@@ -181,6 +188,13 @@
 /* The Font field shows its value in that font. */
 .acp-settings__input_font::part(text-field) {
   --md-text-field-font-family: var(--_acp-settings-font, var(--font-family-mono));
+}
+/* Each option is drawn in its own font; opening the menu would load every installed one at once.
+   Off-screen options are skipped, so only the fonts scrolled into view load. 32px is the menu row
+   height from shadow.css. */
+.acp-settings__option {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 32px;
 }
 .acp-settings__option_default {
   font-family: var(--font-family-mono);

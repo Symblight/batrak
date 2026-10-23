@@ -1,0 +1,76 @@
+:host {
+  display: block;
+  color: var(--md-on-surface);
+}
+
+.acp-agent-form__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-block: var(--space-2) 0;
+}
+.acp-agent-form__subtitle {
+  font: var(--font-weight-medium) 14px/20px var(--font-family);
+}
+/* The same dense outlined field as Theme and Editor (acp-settings.css); md-select's own field
+   (part `text-field`) sets these on its :host, so they go on that part too. */
+.acp-agent-form__input,
+.acp-agent-form__input::part(text-field) {
+  --md-text-field-top-space: 8px;
+  --md-text-field-bottom-space: 8px;
+  --md-text-field-inline-start-space: var(--space-4);
+  --md-text-field-inline-end-space: var(--space-4);
+  --md-text-field-font-size: var(--font-size-lg);
+  --md-text-field-label-size: var(--font-size-lg);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--md-on-surface);
+  --md-text-field-border-color: var(--md-outline);
+  --md-text-field-primary-color: var(--md-primary);
+  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
+
+  caret-color: var(--md-primary);
+
+  &:focus-within::part(indicator) {
+    border-width: 2px;
+  }
+}
+.acp-agent-form__input_mono {
+  --md-text-field-font-family: var(--font-family-mono);
+}
+.acp-agent-form__lock {
+  font-size: var(--icon-size-sm);
+  color: var(--md-on-surface-variant);
+}
+.acp-agent-form__check {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-block: calc(-1 * var(--space-1));
+  font: 400 14px/20px var(--font-family);
+  color: var(--md-on-surface);
+  cursor: pointer;
+}
+.acp-agent-form__hint {
+  font: 400 12px/16px var(--font-family);
+  color: var(--md-on-surface-variant);
+}
+.acp-agent-form__error {
+  font: 400 12px/16px var(--font-family);
+  color: var(--md-error);
+  overflow-wrap: anywhere;
+}
+.acp-agent-form__actions {
+  display: flex;
+  gap: var(--space-2);
+}
+.acp-agent-form__spacer {
+  flex: 1;
+}
+.acp-agent-form__button {
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
+}
+.acp-agent-form__button_danger {
+  --md-button-foreground-color: var(--md-error);
+}

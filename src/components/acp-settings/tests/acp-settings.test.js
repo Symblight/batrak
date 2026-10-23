@@ -3,22 +3,12 @@ import { DEFAULT_SETTINGS } from '../../../models/settings.js';
 import '../acp-settings.js';
 
 /** @typedef {import('../acp-settings.js').AcpSettings} AcpSettings */
-/** @typedef {import('../../../models/types.js').AgentList} AgentList */
-
-/** @type {AgentList} */
-const AGENTS = {
-  agents: [{ id: 'a', name: 'A', scope: 'user', version: null, command: 'a', args: [] }],
-  defaultAgent: 'a',
-  known: [],
-  userAgents: [],
-  errors: [],
-};
 
 /** A short tab, so the sections scroll. */
 async function render() {
   const el = /** @type {AcpSettings} */ (
     await fixture(
-      html`<acp-settings style="height: 320px" .settings=${DEFAULT_SETTINGS} .fonts=${[]} .agents=${AGENTS}></acp-settings>`,
+      html`<acp-settings style="height: 320px" .settings=${DEFAULT_SETTINGS} .fonts=${[]}></acp-settings>`,
     )
   );
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
@@ -59,44 +49,38 @@ describe('acp-settings', () => {
   it('lists its sections and follows the scroll', async () => {
     const { el, root } = await render();
     const items = [...root.querySelectorAll('.acp-settings__nav-item')];
-    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor', 'Agents']);
+    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor']);
     expect(current(root)).to.equal('Theme');
 
     const scroller = scrollerOf(root);
-    /** @type {HTMLElement} */ (items[2]).click();
+    /** @type {HTMLElement} */ (items[1]).click();
     await rendered(el);
     expect(scroller.scrollTop).to.be.greaterThan(0);
-    expect(current(root)).to.equal('Agents');
+    expect(current(root)).to.equal('Editor');
 
     scroller.scrollTo({ top: 0 });
     await rendered(el);
     expect(current(root)).to.equal('Theme');
   });
 
-  it('scrolls to Agents with its add form open when asked, then says so', async () => {
+  it('scrolls to a section when asked, then says so', async () => {
     const { el, root } = await render();
     const scroller = scrollerOf(root);
     /** @type {unknown[]} */
     const revealed = [];
     el.addEventListener('acp-settings-revealed', (e) => revealed.push(/** @type {CustomEvent} */ (e).detail.reveal));
-    const reveal = { section: /** @type {const} */ ('agents'), addAgent: true };
+    const reveal = { section: /** @type {const} */ ('editor') };
     el.reveal = reveal;
     await el.updateComplete;
     expect(revealed).to.deep.equal([reveal]);
-    const agents = /** @type {HTMLElementTagNameMap['acp-settings-agents']} */ (root.querySelector('acp-settings-agents'));
-    await agents.updateComplete;
-    expect(agents.shadowRoot?.querySelector('.acp-settings-agents__form')).to.not.equal(null);
     await rendered(el);
     expect(scroller.scrollTop).to.be.greaterThan(0);
-    expect(current(root)).to.equal('Agents');
+    expect(current(root)).to.equal('Editor');
   });
 
-  it('opens agents.json from the Agents header', async () => {
-    const { el, root } = await render();
-    let opened = false;
-    el.addEventListener('acp-agents-file-open', () => (opened = true));
-    const edit = [...root.querySelectorAll('md-button')].find((b) => b.textContent?.includes('Edit agents.json'));
-    /** @type {HTMLElement} */ (edit).click();
-    expect(opened).to.equal(true);
+  it('leaves the agents to their own tab', async () => {
+    const { root } = await render();
+    expect(root.querySelector('[data-section="agents"]') !== null, 'no Agents section').to.equal(false);
+    expect([...root.querySelectorAll('md-button')].some((b) => b.textContent?.includes('Edit agents.json'))).to.equal(false);
   });
 });

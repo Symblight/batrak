@@ -7,11 +7,14 @@ import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../models/tab-
 
 /** @typedef {import('../models/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../models/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../models/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../models/types.js').TabKind} TabKind */
 /** @typedef {import('../models/types.js').WorktreeFolder} WorktreeFolder */
 
 /** Id of the Settings tab. */
 export const SETTINGS_TAB_ID = 'view:settings';
+/** Id of the Agents tab: installed agents, their switches and updates, and the registry's. */
+export const AGENTS_TAB_ID = 'view:agents';
 /** Id of the Changes tab: every changed file, each expanding into its diff. */
 export const CHANGES_TAB_ID = 'view:changes';
 /** Id of the Browser tab. */
@@ -20,6 +23,7 @@ export const BROWSER_TAB_ID = 'view:browser';
 /** @type {Map<string, Exclude<TabKind, 'file'>>} View tabs by id; any other id is a file's path. */
 const VIEW_TABS = new Map([
   [SETTINGS_TAB_ID, 'settings'],
+  [AGENTS_TAB_ID, 'agents'],
   [CHANGES_TAB_ID, 'changes'],
   [BROWSER_TAB_ID, 'browser'],
 ]);
@@ -214,6 +218,21 @@ export function closeTab(path) {
 }
 
 /**
+ * Opens a tab, active, among a project's tabs, shown or not.
+ * @param {string | null} root The project's path; `null`: no project.
+ * @param {string} path Tab id.
+ */
+export function openProjectTab(root, path) {
+  const key = root ?? NO_PROJECT;
+  if (key === ($workspace.get()?.path ?? NO_PROJECT)) {
+    openTab(path);
+    return;
+  }
+  const tabs = $projectTabs.get()[key] ?? NO_TABS;
+  $projectTabs.setKey(key, { ...tabs, paths: tabs.paths.includes(path) ? tabs.paths : [...tabs.paths, path], active: path });
+}
+
+/**
  * Closes a tab of any project, shown or not, e.g. a terminal whose shell exited.
  * @param {string | null} root Project path; `null` for the tabs open with no project.
  * @param {string} path Tab id.
@@ -307,6 +326,26 @@ export const $settingsReveal = atom(/** @type {SettingsReveal | null} */ (null))
  */
 export function settingsRevealed(reveal) {
   if ($settingsReveal.get() === reveal) $settingsReveal.set(null);
+}
+
+/**
+ * Opens the Agents tab, or switches to it.
+ * @param {AgentsReveal | null} [reveal] Its add form, or an agent's row, to show.
+ */
+export function openAgents(reveal = null) {
+  if (reveal) $agentsReveal.set(reveal);
+  openTab(AGENTS_TAB_ID);
+}
+
+/** What the Agents tab is to show, until it has. */
+export const $agentsReveal = atom(/** @type {AgentsReveal | null} */ (null));
+
+/**
+ * The Agents tab showed `reveal`; a newer request stays.
+ * @param {AgentsReveal} reveal
+ */
+export function agentsRevealed(reveal) {
+  if ($agentsReveal.get() === reveal) $agentsReveal.set(null);
 }
 
 /** Opens the Changes tab, or switches to it. */

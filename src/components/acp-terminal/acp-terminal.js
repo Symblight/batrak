@@ -223,7 +223,7 @@ export class AcpTerminal extends LitElement {
 
   render() {
     const info = this.info;
-    const ended = info?.status === 'exited' || info?.status === 'failed';
+    const ended = (info?.status === 'exited' || info?.status === 'failed') && !info.login;
     return html`${info?.status === 'failed'
         ? html`<div class="acp-terminal__error" role="alert">${info.error}</div>`
         : nothing}

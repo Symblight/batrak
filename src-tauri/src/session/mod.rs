@@ -6,7 +6,9 @@ pub mod env;
 mod runtime;
 mod transcript;
 
-pub use runtime::{CreateSession, Envelope, EventSink, PromptInput, Sessions, SessionsOptions};
+pub use runtime::{
+    CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions, SessionsOptions,
+};
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -160,7 +162,7 @@ pub fn iso_now() -> String {
     iso_from_millis(now.as_millis() as i64)
 }
 
-fn iso_from_millis(ms: i64) -> String {
+pub(crate) fn iso_from_millis(ms: i64) -> String {
     let (secs, millis) = (ms.div_euclid(1000), ms.rem_euclid(1000));
     let (days, rem) = (secs.div_euclid(86_400), secs.rem_euclid(86_400));
     // Civil date from days since 1970-01-01 (Howard Hinnant's algorithm).

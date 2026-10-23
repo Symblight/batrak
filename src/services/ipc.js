@@ -243,6 +243,18 @@ export function agentsUpdate(projectPath, agentId, agent) {
 }
 
 /**
+ * Turns an agent of the project's agents.json (the user's without a project) on or off for this
+ * user; the file isn't touched.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @param {boolean} enabled
+ * @returns {Promise<number>} How many of the project's sessions turning it off stops.
+ */
+export function agentsSetEnabled(projectPath, agentId, enabled) {
+  return invoke('agents_set_enabled', { projectPath, agentId, enabled });
+}
+
+/**
  * Makes an agent the default for new sessions (the project's agents.json, else the user's).
  * @param {string | null} projectPath
  * @param {string} agentId
@@ -265,10 +277,56 @@ export function agentsRemove(projectPath, agentId) {
 /**
  * Copies the user's own agents the project lacks into its agents.json, trusted.
  * @param {string} projectPath
+ * @param {string[] | null} [agentIds] Only these; `null`: all of them.
  * @returns {Promise<string[]>} The ids copied.
  */
-export function agentsImportUser(projectPath) {
-  return invoke('agents_import_user', { projectPath });
+export function agentsImportUser(projectPath, agentIds = null) {
+  return invoke('agents_import_user', { projectPath, agentIds });
+}
+
+/**
+ * The Agents tab's data: the agents searched and filtered by the backend.
+ * @param {string | null} projectPath
+ * @param {string} query
+ * @param {import('../models/types.js').AgentsFilter} filter
+ * @returns {Promise<import('../models/types.js').AgentsView>}
+ */
+export function agentsView(projectPath, query, filter) {
+  return invoke('agents_view', { projectPath, query, filter });
+}
+
+/**
+ * @typedef {Object} UpdatedAgent
+ * @property {string} agentId
+ * @property {string} version
+ * @property {boolean} downloaded Whether npm got the new version ahead of the next start.
+ */
+
+/**
+ * Pins an agent to the registry's newer version and downloads it; resolves once the download ended.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<UpdatedAgent[]>} Empty: it was up to date.
+ */
+export function agentsUpdateVersion(projectPath, agentId) {
+  return invoke('agents_update_version', { projectPath, agentId });
+}
+
+/**
+ * `agentsUpdateVersion()` for every agent with an update.
+ * @param {string | null} projectPath
+ * @returns {Promise<UpdatedAgent[]>}
+ */
+export function agentsUpdateAll(projectPath) {
+  return invoke('agents_update_all', { projectPath });
+}
+
+/**
+ * Asks the ACP registry now.
+ * @returns {Promise<import('../models/types.js').RegistryState>}
+ */
+export function agentsRegistryCheck() {
+  return invoke('agents_registry_check');
 }
 
 /**
@@ -306,10 +364,43 @@ export function agentsConfigFile(projectPath) {
  * folder, asked, and stopped (no prompt is sent).
  * @param {string | null} projectPath Its config comes from this project's agents.json.
  * @param {string} agentId
- * @returns {Promise<import('../models/types.js').AcpConfigOption[]>}
+ * @returns {Promise<import('../models/types.js').ProbedOptions>}
  */
 export function agentsProbeOptions(projectPath, agentId) {
   return invoke('agents_probe_options', { projectPath, agentId });
+}
+
+/**
+ * Signs an agent in: `methodId` one of its methods, or `null` to check whether it's signed in now
+ * (after a login in a terminal). An `agent` method runs in the backend (it opens the browser); a
+ * `terminal` / `command` one runs in a terminal the backend started, whose tab the page opens.
+ * Returns once it started; how it goes comes as `agents://sign-in`.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @param {string | null} methodId
+ * @returns {Promise<import('../models/types.js').LoginTab | null>} The login's terminal, for a terminal method.
+ */
+export function agentsSignIn(projectPath, agentId, methodId) {
+  return invoke('agents_sign_in', { projectPath, agentId, methodId });
+}
+
+/**
+ * Stops an agent's running sign-in.
+ * @param {string | null} projectPath
+ * @param {string} agentId
+ * @returns {Promise<boolean>} `false`: none ran.
+ */
+export function agentsSignInCancel(projectPath, agentId) {
+  return invoke('agents_sign_in_cancel', { projectPath, agentId });
+}
+
+/**
+ * How sign-ins go, this window's and others'.
+ * @param {(event: import('../models/types.js').SignInEvent) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onAgentsSignIn(callback) {
+  return listen('agents://sign-in', (event) => callback(/** @type {import('../models/types.js').SignInEvent} */ (event.payload)));
 }
 
 /**

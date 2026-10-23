@@ -27,7 +27,8 @@ import type { AcpQuickOpen } from './components/acp-quick-open/acp-quick-open.js
 import type { AcpSelectionActions } from './components/acp-selection-actions/acp-selection-actions.js';
 import type { AcpSearchPanel } from './components/acp-search-panel/acp-search-panel.js';
 import type { AcpSettings } from './components/acp-settings/acp-settings.js';
-import type { AcpSettingsAgents } from './components/acp-settings-agents/acp-settings-agents.js';
+import type { AcpAgentForm } from './components/acp-agent-form/acp-agent-form.js';
+import type { AcpAgentsView } from './components/acp-agents-view/acp-agents-view.js';
 import type { AcpSnackbars } from './components/acp-snackbars/acp-snackbars.js';
 import type { AcpSessionBanner } from './components/acp-session-banner/acp-session-banner.js';
 import type { AcpSessionHeader } from './components/acp-session-header/acp-session-header.js';
@@ -76,7 +77,8 @@ declare global {
     'acp-session-status': AcpSessionStatus;
     'acp-session-column': AcpSessionColumn;
     'acp-settings': AcpSettings;
-    'acp-settings-agents': AcpSettingsAgents;
+    'acp-agent-form': AcpAgentForm;
+    'acp-agents-view': AcpAgentsView;
     'acp-snackbars': AcpSnackbars;
     'acp-terminal': AcpTerminal;
     'acp-toolbar': AcpToolbar;

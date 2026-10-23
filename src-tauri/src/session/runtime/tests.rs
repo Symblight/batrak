@@ -15,12 +15,15 @@ struct FakeLauncher {
     agents: Mutex<Vec<Arc<FakeAgentState>>>,
     /// The environment the last launch got.
     env: Mutex<Vec<(String, String)>>,
+    /// The command of each launch, as spawned.
+    commands: Mutex<Vec<String>>,
 }
 
 impl Launcher for FakeLauncher {
-    fn launch(&self, _env: &dyn SessionEnv, _agent: &AgentConfig, process_env: &[(String, String)], _stderr: File)
+    fn launch(&self, _env: &dyn SessionEnv, agent: &AgentConfig, process_env: &[(String, String)], _stderr: File)
         -> Result<Launched, String> {
         self.launches.fetch_add(1, Ordering::SeqCst);
+        lock(&self.commands).push(agent.command.clone());
         *lock(&self.env) = process_env.to_vec();
         let (writer, reader, state) = fake_agent::start(self.options.clone());
         lock(&self.agents).push(state);
@@ -120,6 +123,7 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
         launches: AtomicUsize::new(0),
         agents: Mutex::default(),
         env: Mutex::default(),
+        commands: Mutex::default(),
     });
     let sessions = Sessions::new(options_for(&dir, &launcher));
     let f = Fixture { dir, project, sessions, launcher };
@@ -150,7 +154,8 @@ fn git_fixture(name: &str) -> Fixture {
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
         data_dir: dir.join("data"),
-        configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json"))),
+        configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json")))
+            .with_registry(crate::config::registry::Registry::of(crate::config::registry::tests::FIXTURE)),
         secrets: Arc::new(Secrets),
         base_env: Arc::new(|| {
             HashMap::from([
@@ -1335,7 +1340,7 @@ async fn removing_a_session_stops_its_agent_and_forgets_it() {
 #[tokio::test]
 async fn probing_an_agent_returns_its_options_and_leaves_nothing_behind() {
     let f = fixture("probe", FakeAgentOptions::default());
-    let options = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap();
+    let options = options_of(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap());
     let ids: Vec<_> = options.iter().map(|o| o["id"].as_str().unwrap()).collect();
     assert_eq!(ids, ["model", "effort"]);
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
@@ -1458,6 +1463,78 @@ async fn a_turn_running_when_its_agent_leaves_agents_json_finishes_first() {
 }
 
 #[tokio::test]
+async fn turning_an_agent_off_stops_its_sessions_and_turning_it_on_puts_them_back() {
+    let f = fixture("switch-off", FakeAgentOptions::default());
+    let configs = &f.sessions.inner.opts.configs;
+    let (_, running) = f.create("s", "fake").unwrap();
+    running.wait_status("idle").await;
+    f.sessions.send_prompt("s", text("slow")).unwrap();
+    running.wait_for("first chunk", |e| e.kind == "update").await;
+    let launched = f.launcher.launches.load(Ordering::SeqCst);
+    assert_eq!(f.sessions.active_of(&f.project, "fake"), 1, "what turning it off stops");
+    assert_eq!(f.sessions.active_of(&f.project, "locked"), 0);
+
+    configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+    f.sessions.sync_agents(&f.project).await;
+    assert!(!lock(&running.events).iter().any(|e| e.kind == "unconfigured"), "not mid-turn");
+    assert_eq!(running.wait_turn_end().await, "end_turn");
+    let off = running.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(off.payload["reason"], "off");
+    assert_eq!(off.payload["message"], "Fake is off");
+    running.wait_status("error").await;
+
+    assert!(f.create("t", "fake").unwrap_err().contains("Fake is off"), "no new session of it");
+    running.clear();
+    f.sessions.restart("s").await.unwrap();
+    let refused = running.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(refused.payload["reason"], "off", "a start is refused");
+    let probe = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap_err();
+    assert!(probe.contains("off"), "{probe}");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launched, "nothing ran");
+
+    configs.set_enabled(Some(&f.project), "fake", true).unwrap();
+    running.clear();
+    f.sessions.sync_agents(&f.project).await;
+    running.wait_status("idle").await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launched + 1, "back as it was: running");
+}
+
+#[tokio::test]
+async fn an_agent_turned_off_stops_its_sessions_even_when_another_runs_the_same() {
+    let f = fixture("switch-twin", FakeAgentOptions::default());
+    // Added twice from the registry: `fake-2` runs exactly what `fake` does.
+    f.set_agents(&f.project, &AGENTS.replace("\"locked\":", "\"fake-2\":{\"name\":\"Fake\",\"command\":\"fake-agent\",\"env\":{\"TOKEN\":\"${keychain:token}\"}},\"locked\":"));
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+
+    configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+    f.sessions.sync_agents(&f.project).await;
+    let off = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(off.payload["reason"], "off");
+    events.wait_status("error").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake", "not moved to its twin");
+
+    events.clear();
+    f.sessions.restart("s").await.unwrap();
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(f.sessions.list()[0].agent_id, "fake", "a start doesn't move it either");
+}
+
+#[tokio::test]
+async fn a_removed_agent_is_reported_as_removed() {
+    let f = fixture("switch-removed", FakeAgentOptions::default());
+    let (_, events) = f.create("r", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    f.sessions.sync_agents(&f.project).await;
+    let gone = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(gone.payload["reason"], "removed");
+}
+
+#[tokio::test]
 async fn a_running_session_hears_when_agents_json_changes_what_its_agent_runs() {
     let f = fixture("outdated", FakeAgentOptions::default());
     let (session, events) = f.create("o", "fake").unwrap();
@@ -1483,6 +1560,30 @@ async fn a_running_session_hears_when_agents_json_changes_what_its_agent_runs() 
     events.clear();
     f.sessions.sync_agents(&f.project).await;
     assert!(!lock(&events.events).iter().any(|e| e.kind == "agent-outdated"), "a new name runs nothing new");
+}
+
+#[tokio::test]
+async fn an_update_tells_a_running_session_and_its_restart_runs_the_new_version_trusted() {
+    let f = fixture("update", FakeAgentOptions::default());
+    let configs = &f.sessions.inner.opts.configs;
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"claude":{"name":"Claude","command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]}}}"#);
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    let (_, events) = f.create("u", "claude").unwrap();
+    events.wait_status("idle").await;
+
+    assert_eq!(configs.pin_versions(Some(&f.project), Some("claude")).unwrap().len(), 1);
+    f.sessions.sync_agents(&f.project).await;
+    let outdated = events.wait_for("agent-outdated", |e| e.kind == "agent-outdated").await;
+    assert_eq!(outdated.payload["message"], "agents.json changed what Claude runs. Restart to use it.");
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Idle, "nothing restarts on its own");
+
+    events.clear();
+    f.sessions.restart("u").await.unwrap();
+    events.wait_status("idle").await;
+    assert!(!lock(&events.events).iter().any(|e| e.kind == "untrusted"), "the trust went with the pin");
+    let ran = f.sessions.get("u").unwrap().record.lock().unwrap().launch.clone().unwrap();
+    assert_eq!(ran.args, ["-y", "@agentclientprotocol/claude-agent-acp@0.94.0"]);
 }
 
 #[tokio::test]
@@ -1545,11 +1646,11 @@ async fn the_agent_cannot_rewrite_the_projects_agents_json() {
 
 #[tokio::test]
 async fn a_message_sent_while_the_first_start_fails_does_not_start_the_agent_again() {
-    let f = fixture("once", FakeAgentOptions { require_auth: true, ..Default::default() });
+    let f = fixture("once", FakeAgentOptions { fail_new_session: true, ..Default::default() });
     let (_, events) = f.create("o", "fake").unwrap();
     f.sessions.send_prompt("o", text("hello")).unwrap();
     let failed = events.wait_for("turn error", |e| e.kind == "error" && e.payload["turn"] == true).await;
-    assert!(failed.payload["message"].as_str().unwrap().contains("Sign in"), "{failed:?}");
+    assert!(failed.payload["message"].as_str().unwrap().contains("no session today"), "{failed:?}");
     events.wait_for("start error", |e| e.kind == "error" && e.payload["turn"].is_null()).await;
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
 
@@ -1657,7 +1758,7 @@ async fn real_claude_agent_end_to_end() {
     let mut opts = SessionsOptions::for_app(dir.join("data"), configs);
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
-    let probed = sessions.probe_options(Some(&project), "claude").await.unwrap();
+    let probed = options_of(sessions.probe_options(Some(&project), "claude").await.unwrap());
     let categories: Vec<_> = probed.iter().map(|o| o["category"].as_str().unwrap_or("-")).collect();
     eprintln!("probed categories: {categories:?}");
     assert!(categories.contains(&"model") && categories.contains(&"thought_level"));
@@ -1834,4 +1935,329 @@ async fn after_a_rename_the_agent_no_longer_changes_the_title_until_it_is_reset(
 
     let reset = f.sessions.reset_title("t").unwrap();
     assert_eq!((reset.title.as_str(), reset.title_source), ("Tree view gaps", TitleSource::Agent));
+}
+
+fn options_of(probed: Probed) -> Vec<Value> {
+    match probed {
+        Probed::Options(options) => options,
+        Probed::SignIn { .. } => panic!("the probe asks to sign in"),
+    }
+}
+
+/// An agent that needs a sign-in: one `agent` method, `browser`.
+fn needing_sign_in() -> FakeAgentOptions {
+    FakeAgentOptions {
+        require_auth: true,
+        auth_methods: vec![json!({ "id": "browser", "name": "Log in", "description": "In your browser" })],
+        ..Default::default()
+    }
+}
+
+fn event_count(events: &Recorder, kind: &str) -> usize {
+    lock(&events.events).iter().filter(|e| e.kind == kind).count()
+}
+
+#[tokio::test]
+async fn a_prompt_to_an_agent_that_asks_to_sign_in_is_held_not_lost() {
+    let f = fixture("sign-in-held", needing_sign_in());
+    let (_, events) = f.create("s", "fake").unwrap();
+    let asked = events.wait_for("sign-in", |e| e.kind == "sign-in").await;
+    assert_eq!(asked.payload["agentId"], "fake");
+    assert_eq!(asked.payload["agentName"], "Fake");
+    assert_eq!(asked.payload["methods"][0]["id"], "browser");
+    assert_eq!(asked.payload["methods"][0]["kind"], "agent");
+    let status = events.wait_status("error").await;
+    assert_eq!(status.payload["message"], "Sign in to Fake");
+    assert_eq!(event_count(&events, "error"), 0, "no error notice: the sign-in card says it");
+
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    let held = events.wait_for("held", |e| e.kind == "held").await;
+    assert_eq!(held.payload["prompt"][0]["text"], "hello");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "turn-end"), 0, "the turn waits");
+    assert_eq!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().methods.len(), 1);
+
+    events.clear();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    assert_eq!(sign_in.end().await, SignInEnd::Done);
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts().join(""), "Hello, world", "the held prompt was answered");
+    events.wait_for("sign-in cleared", |e| e.kind == "sign-in" && e.payload.is_null()).await;
+    let agents = lock(&f.launcher.agents).clone();
+    assert_eq!(*agents.last().unwrap().prompts.lock().unwrap(), ["hello"]);
+    assert!(agents.iter().any(|a| *a.authenticated.lock().unwrap() == ["browser"]));
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").is_none(), "it no longer needs one");
+}
+
+#[tokio::test]
+async fn signing_in_brings_back_every_waiting_session_of_the_agent() {
+    let f = fixture("sign-in-two", needing_sign_in());
+    let (_, first) = f.create("a", "fake").unwrap();
+    let (_, second) = f.create("b", "fake").unwrap();
+    first.wait_status("error").await;
+    second.wait_status("error").await;
+    f.sessions.send_prompt("a", text("hello")).unwrap();
+    first.wait_for("held", |e| e.kind == "held").await;
+
+    first.clear();
+    second.clear();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    assert_eq!(sign_in.end().await, SignInEnd::Done);
+    assert_eq!(joined.end().await, SignInEnd::Done, "a second call joins the first");
+    assert_eq!(first.wait_turn_end().await, "end_turn");
+    second.wait_status("idle").await;
+    assert_eq!(event_count(&second, "turn-end"), 0, "nothing was held there");
+    let authenticated: usize = lock(&f.launcher.agents).iter().map(|a| a.authenticated.lock().unwrap().len()).sum();
+    assert_eq!(authenticated, 1, "one sign-in");
+}
+
+#[tokio::test]
+async fn cancel_stop_or_the_agent_leaving_gives_a_held_prompt_back() {
+    let f = fixture("sign-in-drop", needing_sign_in());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    f.sessions.cancel("s").unwrap();
+    let back = events.wait_for("prompt-returned", |e| e.kind == "prompt-returned").await;
+    assert_eq!(back.payload["prompt"][0]["text"], "hello");
+    assert_eq!(events.wait_turn_end().await, "cancelled");
+
+    events.clear();
+    f.sessions.send_prompt("s", text("again")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    f.sessions.stop("s").await.unwrap();
+    events.wait_for("prompt-returned", |e| e.kind == "prompt-returned").await;
+    events.wait_for("sign-in cleared", |e| e.kind == "sign-in" && e.payload.is_null()).await;
+    events.wait_turn_end().await;
+
+    f.sessions.restart("s").await.unwrap();
+    events.clear();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("third")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    f.set_agents(&f.project, r#"{"version":1,"agents":{}}"#);
+    f.sessions.sync_agents(&f.project).await;
+    events.wait_for("prompt-returned", |e| e.kind == "prompt-returned").await;
+    events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    let prompts: Vec<String> = lock(&f.launcher.agents).iter().flat_map(|a| a.prompts.lock().unwrap().clone()).collect();
+    assert!(prompts.is_empty(), "none reached the agent: {prompts:?}");
+}
+
+#[tokio::test]
+async fn a_failed_sign_in_keeps_the_prompt_waiting() {
+    let f = fixture("sign-in-fail", FakeAgentOptions { fail_authenticate: Some((-32603, "login failed")), ..needing_sign_in() });
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await else {
+        panic!("signed in")
+    };
+    assert!(message.contains("login failed"), "{message}");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").is_some_and(|s| !s.pending));
+}
+
+#[tokio::test]
+async fn a_sign_in_runs_only_a_trusted_launch_and_can_be_cancelled() {
+    let f = fixture("sign-in-trust", needing_sign_in());
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent"}}}"#);
+    let refused = f.sessions.sign_in(Some(&f.project), "repo", Some("browser")).await.err().unwrap();
+    assert!(refused.contains("trust"), "{refused}");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "nothing ran");
+    assert!(f.sessions.cancel_sign_in(Some(&f.project), "repo").is_none(), "none runs");
+}
+
+#[tokio::test]
+async fn a_login_that_ran_out_mid_session_holds_the_prompt_until_signed_in_again() {
+    let options = FakeAgentOptions { signed_in: Arc::new(true.into()), ..needing_sign_in() };
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-expired", options);
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+    signed_in.store(false, Ordering::SeqCst);
+    events.clear();
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("sign-in", |e| e.kind == "sign-in" && !e.payload.is_null()).await;
+    events.wait_for("held", |e| e.kind == "held").await;
+    assert_eq!(f.sessions.list()[0].status, SessionStatus::Error);
+
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts().join(""), "Hello, world");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 3, "the session's, the sign-in's, the session's again");
+}
+
+#[tokio::test]
+async fn a_probe_that_asks_to_sign_in_says_so_and_the_tab_shows_it() {
+    let f = fixture("sign-in-probe", needing_sign_in());
+    let Probed::SignIn { sign_in } = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap() else {
+        panic!("options without a sign-in")
+    };
+    assert_eq!(sign_in.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["browser"]);
+    let state = f.sessions.sign_in_state(Some(&f.project), "fake").unwrap();
+    assert!(!state.pending && state.methods == sign_in);
+    assert!(f.sessions.sign_in_state(Some(&f.project), "locked").is_none());
+    let list = f.sessions.agent_list(Some(&f.project));
+    let needs = |id: &str| list.agents.iter().find(|a| a.id == id).unwrap().sign_in;
+    assert!(needs("fake") && !needs("locked"), "the picker says which one needs a sign-in");
+    let json = serde_json::to_value(Probed::SignIn { sign_in }).unwrap();
+    assert_eq!(json["signIn"][0]["name"], "Log in");
+}
+
+#[tokio::test]
+async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
+    let options = needing_sign_in();
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-retry", options);
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await else {
+        panic!("signed in")
+    };
+    assert!(message.contains("still asks to sign in"), "{message}");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "turn-end"), 0, "still held");
+
+    // A login in a terminal, which the app doesn't see.
+    signed_in.store(true, Ordering::SeqCst);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts().join(""), "Hello, world");
+    let authenticated: usize = lock(&f.launcher.agents).iter().map(|a| a.authenticated.lock().unwrap().len()).sum();
+    assert_eq!(authenticated, 0, "Retry only checks");
+}
+
+#[tokio::test]
+async fn a_cancelled_sign_in_ends_cancelled_and_keeps_the_prompt_held() {
+    let f = fixture("sign-in-cancel", FakeAgentOptions { hang_authenticate: true, ..needing_sign_in() });
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    while lock(&f.launcher.agents).iter().all(|a| a.authenticated.lock().unwrap().is_empty()) {
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().pending);
+    assert!(f.sessions.cancel_sign_in(Some(&f.project), "fake").is_some());
+    assert_eq!(sign_in.end().await, SignInEnd::Cancelled);
+    let state = f.sessions.sign_in_state(Some(&f.project), "fake").unwrap();
+    assert!(!state.pending && state.methods.len() == 1, "it still needs one");
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
+}
+
+#[tokio::test]
+async fn a_probe_that_finds_the_agent_signed_in_brings_back_its_waiting_sessions() {
+    let options = needing_sign_in();
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-probe-back", options);
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    signed_in.store(true, Ordering::SeqCst);
+    events.clear();
+    options_of(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap());
+    events.wait_status("idle").await;
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").is_none(), "the tab no longer asks");
+}
+
+#[tokio::test]
+async fn a_session_waiting_under_an_earlier_launch_comes_back_after_signing_in_to_the_new_one() {
+    let f = fixture("sign-in-moved", needing_sign_in());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.set_agents(&f.project, &AGENTS.replace(r#""command":"fake-agent""#, r#""command":"fake-agent","args":["--acp"]"#));
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    f.sessions.sync_agents(&f.project).await;
+
+    events.clear();
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
+    events.wait_status("idle").await;
+}
+
+/// An agent whose only way in is a login in a terminal: Claude's `terminal` type, or Copilot's
+/// `terminal-auth` command.
+fn needing_a_terminal_login() -> FakeAgentOptions {
+    FakeAgentOptions {
+        require_auth: true,
+        auth_methods: vec![
+            json!({ "type": "terminal", "id": "tui", "name": "Subscription", "args": ["auth", "login"], "env": { "MODE": "login" } }),
+            json!({ "id": "cli", "name": "CLI", "_meta": { "terminal-auth": { "command": "/opt/cli", "args": ["login"], "label": "CLI Login" } } }),
+        ],
+        ..Default::default()
+    }
+}
+
+#[tokio::test]
+async fn a_terminal_method_gives_a_login_to_run_and_its_exit_signs_in() {
+    let options = needing_a_terminal_login();
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-terminal", options);
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+    let launches = f.launcher.launches.load(Ordering::SeqCst);
+
+    let mut sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    let tab = sign_in.tab.clone().unwrap();
+    assert_eq!(tab.title, "Subscription");
+    assert_eq!(tab.command_line, "fake-agent auth login");
+    let login = sign_in.login.take().unwrap();
+    assert_eq!(login.command.program, "fake-agent");
+    assert!(login.command.env.contains(&("MODE".to_owned(), "login".to_owned())), "the method's env");
+    assert!(login.command.env.contains(&("TOKEN".to_owned(), "s3cret-value".to_owned())), "the launch's, resolved");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launches, "nothing ran yet");
+    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().pending);
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    assert_eq!(joined.tab.as_ref(), Some(&tab), "a second call shows the same tab");
+    assert!(joined.login.is_none(), "and runs nothing");
+
+    // The login wrote its credentials, then exited 0.
+    signed_in.store(true, Ordering::SeqCst);
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(0));
+    assert_eq!(sign_in.end().await, SignInEnd::Done);
+    assert_eq!(joined.end().await, SignInEnd::Done);
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(events.texts().join(""), "Hello, world", "the held prompt was answered");
+}
+
+#[tokio::test]
+async fn a_failed_or_closed_login_keeps_the_prompt_held() {
+    let f = fixture("sign-in-terminal-fail", needing_a_terminal_login());
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("error").await;
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    events.wait_for("held", |e| e.kind == "held").await;
+
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let tab = sign_in.tab.clone().unwrap();
+    assert_eq!(tab.title, "CLI Login");
+    assert_eq!(sign_in.login.as_ref().unwrap().command.program, "/opt/cli");
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(1));
+    assert_eq!(sign_in.end().await, SignInEnd::Failed("CLI Login exited with 1".to_owned()));
+
+    let again = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let tab = again.tab.clone().unwrap();
+    f.sessions.login_ended(&tab.terminal_id, LoginExit::Closed);
+    assert_eq!(again.end().await, SignInEnd::Cancelled);
+
+    let third = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let cancelled = f.sessions.cancel_sign_in(Some(&f.project), "fake").unwrap();
+    assert_eq!(cancelled.terminal_id, third.tab.as_ref().map(|t| t.terminal_id.clone()), "its terminal is the caller's to close");
+    assert_eq!(third.end().await, SignInEnd::Cancelled);
+
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
 }

@@ -77,6 +77,16 @@ pub struct OpenRequest<'a> {
     pub rows: u16,
 }
 
+/// A program a terminal runs instead of the shell (a sign-in's login), with its whole environment.
+pub struct Program {
+    pub program: String,
+    pub args: Vec<String>,
+    pub env: Vec<(String, String)>,
+}
+
+/// How a program's terminal ended: its exit, or `None` when it was closed first.
+pub type OnExit = Box<dyn FnOnce(Option<&TerminalEvent>) + Send>;
+
 pub struct TerminalsOptions {
     /// The shell to run; `None` = the user's default (`shell::default_shell()`).
     pub shell: Option<PathBuf>,
@@ -142,31 +152,69 @@ impl Terminals {
         lock(&self.inner.terminals).get(id).cloned().ok_or_else(|| format!("unknown terminal {id}"))
     }
 
+    /// Whether `id` is a terminal the window `group` opened: a window reaches only its own.
+    pub fn owns(&self, group: &str, id: &str) -> bool {
+        lock(&self.inner.terminals).get(id).is_some_and(|t| t.group == group)
+    }
+
+    /// The terminals among `ids` that the window `group` opened.
+    pub fn of_group(&self, group: &str, ids: &[String]) -> Vec<String> {
+        let terminals = lock(&self.inner.terminals);
+        ids.iter().filter(|id| terminals.get(id.as_str()).is_some_and(|t| t.group == group)).cloned().collect()
+    }
+
     /// Starts a shell in `req.cwd` (or the fallback when it doesn't exist), which `allowed` must
     /// accept. A running id answers with what it runs; an exited one starts a fresh shell.
     /// Blocking.
     pub fn open(&self, req: &OpenRequest, allowed: &dyn Fn(&Path) -> bool) -> Result<Opened, String> {
+        self.start(req, allowed, None, None)
+    }
+
+    /// Like `open`, but runs `program` instead of the shell, in `req.cwd` (which the caller chose:
+    /// no folder check); `on_exit` hears how it ended. Blocking.
+    pub fn open_program(&self, req: &OpenRequest, program: Program, on_exit: OnExit) -> Result<Opened, String> {
+        self.start(req, &|_| true, Some(program), Some(on_exit))
+    }
+
+    fn start(&self, req: &OpenRequest, allowed: &dyn Fn(&Path) -> bool, program: Option<Program>, on_exit: Option<OnExit>) -> Result<Opened, String> {
         let _opening = lock(&self.inner.opening);
         if let Some(existing) = lock(&self.inner.terminals).get(req.id) {
+            if existing.group != req.group {
+                return Err(format!("terminal {} belongs to another window", req.id));
+            }
             if lock(&existing.stream).exit.is_none() {
                 return Ok(existing.opened.clone());
             }
         }
         let cwd = resolve_cwd(req.cwd, req.fallback, allowed)?;
-        let shell = self.inner.opts.shell.clone().unwrap_or_else(shell::default_shell);
+        let shell = match &program {
+            Some(program) => PathBuf::from(&program.program),
+            None => self.inner.opts.shell.clone().unwrap_or_else(shell::default_shell),
+        };
         let shell_name = shell.file_name().map_or_else(|| shell.to_string_lossy(), |n| n.to_string_lossy()).into_owned();
         let size = PtySize { rows: req.rows.max(1), cols: req.cols.max(1), pixel_width: 0, pixel_height: 0 };
         let pair = portable_pty::native_pty_system()
             .openpty(size)
             .map_err(|e| format!("Couldn't start {shell_name}: {e}"))?;
         let mut cmd = CommandBuilder::new(&shell);
-        if cfg!(unix) {
-            cmd.arg("-l");
-        }
         cmd.cwd(&cwd);
         cmd.env_clear();
-        for (k, v) in shell::terminal_env(std::env::vars_os(), &self.inner.opts.version) {
-            cmd.env(k, v);
+        match program {
+            Some(program) => {
+                cmd.args(&program.args);
+                let env = program.env.into_iter().map(|(k, v)| (k.into(), v.into()));
+                for (k, v) in shell::terminal_env(env, &self.inner.opts.version) {
+                    cmd.env(k, v);
+                }
+            }
+            None => {
+                if cfg!(unix) {
+                    cmd.arg("-l");
+                }
+                for (k, v) in shell::terminal_env(std::env::vars_os(), &self.inner.opts.version) {
+                    cmd.env(k, v);
+                }
+            }
         }
         let mut child = pair.slave.spawn_command(cmd).map_err(|e| {
             tracing::warn!(shell = %shell.display(), "terminal didn't start: {e}");
@@ -256,16 +304,24 @@ impl Terminals {
                     }
                 }
                 if waiting.closed.load(Ordering::SeqCst) {
+                    if let Some(on_exit) = on_exit {
+                        on_exit(None);
+                    }
                     return;
                 }
                 tracing::info!(id, ?exit, "terminal exited");
                 lock(&waiting.writer).take();
                 lock(&waiting.master).take();
-                let mut stream = lock(&waiting.stream);
-                if let Some(sink) = &stream.sink {
-                    sink.event(&exit);
+                {
+                    let mut stream = lock(&waiting.stream);
+                    if let Some(sink) = &stream.sink {
+                        sink.event(&exit);
+                    }
+                    stream.exit = Some(exit.clone());
                 }
-                stream.exit = Some(exit);
+                if let Some(on_exit) = on_exit {
+                    on_exit(Some(&exit));
+                }
             })
             .map_err(|e| e.to_string())?;
         Ok(terminal.opened.clone())

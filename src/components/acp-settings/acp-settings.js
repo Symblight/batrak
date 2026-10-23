@@ -17,8 +17,6 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
 import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
 import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
-import smartToyIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
-import '../acp-settings-agents/acp-settings-agents.js';
 import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts.js';
 import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings.js';
 import styles from './acp-settings.css?inline';
@@ -27,7 +25,6 @@ import styles from './acp-settings.css?inline';
 /** @typedef {import('../../models/types.js').FontFamily} FontFamily */
 /** @typedef {import('../../models/types.js').Settings} Settings */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
-/** @typedef {import('../../models/types.js').AgentList} AgentList */
 /** @typedef {import('../../models/types.js').SettingsAnchor} SettingsAnchor */
 /** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
 
@@ -35,7 +32,6 @@ import styles from './acp-settings.css?inline';
 const SECTIONS = [
   { id: 'theme', label: 'Theme', icon: paletteIcon },
   { id: 'editor', label: 'Editor', icon: codeIcon },
-  { id: 'agents', label: 'Agents', icon: smartToyIcon },
 ];
 
 /** How far below the scroller's top a section counts as the one being read. */
@@ -50,17 +46,15 @@ const APPEARANCES = [
 
 /**
  * @tag acp-settings
- * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor, Agents) and a list that scrolls to them.
+ * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor) and a list that scrolls to them.
  * @fires acp-settings-change `{ patch }` A `Partial<Settings>`; the accent as typed, the font size unclamped.
  * @fires acp-settings-reset `{ section }`
  * @fires acp-settings-revealed `{ reveal }` The `reveal` asked for was shown.
- * @fires acp-agents-file-open `null`
  */
 export class AcpSettings extends LitElement {
   static properties = {
     settings: { attribute: false },
     fonts: { attribute: false },
-    agents: { attribute: false },
     reveal: { attribute: false },
     current: { state: true },
     accentDraft: { state: true },
@@ -75,8 +69,6 @@ export class AcpSettings extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} Installed fonts, sorted; `null` until listed. */
     this.fonts = null;
-    /** @type {AgentList | null} */
-    this.agents = null;
     /** @type {SettingsReveal | null} A section to scroll to; `acp-settings-revealed` once it has. */
     this.reveal = null;
     /** @type {SettingsAnchor} The section being read, marked in the list. */
@@ -128,7 +120,6 @@ export class AcpSettings extends LitElement {
   /** @param {SettingsReveal} reveal */
   #reveal(reveal) {
     this.#scrollTo(reveal.section, 'instant');
-    if (reveal.addAgent) this.renderRoot.querySelector('acp-settings-agents')?.startAdding();
     this.dispatchEvent(new CustomEvent('acp-settings-revealed', { detail: { reveal }, bubbles: true, composed: true }));
   }
 
@@ -240,7 +231,7 @@ export class AcpSettings extends LitElement {
           )}
         </md-segmented-button-group>
       </div>
-      <div class="acp-settings__field">
+      <div class="acp-settings__field acp-settings__field_accent">
         <md-text-field
           class="acp-settings__input"
           variant="outlined"
@@ -374,24 +365,6 @@ export class AcpSettings extends LitElement {
     </section>`;
   }
 
-  #renderAgents() {
-    return html`<section class="acp-settings__group" aria-label="Agents" data-section="agents">
-      <div class="acp-settings__group-header">
-        <h3 class="acp-settings__group-title">Agents</h3>
-        <md-button
-          class="acp-settings__header-button"
-          variant="text"
-          @click=${() =>
-            this.dispatchEvent(new CustomEvent('acp-agents-file-open', { detail: null, bubbles: true, composed: true }))}
-        >
-          <md-icon slot="icon" class="acp-settings__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
-          Edit agents.json
-        </md-button>
-      </div>
-      <acp-settings-agents .agents=${this.agents}></acp-settings-agents>
-    </section>`;
-  }
-
   #renderNav() {
     return html`<nav class="acp-settings__nav" aria-label="Settings sections">
       ${SECTIONS.map(
@@ -420,8 +393,6 @@ export class AcpSettings extends LitElement {
             ${this.#renderTheme(settings)}
             <hr class="acp-settings__divider" />
             ${this.#renderEditor(settings)}
-            <hr class="acp-settings__divider" />
-            ${this.#renderAgents()}
           </div>
           <footer class="acp-settings__footer">
             <span class="acp-settings__link" aria-disabled="true" title="Not available yet">

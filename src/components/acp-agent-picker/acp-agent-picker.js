@@ -8,6 +8,7 @@ import agentIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
+import tuneIcon from '@material-design-icons/svg/outlined/tune.svg?raw';
 import { configOf, currentName } from '../../models/config-options.js';
 import styles from './acp-agent-picker.css?inline';
 
@@ -21,7 +22,8 @@ import styles from './acp-agent-picker.css?inline';
  * @summary The composer's agent · model · thinking button and its menu; the agent is fixed once the session started.
  * @fires acp-agent-select `{ agentId }`
  * @fires acp-config-option `{ agentId, configId, value }` A model or level, of that agent (picked first).
- * @fires acp-agent-add-open `null` Add ACP agent…: Settings opens at Agents with the add form.
+ * @fires acp-agent-add-open `null` Add ACP agent…: the Agents tab opens with the add form.
+ * @fires acp-agents-manage `null` Manage agents…: the Agents tab opens.
  */
 export class AcpAgentPicker extends LitElement {
   static properties = {
@@ -36,7 +38,7 @@ export class AcpAgentPicker extends LitElement {
     super();
     /** @type {ComposerState | null} The active session's. */
     this.composer = null;
-    /** @type {readonly CatalogAgent[]} Every agent the project can run. */
+    /** @type {readonly CatalogAgent[]} Every agent of the project; `off` ones aren't offered. */
     this.agents = [];
     /** @type {AgentInfo | null} The composer's agent. */
     this.agent = null;
@@ -90,14 +92,23 @@ export class AcpAgentPicker extends LitElement {
     return html`<span class="acp-agent-picker__glyph" slot=${slot}>${agent.glyph}</span>`;
   }
 
+  /** The agents a draft can pick: those not turned off. */
+  get #offered() {
+    return this.agents.filter((a) => !a.off);
+  }
+
   /** @param {ComposerState} composer */
   #renderAgentsMenu({ agentId, configOptions }) {
     return html`
-      ${this.agents.length ? this.#renderAgentsGroup(agentId, configOptions) : nothing}
+      ${this.#offered.length ? this.#renderAgentsGroup(agentId, configOptions) : nothing}
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" value="" data-action="add-agent">
           <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
           Add ACP agent…
+        </md-menu-item>
+        <md-menu-item class="acp-agent-picker__item" value="" data-action="manage-agents">
+          <md-icon slot="leading">${unsafeSVG(tuneIcon)}</md-icon>
+          Manage agents…
         </md-menu-item>
       </md-item-group>
     `;
@@ -110,13 +121,15 @@ export class AcpAgentPicker extends LitElement {
   #renderAgentsGroup(agentId, configOptions) {
     return html`
       <md-menu-group label="Agent">
-        ${this.agents.map((agent) => {
+        ${this.#offered.map((agent) => {
           const current = agent.id === agentId;
           const options = current ? configOptions : agent.configOptions;
           return html`
             <md-menu-item class="acp-agent-picker__item" value=${agent.id} ?selected=${current}>
               ${this.#renderGlyph(agent)} ${agent.name}
-              <span slot="supporting-text">${currentName(configOf(options, 'model')) ?? 'No models reported yet'}</span>
+              <span slot="supporting-text"
+                >${agent.signIn ? 'Needs sign-in' : (currentName(configOf(options, 'model')) ?? 'No models reported yet')}</span
+              >
               ${options.some((o) => o.category !== 'mode')
                 ? html`<md-menu slot="submenu" class="acp-agent-picker__menu" aria-label=${agent.name}>
                     ${this.#renderConfigGroups(agent.id, options, current)}
@@ -139,7 +152,9 @@ export class AcpAgentPicker extends LitElement {
       <md-item-group>
         <md-menu-item class="acp-agent-picker__item" disabled>
           ${this.#renderGlyph(agent)} ${agent.name}
-          <span slot="supporting-text">${agent.removed ? 'No longer in agents.json' : 'Fixed for this session'}</span>
+          <span slot="supporting-text"
+            >${agent.removed ? 'No longer in agents.json' : agent.off ? 'Turned off' : 'Fixed for this session'}</span
+          >
           <md-icon slot="trailing" class="acp-agent-picker__lock">${unsafeSVG(lockIcon)}</md-icon>
         </md-menu-item>
       </md-item-group>
@@ -158,6 +173,10 @@ export class AcpAgentPicker extends LitElement {
     const { item } = detail;
     if (item.dataset.action === 'add-agent') {
       this.#emit('acp-agent-add-open', null);
+      return;
+    }
+    if (item.dataset.action === 'manage-agents') {
+      this.#emit('acp-agents-manage', null);
       return;
     }
     const { agent, config } = item.dataset;
@@ -190,7 +209,7 @@ export class AcpAgentPicker extends LitElement {
     return html`
       ${this.#renderGlyph(agent, 'icon')}
       <span class="acp-agent-picker__label">
-        <span class="acp-agent-picker__agent">${agent.name}${agent.removed ? ' (removed)' : ''}${model ? ' ·' : ''}</span>
+        <span class="acp-agent-picker__agent">${agent.name}${agent.removed ? ' (removed)' : agent.off ? ' (off)' : ''}${model ? ' ·' : ''}</span>
         <span class="acp-agent-picker__model">${model}</span>
         ${level
           ? html`<span class="acp-agent-picker__level">

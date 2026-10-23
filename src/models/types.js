@@ -115,6 +115,7 @@
 /**
  * A session event from the backend's channel; `seq` is monotonic per session. `turn-end` carries
  * ACP's `stopReason` (`end_turn`, `cancelled`, …); an `error` with `turn` ended the running turn.
+ * `held`: the turn's prompt waits for a sign-in; `prompt-returned`: such a prompt was dropped unsent.
  * @typedef {{ sessionId: string, seq: number } & (
  *   { kind: 'update', payload: AcpSessionUpdate }
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
@@ -127,9 +128,12 @@
  *   | { kind: 'error', payload: { message: string, turn?: boolean } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
  *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
- *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null } }
+ *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null, reason?: 'removed' | 'off' } }
  *   | { kind: 'agent-outdated', payload: { message: string | null } }
  *   | { kind: 'session', payload: Session }
+ *   | { kind: 'sign-in', payload: SessionSignIn | null }
+ *   | { kind: 'held', payload: { prompt: PromptInput[] } }
+ *   | { kind: 'prompt-returned', payload: { prompt: PromptInput[] } }
  * )} SessionEnvelope
  */
 
@@ -186,12 +190,41 @@
  * What the chat says about a session above its composer: the agent starting, an error (with
  * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued' | 'overlap'} kind `outdated`:
+ * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued' | 'overlap' | 'sign-in'} kind `outdated`:
  *   agents.json changed what the running agent runs; Restart picks it up. `queued`: the turn waits for
  *   `holder`'s. `overlap`: another running turn changed a file this one did, until the turn ends.
+ *   `sign-in`: the agent asks for a sign-in; a prompt sent meanwhile waits for it.
  * @property {string} message
  * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
  * @property {SessionNotice} [under] `overlap`: the `info` / `outdated` notice it covers, back when it goes.
+ * @property {string} [offAgent] `error`: the user turned this agent off; Turn on starts the session again.
+ * @property {SessionSignIn} [signIn] `sign-in`: the agent and the ways it offers.
+ */
+
+/**
+ * A session's agent asks for a sign-in (the `sign-in` session event).
+ * @typedef {Object} SessionSignIn
+ * @property {string} agentId
+ * @property {string} agentName
+ * @property {SignInMethod[]} methods
+ */
+
+/**
+ * A sign-in this window started or saw (`agents://sign-in`), until it's done or cancelled.
+ * @typedef {Object} SignInRun
+ * @property {'waiting' | 'failed'} state
+ * @property {string | null} message `failed`: why.
+ * @property {LoginTab | null} terminal The login's terminal, for a terminal method.
+ */
+
+/**
+ * `agents://sign-in`: how a sign-in goes.
+ * @typedef {Object} SignInEvent
+ * @property {string | null} projectPath `null`: the user's agents.
+ * @property {string} agentId
+ * @property {'waiting' | 'done' | 'failed' | 'cancelled'} state
+ * @property {string | null} message `done`: "Signed in to …"; `failed`: why.
+ * @property {LoginTab | null} terminal The login's terminal, for a terminal method.
  */
 
 /**
@@ -200,15 +233,125 @@
  * @property {string} id
  * @property {string} name
  * @property {'user' | 'project'} scope The agents.json that chose what it runs.
- * @property {string | null} version `agentInfo.version` from its last `initialize`.
+ * @property {string | null} version The version installed: the one its args pin, else `agentInfo.version`
+ *   from its last `initialize`.
+ * @property {string | null} registryId The ACP registry entry it runs; `null`: a custom agent.
+ * @property {AgentUpdate | null} update A newer version the registry has.
+ * @property {boolean} enabled Not turned off by the user; only these are offered and started.
+ * @property {boolean} signIn It asked to sign in and hasn't since.
  * @property {string} command What it runs, for the edit form.
  * @property {string[]} args
  */
 
 /**
- * A well-known ACP agent Settings offers to add, with the registry's launch.
+ * A newer version of an agent in the ACP registry.
+ * @typedef {Object} AgentUpdate
+ * @property {string} to
+ * @property {boolean} pin The installed version isn't known: Update pins the registry's ("Pin latest").
+ */
+
+/** @typedef {'all' | 'updates' | 'off'} AgentsFilter The Agents tab's filter chip. */
+
+/**
+ * What the Agents tab asks the backend for (`agents_view`). In memory.
+ * @typedef {Object} AgentsQuery
+ * @property {string} query
+ * @property {AgentsFilter} filter
+ */
+
+/**
+ * One of an agent's ways to sign in (ACP `authMethods`). `agent`: the agent signs in itself (it
+ * opens the browser); `terminal` / `command`: a login runs in a Terminal tab.
+ * @typedef {Object} SignInMethod
+ * @property {string} id
+ * @property {string} name
+ * @property {string | null} description
+ * @property {'agent' | 'terminal' | 'command'} kind
+ * @property {string | null} label The login terminal's title.
+ * @property {{ provider: string | null } | null} apiKey It reads a key from the agent's environment.
+ */
+
+/**
+ * What a probe learned (`agents_probe_options`): the agent's options, or that it asks to sign in first.
+ * @typedef {AcpConfigOption[] | { signIn: SignInMethod[] }} ProbedOptions
+ */
+
+/**
+ * A sign-in's login running in a terminal the backend started (`agents_sign_in` of a `terminal` /
+ * `command` method): exit 0 signs in, closing its tab cancels.
+ * @typedef {Object} LoginTab
+ * @property {string} terminalId
+ * @property {string} title The method's label, else its name.
+ * @property {string} commandLine What it runs, without its environment: the tab's tooltip.
+ */
+
+/**
+ * An agent that asked to sign in, or is signing in.
+ * @typedef {Object} AgentSignIn
+ * @property {SignInMethod[]} methods
+ * @property {boolean} pending A sign-in runs.
+ */
+
+/**
+ * An installed agent as the Agents tab shows it.
+ * @typedef {Object} AgentRow
+ * @property {string} id
+ * @property {string} name
+ * @property {'user' | 'project'} scope
+ * @property {boolean} enabled
+ * @property {boolean} isDefault
+ * @property {string} command
+ * @property {string[]} args
+ * @property {string | null} version
+ * @property {AgentUpdate | null} update
+ * @property {boolean} updating An update runs: from its write to the end of its download.
+ * @property {'ready' | 'notStarted' | 'off' | 'signIn'} status
+ * @property {AgentSignIn | null} signIn With status `signIn`.
+ * @property {[number, number][]} nameMatches Where the search matched the name, `[start, end)` in UTF-16 units.
+ */
+
+/**
+ * A registry agent that isn't installed.
+ * @typedef {Object} RegistryRow
+ * @property {string} id
+ * @property {string} name
+ * @property {string} vendor
+ * @property {string} description
+ * @property {string} commandLine What Add writes.
+ * @property {[number, number][]} nameMatches
+ */
+
+/**
+ * The last check of the ACP registry.
+ * @typedef {Object} RegistryState
+ * @property {string | null} checkedAt ISO 8601; `null`: never, the bundled list is in use.
+ * @property {boolean} offline The last check failed.
+ * @property {boolean} checking
+ */
+
+/**
+ * `agents_view`: the Agents tab's data, searched and filtered by the backend.
+ * @typedef {Object} AgentsView
+ * @property {AgentRow[]} installed
+ * @property {AgentRow[]} userAgents With a project: the user's own agents it lacks (All only).
+ * @property {RegistryRow[]} registry Registry agents not installed (All only).
+ * @property {{ all: number, updates: number, off: number }} counts Ignore the search.
+ * @property {string | null} defaultAgent
+ * @property {string[]} errors
+ * @property {RegistryState} registryState
+ */
+
+/**
+ * What the Agents tab is to show once open: the registry's agents to add, or an agent's row.
+ * @typedef {Object} AgentsReveal
+ * @property {boolean} [add]
+ * @property {string} [agentId]
+ */
+
+/**
+ * An ACP registry agent the add form offers, with its pinned `npx` launch.
  * @typedef {Object} KnownAgent
- * @property {string} id Its id in agents.json, when that's free.
+ * @property {string} id Its registry id, also its id in agents.json when that's free.
  * @property {string} name
  * @property {string} command
  * @property {string[]} args
@@ -225,13 +368,12 @@
  */
 
 /**
- * Where the Settings tab is to scroll, and whether Agents opens its add form there.
+ * Where the Settings tab is to scroll.
  * @typedef {Object} SettingsReveal
  * @property {SettingsAnchor} section
- * @property {boolean} addAgent
  */
 
-/** @typedef {'theme' | 'editor' | 'agents'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
+/** @typedef {'theme' | 'editor'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
 
 /**
  * `agents_list`: the agents configured for a project, the disabled too.
@@ -340,13 +482,13 @@
 /**
  * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff;
  * Terminal; Browser).
- * @typedef {'file' | 'settings' | 'changes' | 'session-changes' | 'terminal' | 'browser'} TabKind
+ * @typedef {'file' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} TabKind
  */
 
 /**
  * Which view renders a tab's content: a file's by its extension (`code` for any other), a view tab's
  * by its kind. Picked by `TabContentController`.
- * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'changes' | 'session-changes' | 'terminal' | 'browser'} ContentKind
+ * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} ContentKind
  */
 
 /**
@@ -379,6 +521,8 @@
  * @property {TerminalStatus} status
  * @property {TerminalExit | null} exit Set once `exited`.
  * @property {string | null} error Why it didn't start, once `failed`.
+ * @property {string | null} login A sign-in's login (what it runs, the tab's tooltip): the backend
+ *   started it, and the sign-in, not Restart, runs it again.
  */
 
 /**
@@ -639,6 +783,8 @@
  * @property {string} name
  * @property {string} glyph One or two letters for its badge.
  * @property {boolean} [removed] No longer in agents.json (a started session's).
+ * @property {boolean} [off] Turned off by the user: not offered, not started.
+ * @property {boolean} [signIn] It asked to sign in: offered still, since picking it is how one signs in.
  */
 
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */

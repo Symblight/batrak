@@ -1,5 +1,7 @@
 import { expect } from '@esm-bundle/chai';
-import { handleSessionEvent } from './acp-adapter.js';
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { acpAdapter, handleSessionEvent } from './acp-adapter.js';
+import { $returnedPrompts, takeReturnedPrompt } from '../stores/chat.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
 import { $sessionNotices, dismissSessionNotice } from '../stores/session-runtime.js';
 import { $awaitingTrust } from '../stores/trust.js';
@@ -35,6 +37,15 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'claude', message, ran: 'npx -y x' } });
     expect($sessionNotices.get()[id]).to.include({ kind: 'error', message });
+  });
+
+  it('offers to turn a session\'s agent back on when the user turned it off', () => {
+    const id = newSession('/p');
+    startSession(id, { title: 'T', agentId: 'codex', config: {}, mode: 'local' });
+    const message = 'Codex is off';
+    handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
+    handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'codex', message, ran: null, reason: 'off' } });
+    expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'error', message, offAgent: 'codex' });
   });
 
   it('keeps the notice that agents.json changed the running agent until it is restarted or changed back', () => {
@@ -118,5 +129,75 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'update', payload: { sessionUpdate: 'usage_update', used: 24000, size: 200000, cost } });
     expect($contextUsage.get()[id]).to.deep.equal({ used: 24000, size: 200000 });
     forgetContextUsage(id);
+  });
+
+  describe('signing in', () => {
+    /** @type {import('../models/types.js').SignInMethod[]} */
+    const methods = [{ id: 'browser', name: 'Log in', description: null, kind: 'agent', label: null, apiKey: null }];
+
+    it('shows the agent asking to sign in until a start works', () => {
+      const id = newSession('/p');
+      startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+      handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message: 'Sign in to Fake' } });
+      handleSessionEvent({ sessionId: id, seq: 2, kind: 'sign-in', payload: { agentId: 'fake', agentName: 'Fake', methods } });
+      expect($sessionNotices.get()[id]).to.deep.equal({
+        kind: 'sign-in',
+        message: 'Sign in to Fake to continue.',
+        signIn: { agentId: 'fake', agentName: 'Fake', methods },
+      });
+      handleSessionEvent({ sessionId: id, seq: 3, kind: 'sign-in', payload: null });
+      expect($sessionNotices.get()[id] ?? null).to.equal(null);
+    });
+
+    it('gives a dropped prompt back for the composer', () => {
+      const id = newSession('/p');
+      handleSessionEvent({ sessionId: id, seq: 1, kind: 'prompt-returned', payload: { prompt: [{ type: 'text', text: 'hello' }] } });
+      expect($returnedPrompts.get()[id]).to.equal('hello');
+      expect(takeReturnedPrompt(id)).to.equal('hello');
+      expect($returnedPrompts.get()[id]).to.equal(undefined);
+    });
+
+    it("keeps an agent's history replay after a sign-in out of the held turn's reply", async () => {
+      mockIPC(() => null);
+      /** @type {unknown[]} */
+      const replayed = [];
+      const unsubscribe = acpAdapter.subscribe?.({
+        onMessage: () => {},
+        onChunk: (chunk) => replayed.push(chunk),
+        onConnectionChange: () => {},
+      });
+      try {
+        const id = newSession('/p');
+        startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+        const stream = await acpAdapter.sendMessage?.(
+          /** @type {Parameters<NonNullable<typeof acpAdapter.sendMessage>>[0]} */ (
+            /** @type {unknown} */ ({ id: 'm', conversationId: id, parts: [{ type: 'text', text: 'hello' }] })
+          ),
+          { signal: new AbortController().signal },
+        );
+        const text = (/** @type {string} */ t) => ({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
+        let seq = 0;
+        const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+          handleSessionEvent(/** @type {import('../models/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+        send('turn-start', {});
+        send('held', { prompt: [{ type: 'text', text: 'hello' }] });
+        send('status', { status: 'starting' });
+        send('update', { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'earlier' } });
+        send('update', text('Earlier answer'));
+        send('status', { status: 'idle' });
+        send('turn-start', {});
+        send('update', text('Hello'));
+        send('turn-end', { stopReason: 'end_turn' });
+
+        const reader = /** @type {ReadableStream} */ (stream).getReader();
+        const texts = [];
+        for (let read = await reader.read(); !read.done; read = await reader.read()) texts.push(read.value.delta?.text);
+        expect(texts.filter(Boolean)).to.deep.equal(['Hello']);
+        expect(replayed.length, 'the replay went to the history').to.be.greaterThan(0);
+      } finally {
+        unsubscribe?.();
+        clearMocks();
+      }
+    });
   });
 });

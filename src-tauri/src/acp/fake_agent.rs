@@ -10,13 +10,16 @@
 //!   disk as agents' own tools do; then like `sleep`
 //! - `look <path> <ms>` → a read tool call naming the file (location only); then like `sleep`
 //! - `crash` → one chunk, then the agent's side of the pipe closes mid-turn
+//!
+//! With `require_auth`, any prompt is answered AuthRequired while `signed_in` is unset (a login
+//! that ran out).
 
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use agent_client_protocol::schema::v1::{
-    AgentCapabilities, CancelNotification, ContentBlock, ContentChunk, Implementation, InitializeRequest, InitializeResponse,
+    AgentCapabilities, AuthMethod, AuthenticateRequest, AuthenticateResponse, CancelNotification, ContentBlock, ContentChunk, Implementation, InitializeRequest, InitializeResponse,
     LoadSessionRequest, LoadSessionResponse, NewSessionRequest, NewSessionResponse, PermissionOption,
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
@@ -32,8 +35,19 @@ use tokio_util::compat::{TokioAsyncReadCompatExt, TokioAsyncWriteCompatExt};
 #[derive(Clone, Default)]
 pub struct FakeAgentOptions {
     pub load_session: bool,
-    /// `session/new` fails with AuthRequired.
+    /// `session/new`, `session/load` and prompts fail with AuthRequired until `signed_in`.
     pub require_auth: bool,
+    /// `session/new` fails (not AuthRequired).
+    pub fail_new_session: bool,
+    /// The agent's credential store: shared by every agent started with these options, so one
+    /// that signed in is seen by the next.
+    pub signed_in: Arc<AtomicBool>,
+    /// `initialize`'s `authMethods`, as JSON.
+    pub auth_methods: Vec<serde_json::Value>,
+    /// `authenticate` fails with this error code and message instead of signing in.
+    pub fail_authenticate: Option<(i32, &'static str)>,
+    /// `authenticate` is never answered (a login the user hasn't finished).
+    pub hang_authenticate: bool,
     /// `session/set_config_option` is never answered.
     pub hang_set_config: bool,
 }
@@ -48,6 +62,10 @@ pub struct FakeAgentState {
     pub loads: AtomicUsize,
     /// Prompts it got, in order.
     pub prompts: std::sync::Mutex<Vec<String>>,
+    /// `initialize`'s `clientCapabilities`, as JSON.
+    pub client_capabilities: std::sync::Mutex<Option<serde_json::Value>>,
+    /// Methods `authenticate` was called with.
+    pub authenticated: std::sync::Mutex<Vec<String>>,
     pub crash: Notify,
 }
 
@@ -74,24 +92,54 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
     let on_prompt = Arc::clone(&state);
     let new_options = options.clone();
     let on_set = Arc::clone(&state);
+    let load_options = options.clone();
+    let auth_options = options.clone();
+    let prompt_options = options.clone();
+    let on_init = Arc::clone(&state);
+    let on_auth = Arc::clone(&state);
     let hang_set_config = options.hang_set_config;
     let result = Agent
         .builder()
         .name("fake-agent")
         .on_receive_request(
             async move |request: InitializeRequest, responder: Responder<InitializeResponse>, _cx| {
+                *on_init.client_capabilities.lock().unwrap() = serde_json::to_value(&request.client_capabilities).ok();
+                let methods: Vec<AuthMethod> =
+                    options.auth_methods.iter().filter_map(|m| serde_json::from_value(m.clone()).ok()).collect();
                 responder.respond(
                     InitializeResponse::new(request.protocol_version)
                         .agent_capabilities(AgentCapabilities::new().load_session(options.load_session))
-                        .agent_info(Implementation::new("fake-agent", "1.2.3")),
+                        .agent_info(Implementation::new("fake-agent", "1.2.3"))
+                        .auth_methods(methods),
                 )
             },
             agent_client_protocol::on_receive_request!(),
         )
         .on_receive_request(
+            async move |request: AuthenticateRequest, responder: Responder<AuthenticateResponse>, _cx| {
+                on_auth.authenticated.lock().unwrap().push(request.method_id.to_string());
+                if auth_options.hang_authenticate {
+                    tokio::spawn(async move {
+                        std::future::pending::<()>().await;
+                        drop(responder);
+                    });
+                    return Ok(());
+                }
+                if let Some((code, message)) = auth_options.fail_authenticate {
+                    return responder.respond_with_error(agent_client_protocol::Error::new(code, message));
+                }
+                auth_options.signed_in.store(true, Ordering::SeqCst);
+                responder.respond(AuthenticateResponse::new())
+            },
+            agent_client_protocol::on_receive_request!(),
+        )
+        .on_receive_request(
             async move |_request: NewSessionRequest, responder: Responder<NewSessionResponse>, _cx| {
-                if new_options.require_auth {
+                if new_options.needs_sign_in() {
                     return responder.respond_with_error(agent_client_protocol::Error::auth_required());
+                }
+                if new_options.fail_new_session {
+                    return responder.respond_with_error(agent_client_protocol::Error::new(-32603, "no session today"));
                 }
                 responder.respond(NewSessionResponse::new("fake-session-1").config_options(config_options("smart")))
             },
@@ -100,6 +148,9 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         .on_receive_request(
             async move |request: LoadSessionRequest, responder: Responder<LoadSessionResponse>, cx: ConnectionTo<Client>| {
                 on_load.loads.fetch_add(1, Ordering::SeqCst);
+                if load_options.needs_sign_in() {
+                    return responder.respond_with_error(agent_client_protocol::Error::auth_required());
+                }
                 // History is replayed as updates before the response.
                 let sid = request.session_id.clone();
                 cx.send_notification(SessionNotification::new(
@@ -147,6 +198,9 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         .on_receive_request(
             async move |request: PromptRequest, responder: Responder<PromptResponse>, cx: ConnectionTo<Client>| {
                 on_prompt.cancelled.store(false, Ordering::SeqCst);
+                if prompt_options.needs_sign_in() {
+                    return responder.respond_with_error(agent_client_protocol::Error::auth_required());
+                }
                 let state = Arc::clone(&on_prompt);
                 // The turn runs outside the dispatch loop, so cancel notifications and responses
                 // to our own requests keep flowing.
@@ -162,6 +216,12 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         .await;
     if let Err(e) = result {
         eprintln!("fake agent: {}", e.message);
+    }
+}
+
+impl FakeAgentOptions {
+    fn needs_sign_in(&self) -> bool {
+        self.require_auth && !self.signed_in.load(Ordering::SeqCst)
     }
 }
 

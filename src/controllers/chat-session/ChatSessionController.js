@@ -1,5 +1,6 @@
 import { StoreController } from '../store/StoreController.js';
 import { sessionController } from '../../services/session-controller.js';
+import { $returnedPrompts, takeReturnedPrompt } from '../../stores/chat.js';
 import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../../stores/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -30,8 +31,9 @@ function titleOf(text) {
 /**
  * Binds the host's `<chx-chat>` to the sessions: the active session is its conversation (every session's
  * messages stay cached in the chat, replies to a hidden one keep streaming), a draft's first message
- * starts it (and comes back into the composer when the session is refused), and each session keeps
- * what was left in the composer. Statuses come from the backend's session events.
+ * starts it (and comes back into the composer when the session is refused), a prompt the backend
+ * dropped unsent (held for a sign-in, then cancelled) comes back into its session's composer, and each
+ * session keeps what was left in the composer. Statuses come from the backend's session events.
  * @implements {ReactiveController}
  */
 export class ChatSessionController {
@@ -69,7 +71,26 @@ export class ChatSessionController {
         }
       },
     });
+    new StoreController(host, {
+      store: $returnedPrompts,
+      onChange: () => {
+        const chat = this.#config.chat();
+        const id = this.#activeId.value;
+        if (chat && id !== null) this.#putBack(chat, id);
+      },
+    });
     host.addController(this);
+  }
+
+  /**
+   * The session's returned prompt into the composer, unless the user typed something since.
+   * @param {ChxChat} chat Showing `id`.
+   * @param {string} id
+   */
+  #putBack(chat, id) {
+    if (!(id in $returnedPrompts.get()) || !chat.input.isEmpty()) return;
+    const text = takeReturnedPrompt(id);
+    if (text) chat.input.setText(text);
   }
 
   /** For `<chx-chat>`'s `activeConversationId`. */
@@ -146,6 +167,7 @@ export class ChatSessionController {
     shown.input.setText(draft?.text ?? '');
     shown.attachments.clear();
     if (draft?.files.length) shown.attachments.add(draft.files);
+    this.#putBack(shown, id);
     if (oldId !== undefined) shown.input.focusEnd();
   }
 }

@@ -18,7 +18,7 @@ describe('acp-agent-picker', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(root.querySelector('.acp-agent-picker__button')?.textContent).to.contain('Add agent');
     const items = [...root.querySelectorAll('md-menu-item')];
-    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent']);
+    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent', 'manage-agents']);
     expect(root.querySelector('md-menu-group')).to.equal(null);
   });
 
@@ -35,7 +35,19 @@ describe('acp-agent-picker', () => {
     expect(menu.open).to.equal(true);
   });
 
-  it('asks to add an agent from its only item', async () => {
+  it('asks to manage the agents', async () => {
+    const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[data-action="manage-agents"]'));
+    expect(item.textContent?.trim()).to.equal('Manage agents…');
+    let asked = false;
+    el.addEventListener('acp-agents-manage', () => (asked = true));
+    menu.dispatchEvent(new CustomEvent('select', { detail: { value: '', item } }));
+    expect(asked).to.equal(true);
+  });
+
+  it('asks to add an agent from its first item', async () => {
     const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
@@ -44,6 +56,36 @@ describe('acp-agent-picker', () => {
     el.addEventListener('acp-agent-add-open', () => (opened = true));
     menu.dispatchEvent(new CustomEvent('select', { detail: { value: '', item } }));
     expect(opened).to.equal(true);
+  });
+
+  it('offers no agent the user turned off', async () => {
+    const a = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
+    const b = { id: 'b', name: 'B', glyph: 'B', configOptions: [], off: true };
+    const composer = { ...NO_AGENT, agentId: 'a' };
+    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const offered = [...root.querySelectorAll('md-menu-group[label="Agent"] > md-menu-item')].map((i) => i.getAttribute('value'));
+    expect(offered).to.deep.equal(['a']);
+  });
+
+  it('says which agent needs a sign-in, and still offers it', async () => {
+    const a = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
+    const b = { id: 'b', name: 'B', glyph: 'B', configOptions: [], signIn: true };
+    const composer = { ...NO_AGENT, agentId: 'a' };
+    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-group[label="Agent"] > md-menu-item[value="b"]'));
+    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Needs sign-in');
+  });
+
+  it("says when a started session's agent is off", async () => {
+    const agent = { id: 'b', name: 'B', glyph: 'B', off: true };
+    const composer = { ...NO_AGENT, agentId: 'b', started: true };
+    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('.acp-agent-picker__agent')?.textContent?.trim()).to.equal('B (off)');
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[disabled]'));
+    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Turned off');
   });
 
   it('says when a started session\'s agent is gone from agents.json', async () => {

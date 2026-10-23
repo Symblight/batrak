@@ -9,7 +9,7 @@ import { setWorkspaceSettings } from './workspace.js';
  * @param {string} name
  * @returns {import('../models/types.js').AgentSummary}
  */
-const agent = (id, name) => ({ id, name, scope: 'user', version: null, command: id, args: [] });
+const agent = (id, name) => ({ id, name, scope: 'user', version: null, registryId: null, update: null, enabled: true, signIn: false, command: id, args: [] });
 
 describe('composer', () => {
   afterEach(() => {
@@ -52,6 +52,26 @@ describe('composer', () => {
     expect($composer.get().agentId, 'removed from the file').to.equal('a');
     expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
     expect($agents.get().map((x) => x.id)).to.deep.equal(['a']);
+  });
+
+  it('never gives a new session or a draft an agent the user turned off', () => {
+    const off = { ...agent('b', 'B'), enabled: false };
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    newSession('/p');
+    selectAgent('b');
+    expect($composer.get().agentId).to.equal('b');
+
+    $agentList.set({ agents: [agent('a', 'A'), off], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    expect($composer.get().agentId, 'the draft moves on').to.equal('a');
+    newSession('/p');
+    expect($composer.get().agentId, 'the last pick is off: not for a new session').to.equal('a');
+    expect(agentInfo('b')).to.include({ name: 'B', off: true });
+  });
+
+  it('says which agent asks to sign in', () => {
+    $agentList.set({ agents: [agent('a', 'A'), { ...agent('b', 'B'), signIn: true }], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    expect(agentInfo('a')).to.include({ signIn: false });
+    expect(agentInfo('b')).to.include({ signIn: true });
   });
 
   it("gives a draft the project's run target once workspace.json is read, until the user picks one", () => {

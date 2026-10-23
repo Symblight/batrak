@@ -1,5 +1,3 @@
-/** @typedef {import('./types.js').AgentSummary} AgentSummary */
-
 /**
  * One or two letters for an agent's badge.
  * @param {string} name
@@ -67,10 +65,22 @@ export function parseCommandLine(line) {
 }
 
 /**
- * What Settings says of an agent: off, ready (it has answered `initialize`), or not started yet.
- * @param {AgentSummary} agent
- * @returns {{ kind: 'ready' | 'unknown', label: string }}
+ * The ways to sign in from the app: the agent's own (`authenticate`) and logins run in a terminal.
+ * An API key is set in the agent's environment instead.
+ * @param {readonly import('./types.js').SignInMethod[]} methods
  */
-export function agentStatus(agent) {
-  return agent.version ? { kind: 'ready', label: 'Ready' } : { kind: 'unknown', label: 'Not started yet' };
+export function ownSignIns(methods) {
+  return methods.filter((m) => m.apiKey === null);
+}
+
+/**
+ * How to sign in to an agent just added, from its probe: `null` when it needs no sign-in; else its
+ * only method, or `methodId: null` when its row has to offer the choice (or only Retry).
+ * @param {import('./types.js').ProbedOptions} probed
+ * @returns {{ methodId: string | null } | null}
+ */
+export function signInAfterAdd(probed) {
+  if (Array.isArray(probed)) return null;
+  const methods = ownSignIns(probed.signIn);
+  return { methodId: methods.length === 1 ? methods[0].id : null };
 }

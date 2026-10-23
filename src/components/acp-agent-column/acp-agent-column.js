@@ -10,17 +10,21 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
+import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { reportError } from '../../services/notices.js';
+import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
+import { $signIns, signInOf } from '../../stores/agents.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
-import { openSettings } from '../../stores/editor.js';
+import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
-import { $activeNotice, $activePermission } from '../../stores/session-runtime.js';
+import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
+import { $terminals, openLoginTerminal } from '../../stores/terminals.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
@@ -52,6 +56,10 @@ export class AcpAgentColumn extends LitElement {
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
+  /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
+  #signIns = new StoreController(this, { store: $signIns });
+  /** Whether a login's terminal is this window's; `#loginHere()` reads it. */
+  #terminals = new StoreController(this, { store: $terminals });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #localShared = new StoreController(this, { store: $localShared });
@@ -148,8 +156,40 @@ export class AcpAgentColumn extends LitElement {
     const id = $activeSessionId.get();
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
+    else if (action === 'open-terminal') terminalController.sessionTerminal(id);
+    else if (action === 'show-login') {
+      const terminal = this.#signInRun()?.terminal;
+      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $workspace.get()?.path ?? null);
+    }
     else if (action === 'restart') sessionController.restart(id);
+    else if (action === 'turn-on-agent') {
+      const agentId = $sessionNotices.get()[id]?.offAgent;
+      if (agentId) agentConfig.setEnabled(agentId, true);
+    }
     else sessionController.dismissNotice(id);
+  }
+
+  /** @param {Event} e */
+  #onSignIn(e) {
+    const { agentId, methodId } = /** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ (e).detail;
+    agentConfig.signIn(agentId, methodId);
+  }
+
+  /** @param {Event} e */
+  #onSignInCancel(e) {
+    agentConfig.cancelSignIn(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
+  }
+
+  /** The sign-in running or failed for the active notice's agent. */
+  #signInRun() {
+    const agentId = this.#notice.value?.signIn?.agentId;
+    return agentId ? signInOf($workspace.get()?.path ?? null, agentId) : null;
+  }
+
+  /** Whether the active notice's sign-in runs its login in this window's terminal. */
+  #loginHere() {
+    const terminal = this.#signInRun()?.terminal;
+    return terminal !== undefined && terminal !== null && this.#terminals.value[terminal.terminalId] !== undefined;
   }
 
   /** The session a queued turn waits for, from the banner. */
@@ -237,11 +277,16 @@ export class AcpAgentColumn extends LitElement {
             .localTurns=${this.#workspaceSettings.value.localTurns}
             .permission=${hasSession ? this.#permission.value : null}
             .notice=${hasSession ? this.#notice.value : null}
+            .signInRun=${hasSession ? this.#signInRun() : null}
+            .loginHere=${hasSession && this.#loginHere()}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
             @acp-session-select=${this.#onSessionSelect}
-            @acp-agent-add-open=${() => openSettings({ section: 'agents', addAgent: true })}
+            @acp-agent-sign-in=${this.#onSignIn}
+            @acp-agent-sign-in-cancel=${this.#onSignInCancel}
+            @acp-agent-add-open=${() => openAgents({ add: true })}
+            @acp-agents-manage=${() => openAgents()}
             @acp-agent-select=${this.#onAgentSelect}
             @acp-config-option=${this.#onConfigOption}
             @acp-run-target-change=${this.#onRunTargetChange}

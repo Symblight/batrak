@@ -37,6 +37,7 @@ const terminalInfo = {
   status: 'running',
   exit: null,
   error: null,
+  login: null,
 };
 
 describe('acp-tab-view', () => {

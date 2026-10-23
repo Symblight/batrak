@@ -16,3 +16,25 @@ export function takeChatInserts() {
   if (inserts.length) $chatInserts.set([]);
   return inserts;
 }
+
+/** Prompts the backend dropped unsent (a held turn cancelled), by session id: back into its composer. */
+export const $returnedPrompts = atom(/** @type {Readonly<Record<string, string>>} */ ({}));
+
+/**
+ * @param {string} sessionId
+ * @param {string} text
+ */
+export function returnPrompt(sessionId, text) {
+  if (text) $returnedPrompts.set({ ...$returnedPrompts.get(), [sessionId]: text });
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {string | null} The session's returned prompt, now no longer waiting.
+ */
+export function takeReturnedPrompt(sessionId) {
+  const { [sessionId]: text, ...rest } = $returnedPrompts.get();
+  if (text === undefined) return null;
+  $returnedPrompts.set(rest);
+  return text;
+}

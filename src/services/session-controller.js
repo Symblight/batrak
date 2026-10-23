@@ -17,6 +17,7 @@ import {
   workspaceSettings,
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, restoreHistory, trackCreate } from './acp-adapter.js';
+import { agentConfig } from './agent-config.js';
 import { reportError } from './notices.js';
 import { notify } from '../stores/notices.js';
 import {
@@ -54,6 +55,15 @@ const IDLE_STOP_MS = 10 * 60_000;
  * first message, resumes a shown session's stopped agent and stops hidden idle ones, and runs the
  * session actions (permissions, stop, restart, log).
  */
+/**
+ * A session's event; one asking to sign in (or done waiting) changes what the picker says of its agent.
+ * @param {import('../models/types.js').SessionEnvelope} event
+ */
+function onSessionEvent(event) {
+  handleSessionEvent(event);
+  if (event.kind === 'sign-in') agentConfig.refresh();
+}
+
 export class SessionController {
   /** @type {Set<string>} Listed sessions whose recorded conversation was asked for. */
   #historyLoaded = new Set();
@@ -67,7 +77,7 @@ export class SessionController {
     const sessions = await listSessions();
     setListedSessions(sessions);
     for (const session of sessions) {
-      sessionOpen(session.id, handleSessionEvent).catch((err) => reportError(`Opening "${session.title}" failed`, err));
+      sessionOpen(session.id, onSessionEvent).catch((err) => reportError(`Opening "${session.title}" failed`, err));
     }
     // A session's conversation comes back the first time it's shown, not all at launch. Showing a
     // session resumes its stopped agent; the one it replaces is stopped once idle for a while.
@@ -184,7 +194,7 @@ export class SessionController {
     startSession(id, { title, agentId, config, mode });
     setSessionNotice(id, null);
     const request = { sessionId: id, projectPath, agentId, mode, title, config, baseBranch };
-    const created = sessionCreate(request, handleSessionEvent).then(
+    const created = sessionCreate(request, onSessionEvent).then(
       (session) => upsertSession(session),
       (err) => {
         revertToDraft(id);

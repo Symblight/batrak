@@ -1,19 +1,24 @@
 import { LitElement, html, nothing } from 'lit';
 import { OPTION_VARIANTS } from '@symblight/chat/agent';
 import '@symblight/wc-material/button';
+import { ownSignIns } from '../../models/agents.js';
 import styles from './acp-session-banner.css?inline';
 
 /** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
-/** @typedef {'open-log' | 'restart' | 'dismiss-notice'} SessionAction */
+/** @typedef {import('../../models/types.js').SessionSignIn} SessionSignIn */
+/** @typedef {import('../../models/types.js').SignInRun} SignInRun */
+/** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice' | 'open-terminal' | 'show-login'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */
 const VARIANTS = OPTION_VARIANTS;
 
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log, stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, or information).
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log (Turn on for an agent the user turned off), stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, the agent asking to sign in with its ways and Retry, or information).
  * @fires acp-permission-respond `{ requestId, optionId }`
+ * @fires acp-agent-sign-in `{ agentId, methodId }` `methodId: null` is Retry (only checks).
+ * @fires acp-agent-sign-in-cancel `{ agentId }`
  * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
  */
@@ -21,6 +26,8 @@ export class AcpSessionBanner extends LitElement {
   static properties = {
     permission: { attribute: false },
     notice: { attribute: false },
+    signInRun: { attribute: false },
+    loginHere: { attribute: false },
   };
 
   static styles = styles;
@@ -31,6 +38,10 @@ export class AcpSessionBanner extends LitElement {
     this.permission = null;
     /** @type {SessionNotice | null} The active session's notice. */
     this.notice = null;
+    /** @type {SignInRun | null} The sign-in running or failed for the notice's agent. */
+    this.signInRun = null;
+    /** @type {boolean} The run's login terminal is this window's (another window's it can't show). */
+    this.loginHere = false;
   }
 
   /**
@@ -59,16 +70,84 @@ export class AcpSessionBanner extends LitElement {
     );
   }
 
+  /** @param {SessionSignIn} signIn */
+  #renderSignIn(signIn) {
+    const { agentId } = signIn;
+    if (this.signInRun?.state === 'waiting') {
+      return html`${this.signInRun.terminal && this.loginHere
+          ? html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('show-login')}>
+              Show terminal
+            </md-button>`
+          : nothing}
+        <md-button
+          slot="actions"
+          class="acp-session-banner__action"
+          variant="text"
+          @click=${() => this.#emit('acp-agent-sign-in-cancel', { agentId })}
+          >Cancel</md-button
+        >`;
+    }
+    const own = ownSignIns(signIn.methods);
+    const signInWith = (/** @type {string | null} */ methodId) => this.#emit('acp-agent-sign-in', { agentId, methodId });
+    return html`
+      ${own.map(
+        (method) => html`<md-button
+          slot="actions"
+          class="acp-session-banner__action"
+          variant="tonal"
+          title=${method.description ?? nothing}
+          @click=${() => signInWith(method.id)}
+          >${method.name}</md-button
+        >`,
+      )}
+      ${own.length
+        ? nothing
+        : html`<md-button slot="actions" class="acp-session-banner__action" variant="text" @click=${() => this.#act('open-terminal')}>
+            Open terminal
+          </md-button>`}
+      <md-button
+        slot="actions"
+        class="acp-session-banner__action"
+        variant="text"
+        title="Check whether you're signed in now"
+        @click=${() => signInWith(null)}
+        >Retry</md-button
+      >
+    `;
+  }
+
+  /**
+   * @param {SessionNotice} notice
+   * @returns {string}
+   */
+  #signInLabel(notice) {
+    const signIn = /** @type {SessionSignIn} */ (notice.signIn);
+    const run = this.signInRun;
+    if (run?.state === 'waiting' && run.terminal) {
+      const where = this.loginHere ? '' : ' of the window that started it';
+      return `Signing in to ${signIn.agentName}… Finish in the ${run.terminal.title} terminal${where}.`;
+    }
+    if (run?.state === 'waiting') return `Signing in to ${signIn.agentName}… Finish in your browser if it opened.`;
+    if (run?.state === 'failed') return `Signing in to ${signIn.agentName} failed: ${run.message ?? 'unknown error'}`;
+    if (!ownSignIns(signIn.methods).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
+    return notice.message;
+  }
+
   /** @param {SessionNotice} notice */
   #renderNoticeActions(notice) {
+    if (notice.kind === 'sign-in' && notice.signIn) return this.#renderSignIn(notice.signIn);
     if (notice.kind === 'error') {
       return html`
         <md-button slot="actions" class="acp-session-banner__action" variant="text" @click=${() => this.#act('open-log')}>
           Open log
         </md-button>
-        <md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
-          Restart
-        </md-button>
+        ${notice.offAgent
+          ? html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('turn-on-agent')}>
+              Turn on
+            </md-button>`
+          : html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#act('restart')}>
+              Restart
+            </md-button>`}
       `;
     }
     if (notice.kind === 'outdated') {
@@ -103,8 +182,10 @@ export class AcpSessionBanner extends LitElement {
     const request = this.permission;
     const notice = this.notice;
     const shown = request !== null || notice !== null;
-    const label = request?.title ?? notice?.message ?? '';
-    const variant = !request && notice?.kind === 'error' ? 'danger' : 'default';
+    const signingIn = !request && notice?.kind === 'sign-in' && notice.signIn !== undefined;
+    const label = request?.title ?? (notice && signingIn ? this.#signInLabel(notice) : notice?.message) ?? '';
+    const failed = notice?.kind === 'error' || (signingIn && this.signInRun?.state === 'failed');
+    const variant = !request && failed ? 'danger' : 'default';
     // Kept mounted and only hidden: its live region announces a new label reliably.
     return html`<chx-input-mode-banner
       class="acp-session-banner__banner"
@@ -118,5 +199,4 @@ export class AcpSessionBanner extends LitElement {
     </chx-input-mode-banner>`;
   }
 }
-
 customElements.define('acp-session-banner', AcpSessionBanner);

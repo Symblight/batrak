@@ -197,6 +197,7 @@ export class AcpChat extends LitElement {
     localTurns: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
+    signInRun: { attribute: false },
   };
 
   static styles = styles;
@@ -237,6 +238,8 @@ export class AcpChat extends LitElement {
     this.permission = null;
     /** @type {SessionNotice | null} */
     this.notice = null;
+    /** @type {import('../../models/types.js').SignInRun | null} The sign-in of the notice's agent. */
+    this.signInRun = null;
   }
 
   /** The `<chx-chat>` holding every session's conversation; present after the first render. */
@@ -440,6 +443,7 @@ export class AcpChat extends LitElement {
           class="acp-chat__banner"
           .permission=${this.permission}
           .notice=${this.notice}
+          .signInRun=${this.signInRun}
         ></acp-session-banner>
         <chx-message-composer
           slot="message-composer"
