@@ -14,6 +14,8 @@ import type { AcpChat } from './components/acp-chat/acp-chat.js';
 import type { AcpImagePreview } from './components/acp-image-preview/acp-image-preview.js';
 import type { AcpMarkdown } from './components/acp-markdown/acp-markdown.js';
 import type { AcpMarkdownPreview } from './components/acp-markdown-preview/acp-markdown-preview.js';
+import type { AcpCodeView } from './components/acp-code-view/acp-code-view.js';
+import type { AcpTabStrip } from './components/acp-tab-strip/acp-tab-strip.js';
 import type { AcpTabView } from './components/acp-tab-view/acp-tab-view.js';
 import type { AcpMainColumn } from './components/acp-main-column/acp-main-column.js';
 import type { AcpFileColumn } from './components/acp-file-column/acp-file-column.js';
@@ -51,6 +53,7 @@ declare global {
     'acp-bytes': AcpBytes;
     'acp-changes-panel': AcpChangesPanel;
     'acp-changes-review': AcpChangesReview;
+    'acp-code-view': AcpCodeView;
     'acp-chat': AcpChat;
     'acp-comment-bar': AcpCommentBar;
     'acp-confirm-dialog': AcpConfirmDialog;
@@ -58,6 +61,7 @@ declare global {
     'acp-image-preview': AcpImagePreview;
     'acp-markdown': AcpMarkdown;
     'acp-markdown-preview': AcpMarkdownPreview;
+    'acp-tab-strip': AcpTabStrip;
     'acp-tab-view': AcpTabView;
     'acp-main-column': AcpMainColumn;
     'acp-file-column': AcpFileColumn;

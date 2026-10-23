@@ -36,3 +36,23 @@ export function relPath(root, abs) {
   const prefix = `${root}/`;
   return abs.startsWith(prefix) ? abs.slice(prefix.length) : null;
 }
+
+/**
+ * @param {string} path
+ * @returns {string} Its last segment.
+ */
+export function basename(path) {
+  return path.split(/[\\/]/).pop() || path;
+}
+
+/**
+ * A file's path as tabs show it: relative to the project, or to its worktree session's folder;
+ * absolute outside both.
+ * @param {string | null} root Absolute path of the project folder.
+ * @param {readonly import('./types.js').WorktreeFolder[]} worktrees
+ * @param {string} abs Absolute path.
+ */
+export function shownPath(root, worktrees, abs) {
+  const worktree = worktreeOf(worktrees, abs);
+  return relPath(worktree ? worktree.folder : root, abs) ?? abs;
+}

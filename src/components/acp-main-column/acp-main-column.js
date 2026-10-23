@@ -73,7 +73,7 @@ import styles from './acp-main-column.css?inline';
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').Settings} Settings */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
-/** @typedef {import('../acp-tab-view/acp-tab-view.js').CloseScope} CloseScope */
+/** @typedef {import('../acp-tab-strip/acp-tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
 /**

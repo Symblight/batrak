@@ -1,0 +1,149 @@
+:host {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+/* The scroller is ours, not md-tabs', so wheel handling and scrollIntoView have a scroller we own.
+   Flipped vertically (and the tabs back) so its very thin scrollbar sits on top; the flipped padding
+   is the gap above the tabs. `scrollbar-width` and `scrollbar-color` must stay `auto`, or WebKit ignores the pseudo-elements. */
+.acp-tab-strip__scroller {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 var(--space-2) var(--space-0-5);
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-behavior: smooth;
+  scroll-padding-inline: var(--space-2);
+  scrollbar-width: auto;
+  scrollbar-color: auto;
+  scale: 1 -1;
+  /* Fades tabs scrolled under either edge into the column, like the message list into the composer.
+     A mask on the scroller, not its content, so the fades stay put while the tabs scroll. */
+  --_acp-tab-strip-fade: var(--space-4);
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    black var(--_acp-tab-strip-fade),
+    black calc(100% - var(--_acp-tab-strip-fade)),
+    transparent
+  );
+  /* The thumb shows only while the pointer is over the strip. WebKit doesn't repaint a scrollbar
+     pseudo-element on `:hover`, but does when the scroller's `color` changes: the thumb paints
+     `currentColor` (inset shadow), and the tabs set their own colors. */
+  color: transparent;
+  transition: color 150ms ease;
+
+  &:hover {
+    color: var(--md-outline-variant);
+  }
+  &::-webkit-scrollbar {
+    height: 2px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    border-radius: var(--shape-corner-full);
+    box-shadow: inset 0 0 0 2px;
+  }
+}
+.acp-tab-strip__tabs {
+  width: max-content;
+  min-width: 100%;
+  color: var(--md-on-surface);
+  scale: 1 -1;
+}
+.acp-tab-strip__tab {
+  flex: 0 0 auto;
+  translate: var(--_acp-tab-strip-shift, 0) 0;
+  --md-tab-label-size: 0.8rem;
+
+  /* Whole pixels (36px): with a fractional height the flipped strip rounds the tabs 1px off in WebKit
+     while a tab's hover state layer animates. */
+  &::part(tab) {
+    height: 2.25rem;
+  }
+}
+/* Drag and drop: the tabs slide aside to open an empty slot where the dragged one would land. Only
+   while sorting: on drop the reorder takes over their offsets in the same frame, without animating. */
+.acp-tab-strip__tab_sorting {
+  transition: translate 180ms var(--motion-easing-standard);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+/* Its slot stays empty; the native drag preview follows the pointer. */
+.acp-tab-strip__tab_dragging {
+  opacity: 0;
+}
+.acp-tab-strip__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+/* Deleted on disk, still open. */
+.acp-tab-strip__label_deleted {
+  text-decoration: line-through;
+}
+/* A path on one line: md-tooltip caps its own width (`max-inline-size` on its host), which wraps it. */
+.acp-tab-strip__tooltip {
+  width: max-content;
+  max-inline-size: none;
+}
+.acp-tab-strip__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-inline-end: -8px;
+  border-radius: 50%;
+  color: var(--md-on-surface-variant);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--state-pressed);
+    outline: none;
+  }
+}
+.acp-tab-strip__file-icon {
+  font-size: var(--icon-size-xs);
+}
+.acp-tab-strip__close-icon {
+  font-size: var(--icon-size-sm);
+}
+/* Unsaved edits: a dot after the name, in the accent color. */
+.acp-tab-strip__unsaved {
+  margin-inline-start: var(--space-0-5);
+  color: var(--md-primary);
+  font-size: 10px;
+  line-height: 1;
+}
+/* Show Hidden Tabs: outside the scroller, so never faded or scrolled away. */
+.acp-tab-strip__overflow {
+  flex: none;
+  margin-inline-end: var(--space-1);
+  --md-icon-button-font-size: var(--icon-size-md);
+}
+.acp-tab-strip__overflow-icon {
+  font-size: var(--icon-size-md);
+}
+.acp-tab-strip__overflow-menu {
+  --md-menu-min-width: 12rem;
+  --md-menu-max-height: 24rem;
+  --md-menu-shape: var(--shape-corner-small);
+}
+/* Dense rows, like the IDE's popups. */
+.acp-tab-strip__overflow-item {
+  --md-menu-item-min-block-size: 1.375rem;
+  --md-menu-item-padding-block: 0;
+  --md-menu-item-padding-inline: var(--space-1-5);
+  --md-menu-item-label-text-size: var(--font-size-sm);
+  --md-menu-item-label-text-line-height: 1.375rem;
+  --md-menu-item-leading-icon-size: var(--icon-size-xs);
+
+  margin-inline: var(--space-0-5);
+}
