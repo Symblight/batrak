@@ -3,6 +3,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
+import '@symblight/wc-material/tooltip';
 import syncIcon from '@material-design-icons/svg/outlined/sync.svg?raw';
 import { syncSummary } from '../../models/sessions.js';
 import styles from './acp-session-sync.css?inline';
@@ -35,8 +36,8 @@ export class AcpSessionSync extends LitElement {
     if (this.sync === null) return nothing;
     const { label, lines, warn } = syncSummary(this.sync, Date.now());
     return html`<md-icon-button
+        id="acp-session-sync-button"
         class="acp-session-sync__button"
-        title=${[label, ...lines].join('\n')}
         aria-label="Resync sessions"
         @click=${this.#onClick}
       >
@@ -44,6 +45,9 @@ export class AcpSessionSync extends LitElement {
           >${unsafeSVG(syncIcon)}</md-icon
         >
       </md-icon-button>
+      <md-tooltip for="acp-session-sync-button" show-delay="500" placement="bottom">
+        ${[label, ...lines].map((line) => html`<div class="acp-session-sync__line">${line}</div>`)}
+      </md-tooltip>
       ${warn ? html`<span class="acp-session-sync__warning" aria-hidden="true"></span>` : nothing}`;
   }
 }

@@ -24,6 +24,16 @@ async function render(sync) {
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
 }
 
+/**
+ * The tooltip's lines, and whether it belongs to the button.
+ * @param {ShadowRoot} root
+ */
+function tooltip(root) {
+  const tip = root.querySelector('md-tooltip');
+  const lines = [...(tip?.querySelectorAll('.acp-session-sync__line') ?? [])].map((l) => l.textContent?.trim());
+  return { lines, anchored: tip?.getAttribute('for') === root.querySelector('md-icon-button')?.id };
+}
+
 describe('acp-session-sync', () => {
   it('shows nothing without a project', async () => {
     const { root } = await render(null);
@@ -32,16 +42,15 @@ describe('acp-session-sync', () => {
 
   it('spins while a sync runs', async () => {
     const { root } = await render({ running: true, report: null });
-    const button = root.querySelector('md-icon-button');
-    expect(button?.getAttribute('title')).to.equal('Syncing sessions…');
+    expect(tooltip(root)).to.deep.equal({ lines: ['Syncing sessions…'], anchored: true });
+    expect(root.querySelector('md-icon-button')?.hasAttribute('title'), 'no native tooltip').to.equal(false);
     expect(root.querySelector('.acp-session-sync__icon_running')).to.not.equal(null);
   });
 
-  it("says how each agent did in its tooltip, with a warning dot when one needs the user", async () => {
+  it("says how each agent did in its md-tooltip, with a warning dot when one needs the user", async () => {
     const { root } = await render({ running: false, report: REPORT });
-    const button = root.querySelector('md-icon-button');
-    expect(button?.getAttribute('title')).to.equal('Synced just now\nClaude Code · 3 sessions\nCodex · needs sign-in');
-    expect(button?.getAttribute('aria-label')).to.equal('Resync sessions');
+    expect(tooltip(root).lines).to.deep.equal(['Synced just now', 'Claude Code · 3 sessions', 'Codex · needs sign-in']);
+    expect(root.querySelector('md-icon-button')?.getAttribute('aria-label')).to.equal('Resync sessions');
     expect(root.querySelector('.acp-session-sync__warning')).to.not.equal(null);
   });
 
