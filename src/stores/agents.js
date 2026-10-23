@@ -66,6 +66,21 @@ export function noteSignIn({ projectPath, agentId, state, message, terminal }) {
 }
 
 /**
+ * One project's sign-ins, by agent id.
+ * @param {Readonly<Record<string, SignInRun>>} signIns `$signIns`' value.
+ * @param {string | null} projectPath `null`: the user's agents.
+ * @returns {Record<string, SignInRun>}
+ */
+export function signInsOf(signIns, projectPath) {
+  const prefix = signInKey(projectPath, '');
+  return Object.fromEntries(
+    Object.entries(signIns)
+      .filter(([key]) => key.startsWith(prefix))
+      .map(([key, run]) => [key.slice(prefix.length), run]),
+  );
+}
+
+/**
  * @param {string | null} projectPath
  * @param {string} agentId
  * @returns {SignInRun | null}

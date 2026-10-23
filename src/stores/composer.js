@@ -108,11 +108,11 @@ export function normalizeOptions(options) {
 }
 
 /**
- * @param {{ id: string, name: string, enabled?: boolean }} agent
+ * @param {{ id: string, name: string, enabled?: boolean, signIn?: boolean }} agent
  * @returns {CatalogAgent}
  */
-function catalogEntry({ id, name, enabled = true }) {
-  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false, off: !enabled };
+function catalogEntry({ id, name, enabled = true, signIn = false }) {
+  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false, off: !enabled, signIn };
 }
 
 /** The project's agents (`$agentList`), each with its config options as last seen; `off` ones aren't offered. */

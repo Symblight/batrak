@@ -20,7 +20,7 @@ import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { glyphOf } from '../../models/agents.js';
+import { glyphOf, ownSignIns } from '../../models/agents.js';
 import '../acp-agent-form/acp-agent-form.js';
 import styles from './acp-agents-view.css?inline';
 
@@ -31,6 +31,7 @@ import styles from './acp-agents-view.css?inline';
 /** @typedef {import('../../models/types.js').AgentsFilter} AgentsFilter */
 /** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../models/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../models/types.js').SignInRun} SignInRun */
 /** @typedef {import('../acp-agent-form/acp-agent-form.js').FormPreset} FormPreset */
 
 /** @type {Record<AgentRow['status'], string>} */
@@ -68,6 +69,7 @@ const CHIPS = [
  * @fires acp-agent-update `{ agentId, agent }` From the edit form.
  * @fires acp-agent-default `{ agentId }`
  * @fires acp-agent-remove `{ agentId }`
+ * @fires acp-agent-sign-in `{ agentId, methodId }` `methodId: null` is Retry (only checks).
  * @fires acp-agents-import `{ agentIds }` The user's own agents to copy into the project.
  * @fires acp-agents-file-open `null`
  * @fires acp-agents-revealed `{ reveal }`
@@ -78,6 +80,7 @@ export class AcpAgentsView extends LitElement {
     query: { attribute: false },
     known: { attribute: false },
     pending: { attribute: false },
+    signIns: { attribute: false },
     reveal: { attribute: false },
     adding: { state: true },
     editing: { state: true },
@@ -93,6 +96,11 @@ export class AcpAgentsView extends LitElement {
     menu: () => this.renderRoot.querySelector('.acp-agents-view__menu'),
     onSelect: (value, agent) => this.#onMenuSelect(value, agent),
   });
+  /** @type {ContextMenuController<AgentRow>} An agent's ways to sign in, when it has more than one. */
+  #signInMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-agents-view__sign-in-menu'),
+    onSelect: (methodId, agent) => this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId }),
+  });
   /** @type {AgentsReveal | null} A reveal just rendered, to scroll to and confirm. */
   #shown = null;
 
@@ -106,6 +114,8 @@ export class AcpAgentsView extends LitElement {
     this.known = [];
     /** @type {{ updating: readonly string[], checking: boolean }} Calls this window waits for. */
     this.pending = { updating: [], checking: false };
+    /** @type {Readonly<Record<string, SignInRun>>} Sign-ins of the shown agents running or failed, by agent id. */
+    this.signIns = {};
     /** @type {AgentsReveal | null} What to show; `acp-agents-revealed` once shown. */
     this.reveal = null;
     /** @type {FormPreset | null} The add form, open at the top of the list. */
@@ -311,6 +321,39 @@ export class AcpAgentsView extends LitElement {
   }
 
   /** @param {AgentRow} agent */
+  #renderSignIn(agent) {
+    if (agent.status !== 'signIn' || !agent.signIn) return nothing;
+    if (agent.signIn.pending || this.signIns[agent.id]?.state === 'waiting') {
+      return html`<md-button class="acp-agents-view__button" variant="text" disabled>
+        <md-progress-circular slot="icon" class="acp-agents-view__spinner"></md-progress-circular>
+        Signing in…
+      </md-button>`;
+    }
+    const methods = ownSignIns(agent.signIn.methods);
+    if (!methods.length) {
+      return html`<md-button
+          id=${tipId('sign-in', agent.id)}
+          class="acp-agents-view__button"
+          variant="text"
+          @click=${() => this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId: null })}
+          >Retry</md-button
+        >
+        ${tooltip(tipId('sign-in', agent.id), "Check whether you're signed in now")}`;
+    }
+    const [only] = methods;
+    return html`<md-button
+      class="acp-agents-view__button"
+      variant="text"
+      aria-haspopup=${methods.length > 1 ? 'menu' : nothing}
+      @click=${(/** @type {Event} */ e) =>
+        methods.length > 1
+          ? this.#signInMenu.openFrom(agent, /** @type {HTMLElement} */ (e.currentTarget))
+          : this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId: only.id })}
+      >Sign in</md-button
+    >`;
+  }
+
+  /** @param {AgentRow} agent */
   #renderDetails(agent) {
     const parts = [agent.scope === 'project' ? 'Project' : 'Yours'];
     if (agent.version) parts.push(agent.update && !agent.update.pin ? `${agent.version} → ${agent.update.to}` : agent.version);
@@ -326,6 +369,7 @@ export class AcpAgentsView extends LitElement {
       </li>`;
     }
     const menuOpen = this.#menu.target?.id === agent.id;
+    const failed = agent.status === 'signIn' ? this.signIns[agent.id] : undefined;
     return html`<li
       class=${classMap({ 'acp-agents-view__row': true, 'acp-agents-view__row_revealed': this.revealed === agent.id })}
       data-agent-id=${agent.id}
@@ -341,8 +385,11 @@ export class AcpAgentsView extends LitElement {
           ${agent.isDefault ? html`<span id=${tipId('default', agent.id)} class="acp-agents-view__default">Default</span>` : nothing}
         </div>
         <div class="acp-agents-view__details">${this.#renderDetails(agent)}</div>
+        ${failed?.state === 'failed'
+          ? html`<div class="acp-agents-view__error" role="alert">Signing in failed: ${failed.message ?? 'unknown error'}</div>`
+          : nothing}
       </div>
-      ${this.#renderUpdate(agent)}
+      ${this.#renderSignIn(agent)} ${this.#renderUpdate(agent)}
       <md-switch
         id=${tipId('switch', agent.id)}
         class="acp-agents-view__switch"
@@ -520,6 +567,24 @@ export class AcpAgentsView extends LitElement {
     </md-menu>`;
   }
 
+  #renderSignInMenu() {
+    const agent = this.#signInMenu.target;
+    return html`<md-menu
+      class="acp-agents-view__sign-in-menu"
+      placement="bottom-end"
+      aria-label=${agent ? `Sign in to ${agent.name}` : 'Sign in'}
+      @select=${this.#signInMenu.onSelect}
+      @closed=${this.#signInMenu.onClosed}
+    >
+      ${ownSignIns(agent?.signIn?.methods ?? []).map(
+        (method) => html`<md-menu-item class="acp-agents-view__menu-item" value=${method.id}>
+          ${method.name}
+          ${method.description ? html`<span slot="supporting-text">${method.description}</span>` : nothing}
+        </md-menu-item>`,
+      )}
+    </md-menu>`;
+  }
+
   render() {
     const view = this.view;
     return html`<div class="acp-agents-view__page">
@@ -535,9 +600,8 @@ export class AcpAgentsView extends LitElement {
         ? html`${this.#renderEmpty(view)} ${this.#renderInstalled(view)} ${this.#renderUserAgents(view)} ${this.#renderRegistry(view)}
           ${this.#renderFooter(view)}`
         : nothing}
-      ${this.#renderMenu()}
+      ${this.#renderMenu()} ${this.#renderSignInMenu()}
     </div>`;
   }
 }
-
 customElements.define('acp-agents-view', AcpAgentsView);

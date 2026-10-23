@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $agentsPending, $signIns, noteSignIn, signInOf, whileUpdating } from './agents.js';
+import { $agentsPending, $signIns, noteSignIn, signInOf, signInsOf, whileUpdating } from './agents.js';
 
 describe('agents', () => {
   it('shows agents as updating while their call runs, a failed one too', async () => {
@@ -27,5 +27,14 @@ describe('agents', () => {
     expect(signInOf(null, 'codex')?.terminal, "a login's terminal").to.deep.equal(terminal);
     noteSignIn({ projectPath: null, agentId: 'codex', state: 'cancelled', message: null, terminal });
     expect($signIns.get()).to.deep.equal({});
+  });
+
+  it("gives one project's sign-ins by agent", () => {
+    noteSignIn({ projectPath: '/p', agentId: 'codex', state: 'failed', message: 'no', terminal: null });
+    noteSignIn({ projectPath: '/p', agentId: 'zed', state: 'waiting', message: null, terminal: null });
+    noteSignIn({ projectPath: null, agentId: 'gemini', state: 'waiting', message: null, terminal: null });
+    expect(Object.keys(signInsOf($signIns.get(), '/p')).sort()).to.deep.equal(['codex', 'zed']);
+    expect(signInsOf($signIns.get(), null)).to.deep.equal({ gemini: { state: 'waiting', message: null, terminal: null } });
+    $signIns.set({});
   });
 });

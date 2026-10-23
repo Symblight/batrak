@@ -238,6 +238,7 @@
  * @property {string | null} registryId The ACP registry entry it runs; `null`: a custom agent.
  * @property {AgentUpdate | null} update A newer version the registry has.
  * @property {boolean} enabled Not turned off by the user; only these are offered and started.
+ * @property {boolean} signIn It asked to sign in and hasn't since.
  * @property {string} command What it runs, for the edit form.
  * @property {string[]} args
  */
@@ -268,6 +269,11 @@
  * @property {'agent' | 'terminal' | 'command'} kind
  * @property {string | null} label The login terminal's title.
  * @property {{ provider: string | null } | null} apiKey It reads a key from the agent's environment.
+ */
+
+/**
+ * What a probe learned (`agents_probe_options`): the agent's options, or that it asks to sign in first.
+ * @typedef {AcpConfigOption[] | { signIn: SignInMethod[] }} ProbedOptions
  */
 
 /**
@@ -779,6 +785,7 @@
  * @property {string} glyph One or two letters for its badge.
  * @property {boolean} [removed] No longer in agents.json (a started session's).
  * @property {boolean} [off] Turned off by the user: not offered, not started.
+ * @property {boolean} [signIn] It asked to sign in: offered still, since picking it is how one signs in.
  */
 
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */

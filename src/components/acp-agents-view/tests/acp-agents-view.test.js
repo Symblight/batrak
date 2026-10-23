@@ -4,6 +4,8 @@ import '../acp-agents-view.js';
 /** @typedef {import('../../../models/types.js').AgentsView} AgentsView */
 /** @typedef {import('../../../models/types.js').AgentRow} AgentRow */
 /** @typedef {import('../../../models/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../../models/types.js').SignInMethod} SignInMethod */
+/** @typedef {import('../../../models/types.js').SignInRun} SignInRun */
 /** @typedef {import('../acp-agents-view.js').AcpAgentsView} AcpAgentsView */
 
 /**
@@ -47,11 +49,19 @@ const VIEW = {
 const ALL = { query: '', filter: 'all' };
 
 /**
- * @param {{ view?: AgentsView, query?: AgentsQuery, pending?: { updating: string[], checking: boolean } }} [props]
+ * @param {Partial<SignInMethod> & { id: string, name: string }} method
+ * @returns {SignInMethod}
  */
-async function render({ view = VIEW, query = ALL, pending = { updating: [], checking: false } } = {}) {
+const method = (method) => ({ description: null, kind: 'agent', label: null, apiKey: null, ...method });
+
+/**
+ * @param {{ view?: AgentsView, query?: AgentsQuery, pending?: { updating: string[], checking: boolean }, signIns?: Record<string, SignInRun> }} [props]
+ */
+async function render({ view = VIEW, query = ALL, pending = { updating: [], checking: false }, signIns = {} } = {}) {
   const el = /** @type {AcpAgentsView} */ (
-    await fixture(html`<acp-agents-view .view=${view} .query=${query} .pending=${pending} .known=${[]}></acp-agents-view>`)
+    await fixture(
+      html`<acp-agents-view .view=${view} .query=${query} .pending=${pending} .signIns=${signIns} .known=${[]}></acp-agents-view>`,
+    )
   );
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
 }
@@ -258,6 +268,78 @@ describe('acp-agents-view', () => {
     await el.updateComplete;
     expect(row(root, 'codex').classList.contains('acp-agents-view__row_revealed')).to.equal(true);
     expect(revealed).to.deep.equal([{ reveal: add }, { reveal: show }]);
+  });
+
+  it('offers to sign in: one way runs it, more open a menu of them, none checks again', async () => {
+    const browser = method({ id: 'browser', name: 'Log in with your browser' });
+    const view = {
+      ...VIEW,
+      installed: [
+        agent({ id: 'zed', name: 'Zed', status: 'signIn', signIn: { methods: [browser], pending: false } }),
+        agent({
+          id: 'copilot',
+          name: 'GitHub Copilot',
+          status: 'signIn',
+          signIn: {
+            methods: [
+              method({ id: 'copilot-login', name: 'Copilot Login', kind: 'terminal' }),
+              method({ id: 'key', name: 'API key', apiKey: { provider: 'github' } }),
+              method({ id: 'device', name: 'Device code' }),
+            ],
+            pending: false,
+          },
+        }),
+        agent({ id: 'gemini', name: 'Gemini CLI', status: 'signIn', signIn: { methods: [method({ id: 'key', name: 'Key', apiKey: { provider: 'gemini' } })], pending: false } }),
+      ],
+    };
+    const { el, root } = await render({ view });
+    const asked = heard(el, 'acp-agent-sign-in');
+    expect(text(/** @type {Element} */ (row(root, 'zed').querySelector('.acp-agents-view__details')))).to.contain('Needs sign-in');
+
+    button(row(root, 'zed'), 'Sign in').click();
+    expect(asked).to.deep.equal([{ agentId: 'zed', methodId: 'browser' }]);
+
+    button(row(root, 'copilot'), 'Sign in').click();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await el.updateComplete;
+    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-agents-view__sign-in-menu'));
+    await menu.updateComplete;
+    const items = [...menu.querySelectorAll('md-menu-item')];
+    expect(items.map((i) => text(i))).to.deep.equal(['Copilot Login', 'Device code'], 'no API keys');
+    const device = /** @type {HTMLElementTagNameMap['md-menu-item']} */ (items[1]);
+    menu.dispatchEvent(new CustomEvent('select', { detail: { value: device.value, item: device } }));
+    expect(asked[1]).to.deep.equal({ agentId: 'copilot', methodId: 'device' });
+
+    const retry = button(row(root, 'gemini'), 'Retry');
+    expect(tooltipOf(root, retry)).to.equal("Check whether you're signed in now");
+    retry.click();
+    expect(asked[2]).to.deep.equal({ agentId: 'gemini', methodId: null });
+  });
+
+  it('shows Signing in… while a sign-in runs, here or in another window, and why one failed', async () => {
+    const signIn = { methods: [method({ id: 'browser', name: 'Log in' })], pending: false };
+    const view = {
+      ...VIEW,
+      installed: [
+        agent({ id: 'zed', name: 'Zed', status: 'signIn', signIn: { ...signIn, pending: true } }),
+        agent({ id: 'copilot', name: 'GitHub Copilot', status: 'signIn', signIn }),
+        agent({ id: 'codex', name: 'Codex', status: 'signIn', signIn }),
+      ],
+    };
+    /** @type {Record<string, SignInRun>} */
+    const signIns = {
+      copilot: { state: 'waiting', message: null, terminal: null },
+      codex: { state: 'failed', message: 'Copilot Login exited with 1', terminal: null },
+    };
+    const { root } = await render({ view, signIns });
+    for (const id of ['zed', 'copilot']) {
+      const signingIn = button(row(root, id), 'Signing in…');
+      expect(signingIn.disabled, id).to.equal(true);
+      expect(signingIn.querySelector('md-progress-circular'), id).to.be.ok;
+    }
+    const codex = row(root, 'codex');
+    expect(text(/** @type {Element} */ (codex.querySelector('.acp-agents-view__error')))).to.equal('Signing in failed: Copilot Login exited with 1');
+    expect(button(codex, 'Sign in').disabled).to.equal(false);
   });
 
   it('asks to open agents.json', async () => {

@@ -127,7 +127,9 @@ export class AcpAgentPicker extends LitElement {
           return html`
             <md-menu-item class="acp-agent-picker__item" value=${agent.id} ?selected=${current}>
               ${this.#renderGlyph(agent)} ${agent.name}
-              <span slot="supporting-text">${currentName(configOf(options, 'model')) ?? 'No models reported yet'}</span>
+              <span slot="supporting-text"
+                >${agent.signIn ? 'Needs sign-in' : (currentName(configOf(options, 'model')) ?? 'No models reported yet')}</span
+              >
               ${options.some((o) => o.category !== 'mode')
                 ? html`<md-menu slot="submenu" class="acp-agent-picker__menu" aria-label=${agent.name}>
                     ${this.#renderConfigGroups(agent.id, options, current)}

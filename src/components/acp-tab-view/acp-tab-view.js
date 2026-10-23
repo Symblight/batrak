@@ -124,6 +124,7 @@ export class AcpTabView extends LitElement {
     agentsView: { attribute: false },
     agentsQuery: { attribute: false },
     agentsPending: { attribute: false },
+    agentsSignIns: { attribute: false },
     agentsReveal: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
@@ -172,6 +173,7 @@ export class AcpTabView extends LitElement {
           .query=${this.agentsQuery}
           .known=${this.agents?.known ?? []}
           .pending=${this.agentsPending}
+          .signIns=${this.agentsSignIns}
           .reveal=${this.agentsReveal}
         ></acp-agents-view>`,
       changes: () => this.#renderChanges(),
@@ -273,6 +275,8 @@ export class AcpTabView extends LitElement {
     this.agentsQuery = { query: '', filter: 'all' };
     /** @type {{ updating: readonly string[], checking: boolean }} For the Agents tab: calls this window waits for. */
     this.agentsPending = { updating: [], checking: false };
+    /** @type {Readonly<Record<string, import('../../models/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
+    this.agentsSignIns = {};
     /** @type {import('../../models/types.js').AgentsReveal | null} For the Agents tab. */
     this.agentsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */

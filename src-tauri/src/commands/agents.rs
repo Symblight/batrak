@@ -10,14 +10,14 @@ use super::blocking;
 /// The agents of a project (its `.brama/agents.json`; the user's file without one), without their
 /// environment. `errors` lists files that don't parse.
 #[tauri::command]
-pub async fn agents_list(configs: State<'_, AgentConfigs>, project_path: Option<String>) -> Result<AgentList, String> {
-    let configs = configs.inner().clone();
+pub async fn agents_list(sessions: State<'_, crate::session::Sessions>, project_path: Option<String>) -> Result<AgentList, String> {
+    let sessions = sessions.inner().clone();
     blocking(move || {
         let project = match project_path {
             Some(path) => Some(dunce::canonicalize(&path).map_err(|e| format!("{path}: {e}"))?),
             None => None,
         };
-        Ok(configs.list(project.as_deref()))
+        Ok(sessions.agent_list(project.as_deref()))
     })
     .await?
 }

@@ -36,7 +36,7 @@ import {
   setTabPinned,
   settingsRevealed,
 } from '../../stores/editor.js';
-import { $agentList, $agentsPending, $agentsQuery, $agentsView } from '../../stores/agents.js';
+import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents.js';
 import { addToChat } from '../../stores/chat.js';
 import {
   $commentFocus,
@@ -99,6 +99,7 @@ export class AcpMainColumn extends LitElement {
   #agentsQuery = new StoreController(this, { store: $agentsQuery });
   #agentsPending = new StoreController(this, { store: $agentsPending });
   #agentsReveal = new StoreController(this, { store: $agentsReveal });
+  #signIns = new StoreController(this, { store: $signIns });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #gitChanges = new StoreController(this, { store: $gitChanges });
@@ -285,6 +286,7 @@ export class AcpMainColumn extends LitElement {
         .agentsView=${this.#agentsView.value}
         .agentsQuery=${this.#agentsQuery.value}
         .agentsPending=${this.#agentsPending.value}
+        .agentsSignIns=${signInsOf(this.#signIns.value, this.#workspace.value?.path ?? null)}
         .agentsReveal=${this.#agentsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
@@ -352,6 +354,8 @@ export class AcpMainColumn extends LitElement {
           agentConfig.setEnabled(e.detail.agentId, e.detail.enabled)}
         @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
         @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
+        @acp-agent-sign-in=${(/** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ e) =>
+          agentConfig.signIn(e.detail.agentId, e.detail.methodId)}
       ></acp-tab-view>
       <acp-comment-bar
         class=${classMap({

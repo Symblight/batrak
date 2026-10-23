@@ -364,8 +364,7 @@ export function agentsConfigFile(projectPath) {
  * folder, asked, and stopped (no prompt is sent).
  * @param {string | null} projectPath Its config comes from this project's agents.json.
  * @param {string} agentId
- * @returns {Promise<import('../models/types.js').AcpConfigOption[] | { signIn: import('../models/types.js').SignInMethod[] }>}
- *   `signIn`: it asks to sign in first.
+ * @returns {Promise<import('../models/types.js').ProbedOptions>}
  */
 export function agentsProbeOptions(projectPath, agentId) {
   return invoke('agents_probe_options', { projectPath, agentId });

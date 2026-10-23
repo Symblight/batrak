@@ -68,6 +68,16 @@ describe('acp-agent-picker', () => {
     expect(offered).to.deep.equal(['a']);
   });
 
+  it('says which agent needs a sign-in, and still offers it', async () => {
+    const a = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
+    const b = { id: 'b', name: 'B', glyph: 'B', configOptions: [], signIn: true };
+    const composer = { ...NO_AGENT, agentId: 'a' };
+    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-group[label="Agent"] > md-menu-item[value="b"]'));
+    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Needs sign-in');
+  });
+
   it("says when a started session's agent is off", async () => {
     const agent = { id: 'b', name: 'B', glyph: 'B', off: true };
     const composer = { ...NO_AGENT, agentId: 'b', started: true };

@@ -177,6 +177,9 @@ pub struct AgentSummary {
     pub update: Option<registry::AgentUpdate>,
     /// Not turned off by the user (`switches`): only these are offered and started.
     pub enabled: bool,
+    /// It asked to sign in (at a start, a prompt or a probe) and hasn't since; set by
+    /// `Sessions::agent_list`.
+    pub sign_in: bool,
     /// What it runs, for Settings' edit form; never its environment.
     pub command: String,
     pub args: Vec<String>,
@@ -270,6 +273,7 @@ impl Merged {
             registry_id: None,
             update: None,
             enabled: !self.off.contains(&a.id),
+            sign_in: false,
             command: a.command.clone(),
             args: a.args.clone(),
         };

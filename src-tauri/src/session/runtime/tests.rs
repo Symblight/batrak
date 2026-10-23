@@ -2098,6 +2098,9 @@ async fn a_probe_that_asks_to_sign_in_says_so_and_the_tab_shows_it() {
     let state = f.sessions.sign_in_state(Some(&f.project), "fake").unwrap();
     assert!(!state.pending && state.methods == sign_in);
     assert!(f.sessions.sign_in_state(Some(&f.project), "locked").is_none());
+    let list = f.sessions.agent_list(Some(&f.project));
+    let needs = |id: &str| list.agents.iter().find(|a| a.id == id).unwrap().sign_in;
+    assert!(needs("fake") && !needs("locked"), "the picker says which one needs a sign-in");
     let json = serde_json::to_value(Probed::SignIn { sign_in }).unwrap();
     assert_eq!(json["signIn"][0]["name"], "Log in");
 }

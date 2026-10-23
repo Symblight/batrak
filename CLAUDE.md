@@ -268,7 +268,11 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   its command line as tooltip, no Restart: the sign-in runs it again); exit 0 signs in
   (`Sessions::login_ended`), another exit fails, closing the tab cancels. The banner offers every
   method but API keys, says which terminal to finish in (Show terminal), and with no method at all
-  offers Open terminal, then Retry.
+  offers Open terminal, then Retry. The Agents tab's row offers Sign in (one method runs it, more
+  open a menu, none is Retry), "Signing in…" while one runs (`AgentSignIn.pending`, or this
+  window's `$signIns`) and why one failed; an agent added there is probed at once and the snackbar
+  offers Sign in when it asks for one; the picker says "Needs sign-in" (`AgentSummary.signIn`,
+  from `Sessions::agent_list`).
 - **Sessions** (`src-tauri/src/session/`): `Sessions` owns every session (`sessions.json` in app
   data; all `stopped` after a restart). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project

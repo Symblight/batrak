@@ -314,6 +314,7 @@ mod tests {
             registry_id: None,
             update: None,
             enabled: true,
+            sign_in: false,
             command: command.into(),
             args: args.iter().map(|&a| a.into()).collect(),
         }

@@ -777,6 +777,15 @@ impl Sessions {
         Some(Cancelled { terminal_id: run.login.map(|l| l.terminal_id) })
     }
 
+    /// The agents of a project (the user's without one), each marked when it waits for a sign-in.
+    pub fn agent_list(&self, project: Option<&Path>) -> crate::config::AgentList {
+        let mut list = self.inner.opts.configs.list(project);
+        for agent in &mut list.agents {
+            agent.sign_in = agent.enabled && self.sign_in_state(project, &agent.id).is_some_and(|s| !s.methods.is_empty());
+        }
+        list
+    }
+
     /// Whether an agent asked for a sign-in (at a start, a prompt or a probe), or one runs.
     pub fn sign_in_state(&self, project: Option<&Path>, agent_id: &str) -> Option<SignInState> {
         let merged = self.inner.opts.configs.merged(project);

@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { OPTION_VARIANTS } from '@symblight/chat/agent';
 import '@symblight/wc-material/button';
+import { ownSignIns } from '../../models/agents.js';
 import styles from './acp-session-banner.css?inline';
 
 /** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
@@ -83,7 +84,7 @@ export class AcpSessionBanner extends LitElement {
           >Cancel</md-button
         >`;
     }
-    const own = ownSignIns(signIn);
+    const own = ownSignIns(signIn.methods);
     const signInWith = (/** @type {string | null} */ methodId) => this.#emit('acp-agent-sign-in', { agentId, methodId });
     return html`
       ${own.map(
@@ -122,7 +123,7 @@ export class AcpSessionBanner extends LitElement {
     if (run?.state === 'waiting' && run.terminal) return `Signing in to ${signIn.agentName}… Finish in the ${run.terminal.title} terminal.`;
     if (run?.state === 'waiting') return `Signing in to ${signIn.agentName}… Finish in your browser if it opened.`;
     if (run?.state === 'failed') return `Signing in to ${signIn.agentName} failed: ${run.message ?? 'unknown error'}`;
-    if (!ownSignIns(signIn).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
+    if (!ownSignIns(signIn.methods).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
     return notice.message;
   }
 
@@ -192,14 +193,4 @@ export class AcpSessionBanner extends LitElement {
     </chx-input-mode-banner>`;
   }
 }
-
-/**
- * The ways to sign in from here: the agent's own (`authenticate`) and logins run in a terminal. An
- * API key needs the agent's settings first.
- * @param {SessionSignIn} signIn
- */
-function ownSignIns(signIn) {
-  return signIn.methods.filter((m) => m.apiKey === null);
-}
-
 customElements.define('acp-session-banner', AcpSessionBanner);
