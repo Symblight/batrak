@@ -72,6 +72,17 @@ export function newTerminalFolder({ activeFolder, project, home }) {
 }
 
 /**
+ * Where Project Terminal starts: always the project folder, with the project as fallback; with no
+ * project, the home folder.
+ * @param {{ project: string | null, home: string }} where
+ * @returns {TerminalFolder}
+ */
+export function projectTerminalFolder({ project, home }) {
+  if (project === null) return { cwd: home, fallback: null };
+  return { cwd: project, fallback: project };
+}
+
+/**
  * Where a session's Open in → Terminal starts.
  * @param {Session} session
  * @returns {TerminalFolder}
@@ -129,6 +140,14 @@ class TerminalController {
     const project = $workspace.get()?.path ?? null;
     const home = project === null ? await getHomeDir() : '';
     const { cwd, fallback } = newTerminalFolder({ activeFolder: $activeFolder.get(), project, home });
+    openTerminal(cwd, fallback, folderLabel(cwd, $sessions.get()));
+  }
+
+  /** Project Terminal: always in the project root folder, or home if no project. */
+  async projectTerminal() {
+    const project = $workspace.get()?.path ?? null;
+    const home = project === null ? await getHomeDir() : '';
+    const { cwd, fallback } = projectTerminalFolder({ project, home });
     openTerminal(cwd, fallback, folderLabel(cwd, $sessions.get()));
   }
 

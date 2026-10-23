@@ -189,6 +189,151 @@ describe('acp-tab-view', () => {
     expect(el.shadowRoot.querySelector('md-tooltip')?.textContent.trim()).to.equal('/elsewhere/notes.md');
   });
 
+  describe('Show Hidden Tabs', () => {
+    const ids = Array.from({ length: 10 }, (_, i) => `/p/src/file-number-${i}.js`);
+    /** Lets the strip's observers measure it and the view render what they found. */
+    const settle = async (/** @type {HTMLElementTagNameMap['acp-tab-view']} */ el) => {
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await new Promise((r) => setTimeout(r, 20));
+      await el.updateComplete;
+    };
+
+    /**
+     * @param {{ width?: number, count?: number, active?: string, pinned?: string[], dirty?: string[] }} [props]
+     */
+    async function render({ width = 320, count = ids.length, active = ids[0], pinned = [], dirty = [] } = {}) {
+      const tabs = ids.slice(0, count).map((id) => ({ ...fileTab(id), draft: dirty.includes(id) ? 'x' : null }));
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+        await fixture(html`<acp-tab-view
+          style=${`width: ${width}px; height: 200px`}
+          .tabs=${tabs}
+          .active=${active}
+          .pinned=${pinned}
+          .root=${'/p'}
+        ></acp-tab-view>`)
+      );
+      await settle(el);
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const strip = /** @type {HTMLElement} */ (root.querySelector('.acp-tab-view__tab-strip'));
+      strip.style.scrollBehavior = 'auto';
+      const button = () => /** @type {HTMLElement | null} */ (root.querySelector('.acp-tab-view__overflow'));
+      const menu = () => /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-tab-view__overflow-menu'));
+      const rows = () => [...menu().querySelectorAll('.acp-tab-view__overflow-item')];
+      const listed = () => rows().map((r) => r.getAttribute('value'));
+      const open = async () => {
+        /** @type {HTMLElement} */ (button()).click();
+        await settle(el);
+      };
+      /** @param {string} type */
+      const listen = (type) => {
+        /** @type {unknown[]} */
+        const details = [];
+        el.addEventListener(type, (e) => details.push(/** @type {CustomEvent} */ (e).detail));
+        return details;
+      };
+      /** @param {string} id */
+      const closeRow = (id) =>
+        /** @type {HTMLElement} */ (
+          menu().querySelector(`.acp-tab-view__overflow-item[value="${CSS.escape(id)}"] .acp-tab-view__overflow-close`)
+        ).click();
+      return { el, root, strip, button, menu, rows, listed, open, listen, closeRow };
+    }
+
+    it('shows no button while the tabs fit', async () => {
+      const { button } = await render({ width: 900, count: 2 });
+      expect(button()).to.equal(null);
+    });
+
+    it("shows the button once they don't, and lists only the tabs out of view, in strip order", async () => {
+      const { button, open, menu, listed } = await render();
+      expect(button()).to.exist;
+      expect(button()?.getAttribute('aria-label')).to.equal('Show Hidden Tabs');
+      await open();
+      expect(menu().open).to.be.true;
+      const hidden = listed();
+      expect(hidden.length).to.be.within(1, ids.length - 1);
+      expect(hidden).not.to.include(ids[0]);
+      expect(hidden, 'the tail of the strip').to.deep.equal(ids.slice(ids.length - hidden.length));
+    });
+
+    it('lists the active tab selected when it is scrolled out of view', async () => {
+      const { el, strip, open, rows } = await render();
+      strip.scrollLeft = strip.scrollWidth;
+      await settle(el);
+      await open();
+      const selected = rows().filter((r) => r.hasAttribute('selected'));
+      expect(selected.map((r) => r.getAttribute('value'))).to.deep.equal([ids[0]]);
+      expect(rows()[0].getAttribute('value')).to.equal(ids[0]);
+    });
+
+    it('activates a picked row and closes the menu', async () => {
+      const { el, open, rows, menu, listen } = await render();
+      await open();
+      const activations = listen('acp-tab-activate');
+      const row = rows()[0];
+      /** @type {HTMLElement} */ (row.shadowRoot?.querySelector('.md-menu-item__interactive')).click();
+      await settle(el);
+      expect(activations).to.deep.equal([{ id: row.getAttribute('value') }]);
+      expect(menu().open).to.be.false;
+    });
+
+    it("closes a row's tab with its ×, keeping the menu open", async () => {
+      const { el, open, listed, menu, listen, closeRow } = await render();
+      await open();
+      const closes = listen('acp-tab-close');
+      const activations = listen('acp-tab-activate');
+      const id = /** @type {string} */ (listed().at(-1));
+      closeRow(id);
+      await settle(el);
+      expect(closes).to.deep.equal([{ id, scope: 'tab' }]);
+      expect(activations).to.deep.equal([]);
+      expect(menu().open).to.be.true;
+    });
+
+    it("unpins a pinned row's tab with its pin", async () => {
+      const { el, strip, open, menu, listen, closeRow } = await render({ pinned: [ids[0]], active: ids[5] });
+      strip.scrollLeft = strip.scrollWidth;
+      await settle(el);
+      await open();
+      const pins = listen('acp-tab-pin');
+      closeRow(ids[0]);
+      await settle(el);
+      expect(pins).to.deep.equal([{ id: ids[0], pinned: false }]);
+      expect(menu().open).to.be.true;
+    });
+
+    it("asks before closing a row's tab with unsaved edits", async () => {
+      const { el, root, open, listed, listen, closeRow } = await render({ dirty: [ids.at(-1) ?? ''] });
+      await open();
+      expect(listed()).to.include(ids.at(-1));
+      const closes = listen('acp-tab-close');
+      closeRow(/** @type {string} */ (ids.at(-1)));
+      await settle(el);
+      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
+      expect(dialog.options?.headline).to.equal('Discard unsaved changes?');
+      expect(closes).to.deep.equal([]);
+      dialog.close();
+    });
+
+    it('closes a row with Delete', async () => {
+      const { el, open, rows, listen } = await render();
+      await open();
+      const closes = listen('acp-tab-close');
+      const row = rows()[0];
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, composed: true }));
+      await settle(el);
+      expect(closes).to.deep.equal([{ id: row.getAttribute('value'), scope: 'tab' }]);
+    });
+
+    it('closes the menu with Escape', async () => {
+      const { el, open, menu } = await render();
+      await open();
+      menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+      await settle(el);
+      expect(menu().open).to.be.false;
+    });
+  });
+
   describe('footer menus', () => {
     /**
      * @param {HTMLElement} el

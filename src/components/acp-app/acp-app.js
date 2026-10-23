@@ -83,6 +83,10 @@ export class AcpApp extends LitElement {
     terminalController.newTerminal().catch((err) => reportError('Opening a terminal failed', err));
   }
 
+  #openProjectTerminal() {
+    terminalController.projectTerminal().catch((err) => reportError('Opening a terminal failed', err));
+  }
+
   /** Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: Find in Files. Ctrl+`: New Terminal. */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
     if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
@@ -358,6 +362,7 @@ export class AcpApp extends LitElement {
           @acp-show-files=${this.#showFiles}
           @acp-find-in-files=${this.#showSearch}
           @acp-show-changes=${this.#showChanges}
+          @acp-open-terminal=${this.#openProjectTerminal}
           @acp-show-settings=${this.#showSettings}
         ></acp-nav-rail>
       </div>

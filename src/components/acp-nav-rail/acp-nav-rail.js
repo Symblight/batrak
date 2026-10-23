@@ -13,6 +13,7 @@ import assignmentFilledIcon from '@material-design-icons/svg/filled/assignment.s
 import notificationsIcon from '@material-design-icons/svg/outlined/notifications.svg?raw';
 import notificationsFilledIcon from '@material-design-icons/svg/filled/notifications.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import styles from './acp-nav-rail.css?inline';
 
 /**
@@ -49,6 +50,7 @@ const TOP_ITEMS = [
 /** @type {NavRailItem[]} */
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
+  { name: 'terminal', label: 'Terminal', icon: terminalIcon, event: 'acp-open-terminal' },
   { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
 ];
 
@@ -58,6 +60,7 @@ const BOTTOM_ITEMS = [
  * @fires acp-show-files
  * @fires acp-find-in-files
  * @fires acp-show-changes
+ * @fires acp-open-terminal
  * @fires acp-show-settings
  */
 export class AcpNavRail extends LitElement {

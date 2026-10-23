@@ -1,9 +1,17 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { ACK_EVERY, folderLabel, newTerminalFolder, sessionTerminalFolder, terminalController } from './terminals.js';
+import {
+  ACK_EVERY,
+  folderLabel,
+  newTerminalFolder,
+  projectTerminalFolder,
+  sessionTerminalFolder,
+  terminalController,
+} from './terminals.js';
 import { $terminals, forgetTerminal, openLoginTerminal, openTerminal } from '../stores/terminals.js';
 import { $editorTabs } from '../stores/editor.js';
 import { noteSignIn } from '../stores/agents.js';
+import { $activeSessionId, $sessions } from '../stores/sessions.js';
 import { $workspace } from '../stores/workspace.js';
 import { terminalTabId } from '../models/tab-ids.js';
 
@@ -34,6 +42,14 @@ describe('terminal folders', () => {
 
   it('starts a new terminal at home with no project', () => {
     expect(newTerminalFolder({ activeFolder: null, project: null, home })).to.deep.equal({ cwd: home, fallback: null });
+  });
+
+  it('starts a project terminal in the project root, ignoring any active worktree folder', () => {
+    expect(projectTerminalFolder({ project: '/p', home })).to.deep.equal({ cwd: '/p', fallback: '/p' });
+  });
+
+  it('starts a project terminal at home with no project', () => {
+    expect(projectTerminalFolder({ project: null, home })).to.deep.equal({ cwd: home, fallback: null });
   });
 
   it('starts a session’s terminal in that session’s folder', () => {
@@ -175,5 +191,20 @@ describe('terminalController', () => {
     link.dispose();
     await until(() => acks().length === 2);
     expect(acks()[1]).to.equal(20);
+  });
+
+  it('opens a project terminal in the workspace root, ignoring any active worktree folder', async () => {
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $sessions.set([session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' })]);
+    $activeSessionId.set('s1');
+    await terminalController.projectTerminal();
+    const terminals = Object.values($terminals.get());
+    expect(terminals).to.have.length(1);
+    expect(terminals[0].cwd).to.equal('/p');
+    expect(terminals[0].fallback).to.equal('/p');
+    expect(terminals[0].label).to.equal('p');
+    $workspace.set(null);
+    $sessions.set([]);
+    $activeSessionId.set(null);
   });
 });
