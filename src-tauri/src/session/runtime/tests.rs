@@ -15,16 +15,31 @@ struct FakeLauncher {
     agents: Mutex<Vec<Arc<FakeAgentState>>>,
     /// The environment the last launch got.
     env: Mutex<Vec<(String, String)>>,
+    /// The command of each launch, as spawned.
+    commands: Mutex<Vec<String>>,
 }
 
 impl Launcher for FakeLauncher {
-    fn launch(&self, _env: &dyn SessionEnv, _agent: &AgentConfig, process_env: &[(String, String)], _stderr: File)
+    fn launch(&self, _env: &dyn SessionEnv, agent: &AgentConfig, process_env: &[(String, String)], _stderr: File)
         -> Result<Launched, String> {
         self.launches.fetch_add(1, Ordering::SeqCst);
+        lock(&self.commands).push(agent.command.clone());
         *lock(&self.env) = process_env.to_vec();
         let (writer, reader, state) = fake_agent::start(self.options.clone());
         lock(&self.agents).push(state);
         Ok(Launched { process: None, writer: Box::new(writer), reader: Box::new(reader) })
+    }
+}
+
+/// Downloaded agents "installed" under `/agents`; `missing` isn't in the registry.
+struct Installed;
+
+impl crate::config::install::Installer for Installed {
+    fn install(&self, id: &str, version: &str) -> Result<PathBuf, String> {
+        if id == "missing" {
+            return Err(format!("{id} isn't in the ACP registry"));
+        }
+        Ok(PathBuf::from(format!("/agents/{id}/{version}/program")))
     }
 }
 
@@ -120,6 +135,7 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
         launches: AtomicUsize::new(0),
         agents: Mutex::default(),
         env: Mutex::default(),
+        commands: Mutex::default(),
     });
     let sessions = Sessions::new(options_for(&dir, &launcher));
     let f = Fixture { dir, project, sessions, launcher };
@@ -160,6 +176,7 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
             ])
         }),
         launcher: Arc::clone(launcher) as Arc<dyn Launcher>,
+        installer: Arc::new(Installed),
         initialize_timeout: Duration::from_secs(5),
         overlap_grace: OVERLAP_GRACE,
     }
@@ -1751,7 +1768,12 @@ async fn real_claude_agent_end_to_end() {
     let configs = AgentConfigs::new(None, None);
     let launches: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch).collect();
     configs.trust(&project, &launches).unwrap();
-    let mut opts = SessionsOptions::for_app(dir.join("data"), configs);
+    let installer = Arc::new(crate::config::install::ArchiveInstaller::new(
+        dir.join("data/agents"),
+        crate::config::registry::Registry::bundled(),
+        Arc::new(crate::config::install::Https),
+    ));
+    let mut opts = SessionsOptions::for_app(dir.join("data"), configs, installer);
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
     let probed = options_of(sessions.probe_options(Some(&project), "claude").await.unwrap());
@@ -2086,6 +2108,28 @@ async fn a_login_that_ran_out_mid_session_holds_the_prompt_until_signed_in_again
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 3, "the session's, the sign-in's, the session's again");
+}
+
+#[tokio::test]
+async fn a_downloaded_agent_starts_as_its_installed_program() {
+    let f = fixture("installed", FakeAgentOptions::default());
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"${agent:antigravity-acp@1.4.1}"},
+        "gone":{"name":"Gone","command":"${agent:missing@1.0.0}"}}}"#);
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    assert!(launches.iter().any(|l| l.command == "${agent:antigravity-acp@1.4.1}"), "trusted as agents.json says it");
+    configs.trust(&f.project, &launches).unwrap();
+
+    let (_, events) = f.create("s", "agy").unwrap();
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    f.sessions.probe_options(Some(&f.project), "agy").await.unwrap();
+    assert_eq!(*lock(&f.launcher.commands), ["/agents/antigravity-acp/1.4.1/program"; 2], "the session's and the probe's");
+
+    let (_, events) = f.create("g", "gone").unwrap();
+    f.sessions.send_prompt("g", text("hello")).unwrap();
+    events.wait_status("error").await;
+    assert_eq!(lock(&f.launcher.commands).len(), 2, "nothing spawned");
 }
 
 #[tokio::test]

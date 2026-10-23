@@ -30,10 +30,18 @@ pub struct RegistryAgent {
     pub vendor: String,
     pub repository: Option<String>,
     pub website: Option<String>,
-    pub npx: Npx,
+    pub launch: Launch,
 }
 
-/// How it runs: `npx -y <package>@<version> <args>`.
+/// How it runs.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum Launch {
+    Npx(Npx),
+    Binary(Binary),
+}
+
+/// `npx -y <package>@<version> <args>`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Npx {
@@ -43,10 +51,19 @@ pub struct Npx {
     pub env: BTreeMap<String, String>,
 }
 
-/// The registry agents Brama offers; the registry's others are left out.
-pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "gemini"];
+/// This platform's archive, unpacked into app data (`install`) and run as `<cmd> <args>`.
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Binary {
+    pub archive: String,
+    pub cmd: String,
+    pub args: Vec<String>,
+}
 
-/// A registry agent Settings offers to add, with its pinned `npx` launch.
+/// The registry agents Brama offers; the registry's others are left out.
+pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"];
+
+/// A registry agent the Agents tab offers to add, with its pinned launch.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct KnownAgent {
@@ -58,11 +75,36 @@ pub struct KnownAgent {
 }
 
 impl RegistryAgent {
-    /// What `npx` runs it with, pinned to the registry's version.
-    pub fn npx_launch(&self) -> KnownAgent {
-        let Npx { package, version, args, .. } = &self.npx;
-        let args = ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect();
-        KnownAgent { id: self.id.clone(), name: self.name.clone(), command: "npx".to_owned(), args }
+    /// What agents.json runs it with, pinned to the registry's version: `npx` with the package,
+    /// or the downloaded program (`install::reference`).
+    pub fn known(&self) -> KnownAgent {
+        let (command, args) = match &self.launch {
+            Launch::Npx(Npx { package, version, args, .. }) => {
+                ("npx".to_owned(), ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect())
+            }
+            Launch::Binary(binary) => (super::install::reference(&self.id, &self.version), binary.args.clone()),
+        };
+        KnownAgent { id: self.id.clone(), name: self.name.clone(), command, args }
+    }
+
+    /// The registry's version of it.
+    pub fn latest(&self) -> &str {
+        match &self.launch {
+            Launch::Npx(npx) => &npx.version,
+            Launch::Binary(_) => &self.version,
+        }
+    }
+
+    /// What Add writes, for people: the `npx` command line, or the program that's downloaded.
+    pub fn command_line(&self) -> String {
+        let known = self.known();
+        match &self.launch {
+            Launch::Npx(_) => std::iter::once(known.command.as_str()).chain(known.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "),
+            Launch::Binary(binary) => {
+                let program = binary.cmd.strip_prefix("./").unwrap_or(&binary.cmd);
+                format!("{program} {}, downloaded on its first start", self.version)
+            }
+        }
     }
 }
 
@@ -74,8 +116,8 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
     }
 }
 
-/// The registry's agents Brama offers (`SUPPORTED`), each run with `npx`; the others, and one that
-/// doesn't read, are left out.
+/// The registry's agents Brama offers (`SUPPORTED`), each with its `npx` launch or this
+/// platform's archive; the others, and one that doesn't read, are left out.
 pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     #[derive(Deserialize)]
     struct File {
@@ -98,6 +140,14 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     #[derive(Deserialize)]
     struct Dist {
         npx: Option<NpxDist>,
+        binary: Option<BTreeMap<String, BinaryDist>>,
+    }
+    #[derive(Deserialize)]
+    struct BinaryDist {
+        archive: String,
+        cmd: String,
+        #[serde(default)]
+        args: Vec<String>,
     }
     #[derive(Deserialize)]
     struct NpxDist {
@@ -111,6 +161,7 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     if !file.version.starts_with("1.") {
         return Err(format!("registry.json: unsupported version {}", file.version));
     }
+    let platform = super::install::platform();
     let mut agents = Vec::new();
     for value in file.agents {
         if !value.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| SUPPORTED.contains(&id)) {
@@ -123,16 +174,24 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
                 continue;
             }
         };
-        let Some(npx) = agent.distribution.npx else {
-            tracing::debug!(agent = %agent.id, "registry agent skipped: no npx launch");
-            continue;
-        };
-        let (package, version) = split_spec(&npx.package);
-        let npx = Npx {
-            package: package.to_owned(),
-            version: version.unwrap_or(&agent.version).to_owned(),
-            args: npx.args,
-            env: npx.env,
+        let launch = match agent.distribution {
+            Dist { npx: Some(npx), .. } => {
+                let (package, version) = split_spec(&npx.package);
+                Launch::Npx(Npx {
+                    package: package.to_owned(),
+                    version: version.unwrap_or(&agent.version).to_owned(),
+                    args: npx.args,
+                    env: npx.env,
+                })
+            }
+            Dist { binary: Some(mut builds), .. } => match builds.remove(&platform) {
+                Some(build) => Launch::Binary(Binary { archive: build.archive, cmd: build.cmd, args: build.args }),
+                None => {
+                    tracing::debug!(agent = %agent.id, platform, "registry agent skipped: no build for this platform");
+                    continue;
+                }
+            },
+            _ => continue,
         };
         agents.push(RegistryAgent {
             id: agent.id,
@@ -142,7 +201,7 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
             vendor: agent.authors.join(", "),
             repository: agent.repository,
             website: agent.website,
-            npx,
+            launch,
         });
     }
     Ok(agents)
@@ -177,14 +236,19 @@ pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
     None
 }
 
-/// The registry agent a launch runs: `npx` whose package (`package_arg`) is the entry's, with or
-/// without `@version`. Ids aren't compared: agents.json names its agents as it likes.
+/// The registry agent a launch runs: a downloaded agent's `${agent:<id>@<version>}`, or `npx`
+/// whose package (`package_arg`) is the entry's, with or without `@version`. agents.json's ids
+/// aren't compared: it names its agents as it likes.
 pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[String]) -> Option<Matched<'a>> {
+    if let Some((id, version)) = super::install::parse_reference(command) {
+        let agent = agents.iter().find(|a| a.id == id && matches!(a.launch, Launch::Binary(_)))?;
+        return Some(Matched { agent, pinned: parse_version(version).map(|_| version.to_owned()) });
+    }
     if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
         return None;
     }
     let (package, version) = split_spec(package_arg(args)?.1);
-    let agent = agents.iter().find(|a| a.npx.package == package)?;
+    let agent = agents.iter().find(|a| matches!(&a.launch, Launch::Npx(npx) if npx.package == package))?;
     let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
     Some(Matched { agent, pinned })
 }
@@ -206,8 +270,8 @@ pub struct AgentUpdate {
 /// Whether the registry's version of `matched` is newer than the one installed: the version its
 /// args pin, else `reported` (`agentInfo.version` from its last `initialize`).
 pub fn update_of(matched: &Matched<'_>, reported: Option<&str>) -> Option<AgentUpdate> {
-    let latest = &matched.agent.npx.version;
-    let newest = parse_version(latest)?;
+    let latest = matched.agent.latest().to_owned();
+    let newest = parse_version(&latest)?;
     match matched.pinned.as_deref().or(reported) {
         Some(installed) => {
             let installed = parse_version(installed)?;
@@ -371,7 +435,7 @@ impl Registry {
 
     /// The registry agents the add form offers, with their pinned launches.
     pub fn known(&self) -> Vec<KnownAgent> {
-        self.agents().iter().map(RegistryAgent::npx_launch).collect()
+        self.agents().iter().map(RegistryAgent::known).collect()
     }
 
     pub fn state(&self) -> RegistryState {
@@ -459,13 +523,13 @@ pub(crate) mod tests {
     use super::*;
     use std::collections::VecDeque;
 
-    /// A registry of three supported agents, and others Brama leaves out: one it doesn't offer,
-    /// a `binary`, a `uvx` and a broken one.
+    /// A registry of the supported agents (Antigravity's archive for every platform the tests run
+    /// on), and others Brama leaves out: one it doesn't offer, a `binary`, a `uvx` and a broken one.
     pub(crate) const FIXTURE: &str = r#"{"version":"1.0.0","agents":[
         {"id":"claude-acp","name":"Claude Agent","version":"0.94.0","description":"ACP wrapper for Anthropic's Claude",
          "authors":["Anthropic","Zed Industries"],"distribution":{"npx":{"package":"@agentclientprotocol/claude-agent-acp@0.94.0"}}},
-        {"id":"gemini","name":"Gemini CLI","version":"0.65.0","authors":["Google"],
-         "distribution":{"npx":{"package":"@google/gemini-cli@0.65.0","args":["--acp"]}}},
+        {"id":"codex-acp","name":"Codex","version":"0.65.0","authors":["OpenAI"],
+         "distribution":{"npx":{"package":"@agentclientprotocol/codex-acp@0.65.0","args":["--acp"]}}},
         {"id":"github-copilot-cli","name":"Copilot","version":"1.0.101","authors":["GitHub"],
          "distribution":{"npx":{"package":"@github/copilot@1.0.101","args":["--acp"]}}},
         {"id":"cline","name":"Cline","version":"3.0.73","authors":["Cline Bot Inc."],
@@ -473,7 +537,14 @@ pub(crate) mod tests {
         {"id":"goose","name":"goose","version":"1.55.0","authors":["Block"],
          "distribution":{"binary":{"darwin-aarch64":{"archive":"https://x/goose.tar.gz","cmd":"./goose"}}}},
         {"id":"fast-agent","name":"fast-agent","version":"0.10.1","distribution":{"uvx":{"package":"fast-agent-acp"}}},
-        {"id":"broken","distribution":{}}
+        {"id":"broken","distribution":{}},
+        {"id":"antigravity-acp","name":"Google Antigravity","version":"1.4.1","authors":["Google LLC"],
+         "distribution":{"binary":{
+            "darwin-aarch64":{"archive":"https://dl.example.com/agy-darwin-arm64.zip","cmd":"./agy_acp_server.par"},
+            "darwin-x86_64":{"archive":"https://dl.example.com/agy-darwin-x86_64.zip","cmd":"./agy_acp_server.par"},
+            "linux-x86_64":{"archive":"https://dl.example.com/agy-linux-x86_64.zip","cmd":"./agy_acp_server.par","args":["--uid="]},
+            "linux-aarch64":{"archive":"https://dl.example.com/agy-linux-arm64.zip","cmd":"./agy_acp_server.par","args":["--uid="]},
+            "windows-x86_64":{"archive":"https://dl.example.com/agy-windows-x86_64.zip","cmd":"./agy_acp_server.par"}}}}
     ],"extensions":[]}"#;
 
     /// A registry that answers with `answers`, one per check, recording the `ETag`s it was sent.
@@ -515,17 +586,20 @@ pub(crate) mod tests {
     #[test]
     fn parses_only_the_supported_agents() {
         let agents = parse(FIXTURE).unwrap();
-        assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"]);
+        assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
         assert_eq!(
-            agents[0].npx,
-            Npx {
+            agents[0].launch,
+            Launch::Npx(Npx {
                 package: "@agentclientprotocol/claude-agent-acp".into(),
                 version: "0.94.0".into(),
                 args: vec![],
                 env: BTreeMap::new()
-            }
+            })
         );
         assert_eq!(agents[0].vendor, "Anthropic, Zed Industries");
+        let Launch::Binary(antigravity) = &agents[3].launch else { panic!("{:?}", agents[3].launch) };
+        assert!(antigravity.archive.starts_with("https://dl.example.com/agy-") && antigravity.cmd == "./agy_acp_server.par", "this platform's");
+        assert_eq!(agents[3].latest(), "1.4.1");
         assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
     }
 
@@ -534,18 +608,21 @@ pub(crate) mod tests {
         let agents = parse(BUNDLED).unwrap();
         let mut ids: Vec<_> = agents.iter().map(|a| a.id.as_str()).collect();
         ids.sort_unstable();
-        assert_eq!(ids, ["claude-acp", "codex-acp", "gemini", "github-copilot-cli"], "every supported agent, nothing else");
+        assert_eq!(ids, ["antigravity-acp", "claude-acp", "codex-acp", "github-copilot-cli"], "every supported agent, nothing else");
         let claude = agents.iter().find(|a| a.id == "claude-acp").unwrap();
-        assert_eq!(claude.npx.package, "@agentclientprotocol/claude-agent-acp");
-        assert!(Registry::bundled().known().iter().all(|k| k.command == "npx"));
+        assert!(matches!(&claude.launch, Launch::Npx(npx) if npx.package == "@agentclientprotocol/claude-agent-acp"));
+        let antigravity = agents.iter().find(|a| a.id == "antigravity-acp").unwrap();
+        assert!(matches!(&antigravity.launch, Launch::Binary(b) if b.archive.starts_with("https://dl.google.com/")));
     }
 
     #[test]
     fn known_agents_are_pinned_to_the_registrys_version() {
         let agents = parse(FIXTURE).unwrap();
-        let known: Vec<_> = agents.iter().map(RegistryAgent::npx_launch).collect();
-        assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"]);
-        assert_eq!(known[1].args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+        let known: Vec<_> = agents.iter().map(RegistryAgent::known).collect();
+        assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
+        assert_eq!(known[1].args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
+        assert_eq!(known[3].command, "${agent:antigravity-acp@1.4.1}", "downloaded on its first start");
+        assert_eq!(agents[3].command_line(), "agy_acp_server.par 1.4.1, downloaded on its first start");
     }
 
     #[test]
@@ -556,15 +633,17 @@ pub(crate) mod tests {
 
         assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.90.0"]), Some(("claude-acp".into(), Some("0.90.0".into()))));
         assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp"]), Some(("claude-acp".into(), None)), "unpinned");
-        assert_eq!(matched("/usr/local/bin/npx", &["@google/gemini-cli", "--acp"]), Some(("gemini".into(), None)));
-        assert_eq!(matched("npx", &["-y", "@google/gemini-cli@latest"]), Some(("gemini".into(), None)), "a tag pins nothing");
+        assert_eq!(matched("/usr/local/bin/npx", &["@agentclientprotocol/codex-acp", "--acp"]), Some(("codex-acp".into(), None)));
+        assert_eq!(matched("npx", &["-y", "@agentclientprotocol/codex-acp@latest"]), Some(("codex-acp".into(), None)), "a tag pins nothing");
         assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"]), None, "another package");
-        assert_eq!(matched("gemini", &["--acp"]), None, "custom");
+        assert_eq!(matched("codex-acp", &["--acp"]), None, "custom");
         assert_eq!(matched("npx", &["-y", "cline"]), None, "not a supported agent");
-        assert_eq!(matched("npx", &["-y", "my-wrapper", "--agent", "@google/gemini-cli"]), None, "only the package npx runs");
-        assert_eq!(matched("npx", &["--yes", "--", "@google/gemini-cli@0.60.0"]), Some(("gemini".into(), Some("0.60.0".into()))));
-        assert_eq!(matched("npx", &["-p", "@google/gemini-cli@0.60.0", "gemini", "--acp"]), Some(("gemini".into(), Some("0.60.0".into()))));
-        assert_eq!(matched("npx", &["--package=@google/gemini-cli", "gemini"]), Some(("gemini".into(), None)));
+        assert_eq!(matched("npx", &["-y", "my-wrapper", "--agent", "@agentclientprotocol/codex-acp"]), None, "only the package npx runs");
+        assert_eq!(matched("npx", &["--yes", "--", "@agentclientprotocol/codex-acp@0.60.0"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
+        assert_eq!(matched("npx", &["-p", "@agentclientprotocol/codex-acp@0.60.0", "codex-acp", "--acp"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
+        assert_eq!(matched("npx", &["--package=@agentclientprotocol/codex-acp", "codex-acp"]), Some(("codex-acp".into(), None)));
+        assert_eq!(matched("${agent:antigravity-acp@1.4.0}", &[]), Some(("antigravity-acp".into(), Some("1.4.0".into()))), "downloaded");
+        assert_eq!(matched("${agent:claude-acp@0.94.0}", &[]), None, "an npx agent isn't downloaded");
     }
 
     #[test]
@@ -593,7 +672,7 @@ pub(crate) mod tests {
         assert!(ids(&registry).contains(&"claude-acp".to_owned()), "the bundled snapshot meanwhile");
 
         assert!(registry.check().await, "changed");
-        assert_eq!(ids(&registry), ["claude-acp", "gemini", "github-copilot-cli"]);
+        assert_eq!(ids(&registry), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
         assert!(!registry.due());
         assert!(registry.state().checked_at.is_some());
 
@@ -601,7 +680,7 @@ pub(crate) mod tests {
         assert_eq!(*script.etags.lock().unwrap(), [None, Some("\"a\"".to_owned())], "asked with the ETag it got");
 
         let again = Registry::new(Some(cache), Script::new(vec![]));
-        assert_eq!(ids(&again), ["claude-acp", "gemini", "github-copilot-cli"], "kept in app data");
+        assert_eq!(ids(&again), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"], "kept in app data");
         assert!(!again.due());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -613,9 +692,9 @@ pub(crate) mod tests {
         registry.check().await;
         assert!(!registry.check().await);
         assert!(registry.state().offline);
-        assert_eq!(ids(&registry), ["claude-acp", "gemini", "github-copilot-cli"], "the last answer stays");
+        assert_eq!(ids(&registry), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"], "the last answer stays");
         assert!(!registry.check().await, "a body that doesn't parse is kept out");
-        assert_eq!(ids(&registry).len(), 3);
+        assert_eq!(ids(&registry).len(), 4);
         registry.check().await;
         assert!(!registry.state().offline, "back");
     }

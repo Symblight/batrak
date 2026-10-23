@@ -50,6 +50,7 @@ ureq = { version = "3", default-features = false, features = ["rustls"] }
 semver = "1"
 # Accent-insensitive agent search (NFD); already in the tree through url/idna
 icu_normalizer = "2"
+zip = { version = "9.0.5", default-features = false, features = ["deflate"] }
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]

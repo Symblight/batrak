@@ -119,6 +119,25 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
+/// An update's download: a downloaded agent's archive (`${agent:…}`, through `installer`), else
+/// the package into npm's cache.
+pub struct Download {
+    pub npm: NpmPrefetch,
+    pub installer: Arc<dyn super::install::Installer>,
+}
+
+impl Prefetch for Download {
+    fn prefetch(&self, spec: String) -> BoxFuture<Result<(), String>> {
+        let Some((id, version)) = super::install::parse_reference(&spec).map(|(id, v)| (id.to_owned(), v.to_owned())) else {
+            return self.npm.prefetch(spec);
+        };
+        let installer = Arc::clone(&self.installer);
+        Box::pin(async move {
+            tokio::task::spawn_blocking(move || installer.install(&id, &version).map(drop)).await.map_err(|e| e.to_string())?
+        })
+    }
+}
+
 /// `npm cache add <spec>` in the user's login-shell environment, in its own process group (stopped
 /// with the agents on app exit), at most `PREFETCH_TIMEOUT`.
 pub struct NpmPrefetch {
@@ -217,7 +236,7 @@ mod tests {
             &file,
             r#"{"version":1,"agents":{
                 "claude":{"name":"Claude","command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]},
-                "gem":{"name":"Gemini","command":"npx","args":["-y","@google/gemini-cli@0.60.0","--acp"]}
+                "gem":{"name":"Gemini","command":"npx","args":["-y","@agentclientprotocol/codex-acp@0.60.0","--acp"]}
             }}"#,
         )
         .unwrap();
@@ -249,7 +268,7 @@ mod tests {
         let f = fixture("fail", FakePrefetch { fail: true, ..FakePrefetch::default() });
         let updated = f.updater.update(None, "gem".into()).await.unwrap();
         assert_eq!(updated, [Updated { agent_id: "gem".into(), version: "0.65.0".into(), downloaded: false }]);
-        assert_eq!(f.configs.merged(None).agent("gem").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+        assert_eq!(f.configs.merged(None).agent("gem").unwrap().args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
     }
 
     #[tokio::test]
@@ -287,5 +306,24 @@ mod tests {
         assert_eq!(lock(&f.changed).len(), 1, "one write");
         assert_eq!(lock(&f.prefetch.specs).len(), 2);
         assert!(f.configs.list(None).agents.iter().all(|a| a.update.is_none()));
+    }
+
+    /// Records what it was asked to install.
+    #[derive(Default)]
+    struct FakeInstaller(Mutex<Vec<String>>);
+
+    impl crate::config::install::Installer for FakeInstaller {
+        fn install(&self, id: &str, version: &str) -> Result<PathBuf, String> {
+            lock(&self.0).push(format!("{id}@{version}"));
+            Ok(PathBuf::from("/agents/program"))
+        }
+    }
+
+    #[tokio::test]
+    async fn a_downloaded_agents_update_installs_it_instead_of_asking_npm() {
+        let installer = Arc::new(FakeInstaller::default());
+        let download = Download { npm: NpmPrefetch { dir: PathBuf::from("/nonexistent") }, installer: installer.clone() };
+        download.prefetch("${agent:antigravity-acp@1.4.1}".to_owned()).await.unwrap();
+        assert_eq!(*lock(&installer.0), ["antigravity-acp@1.4.1"]);
     }
 }

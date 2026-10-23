@@ -181,7 +181,7 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). `agentConfig`
     keeps `$agentsView` for `$agentsQuery` (in memory; the latest answer only), asked again on
     `agents://changed`, a project switch and when the tab shows. It lists only agents that run
-    Claude, Codex, Copilot or Gemini (`registryId` set; others in an agents.json still run, unlisted).
+    Claude, Codex, Copilot or Antigravity (`registryId` set; others in an agents.json still run, unlisted).
     Rows: installed agents (switch,
     Update, menu: Edit, Set as default, Remove), the user's own agents the project lacks
     (`AgentRow` from `AgentList.userAgents`, Add to project: `agents_import_user`, whole entries
@@ -211,11 +211,17 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     `<app data>/acp-registry.json` with its `ETag` and checked again when a day old (launch, an
     hourly look, Check now: `agents_registry_check`), one check at a time, 15 s; a failure keeps
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
-    `projectPath: null`. Only Claude, Codex, Copilot and Gemini are read from it
-    (`registry::SUPPORTED`, each an `npx` launch; the rest are left out), and can be added
-    (`AgentList.known`, pinned launches). An installed agent is matched by what it runs
-    (`match_launch`: `npx` running the entry's package, its first `-p` / `--package` value or
-    first non-flag argument, with or without `@version`), not by id;
+    `projectPath: null`. Only Claude, Codex, Copilot and Antigravity are read from it
+    (`registry::SUPPORTED`; the rest are left out), and can be added (`AgentList.known`, pinned
+    launches). Claude, Codex and Copilot run with `npx`; Antigravity is a `binary` (`Launch`, this
+    platform's archive): agents.json runs it as `${agent:antigravity-acp@<version>}`
+    (`config/install.rs`), which becomes the program unpacked into
+    `<app data>/agents/<id>/<version>/` just before it's spawned (session, probe, sign-in login),
+    downloaded (HTTPS, at most 1 GiB; the registry has no checksum) and unpacked (no entry out of
+    the folder) the first time; only the registry's current version installs. An installed agent
+    is matched by what it runs (`match_launch`: that `${agent:…}`, or `npx` running the entry's
+    package, its first `-p` / `--package` value or first non-flag argument, with or without
+    `@version`), not by id;
     `AgentSummary.version` is the version its args pin, else `agentInfo.version` from its last
     `initialize` (`<app data>/agent-versions.json`); `update` (semver) is a newer registry
     version, `pin: true` when the installed one is unknown ("Pin latest").
@@ -224,7 +230,8 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     stays trusted when the pin is all that changed), emit `agents://changed` (running sessions get
     `agent-outdated`; nothing restarts), then `npm cache add <pkg>@<version>` (login-shell env, own
     process group, 5 min; a failure keeps the pin and `warn`s). A second Update of an agent joins
-    the running one. The tab shows "Updating…" from the call until it returns (`$agentsPending`)
+    the running one; a downloaded agent's update pins `${agent:<id>@<new>}` and installs it
+    instead (`update::Download`). The tab shows "Updating…" from the call until it returns (`$agentsPending`)
     and while the backend says an update runs (another window's).
   - **Following the list:** the watcher flags `.brama/agents.json` (`Changes.config`) → reload →
     `agents://changed`; the user's file has its own watcher (`config/watch.rs`, its folder,

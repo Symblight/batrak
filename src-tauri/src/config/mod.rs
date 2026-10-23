@@ -3,6 +3,7 @@
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
 pub mod env;
+pub mod install;
 pub mod registry;
 pub mod switches;
 pub mod update;
@@ -113,7 +114,7 @@ pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
 
 /// One agent as configured. `env` values are templates (`${env:NAME}`, `${keychain:name}`),
 /// resolved only when the agent starts, so no secret is held here.
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, Default, PartialEq)]
 pub struct AgentConfig {
     pub id: String,
     pub name: String,
@@ -428,7 +429,7 @@ fn agents_of(root: &mut serde_json::Map<String, serde_json::Value>) -> Result<&m
         .ok_or_else(|| "\"agents\" is not an object".to_owned())
 }
 
-/// An id from a name: lowercase letters, digits and dashes (`Gemini CLI` → `gemini-cli`).
+/// An id from a name: lowercase letters, digits and dashes (`Codex` → `gemini-cli`).
 fn slug(name: &str) -> String {
     let mut slug = String::new();
     for c in name.chars().flat_map(char::to_lowercase) {
@@ -517,7 +518,8 @@ struct Removed {
 pub struct Pinned {
     pub agent_id: String,
     pub name: String,
-    /// `<package>@<version>`, as `npm` takes it.
+    /// What the update downloads: `<package>@<version>` as `npm` takes it, or a downloaded
+    /// agent's `${agent:<id>@<version>}` (`install::reference`).
     pub spec: String,
     pub version: String,
 }
@@ -627,7 +629,7 @@ impl AgentConfigs {
             list.user_agents = own.into_iter().filter(|a| !list.agents.iter().any(|p| p.id == a.id)).collect();
         }
         let entries = self.registry.agents();
-        list.known = entries.iter().map(registry::RegistryAgent::npx_launch).collect();
+        list.known = entries.iter().map(registry::RegistryAgent::known).collect();
         let inner = self.lock();
         for agent in list.agents.iter_mut().chain(&mut list.user_agents) {
             let reported = inner.versions.get(&agent.id).map(String::as_str);
@@ -706,7 +708,7 @@ impl AgentConfigs {
     /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
         if agent.known.is_none() {
-            return Err("only Claude, Codex, Copilot or Gemini can be added".to_owned());
+            return Err("only Claude, Codex, Copilot or Antigravity can be added".to_owned());
         }
         if agent.command.is_some() {
             return Err("an added agent runs the registry's launch; edit it to change that".to_owned());
@@ -819,7 +821,8 @@ impl AgentConfigs {
     pub fn pin_versions(&self, project: Option<&Path>, agent_id: Option<&str>) -> Result<Vec<Pinned>, String> {
         let entries = self.registry.agents();
         let merged = self.merged(project);
-        let targets: Vec<(AgentSummary, String, String)> = self
+        // An `npx` agent's package gets the new version; `None`: a downloaded agent, whose command does.
+        let targets: Vec<(AgentSummary, Option<String>, String)> = self
             .list(project)
             .agents
             .into_iter()
@@ -827,8 +830,15 @@ impl AgentConfigs {
             .filter_map(|a| {
                 let to = a.update.as_ref()?.to.clone();
                 let matched = registry::match_launch(&entries, &a.command, &a.args)?;
-                let package = matched.agent.npx.package.clone();
-                Some((a, package, to))
+                let package = match &matched.agent.launch {
+                    registry::Launch::Npx(npx) => Some(npx.package.clone()),
+                    registry::Launch::Binary(_) => None,
+                };
+                let spec = match &package {
+                    Some(package) => format!("{package}@{to}"),
+                    None => install::reference(&matched.agent.id, &to),
+                };
+                Some((a, package, spec))
             })
             .collect();
         if targets.is_empty() {
@@ -842,18 +852,21 @@ impl AgentConfigs {
                 trusted.then_some(launch)
             })
             .collect();
-        let spec_of = |package: &str, to: &str| format!("{package}@{to}");
         edit_file(&self.file_of(project)?, |root| {
             let agents = agents_of(root)?;
-            for (agent, package, to) in &targets {
+            for (agent, package, spec) in &targets {
+                let Some(package) = package else {
+                    let entry = agents.get_mut(&agent.id).and_then(serde_json::Value::as_object_mut).ok_or_else(|| format!("unknown agent \"{}\"", agent.id))?;
+                    entry.insert("command".to_owned(), spec.as_str().into());
+                    continue;
+                };
                 let args = agents
                     .get_mut(&agent.id)
                     .and_then(|entry| entry.get_mut("args"))
                     .and_then(serde_json::Value::as_array_mut)
                     .ok_or_else(|| format!("agent \"{}\" has no args to pin", agent.id))?;
                 let texts: Vec<String> = args.iter().map(|arg| arg.as_str().unwrap_or_default().to_owned()).collect();
-                let (at, arg) = pinned_arg(&texts, package, &spec_of(package, to))
-                    .ok_or_else(|| format!("agent \"{}\" doesn't run {package}", agent.id))?;
+                let (at, arg) = pinned_arg(&texts, package, spec).ok_or_else(|| format!("agent \"{}\" doesn't run {package}", agent.id))?;
                 args[at] = arg.into();
             }
             Ok(())
@@ -861,7 +874,12 @@ impl AgentConfigs {
         self.reload_file(project);
         let pinned: Vec<Pinned> = targets
             .iter()
-            .map(|(a, package, to)| Pinned { agent_id: a.id.clone(), name: a.name.clone(), spec: spec_of(package, to), version: to.clone() })
+            .map(|(a, _, spec)| Pinned {
+                agent_id: a.id.clone(),
+                name: a.name.clone(),
+                spec: spec.clone(),
+                version: a.update.as_ref().map(|u| u.to.clone()).unwrap_or_default(),
+            })
             .collect();
         for p in &pinned {
             tracing::info!(agent = %p.agent_id, version = %p.version, "agent pinned to the registry's version");
@@ -874,8 +892,13 @@ impl AgentConfigs {
                 .zip(&pinned)
                 .filter_map(|(((_, package, _), before), pin)| {
                     let mut expected = before.clone()?;
-                    let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
-                    expected.args[at] = arg;
+                    match package {
+                        Some(package) => {
+                            let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
+                            expected.args[at] = arg;
+                        }
+                        None => expected.command.clone_from(&pin.spec),
+                    }
                     now.launch(&pin.agent_id).filter(|launch| *launch == expected)
                 })
                 .collect();
@@ -1436,16 +1459,16 @@ mod tests {
         let base = temp_project("add");
         let user_file = base.join("config/brama/agents.json");
         let configs = with_fixture(Some(user_file.clone()), None);
-        let agent = NewAgent { known: Some("gemini".into()), ..Default::default() };
-        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini", "creates the file");
-        assert_eq!(configs.merged(None).agent("gemini").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+        let agent = NewAgent { known: Some("codex-acp".into()), ..Default::default() };
+        assert_eq!(configs.add_agent(None, &agent).unwrap(), "codex-acp", "creates the file");
+        assert_eq!(configs.merged(None).agent("codex-acp").unwrap().args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
 
         fs::write(
             &user_file,
-            "{\n  \"version\": 1,\n  \"defaultAgent\": \"gemini\",\n  \"agents\": {\n    \"gemini\": {\"command\": \"gemini\"}\n  },\n  \"mcpServers\": []\n}\n",
+            "{\n  \"version\": 1,\n  \"defaultAgent\": \"codex-acp\",\n  \"agents\": {\n    \"codex-acp\": {\"command\": \"codex-acp\"}\n  },\n  \"mcpServers\": []\n}\n",
         )
         .unwrap();
-        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini-2", "ids stay unique");
+        assert_eq!(configs.add_agent(None, &agent).unwrap(), "codex-acp-2", "ids stay unique");
         let text = fs::read_to_string(&user_file).unwrap();
         let keys: Vec<_> = ["\"version\"", "\"defaultAgent\"", "\"agents\"", "\"mcpServers\""]
             .iter()
@@ -1453,8 +1476,8 @@ mod tests {
             .collect();
         assert!(keys.windows(2).all(|w| w[0] < w[1]), "keys keep their order:\n{text}");
         let merged = configs.merged(None);
-        assert_eq!(merged.agent("gemini-2").unwrap().name, "Gemini CLI");
-        assert!(merged.agent("gemini").is_some());
+        assert_eq!(merged.agent("codex-acp-2").unwrap().name, "Codex");
+        assert!(merged.agent("codex-acp").is_some());
 
         fs::write(&user_file, "{ \"version\": 1, oops").unwrap();
         assert!(configs.add_agent(None, &agent).unwrap_err().contains("agents.json"), "an invalid file is never overwritten");
@@ -1503,7 +1526,7 @@ mod tests {
 
         fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"mine","env":{"K":"${keychain:k}"}},"both":{"command":"user"},"other":{"command":"other"}}}"#).unwrap();
         assert!(configs.import_user_agents(&project, None).unwrap().is_empty(), "custom commands aren't copied");
-        let gemini = r#""gemini":{"name":"Gemini","command":"npx","args":["-y","@google/gemini-cli","--acp"]}"#;
+        let gemini = r#""gemini":{"name":"Gemini","command":"npx","args":["-y","@agentclientprotocol/codex-acp","--acp"]}"#;
         fs::write(&user_file, format!(r#"{{"version":1,"agents":{{{gemini},"mine":{{"name":"Mine","command":"npx","args":["@github/copilot","--acp"],"env":{{"K":"${{keychain:k}}"}}}},"both":{{"command":"user"}}}}}}"#)).unwrap();
         assert_eq!(configs.import_user_agents(&project, Some(&["gemini".to_owned()])).unwrap(), ["gemini"], "only the one asked for");
         assert_eq!(configs.import_user_agents(&project, None).unwrap(), ["mine"]);
@@ -1532,9 +1555,9 @@ mod tests {
         let configs = with_fixture(None, None);
         let waiting = |configs: &AgentConfigs| configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect::<Vec<_>>();
 
-        let pick = NewAgent { known: Some("gemini".into()), ..Default::default() };
+        let pick = NewAgent { known: Some("codex-acp".into()), ..Default::default() };
         configs.add_agent(Some(&project), &pick).unwrap();
-        assert!(waiting(&configs).contains(&"gemini".to_owned()), "the repo's MCP servers start with it: the dialog asks");
+        assert!(waiting(&configs).contains(&"codex-acp".to_owned()), "the repo's MCP servers start with it: the dialog asks");
 
         fs::write(&project_file, r#"{"version":1,"agents":{"repo":{"command":"./run","env":{"T":"${keychain:github}"}}}}"#).unwrap();
         configs.reload(&project);
@@ -1558,12 +1581,12 @@ mod tests {
         fs::write(&project_file, r#"{"version":1,"agents":{"repo":{"command":"./run","env":{"K":"${env:K}"}}}}"#).unwrap();
         let configs = with_fixture(Some(user_file.clone()), None);
 
-        let repo = NewAgent { name: "Repo".into(), known: Some("gemini".into()), ..Default::default() };
+        let repo = NewAgent { name: "Repo".into(), known: Some("codex-acp".into()), ..Default::default() };
         assert_eq!(configs.update_agent(Some(&project), "repo", &repo).unwrap(), Some(project.clone()));
         let merged = configs.merged(Some(&project));
         let edited = merged.agent("repo").unwrap();
         assert_eq!(edited.name, "Repo");
-        assert_eq!(edited.args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+        assert_eq!(edited.args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
         assert_eq!(edited.env.get("K").map(String::as_str), Some("${env:K}"), "the rest is kept");
         let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
         assert_eq!(waiting, ["repo"], "its env wasn't the user's choice: the trust dialog asks");
@@ -1638,23 +1661,23 @@ mod tests {
         let user_file = base.join("agents.json");
         let configs = with_fixture(Some(user_file.clone()), None);
         let listed = configs.list(None).known;
-        assert_eq!(listed.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"], "the supported registry agents");
-        let gemini = &listed[1];
+        assert_eq!(listed.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"], "the supported registry agents");
+        let codex = &listed[1];
 
-        let pick = NewAgent { known: Some("gemini".into()), ..Default::default() };
-        assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini", "its own id, its own name");
+        let pick = NewAgent { known: Some("codex-acp".into()), ..Default::default() };
+        assert_eq!(configs.add_agent(None, &pick).unwrap(), "codex-acp", "its own id, its own name");
         let merged = configs.merged(None);
-        let added = merged.agent("gemini").unwrap();
-        assert_eq!((added.name.as_str(), added.command.as_str()), ("Gemini CLI", "npx"));
-        assert_eq!(added.args, gemini.args);
+        let added = merged.agent("codex-acp").unwrap();
+        assert_eq!((added.name.as_str(), added.command.as_str()), ("Codex", "npx"));
+        assert_eq!(added.args, codex.args);
 
-        let named = NewAgent { name: "Gemini Pro".into(), known: Some("gemini".into()), ..Default::default() };
-        assert_eq!(configs.add_agent(None, &named).unwrap(), "gemini-pro", "the id is taken: from the name");
+        let named = NewAgent { name: "Codex Pro".into(), known: Some("codex-acp".into()), ..Default::default() };
+        assert_eq!(configs.add_agent(None, &named).unwrap(), "codex-pro", "the id is taken: from the name");
 
-        let custom = NewAgent { known: Some("gemini".into()), command: Some("gemini".into()), ..Default::default() };
+        let custom = NewAgent { known: Some("codex-acp".into()), command: Some("codex-acp".into()), ..Default::default() };
         assert!(configs.add_agent(None, &custom).unwrap_err().contains("registry's launch"), "no custom command");
         let any = NewAgent { name: "X".into(), command: Some("x".into()), ..Default::default() };
-        assert!(configs.add_agent(None, &any).unwrap_err().contains("Claude, Codex, Copilot or Gemini"), "no custom agent");
+        assert!(configs.add_agent(None, &any).unwrap_err().contains("Claude, Codex, Copilot or Antigravity"), "no custom agent");
         let unknown = NewAgent { known: Some("nope".into()), ..Default::default() };
         assert!(configs.add_agent(None, &unknown).unwrap_err().contains("nope"));
         fs::remove_dir_all(base).unwrap();
@@ -1778,8 +1801,8 @@ mod tests {
             r#"{"version":1,"agents":{
                 "old":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]},
                 "current":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.94.0"]},
-                "loose":{"command":"npx","args":["-y","@google/gemini-cli","--acp"]},
-                "ran":{"command":"npx","args":["-y","@google/gemini-cli","--acp"]},
+                "loose":{"command":"npx","args":["-y","@agentclientprotocol/codex-acp","--acp"]},
+                "ran":{"command":"npx","args":["-y","@agentclientprotocol/codex-acp","--acp"]},
                 "custom":{"command":"./agent"}
             }}"#,
         )
@@ -1795,9 +1818,27 @@ mod tests {
 
         assert_eq!(shown["old"], (Some("claude-acp"), Some("0.90.0"), update("0.94.0", false)), "the pin, not what it reported");
         assert_eq!(shown["current"], (Some("claude-acp"), Some("0.94.0"), None));
-        assert_eq!(shown["loose"], (Some("gemini"), None, update("0.65.0", true)), "unpinned, never ran: pin the latest");
-        assert_eq!(shown["ran"], (Some("gemini"), Some("0.65.0"), None), "what it reported");
+        assert_eq!(shown["loose"], (Some("codex-acp"), None, update("0.65.0", true)), "unpinned, never ran: pin the latest");
+        assert_eq!(shown["ran"], (Some("codex-acp"), Some("0.65.0"), None), "what it reported");
         assert_eq!(shown["custom"], (None, Some("3.1.0"), None), "not in the registry: no update");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn a_downloaded_agent_shows_its_version_and_an_update_pins_the_new_one_in_its_command() {
+        let base = temp_project("pin-download");
+        let user_file = base.join("user.json");
+        fs::write(&user_file, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"${agent:antigravity-acp@1.4.0}"}}}"#).unwrap();
+        let configs = with_fixture(Some(user_file), None);
+        let agy = configs.list(None).agents.into_iter().find(|a| a.id == "agy").unwrap();
+        assert_eq!((agy.registry_id.as_deref(), agy.version.as_deref()), (Some("antigravity-acp"), Some("1.4.0")));
+        assert_eq!(agy.update, Some(registry::AgentUpdate { to: "1.4.1".into(), pin: false }));
+
+        let pinned = configs.pin_versions(None, Some("agy")).unwrap();
+        assert_eq!(pinned.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["${agent:antigravity-acp@1.4.1}"], "what the update downloads");
+        assert_eq!(pinned[0].version, "1.4.1");
+        assert_eq!(configs.merged(None).agent("agy").unwrap().command, "${agent:antigravity-acp@1.4.1}");
+        assert!(configs.list(None).agents.iter().all(|a| a.update.is_none()), "up to date");
         fs::remove_dir_all(base).unwrap();
     }
 
@@ -1805,7 +1846,7 @@ mod tests {
     fn an_update_pins_the_registrys_version_in_place() {
         let base = temp_project("pin");
         let user_file = base.join("user.json");
-        let text = "{\n  \"version\": 1,\n  \"agents\": {\n    \"claude\": {\n      \"name\": \"Claude\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@agentclientprotocol/claude-agent-acp@0.90.0\", \"--debug\"],\n      \"env\": {\"K\": \"v\"}\n    },\n    \"gem\": {\"command\": \"npx\", \"args\": [\"-y\", \"@google/gemini-cli\", \"--acp\"]},\n    \"custom\": {\"command\": \"./agent\"}\n  },\n  \"mcpServers\": []\n}\n";
+        let text = "{\n  \"version\": 1,\n  \"agents\": {\n    \"claude\": {\n      \"name\": \"Claude\",\n      \"command\": \"npx\",\n      \"args\": [\"-y\", \"@agentclientprotocol/claude-agent-acp@0.90.0\", \"--debug\"],\n      \"env\": {\"K\": \"v\"}\n    },\n    \"gem\": {\"command\": \"npx\", \"args\": [\"-y\", \"@agentclientprotocol/codex-acp\", \"--acp\"]},\n    \"custom\": {\"command\": \"./agent\"}\n  },\n  \"mcpServers\": []\n}\n";
         fs::write(&user_file, text).unwrap();
         let configs = with_fixture(Some(user_file.clone()), None);
 
@@ -1822,14 +1863,14 @@ mod tests {
         assert!(configs.pin_versions(None, Some("custom")).unwrap().is_empty(), "not in the registry");
 
         let all = configs.pin_versions(None, None).unwrap();
-        assert_eq!(all.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["@google/gemini-cli@0.65.0"], "every update: an unpinned one gets pinned");
-        assert_eq!(configs.merged(None).agent("gem").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
+        assert_eq!(all.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["@agentclientprotocol/codex-acp@0.65.0"], "every update: an unpinned one gets pinned");
+        assert_eq!(configs.merged(None).agent("gem").unwrap().args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
 
         fs::write(
             &user_file,
             r#"{"version":1,"agents":{
-                "wrapper":{"command":"npx","args":["-y","my-wrapper","--agent","@google/gemini-cli"]},
-                "pkg":{"command":"npx","args":["--package=@google/gemini-cli@0.60.0","--","@google/gemini-cli","--acp"]}
+                "wrapper":{"command":"npx","args":["-y","my-wrapper","--agent","@agentclientprotocol/codex-acp"]},
+                "pkg":{"command":"npx","args":["--package=@agentclientprotocol/codex-acp@0.60.0","--","@agentclientprotocol/codex-acp","--acp"]}
             }}"#,
         )
         .unwrap();
@@ -1837,8 +1878,8 @@ mod tests {
         let all = configs.pin_versions(None, None).unwrap();
         assert_eq!(all.iter().map(|p| p.agent_id.as_str()).collect::<Vec<_>>(), ["pkg"], "a custom agent's argument isn't the package npx runs");
         let merged = configs.merged(None);
-        assert_eq!(merged.agent("wrapper").unwrap().args, ["-y", "my-wrapper", "--agent", "@google/gemini-cli"], "left alone");
-        assert_eq!(merged.agent("pkg").unwrap().args, ["--package=@google/gemini-cli@0.65.0", "--", "@google/gemini-cli", "--acp"], "the package pinned, the command not");
+        assert_eq!(merged.agent("wrapper").unwrap().args, ["-y", "my-wrapper", "--agent", "@agentclientprotocol/codex-acp"], "left alone");
+        assert_eq!(merged.agent("pkg").unwrap().args, ["--package=@agentclientprotocol/codex-acp@0.65.0", "--", "@agentclientprotocol/codex-acp", "--acp"], "the package pinned, the command not");
 
         fs::remove_dir_all(base).unwrap();
     }
@@ -1853,7 +1894,7 @@ mod tests {
             &project_file,
             r#"{"version":1,"agents":{
                 "trusted":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.90.0"]},
-                "waiting":{"command":"npx","args":["-y","@google/gemini-cli@0.60.0","--acp"]}
+                "waiting":{"command":"npx","args":["-y","@agentclientprotocol/codex-acp@0.60.0","--acp"]}
             }}"#,
         )
         .unwrap();
@@ -1879,10 +1920,10 @@ mod tests {
     fn a_registry_agent_added_twice_gets_its_id_with_a_number() {
         let base = temp_project("add-twice");
         let configs = with_fixture(Some(base.join("user.json")), None);
-        let pick: NewAgent = serde_json::from_value(serde_json::json!({ "registry": "gemini" })).unwrap();
-        assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini");
-        assert_eq!(configs.add_agent(None, &pick).unwrap(), "gemini-2");
-        assert_eq!(configs.merged(None).agent("gemini-2").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"], "pinned");
+        let pick: NewAgent = serde_json::from_value(serde_json::json!({ "registry": "codex-acp" })).unwrap();
+        assert_eq!(configs.add_agent(None, &pick).unwrap(), "codex-acp");
+        assert_eq!(configs.add_agent(None, &pick).unwrap(), "codex-acp-2");
+        assert_eq!(configs.merged(None).agent("codex-acp-2").unwrap().args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"], "pinned");
         fs::remove_dir_all(base).unwrap();
     }
 
@@ -1890,14 +1931,14 @@ mod tests {
     fn the_agents_view_hides_the_registry_entries_installed_and_knows_who_ran() {
         let base = temp_project("view");
         let user_file = base.join("user.json");
-        fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"npx","args":["-y","@google/gemini-cli","--acp"]},"x":{"command":"x"}}}"#).unwrap();
+        fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"npx","args":["-y","@agentclientprotocol/codex-acp","--acp"]},"x":{"command":"x"}}}"#).unwrap();
         let configs = with_fixture(Some(user_file), None);
         configs.note_version("x", "1.0.0");
         configs.set_enabled(None, "mine", false).unwrap();
         let v = configs.view(None, "", view::Filter::All, view::RowState { updating: &|id| id == "mine", sign_in: &|_| None });
         let rows: Vec<_> = v.installed.iter().map(|r| (r.id.as_str(), r.status, r.updating)).collect();
         assert_eq!(rows, [("mine", view::Status::Off, true)], "x runs a custom command: not listed");
-        assert_eq!(v.registry.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "github-copilot-cli"], "Gemini is installed as Mine");
+        assert_eq!(v.registry.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "github-copilot-cli", "antigravity-acp"], "Codex is installed as Mine");
         assert_eq!(v.counts, view::Counts { all: 1, updates: 1, off: 1 });
         fs::remove_dir_all(base).unwrap();
     }

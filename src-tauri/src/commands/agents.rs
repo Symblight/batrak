@@ -210,7 +210,7 @@ pub(crate) fn emit_changed(app: &AppHandle, project: Option<&std::path::Path>) {
     }
 }
 
-/// Adds a supported registry agent (Claude, Codex, Copilot or Gemini) with the registry's launch to
+/// Adds a supported registry agent (Claude, Codex, Copilot or Antigravity) with the registry's launch to
 /// the project's agents.json (trusted), or the user's without a project; returns its id.
 #[tauri::command]
 pub async fn agents_add(

@@ -170,8 +170,7 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
             .iter()
             .filter(|e| !installed_entries.contains(&e.id.as_str()))
             .filter_map(|e| {
-                let launch = e.npx_launch();
-                let command_line = std::iter::once(launch.command.as_str()).chain(launch.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ");
+                let command_line = e.command_line();
                 let rank = query.rank(&e.name, &[&e.id, &e.vendor, &e.description, &command_line])?;
                 let row = RegistryRow {
                     id: e.id.clone(),
@@ -391,7 +390,7 @@ mod tests {
     #[test]
     fn without_a_query_the_default_leads_then_names() {
         let all = view("", Filter::All);
-        assert_eq!(names(&all), (vec!["Repo", "Claude Code", "Codex", "Zébulon Agent"], vec!["Copilot", "Gemini CLI"]), "Claude's entry is installed");
+        assert_eq!(names(&all), (vec!["Repo", "Claude Code", "Codex", "Zébulon Agent"], vec!["Copilot", "Google Antigravity"]), "Claude's and Codex's entries are installed");
         assert_eq!(all.counts, Counts { all: 4, updates: 1, off: 1 });
         let repo = &all.installed[0];
         assert!(repo.is_default && repo.status == Status::Ready);
@@ -402,7 +401,8 @@ mod tests {
         assert_eq!(all.errors, ["agents.json:3:4: oops"]);
         assert!(all.registry_state.offline);
 
-        assert_eq!(all.registry[1].command_line, "npx -y @google/gemini-cli@0.65.0 --acp");
+        assert_eq!(all.registry[0].command_line, "npx -y @github/copilot@1.0.101 --acp");
+        assert_eq!(all.registry[1].command_line, "agy_acp_server.par 1.4.1, downloaded on its first start");
     }
 
     #[test]
@@ -423,14 +423,14 @@ mod tests {
     #[test]
     fn every_term_matches_some_field_and_ranks_by_the_name() {
         let table: [(&str, Vec<&str>, Vec<&str>); 9] = [
-            ("cl", vec!["Claude Code", "Repo"], vec!["Gemini CLI", "Copilot"]),
+            ("cl", vec!["Claude Code", "Repo"], vec!["Copilot"]),
             // Name starts with it, a word starts with it, the command line has it.
             ("co", vec!["Codex", "Claude Code"], vec!["Copilot"]),
             ("claude", vec!["Claude Code", "Repo"], vec![]),
             ("ZEBU", vec!["Zébulon Agent"], vec![]),
             ("zébu", vec!["Zébulon Agent"], vec![]),
             ("agent zeb", vec!["Zébulon Agent"], vec![]),
-            ("google", vec![], vec!["Gemini CLI"]),
+            ("google", vec![], vec!["Google Antigravity"]),
             ("  github ", vec![], vec!["Copilot"]),
             ("claude nothing", vec![], vec![]),
         ];

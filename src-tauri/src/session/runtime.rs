@@ -90,6 +90,8 @@ pub struct SessionsOptions {
     /// The environment agents start from (the login shell's). Blocking.
     pub base_env: Arc<dyn Fn() -> HashMap<String, String> + Send + Sync>,
     pub launcher: Arc<dyn Launcher>,
+    /// Puts a downloaded agent (`${agent:<id>@<version>}`) in place before it's spawned.
+    pub installer: Arc<dyn crate::config::install::Installer>,
     /// How long a starting agent may take to answer `initialize`, and each config option the
     /// session is set to.
     pub initialize_timeout: Duration,
@@ -105,10 +107,11 @@ const OVERLAP_GRACE: Duration = Duration::from_secs(1);
 const SIGN_IN_LIMIT: Duration = Duration::from_secs(10 * 60);
 
 impl SessionsOptions {
-    pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
+    pub fn for_app(data_dir: PathBuf, configs: AgentConfigs, installer: Arc<dyn crate::config::install::Installer>) -> SessionsOptions {
         SessionsOptions {
             data_dir,
             configs,
+            installer,
             secrets: Arc::new(crate::config::env::OsKeychain),
             base_env: Arc::new(|| crate::config::env::login_shell_env().clone()),
             launcher: Arc::new(ProcessLauncher),
@@ -1277,7 +1280,15 @@ impl Inner {
 
     /// Starts `agent` in a scratch folder in app data (`initialize`, then `authenticate` with
     /// `authenticate` if given, then `session/new`; no prompt) and stops it again.
+    /// `agent` as it's spawned: a downloaded agent's program, installed first when it isn't yet.
+    async fn installed(&self, agent: &AgentConfig) -> Result<AgentConfig, String> {
+        let installer = Arc::clone(&self.opts.installer);
+        let agent = agent.clone();
+        tokio::task::spawn_blocking(move || crate::config::install::resolve(&*installer, &agent)).await.map_err(|e| e.to_string())?
+    }
+
     async fn scratch_start(&self, agent: &AgentConfig, authenticate: Option<String>) -> Result<acp::Started, ConnectError> {
+        let spawned = self.installed(agent).await?;
         let dir = self.data_dir().join("probe");
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
         let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -1297,7 +1308,7 @@ impl Inner {
             .open(&log_path)
             .map_err(|e| format!("{}: {e}", log_path.display()))?;
         let env = env::LocalEnv::new(dir.clone());
-        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, agent, &process_env, log)?;
+        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, &spawned, &process_env, log)?;
         drop(process_env);
         let opts = StartOptions {
             cwd: dir,
@@ -1334,7 +1345,8 @@ impl Inner {
         .await
         .map_err(|e| e.to_string())?
         .map_err(|e| format!("{}: {e}", agent.name))?;
-        let command = acp::auth::login_command(&agent.command, &agent.args, &env, login);
+        let spawned = self.installed(agent).await?;
+        let command = acp::auth::login_command(&spawned.command, &spawned.args, &env, login);
         let cwd = self.data_dir().join("probe");
         std::fs::create_dir_all(&cwd).map_err(|e| format!("{}: {e}", cwd.display()))?;
         let cwd = dunce::canonicalize(&cwd).map_err(|e| format!("{}: {e}", cwd.display()))?;
@@ -1490,8 +1502,9 @@ impl Inner {
             drop(record);
             self.persist();
         }
+        let spawned = self.installed(&agent).await?;
         let log = self.open_log(&state.id, &agent)?;
-        let launched = self.opts.launcher.launch(&*env, &agent, &process_env, log)?;
+        let launched = self.opts.launcher.launch(&*env, &spawned, &process_env, log)?;
         drop(process_env);
         if let Some(pid) = launched.process.as_ref().and_then(AgentProcess::pid) {
             tracing::info!(session = %state.id, agent = %agent.id, pid, "agent process started");
