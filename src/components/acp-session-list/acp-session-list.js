@@ -7,6 +7,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
+import '@symblight/wc-material/skeleton';
 import '@symblight/wc-material/text-field';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
@@ -47,7 +48,7 @@ function age(iso) {
 
 /**
  * @tag acp-session-list
- * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity; five, and five more with each Show more) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity; five, and five more with each Show more; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-project-open-folder `null`
  * @fires acp-project-select `{ projectId }`
  * @fires acp-project-toggle `{ projectId, expanded }`
@@ -75,6 +76,7 @@ export class AcpSessionList extends LitElement {
     waiting: { attribute: false },
     failures: { attribute: false },
     sync: { attribute: false },
+    loading: { attribute: false },
     home: {},
     renaming: { state: true },
     limits: { state: true },
@@ -121,6 +123,8 @@ export class AcpSessionList extends LitElement {
     this.failures = {};
     /** @type {import('../../models/types.js').SessionSync | null} The active project's sync with its agents. */
     this.sync = null;
+    /** @type {readonly string[]} Projects whose sessions are loading; one with none to show yet shows skeleton rows. */
+    this.loading = [];
     /** @type {string | null} Shown as `~` in project paths. */
     this.home = null;
     /** @type {string | null} The session whose title is being edited in its row. */
@@ -308,13 +312,27 @@ export class AcpSessionList extends LitElement {
       ${expanded
         ? sessions.length > 0
           ? this.#renderSessions(project, sessions)
-          : html`<div class="acp-session-list__empty">
+          : this.loading.includes(project.id)
+            ? this.#renderLoading()
+            : html`<div class="acp-session-list__empty">
               No sessions yet. Press
               <md-icon class="acp-session-list__empty-icon">${unsafeSVG(addIcon)}</md-icon>
               to start one.
             </div>`
         : nothing}
     `;
+  }
+
+  /** Rows the shape of session rows, while a project's sessions load. */
+  #renderLoading() {
+    return html`<div class="acp-session-list__loading" role="status" aria-label="Loading sessions" aria-busy="true">
+      ${['70%', '55%', '62%'].map(
+        (width) => html`<div class="acp-session-list__skeleton-row">
+          <md-skeleton class="acp-session-list__skeleton-title" style=${`width: ${width}`}></md-skeleton>
+          <md-skeleton class="acp-session-list__skeleton-age"></md-skeleton>
+        </div>`,
+      )}
+    </div>`;
   }
 
   /**

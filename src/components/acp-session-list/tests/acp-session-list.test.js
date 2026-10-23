@@ -339,5 +339,15 @@ describe('acp-session-list', () => {
     expect(root.querySelector('.acp-session-list__show-more')).to.equal(null);
   });
 
+  it('shows skeleton rows for a loading project with no sessions to show yet', async () => {
+    const { root } = await render({ sessions: [SESSIONS[3]], loading: ['/home/me/brama', '/home/me/rich'] });
+    const loading = root.querySelector('.acp-session-list__loading');
+    expect(loading?.getAttribute('aria-label')).to.equal('Loading sessions');
+    expect(loading?.querySelectorAll('.acp-session-list__skeleton-row md-skeleton').length).to.equal(6);
+    expect(loading?.querySelectorAll('.acp-session-list__skeleton-row').length, 'three rows').to.equal(3);
+    expect(root.querySelector('.acp-session-list__empty'), 'not "No sessions yet"').to.equal(null);
+    expect(titles(root), 'a project with sessions shows them').to.deep.equal(['Session r']);
+    expect(root.querySelectorAll('.acp-session-list__loading').length).to.equal(1);
+  });
 });
 

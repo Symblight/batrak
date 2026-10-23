@@ -250,6 +250,31 @@
   --md-button-block-end-space: var(--button-block-space-compact);
 }
 
+.acp-session-list__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-0-5);
+  padding-block: var(--space-0-5) var(--space-1-5);
+}
+
+.acp-session-list__skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1-5);
+  height: 28px;
+  padding-inline: 28px var(--space-3);
+}
+
+.acp-session-list__skeleton-title {
+  height: 12px;
+}
+
+.acp-session-list__skeleton-age {
+  width: 20px;
+  height: 12px;
+  margin-inline-start: auto;
+}
+
 .acp-session-list__empty {
   padding: var(--space-1) var(--space-3) 10px 30px;
   font-size: var(--font-size-sm);

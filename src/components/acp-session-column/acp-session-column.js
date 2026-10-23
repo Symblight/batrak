@@ -10,7 +10,8 @@ import { sessionController } from '../../services/session-controller.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime.js';
 import { $sessionSync } from '../../stores/session-sync.js';
-import { $activeSessionId, $pinnedSessions, $sessions } from '../../stores/sessions.js';
+import { loadingProjects } from '../../models/sessions.js';
+import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace.js';
 import styles from './acp-session-column.css?inline';
 
@@ -36,6 +37,7 @@ export class AcpSessionColumn extends LitElement {
   #unread = new StoreController(this, { store: $unreadSessions });
   #permissions = new StoreController(this, { store: $permissionRequests });
   #sync = new StoreController(this, { store: $sessionSync });
+  #loaded = new StoreController(this, { store: $sessionsLoaded });
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.#dialog });
 
@@ -174,6 +176,11 @@ export class AcpSessionColumn extends LitElement {
         .unread=${this.#unread.value}
         .waiting=${Object.keys(this.#permissions.value)}
         .failures=${this.failures}
+        .loading=${loadingProjects(
+          this.#projects.value.map((p) => p.id),
+          this.#loaded.value,
+          this.#sync.value,
+        )}
         .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}
         .home=${this.home}
         @acp-project-open-folder=${this.#onOpenFolder}

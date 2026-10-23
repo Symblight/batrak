@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
+import { loadingProjects, orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
 
 /** @typedef {import('./types.js').Session} Session */
 
@@ -154,5 +154,20 @@ describe('visibleSessions', () => {
     const { shown, hidden } = visibleSessions(ten, 5, 'g');
     expect(shown.map((s) => s.id)).to.deep.equal(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
     expect(hidden).to.equal(3);
+  });
+});
+
+describe('loadingProjects', () => {
+  const projects = ['/p', '/q', '/r'];
+  /** @type {import('./types.js').SyncReport} */
+  const report = { projectPath: '/q', startedAt: 'a', endedAt: 'b', agents: [] };
+
+  it('is every project until the stored list arrives', () => {
+    expect(loadingProjects(projects, false, {})).to.deep.equal(projects);
+  });
+
+  it('is then each project in its first sync', () => {
+    const syncs = { '/p': { running: true, report: null }, '/q': { running: true, report }, '/r': { running: false, report: null } };
+    expect(loadingProjects(projects, true, syncs)).to.deep.equal(['/p']);
   });
 });

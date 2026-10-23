@@ -63,6 +63,19 @@ export function visibleSessions(sessions, limit, activeId) {
 }
 
 /**
+ * The projects whose session lists are loading: all of them until the stored list arrives, then each
+ * one in its first sync.
+ * @param {readonly string[]} projectIds
+ * @param {boolean} loaded The stored list arrived (`$sessionsLoaded`).
+ * @param {Readonly<Record<string, SessionSync>>} syncs By project id (`$sessionSync`).
+ * @returns {string[]}
+ */
+export function loadingProjects(projectIds, loaded, syncs) {
+  if (!loaded) return [...projectIds];
+  return projectIds.filter((id) => syncs[id]?.running === true && syncs[id]?.report === null);
+}
+
+/**
  * What removing a session asks first; the project's files stay either way.
  * @param {Session} session
  * @returns {ConfirmOptions}
