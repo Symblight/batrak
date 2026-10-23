@@ -1277,6 +1277,15 @@ impl Inner {
 
     /// Starts `agent` in a scratch folder in app data (`initialize`, then `authenticate` with
     /// `authenticate` if given, then `session/new`; no prompt) and stops it again.
+    /// A spawn's error; an agent's program on PATH that isn't there says how to install it.
+    fn launch_error(&self, agent: &AgentConfig, error: String) -> String {
+        // `os error 2`: not found, on unix (ENOENT) and Windows (ERROR_FILE_NOT_FOUND) alike.
+        if !error.ends_with("(os error 2)") {
+            return error;
+        }
+        crate::config::registry::not_installed(&self.opts.configs.registry().agents(), &agent.command).unwrap_or(error)
+    }
+
     async fn scratch_start(&self, agent: &AgentConfig, authenticate: Option<String>) -> Result<acp::Started, ConnectError> {
         let dir = self.data_dir().join("probe");
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -1297,7 +1306,7 @@ impl Inner {
             .open(&log_path)
             .map_err(|e| format!("{}: {e}", log_path.display()))?;
         let env = env::LocalEnv::new(dir.clone());
-        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, agent, &process_env, log)?;
+        let Launched { mut process, writer, reader } = self.opts.launcher.launch(&env, agent, &process_env, log).map_err(|e| self.launch_error(agent, e))?;
         drop(process_env);
         let opts = StartOptions {
             cwd: dir,
@@ -1491,7 +1500,7 @@ impl Inner {
             self.persist();
         }
         let log = self.open_log(&state.id, &agent)?;
-        let launched = self.opts.launcher.launch(&*env, &agent, &process_env, log)?;
+        let launched = self.opts.launcher.launch(&*env, &agent, &process_env, log).map_err(|e| self.launch_error(&agent, e))?;
         drop(process_env);
         if let Some(pid) = launched.process.as_ref().and_then(AgentProcess::pid) {
             tracing::info!(session = %state.id, agent = %agent.id, pid, "agent process started");

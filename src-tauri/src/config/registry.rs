@@ -51,20 +51,20 @@ pub struct Npx {
     pub env: BTreeMap<String, String>,
 }
 
-/// A program the user installed, run from PATH as `<command> <args>` (the registry ships it as
-/// an archive, which Brama doesn't download).
+/// A program the user installed, run from PATH as `<command> <args>`: the registry ships it as
+/// an archive, which Brama doesn't download.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
+    /// The archive's `cmd` (`./agy_acp_server.par`) without its folder.
     pub command: String,
     pub args: Vec<String>,
+    /// This platform's archive, for the user to download.
+    pub archive: String,
 }
 
 /// The registry agents Brama offers; the registry's others are left out.
 pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"];
-
-/// What a supported `binary` agent runs: the program the user installs on PATH.
-const ON_PATH: [(&str, &str); 1] = [("antigravity-acp", "agy_acp_server")];
 
 /// This machine's key in the registry's `binary` map (`darwin-aarch64`, `windows-x86_64`…).
 fn platform() -> String {
@@ -150,6 +150,8 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     }
     #[derive(Deserialize)]
     struct BinaryDist {
+        archive: String,
+        cmd: String,
         #[serde(default)]
         args: Vec<String>,
     }
@@ -188,16 +190,16 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
                     env: npx.env,
                 })
             }
-            Dist { binary: Some(mut builds), .. } => {
-                let Some(&(_, command)) = ON_PATH.iter().find(|(id, _)| *id == agent.id) else { continue };
-                match builds.remove(&platform) {
-                    Some(build) => Launch::Program(Program { command: command.to_owned(), args: build.args }),
-                    None => {
-                        tracing::debug!(agent = %agent.id, platform, "registry agent skipped: no build for this platform");
-                        continue;
-                    }
+            Dist { binary: Some(mut builds), .. } => match builds.remove(&platform) {
+                Some(build) => {
+                    let Some(command) = Path::new(&build.cmd).file_name().and_then(|n| n.to_str()) else { continue };
+                    Launch::Program(Program { command: command.to_owned(), args: build.args, archive: build.archive })
                 }
-            }
+                None => {
+                    tracing::debug!(agent = %agent.id, platform, "registry agent skipped: no build for this platform");
+                    continue;
+                }
+            },
             _ => continue,
         };
         agents.push(RegistryAgent {
@@ -247,17 +249,33 @@ pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
 /// (`package_arg`) is the entry's, with or without `@version`. agents.json's ids aren't compared:
 /// it names its agents as it likes.
 pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[String]) -> Option<Matched<'a>> {
-    let stem = Path::new(command).file_stem()?;
-    if let Some(agent) = agents.iter().find(|a| matches!(&a.launch, Launch::Program(p) if stem == p.command.as_str())) {
+    if let Some(agent) = program_of(agents, command) {
         return Some(Matched { agent, pinned: None });
     }
-    if stem != "npx" {
+    if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
         return None;
     }
     let (package, version) = split_spec(package_arg(args)?.1);
     let agent = agents.iter().find(|a| matches!(&a.launch, Launch::Npx(npx) if npx.package == package))?;
     let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
     Some(Matched { agent, pinned })
+}
+
+/// The registry agent whose program on PATH `command` is (by file name).
+fn program_of<'a>(agents: &'a [RegistryAgent], command: &str) -> Option<&'a RegistryAgent> {
+    let name = Path::new(command).file_name()?;
+    agents.iter().find(|a| matches!(&a.launch, Launch::Program(p) if name == p.command.as_str()))
+}
+
+/// What to tell the user when `command`, a registry agent's program on PATH, didn't start: it
+/// isn't installed, and where to get it. `None` for anything else.
+pub fn not_installed(agents: &[RegistryAgent], command: &str) -> Option<String> {
+    let agent = program_of(agents, command)?;
+    let Launch::Program(program) = &agent.launch else { return None };
+    Some(format!(
+        "{} isn't installed: download {}, unpack it and put {} on PATH, then restart Brama",
+        agent.name, program.archive, program.command
+    ))
 }
 
 fn parse_version(version: &str) -> Option<semver::Version> {
@@ -605,7 +623,8 @@ pub(crate) mod tests {
         );
         assert_eq!(agents[0].vendor, "Anthropic, Zed Industries");
         let Launch::Program(antigravity) = &agents[3].launch else { panic!("{:?}", agents[3].launch) };
-        assert_eq!(antigravity.command, "agy_acp_server", "a program the user installed");
+        assert_eq!(antigravity.command, "agy_acp_server.par", "the archive's program, which the user puts on PATH");
+        assert!(antigravity.archive.starts_with("https://dl.example.com/agy-"), "where to get it");
         assert_eq!(agents[3].latest(), None, "the user updates it");
         assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
     }
@@ -619,7 +638,7 @@ pub(crate) mod tests {
         let claude = agents.iter().find(|a| a.id == "claude-acp").unwrap();
         assert!(matches!(&claude.launch, Launch::Npx(npx) if npx.package == "@agentclientprotocol/claude-agent-acp"));
         let antigravity = agents.iter().find(|a| a.id == "antigravity-acp").unwrap();
-        assert!(matches!(&antigravity.launch, Launch::Program(p) if p.command == "agy_acp_server"));
+        assert!(matches!(&antigravity.launch, Launch::Program(p) if p.command.starts_with("agy_acp_server.")));
     }
 
     #[test]
@@ -628,8 +647,8 @@ pub(crate) mod tests {
         let known: Vec<_> = agents.iter().map(RegistryAgent::known).collect();
         assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"]);
         assert_eq!(known[1].args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
-        assert_eq!(known[3].command, "agy_acp_server", "on PATH, never downloaded");
-        assert!(agents[3].command_line().starts_with("agy_acp_server"), "{}", agents[3].command_line());
+        assert_eq!(known[3].command, "agy_acp_server.par", "on PATH, never downloaded");
+        assert!(agents[3].command_line().starts_with("agy_acp_server.par"), "{}", agents[3].command_line());
     }
 
     #[test]
@@ -649,8 +668,17 @@ pub(crate) mod tests {
         assert_eq!(matched("npx", &["--yes", "--", "@agentclientprotocol/codex-acp@0.60.0"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
         assert_eq!(matched("npx", &["-p", "@agentclientprotocol/codex-acp@0.60.0", "codex-acp", "--acp"]), Some(("codex-acp".into(), Some("0.60.0".into()))));
         assert_eq!(matched("npx", &["--package=@agentclientprotocol/codex-acp", "codex-acp"]), Some(("codex-acp".into(), None)));
-        assert_eq!(matched("agy_acp_server", &[]), Some(("antigravity-acp".into(), None)), "a program on PATH");
-        assert_eq!(matched("/opt/agy/agy_acp_server", &["--uid="]), Some(("antigravity-acp".into(), None)));
+        assert_eq!(matched("agy_acp_server.par", &[]), Some(("antigravity-acp".into(), None)), "a program on PATH");
+        assert_eq!(matched("/opt/agy/agy_acp_server.par", &["--uid="]), Some(("antigravity-acp".into(), None)));
+    }
+
+    #[test]
+    fn a_program_that_isnt_installed_says_where_to_get_it() {
+        let agents = parse(FIXTURE).unwrap();
+        let hint = not_installed(&agents, "agy_acp_server.par").unwrap();
+        assert!(hint.contains("Google Antigravity isn't installed") && hint.contains("https://dl.example.com/agy-"), "{hint}");
+        assert!(hint.contains("agy_acp_server.par") && hint.contains("PATH"), "{hint}");
+        assert_eq!(not_installed(&agents, "npx"), None, "npx installs its own");
     }
 
     #[test]

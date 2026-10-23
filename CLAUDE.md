@@ -214,8 +214,10 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     `projectPath: null`. Only Claude, Codex, Copilot and Antigravity are read from it
     (`registry::SUPPORTED`; the rest are left out), and can be added (`AgentList.known`, pinned
     launches). Claude, Codex and Copilot run with `npx`; Antigravity, a `binary` in the registry,
-    runs `agy_acp_server` from PATH (`Launch::Program`, `registry::ON_PATH`, this platform's
-    args): the user installs and updates it, Brama never downloads an agent. An installed agent
+    runs its archive's program (`cmd`'s file name, `agy_acp_server.par`) from PATH
+    (`Launch::Program`, this platform's args): the user installs and updates it, Brama never
+    downloads an agent; a start that doesn't find it says so with the archive's link
+    (`registry::not_installed`). An installed agent
     is matched by what it runs (`match_launch`: that program's name, or `npx` running the entry's
     package, its first `-p` / `--package` value or first non-flag argument, with or without
     `@version`), not by id;

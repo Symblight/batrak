@@ -1866,7 +1866,7 @@ mod tests {
     fn an_agent_run_from_path_is_the_users_to_update() {
         let base = temp_project("on-path");
         let user_file = base.join("user.json");
-        fs::write(&user_file, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"agy_acp_server"}}}"#).unwrap();
+        fs::write(&user_file, r#"{"version":1,"agents":{"agy":{"name":"Antigravity","command":"agy_acp_server.par"}}}"#).unwrap();
         let configs = with_fixture(Some(user_file), None);
         configs.note_version("agy", "1.0.0");
         let agy = configs.list(None).agents.into_iter().find(|a| a.id == "agy").unwrap();

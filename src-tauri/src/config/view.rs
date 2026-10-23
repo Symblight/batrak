@@ -402,7 +402,7 @@ mod tests {
         assert!(all.registry_state.offline);
 
         assert_eq!(all.registry[0].command_line, "npx -y @github/copilot@1.0.101 --acp");
-        assert!(all.registry[1].command_line.starts_with("agy_acp_server"), "a program the user installs");
+        assert!(all.registry[1].command_line.starts_with("agy_acp_server.par"), "a program the user installs");
     }
 
     #[test]
