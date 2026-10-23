@@ -12,7 +12,7 @@
 .acp-agents-view__page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   box-sizing: border-box;
   max-width: 640px;
   margin-inline: auto;
@@ -101,20 +101,20 @@
 .acp-agents-view__group {
   display: flex;
   flex-direction: column;
-  padding: var(--space-2);
+  padding: var(--space-1);
   border-radius: var(--shape-corner-medium);
   background: var(--md-surface-container-low);
 }
 .acp-agents-view__group-header {
   display: flex;
   align-items: center;
-  min-height: 36px;
+  min-height: 32px;
   padding-inline: var(--space-2);
 }
 .acp-agents-view__group-title {
   flex: 1;
   margin: 0;
-  font: var(--font-weight-medium) var(--font-size-lg)/20px var(--font-family);
+  font: var(--font-weight-medium) var(--font-size-md)/18px var(--font-family);
   color: var(--md-on-surface-variant);
 }
 .acp-agents-view__list {
@@ -128,10 +128,10 @@
 .acp-agents-view__row {
   display: flex;
   align-items: center;
-  gap: var(--space-3);
-  min-height: 72px;
+  gap: var(--space-2);
+  min-height: 44px;
   box-sizing: border-box;
-  padding: var(--space-2) var(--space-1) var(--space-2) var(--space-2);
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
   border-radius: var(--shape-corner-small);
 
   &:hover {
@@ -149,11 +149,11 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: var(--shape-corner-small);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--shape-corner-extra-small);
   background: var(--md-surface-container-highest);
-  font: var(--font-weight-medium) var(--font-size-md)/1 var(--font-family);
+  font: var(--font-weight-medium) var(--font-size-xs)/1 var(--font-family);
 }
 /* Off: its name and glyph fade; the switch and menu keep full contrast. */
 .acp-agents-view__glyph_off,
@@ -172,7 +172,7 @@
 }
 .acp-agents-view__name {
   overflow: hidden;
-  font: 400 16px/24px var(--font-family);
+  font: 400 var(--font-size-lg)/20px var(--font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -191,7 +191,7 @@
 }
 .acp-agents-view__details {
   overflow: hidden;
-  font: 400 var(--font-size-md)/18px var(--font-family);
+  font: 400 var(--font-size-sm)/16px var(--font-family);
   color: var(--md-on-surface-variant);
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -229,8 +229,8 @@
 
 .acp-agents-view__note {
   margin: 0;
-  padding: var(--space-1) var(--space-2) var(--space-2);
-  font: 400 var(--font-size-md)/20px var(--font-family);
+  padding: 0 var(--space-2) var(--space-1);
+  font: 400 var(--font-size-sm)/16px var(--font-family);
   color: var(--md-on-surface-variant);
 }
 .acp-agents-view__empty {
