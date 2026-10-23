@@ -101,8 +101,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
   and the tab scrolls there and answers `acp-settings-revealed`; `AGENTS_TAB_ID`, the Agents tab
-  (see "Agents over ACP"), opened by `openAgents(reveal)` (`$agentsReveal`: its add form, or an
-  agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
+  (see "Agents over ACP"), opened by `openAgents(reveal)` (`$agentsReveal`: the registry's agents
+  to add, or an agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
   click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids.js`), one per
   terminal, see "Terminals"; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
@@ -171,7 +171,7 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
   base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
   `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
-  agent (the composer's picker offers Add ACP agent…, which opens the Agents tab with its add form,
+  agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
   and Manage agents…; a draft's send is refused with a notice).
   - **The Agents tab** (`<acp-agents-view>`, presentational; spec: `docs/specs/agents-tab.md`) renders
     `agents_view { projectPath, query, filter }` (`config/view.rs`) as is: the backend matches
@@ -180,19 +180,21 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     another field; with no query the default first, then by name), filters (`all` / `updates` /
     `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). `agentConfig`
     keeps `$agentsView` for `$agentsQuery` (in memory; the latest answer only), asked again on
-    `agents://changed`, a project switch and when the tab shows. Rows: installed agents (switch,
+    `agents://changed`, a project switch and when the tab shows. It lists only agents that run
+    Claude, Codex, Copilot or Gemini (`registryId` set; others in an agents.json still run, unlisted).
+    Rows: installed agents (switch,
     Update, menu: Edit, Set as default, Remove), the user's own agents the project lacks
     (`AgentRow` from `AgentList.userAgents`, Add to project: `agents_import_user`, whole entries
     or `agentIds`, trusted unless the project's MCP servers start with them), and the registry's
-    not installed (one-click Add; binary agents listed, not addable). `<acp-agent-form>` adds and
+    not installed (one-click Add, the only way to add one: no custom agents). `<acp-agent-form>`
     edits. `agentsList` stays for the composer, the trust dialog and session names.
   - **Writing agents.json:** the tab changes that one file (the user's with no project open),
     keeping its other content and key order (`serde_json` `preserve_order`) and refusing a file that
     doesn't parse; a launch is trusted at once only when it is exactly what the user chose there
     (that command and args, no `env`, no project `mcpServers`), else the trust dialog asks.
-    `agents_add` takes a registry agent (`known`, alias `registry`: its pinned launch, under its
-    id, `<id>-2`… when taken) with that launch or a custom command line, or any command (id from the
-    name). Edit is `agents_update`, Set as default `agents_set_default` (refused for an agent that's
+    `agents_add` takes only a supported registry agent (`known`, alias `registry`: its pinned
+    launch, under its id, `<id>-2`… when taken; no `command`), `agents_import_user` only the user's
+    agents that run one. Edit is `agents_update`, Set as default `agents_set_default` (refused for an agent that's
     off), Remove `agents_remove` with Undo on the snackbar (`agents_restore`, the entry back where
     it was, its switch too; `notify()` takes an `action` and a `timeout`). An invalid file keeps its
     last valid version and is reported as `file:line:col`.
@@ -209,8 +211,9 @@ review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor
     `<app data>/acp-registry.json` with its `ETag` and checked again when a day old (launch, an
     hourly look, Check now: `agents_registry_check`), one check at a time, 15 s; a failure keeps
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
-    `projectPath: null`. `npx` agents can be added (`AgentList.known`, pinned launches); `binary`
-    ones are listed only, `uvx` skipped. An installed agent is matched by what it runs
+    `projectPath: null`. Only Claude, Codex, Copilot and Gemini are read from it
+    (`registry::SUPPORTED`, each an `npx` launch; the rest are left out), and can be added
+    (`AgentList.known`, pinned launches). An installed agent is matched by what it runs
     (`match_launch`: `npx` running the entry's package, its first `-p` / `--package` value or
     first non-flag argument, with or without `@version`), not by id;
     `AgentSummary.version` is the version its args pin, else `agentInfo.version` from its last

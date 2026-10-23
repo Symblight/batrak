@@ -98,12 +98,6 @@
   color: var(--md-on-surface-variant);
 }
 
-.acp-agents-view__adding {
-  padding: var(--space-3) var(--space-4);
-  border-radius: var(--shape-corner-medium);
-  background: var(--md-surface-container-low);
-}
-
 .acp-agents-view__group {
   display: flex;
   flex-direction: column;

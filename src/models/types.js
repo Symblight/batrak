@@ -317,8 +317,7 @@
  * @property {string} name
  * @property {string} vendor
  * @property {string} description
- * @property {string | null} commandLine What Add writes; `null` for a binary agent.
- * @property {boolean} addable Binary agents can't be added yet.
+ * @property {string} commandLine What Add writes.
  * @property {[number, number][]} nameMatches
  */
 
@@ -343,7 +342,7 @@
  */
 
 /**
- * What the Agents tab is to show once open: the add form, or an agent's row.
+ * What the Agents tab is to show once open: the registry's agents to add, or an agent's row.
  * @typedef {Object} AgentsReveal
  * @property {boolean} [add]
  * @property {string} [agentId]

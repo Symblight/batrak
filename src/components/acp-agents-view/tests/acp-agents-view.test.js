@@ -36,8 +36,7 @@ const VIEW = {
   ],
   userAgents: [agent({ id: 'mine', name: 'Mine', scope: 'user' })],
   registry: [
-    { id: 'cline', name: 'Cline', vendor: 'Cline Bot Inc.', description: '', commandLine: 'npx -y cline@3.0.73 --acp', addable: true, nameMatches: [] },
-    { id: 'goose', name: 'goose', vendor: 'Block', description: '', commandLine: null, addable: false, nameMatches: [] },
+    { id: 'github-copilot-cli', name: 'Copilot', vendor: 'GitHub', description: '', commandLine: 'npx -y @github/copilot@1.0.101 --acp', nameMatches: [] },
   ],
   counts: { all: 3, updates: 2, off: 1 },
   defaultAgent: 'claude',
@@ -128,11 +127,9 @@ describe('acp-agents-view', () => {
     expect(text(/** @type {Element} */ (claude.querySelector('.acp-agents-view__details')))).to.equal('Project · 0.90.0 → 0.94.0 · Ready');
     expect(text(/** @type {Element} */ (row(root, 'codex').querySelector('.acp-agents-view__details')))).to.equal('Project · Off');
     expect(button(row(root, 'gem'), 'Pin latest (0.65.0)'), 'version unknown: pin it').to.be.ok;
-    expect(text(/** @type {Element} */ (row(root, 'cline').querySelector('.acp-agents-view__details')))).to.equal(
-      'Cline Bot Inc. · npx -y cline@3.0.73 --acp',
-    );
-    const goose = button(row(root, 'goose'), 'Add');
-    expect(goose.disabled && tooltipOf(root, goose)).to.equal("Binary agents aren't supported yet");
+    const copilot = row(root, 'github-copilot-cli');
+    expect(text(/** @type {Element} */ (copilot.querySelector('.acp-agents-view__details')))).to.equal('GitHub · npx -y @github/copilot@1.0.101 --acp');
+    expect(tooltipOf(root, button(copilot, 'Add'))).to.equal("Add Copilot, pinned to the registry's version");
     expect(tooltipOf(root, /** @type {Element} */ (claude.querySelector('md-switch')))).to.equal('Turn off: no new sessions, and its sessions stop');
     expect(tooltipOf(root, /** @type {Element} */ (row(root, 'codex').querySelector('md-switch')))).to.equal('Turn on');
     expect(tooltipOf(root, button(claude, 'Update'))).to.equal('Pin 0.94.0 in agents.json');
@@ -204,13 +201,13 @@ describe('acp-agents-view', () => {
     const { el, root } = await render();
     const added = heard(el, 'acp-agent-add');
     const imported = heard(el, 'acp-agents-import');
-    button(row(root, 'cline'), 'Add').click();
+    button(row(root, 'github-copilot-cli'), 'Add').click();
     await el.updateComplete;
-    expect(added).to.deep.equal([{ agent: { name: '', known: 'cline' } }]);
-    expect(button(row(root, 'cline'), 'Adding…').disabled).to.equal(true);
+    expect(added).to.deep.equal([{ agent: { name: '', known: 'github-copilot-cli' } }]);
+    expect(button(row(root, 'github-copilot-cli'), 'Adding…').disabled).to.equal(true);
     el.saveFinished('npx not found');
     await el.updateComplete;
-    expect(text(/** @type {Element} */ (row(root, 'cline').querySelector('.acp-agents-view__error')))).to.equal('npx not found');
+    expect(text(/** @type {Element} */ (row(root, 'github-copilot-cli').querySelector('.acp-agents-view__error')))).to.equal('npx not found');
 
     button(row(root, 'mine'), 'Add to project').click();
     button(root, 'Add all').click();
@@ -241,28 +238,22 @@ describe('acp-agents-view', () => {
     expect(root.querySelector('acp-agent-form')).to.equal(null);
   });
 
-  it('opens the add form from the header, and with the search as the name when nothing matched', async () => {
+  it('adds only from the registry: no custom agent, and says when nothing matched', async () => {
+    const { root } = await render();
+    expect(() => button(root, 'Add agent'), 'no add form').to.throw();
     const empty = { ...VIEW, installed: [], userAgents: [], registry: [] };
-    const { el, root } = await render({ view: empty, query: { query: 'Hermes', filter: 'all' } });
-    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__empty')))).to.contain('No agents match “Hermes”.');
-    button(root, 'Add a custom ACP agent').click();
-    await el.updateComplete;
-    const form = /** @type {HTMLElementTagNameMap['acp-agent-form']} */ (root.querySelector('acp-agent-form'));
-    expect(form.preset).to.deep.equal({ known: '', name: 'Hermes' });
-    form.dispatchEvent(new CustomEvent('acp-agent-form-close', { detail: null }));
-    await el.updateComplete;
-    button(root, 'Add agent').click();
-    await el.updateComplete;
-    expect(/** @type {HTMLElementTagNameMap['acp-agent-form']} */ (root.querySelector('acp-agent-form')).preset.name).to.equal('');
+    const { root: none } = await render({ view: empty, query: { query: 'Hermes', filter: 'all' } });
+    expect(text(/** @type {Element} */ (none.querySelector('.acp-agents-view__empty')))).to.equal('No agents match “Hermes”.');
+    expect(none.querySelector('md-button.acp-agents-view__empty-add'), 'no custom agent').to.equal(null);
   });
 
-  it('opens the add form or shows an agent when asked, and says when it has', async () => {
+  it('shows the registry or an agent when asked, and says when it has', async () => {
     const { el, root } = await render();
     const revealed = heard(el, 'acp-agents-revealed');
     const add = { add: true };
     el.reveal = add;
     await el.updateComplete;
-    expect(root.querySelector('acp-agent-form')).to.be.ok;
+    expect(root.querySelector('acp-agent-form'), 'no add form').to.equal(null);
     const show = { agentId: 'codex' };
     el.reveal = show;
     await el.updateComplete;

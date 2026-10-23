@@ -30,17 +30,21 @@ pub struct RegistryAgent {
     pub vendor: String,
     pub repository: Option<String>,
     pub website: Option<String>,
-    pub distribution: Distribution,
+    pub npx: Npx,
 }
 
+/// How it runs: `npx -y <package>@<version> <args>`.
 #[derive(Debug, Clone, PartialEq, Serialize)]
-#[serde(rename_all = "camelCase", tag = "kind")]
-pub enum Distribution {
-    /// `npx -y <package>@<version> <args>`.
-    Npx { package: String, version: String, args: Vec<String>, env: BTreeMap<String, String> },
-    /// Archives per platform; listed, not yet installable.
-    Binary,
+#[serde(rename_all = "camelCase")]
+pub struct Npx {
+    pub package: String,
+    pub version: String,
+    pub args: Vec<String>,
+    pub env: BTreeMap<String, String>,
 }
+
+/// The registry agents Brama offers; the registry's others are left out.
+pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "gemini"];
 
 /// A registry agent Settings offers to add, with its pinned `npx` launch.
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -55,10 +59,10 @@ pub struct KnownAgent {
 
 impl RegistryAgent {
     /// What `npx` runs it with, pinned to the registry's version.
-    pub fn npx_launch(&self) -> Option<KnownAgent> {
-        let Distribution::Npx { package, version, args, .. } = &self.distribution else { return None };
+    pub fn npx_launch(&self) -> KnownAgent {
+        let Npx { package, version, args, .. } = &self.npx;
         let args = ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect();
-        Some(KnownAgent { id: self.id.clone(), name: self.name.clone(), command: "npx".to_owned(), args })
+        KnownAgent { id: self.id.clone(), name: self.name.clone(), command: "npx".to_owned(), args }
     }
 }
 
@@ -70,8 +74,8 @@ pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
     }
 }
 
-/// The registry's agents: `npx` and `binary` ones; an agent of another kind (`uvx`) or that doesn't
-/// read is left out.
+/// The registry's agents Brama offers (`SUPPORTED`), each run with `npx`; the others, and one that
+/// doesn't read, are left out.
 pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     #[derive(Deserialize)]
     struct File {
@@ -93,11 +97,10 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     }
     #[derive(Deserialize)]
     struct Dist {
-        npx: Option<Npx>,
-        binary: Option<serde_json::Value>,
+        npx: Option<NpxDist>,
     }
     #[derive(Deserialize)]
-    struct Npx {
+    struct NpxDist {
         package: String,
         #[serde(default)]
         args: Vec<String>,
@@ -110,6 +113,9 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     }
     let mut agents = Vec::new();
     for value in file.agents {
+        if !value.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| SUPPORTED.contains(&id)) {
+            continue;
+        }
         let agent: Agent = match serde_json::from_value(value) {
             Ok(agent) => agent,
             Err(e) => {
@@ -117,18 +123,16 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
                 continue;
             }
         };
-        let distribution = match agent.distribution {
-            Dist { npx: Some(npx), .. } => {
-                let (package, version) = split_spec(&npx.package);
-                Distribution::Npx {
-                    package: package.to_owned(),
-                    version: version.unwrap_or(&agent.version).to_owned(),
-                    args: npx.args,
-                    env: npx.env,
-                }
-            }
-            Dist { binary: Some(_), .. } => Distribution::Binary,
-            _ => continue,
+        let Some(npx) = agent.distribution.npx else {
+            tracing::debug!(agent = %agent.id, "registry agent skipped: no npx launch");
+            continue;
+        };
+        let (package, version) = split_spec(&npx.package);
+        let npx = Npx {
+            package: package.to_owned(),
+            version: version.unwrap_or(&agent.version).to_owned(),
+            args: npx.args,
+            env: npx.env,
         };
         agents.push(RegistryAgent {
             id: agent.id,
@@ -138,7 +142,7 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
             vendor: agent.authors.join(", "),
             repository: agent.repository,
             website: agent.website,
-            distribution,
+            npx,
         });
     }
     Ok(agents)
@@ -180,7 +184,7 @@ pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[Stri
         return None;
     }
     let (package, version) = split_spec(package_arg(args)?.1);
-    let agent = agents.iter().find(|a| matches!(&a.distribution, Distribution::Npx { package: p, .. } if p == package))?;
+    let agent = agents.iter().find(|a| a.npx.package == package)?;
     let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
     Some(Matched { agent, pinned })
 }
@@ -202,7 +206,7 @@ pub struct AgentUpdate {
 /// Whether the registry's version of `matched` is newer than the one installed: the version its
 /// args pin, else `reported` (`agentInfo.version` from its last `initialize`).
 pub fn update_of(matched: &Matched<'_>, reported: Option<&str>) -> Option<AgentUpdate> {
-    let Distribution::Npx { version: latest, .. } = &matched.agent.distribution else { return None };
+    let latest = &matched.agent.npx.version;
     let newest = parse_version(latest)?;
     match matched.pinned.as_deref().or(reported) {
         Some(installed) => {
@@ -365,9 +369,9 @@ impl Registry {
         Arc::clone(&self.lock().agents)
     }
 
-    /// The registry agents Settings can add: those with an `npx` launch.
+    /// The registry agents the add form offers, with their pinned launches.
     pub fn known(&self) -> Vec<KnownAgent> {
-        self.agents().iter().filter_map(RegistryAgent::npx_launch).collect()
+        self.agents().iter().map(RegistryAgent::npx_launch).collect()
     }
 
     pub fn state(&self) -> RegistryState {
@@ -455,12 +459,17 @@ pub(crate) mod tests {
     use super::*;
     use std::collections::VecDeque;
 
-    /// A registry of three agents: two `npx`, one `binary`.
+    /// A registry of three supported agents, and others Brama leaves out: one it doesn't offer,
+    /// a `binary`, a `uvx` and a broken one.
     pub(crate) const FIXTURE: &str = r#"{"version":"1.0.0","agents":[
         {"id":"claude-acp","name":"Claude Agent","version":"0.94.0","description":"ACP wrapper for Anthropic's Claude",
          "authors":["Anthropic","Zed Industries"],"distribution":{"npx":{"package":"@agentclientprotocol/claude-agent-acp@0.94.0"}}},
         {"id":"gemini","name":"Gemini CLI","version":"0.65.0","authors":["Google"],
          "distribution":{"npx":{"package":"@google/gemini-cli@0.65.0","args":["--acp"]}}},
+        {"id":"github-copilot-cli","name":"Copilot","version":"1.0.101","authors":["GitHub"],
+         "distribution":{"npx":{"package":"@github/copilot@1.0.101","args":["--acp"]}}},
+        {"id":"cline","name":"Cline","version":"3.0.73","authors":["Cline Bot Inc."],
+         "distribution":{"npx":{"package":"cline@3.0.73","args":["--acp"]}}},
         {"id":"goose","name":"goose","version":"1.55.0","authors":["Block"],
          "distribution":{"binary":{"darwin-aarch64":{"archive":"https://x/goose.tar.gz","cmd":"./goose"}}}},
         {"id":"fast-agent","name":"fast-agent","version":"0.10.1","distribution":{"uvx":{"package":"fast-agent-acp"}}},
@@ -504,12 +513,12 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn parses_npx_and_binary_agents_and_skips_the_rest() {
+    fn parses_only_the_supported_agents() {
         let agents = parse(FIXTURE).unwrap();
-        assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "goose"]);
+        assert_eq!(agents.iter().map(|a| a.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"]);
         assert_eq!(
-            agents[0].distribution,
-            Distribution::Npx {
+            agents[0].npx,
+            Npx {
                 package: "@agentclientprotocol/claude-agent-acp".into(),
                 version: "0.94.0".into(),
                 args: vec![],
@@ -517,24 +526,25 @@ pub(crate) mod tests {
             }
         );
         assert_eq!(agents[0].vendor, "Anthropic, Zed Industries");
-        assert_eq!(agents[2].distribution, Distribution::Binary);
         assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
     }
 
     #[test]
     fn the_bundled_snapshot_parses() {
         let agents = parse(BUNDLED).unwrap();
-        let claude = agents.iter().find(|a| a.id == "claude-acp").expect("Claude in the snapshot");
-        assert!(matches!(&claude.distribution, Distribution::Npx { package, .. } if package == "@agentclientprotocol/claude-agent-acp"));
-        assert!(agents.iter().any(|a| a.distribution == Distribution::Binary));
+        let mut ids: Vec<_> = agents.iter().map(|a| a.id.as_str()).collect();
+        ids.sort_unstable();
+        assert_eq!(ids, ["claude-acp", "codex-acp", "gemini", "github-copilot-cli"], "every supported agent, nothing else");
+        let claude = agents.iter().find(|a| a.id == "claude-acp").unwrap();
+        assert_eq!(claude.npx.package, "@agentclientprotocol/claude-agent-acp");
         assert!(Registry::bundled().known().iter().all(|k| k.command == "npx"));
     }
 
     #[test]
     fn known_agents_are_pinned_to_the_registrys_version() {
         let agents = parse(FIXTURE).unwrap();
-        let known: Vec<_> = agents.iter().filter_map(RegistryAgent::npx_launch).collect();
-        assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini"], "no binary agent");
+        let known: Vec<_> = agents.iter().map(RegistryAgent::npx_launch).collect();
+        assert_eq!(known.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"]);
         assert_eq!(known[1].args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
     }
 
@@ -550,7 +560,7 @@ pub(crate) mod tests {
         assert_eq!(matched("npx", &["-y", "@google/gemini-cli@latest"]), Some(("gemini".into(), None)), "a tag pins nothing");
         assert_eq!(matched("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"]), None, "another package");
         assert_eq!(matched("gemini", &["--acp"]), None, "custom");
-        assert_eq!(matched("npx", &["-y", "goose"]), None, "not an npx agent");
+        assert_eq!(matched("npx", &["-y", "cline"]), None, "not a supported agent");
         assert_eq!(matched("npx", &["-y", "my-wrapper", "--agent", "@google/gemini-cli"]), None, "only the package npx runs");
         assert_eq!(matched("npx", &["--yes", "--", "@google/gemini-cli@0.60.0"]), Some(("gemini".into(), Some("0.60.0".into()))));
         assert_eq!(matched("npx", &["-p", "@google/gemini-cli@0.60.0", "gemini", "--acp"]), Some(("gemini".into(), Some("0.60.0".into()))));
@@ -583,7 +593,7 @@ pub(crate) mod tests {
         assert!(ids(&registry).contains(&"claude-acp".to_owned()), "the bundled snapshot meanwhile");
 
         assert!(registry.check().await, "changed");
-        assert_eq!(ids(&registry), ["claude-acp", "gemini", "goose"]);
+        assert_eq!(ids(&registry), ["claude-acp", "gemini", "github-copilot-cli"]);
         assert!(!registry.due());
         assert!(registry.state().checked_at.is_some());
 
@@ -591,7 +601,7 @@ pub(crate) mod tests {
         assert_eq!(*script.etags.lock().unwrap(), [None, Some("\"a\"".to_owned())], "asked with the ETag it got");
 
         let again = Registry::new(Some(cache), Script::new(vec![]));
-        assert_eq!(ids(&again), ["claude-acp", "gemini", "goose"], "kept in app data");
+        assert_eq!(ids(&again), ["claude-acp", "gemini", "github-copilot-cli"], "kept in app data");
         assert!(!again.due());
         std::fs::remove_dir_all(dir).unwrap();
     }
@@ -603,7 +613,7 @@ pub(crate) mod tests {
         registry.check().await;
         assert!(!registry.check().await);
         assert!(registry.state().offline);
-        assert_eq!(ids(&registry), ["claude-acp", "gemini", "goose"], "the last answer stays");
+        assert_eq!(ids(&registry), ["claude-acp", "gemini", "github-copilot-cli"], "the last answer stays");
         assert!(!registry.check().await, "a body that doesn't parse is kept out");
         assert_eq!(ids(&registry).len(), 3);
         registry.check().await;

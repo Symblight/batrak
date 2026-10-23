@@ -4,7 +4,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::registry::{AgentUpdate, Distribution, RegistryAgent, RegistryState};
+use super::registry::{AgentUpdate, RegistryAgent, RegistryState};
 use crate::acp::auth::SignInMethod;
 use super::{AgentList, AgentSummary, Scope};
 
@@ -66,10 +66,8 @@ pub struct RegistryRow {
     pub name: String,
     pub vendor: String,
     pub description: String,
-    /// What Add writes (`npx -y <package>@<version> …`); `None` for a binary agent.
-    pub command_line: Option<String>,
-    /// Binary agents can't be added yet.
-    pub addable: bool,
+    /// What Add writes (`npx -y <package>@<version> …`).
+    pub command_line: String,
     pub name_matches: Vec<[usize; 2]>,
 }
 
@@ -115,7 +113,10 @@ pub struct Inputs<'a> {
 }
 
 pub fn build(inputs: Inputs<'_>) -> AgentsView {
-    let Inputs { list, registry: entries, registry_state, reported, updating, sign_in, query, filter } = inputs;
+    let Inputs { mut list, registry: entries, registry_state, reported, updating, sign_in, query, filter } = inputs;
+    // Only agents that run a supported registry agent (`registry::SUPPORTED`) are the tab's.
+    list.agents.retain(|a| a.registry_id.is_some());
+    list.user_agents.retain(|a| a.registry_id.is_some());
     let query = Query::new(query);
     let counts = Counts {
         all: list.agents.len(),
@@ -170,14 +171,13 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
             .filter(|e| !installed_entries.contains(&e.id.as_str()))
             .filter_map(|e| {
                 let launch = e.npx_launch();
-                let command_line = launch.as_ref().map(|k| std::iter::once(k.command.as_str()).chain(k.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" "));
-                let rank = query.rank(&e.name, &[&e.id, &e.vendor, &e.description, command_line.as_deref().unwrap_or("")])?;
+                let command_line = std::iter::once(launch.command.as_str()).chain(launch.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ");
+                let rank = query.rank(&e.name, &[&e.id, &e.vendor, &e.description, &command_line])?;
                 let row = RegistryRow {
                     id: e.id.clone(),
                     name: e.name.clone(),
                     vendor: e.vendor.clone(),
                     description: e.description.clone(),
-                    addable: matches!(e.distribution, Distribution::Npx { .. }),
                     command_line,
                     name_matches: query.highlights(&e.name),
                 };
@@ -326,16 +326,23 @@ mod tests {
         claude.update = Some(AgentUpdate { to: "0.94.0".into(), pin: false });
         let mut codex = agent("codex", "Codex", "codex-acp", &[]);
         codex.enabled = false;
+        // Each runs a supported registry agent (the view only reads `registryId`), but `custom`.
+        let mut agents = vec![
+            claude,
+            codex,
+            agent("zed", "Zébulon Agent", "zbl", &["--acp"]),
+            agent("repo", "Repo", "./run", &["--model", "claude-opus"]),
+            agent("custom", "Custom", "custom-acp", &[]),
+        ];
+        let mut mine = agent("mine", "Mine", "mine", &[]);
+        for a in agents.iter_mut().skip(1).take(3).chain([&mut mine]) {
+            a.registry_id = Some(format!("{}-acp", a.id));
+        }
         AgentList {
-            agents: vec![
-                claude,
-                codex,
-                agent("zed", "Zébulon Agent", "zbl", &["--acp"]),
-                agent("repo", "Repo", "./run", &["--model", "claude-opus"]),
-            ],
+            agents,
             default_agent: Some("repo".into()),
             known: Vec::new(),
-            user_agents: vec![agent("mine", "Mine", "mine", &[])],
+            user_agents: vec![mine, agent("theirs", "Theirs", "theirs", &[])],
             errors: vec!["agents.json:3:4: oops".into()],
         }
     }
@@ -358,6 +365,14 @@ mod tests {
     }
 
     #[test]
+    fn only_agents_that_run_a_supported_registry_agent_are_listed() {
+        let all = view("", Filter::All);
+        assert!(all.installed.iter().all(|r| r.id != "custom"), "a custom command");
+        assert_eq!(all.user_agents.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["mine"]);
+        assert!(view("custom", Filter::All).installed.is_empty());
+    }
+
+    #[test]
     fn an_agent_that_asked_to_sign_in_says_so_unless_it_is_off() {
         let all = view("", Filter::All);
         let zed = all.installed.iter().find(|r| r.id == "zed").unwrap();
@@ -376,7 +391,7 @@ mod tests {
     #[test]
     fn without_a_query_the_default_leads_then_names() {
         let all = view("", Filter::All);
-        assert_eq!(names(&all), (vec!["Repo", "Claude Code", "Codex", "Zébulon Agent"], vec!["Gemini CLI", "goose"]), "Claude's entry is installed");
+        assert_eq!(names(&all), (vec!["Repo", "Claude Code", "Codex", "Zébulon Agent"], vec!["Copilot", "Gemini CLI"]), "Claude's entry is installed");
         assert_eq!(all.counts, Counts { all: 4, updates: 1, off: 1 });
         let repo = &all.installed[0];
         assert!(repo.is_default && repo.status == Status::Ready);
@@ -387,10 +402,7 @@ mod tests {
         assert_eq!(all.errors, ["agents.json:3:4: oops"]);
         assert!(all.registry_state.offline);
 
-        let gemini = &all.registry[0];
-        assert_eq!(gemini.command_line.as_deref(), Some("npx -y @google/gemini-cli@0.65.0 --acp"));
-        assert!(gemini.addable);
-        assert!(!all.registry[1].addable && all.registry[1].command_line.is_none(), "binary");
+        assert_eq!(all.registry[1].command_line, "npx -y @google/gemini-cli@0.65.0 --acp");
     }
 
     #[test]
@@ -411,15 +423,15 @@ mod tests {
     #[test]
     fn every_term_matches_some_field_and_ranks_by_the_name() {
         let table: [(&str, Vec<&str>, Vec<&str>); 9] = [
-            ("cl", vec!["Claude Code", "Repo"], vec!["Gemini CLI"]),
+            ("cl", vec!["Claude Code", "Repo"], vec!["Gemini CLI", "Copilot"]),
             // Name starts with it, a word starts with it, the command line has it.
-            ("co", vec!["Codex", "Claude Code"], vec![]),
+            ("co", vec!["Codex", "Claude Code"], vec!["Copilot"]),
             ("claude", vec!["Claude Code", "Repo"], vec![]),
             ("ZEBU", vec!["Zébulon Agent"], vec![]),
             ("zébu", vec!["Zébulon Agent"], vec![]),
             ("agent zeb", vec!["Zébulon Agent"], vec![]),
             ("google", vec![], vec!["Gemini CLI"]),
-            ("  block ", vec![], vec!["goose"]),
+            ("  github ", vec![], vec!["Copilot"]),
             ("claude nothing", vec![], vec![]),
         ];
         for (query, installed, registry) in table {

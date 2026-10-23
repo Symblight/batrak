@@ -627,7 +627,7 @@ impl AgentConfigs {
             list.user_agents = own.into_iter().filter(|a| !list.agents.iter().any(|p| p.id == a.id)).collect();
         }
         let entries = self.registry.agents();
-        list.known = entries.iter().filter_map(registry::RegistryAgent::npx_launch).collect();
+        list.known = entries.iter().map(registry::RegistryAgent::npx_launch).collect();
         let inner = self.lock();
         for agent in list.agents.iter_mut().chain(&mut list.user_agents) {
             let reported = inner.versions.get(&agent.id).map(String::as_str);
@@ -701,10 +701,16 @@ impl AgentConfigs {
         }
     }
 
-    /// Adds an agent to the open project's `.brama/agents.json`, trusting the launch the user just
-    /// chose, or without a project to the user's agents.json. Returns its id, unique in that file:
-    /// a known agent's own, else made from the name.
+    /// Adds a supported registry agent (`registry::SUPPORTED`), with the registry's pinned launch,
+    /// to the open project's `.brama/agents.json`, trusting it, or without a project to the user's
+    /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
+        if agent.known.is_none() {
+            return Err("only Claude, Codex, Copilot or Gemini can be added".to_owned());
+        }
+        if agent.command.is_some() {
+            return Err("an added agent runs the registry's launch; edit it to change that".to_owned());
+        }
         let chosen = resolve(agent, &self.registry.known())?;
         let file = self.file_of(project)?;
         let mut base = slug(&chosen.name);
@@ -772,10 +778,13 @@ impl AgentConfigs {
         };
     }
 
-    /// Copies the user's own agents the project lacks (by id), whole entries, into its
-    /// agents.json, and trusts them: the user wrote them. One that the project's MCP servers would
-    /// start with is left for the trust dialog. `ids`: only those. Returns the ids copied.
+    /// Copies the user's own agents the project lacks (by id) that run a supported registry agent,
+    /// whole entries, into its agents.json, and trusts them: the user wrote them. One that the
+    /// project's MCP servers would start with is left for the trust dialog. `ids`: only those.
+    /// Returns the ids copied.
     pub fn import_user_agents(&self, project: &Path, ids: Option<&[String]>) -> Result<Vec<String>, String> {
+        let supported: Vec<String> =
+            self.list(Some(project)).user_agents.into_iter().filter(|a| a.registry_id.is_some()).map(|a| a.id).collect();
         let user_file = self.user_file.clone().ok_or("this system has no config folder")?;
         let text = fs::read_to_string(&user_file).map_err(|e| format!("{}: {e}", user_file.display()))?;
         parse(&user_file, &text)?;
@@ -785,7 +794,7 @@ impl AgentConfigs {
         edit_file(&self.file_of(Some(project))?, |root| {
             let agents = agents_of(root)?;
             for (id, entry) in own {
-                if !agents.contains_key(&id) && ids.is_none_or(|ids| ids.contains(&id)) {
+                if !agents.contains_key(&id) && supported.contains(&id) && ids.is_none_or(|ids| ids.contains(&id)) {
                     agents.insert(id.clone(), entry);
                     copied.push(id);
                 }
@@ -818,8 +827,7 @@ impl AgentConfigs {
             .filter_map(|a| {
                 let to = a.update.as_ref()?.to.clone();
                 let matched = registry::match_launch(&entries, &a.command, &a.args)?;
-                let registry::Distribution::Npx { package, .. } = &matched.agent.distribution else { return None };
-                let package = package.clone();
+                let package = matched.agent.npx.package.clone();
                 Some((a, package, to))
             })
             .collect();
@@ -1427,22 +1435,17 @@ mod tests {
     fn add_agent_writes_the_users_file_and_keeps_what_it_had() {
         let base = temp_project("add");
         let user_file = base.join("config/brama/agents.json");
-        let configs = AgentConfigs::new(Some(user_file.clone()), None);
-        let agent = NewAgent {
-            name: "Gemini CLI".into(),
-            command: Some("gemini".into()),
-            args: vec!["--experimental-acp".into()],
-            ..Default::default()
-        };
-        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini-cli", "creates the file");
-        assert_eq!(configs.merged(None).agent("gemini-cli").unwrap().args, ["--experimental-acp"]);
+        let configs = with_fixture(Some(user_file.clone()), None);
+        let agent = NewAgent { known: Some("gemini".into()), ..Default::default() };
+        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini", "creates the file");
+        assert_eq!(configs.merged(None).agent("gemini").unwrap().args, ["-y", "@google/gemini-cli@0.65.0", "--acp"]);
 
         fs::write(
             &user_file,
-            "{\n  \"version\": 1,\n  \"defaultAgent\": \"gemini-cli\",\n  \"agents\": {\n    \"gemini-cli\": {\"command\": \"gemini\"}\n  },\n  \"mcpServers\": []\n}\n",
+            "{\n  \"version\": 1,\n  \"defaultAgent\": \"gemini\",\n  \"agents\": {\n    \"gemini\": {\"command\": \"gemini\"}\n  },\n  \"mcpServers\": []\n}\n",
         )
         .unwrap();
-        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini-cli-2", "ids stay unique");
+        assert_eq!(configs.add_agent(None, &agent).unwrap(), "gemini-2", "ids stay unique");
         let text = fs::read_to_string(&user_file).unwrap();
         let keys: Vec<_> = ["\"version\"", "\"defaultAgent\"", "\"agents\"", "\"mcpServers\""]
             .iter()
@@ -1450,17 +1453,13 @@ mod tests {
             .collect();
         assert!(keys.windows(2).all(|w| w[0] < w[1]), "keys keep their order:\n{text}");
         let merged = configs.merged(None);
-        assert_eq!(merged.agent("gemini-cli-2").unwrap().name, "Gemini CLI");
-        assert!(merged.agent("gemini-cli").is_some());
+        assert_eq!(merged.agent("gemini-2").unwrap().name, "Gemini CLI");
+        assert!(merged.agent("gemini").is_some());
 
         fs::write(&user_file, "{ \"version\": 1, oops").unwrap();
         assert!(configs.add_agent(None, &agent).unwrap_err().contains("agents.json"), "an invalid file is never overwritten");
         assert_eq!(fs::read_to_string(&user_file).unwrap(), "{ \"version\": 1, oops");
 
-        let blank = NewAgent { name: " ".into(), command: Some("x".into()), ..Default::default() };
-        assert!(configs.add_agent(None, &blank).is_err());
-        let no_command = NewAgent { name: "X".into(), command: Some(" ".into()), ..Default::default() };
-        assert!(configs.add_agent(None, &no_command).is_err());
         fs::remove_dir_all(base).unwrap();
     }
 
@@ -1496,14 +1495,17 @@ mod tests {
         .unwrap();
         let project_file = project.join(".brama/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"both":{"command":"project"}}}"#).unwrap();
-        let configs = AgentConfigs::new(Some(user_file.clone()), None);
+        let configs = with_fixture(Some(user_file.clone()), None);
         let offered = |project: Option<&Path>| configs.list(project).user_agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
 
         assert_eq!(offered(Some(&project)), ["mine"], "only those the project lacks");
         assert!(offered(None).is_empty(), "nothing to offer without a project");
 
         fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"mine","env":{"K":"${keychain:k}"}},"both":{"command":"user"},"other":{"command":"other"}}}"#).unwrap();
-        assert_eq!(configs.import_user_agents(&project, Some(&["other".to_owned()])).unwrap(), ["other"], "only the one asked for");
+        assert!(configs.import_user_agents(&project, None).unwrap().is_empty(), "custom commands aren't copied");
+        let gemini = r#""gemini":{"name":"Gemini","command":"npx","args":["-y","@google/gemini-cli","--acp"]}"#;
+        fs::write(&user_file, format!(r#"{{"version":1,"agents":{{{gemini},"mine":{{"name":"Mine","command":"npx","args":["@github/copilot","--acp"],"env":{{"K":"${{keychain:k}}"}}}},"both":{{"command":"user"}}}}}}"#)).unwrap();
+        assert_eq!(configs.import_user_agents(&project, Some(&["gemini".to_owned()])).unwrap(), ["gemini"], "only the one asked for");
         assert_eq!(configs.import_user_agents(&project, None).unwrap(), ["mine"]);
         let merged = configs.merged(Some(&project));
         let mine = merged.agent("mine").unwrap();
@@ -1636,7 +1638,7 @@ mod tests {
         let user_file = base.join("agents.json");
         let configs = with_fixture(Some(user_file.clone()), None);
         let listed = configs.list(None).known;
-        assert_eq!(listed.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini"], "the registry's npx agents");
+        assert_eq!(listed.iter().map(|k| k.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "gemini", "github-copilot-cli"], "the supported registry agents");
         let gemini = &listed[1];
 
         let pick = NewAgent { known: Some("gemini".into()), ..Default::default() };
@@ -1646,21 +1648,15 @@ mod tests {
         assert_eq!((added.name.as_str(), added.command.as_str()), ("Gemini CLI", "npx"));
         assert_eq!(added.args, gemini.args);
 
-        let custom = NewAgent {
-            name: "Gemini Pro".into(),
-            known: Some("gemini".into()),
-            command: Some("gemini".into()),
-            args: vec!["--acp".into(), "--model".into(), "gemini-3.1-pro".into()],
-        };
-        assert_eq!(configs.add_agent(None, &custom).unwrap(), "gemini-pro", "the id is taken: from the name");
-        let merged = configs.merged(None);
-        let added = merged.agent("gemini-pro").unwrap();
-        assert_eq!(added.command, "gemini");
-        assert_eq!(added.args, ["--acp", "--model", "gemini-3.1-pro"]);
+        let named = NewAgent { name: "Gemini Pro".into(), known: Some("gemini".into()), ..Default::default() };
+        assert_eq!(configs.add_agent(None, &named).unwrap(), "gemini-pro", "the id is taken: from the name");
 
+        let custom = NewAgent { known: Some("gemini".into()), command: Some("gemini".into()), ..Default::default() };
+        assert!(configs.add_agent(None, &custom).unwrap_err().contains("registry's launch"), "no custom command");
+        let any = NewAgent { name: "X".into(), command: Some("x".into()), ..Default::default() };
+        assert!(configs.add_agent(None, &any).unwrap_err().contains("Claude, Codex, Copilot or Gemini"), "no custom agent");
         let unknown = NewAgent { known: Some("nope".into()), ..Default::default() };
         assert!(configs.add_agent(None, &unknown).unwrap_err().contains("nope"));
-        assert!(configs.add_agent(None, &NewAgent::default()).is_err(), "neither known nor a command");
         fs::remove_dir_all(base).unwrap();
     }
 
@@ -1900,9 +1896,9 @@ mod tests {
         configs.set_enabled(None, "mine", false).unwrap();
         let v = configs.view(None, "", view::Filter::All, view::RowState { updating: &|id| id == "mine", sign_in: &|_| None });
         let rows: Vec<_> = v.installed.iter().map(|r| (r.id.as_str(), r.status, r.updating)).collect();
-        assert_eq!(rows, [("x", view::Status::Ready, false), ("mine", view::Status::Off, true)], "default first");
-        assert_eq!(v.registry.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "goose"], "Gemini is installed as Mine");
-        assert_eq!(v.counts, view::Counts { all: 2, updates: 1, off: 1 });
+        assert_eq!(rows, [("mine", view::Status::Off, true)], "x runs a custom command: not listed");
+        assert_eq!(v.registry.iter().map(|r| r.id.as_str()).collect::<Vec<_>>(), ["claude-acp", "github-copilot-cli"], "Gemini is installed as Mine");
+        assert_eq!(v.counts, view::Counts { all: 1, updates: 1, off: 1 });
         fs::remove_dir_all(base).unwrap();
     }
 

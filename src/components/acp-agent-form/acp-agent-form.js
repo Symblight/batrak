@@ -18,19 +18,14 @@ import styles from './acp-agent-form.css?inline';
  */
 
 /**
- * What a new agent's form starts with: a registry agent (`''`: any command) and a name.
- * @typedef {{ known: string, name: string }} FormPreset
- */
-
-/**
- * The form: a registry agent (`known`, `''` for another) and, when `custom`, the command line typed.
+ * The form: a registry agent (`known`, `''` when it runs another launch) and, when `custom`, the
+ * command line typed.
  * @typedef {{ known: string, name: string, custom: boolean, command: string }} Draft
  */
 
 /**
  * @tag acp-agent-form
- * @summary The form to add an ACP agent (a registry agent or any command) or edit one.
- * @fires acp-agent-add `{ agent }` A `NewAgent`; the container answers with `saveFinished()`.
+ * @summary The form to edit an agent: its name, the registry agent it runs, or its own command line.
  * @fires acp-agent-update `{ agentId, agent }` A `NewAgent`; the container answers with `saveFinished()`.
  * @fires acp-agent-remove `{ agentId }` From the edit form.
  * @fires acp-agent-form-close `null` Cancelled, or saved; not composed, for the element that shows it.
@@ -39,7 +34,6 @@ export class AcpAgentForm extends LitElement {
   static properties = {
     known: { attribute: false },
     agent: { attribute: false },
-    preset: { attribute: false },
     saving: { state: true },
     error: { state: true },
     draft: { state: true },
@@ -51,11 +45,9 @@ export class AcpAgentForm extends LitElement {
     super();
     /** @type {readonly KnownAgent[]} The registry agents to pick from. */
     this.known = [];
-    /** @type {EditedAgent | null} The agent edited; `null`: a new one. */
+    /** @type {EditedAgent | null} The agent edited; `null` shows nothing. */
     this.agent = null;
-    /** @type {FormPreset} A new agent's start. */
-    this.preset = { known: '', name: '' };
-    /** An `acp-agent-add` / `-update` waits for `saveFinished()`. */
+    /** An `acp-agent-update` waits for `saveFinished()`. */
     this.saving = false;
     /** @type {string | null} Why the last save failed. */
     this.error = null;
@@ -65,17 +57,17 @@ export class AcpAgentForm extends LitElement {
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    if (changed.has('agent') || changed.has('preset')) this.draft = this.#start();
+    if (changed.has('agent')) this.draft = this.#start();
   }
 
   firstUpdated() {
     /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-agent-form__select'))?.focus();
   }
 
-  /** @returns {Draft} The edited agent as it is (its registry agent while it runs that launch), else the preset. */
+  /** @returns {Draft} The edited agent as it is (its registry agent while it runs that launch). */
   #start() {
     const agent = this.agent;
-    if (!agent) return { ...this.#pick(this.preset.known), ...(this.preset.name ? { name: this.preset.name } : {}) };
+    if (!agent) return { known: '', name: '', custom: true, command: '' };
     const line = commandLine(agent.command, [...agent.args]);
     const same = this.known.find((k) => commandLine(k.command, k.args) === line);
     const named = same ?? this.known.find((k) => k.id === agent.id);
@@ -88,19 +80,7 @@ export class AcpAgentForm extends LitElement {
   }
 
   /**
-   * The form with a registry agent picked (`''`: another agent, any command), its own command shown.
-   * @param {string} id
-   * @returns {Draft}
-   */
-  #pick(id) {
-    const known = this.#knownAgent(id);
-    return known
-      ? { known: known.id, name: known.name, custom: false, command: commandLine(known.command, known.args) }
-      : { known: '', name: '', custom: true, command: '' };
-  }
-
-  /**
-   * The container's answer to `acp-agent-add` / `-update`: `null` closes the form, a message stays on it.
+   * The container's answer to `acp-agent-update`: `null` closes the form, a message stays on it.
    * @param {string | null} error
    */
   saveFinished(error) {
@@ -120,15 +100,16 @@ export class AcpAgentForm extends LitElement {
 
   #save = () => {
     if (!this.#canSave) return;
+    const agentId = this.agent?.id;
     const { known, name, custom } = this.draft;
+    if (agentId === undefined) return;
     this.saving = true;
     this.error = null;
     /** @type {NewAgent} */
     const agent = { name: name.trim() };
     if (known) agent.known = known;
     if (custom) Object.assign(agent, parseCommandLine(this.draft.command));
-    if (this.agent) this.#emit('acp-agent-update', { agentId: this.agent.id, agent });
-    else this.#emit('acp-agent-add', { agent });
+    this.#emit('acp-agent-update', { agentId, agent });
   };
 
   /**
@@ -148,9 +129,9 @@ export class AcpAgentForm extends LitElement {
   }
 
   #onPick = (/** @type {Event} */ e) => {
-    const picked = this.#pick(/** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value ?? '');
-    // An edit keeps the agent's own name.
-    this.draft = this.agent ? { ...picked, name: this.draft.name } : picked;
+    const known = this.#knownAgent(/** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value ?? '');
+    // The agent keeps its own name.
+    if (known) this.draft = { ...this.draft, known: known.id, custom: false, command: commandLine(known.command, known.args) };
   };
 
   /** Checked: the command is the user's, starting from the registry's; unchecked: the registry's again. */
@@ -175,11 +156,11 @@ export class AcpAgentForm extends LitElement {
   render() {
     const { known, name, custom, command } = this.draft;
     const agent = this.agent;
+    if (!agent) return nothing;
     return html`<div class="acp-agent-form__form" @keydown=${this.#onKeydown}>
-      <span class="acp-agent-form__subtitle">${agent ? `Edit ${agent.name}` : 'New ACP agent'}</span>
+      <span class="acp-agent-form__subtitle">Edit ${agent.name}</span>
       <md-select class="acp-agent-form__input acp-agent-form__select" variant="outlined" label="Agent" .value=${known} @change=${this.#onPick}>
         ${this.known.map((k) => html`<md-option value=${k.id}>${k.name}</md-option>`)}
-        <md-option value="">Other agent</md-option>
       </md-select>
       <md-text-field
         class="acp-agent-form__input"
@@ -210,19 +191,14 @@ export class AcpAgentForm extends LitElement {
         <md-checkbox class="acp-agent-form__custom" ?disabled=${!known} .checked=${custom} @change=${this.#onCustom}></md-checkbox>
         Use custom command
       </label>
-      ${agent
-        ? nothing
-        : html`<span class="acp-agent-form__hint">Saved to the project's .brama/agents.json (yours, with no project open).</span>`}
       ${this.error ? html`<span class="acp-agent-form__error" role="alert">${this.error}</span>` : nothing}
       <div class="acp-agent-form__actions">
-        ${agent
-          ? html`<md-button
-              class="acp-agent-form__button acp-agent-form__button_danger"
-              variant="text"
-              @click=${() => this.#emit('acp-agent-remove', { agentId: agent.id })}
-              >Remove</md-button
-            >`
-          : nothing}
+        <md-button
+          class="acp-agent-form__button acp-agent-form__button_danger"
+          variant="text"
+          @click=${() => this.#emit('acp-agent-remove', { agentId: agent.id })}
+          >Remove</md-button
+        >
         <span class="acp-agent-form__spacer"></span>
         <md-button class="acp-agent-form__button" variant="text" @click=${this.#close}>Cancel</md-button>
         <md-button class="acp-agent-form__button" variant="filled" ?disabled=${!this.#canSave} @click=${this.#save}>Save</md-button>

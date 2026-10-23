@@ -10,7 +10,6 @@ import '@symblight/wc-material/menu';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/switch';
 import '@symblight/wc-material/tooltip';
-import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import cloudOffIcon from '@material-design-icons/svg/outlined/cloud_off.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
@@ -32,7 +31,6 @@ import styles from './acp-agents-view.css?inline';
 /** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../models/types.js').KnownAgent} KnownAgent */
 /** @typedef {import('../../models/types.js').SignInRun} SignInRun */
-/** @typedef {import('../acp-agent-form/acp-agent-form.js').FormPreset} FormPreset */
 
 /** @type {Record<AgentRow['status'], string>} */
 const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off', signIn: 'Needs sign-in' };
@@ -59,7 +57,7 @@ const CHIPS = [
 
 /**
  * @tag acp-agents-view
- * @summary The Agents tab: installed agents (switch, Update, menu), the user's own agents, the ACP registry's, searched and filtered by the backend.
+ * @summary The Agents tab: the installed agents (switch, Update, menu), the user's own agents and the ACP registry's that Brama supports, searched and filtered by the backend.
  * @fires acp-agents-query `{ query, filter }`
  * @fires acp-agent-enable `{ agentId, enabled }`
  * @fires acp-agent-version-update `{ agentId }`
@@ -82,7 +80,6 @@ export class AcpAgentsView extends LitElement {
     pending: { attribute: false },
     signIns: { attribute: false },
     reveal: { attribute: false },
-    adding: { state: true },
     editing: { state: true },
     addingFromRegistry: { state: true },
     registryError: { state: true },
@@ -118,8 +115,6 @@ export class AcpAgentsView extends LitElement {
     this.signIns = {};
     /** @type {AgentsReveal | null} What to show; `acp-agents-revealed` once shown. */
     this.reveal = null;
-    /** @type {FormPreset | null} The add form, open at the top of the list. */
-    this.adding = null;
     /** @type {string | null} The agent whose edit form is open, in place of its row. */
     this.editing = null;
     /** @type {string | null} The registry agent being added. */
@@ -147,8 +142,6 @@ export class AcpAgentsView extends LitElement {
     const reveal = this.reveal;
     if (!reveal || !(changed.has('reveal') || changed.has('view'))) return;
     if (reveal.add) {
-      this.adding = { known: '', name: '' };
-      this.editing = null;
       this.#shown = reveal;
     } else if (reveal.agentId && this.view?.installed.some((a) => a.id === reveal.agentId)) {
       // Not listed yet, the view's next answer may list it.
@@ -162,6 +155,7 @@ export class AcpAgentsView extends LitElement {
     if (!shown) return;
     this.#shown = null;
     if (shown.agentId) this.renderRoot.querySelector(`[data-agent-id="${CSS.escape(shown.agentId)}"]`)?.scrollIntoView({ block: 'center' });
+    if (shown.add) this.renderRoot.querySelector('.acp-agents-view__registry')?.scrollIntoView({ block: 'start' });
     this.#emit('acp-agents-revealed', { reveal: shown });
   }
 
@@ -213,7 +207,6 @@ export class AcpAgentsView extends LitElement {
    */
   #onMenuSelect(value, agent) {
     if (value === 'edit') {
-      this.adding = null;
       this.editing = agent.id;
     } else if (value === 'default') this.#emit('acp-agent-default', { agentId: agent.id });
     else if (value === 'remove') this.#emit('acp-agent-remove', { agentId: agent.id });
@@ -243,22 +236,12 @@ export class AcpAgentsView extends LitElement {
     return parts;
   }
 
-  /** @param {FormPreset} preset */
-  #openAdd(preset) {
-    this.editing = null;
-    this.adding = preset;
-  }
-
   #renderHeader() {
     return html`<header class="acp-agents-view__header">
       <h2 class="acp-agents-view__title-text">Agents</h2>
       <md-button class="acp-agents-view__button" variant="text" @click=${() => this.#emit('acp-agents-file-open', null)}>
         <md-icon slot="icon" class="acp-agents-view__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
         Edit agents.json
-      </md-button>
-      <md-button class="acp-agents-view__button" variant="tonal" @click=${() => this.#openAdd({ known: '', name: '' })}>
-        <md-icon slot="icon" class="acp-agents-view__icon">${unsafeSVG(addIcon)}</md-icon>
-        Add agent
       </md-button>
     </header>`;
   }
@@ -468,7 +451,7 @@ export class AcpAgentsView extends LitElement {
   #renderRegistryAgent(entry) {
     const adding = this.addingFromRegistry === entry.id;
     const error = this.registryError?.id === entry.id ? this.registryError.message : null;
-    const details = [entry.vendor, entry.commandLine ?? 'Binary'].filter(Boolean).join(' · ');
+    const details = [entry.vendor, entry.commandLine].filter(Boolean).join(' · ');
     return html`<li class="acp-agents-view__row" data-agent-id=${entry.id}>
       <span class="acp-agents-view__glyph" aria-hidden="true">${glyphOf(entry.name)}</span>
       <div id=${tipId('registry', entry.id)} class="acp-agents-view__text">
@@ -482,19 +465,19 @@ export class AcpAgentsView extends LitElement {
         id=${tipId('add', entry.id)}
         class="acp-agents-view__button"
         variant="text"
-        ?disabled=${!entry.addable || this.addingFromRegistry !== null}
+        ?disabled=${this.addingFromRegistry !== null}
         @click=${() => this.#addFromRegistry(entry)}
         >${adding ? 'Adding…' : 'Add'}</md-button
       >
       ${entry.description ? tooltip(tipId('registry', entry.id), entry.description) : nothing}
-      ${tooltip(tipId('add', entry.id), entry.addable ? `Add ${entry.name}, pinned to the registry's version` : "Binary agents aren't supported yet")}
+      ${tooltip(tipId('add', entry.id), `Add ${entry.name}, pinned to the registry's version`)}
     </li>`;
   }
 
   /** @param {AgentsView} view */
   #renderRegistry(view) {
     if (!view.registry.length) return nothing;
-    return html`<section class="acp-agents-view__group" aria-label="From the ACP registry">
+    return html`<section class="acp-agents-view__group acp-agents-view__registry" aria-label="From the ACP registry">
       <div class="acp-agents-view__group-header">
         <h3 class="acp-agents-view__group-title">From the ACP registry</h3>
       </div>
@@ -508,9 +491,6 @@ export class AcpAgentsView extends LitElement {
     if (!query || view.installed.length || view.userAgents.length || view.registry.length) return nothing;
     return html`<div class="acp-agents-view__empty">
       <p class="acp-agents-view__note">No agents match “${query}”.</p>
-      <md-button class="acp-agents-view__button" variant="text" @click=${() => this.#openAdd({ known: '', name: query })}
-        >Add a custom ACP agent</md-button
-      >
     </div>`;
   }
 
@@ -591,11 +571,6 @@ export class AcpAgentsView extends LitElement {
       ${this.#renderHeader()}
       ${view?.errors.map((error) => html`<p class="acp-agents-view__problem">${error}</p>`)} ${this.#renderSearch()}
       ${view ? this.#renderChips(view) : nothing}
-      ${this.adding
-        ? html`<div class="acp-agents-view__adding">
-            <acp-agent-form .known=${this.known} .preset=${this.adding} @acp-agent-form-close=${() => (this.adding = null)}></acp-agent-form>
-          </div>`
-        : nothing}
       ${view
         ? html`${this.#renderEmpty(view)} ${this.#renderInstalled(view)} ${this.#renderUserAgents(view)} ${this.#renderRegistry(view)}
           ${this.#renderFooter(view)}`
