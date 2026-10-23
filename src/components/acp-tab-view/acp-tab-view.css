@@ -11,8 +11,15 @@
 /* The strip scrolls instead of md-tabs, so wheel handling and scrollIntoView have a scroller we own.
    Flipped vertically (and the tabs back) so its very thin scrollbar sits on top; the flipped padding
    is the gap above the tabs. `scrollbar-width` and `scrollbar-color` must stay `auto`, or WebKit ignores the pseudo-elements. */
-.acp-tab-view__tab-strip {
+.acp-tab-view__tab-bar {
   flex: none;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.acp-tab-view__tab-strip {
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 0 var(--space-2) var(--space-0-5);
   overflow-x: auto;
   overflow-y: hidden;
@@ -197,4 +204,21 @@
 }
 .acp-tab-view__menu-item_ignored {
   --md-menu-item-label-text-color: var(--md-on-surface-variant);
+}
+/* Show Hidden Tabs: outside the scroller, so never faded or scrolled away. */
+.acp-tab-view__overflow {
+  flex: none;
+  margin-inline-end: var(--space-1);
+  --md-icon-button-font-size: var(--icon-size-md);
+}
+.acp-tab-view__overflow-icon {
+  font-size: var(--icon-size-md);
+}
+.acp-tab-view__overflow-menu {
+  --md-menu-min-width: 12rem;
+  --md-menu-max-height: 24rem;
+  --md-menu-shape: var(--shape-corner-small);
+}
+.acp-tab-view__overflow-title_deleted {
+  text-decoration: line-through;
 }
