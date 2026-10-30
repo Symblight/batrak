@@ -1,0 +1,39 @@
+name: Setup
+description: pnpm, Node and the frontend dependencies (the @symblight packages come from a private repo)
+
+inputs:
+  deps-token:
+    description: A token with read access to Symblight/rich-components
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 10
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: lts/*
+        cache: pnpm
+
+    # pnpm clones the git dependencies over every URL form the lockfile may use.
+    - name: Authenticate git dependencies
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.deps-token }}
+      run: |
+        if [ -z "$TOKEN" ]; then
+          echo "::error::The DEPS_TOKEN secret is not set (needed to fetch Symblight/rich-components)"
+          exit 1
+        fi
+        base="https://x-access-token:${TOKEN}@github.com/"
+        git config --global url."$base".insteadOf "https://github.com/"
+        git config --global --add url."$base".insteadOf "https://git@github.com/"
+        git config --global --add url."$base".insteadOf "ssh://git@github.com/"
+        git config --global --add url."$base".insteadOf "git@github.com:"
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
