@@ -7,7 +7,7 @@
       "command": "npx",
       "args": [
         "-y",
-        "@github/copilot@1.0.103",
+        "@github/copilot@1.0.105",
         "--acp"
       ]
     },
