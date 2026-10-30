@@ -1,0 +1,150 @@
+---
+paths:
+  - "src-tauri/src/session/**"
+  - "src-tauri/src/acp/**"
+  - "src-tauri/src/commands/sessions.rs"
+  - "src/services/{session-controller,session-root-controller,acp-adapter}.js"
+  - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}.js"
+  - "src/components/acp-{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker}/**"
+  - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
+  - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default}.md"
+---
+
+# Sessions over ACP
+
+**Sessions:** `stores/sessions.js` holds `$sessions` (listed), `$draftSessions` (id → project id: a
+"New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
+conversation id; `$activeSession` is `null` for a draft. `sessionController` keeps the active session in
+the opened project (`showProject()`: the project's last shown session (`brama:sessions:last:<project path>`, per window, so it
+survives a relaunch), its newest, or a new draft),
+`create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
+agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
+(`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
+(messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
+(`src/controllers/chat-session/`, on `<acp-agent-column>`, reaching the chat through `<acp-chat>`'s
+`chat`): `activeConversationId`, the draft's first send (put back into
+the composer when the backend refuses the session), and each session's unsent composer text and files.
+Statuses come from the backend's session events. A draft shows only the composer, centered; the message
+list appears with the first message. Replies come over ACP (see below and `agent-config.md`); messages live only
+in the chat element and the agent, which replays them (`session/load`) when it starts again.
+
+- **Sessions** (`src-tauri/src/session/`; `runtime.rs` holds `Sessions` and the lifecycle calls,
+  `runtime/` one module per concern, each adding to `Sessions` / `Inner`: `api`, `state`, `start`,
+  `turn`, `sign_in`, `agents`, `host`, `worktree`, `sync`, `slots`): the agents own the sessions (spec:
+  `docs/specs/session-sync.md`). `Sessions::sync` (`session/runtime/sync.rs`, `sessions_sync` →
+  `sessions://synced` to every window) asks each agent of a project that's on, trusted and not
+  waiting for a sign-in for its sessions there (`acp::Catalog`: `initialize` + `session/list` of
+  the project and its worktree folders, scratch process in `<app data>/probe`, two at a time, 15 s
+  each; one that listed is kept up for the next sync, stopped after 90 s unused) and makes them the list (`SyncReport`: `listed` / `unsupported` / `off` / `untrusted` /
+  `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has. A
+  session first seen in a list gets the id `<agent id>~<acp id>`. `sessions.json` in app data
+  stores the list as last seen (no messages, all `stopped` after a restart) so it shows at once; a
+  sync runs at launch, when a project is shown (5 min stale), when a session is clicked (its agent,
+  every 30 s at most), for agents that didn't list once `$agentList` changes, on Resync
+  (`<acp-session-sync>` in the session list), and every 20 s for the shown project's listing agents
+  (quiet, window visible). `Session.activeElsewhereUntil`: its agent saw activity that wasn't
+  Brama's, plus 2 min; `isActiveElsewhere(session, $now)` (`stores/clock.js`, 10 s ticks) shows it
+  with the working spinner while it doesn't run here. Showing a session waits for its agent's
+  sync before resuming, and doesn't resume one active elsewhere (the banner's Resume does). The agent starts on the first message, or when its session is
+  shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
+  has its worktree's branch). Any number of `local` sessions of a project run; their turns share
+  the checkout through a turn slot (`session/runtime/slots.rs`, spec:
+  `docs/specs/parallel-sessions.md`): a turn takes it after `ensure_started` and holds it until it
+  returns, a prompt sent meanwhile is `queued` (a `queued { holder }` event; saved as `idle`)
+  and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
+  agents.json drop it from the queue (cancelled, never reaching the agent). Worktree sessions
+  never queue, and neither do local ones with `.brama/workspace.json` `"localTurns":
+  "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
+  locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
+  are its `touched`, and a watcher batch of the project (`Sessions::note_changes`, from
+  `Workspaces::open`'s callback; none for a project whose root isn't open) naming one that two
+  turns touched, running or ended less than `overlap_grace` (1 s) ago, sends each running one an
+  `overlap` (once per file per turn; a banner notice until the turn ends, over an `info` /
+  `outdated` one that comes back then). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
+  `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
+  builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
+  branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`
+  (again from the branch if the folder was deleted; Stop mid-checkout, which git can't be
+  interrupted in, sets `prepare_cancel` and `prepare` undoes it); its cwd is the project's folder in it. No
+  repository, no commit or an unknown base refuses the create. Every agent path goes through
+  `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
+  `HOOK(git)` comments in `try_turn` (`session/runtime/turn.rs`) mark the checkpoint points. `Sessions::remove` (session row
+  menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or
+  keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
+  (its log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
+  uncommitted work onto its branch (`archive` → `git::apply::snapshot_commit`: scratch index, no
+  hooks, CAS `update-ref`, Brama's identity when git has none), removes the worktree, and deletes
+  the branch only when it has no commits past the base. A detached worktree (Check Out Branch)
+  with uncommitted work is kept (a warning). At launch `Sessions::tidy_worktrees` (background)
+  prunes worktree metadata and removes app-data worktrees no session owns, unless dirty (a
+  warning); branches stay.
+- **ACP host** (`src-tauri/src/acp/`): the only module using `agent-client-protocol` (pinned). One
+  process per session in its own process group (stopped as a group; `process::stop_all` on app
+  exit), stderr → `<app data>/sessions/<id>/agent.log`. Dispatch-loop callbacks never wait:
+  permission responders are parked until the user answers. Tests run `acp/fake_agent.rs`
+  in-process; `real_claude_agent_end_to_end` (ignored) runs the real agent.
+- **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
+  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/acp-adapter.js`), which
+  maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
+  or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
+  notices live in `stores/session-runtime.js`, shown by `<acp-session-banner>` (a queued
+  turn's names the session it waits for, with Show session, and says when that one waits for
+  your answer; the run-target picker's Local says how many local sessions share the checkout,
+  `$localShared`); `$agentList`
+  (`services/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
+  `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
+  width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in
+  while their row is busy (`chx-message-row[aria-busy='true']` in `shadow.css`, CSS only: history and
+  rows scrolled back don't replay; opacity and transform only, so row heights hold). A thought is `<acp-part-thinking>`: ACP never
+  ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live
+  one timed in `data` (`startedAt`, `endedAt`); the last part of a cancelled reply shows as stopped.
+  It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
+  `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
+  (`models/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
+  and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
+  `acp-file-open` (`<acp-app>` opens the tab and selects the file in the tree, expanding its folders);
+  a folder's (a folder chip, or a ref the project lists as a folder, like `@.brama`) fires
+  `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
+- **Session folders:** `Session.folder` is where the agent works (the project, or the project's
+  folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
+  (`folderOf()`, `$activeFolder`). A worktree session's files open as tabs of its project
+  (`$worktrees`; `read_file` reads its folder through `Sessions::contains`), marked with a branch
+  icon, no diff gutter, re-read when its turn ends; its folder refs
+  reveal the project's same folder. While a worktree session is active, the Files tree lists its
+  folder under a root row named after the worktree (`$treeRoot`, `stores/session-root.js`): the
+  session root (`open_session_root`, its own scan and watcher, at most one per window) that
+  `sessionRootController` keeps open; Search, Changes and Quick Open stay on the project
+  (spec: `docs/specs/worktree-default.md`). A prompt path that is relative is the session's own copy; an
+  absolute one inside the project is the user's file there (a selection quotes the project's text).
+  A session's own Changes tab (`view:session-changes:<id>`, `models/tab-ids.js`, opened by
+  `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no
+  longer offers it, so nothing in the UI opens it now): `SessionChangesController`
+  (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,
+  `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
+  each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
+  `base` shows them without commit picks, with Apply locally and Check out branch (through
+  `sessionController`).
+- **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
+  `config_option_update` and every `session/set_config_option` answer, reach the page as
+  `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
+  through `session/set_mode`). `applyAgentOptions()` (`stores/composer.js`) replaces the session's
+  options and caches them per agent (`brama:agents:config-options`, keeping the agent's defaults
+  as first learned), so a new session shows the real models before it starts. A new session starts
+  with the user's last picks for its agent (`brama:agents:last-picks`; never a permission mode,
+  category `mode`); a listed session without a composer this launch (after a reload) gets one
+  from its record: its agent, `config`, run target, started. An agent with nothing cached is probed once per launch
+  (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
+  `session/new`, no prompt, stopped). A pick goes through `sessionController.setConfigOption()`: shown at once,
+  sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session
+  keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
+  every answer and update): a new start of its agent is set to them (`apply_config`, inside the
+  start Stop aborts, each answer bounded by `initialize_timeout`) before anyone gets the connection, so an agent that forgets its model on restart or `session/load` doesn't drop it.
+- **History**: Brama stores no messages. A session's conversation is its agent's replay
+  (`session/load`, when it's shown), shown once per launch (`acp-adapter.js` `loaded`: a later load
+  after an idle stop adds nothing); an agent with only `session/resume` continues it without
+  history (the banner says so). Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
+  `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`
+  (`stores/context-usage.js`, `brama:sessions:context-usage:<session id>`, one item per session),
+  so a session shows its last report after a reload or restart (no agent reports on
+  `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
+  ring until there is one.
