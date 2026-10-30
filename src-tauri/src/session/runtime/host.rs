@@ -29,7 +29,7 @@ impl SessionHost {
     /// user named the session; saved with the next status change or turn end, like config options.
     fn on_agent_title(&self, state: &SessionState, title: Option<&str>) {
         let title = title.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
-        let session = {
+        {
             let mut record = lock(&state.record);
             if record.agent_title == title {
                 return;
@@ -39,9 +39,8 @@ impl SessionHost {
                 record.title = title;
                 record.title_source = TitleSource::Agent;
             }
-            Session::from(&*record)
-        };
-        state.emit("session", serde_json::to_value(session).unwrap_or_default());
+        }
+        state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
     }
 
     /// The files a tool call changes, as the turn's: its diffs, and its locations unless its kind

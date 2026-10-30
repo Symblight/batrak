@@ -52,8 +52,14 @@
  */
 
 /**
- * The status icon a session shows in its header and list row (`sessionIndicator()`).
- * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'unread'} SessionIndicator
+ * The status icon a session shows in its header and list row (`sessionIndicator()`). `terminal`: its
+ * agent's CLI runs it in Brama's terminal; `terminal-working`: and that CLI is busy.
+ * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'terminal' | 'terminal-working' | 'unread'} SessionIndicator
+ */
+
+/**
+ * How a session is shown in the agent column: `<chx-chat>` over ACP, or its agent's own CLI in a terminal.
+ * @typedef {'chat' | 'terminal'} SessionView
  */
 
 /**
@@ -70,6 +76,7 @@
  * @property {string | null} [activeElsewhereUntil] Until when another app (a terminal) may be running it:
  *   its agent saw activity in it that wasn't Brama's. Counts only while it doesn't run here
  *   (`isActiveElsewhere()`).
+ * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal; activity it reports is that CLI's.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
@@ -120,6 +127,7 @@
  * A session event from the backend's channel; `seq` is monotonic per session. `turn-end` carries
  * ACP's `stopReason` (`end_turn`, `cancelled`, …); an `error` with `turn` ended the running turn.
  * `held`: the turn's prompt waits for a sign-in; `prompt-returned`: such a prompt was dropped unsent.
+ * `cli-exited`: the session's CLI (its Terminal view) ended.
  * @typedef {{ sessionId: string, seq: number } & (
  *   { kind: 'update', payload: AcpSessionUpdate }
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
@@ -138,6 +146,7 @@
  *   | { kind: 'sign-in', payload: SessionSignIn | null }
  *   | { kind: 'held', payload: { prompt: PromptInput[] } }
  *   | { kind: 'prompt-returned', payload: { prompt: PromptInput[] } }
+ *   | { kind: 'cli-exited', payload: TerminalExit }
  * )} SessionEnvelope
  */
 
@@ -276,6 +285,14 @@
  * @property {boolean} signIn It asked to sign in and hasn't since.
  * @property {string} command What it runs, for the edit form.
  * @property {string[]} args
+ * @property {AgentTerminal | null} [terminal] Its CLI, for a session's Terminal view; `null`: it has none.
+ */
+
+/**
+ * What an agent's CLI can do for a session's Terminal view.
+ * @typedef {Object} AgentTerminal
+ * @property {boolean} resume It continues a session by its ACP id.
+ * @property {boolean} new It starts a session under an id Brama chooses.
  */
 
 /**
@@ -343,6 +360,8 @@
  * @property {'ready' | 'notStarted' | 'off' | 'signIn'} status
  * @property {AgentSignIn | null} signIn With status `signIn`.
  * @property {[number, number][]} nameMatches Where the search matched the name, `[start, end)` in UTF-16 units.
+ * @property {AgentTerminal | null} terminal Its CLI, for a session's Terminal view; `null`: it has none.
+ * @property {string | null} description The registry's description of what it runs.
  */
 
 /**
@@ -558,6 +577,8 @@
  * @property {string | null} error Why it didn't start, once `failed`.
  * @property {string | null} login A sign-in's login (what it runs, the tab's tooltip): the backend
  *   started it, and the sign-in, not Restart, runs it again.
+ * @property {string | null} [sessionId] A session's CLI (its Terminal view): never a tab; the backend
+ *   started it, and Restart starts the CLI again.
  */
 
 /**
@@ -816,7 +837,6 @@
  * @typedef {Object} AgentInfo
  * @property {string} id
  * @property {string} name
- * @property {string} glyph One or two letters for its badge.
  * @property {boolean} [removed] No longer in agents.json (a started session's).
  * @property {boolean} [off] Turned off by the user: not offered, not started.
  * @property {boolean} [signIn] It asked to sign in: offered still, since picking it is how one signs in.

@@ -9,6 +9,7 @@ import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import '@symblight/wc-material/skeleton';
 import '@symblight/wc-material/text-field';
+import '@symblight/wc-material/tooltip';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
@@ -22,6 +23,7 @@ import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import '../acp-session-sync/acp-session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
+import { agentIconOf } from '../../models/agent-icons.js';
 import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions.js';
 import styles from './acp-session-list.css?inline';
 
@@ -282,7 +284,6 @@ export class AcpSessionList extends LitElement {
         role="treeitem"
         tabindex="0"
         aria-expanded=${expanded ? 'true' : 'false'}
-        title=${project.path}
         @click=${() => this.#emit('acp-project-select', { projectId: project.id })}
         @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onProjectKeydown(project, e)}
         @contextmenu=${(/** @type {MouseEvent} */ e) => this.#projectMenu.onContextMenu(project, e)}
@@ -295,11 +296,13 @@ export class AcpSessionList extends LitElement {
           })}
           >${project.name}</span
         >
-        <span class="acp-session-list__project-path">${this.#displayPath(project.path)}</span>
+        <span id=${`acp-session-list-path-${project.id}`} class="acp-session-list__project-path"
+          >${this.#displayPath(project.path)}</span
+        >
         ${!expanded && sessions.length > 0 ? html`<span class="acp-session-list__count">${sessions.length}</span>` : nothing}
         <md-icon-button
+          id=${`acp-session-list-add-${project.id}`}
           class="acp-session-list__add"
-          title="New session"
           aria-label=${`New session in ${project.name}`}
           @click=${(/** @type {Event} */ e) => {
             e.stopPropagation();
@@ -309,6 +312,10 @@ export class AcpSessionList extends LitElement {
           <md-icon class="acp-session-list__add-icon">${unsafeSVG(addIcon)}</md-icon>
         </md-icon-button>
       </div>
+      <md-tooltip for=${`acp-session-list-path-${project.id}`} show-delay="800" style="width: max-content; max-inline-size: none"
+        >${project.path}</md-tooltip
+      >
+      <md-tooltip for=${`acp-session-list-add-${project.id}`} show-delay="800">New session</md-tooltip>
       ${failure !== undefined
         ? html`<div class="acp-session-list__error" role="alert">Couldn't open the folder: ${failure}</div>`
         : nothing}
@@ -360,6 +367,21 @@ export class AcpSessionList extends LitElement {
     </div>`;
   }
 
+  /**
+   * Its agent's mark; a generic one for an agent that isn't one of the supported brands.
+   * @param {Session} session
+   */
+  #renderAgent(session) {
+    const { brand, svg } = agentIconOf(session.agentId, session.agentName);
+    return html`<md-icon
+      id=${`acp-session-list-agent-${session.id}`}
+      class="acp-session-list__agent"
+      data-brand=${brand ?? nothing}
+      aria-label=${session.agentName ?? session.agentId}
+      >${unsafeSVG(svg)}</md-icon
+    >`;
+  }
+
   /** @param {Session} session */
   #renderSession(session) {
     const selected = session.id === this.activeSessionId;
@@ -386,8 +408,11 @@ export class AcpSessionList extends LitElement {
       @focusout=${(/** @type {FocusEvent} */ e) => this.#onRowFocusOut(session, e)}
     >
       ${pinned
-        ? html`<md-icon class="acp-session-list__pin" title="Pinned" aria-label="Pinned">${unsafeSVG(pinIcon)}</md-icon>`
+        ? html`<md-icon id=${`acp-session-list-pin-${session.id}`} class="acp-session-list__pin" aria-label="Pinned"
+            >${unsafeSVG(pinIcon)}</md-icon
+          >`
         : nothing}
+      ${this.#renderAgent(session)}
       ${renaming
         ? html`<md-text-field
             class="acp-session-list__rename"
@@ -405,15 +430,15 @@ export class AcpSessionList extends LitElement {
             >${session.title}</span
           >`}
       ${session.branch
-        ? html`<md-icon class="acp-session-list__branch" title=${`Worktree on ${session.branch}`} aria-label="Worktree"
+        ? html`<md-icon id=${`acp-session-list-branch-${session.id}`} class="acp-session-list__branch" aria-label="Worktree"
             >${unsafeSVG(branchIcon)}</md-icon
           >`
         : nothing}
       <span class="acp-session-list__age">${age(session.lastActivityAt)}</span>
       ${showMore
         ? html`<md-icon-button
+            id=${`acp-session-list-more-${session.id}`}
             class="acp-session-list__more"
-            title="Session menu"
             aria-label=${`Session menu: ${session.title}`}
             @click=${(/** @type {Event} */ e) => {
               e.stopPropagation();
@@ -423,7 +448,13 @@ export class AcpSessionList extends LitElement {
             <md-icon class="acp-session-list__more-icon">${unsafeSVG(moreIcon)}</md-icon>
           </md-icon-button>`
         : this.#renderStatus(session, unread)}
-    </div>`;
+    </div>
+    <md-tooltip for=${`acp-session-list-agent-${session.id}`} show-delay="800">${session.agentName ?? session.agentId}</md-tooltip>
+    ${pinned ? html`<md-tooltip for=${`acp-session-list-pin-${session.id}`} show-delay="800">Pinned</md-tooltip>` : nothing}
+    ${session.branch
+      ? html`<md-tooltip for=${`acp-session-list-branch-${session.id}`} show-delay="800">Worktree on ${session.branch}</md-tooltip>`
+      : nothing}
+    ${showMore ? html`<md-tooltip for=${`acp-session-list-more-${session.id}`} show-delay="800">Session menu</md-tooltip>` : nothing}`;
   }
 
   /**
@@ -431,8 +462,15 @@ export class AcpSessionList extends LitElement {
    * @param {boolean} unread
    */
   #renderStatus(session, unread) {
-    const indicator = sessionIndicator(session.status, this.waiting.includes(session.id), unread, isActiveElsewhere(session, this.now));
-    return indicator === null
+    const indicator = sessionIndicator(
+      session.status,
+      this.waiting.includes(session.id),
+      unread,
+      isActiveElsewhere(session, this.now),
+      session.inTerminal === true,
+    );
+    // An idle terminal session looks like any other in the list; the header still says it.
+    return indicator === null || indicator === 'terminal'
       ? nothing
       : html`<acp-session-status class="acp-session-list__status" .indicator=${indicator}></acp-session-status>`;
   }
@@ -467,13 +505,14 @@ export class AcpSessionList extends LitElement {
         <h2 class="acp-session-list__heading">Sessions</h2>
         <acp-session-sync .sync=${this.sync}></acp-session-sync>
         <md-icon-button
+          id="acp-session-list-open-folder"
           class="acp-session-list__open-folder"
-          title="Open folder…"
           aria-label="Open folder"
           @click=${() => this.#emit('acp-project-open-folder')}
         >
           <md-icon class="acp-session-list__open-folder-icon">${unsafeSVG(openFolderIcon)}</md-icon>
         </md-icon-button>
+        <md-tooltip for="acp-session-list-open-folder" show-delay="800">Open folder…</md-tooltip>
       </div>
       <div class="acp-session-list__list" role="tree" aria-label="Sessions">
         ${repeat(

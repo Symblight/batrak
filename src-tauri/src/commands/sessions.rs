@@ -9,7 +9,7 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State, Window};
 
 use crate::session::env::Mode;
-use crate::session::{CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
+use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
 use super::blocking;
 
@@ -148,6 +148,37 @@ pub async fn session_restart(sessions: State<'_, Sessions>, session_id: String) 
 #[tauri::command]
 pub async fn session_resume(sessions: State<'_, Sessions>, session_id: String) -> Result<bool, String> {
     sessions.resume(&session_id).await
+}
+
+/// Continues a session in its agent's own CLI, in a terminal this window owns (`terminalId`,
+/// which the page attaches to like a Terminal tab's), at the page's size. Refused while its ACP
+/// agent runs: the page stops it first. A `draft` (a new session, its id a UUID) is created and
+/// started there under that id; the page then hears its events through `session_open`. The CLI's
+/// exit comes as a `cli-exited { code, signal }` session event.
+#[tauri::command]
+pub async fn session_open_cli(
+    window: Window,
+    sessions: State<'_, Sessions>,
+    terminals: State<'_, crate::terminal::Terminals>,
+    session_id: String,
+    cols: u16,
+    rows: u16,
+    draft: Option<CliDraft>,
+) -> Result<CliOpened, String> {
+    let cli = CliWindow { terminals: terminals.inner(), group: window.label(), cols, rows };
+    sessions.open_cli(&session_id, draft, cli).await
+}
+
+/// Closes a session's CLI and returns once it's gone; the chat can start its agent then.
+#[tauri::command]
+pub async fn session_close_cli(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
+    sessions.close_cli(&session_id).await
+}
+
+/// Whether closing the session's CLI would stop its work (a tool it runs, or activity in the last 10 s).
+#[tauri::command]
+pub async fn session_cli_busy(sessions: State<'_, Sessions>, session_id: String) -> Result<bool, String> {
+    sessions.cli_busy(&session_id)
 }
 
 /// Sets the agent's model, thought level or mode (`session/set_config_option`); the options as they

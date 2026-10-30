@@ -24,13 +24,15 @@ const agent = (row) => /** @type {AgentRow} */ ({
   status: 'notStarted',
   signIn: null,
   nameMatches: [],
+  terminal: null,
+  description: null,
   ...row,
 });
 
 /** @type {AgentsView} */
 const VIEW = {
   installed: [
-    agent({ id: 'claude', name: 'Claude Code', isDefault: true, version: '0.90.0', status: 'ready', update: { to: '0.94.0', pin: false } }),
+    agent({ id: 'claude', name: 'Claude Code', isDefault: true, version: '0.90.0', status: 'ready', update: { to: '0.94.0', pin: false }, terminal: { resume: true, new: true }, description: 'ACP wrapper for Anthropic\'s Claude' }),
     agent({ id: 'gem', name: 'Gemini CLI', update: { to: '0.65.0', pin: true } }),
     agent({ id: 'codex', name: 'Codex', enabled: false, status: 'off' }),
   ],
@@ -54,12 +56,12 @@ const ALL = { query: '', filter: 'all' };
 const method = (method) => ({ description: null, kind: 'agent', label: null, apiKey: null, ...method });
 
 /**
- * @param {{ view?: AgentsView, query?: AgentsQuery, pending?: { updating: string[], checking: boolean }, signIns?: Record<string, SignInRun> }} [props]
+ * @param {{ view?: AgentsView, query?: AgentsQuery, pending?: { updating: string[], checking: boolean }, signIns?: Record<string, SignInRun>, terminalAgents?: string[] }} [props]
  */
-async function render({ view = VIEW, query = ALL, pending = { updating: [], checking: false }, signIns = {} } = {}) {
+async function render({ view = VIEW, query = ALL, pending = { updating: [], checking: false }, signIns = {}, terminalAgents = [] } = {}) {
   const el = /** @type {AcpAgentsView} */ (
     await fixture(
-      html`<acp-agents-view .view=${view} .query=${query} .pending=${pending} .signIns=${signIns} .known=${[]}></acp-agents-view>`,
+      html`<acp-agents-view .view=${view} .query=${query} .pending=${pending} .signIns=${signIns} .terminalAgents=${terminalAgents} .known=${[]}></acp-agents-view>`,
     )
   );
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
@@ -124,7 +126,9 @@ describe('acp-agents-view', () => {
     expect([...root.querySelectorAll('md-filter-chip')].map(text)).to.deep.equal(['All', 'Updates 2', 'Off 1']);
     const claude = row(root, 'claude');
     expect(text(/** @type {Element} */ (claude.querySelector('.acp-agents-view__title')))).to.equal('Claude Code Default');
-    expect(text(/** @type {Element} */ (claude.querySelector('.acp-agents-view__details')))).to.equal('Project · 0.90.0 → 0.94.0 · Ready');
+    expect(text(/** @type {Element} */ (claude.querySelector('.acp-agents-view__details'))), 'a card: its description').to.equal(
+      "ACP wrapper for Anthropic's Claude",
+    );
     expect(text(/** @type {Element} */ (row(root, 'codex').querySelector('.acp-agents-view__details')))).to.equal('Project · Off');
     expect(button(row(root, 'gem'), 'Pin latest (0.65.0)'), 'version unknown: pin it').to.be.ok;
     const copilot = row(root, 'github-copilot-cli');
@@ -135,6 +139,16 @@ describe('acp-agents-view', () => {
     expect(tooltipOf(root, button(claude, 'Update'))).to.equal('Pin 0.94.0 in agents.json');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
     expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer')))).to.contain('Versions are checked against the ACP registry daily');
+  });
+
+  it('shows each agent as a logo icon, a generic one for an agent of no known brand', async () => {
+    const { root } = await render();
+    /** @param {string} id */
+    const icon = (id) => row(root, id).querySelector('.acp-agents-view__glyph md-icon');
+    expect(icon('claude')?.getAttribute('data-brand')).to.equal('claude');
+    expect(icon('claude')?.querySelector('svg')).to.not.equal(null);
+    expect(icon('github-copilot-cli')?.getAttribute('data-brand')).to.equal('copilot');
+    expect(icon('mine')?.hasAttribute('data-brand')).to.equal(false);
   });
 
   it('marks what the search matched in a name', async () => {
@@ -166,6 +180,78 @@ describe('acp-agents-view', () => {
     const { root } = await render();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }));
     expect(root.activeElement).to.equal(root.querySelector('.acp-agents-view__search-input'));
+  });
+
+  it('lets an agent with a CLI choose Chat or Terminal for its sessions', async () => {
+    const { el, root } = await render({ terminalAgents: ['claude'] });
+    const views = heard(el, 'acp-agent-session-view');
+    const claude = row(root, 'claude');
+    const radios = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...claude.querySelectorAll('md-radio')]);
+    expect(radios.map((r) => r.value)).to.deep.equal(['chat', 'terminal']);
+    expect(radios.map((r) => r.checked)).to.deep.equal([false, true]);
+    const group = /** @type {HTMLFieldSetElement} */ (claude.querySelector('fieldset'));
+    expect(text(/** @type {Element} */ (group.querySelector('legend')))).to.equal('Open sessions in');
+    expect(radios.every((r) => group.contains(r)), 'one group per agent').to.equal(true);
+    const [chatText, terminalText] = [...group.querySelectorAll('.acp-agents-view__mode-text')].map((e) => text(e));
+    expect(chatText, 'its version on the Chat line, its description under it').to.equal("Chat 0.90.0 → 0.94.0 ACP wrapper for Anthropic's Claude");
+    expect(terminalText).to.equal('Terminal CLI available');
+    expect(text(group))
+      .to.contain('Chat')
+      .and.contain('Terminal')
+      .and.contain('CLI available');
+    expect(claude.querySelectorAll('md-switch'), 'one switch for the agent').to.have.length(1);
+    expect(claude.querySelector('.acp-agents-view__more'), 'the chat option keeps the menu').not.to.equal(null);
+
+    radios[0].checked = true;
+    radios[0].dispatchEvent(new Event('change', { bubbles: true }));
+    expect(views).to.deep.equal([{ agentId: 'claude', view: 'chat' }]);
+
+    el.terminalAgents = [];
+    await el.updateComplete;
+    expect(radios.map((r) => r.checked)).to.deep.equal([true, false]);
+    radios[1].checked = true;
+    radios[1].dispatchEvent(new Event('change', { bubbles: true }));
+    expect(views.at(-1)).to.deep.equal({ agentId: 'claude', view: 'terminal' });
+
+    const gem = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...row(root, 'gem').querySelectorAll('md-radio')]);
+    expect(gem.map((r) => [r.value, r.checked, r.disabled]), 'no CLI: Terminal disabled').to.deep.equal([
+      ['chat', true, false],
+      ['terminal', false, true],
+    ]);
+    expect(text(/** @type {Element} */ (row(root, 'gem').querySelector('fieldset')))).to.contain('No CLI for this agent');
+  });
+
+  it('shows every installed agent as a card: its name and switch, then where its sessions open', async () => {
+    const { root } = await render();
+    for (const id of ['claude', 'gem']) {
+      const card = row(root, id);
+      expect(card.classList.contains('acp-agents-view__card'), id).to.equal(true);
+      expect(card.querySelector('.acp-agents-view__card-header md-switch'), `${id}: its switch on top`).not.to.equal(null);
+      expect(card.querySelector('.acp-agents-view__mode .acp-agents-view__more'), `${id}: its menu on the Chat option`).not.to.equal(null);
+      expect([...card.querySelectorAll('.acp-agents-view__mode-name')].map(text).map((t) => t.split(' ')[0])).to.deep.equal(['Chat', 'Terminal']);
+    }
+  });
+
+  it('hides the Chat / Terminal choice of an agent that is off', async () => {
+    const { root } = await render({ terminalAgents: ['codex'] });
+    const codex = row(root, 'codex');
+    expect(codex.classList.contains('acp-agents-view__card')).to.equal(true);
+    expect(codex.querySelector('fieldset'), 'no choice').to.equal(null);
+    expect(codex.querySelector('md-switch'), 'its switch stays').not.to.equal(null);
+    expect(codex.querySelector('.acp-agents-view__more'), 'its menu stays').not.to.equal(null);
+  });
+  it('moves between Chat and Terminal with the arrow keys, within one agent', async () => {
+    const view = { ...VIEW, installed: [...VIEW.installed, agent({ id: 'copilot', name: 'Copilot', terminal: { resume: true, new: true } })] };
+    const { el, root } = await render({ view });
+    const views = heard(el, 'acp-agent-session-view');
+    const radios = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...row(root, 'claude').querySelectorAll('md-radio')]);
+    await Promise.all(radios.map((r) => r.updateComplete));
+    radios[0].focusInteractive();
+    radios[0].input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
+    expect(radios[1].checked).to.equal(true);
+    expect(views).to.deep.equal([{ agentId: 'claude', view: 'terminal' }]);
+    const copilot = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...row(root, 'copilot').querySelectorAll('md-radio')]);
+    expect(copilot.map((r) => r.checked), "another agent's choice stays").to.deep.equal([true, false]);
   });
 
   it('turns agents on and off, updates them, and checks the registry', async () => {

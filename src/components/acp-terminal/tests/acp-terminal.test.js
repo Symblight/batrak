@@ -191,4 +191,18 @@ describe('acp-terminal', () => {
     expect(el.shadowRoot?.querySelector('.acp-terminal__error')?.textContent).to.include('Couldn’t start zsh: gone');
     expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.not.equal(null);
   });
+
+  it("offers Continue in chat next to Restart once a session's CLI ended", async () => {
+    const { el, calls } = await render();
+    el.chatFallback = true;
+    calls.sink?.exit({ code: 0, signal: null });
+    el.info = { ...running, status: 'exited', exit: { code: 0, signal: null }, sessionId: 's1' };
+    await el.updateComplete;
+    /** @type {CustomEvent[]} */
+    const chats = [];
+    el.addEventListener('acp-terminal-chat', (e) => chats.push(/** @type {CustomEvent} */ (e)));
+    /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-terminal__chat')).click();
+    expect(chats.map((e) => e.detail)).to.deep.equal([{ terminalId: 't1' }]);
+    expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.not.equal(null);
+  });
 });

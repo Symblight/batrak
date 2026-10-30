@@ -183,6 +183,49 @@ export function sessionRestart(sessionId) {
 }
 
 /**
+ * A draft whose CLI starts it: what `session_create` would get.
+ * @typedef {Object} CliDraft
+ * @property {string} projectPath
+ * @property {string} agentId
+ * @property {import('../models/types.js').RunTargetKind} mode
+ * @property {string} title
+ * @property {Record<string, string>} [config]
+ * @property {string | null} [baseBranch]
+ * @property {string} [prompt] Its first message, which the CLI starts with.
+ */
+
+/**
+ * Runs a session's agent CLI in a terminal (its Terminal view), continuing it by its ACP id; refused
+ * while its ACP agent runs, or while another window's CLI holds it. With `draft`, the CLI starts a new
+ * session under `sessionId` (a UUID).
+ * @param {string} sessionId
+ * @param {number} cols
+ * @param {number} rows
+ * @param {CliDraft} [draft]
+ * @returns {Promise<{ terminalId: string }>}
+ */
+export function sessionOpenCli(sessionId, cols, rows, draft) {
+  return invoke('session_open_cli', draft ? { sessionId, cols, rows, draft } : { sessionId, cols, rows });
+}
+
+/**
+ * Closes a session's CLI; resolves once its process is gone.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionCloseCli(sessionId) {
+  return invoke('session_close_cli', { sessionId });
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {Promise<boolean>} Its CLI is working: a tool runs in it, or it reported activity just now.
+ */
+export function sessionCliBusy(sessionId) {
+  return invoke('session_cli_busy', { sessionId });
+}
+
+/**
  * Starts a stopped session's agent, continuing its ACP session where the agent supports it.
  * @param {string} sessionId
  * @returns {Promise<boolean>} `false` when it stays stopped: the project has its worktree's

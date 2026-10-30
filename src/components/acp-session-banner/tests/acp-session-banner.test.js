@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-session-banner.js';
 
 describe('acp-session-banner', () => {
@@ -88,6 +88,14 @@ describe('acp-session-banner', () => {
         ['acp-agent-sign-in', { agentId: 'codex', methodId: 'chat-gpt' }],
         ['acp-agent-sign-in', { agentId: 'codex', methodId: null }],
       ]);
+    });
+
+    it("explains a sign-in and Retry in tooltips, not titles", async () => {
+      const methods = [method({ id: 'chat-gpt', name: 'ChatGPT', description: 'Use your ChatGPT plan' })];
+      const el = await fixture(html`<acp-session-banner .notice=${notice(methods)} .permission=${null}></acp-session-banner>`);
+      const { buttons } = view(el);
+      expect(buttons.map(tooltipOf)).to.deep.equal(['Use your ChatGPT plan', "Check whether you're signed in now"]);
+      expect(el.shadowRoot.querySelector('[title]')).to.equal(null);
     });
 
     it('offers terminal logins as sign-ins too', async () => {

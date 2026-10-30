@@ -2,9 +2,12 @@ import {
   listSessions,
   sessionApplyLocally,
   sessionCheckOutBranch,
+  sessionCliBusy,
+  sessionCloseCli,
   onSessionsSynced,
   sessionCreate,
   sessionOpen,
+  sessionOpenCli,
   sessionOpenLog,
   sessionRemove,
   sessionRename,
@@ -15,9 +18,10 @@ import {
   sessionSetConfigOption,
   sessionStop,
   sessionsSync,
+  terminalClose,
   workspaceSettings,
 } from './ipc.js';
-import { forgetSession, handleSessionEvent, trackCreate } from './acp-adapter.js';
+import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from './acp-adapter.js';
 import { agentConfig } from './agent-config.js';
 import { log } from './logger.js';
 import { reportError } from './notices.js';
@@ -30,7 +34,7 @@ import {
   startComposer,
 } from '../stores/composer.js';
 import { sessionRootController } from './session-root-controller.js';
-import { isActiveElsewhere } from '../models/sessions.js';
+import { RUNNING, isActiveElsewhere } from '../models/sessions.js';
 import { $agentList } from '../stores/agents.js';
 import { forgetContextUsage } from '../stores/context-usage.js';
 import { endSync, startSync, syncOf } from '../stores/session-sync.js';
@@ -49,7 +53,19 @@ import {
   startSession,
   upsertSession,
 } from '../stores/sessions.js';
-import { dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
+import { $activePermission, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
+import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../stores/session-views.js';
+import { resetHistory } from '../stores/chat.js';
+import {
+  $cliStarting,
+  $sessionTerminals,
+  $terminals,
+  addSessionTerminal,
+  forgetTerminal,
+  sessionTerminalOf,
+  setCliStarting,
+  terminalFailed,
+} from '../stores/terminals.js';
 import { $workspacePath, setWorkspaceSettings } from '../stores/workspace.js';
 
 /** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
@@ -60,6 +76,10 @@ const SYNC_STALE_MS = 5 * 60_000;
 const SELECT_SYNC_MS = 30_000;
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
+/** A CLI starts at this size; its view sends the real one once attached. */
+const CLI_SIZE = { cols: 80, rows: 24 };
+/** A session in these is in a turn (or waits for an answer): its view's change waits for the turn's end. */
+const IN_TURN = new Set(['working', 'queued', 'waiting']);
 
 /**
  * Loads the stored sessions from the backend into `$sessions` / `$activeSessionId` and opens each
@@ -93,6 +113,14 @@ export class SessionController {
   #settingsLoad = 0;
   /** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
   #idleStops = new Map();
+  /** @type {Map<string, Promise<void>>} Sessions whose CLI is starting, so a second ask doesn't start another. */
+  #cliOpening = new Map();
+  /** @type {string | null} The shown session once its agent's list is current: its view is acted on from then. */
+  #ready = null;
+  /** @type {Promise<boolean>} The last reconcile; the next waits for it. */
+  #reconciling = Promise.resolve(false);
+  /** @type {Set<string>} Sessions whose busy CLI was kept although they're to be Chat; until shown again or switched by hand. */
+  #keptBusy = new Set();
 
   /** @returns {Promise<void>} */
   async init() {
@@ -111,11 +139,13 @@ export class SessionController {
     let shown = null;
     $activeSessionId.subscribe((id) => {
       if (shown !== null) this.#stopWhenIdle(shown);
+      if (shown !== null) this.#keptBusy.delete(shown);
       shown = id;
+      this.#ready = null;
       if (id === null) return;
       clearTimeout(this.#idleStops.get(id));
       this.#idleStops.delete(id);
-      this.#show(id);
+      this.show(id);
     });
     $workspacePath.subscribe((path) => {
       this.#loadSettings(path);
@@ -136,6 +166,13 @@ export class SessionController {
       const due = agents.filter((a) => a.enabled && !settled.has(a.id)).map((a) => a.id);
       if (due.length > 0) this.sync(path, { force: true, agentIds: due });
     });
+    // The shown session's view changed (the header, its agent's choice in the Agents tab, a first
+    // message, its turn ended): its CLI starts or closes to match.
+    for (const store of [$activeView, $activePermission, $sessions, $sessionTerminals]) {
+      store.listen(() => {
+        if (this.#ready !== null && this.#ready === $activeSessionId.get()) this.reconcile();
+      });
+    }
     setInterval(() => this.#poll(), POLL_MS);
   }
 
@@ -155,12 +192,235 @@ export class SessionController {
   }
 
   /**
-   * A session shown: once its agent's list is current, its stopped agent is resumed (`#resume`).
+   * A session shown (`$activeSessionId`): its agent's choice decides chat or terminal at once; once its
+   * agent's list is current, its CLI starts or its stopped agent is resumed (`#resume`).
    * @param {string} id
    */
-  async #show(id) {
-    await this.#syncAgentOf(id);
-    if ($activeSessionId.get() === id) this.#resume(id);
+  async show(id) {
+    // Its agent's choice decides at once: a terminal session never shows its chat while its agent's
+    // list is asked for.
+    const session = $sessions.get().find((s) => s.id === id);
+    const early =
+      session !== undefined &&
+      viewOfSession(id) === 'terminal' &&
+      !IN_TURN.has(session.status) &&
+      sessionTerminalOf(id) === null &&
+      !$cliStarting.get().includes(id);
+    if (early) setCliStarting(id, true);
+    try {
+      await this.#syncAgentOf(id);
+    } finally {
+      if (early && $activeSessionId.get() !== id) setCliStarting(id, false);
+    }
+    if ($activeSessionId.get() !== id) return;
+    this.#ready = id;
+    if (early) setCliStarting(id, false);
+    const acted = await this.reconcile();
+    if (!acted && $activeSessionId.get() === id && viewOfSession(id) === 'chat') this.#resume(id);
+  }
+
+  /**
+   * Makes the active session shown as its view asks: starts its CLI (not a draft's, which shows its
+   * composer until its first message) or closes it and resumes its agent. Unless `force` (the user asked, and was asked about
+   * the work it stops), a turn running or waiting for an answer is left to end first, and a busy CLI
+   * is kept until the session is switched again.
+   * @param {{ force?: boolean }} [options]
+   * @returns {Promise<boolean>} The session has, or now had, a CLI to act on.
+   */
+  reconcile({ force = false } = {}) {
+    const run = this.#reconciling.then(() => this.#reconcileNow(force));
+    this.#reconciling = run.catch(() => false);
+    return run;
+  }
+
+  /**
+   * @param {boolean} force
+   * @returns {Promise<boolean>}
+   */
+  async #reconcileNow(force) {
+    const id = $activeSessionId.get();
+    if (id === null) return false;
+    const terminalId = sessionTerminalOf(id);
+    if (viewOfSession(id) === 'terminal') {
+      this.#keptBusy.delete(id);
+      if (terminalId !== null || $cliStarting.get().includes(id)) return true;
+      const session = $sessions.get().find((s) => s.id === id);
+      // A draft shows its composer: its first message starts the CLI (`startInTerminal`).
+      if (!session) return false;
+      if (!force && (IN_TURN.has(session.status) || $activePermission.get() !== null)) return false;
+      await this.#openCli(id);
+      return true;
+    }
+    if (terminalId === null) return false;
+    if (!force && $terminals.get()[terminalId]?.status === 'running') {
+      if (this.#keptBusy.has(id)) return true;
+      if (await sessionCliBusy(id).catch(() => false)) {
+        this.#keptBusy.add(id);
+        return true;
+      }
+    }
+    await this.#toChat(id);
+    return true;
+  }
+
+  /**
+   * Shows a session in its agent's CLI: a running turn is stopped first (the column asked), its ACP
+   * agent stopped, and the CLI continues it in a terminal.
+   * @param {string} id
+   * @returns {Promise<void>}
+   */
+  async continueInTerminal(id) {
+    setSessionView(id, 'terminal');
+    if ($activeSessionId.get() === id) await this.reconcile({ force: true });
+    else await this.#openCli(id);
+  }
+
+  /**
+   * Shows a session as Chat again: its CLI is closed (the column asked), and its agent resumes it,
+   * replaying the turns the CLI ran.
+   * @param {string} id
+   * @returns {Promise<void>}
+   */
+  async continueInChat(id) {
+    setSessionView(id, 'chat');
+    if ($activeSessionId.get() === id) await this.reconcile({ force: true });
+    else await this.#toChat(id);
+  }
+
+  /**
+   * Closes the session's CLI and resumes its agent, whose replay rebuilds the chat with the turns the
+   * CLI ran.
+   * @param {string} id
+   */
+  async #toChat(id) {
+    await this.#cliOpening.get(id);
+    await this.#closeCli(id);
+    resetHistory(id);
+    forgetHistory(id);
+    // Not `#resume`: the activity another app showed was this CLI's.
+    if ($sessions.get().find((s) => s.id === id)?.status === 'stopped')
+      await sessionResume(id).catch((err) => reportError('Starting the agent failed', err));
+  }
+
+  /**
+   * Whether a draft's first message starts its agent's CLI rather than the chat: its agent's
+   * sessions open in the terminal, and its CLI can start one.
+   * @param {string} id
+   * @returns {boolean}
+   */
+  startsInTerminal(id) {
+    return id in $draftSessions.get() && !$sessions.get().some((s) => s.id === id) && viewOfSession(id) === 'terminal';
+  }
+
+  /**
+   * A draft's first message, for its agent's CLI: listed at once, and its CLI starts the agent's
+   * session under the draft's id, with the draft's picks and the message as its first prompt.
+   * Refused, it's a draft again, with the reason above its composer.
+   * @param {string} id
+   * @param {string} title
+   * @param {string} prompt
+   * @returns {Promise<boolean>}
+   */
+  async startInTerminal(id, title, prompt) {
+    const projectPath = $draftSessions.get()[id];
+    const { agentId, chosen: config, runTarget } = composerOf(id);
+    if (projectPath === undefined || agentId === null) return false;
+    const mode = runTarget.kind;
+    const baseBranch = mode === 'worktree' ? runTarget.branch : null;
+    startComposer(id);
+    startSession(id, { title, agentId, config, mode });
+    setSessionNotice(id, null);
+    setCliStarting(id, true);
+    const label = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'Agent';
+    try {
+      const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, mode, title, config, baseBranch, prompt });
+      addSessionTerminal(terminalId, id, projectPath, label);
+      const session = $sessions.get().find((s) => s.id === id);
+      if (session) this.#openAll([session]);
+    } catch (err) {
+      revertToDraft(id);
+      setSessionNotice(id, { kind: 'error', message: `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}` });
+    } finally {
+      setCliStarting(id, false);
+    }
+    return true;
+  }
+
+  /**
+   * Starts the CLI again after it exited or failed to start.
+   * @param {string} id
+   */
+  async restartCli(id) {
+    await this.#closeCli(id);
+    await this.#openCli(id);
+  }
+
+  /**
+   * @param {string} id
+   * @returns {Promise<boolean>} Closing its CLI would stop its work.
+   */
+  cliBusy(id) {
+    return sessionTerminalOf(id) === null ? Promise.resolve(false) : sessionCliBusy(id).catch(() => false);
+  }
+
+  /**
+   * Starts the session's CLI unless it runs; once however many ask meanwhile.
+   * @param {string} id
+   * @returns {Promise<void>}
+   */
+  #openCli(id) {
+    let opening = this.#cliOpening.get(id);
+    if (!opening) {
+      opening = this.#startCli(id).finally(() => this.#cliOpening.delete(id));
+      this.#cliOpening.set(id, opening);
+    }
+    return opening;
+  }
+
+  /** @param {string} id */
+  async #startCli(id) {
+    const session = $sessions.get().find((s) => s.id === id);
+    const running = sessionTerminalOf(id);
+    if (!session || (running !== null && $terminals.get()[running]?.status === 'running')) return;
+    if (running !== null) forgetTerminal(running);
+    clearTimeout(this.#idleStops.get(id));
+    this.#idleStops.delete(id);
+    const label = session.agentName ?? 'Agent';
+    // From now on, so the chat doesn't show while its agent stops.
+    setCliStarting(id, true);
+    try {
+      if (RUNNING.has(session.status)) {
+        try {
+          await sessionStop(id);
+        } catch (err) {
+          reportError('Stopping the agent failed', err);
+          return;
+        }
+      }
+      const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows);
+      addSessionTerminal(terminalId, id, session.folder, label);
+    } catch (err) {
+      // Shown in its place, with Restart and Continue in chat; never attached (the backend has no such terminal).
+      const failed = `cli:${id}`;
+      addSessionTerminal(failed, id, session.folder, label);
+      terminalFailed(failed, `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setCliStarting(id, false);
+    }
+  }
+
+  /**
+   * Closes the session's CLI, if it has one; resolves once it's gone.
+   * @param {string} id
+   */
+  async #closeCli(id) {
+    const terminalId = sessionTerminalOf(id);
+    if (terminalId === null) return;
+    const status = $terminals.get()[terminalId]?.status;
+    if (status === 'running') await sessionCloseCli(id).catch((err) => reportError('Closing the terminal failed', err));
+    // Exited by itself: the backend let the session go, but keeps its terminal's output.
+    else if (status === 'exited') await terminalClose([terminalId]).catch(() => {});
+    forgetTerminal(terminalId);
   }
 
   /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
@@ -453,6 +713,13 @@ export class SessionController {
     }
     clearTimeout(this.#idleStops.get(id));
     this.#idleStops.delete(id);
+    // The backend closed a running CLI; one that exited by itself left its terminal.
+    const terminalId = sessionTerminalOf(id);
+    if (terminalId !== null) {
+      if ($terminals.get()[terminalId]?.status === 'exited') await terminalClose([terminalId]).catch(() => {});
+      forgetTerminal(terminalId);
+    }
+    forgetSessionView(id);
     forgetSession(id);
     forgetComposer(id);
     forgetContextUsage(id);

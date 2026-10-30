@@ -2,11 +2,13 @@ import { expect } from '@esm-bundle/chai';
 import { $editorTabs, $projectTabs } from './editor.js';
 import {
   $terminals,
+  addSessionTerminal,
   forgetTerminal,
   openLoginTerminal,
   openTerminal,
   terminalExited,
   terminalStarted,
+  sessionTerminalOf,
   terminalsOfProject,
 } from './terminals.js';
 import { $workspace } from './workspace.js';
@@ -83,5 +85,18 @@ describe('terminals', () => {
     expect($terminals.get()[id]).to.deep.include({ status: 'exited', exit: { code: 1, signal: null } });
     forgetTerminal(id);
     expect($terminals.get()).to.deep.equal({});
+  });
+
+  it("keeps a session's CLI out of every project's tabs", () => {
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $projectTabs.setKey('/p', { paths: [], active: null, pinned: [] });
+    addSessionTerminal('t1', 's1', '/p', 'Claude Code');
+    expect($terminals.get().t1).to.include({ status: 'running', sessionId: 's1' });
+    expect(sessionTerminalOf('s1')).to.equal('t1');
+    expect(sessionTerminalOf('s2')).to.equal(null);
+    expect($editorTabs.get().paths).to.deep.equal([]);
+    expect(terminalsOfProject(null)).to.deep.equal([]);
+    forgetTerminal('t1');
+    expect(sessionTerminalOf('s1')).to.equal(null);
   });
 });

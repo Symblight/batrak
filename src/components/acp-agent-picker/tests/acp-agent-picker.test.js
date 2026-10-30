@@ -24,7 +24,7 @@ describe('acp-agent-picker', () => {
 
   it('opens its menu from the button once the agents arrive', async () => {
     const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
-    const agent = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
+    const agent = { id: 'a', name: 'A', configOptions: [] };
     el.agents = [agent];
     el.agent = agent;
     el.composer = { ...NO_AGENT, agentId: 'a' };
@@ -59,8 +59,8 @@ describe('acp-agent-picker', () => {
   });
 
   it('offers no agent the user turned off', async () => {
-    const a = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
-    const b = { id: 'b', name: 'B', glyph: 'B', configOptions: [], off: true };
+    const a = { id: 'a', name: 'A', configOptions: [] };
+    const b = { id: 'b', name: 'B', configOptions: [], off: true };
     const composer = { ...NO_AGENT, agentId: 'a' };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
@@ -69,8 +69,8 @@ describe('acp-agent-picker', () => {
   });
 
   it('says which agent needs a sign-in, and still offers it', async () => {
-    const a = { id: 'a', name: 'A', glyph: 'A', configOptions: [] };
-    const b = { id: 'b', name: 'B', glyph: 'B', configOptions: [], signIn: true };
+    const a = { id: 'a', name: 'A', configOptions: [] };
+    const b = { id: 'b', name: 'B', configOptions: [], signIn: true };
     const composer = { ...NO_AGENT, agentId: 'a' };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
@@ -79,7 +79,7 @@ describe('acp-agent-picker', () => {
   });
 
   it("says when a started session's agent is off", async () => {
-    const agent = { id: 'b', name: 'B', glyph: 'B', off: true };
+    const agent = { id: 'b', name: 'B', off: true };
     const composer = { ...NO_AGENT, agentId: 'b', started: true };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
@@ -89,7 +89,7 @@ describe('acp-agent-picker', () => {
   });
 
   it('says when a started session\'s agent is gone from agents.json', async () => {
-    const agent = { id: 'claude', name: 'Claude Code', glyph: 'CC', removed: true };
+    const agent = { id: 'claude', name: 'Claude Code', removed: true };
     const composer = { ...NO_AGENT, agentId: 'claude', started: true };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);

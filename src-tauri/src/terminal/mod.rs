@@ -282,12 +282,19 @@ impl Terminals {
             .map_err(|e| e.to_string())?;
         let waiting = terminal.clone();
         let id = req.id.to_owned();
+        let mut on_exit = on_exit;
         std::thread::Builder::new()
             .name(format!("terminal-{id}-wait"))
             .spawn(move || {
                 #[cfg(unix)]
                 if let Some(pid) = pid {
                     wait_exited(pid);
+                }
+                // Closed and gone: heard now, not once the close's grace is over.
+                if waiting.closed.load(Ordering::SeqCst) {
+                    if let Some(on_exit) = on_exit.take() {
+                        on_exit(None);
+                    }
                 }
                 let exit = {
                     let mut shell = lock(&waiting.shell);
@@ -304,7 +311,7 @@ impl Terminals {
                     }
                 }
                 if waiting.closed.load(Ordering::SeqCst) {
-                    if let Some(on_exit) = on_exit {
+                    if let Some(on_exit) = on_exit.take() {
                         on_exit(None);
                     }
                     return;

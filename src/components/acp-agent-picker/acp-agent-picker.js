@@ -9,6 +9,7 @@ import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?r
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
 import tuneIcon from '@material-design-icons/svg/outlined/tune.svg?raw';
+import { agentIconOf } from '../../models/agent-icons.js';
 import { configOf, currentName } from '../../models/config-options.js';
 import styles from './acp-agent-picker.css?inline';
 
@@ -89,7 +90,8 @@ export class AcpAgentPicker extends LitElement {
    * @param {string} slot
    */
   #renderGlyph(agent, slot = 'leading') {
-    return html`<span class="acp-agent-picker__glyph" slot=${slot}>${agent.glyph}</span>`;
+    const { brand, svg } = agentIconOf(agent.id, agent.name);
+    return html`<md-icon class="acp-agent-picker__glyph" slot=${slot} data-brand=${brand ?? nothing}>${unsafeSVG(svg)}</md-icon>`;
   }
 
   /** The agents a draft can pick: those not turned off. */

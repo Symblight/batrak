@@ -129,9 +129,15 @@ class TerminalController {
     this.#started = true;
     $projectTabs.listen((projects) => {
       const gone = Object.entries($terminals.get())
-        .filter(([id, t]) => !projects[t.projectPath ?? '']?.paths.includes(terminalTabId(id)))
+        .filter(([id, t]) => !t.sessionId && !projects[t.projectPath ?? '']?.paths.includes(terminalTabId(id)))
         .map(([id]) => id);
       if (gone.length) this.#close(gone);
+    });
+    // A session's CLI is closed by the backend (`session_close_cli`); only its stream is dropped here.
+    $terminals.listen((terminals) => {
+      for (const id of [...this.#routes.keys(), ...this.#input.keys()]) {
+        if (!terminals[id]) this.#forget(id);
+      }
     });
   }
 
@@ -200,6 +206,8 @@ class TerminalController {
    */
   async #attach(id, route) {
     await this.#ready;
+    // A session's CLI that didn't start has no terminal in the backend: its view shows why.
+    if ($terminals.get()[id]?.sessionId && $terminals.get()[id]?.status === 'failed') return;
     if ($terminals.get()[id]?.status === 'starting' && !(await this.#open(id, route.size))) return;
     this.#flush(id);
     if (route.disposed || !$terminals.get()[id]) return;
@@ -287,7 +295,8 @@ class TerminalController {
   #exited(id, exit) {
     const info = $terminals.get()[id];
     if (!info || info.status === 'exited') return;
-    if (exit.code === 0 && exit.signal === null) closeProjectTab(info.projectPath, terminalTabId(id));
+    if (info.sessionId) terminalExited(id, exit);
+    else if (exit.code === 0 && exit.signal === null) closeProjectTab(info.projectPath, terminalTabId(id));
     else terminalExited(id, exit);
   }
 
@@ -297,7 +306,8 @@ class TerminalController {
    */
   async restart(id) {
     const info = $terminals.get()[id];
-    if (!info || info.status === 'running' || info.status === 'starting') return;
+    // A session's CLI starts again through its session (`sessionController.restartCli()`).
+    if (!info || info.sessionId || info.status === 'running' || info.status === 'starting') return;
     const route = this.#routes.get(id);
     terminalRestarting(id);
     if (!route) return; // its view starts it when shown
@@ -346,13 +356,18 @@ class TerminalController {
       });
   }
 
+  /** @param {string} id */
+  #forget(id) {
+    this.#routes.delete(id);
+    this.#input.delete(id);
+    this.#drawn.delete(id);
+  }
+
   /** @param {string[]} ids */
   #close(ids) {
     for (const id of ids) {
       forgetTerminal(id);
-      this.#routes.delete(id);
-      this.#input.delete(id);
-      this.#drawn.delete(id);
+      this.#forget(id);
     }
     this.#ready.then(() => terminalClose(ids)).catch((err) => reportError('Closing terminals failed', err));
   }

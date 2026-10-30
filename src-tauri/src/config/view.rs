@@ -57,6 +57,10 @@ pub struct AgentRow {
     pub sign_in: Option<SignInState>,
     /// `[start, end)` in UTF-16 code units of `name`.
     pub name_matches: Vec<[usize; 2]>,
+    /// Whether its sessions can continue in its own CLI; `None`: it has none.
+    pub terminal: Option<super::cli::TerminalMode>,
+    /// The registry's description of what it runs; `None` when the registry doesn't know it.
+    pub description: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -140,7 +144,9 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
         } else {
             Status::NotStarted
         };
+        let description = entry.map(|e| e.description.clone()).filter(|d| !d.is_empty());
         let row = AgentRow {
+            description,
             is_default: default_agent.as_deref() == Some(a.id.as_str()),
             updating: updating(&a.id),
             name_matches: query.highlights(&a.name),
@@ -154,6 +160,7 @@ pub fn build(inputs: Inputs<'_>) -> AgentsView {
             args: a.args,
             version: a.version,
             update: a.update,
+            terminal: a.terminal,
         };
         Some((rank, row))
     };
@@ -316,6 +323,7 @@ mod tests {
             sign_in: false,
             command: command.into(),
             args: args.iter().map(|&a| a.into()).collect(),
+            terminal: None,
         }
     }
 
@@ -323,6 +331,7 @@ mod tests {
         let mut claude = agent("claude", "Claude Code", "npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.90.0"]);
         claude.registry_id = Some("claude-acp".into());
         claude.update = Some(AgentUpdate { to: "0.94.0".into(), pin: false });
+        claude.terminal = Some(crate::config::cli::TerminalMode { resume: true, new: true });
         let mut codex = agent("codex", "Codex", "codex-acp", &[]);
         codex.enabled = false;
         // Each runs a supported registry agent (the view only reads `registryId`), but `custom`.
@@ -381,6 +390,24 @@ mod tests {
         let codex = all.installed.iter().find(|r| r.id == "codex").unwrap();
         assert!(codex.status == Status::Off && codex.sign_in.is_none());
         assert!(all.installed.iter().filter(|r| !["zed", "codex"].contains(&r.id.as_str())).all(|r| r.sign_in.is_none()));
+    }
+
+    #[test]
+    fn a_row_says_whether_its_agent_can_run_in_a_terminal() {
+        let all = view("", Filter::All);
+        let terminal = |id: &str| all.installed.iter().find(|r| r.id == id).unwrap().terminal;
+        assert_eq!(terminal("claude"), Some(crate::config::cli::TerminalMode { resume: true, new: true }));
+        assert_eq!(terminal("repo"), None);
+        let json = serde_json::to_value(all.installed.iter().find(|r| r.id == "repo").unwrap()).unwrap();
+        assert_eq!(json["terminal"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn a_row_carries_its_registry_description() {
+        let all = view("", Filter::All);
+        let description = |id: &str| all.installed.iter().find(|r| r.id == id).unwrap().description.clone();
+        assert_eq!(description("claude").as_deref(), Some("ACP wrapper for Anthropic's Claude"));
+        assert_eq!(description("repo"), None, "not in the registry");
     }
 
     fn names(view: &AgentsView) -> (Vec<&str>, Vec<&str>) {

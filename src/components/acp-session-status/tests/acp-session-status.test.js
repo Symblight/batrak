@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-session-status.js';
 
 /** @typedef {import('../acp-session-status.js').AcpSessionStatus} AcpSessionStatus */
@@ -13,13 +13,16 @@ describe('acp-session-status', () => {
       ['error', 'Last turn failed', 'md-icon'],
       ['running', 'Agent is working', 'md-progress-circular'],
       ['elsewhere', 'Active in another app', 'md-progress-circular'],
+      ['terminal', 'In terminal', 'md-icon'],
+      ['terminal-working', 'Working in terminal', 'md-progress-circular'],
       ['unread', 'New output', '.acp-session-status__dot'],
     ];
     for (const [indicator, label, part] of cases) {
       el.indicator = indicator;
       await el.updateComplete;
       const icon = root.querySelector('.acp-session-status__icon');
-      expect([icon?.getAttribute('aria-label'), icon?.getAttribute('title')]).to.deep.equal([label, label]);
+      expect([icon?.getAttribute('aria-label'), tooltipOf(icon)]).to.deep.equal([label, label]);
+      expect(root.querySelector('[title]')).to.equal(null);
       expect(root.querySelector(part), indicator).to.not.equal(null);
     }
   });

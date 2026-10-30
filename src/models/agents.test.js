@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { commandLine, glyphOf, ownSignIns, parseCommandLine, signInAfterAdd, splitArgs } from './agents.js';
+import { agentBrandOf, commandLine, ownSignIns, parseCommandLine, signInAfterAdd, splitArgs } from './agents.js';
 
 /** @typedef {import('./types.js').SignInMethod} SignInMethod */
 
@@ -11,10 +11,14 @@ import { commandLine, glyphOf, ownSignIns, parseCommandLine, signInAfterAdd, spl
 const method = (id, apiKey = null) => ({ id, name: id, description: null, kind: 'agent', label: null, apiKey });
 
 describe('agents', () => {
-  it('makes a glyph of one or two letters', () => {
-    expect(glyphOf('Claude Code')).to.equal('CC');
-    expect(glyphOf('gemini-cli')).to.equal('GC');
-    expect(glyphOf('codex')).to.equal('CO');
+  it('knows the brand of an agent by its id or name', () => {
+    expect(agentBrandOf('claude-code', 'Claude Code')).to.equal('claude');
+    expect(agentBrandOf('claude-acp', null)).to.equal('claude');
+    expect(agentBrandOf('codex-acp', 'Codex CLI')).to.equal('codex');
+    expect(agentBrandOf('github-copilot-cli', 'Copilot')).to.equal('copilot');
+    expect(agentBrandOf('antigravity-acp', 'Google Antigravity')).to.equal('antigravity');
+    expect(agentBrandOf('mine', 'My Claude')).to.equal('claude');
+    expect(agentBrandOf('a', 'Something else')).to.equal(null);
   });
 
   it('splits arguments as a shell would, quotes kept together', () => {

@@ -1,6 +1,6 @@
 import { StoreController } from '../store/StoreController.js';
 import { sessionController } from '../../services/session-controller.js';
-import { $returnedPrompts, takeReturnedPrompt } from '../../stores/chat.js';
+import { $historyResets, $returnedPrompts, takeHistoryResets, takeReturnedPrompt } from '../../stores/chat.js';
 import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../../stores/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -71,6 +71,15 @@ export class ChatSessionController {
         }
       },
     });
+    // A session back from its CLI: its agent's replay rebuilds it.
+    new StoreController(host, {
+      store: $historyResets,
+      onChange: (ids) => {
+        const chat = this.#config.chat();
+        if (!chat || ids.length === 0) return;
+        for (const id of takeHistoryResets()) chat.store.clear(id);
+      },
+    });
     new StoreController(host, {
       store: $returnedPrompts,
       onChange: () => {
@@ -120,7 +129,16 @@ export class ChatSessionController {
   #onSend = (e) => {
     const id = this.#activeId.value;
     if (id === null || this.#session.value !== null) return;
-    if (!sessionController.start(id, titleOf(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value))) {
+    const text = /** @type {CustomEvent<{ value: string }>} */ (e).detail.value;
+    if (sessionController.startsInTerminal(id)) {
+      // The CLI starts with it as its first prompt; the chat never sends it.
+      e.stopPropagation();
+      e.preventDefault();
+      this.#config.chat()?.input.setText('');
+      sessionController.startInTerminal(id, titleOf(text), text);
+      return;
+    }
+    if (!sessionController.start(id, titleOf(text))) {
       // Kept from `<chx-chat>`, and cancelled so the composer keeps the text.
       e.stopPropagation();
       e.preventDefault();

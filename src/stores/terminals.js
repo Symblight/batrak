@@ -1,4 +1,4 @@
-import { atom } from 'nanostores';
+import { atom, computed } from 'nanostores';
 import { openProjectTab, openTab } from './editor.js';
 import { $workspace } from './workspace.js';
 import { terminalTabId } from '../models/tab-ids.js';
@@ -37,6 +37,52 @@ export function openTerminal(cwd, fallback, label) {
   });
   openTab(terminalTabId(id));
   return id;
+}
+
+/**
+ * Adds a session's CLI, which the backend started (`session_open_cli`): shown in the agent column in
+ * place of the chat, never as a tab.
+ * @param {string} id The terminal's.
+ * @param {string} sessionId
+ * @param {string} cwd
+ * @param {string} label
+ */
+export function addSessionTerminal(id, sessionId, cwd, label) {
+  $terminals.set({
+    ...$terminals.get(),
+    [id]: { cwd, fallback: null, label, title: null, projectPath: null, status: 'running', exit: null, error: null, login: null, sessionId },
+  });
+}
+
+/** Sessions whose CLI is starting (`session_open_cli` asked, no answer yet). */
+export const $cliStarting = atom(/** @type {readonly string[]} */ ([]));
+
+/**
+ * @param {string} sessionId
+ * @param {boolean} starting
+ */
+export function setCliStarting(sessionId, starting) {
+  const others = $cliStarting.get().filter((id) => id !== sessionId);
+  $cliStarting.set(starting ? [...others, sessionId] : others);
+}
+
+/** Each session's CLI, by session id: its terminal's id. */
+export const $sessionTerminals = computed($terminals, (terminals) =>
+  /** @type {Readonly<Record<string, string>>} */ (
+    Object.fromEntries(
+      Object.entries(terminals)
+        .filter(([, t]) => typeof t.sessionId === 'string')
+        .map(([id, t]) => [/** @type {string} */ (t.sessionId), id]),
+    )
+  ),
+);
+
+/**
+ * @param {string} sessionId
+ * @returns {string | null} The terminal of the session's CLI.
+ */
+export function sessionTerminalOf(sessionId) {
+  return $sessionTerminals.get()[sessionId] ?? null;
 }
 
 /**
@@ -109,6 +155,6 @@ export function forgetTerminal(id) {
  */
 export function terminalsOfProject(projectPath) {
   return Object.entries($terminals.get())
-    .filter(([, t]) => t.projectPath === projectPath)
+    .filter(([, t]) => t.projectPath === projectPath && !t.sessionId)
     .map(([id]) => id);
 }

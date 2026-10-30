@@ -38,3 +38,21 @@ export function takeReturnedPrompt(sessionId) {
   $returnedPrompts.set(rest);
   return text;
 }
+
+/**
+ * Sessions whose cached messages the chat drops, so their agent's next replay rebuilds them (a
+ * session back from its CLI, which ran turns the chat never saw).
+ */
+export const $historyResets = atom(/** @type {readonly string[]} */ ([]));
+
+/** @param {string} sessionId */
+export function resetHistory(sessionId) {
+  if (!$historyResets.get().includes(sessionId)) $historyResets.set([...$historyResets.get(), sessionId]);
+}
+
+/** @returns {readonly string[]} The sessions to drop, now no longer waiting. */
+export function takeHistoryResets() {
+  const ids = $historyResets.get();
+  if (ids.length) $historyResets.set([]);
+  return ids;
+}

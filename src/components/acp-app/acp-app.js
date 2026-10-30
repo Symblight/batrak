@@ -87,7 +87,7 @@ export class AcpApp extends LitElement {
     terminalController.projectTerminal().catch((err) => reportError('Opening a terminal failed', err));
   }
 
-  /** Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: Find in Files. Ctrl+`: New Terminal. */
+  /** Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: Find in Files. Cmd/Ctrl+Shift+T: the session in chat / terminal. Ctrl+`: New Terminal. */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
     if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
       e.preventDefault();
@@ -102,6 +102,9 @@ export class AcpApp extends LitElement {
     } else if (key === 'f' && e.shiftKey) {
       e.preventDefault();
       this.#showSearch();
+    } else if (key === 't' && e.shiftKey) {
+      e.preventDefault();
+      this.renderRoot.querySelector('acp-agent-column')?.toggleView();
     }
   };
 

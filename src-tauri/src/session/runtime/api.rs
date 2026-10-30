@@ -13,7 +13,8 @@ pub struct Envelope {
     /// agent's model, thought level and mode options as they are now), or `session` (the `Session`
     /// after the agent named it), `sign-in` (`{ agentId, agentName, methods }`: the agent asks
     /// for a sign-in; `null` once a start works or Stop), `held` (`{ prompt }`: the turn's prompt
-    /// waits for that sign-in) or `prompt-returned` (`{ prompt }`: a held prompt was dropped).
+    /// waits for that sign-in), `prompt-returned` (`{ prompt }`: a held prompt was dropped) or
+    /// `cli-exited` (`{ code, signal }`: its agent's CLI, in a terminal, exited).
     pub kind: &'static str,
     pub payload: Value,
 }

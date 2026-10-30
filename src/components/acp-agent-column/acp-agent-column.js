@@ -3,12 +3,14 @@ import '@symblight/wc-material/progress-circular';
 import '../acp-chat/acp-chat.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import '../acp-session-header/acp-session-header.js';
+import '../acp-terminal/acp-terminal.js';
 import '../acp-welcome/acp-welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
+import { copyText } from '../../services/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
@@ -25,17 +27,20 @@ import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
-import { $terminals, openLoginTerminal } from '../../stores/terminals.js';
+import { $sessionTerminals, $terminals, openLoginTerminal } from '../../stores/terminals.js';
+import { $activeShownView, $activeView } from '../../stores/session-views.js';
+import { $editorFont, $editorFontSize } from '../../stores/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../models/types.js').SessionView} SessionView */
 /** @typedef {import('../acp-session-banner/acp-session-banner.js').SessionAction} SessionAction */
 
 /**
  * @tag acp-agent-column
- * @summary Agent chat for the opened project; the welcome screen until one is opened, a spinner while one opens.
+ * @summary Agent chat for the opened project, or the active session's CLI in a terminal (the chat kept, hidden); the welcome screen until one is opened, a spinner while one opens.
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
@@ -66,6 +71,11 @@ export class AcpAgentColumn extends LitElement {
   #activeSession = new StoreController(this, { store: $activeSession });
   #localShared = new StoreController(this, { store: $localShared });
   #workspaceSettings = new StoreController(this, { store: $workspaceSettings });
+  #activeView = new StoreController(this, { store: $activeView });
+  #shownView = new StoreController(this, { store: $activeShownView });
+  #sessionTerminals = new StoreController(this, { store: $sessionTerminals });
+  #editorFont = new StoreController(this, { store: $editorFont });
+  #editorFontSize = new StoreController(this, { store: $editorFontSize });
   /** The header's rename, reset title, reveal and delete. */
   #sessionActions = new SessionActionsController(this, {
     confirm: () => this.renderRoot.querySelector('acp-confirm-dialog'),
@@ -225,6 +235,85 @@ export class AcpAgentColumn extends LitElement {
     openUrl(url).catch((err) => reportError('Opening the link failed', err));
   }
 
+  /** Continue in the other view: ⌘⇧T, or the header's button. */
+  toggleView() {
+    const id = $activeSessionId.get();
+    if (id !== null && $activeView.get().disabled === '') this.#switchView(id, $activeShownView.get() === 'terminal' ? 'chat' : 'terminal');
+  }
+
+  /** @param {Event} e */
+  #onSessionView(e) {
+    const { sessionId, view } = /** @type {CustomEvent<{ sessionId: string, view: SessionView }>} */ (e).detail;
+    this.#switchView(sessionId, view);
+  }
+
+  /**
+   * Asks first when the switch would stop work: a running turn (or one waiting for an answer) going
+   * to the terminal, a busy CLI going back to chat.
+   * @param {string} id
+   * @param {SessionView} view
+   */
+  async #switchView(id, view) {
+    const dialog = this.renderRoot.querySelector('acp-confirm-dialog');
+    const status = this.#activeSession.value?.id === id ? this.#activeSession.value.status : null;
+    if (view === 'terminal') {
+      const busy = status === 'working' || status === 'queued' || status === 'waiting' || this.#permission.value !== null;
+      const asked = { headline: 'Stop the current turn?', message: 'Stop the current turn and continue in the terminal?', confirmLabel: 'Stop and continue' };
+      if (busy && !(await dialog?.confirm(asked))) return;
+      await sessionController.continueInTerminal(id);
+      return;
+    }
+    if (await sessionController.cliBusy(id)) {
+      const name = this.#activeSession.value?.agentName ?? 'the agent';
+      const asked = { headline: `Close ${name}?`, message: `Close ${name} in the terminal? Its current reply stops.`, confirmLabel: 'Close and continue' };
+      if (!(await dialog?.confirm(asked))) return;
+    }
+    await sessionController.continueInChat(id);
+  }
+
+  /** @param {Event} e */
+  #onTerminalRestart(e) {
+    e.stopPropagation();
+    const id = $activeSessionId.get();
+    if (id !== null) sessionController.restartCli(id);
+  }
+
+  /** @param {Event} e */
+  #onTerminalChat(e) {
+    e.stopPropagation();
+    const id = $activeSessionId.get();
+    if (id !== null) this.#switchView(id, 'chat');
+  }
+
+  /** @param {Event} e */
+  #onTerminalCopy(e) {
+    copyText(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying failed');
+  }
+
+  /** The active session's CLI, or a spinner while it starts. */
+  #renderTerminal() {
+    const id = this.#activeSessionId.value;
+    const terminalId = id === null ? undefined : this.#sessionTerminals.value[id];
+    if (terminalId === undefined) {
+      return html`<div class="acp-agent-column__loading">
+        <md-progress-circular class="acp-agent-column__spinner" aria-label="Starting the agent's CLI"></md-progress-circular>
+      </div>`;
+    }
+    return html`<acp-terminal
+      class="acp-agent-column__terminal"
+      chat-fallback
+      terminal-id=${terminalId}
+      .connect=${terminalController.connect}
+      .info=${this.#terminals.value[terminalId] ?? null}
+      .fontFamily=${this.#editorFont.value}
+      .fontSize=${this.#editorFontSize.value}
+      @acp-terminal-restart=${this.#onTerminalRestart}
+      @acp-terminal-chat=${this.#onTerminalChat}
+      @acp-terminal-copy=${this.#onTerminalCopy}
+      @acp-link-open=${this.#onLinkOpen}
+    ></acp-terminal>`;
+  }
+
   #onNewSession() {
     const workspace = $workspace.get();
     if (workspace) sessionController.create(workspace.path);
@@ -242,9 +331,18 @@ export class AcpAgentColumn extends LitElement {
       ?provisional=${session?.titleSource === 'prompt'}
       ?resettable=${session?.titleSource === 'user' && session.agentTitle !== null}
       .indicator=${session
-        ? sessionIndicator(session.status, this.#permission.value !== null, false, isActiveElsewhere(session, this.#now.value))
+        ? sessionIndicator(
+            session.status,
+            this.#permission.value !== null,
+            false,
+            isActiveElsewhere(session, this.#now.value),
+            session.inTerminal === true,
+          )
         : null}
+      .view=${this.#shownView.value}
+      view-disabled=${this.#activeView.value.disabled}
       @acp-session-new=${this.#onNewSession}
+      @acp-session-view=${this.#onSessionView}
     ></acp-session-header>`;
   }
 
@@ -257,13 +355,14 @@ export class AcpAgentColumn extends LitElement {
     const workspace = this.#workspace.value;
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
+    const inTerminal = workspace !== null && !opening && hasSession && this.#shownView.value === 'terminal';
     // Hidden rather than removed while a project opens, so the chat keeps its state.
     return html`
       ${workspace !== null && !opening ? this.#renderHeader() : nothing}
       ${workspace !== null
         ? html`<acp-chat
             class="acp-agent-column__chat"
-            ?hidden=${opening}
+            ?hidden=${opening || inTerminal}
             .conversationId=${this.#session.conversationId}
             ?empty=${this.#session.empty}
             .adapter=${acpAdapter}
@@ -302,6 +401,7 @@ export class AcpAgentColumn extends LitElement {
             ?hidden=${opening}
             @acp-open-local=${this.#onOpenLocal}
           ></acp-welcome>`}
+      ${inTerminal ? this.#renderTerminal() : nothing}
       ${opening
         ? html`<div class="acp-agent-column__loading">
             <md-progress-circular class="acp-agent-column__spinner" aria-label="Opening project"></md-progress-circular>

@@ -37,6 +37,7 @@ import {
   settingsRevealed,
 } from '../../stores/editor.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents.js';
+import { $agentViews, setAgentView } from '../../stores/session-views.js';
 import { addToChat } from '../../stores/chat.js';
 import {
   $commentFocus,
@@ -72,6 +73,7 @@ import styles from './acp-main-column.css?inline';
 /** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').Settings} Settings */
+/** @typedef {import('../../models/types.js').SessionView} SessionView */
 /** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
 /** @typedef {import('../acp-tab-strip/acp-tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
@@ -100,6 +102,7 @@ export class AcpMainColumn extends LitElement {
   #agentsPending = new StoreController(this, { store: $agentsPending });
   #agentsReveal = new StoreController(this, { store: $agentsReveal });
   #signIns = new StoreController(this, { store: $signIns });
+  #agentViews = new StoreController(this, { store: $agentViews });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #gitChanges = new StoreController(this, { store: $gitChanges });
@@ -287,6 +290,7 @@ export class AcpMainColumn extends LitElement {
         .agentsQuery=${this.#agentsQuery.value}
         .agentsPending=${this.#agentsPending.value}
         .agentsSignIns=${signInsOf(this.#signIns.value, this.#workspace.value?.path ?? null)}
+        .agentsTerminal=${Object.keys(this.#agentViews.value)}
         .agentsReveal=${this.#agentsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
@@ -352,6 +356,8 @@ export class AcpMainColumn extends LitElement {
         @acp-agent-update=${this.#onAgentSave}
         @acp-agent-enable=${(/** @type {CustomEvent<{ agentId: string, enabled: boolean }>} */ e) =>
           agentConfig.setEnabled(e.detail.agentId, e.detail.enabled)}
+        @acp-agent-session-view=${(/** @type {CustomEvent<{ agentId: string, view: SessionView }>} */ e) =>
+          setAgentView(e.detail.agentId, e.detail.view)}
         @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
         @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
         @acp-agent-sign-in=${(/** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ e) =>

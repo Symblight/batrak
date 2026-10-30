@@ -119,7 +119,7 @@ describe('composer', () => {
   it('names an agent agents.json no longer has as the session knew it', () => {
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: null, known: [], userAgents: [], errors: [] });
     expect(agentInfo('a')).to.deep.include({ name: 'A', removed: false });
-    expect(agentInfo('claude', 'Claude Code')).to.deep.include({ id: 'claude', name: 'Claude Code', glyph: 'CC', removed: true });
+    expect(agentInfo('claude', 'Claude Code')).to.deep.include({ id: 'claude', name: 'Claude Code', removed: true });
     expect(agentInfo('claude')).to.deep.include({ name: 'claude', removed: true });
   });
 });

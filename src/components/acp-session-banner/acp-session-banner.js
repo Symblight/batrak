@@ -1,6 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import { OPTION_VARIANTS } from '@symblight/chat/agent';
 import '@symblight/wc-material/button';
+import '@symblight/wc-material/tooltip';
 import { ownSignIns } from '../../models/agents.js';
 import styles from './acp-session-banner.css?inline';
 
@@ -92,13 +93,18 @@ export class AcpSessionBanner extends LitElement {
     return html`
       ${own.map(
         (method) => html`<md-button
-          slot="actions"
-          class="acp-session-banner__action"
-          variant="tonal"
-          title=${method.description ?? nothing}
-          @click=${() => signInWith(method.id)}
-          >${method.name}</md-button
-        >`,
+            id="acp-session-banner-method-${method.id}"
+            slot="actions"
+            class="acp-session-banner__action"
+            variant="tonal"
+            @click=${() => signInWith(method.id)}
+            >${method.name}</md-button
+          >
+          ${method.description
+            ? html`<md-tooltip slot="actions" for="acp-session-banner-method-${method.id}" show-delay="800"
+                >${method.description}</md-tooltip
+              >`
+            : nothing}`,
       )}
       ${own.length
         ? nothing
@@ -106,13 +112,14 @@ export class AcpSessionBanner extends LitElement {
             Open terminal
           </md-button>`}
       <md-button
+        id="acp-session-banner-retry"
         slot="actions"
         class="acp-session-banner__action"
         variant="text"
-        title="Check whether you're signed in now"
         @click=${() => signInWith(null)}
         >Retry</md-button
       >
+      <md-tooltip slot="actions" for="acp-session-banner-retry" show-delay="800">Check whether you're signed in now</md-tooltip>
     `;
   }
 
@@ -167,13 +174,16 @@ export class AcpSessionBanner extends LitElement {
     }
     if (notice.kind === 'stopped') {
       return html`<md-button
-        slot="actions"
-        class="acp-session-banner__action"
-        variant="text"
-        title="Start the agent now; it restores the conversation where it can"
-        @click=${() => this.#act('restart')}
-        >Resume</md-button
-      >`;
+          id="acp-session-banner-resume"
+          slot="actions"
+          class="acp-session-banner__action"
+          variant="text"
+          @click=${() => this.#act('restart')}
+          >Resume</md-button
+        >
+        <md-tooltip slot="actions" for="acp-session-banner-resume" show-delay="800"
+          >Start the agent now; it restores the conversation where it can</md-tooltip
+        >`;
     }
     return nothing;
   }

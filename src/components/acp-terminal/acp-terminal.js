@@ -21,6 +21,7 @@ const MONO = 'ui-monospace, Menlo, monospace';
  * @summary A terminal tab: xterm.js streaming its shell through `connect`, sized to the tab.
  * @fires acp-terminal-copy `{ text }`
  * @fires acp-terminal-restart `{ terminalId }`
+ * @fires acp-terminal-chat `{ terminalId }` Continue in chat, for a session's CLI that ended.
  * @fires acp-terminal-title `{ terminalId, title }` A title the shell set.
  * @fires acp-link-open `{ url }` A link ⌘-clicked (Ctrl-clicked elsewhere).
  */
@@ -32,6 +33,7 @@ export class AcpTerminal extends LitElement {
     fontFamily: { attribute: false },
     fontSize: { attribute: false },
     gpu: { attribute: false },
+    chatFallback: { type: Boolean, attribute: 'chat-fallback' },
   };
 
   static styles = [xtermStyles, styles];
@@ -64,6 +66,8 @@ export class AcpTerminal extends LitElement {
     this.fontSize = 13;
     /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
     this.gpu = true;
+    /** @type {boolean} A session's CLI: once ended it offers Continue in chat next to Restart. */
+    this.chatFallback = false;
   }
 
   /**
@@ -216,7 +220,7 @@ export class AcpTerminal extends LitElement {
       if (down && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
       return false;
     }
-    if (e.ctrlKey && e.shiftKey && (key === 'v' || key === 'f')) return false;
+    if (e.ctrlKey && e.shiftKey && (key === 'v' || key === 'f' || key === 't')) return false;
     if (e.ctrlKey && !e.shiftKey && key === 'p') return false;
     return true;
   };
@@ -229,12 +233,22 @@ export class AcpTerminal extends LitElement {
         : nothing}
       <div class="acp-terminal__screen"></div>
       ${ended
-        ? html`<md-button
-            class="acp-terminal__restart"
-            variant="tonal"
-            @click=${() => this.#emit('acp-terminal-restart', { terminalId: this.terminalId })}
-            >Restart</md-button
-          >`
+        ? html`<div class="acp-terminal__actions">
+            ${this.chatFallback
+              ? html`<md-button
+                  class="acp-terminal__chat"
+                  variant="text"
+                  @click=${() => this.#emit('acp-terminal-chat', { terminalId: this.terminalId })}
+                  >Continue in chat</md-button
+                >`
+              : nothing}
+            <md-button
+              class="acp-terminal__restart"
+              variant="tonal"
+              @click=${() => this.#emit('acp-terminal-restart', { terminalId: this.terminalId })}
+              >Restart</md-button
+            >
+          </div>`
         : nothing}`;
   }
 }

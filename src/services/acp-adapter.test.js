@@ -1,6 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { USER_ID, acpAdapter, handleSessionEvent } from './acp-adapter.js';
+import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from './acp-adapter.js';
+import { $terminals, addSessionTerminal } from '../stores/terminals.js';
 import { $returnedPrompts, takeReturnedPrompt } from '../stores/chat.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
 import { $sessionNotices, dismissSessionNotice } from '../stores/session-runtime.js';
@@ -35,6 +36,36 @@ describe('acp-adapter', () => {
     } finally {
       unsubscribe?.();
     }
+  });
+
+  it('replays a history again once forgotten: turns a CLI ran since', () => {
+    /** @type {{ delta?: { text?: string } }[]} */
+    const chunks = [];
+    const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+    try {
+      const id = 'forgotten';
+      let seq = 0;
+      const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+        handleSessionEvent(/** @type {import('../models/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+      const load = () => {
+        send('status', { status: 'starting' });
+        send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } });
+        send('status', { status: 'idle' });
+      };
+      load();
+      forgetHistory(id);
+      load();
+      expect(chunks.map((c) => c.delta?.text).filter(Boolean)).to.deep.equal(['Hello', 'Hello']);
+    } finally {
+      unsubscribe?.();
+    }
+  });
+
+  it("marks a session's CLI exited", () => {
+    addSessionTerminal('t-cli', 'cli-session', '/p', 'Claude Code');
+    handleSessionEvent({ sessionId: 'cli-session', seq: 1, kind: 'cli-exited', payload: { code: 0, signal: null } });
+    expect($terminals.get()['t-cli']).to.deep.include({ status: 'exited', exit: { code: 0, signal: null } });
+    $terminals.set({});
   });
 
   it('takes the session the agent named as the backend reports it', () => {

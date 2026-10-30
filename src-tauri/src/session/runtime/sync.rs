@@ -482,14 +482,16 @@ fn update_from_list(state: &SessionState, item: &ListedSession) {
     }
 }
 
-/// A session as the list shows it: until when another app may be running it, when its agent
-/// saw activity in it that wasn't Brama's own.
+/// A session as the page gets it: until when another app may be running it, when its agent saw
+/// activity in it that wasn't Brama's own, and whether its CLI holds it. Takes the record's lock:
+/// call it with none held.
 pub(super) fn listed(state: &SessionState) -> Session {
-    let mut session = Session::from(&*lock(&state.record));
+    let mut session = Session::of_record(&lock(&state.record));
     let ours = *lock(&state.active_here);
     session.active_elsewhere_until = lock(&state.listed_activity)
         .filter(|at| ours.is_none_or(|ours| *at > ours + OWN_ACTIVITY_SLACK_MS))
         .map(|at| iso_from_millis(at + ELSEWHERE_MS));
+    session.in_terminal = lock(&state.cli).is_some();
     session
 }
 

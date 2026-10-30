@@ -448,5 +448,7 @@ fn closing_a_programs_terminal_reports_no_exit() {
     let (out, ended) = run_program(&f, "login", "echo waiting; sleep 30");
     out.wait_for("waiting");
     f.terminals.close(&["login".to_owned()]);
+    let started = std::time::Instant::now();
     assert_eq!(ended.recv_timeout(Duration::from_secs(5)).unwrap(), None);
+    assert!(started.elapsed() < Duration::from_secs(1), "heard once it's gone, not after the kill's grace: {:?}", started.elapsed());
 }

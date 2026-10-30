@@ -5,6 +5,7 @@ import { MESSAGE_PART_RULES, fenceCode } from '../models/chat-parts.js';
 import { returnPrompt } from '../stores/chat.js';
 import { applyAgentOptions } from '../stores/composer.js';
 import { setContextUsage } from '../stores/context-usage.js';
+import { $terminals, sessionTerminalOf, terminalExited } from '../stores/terminals.js';
 import { folderOf, setSessionStatus, touchSession, upsertSession } from '../stores/sessions.js';
 import {
   $sessionNotices,
@@ -437,6 +438,11 @@ export function handleSessionEvent(event) {
     case 'prompt-returned':
       returnPrompt(sessionId, promptText(event.payload.prompt));
       return;
+    case 'cli-exited': {
+      const terminalId = sessionTerminalOf(sessionId);
+      if (terminalId !== null && $terminals.get()[terminalId]?.status !== 'exited') terminalExited(terminalId, event.payload);
+      return;
+    }
     case 'error':
       if (event.payload.turn) {
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.
@@ -469,6 +475,17 @@ function noticeOf(sessionId, status, message) {
   if (status === 'queued' && current?.kind === 'queued') return current;
   // Information and a changed launch stay through the session's turns, an overlap through its turn.
   return current?.kind === 'info' || current?.kind === 'outdated' || current?.kind === 'overlap' ? current : null;
+}
+
+/**
+ * Lets the session's next `session/load` replay its history again (the chat's copy of it was
+ * dropped): turns its CLI ran since aren't in that copy.
+ * @param {string} sessionId
+ */
+export function forgetHistory(sessionId) {
+  replays.delete(sessionId);
+  loaded.delete(sessionId);
+  replaying.delete(sessionId);
 }
 
 /**

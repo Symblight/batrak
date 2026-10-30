@@ -125,10 +125,12 @@
   min-width: var(--space-2);
 }
 
-.acp-session-header__new {
+.acp-session-header__new,
+.acp-session-header__view {
   flex: none;
 }
 
-.acp-session-header__new-icon {
+.acp-session-header__new-icon,
+.acp-session-header__view-icon {
   font-size: var(--icon-size-lg);
 }

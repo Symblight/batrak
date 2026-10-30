@@ -50,6 +50,7 @@ impl Inner {
                 let ran = record.launch.as_ref().map(|l| format!("{} {}", l.command, l.args.join(" ")));
                 let absence = Absence::of(&merged, &record.agent_id);
                 tracing::info!(session = %state.id, agent = %record.agent_id, ?absence, "its agent can't run: stopped");
+                self.close_cli(state).await;
                 self.stop(state).await;
                 self.report_unconfigured(state, &record.agent_id, ran.as_deref(), absence, record.status.is_active());
             }
@@ -99,13 +100,9 @@ impl Inner {
             .and_then(|ran| merged.agents.iter().filter(|a| merged.enabled(&a.id).is_some()).find(|a| log_line(a) == *ran))
             .ok_or_else(|| StartFailure::Unconfigured { agent_id: record.agent_id.clone(), ran: ran.clone(), absence })?;
         tracing::info!(session = %state.id, from = %record.agent_id, to = %agent.id, "session follows its agent to a new id");
-        let session = {
-            let mut record = lock(&state.record);
-            record.agent_id.clone_from(&agent.id);
-            Session::from(&*record)
-        };
+        lock(&state.record).agent_id.clone_from(&agent.id);
         self.persist();
-        state.emit("session", serde_json::to_value(session).unwrap_or_default());
+        state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
         Ok(agent.clone())
     }
 }

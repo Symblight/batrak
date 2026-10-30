@@ -96,7 +96,7 @@ impl Sessions {
 
     /// Most recently active first.
     pub fn list(&self) -> Vec<Session> {
-        let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| sync::listed(s)).collect();
+        let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| s.page()).collect();
         sessions.sort_by(|a, b| (&b.last_activity_at, &b.created_at).cmp(&(&a.last_activity_at, &a.created_at)));
         sessions
     }
@@ -119,6 +119,16 @@ impl Sessions {
     /// Creates a session and starts its agent in the background; progress arrives on `sink`.
     /// Blocking: placing a worktree session asks git.
     pub fn create(&self, req: CreateSession, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
+        let record = self.new_record(&req)?;
+        let state = self.insert(record, Some((sink_key, sink)))?;
+        tracing::info!(session = %state.id, agent = %req.agent_id, mode = ?req.mode, branch = ?state.record().branch, "session created");
+        self.inner.start_in_background(&state);
+        Ok(state.page())
+    }
+
+    /// The record of a new session, `preparing`, its folder placed. Blocking: placing a worktree
+    /// session asks git.
+    fn new_record(&self, req: &CreateSession) -> Result<SessionRecord, String> {
         // It names the session's folder in app data, which Remove deletes.
         let valid_id = (1..=64).contains(&req.session_id.len())
             && req.session_id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_');
@@ -141,42 +151,46 @@ impl Sessions {
         }
         let placed =
             env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?;
-        let record = SessionRecord {
+        Ok(SessionRecord {
             session_id: req.session_id.clone(),
             acp_session_id: None,
-            agent_id: req.agent_id,
+            agent_id: req.agent_id.clone(),
             mode: req.mode,
             agent_cwd: placed.agent_cwd,
             project_path: project,
-            title: req.title,
+            title: req.title.clone(),
             title_source: TitleSource::Prompt,
             agent_title: None,
             status: SessionStatus::Preparing,
             created_at: iso_now(),
             last_activity_at: None,
-            config: req.config,
+            config: req.config.clone(),
             worktree_path: placed.worktree_path,
             branch: placed.branch,
             base_commit: placed.base_commit,
             launch: None,
             agent_name: Some(agent_name),
             hidden: false,
-        };
+        })
+    }
+
+    /// Lists a new session, its events going to `sink` if given.
+    fn insert(&self, record: SessionRecord, sink: Option<(&str, Arc<dyn EventSink>)>) -> Result<Arc<SessionState>, String> {
+        let id = record.session_id.clone();
         let state = {
             let mut sessions = lock(&self.inner.sessions);
-            if sessions.contains_key(&req.session_id) {
-                return Err(format!("session {} exists already", req.session_id));
+            if sessions.contains_key(&id) {
+                return Err(format!("session {id} exists already"));
             }
             let state = Arc::new(new_state(record));
-            lock(&state.sinks).insert(sink_key.to_owned(), sink);
-            sessions.insert(req.session_id.clone(), Arc::clone(&state));
+            if let Some((key, sink)) = sink {
+                lock(&state.sinks).insert(key.to_owned(), sink);
+            }
+            sessions.insert(id, Arc::clone(&state));
             state
         };
         self.inner.persist();
-        let record = state.record();
-        tracing::info!(session = %state.id, agent = %record.agent_id, mode = ?req.mode, branch = ?record.branch, "session created");
-        self.inner.start_in_background(&state);
-        Ok(Session::from(&state.record()))
+        Ok(state)
     }
 
     /// Sends this window's events of a session to `sink` (replacing an earlier one), starting
@@ -186,7 +200,7 @@ impl Sessions {
         lock(&state.sinks).insert(sink_key.to_owned(), sink);
         let status = state.status();
         state.emit("status", json!({ "status": status }));
-        Ok(Session::from(&state.record()))
+        Ok(state.page())
     }
 
     /// Forgets a window's sinks (it closed or reloaded).
@@ -211,28 +225,26 @@ impl Sessions {
             return Err("a session's title can't be empty".into());
         }
         let state = self.get(id)?;
-        let session = {
+        {
             let mut record = lock(&state.record);
             record.title = title.to_owned();
             record.title_source = TitleSource::User;
-            Session::from(&*record)
-        };
+        }
         self.inner.persist();
-        Ok(session)
+        Ok(state.page())
     }
 
     /// Gives a renamed session back the title its agent gave it, which it then keeps up to date.
     pub fn reset_title(&self, id: &str) -> Result<Session, String> {
         let state = self.get(id)?;
-        let session = {
+        {
             let mut record = lock(&state.record);
             let title = record.agent_title.clone().ok_or("the agent hasn't named this session")?;
             record.title = title;
             record.title_source = TitleSource::Agent;
-            Session::from(&*record)
-        };
+        }
         self.inner.persist();
-        Ok(session)
+        Ok(state.page())
     }
 
     /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's
@@ -242,6 +254,7 @@ impl Sessions {
     /// uncommitted changes and a branch with commits.
     pub async fn remove(&self, id: &str) -> Result<(), String> {
         let state = self.get(id)?;
+        self.inner.close_cli(&state).await;
         self.inner.stop(&state).await;
         if lock(&self.inner.sessions).remove(id).is_none() {
             return Err(format!("unknown session {id}"));
@@ -287,6 +300,9 @@ impl Sessions {
     /// says why).
     pub async fn resume(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
+        if lock(&state.cli).is_some() {
+            return Ok(false);
+        }
         let record = state.record();
         if record.status != SessionStatus::Stopped {
             return Ok(record.status.is_active());
@@ -448,6 +464,7 @@ impl Inner {
 
 mod agents;
 mod api;
+mod cli;
 mod host;
 mod sign_in;
 mod slots;
@@ -460,10 +477,12 @@ mod turn;
 mod worktree;
 
 use self::agents::*;
+use self::cli::{CliHeld, OPEN_IN_TERMINAL};
 use self::host::*;
 use self::start::*;
 use self::state::*;
 use self::turn::*;
+pub use cli::{CliDraft, CliOpened, CliWindow};
 pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions};
 pub use sign_in::{Login, LoginExit, LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};

@@ -57,6 +57,9 @@ impl Inner {
         if let Some(live) = live.as_ref() {
             return Ok(Arc::clone(&live.conn));
         }
+        if lock(&state.cli).is_some() {
+            return Err(StartError::Failed(OPEN_IN_TERMINAL.to_owned()));
+        }
         if state.start_attempts.load(Ordering::SeqCst) != attempts {
             let failed = lock(&state.start_error).clone();
             return Err(failed.unwrap_or_else(|| StartError::Failed("the agent stopped".to_owned())));

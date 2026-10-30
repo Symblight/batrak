@@ -1,5 +1,16 @@
 import { expect } from '@esm-bundle/chai';
-import { isActiveElsewhere, loadingProjects, orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
+import {
+  isActiveElsewhere,
+  loadingProjects,
+  orderSessions,
+  ownView,
+  removeSessionConfirm,
+  sessionIndicator,
+  syncSummary,
+  viewDisabledReason,
+  viewOf,
+  visibleSessions,
+} from './sessions.js';
 
 /** @typedef {import('./types.js').Session} Session */
 
@@ -60,6 +71,50 @@ describe('sessionIndicator', () => {
     expect(sessionIndicator('waiting', false)).to.equal('permission');
     expect(sessionIndicator('working', true)).to.equal('permission');
     expect(sessionIndicator('error', true)).to.equal('permission');
+  });
+});
+
+describe('sessionIndicator in a terminal', () => {
+  it('says the CLI runs it, with a spinner while it works', () => {
+    expect(sessionIndicator('stopped', false, false, false, true)).to.equal('terminal');
+    expect(sessionIndicator('stopped', false, true, true, true)).to.equal('terminal-working');
+    expect(sessionIndicator('error', false, false, true, true)).to.equal('error');
+  });
+});
+
+describe('viewOf', () => {
+  const both = { resume: true, new: true };
+  const resumeOnly = { resume: true, new: false };
+
+  it("takes the session's own view over the setting", () => {
+    expect(viewOf('terminal', 'chat', both, false)).to.equal('terminal');
+    expect(viewOf('chat', 'terminal', both, false)).to.equal('chat');
+  });
+
+  it('takes the setting when the session has none', () => {
+    expect(viewOf(undefined, 'terminal', both, false)).to.equal('terminal');
+    expect(viewOf(undefined, 'chat', both, false)).to.equal('chat');
+  });
+
+  it('is chat for an agent with no terminal mode', () => {
+    expect(viewOf('terminal', 'terminal', null, false)).to.equal('chat');
+    expect(viewOf('terminal', 'terminal', undefined, false)).to.equal('chat');
+  });
+
+  it('is terminal for a draft only when the CLI can start a session', () => {
+    expect(viewOf(undefined, 'terminal', resumeOnly, true)).to.equal('chat');
+    expect(viewOf(undefined, 'terminal', both, true)).to.equal('terminal');
+  });
+
+  it('forgets a choice that is what the setting says', () => {
+    expect(ownView('chat', 'chat')).to.equal(undefined);
+    expect(ownView('terminal', 'chat')).to.equal('terminal');
+  });
+
+  it('says why the button is disabled', () => {
+    expect(viewDisabledReason(null, false, 'Copilot')).to.equal('Copilot has no terminal mode');
+    expect(viewDisabledReason(resumeOnly, true, 'Codex')).to.equal('Send a first message, then continue in the terminal');
+    expect(viewDisabledReason(resumeOnly, false, 'Codex')).to.equal('');
   });
 });
 

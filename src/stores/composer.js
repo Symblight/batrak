@@ -3,7 +3,6 @@ import { $activeSessionId, $sessions } from './sessions.js';
 import { $agentList } from './agents.js';
 import { $workspaceSettings } from './workspace.js';
 import { isRecord, persistentStore } from './persistent.js';
-import { glyphOf } from '../models/agents.js';
 
 /** @typedef {import('../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
@@ -112,7 +111,7 @@ export function normalizeOptions(options) {
  * @returns {CatalogAgent}
  */
 function catalogEntry({ id, name, enabled = true, signIn = false }) {
-  return { id, name, glyph: glyphOf(name), configOptions: $agentOptions.get()[id] ?? [], removed: false, off: !enabled, signIn };
+  return { id, name, configOptions: $agentOptions.get()[id] ?? [], removed: false, off: !enabled, signIn };
 }
 
 /** The project's agents (`$agentList`), each with its config options as last seen; `off` ones aren't offered. */
@@ -243,7 +242,7 @@ export function agentInfo(agentId, knownName = null) {
   const agent = $agents.get().find((a) => a.id === agentId);
   if (agent) return agent;
   const name = knownName ?? agentId;
-  return { id: agentId, name, glyph: glyphOf(name), removed: true };
+  return { id: agentId, name, removed: true };
 }
 
 /**

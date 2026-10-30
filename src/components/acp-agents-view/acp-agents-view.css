@@ -149,6 +149,79 @@
     background: var(--state-hover);
   }
 }
+.acp-agents-view__card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  margin-block: var(--space-1);
+  border-radius: var(--shape-corner-medium);
+  background: var(--md-surface-container-high);
+}
+.acp-agents-view__card-header,
+.acp-agents-view__mode {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+}
+.acp-agents-view__card-header {
+  /* The switch lines up with the options' menu buttons. */
+  padding-inline-end: var(--space-2);
+}
+.acp-agents-view__mode {
+  position: relative;
+
+  /* An inset divider above each option, as in a list. */
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline: var(--space-2);
+    border-block-start: 1px solid var(--md-outline-variant);
+  }
+
+  &:last-child {
+    border-end-start-radius: var(--shape-corner-medium);
+    border-end-end-radius: var(--shape-corner-medium);
+  }
+
+  &:hover {
+    background: var(--state-hover);
+  }
+}
+.acp-agents-view__modes {
+  /* A fieldset only to group each agent's radios (md-radio groups by its fieldset). */
+  min-inline-size: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+/* Named for assistive tech; the card's header already says whose choice it is. */
+.acp-agents-view__modes-legend {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.acp-agents-view__mode-radio {
+  flex: none;
+  /* Under the glyph above it. */
+  margin-inline: 2px;
+}
+.acp-agents-view__mode-text {
+  cursor: default;
+}
+.acp-agents-view__mode-name {
+  font: var(--font-weight-medium) var(--font-size-md)/20px var(--font-family);
+}
+.acp-agents-view__mode-version {
+  color: var(--md-on-surface-variant);
+  font-weight: 400;
+}
 .acp-agents-view__row_revealed {
   background: color-mix(in srgb, var(--md-primary) 10%, transparent);
 }
@@ -164,7 +237,9 @@
   height: 28px;
   border-radius: var(--shape-corner-extra-small);
   background: var(--md-surface-container-highest);
-  font: var(--font-weight-medium) var(--font-size-xs)/1 var(--font-family);
+}
+.acp-agents-view__glyph-icon {
+  font-size: var(--icon-size-sm);
 }
 /* Off: its name and glyph fade; the switch and menu keep full contrast. */
 .acp-agents-view__glyph_off,

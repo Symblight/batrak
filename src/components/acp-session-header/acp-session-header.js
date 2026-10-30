@@ -8,21 +8,25 @@ import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import newSessionIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import chatIcon from '@material-design-icons/svg/outlined/chat.svg?raw';
 import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import styles from './acp-session-header.css?inline';
 
 /** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types.js').SessionView} SessionView */
 
 /**
  * @tag acp-session-header
- * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, open in a terminal, delete), and a new-session button.
+ * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, open in a terminal, delete), a Chat / Terminal switch and a new-session button.
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
  * @fires acp-session-new `null`
+ * @fires acp-session-view `{ sessionId, view }` Continue in the other view.
  */
 export class AcpSessionHeader extends LitElement {
   static properties = {
@@ -32,6 +36,8 @@ export class AcpSessionHeader extends LitElement {
     provisional: { type: Boolean },
     resettable: { type: Boolean },
     indicator: {},
+    view: {},
+    viewDisabled: { attribute: 'view-disabled' },
     renaming: { state: true },
     menuOpen: { state: true },
   };
@@ -52,6 +58,10 @@ export class AcpSessionHeader extends LitElement {
     this.resettable = false;
     /** @type {SessionIndicator | null} */
     this.indicator = null;
+    /** @type {SessionView} */
+    this.view = 'chat';
+    /** @type {string} Why the session can't switch views, the button's tooltip; `''` when it can. */
+    this.viewDisabled = '';
     /** @type {boolean} The title is an editable field. */
     this.renaming = false;
     /** @type {boolean} */
@@ -170,6 +180,29 @@ export class AcpSessionHeader extends LitElement {
       <md-tooltip for="acp-session-header-title" show-delay="800" placement="bottom">${this.sessionTitle}</md-tooltip>`;
   }
 
+  /** Continue in terminal / in chat. */
+  #renderViewToggle() {
+    if (this.renaming) return nothing;
+    const terminal = this.view === 'terminal';
+    const label = terminal ? 'Continue in chat' : 'Continue in terminal';
+    const disabled = this.viewDisabled !== '';
+    return html`<md-icon-button
+        id="acp-session-header-view"
+        class="acp-session-header__view"
+        aria-pressed=${terminal ? 'true' : 'false'}
+        aria-label=${label}
+      ?disabled=${disabled}
+      @click=${() => {
+        if (!disabled) this.#emit('acp-session-view', { sessionId: this.sessionId, view: terminal ? 'chat' : 'terminal' });
+      }}
+    >
+      <md-icon class="acp-session-header__view-icon">${unsafeSVG(terminal ? chatIcon : terminalIcon)}</md-icon>
+      </md-icon-button>
+      <md-tooltip for="acp-session-header-view" show-delay="800" placement="bottom"
+        >${disabled ? this.viewDisabled : label}</md-tooltip
+      >`;
+  }
+
   /** Gone while renaming: the field replaces the button it opens from. */
   #renderMenu() {
     if (this.draft || this.renaming) return nothing;
@@ -197,16 +230,18 @@ export class AcpSessionHeader extends LitElement {
         : html`<acp-session-status class="acp-session-header__status" .indicator=${this.indicator}></acp-session-status>`}
       ${this.#renderTitle()}
       <span class="acp-session-header__spacer"></span>
+      ${this.#renderViewToggle()}
       ${this.renaming
         ? nothing
         : html`<md-icon-button
-            class="acp-session-header__new"
-            title="New session"
-            aria-label="New session"
-            @click=${() => this.#emit('acp-session-new')}
-          >
-            <md-icon class="acp-session-header__new-icon">${unsafeSVG(newSessionIcon)}</md-icon>
-          </md-icon-button>`}
+              id="acp-session-header-new"
+              class="acp-session-header__new"
+              aria-label="New session"
+              @click=${() => this.#emit('acp-session-new')}
+            >
+              <md-icon class="acp-session-header__new-icon">${unsafeSVG(newSessionIcon)}</md-icon>
+            </md-icon-button>
+            <md-tooltip for="acp-session-header-new" show-delay="800" placement="bottom">New session</md-tooltip>`}
       ${this.#renderMenu()}
     `;
   }

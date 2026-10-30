@@ -63,9 +63,16 @@ pub(super) struct SessionState {
     pub(super) sign_in: Mutex<Option<SignInNeed>>,
     /// The turn whose prompt waits for that sign-in: `true` sends it, `false` drops it.
     pub(super) held: Mutex<Option<oneshot::Sender<bool>>>,
+    /// Its agent's CLI holds it, in a terminal (`cli`): the agent isn't started here meanwhile.
+    pub(super) cli: Mutex<Option<CliHeld>>,
 }
 
 impl SessionState {
+    /// The session as the page gets it (`sync::listed`): every `Session` sent goes through here.
+    pub(super) fn page(&self) -> Session {
+        sync::listed(self)
+    }
+
     pub(super) fn record(&self) -> SessionRecord {
         lock(&self.record).clone()
     }
@@ -104,6 +111,7 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         turn_ended: Mutex::default(),
         sign_in: Mutex::default(),
         held: Mutex::default(),
+        cli: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),

@@ -1,10 +1,23 @@
+/** @typedef {'claude' | 'codex' | 'copilot' | 'antigravity'} AgentBrand */
+
+/** @type {readonly [RegExp, AgentBrand][]} */
+const BRANDS = [
+  [/claude/, 'claude'],
+  [/codex/, 'codex'],
+  [/copilot/, 'copilot'],
+  [/antigravity/, 'antigravity'],
+];
+
 /**
- * One or two letters for an agent's badge.
- * @param {string} name
+ * Which of the supported agents this one is, by its id or name (ids differ between agents.json
+ * files); `null`: none of them.
+ * @param {string} agentId
+ * @param {string | null | undefined} name
+ * @returns {AgentBrand | null}
  */
-export function glyphOf(name) {
-  const words = name.split(/[\s-]+/).filter(Boolean);
-  return (words.length > 1 ? words[0][0] + words[1][0] : name.slice(0, 2)).toUpperCase();
+export function agentBrandOf(agentId, name) {
+  const text = `${agentId} ${name ?? ''}`.toLowerCase();
+  return BRANDS.find(([re]) => re.test(text))?.[1] ?? null;
 }
 
 /**

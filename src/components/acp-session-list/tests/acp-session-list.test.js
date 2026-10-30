@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-session-list.js';
 
 /** @typedef {import('../acp-session-list.js').AcpSessionList} AcpSessionList */
@@ -93,14 +93,30 @@ describe('acp-session-list', () => {
     expect(titles(root)).to.deep.equal(['Session c', 'Session b', 'Session a', 'Session r']);
     expect(row(root, 'Session c').querySelector('.acp-session-list__pin')).to.not.equal(null);
     expect(row(root, 'Session b').querySelector('.acp-session-list__pin')).to.equal(null);
+    expect(tooltipOf(row(root, 'Session c').querySelector('.acp-session-list__pin'))).to.equal('Pinned');
   });
 
   it('shows a worktree session’s branch and each session’s age', async () => {
     const { root } = await render();
-    expect(row(root, 'Session r').querySelector('.acp-session-list__branch')?.getAttribute('title')).to.equal(
-      'Worktree on brama/r-1',
-    );
+    expect(tooltipOf(row(root, 'Session r').querySelector('.acp-session-list__branch'))).to.equal('Worktree on brama/r-1');
+    expect(tooltipOf(root.querySelector('.acp-session-list__project-path'))).to.equal('/home/me/brama');
+    expect(tooltipOf(root.querySelector('.acp-session-list__add'))).to.equal('New session');
+    expect(tooltipOf(root.querySelector('.acp-session-list__open-folder'))).to.equal('Open folder…');
+    expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
     expect(row(root, 'Session a').querySelector('.acp-session-list__age')?.textContent).to.match(/^\d+d$/);
+  });
+
+  it('shows each session’s agent as a small icon named by its tooltip', async () => {
+    const { root } = await render({
+      sessions: [session('a', { agentId: 'claude-code', agentName: 'Claude Code' }), session('b', { agentId: 'mine' })],
+    });
+    const claude = row(root, 'Session a').querySelector('.acp-session-list__agent');
+    expect(claude?.getAttribute('data-brand')).to.equal('claude');
+    expect(claude?.querySelector('svg')).to.not.equal(null);
+    expect(tooltipOf(claude)).to.equal('Claude Code');
+    const other = row(root, 'Session b').querySelector('.acp-session-list__agent');
+    expect(other?.hasAttribute('data-brand')).to.equal(false);
+    expect(tooltipOf(other)).to.equal('mine');
   });
 
   it('hides a collapsed project’s sessions and counts them', async () => {
@@ -312,6 +328,20 @@ describe('acp-session-list', () => {
       root.querySelector('[data-session-id="t"] acp-session-status')
     );
     expect(status?.indicator).to.equal('elsewhere');
+  });
+
+  it('shows a session its CLI runs in a terminal working, with no terminal icon when idle', async () => {
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    const sessions = [
+      session('w', { status: 'stopped', inTerminal: true, activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
+      session('i', { status: 'stopped', inTerminal: true }),
+    ];
+    const { root } = await render({ sessions, now });
+    const indicator = (/** @type {string} */ id) =>
+      /** @type {import('../../acp-session-status/acp-session-status.js').AcpSessionStatus | null} */ (
+        root.querySelector(`[data-session-id="${id}"] acp-session-status`)
+      )?.indicator;
+    expect([indicator('w'), indicator('i')]).to.deep.equal(['terminal-working', undefined]);
   });
 
   it("shows the active project's sync beside the heading", async () => {

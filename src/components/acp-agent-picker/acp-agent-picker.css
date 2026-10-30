@@ -72,21 +72,9 @@
   }
 }
 
-/* The agent's badge, in the button's icon slot and in menu items' leading slot. */
+/* The agent's logo, in the button's icon slot and in menu items' leading slot. */
 .acp-agent-picker__glyph {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-  min-width: 18px;
-  height: 18px;
-  padding-inline: 3px;
-  border-radius: 5px;
-  background: var(--md-surface-container-highest);
-  color: var(--md-on-surface);
-  font-size: 9.5px;
-  font-weight: var(--font-weight-medium);
-  line-height: 1;
+  font-size: var(--icon-size-sm);
 }
 
 .acp-agent-picker__agent-icon {

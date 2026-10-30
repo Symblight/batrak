@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-session-header.js';
 
 /** @typedef {import('../acp-session-header.js').AcpSessionHeader} AcpSessionHeader */
@@ -189,5 +189,43 @@ describe('acp-session-header', () => {
       await el.updateComplete;
       expect(root.activeElement).to.equal(root.querySelector('.acp-session-header__title-button'));
     });
+  });
+
+  it('switches a chat session to its terminal, and back', async () => {
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
+    const events = record(el, 'acp-session-view');
+    const button = /** @type {HTMLElementTagNameMap['md-icon-button']} */ (root.querySelector('.acp-session-header__view'));
+    expect(button.getAttribute('aria-label')).to.equal('Continue in terminal');
+    expect(button.getAttribute('aria-pressed')).to.equal('false');
+    button.click();
+    expect(events.map((e) => e.detail)).to.deep.equal([{ sessionId: 's1', view: 'terminal' }]);
+
+    el.view = 'terminal';
+    await el.updateComplete;
+    expect(button.getAttribute('aria-label')).to.equal('Continue in chat');
+    expect(button.getAttribute('aria-pressed')).to.equal('true');
+    button.click();
+    expect(events.at(-1)?.detail).to.deep.equal({ sessionId: 's1', view: 'chat' });
+  });
+
+  it('disables the switch with the reason as its tooltip', async () => {
+    const { el, root } = await render(
+      html`<acp-session-header session-id="s1" session-title="T" view-disabled="Copilot has no terminal mode"></acp-session-header>`,
+    );
+    const events = record(el, 'acp-session-view');
+    const button = /** @type {HTMLElementTagNameMap['md-icon-button']} */ (root.querySelector('.acp-session-header__view'));
+    expect(button.disabled).to.equal(true);
+    expect(tooltipOf(button)).to.equal('Copilot has no terminal mode');
+    expect(tooltipOf(root.querySelector('.acp-session-header__new'))).to.equal('New session');
+    expect(root.querySelector('[title]')).to.equal(null);
+    button.click();
+    expect(events).to.deep.equal([]);
+  });
+
+  it('hides the switch while renaming', async () => {
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
+    pick(root, 'rename');
+    await el.updateComplete;
+    expect(root.querySelector('.acp-session-header__view')).to.equal(null);
   });
 });

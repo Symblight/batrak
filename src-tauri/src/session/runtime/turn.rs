@@ -10,6 +10,9 @@ impl Sessions {
         if prompt.is_empty() {
             return Err("empty prompt".to_owned());
         }
+        if lock(&state.cli).is_some() {
+            return Err(OPEN_IN_TERMINAL.to_owned());
+        }
         if state.turn_running.swap(true, Ordering::SeqCst) {
             return Err("The agent is still working on the previous message".to_owned());
         }

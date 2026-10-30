@@ -9,7 +9,7 @@ pub mod env;
 mod runtime;
 
 pub use runtime::{
-    CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
+    CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
     SessionsOptions, SyncReport,
 };
 
@@ -132,6 +132,9 @@ pub struct Session {
     /// Until when another app may be running it: its agent saw activity in it that wasn't Brama's
     /// (2 min after that). Counts only while it doesn't run here.
     pub active_elsewhere_until: Option<String>,
+    /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`): activity its agent
+    /// reports meanwhile is that CLI's, not another app's.
+    pub in_terminal: bool,
     pub config: BTreeMap<String, String>,
     pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
@@ -144,8 +147,10 @@ pub struct Session {
     pub last_activity_at: String,
 }
 
-impl From<&SessionRecord> for Session {
-    fn from(r: &SessionRecord) -> Session {
+impl Session {
+    /// The record's fields only; what the page gets is `SessionState::page()`, which adds what
+    /// the record doesn't hold (activity elsewhere, the CLI's hold).
+    fn of_record(r: &SessionRecord) -> Session {
         Session {
             id: r.session_id.clone(),
             project_id: r.project_path.to_string_lossy().into_owned(),
@@ -157,6 +162,7 @@ impl From<&SessionRecord> for Session {
             agent_name: r.agent_name.clone(),
             acp_session_id: r.acp_session_id.clone(),
             active_elsewhere_until: None,
+            in_terminal: false,
             config: r.config.clone(),
             mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),

@@ -3,6 +3,8 @@
 /** @typedef {import('./types.js').SessionIndicator} SessionIndicator */
 /** @typedef {import('./types.js').SessionStatus} SessionStatus */
 /** @typedef {import('./types.js').SessionSync} SessionSync */
+/** @typedef {import('./types.js').SessionView} SessionView */
+/** @typedef {import('./types.js').AgentTerminal} AgentTerminal */
 
 /** Statuses in which a session holds (or is getting) an agent process. */
 export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
@@ -14,6 +16,8 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
   running: 'Agent is working',
   queued: 'Waiting for the project',
   elsewhere: 'Active in another app',
+  terminal: 'In terminal',
+  'terminal-working': 'Working in terminal',
   unread: 'New output',
 });
 
@@ -23,13 +27,15 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
  * @param {boolean} permissionPending A permission request of it waits for the user.
  * @param {boolean} [unread] It has output not seen yet.
  * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
+ * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal: activity elsewhere is that CLI's.
  * @returns {SessionIndicator | null}
  */
-export function sessionIndicator(status, permissionPending, unread = false, activeElsewhere = false) {
+export function sessionIndicator(status, permissionPending, unread = false, activeElsewhere = false, inTerminal = false) {
   if (permissionPending || status === 'waiting') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
   if (status === 'queued') return 'queued';
+  if (inTerminal) return activeElsewhere ? 'terminal-working' : 'terminal';
   if (activeElsewhere) return 'elsewhere';
   return unread ? 'unread' : null;
 }
@@ -43,6 +49,51 @@ export function sessionIndicator(status, permissionPending, unread = false, acti
 export function isActiveElsewhere(session, now) {
   const until = session.activeElsewhereUntil;
   return !RUNNING.has(session.status) && typeof until === 'string' && Date.parse(until) > now;
+}
+
+/**
+ * Whether a session can be shown in its agent's CLI.
+ * @param {AgentTerminal | null | undefined} terminal Its agent's (`AgentSummary.terminal`).
+ * @param {boolean} draft No message yet: the CLI must start it under an id Brama chooses.
+ */
+export function canUseTerminal(terminal, draft) {
+  return terminal != null && (draft ? terminal.new : terminal.resume);
+}
+
+/**
+ * How a session is shown: its own view, else its agent's; always `chat` when its agent's CLI can't
+ * show it.
+ * @param {SessionView | undefined} own The session's own (`$sessionViews`).
+ * @param {SessionView} preferred Its agent's (`$agentViews`).
+ * @param {AgentTerminal | null | undefined} terminal Its agent's.
+ * @param {boolean} draft
+ * @returns {SessionView}
+ */
+export function viewOf(own, preferred, terminal, draft) {
+  return canUseTerminal(terminal, draft) ? (own ?? preferred) : 'chat';
+}
+
+/**
+ * The session's own view to keep for a choice: none when it's its agent's, so a later change of
+ * the agent's applies to it again.
+ * @param {SessionView} view
+ * @param {SessionView} preferred
+ * @returns {SessionView | undefined}
+ */
+export function ownView(view, preferred) {
+  return view === preferred ? undefined : view;
+}
+
+/**
+ * Why the header's Chat / Terminal button is disabled for a session; `''` when it isn't.
+ * @param {AgentTerminal | null | undefined} terminal
+ * @param {boolean} draft
+ * @param {string} agentName
+ */
+export function viewDisabledReason(terminal, draft, agentName) {
+  if (terminal == null) return `${agentName} has no terminal mode`;
+  if (!canUseTerminal(terminal, draft)) return draft ? 'Send a first message, then continue in the terminal' : `${agentName} can't continue this session in its terminal`;
+  return '';
 }
 
 /**

@@ -2,6 +2,7 @@
 //! `<config dir>/brama/agents.json` is the agents of no project. Nothing is configured by default. The last valid
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
+pub mod cli;
 pub mod env;
 pub mod registry;
 pub mod switches;
@@ -120,7 +121,9 @@ pub struct AgentConfig {
     pub command: String,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
-    /// The project's agents.json sets its command, args or env: cloning a repo must not be enough
+    /// agents.json's `cli`: how its own CLI runs, over the one known for what it runs (`cli::cli_for`).
+    pub cli: Option<cli::CliOverride>,
+    /// The project's agents.json sets its command, args, env or cli: cloning a repo must not be enough
     /// to run something, so it starts only once the user trusts it ([`AgentConfigs::trust`]).
     pub from_project: bool,
 }
@@ -135,6 +138,10 @@ pub struct LaunchConfig {
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub mcp_servers: Vec<serde_json::Value>,
+    /// agents.json's `cli`: running it in a terminal runs this too. Absent when unset, so a launch
+    /// trusted before it existed stays trusted.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cli: Option<cli::CliOverride>,
 }
 
 /// A launch the user trusted in a project (`trusted-agents.json` in app data).
@@ -183,6 +190,8 @@ pub struct AgentSummary {
     /// What it runs, for Settings' edit form; never its environment.
     pub command: String,
     pub args: Vec<String>,
+    /// Whether a session of it can continue in its own CLI, in a terminal; `None`: it has none.
+    pub terminal: Option<cli::TerminalMode>,
 }
 
 /// An agent added in Settings: written to the user's agents.json. A known agent runs its own
@@ -260,6 +269,7 @@ impl Merged {
             args: a.args.clone(),
             env: a.env.clone(),
             mcp_servers: self.mcp_servers.clone(),
+            cli: a.cli.clone(),
         })
     }
 
@@ -276,6 +286,7 @@ impl Merged {
             sign_in: false,
             command: a.command.clone(),
             args: a.args.clone(),
+            terminal: cli::cli_for(a).map(|spec| spec.mode()),
         };
         let mut agents: Vec<AgentSummary> = self.agents.iter().map(summary).collect();
         agents.sort_by(|a, b| a.id.cmp(&b.id));
@@ -309,6 +320,7 @@ struct AgentEntry {
     command: Option<String>,
     args: Option<Vec<String>>,
     env: Option<BTreeMap<String, String>>,
+    cli: Option<cli::CliOverride>,
     /// From when agents could be turned off: read, ignored and reported, so such a file still loads.
     #[serde(default)]
     disabled: Option<serde_json::Value>,
@@ -322,6 +334,7 @@ impl AgentEntry {
             command: self.command.or(base.command),
             args: self.args.or(base.args),
             env: self.env.or(base.env),
+            cli: self.cli.or(base.cli),
             disabled: self.disabled.or(base.disabled),
         }
     }
@@ -352,7 +365,7 @@ fn merge(layers: &[&AgentsFile], project: Option<&AgentsFile>) -> Merged {
     let all = layers.iter().map(|layer| (*layer, false)).chain(project.map(|p| (p, true)));
     for (layer, is_project) in all {
         for (id, entry) in &layer.agents {
-            let sets_launch = entry.command.is_some() || entry.args.is_some() || entry.env.is_some();
+            let sets_launch = entry.command.is_some() || entry.args.is_some() || entry.env.is_some() || entry.cli.is_some();
             let merged = match entries.remove(id) {
                 Some(base) => Layered {
                     entry: entry.clone().over(base.entry),
@@ -387,6 +400,7 @@ fn merge(layers: &[&AgentsFile], project: Option<&AgentsFile>) -> Merged {
                 command,
                 args: entry.args.unwrap_or_default(),
                 env: entry.env.unwrap_or_default(),
+                cli: entry.cli,
                 from_project,
             }),
             None => errors.push(format!("agent {id:?} has no command")),
@@ -1342,6 +1356,66 @@ mod tests {
         let merged = merge(&[&user], Some(&with_mcp));
         assert!(merged.needs_trust("claude"), "the project's MCP servers start with any agent");
         assert_eq!(merged.launch("claude").unwrap().mcp_servers.len(), 1);
+    }
+
+    #[test]
+    fn a_cli_entry_is_part_of_what_is_trusted() {
+        let base = temp_project("trust-cli");
+        let project = base.join("p");
+        ensure_project_dir(&project).unwrap();
+        let file = project.join(".brama/agents.json");
+        let user = r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#;
+        let user_file = base.join("user.json");
+        fs::write(&user_file, user).unwrap();
+        fs::write(&file, user).unwrap();
+        let configs = AgentConfigs::new(Some(user_file), Some(base.join("data/trusted-agents.json")));
+        let launch = configs.merged(Some(&project)).launch("claude").unwrap();
+        assert_eq!(launch.cli, None);
+        assert!(!serde_json::to_string(&launch).unwrap().contains("\"cli\""), "a launch trusted before `cli` existed reads the same");
+        configs.trust(&project, std::slice::from_ref(&launch)).unwrap();
+
+        fs::write(&file, r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"],
+            "cli":{"command":"./evil","resumeArgs":["{id}"]}}}}"#).unwrap();
+        configs.reload(&project);
+        let merged = configs.merged(Some(&project));
+        let changed = merged.launch("claude").unwrap();
+        assert_eq!(changed.cli.as_ref().and_then(|c| c.command.as_deref()), Some("./evil"));
+        assert!(!configs.is_trusted(&project, &changed), "a cli the file sets needs trust again");
+        assert_eq!(merged.agent("claude").unwrap().cli, changed.cli);
+
+        let user_cli = parse(Path::new("user.json"), r#"{"version":1,"agents":{"x":{"command":"x","cli":{"resumeArgs":["{id}"]}}}}"#).unwrap();
+        let project_name = parse(Path::new("project.json"), r#"{"version":1,"agents":{"x":{"name":"X"}}}"#).unwrap();
+        let project_cli = parse(Path::new("project.json"), r#"{"version":1,"agents":{"x":{"cli":{"resumeArgs":["{id}"]}}}}"#).unwrap();
+        assert!(!merge(&[&user_cli], Some(&project_name)).needs_trust("x"), "the user's cli needs no trust");
+        assert!(merge(&[&user_cli], Some(&project_cli)).needs_trust("x"), "the project's does");
+        assert!(parse(Path::new("a.json"), r#"{"version":1,"agents":{"x":{"command":"x","cli":{"args":[]}}}}"#).is_err(), "resumeArgs is required");
+        fs::remove_dir_all(base).unwrap();
+    }
+
+    #[test]
+    fn the_list_says_which_agents_have_a_terminal_mode() {
+        let file = parse(
+            Path::new("user.json"),
+            r#"{"version":1,"agents":{
+                "claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp@0.99.1"]},
+                "codex":{"command":"npx","args":["-y","@agentclientprotocol/codex-acp@2.5.0"]},
+                "agy":{"command":"agy_acp_server.par"}
+            }}"#,
+        )
+        .unwrap();
+        let list = merge(&[&file], None).list();
+        let modes: Vec<_> = list.agents.iter().map(|a| (a.id.as_str(), a.terminal)).collect();
+        assert_eq!(
+            modes,
+            [
+                ("agy", None),
+                ("claude", Some(cli::TerminalMode { resume: true, new: true })),
+                ("codex", Some(cli::TerminalMode { resume: true, new: false })),
+            ]
+        );
+        let json = serde_json::to_value(&list.agents[1]).unwrap();
+        assert_eq!(json["terminal"], serde_json::json!({ "resume": true, "new": true }));
+        assert_eq!(serde_json::to_value(&list.agents[0]).unwrap()["terminal"], serde_json::Value::Null);
     }
 
     #[test]

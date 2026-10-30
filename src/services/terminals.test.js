@@ -8,7 +8,7 @@ import {
   sessionTerminalFolder,
   terminalController,
 } from './terminals.js';
-import { $terminals, forgetTerminal, openLoginTerminal, openTerminal } from '../stores/terminals.js';
+import { $terminals, addSessionTerminal, forgetTerminal, openLoginTerminal, openTerminal, terminalFailed } from '../stores/terminals.js';
 import { $editorTabs } from '../stores/editor.js';
 import { noteSignIn } from '../stores/agents.js';
 import { $activeSessionId, $sessions } from '../stores/sessions.js';
@@ -131,6 +131,17 @@ describe('terminalController', () => {
     const sink = { output: (_bytes, done) => pending.push(done), reset: () => {}, exit: () => {} };
     return { sink, pending };
   }
+
+  it("doesn't attach a session's CLI that didn't start, and keeps why", async () => {
+    terminalController.start();
+    addSessionTerminal('cli:s1', 's1', '/p', 'Claude Code');
+    terminalFailed('cli:s1', "Couldn't start Claude Code: held by another window");
+    const link = terminalController.connect('cli:s1', { cols: 80, rows: 24 }, view().sink);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls.map((c) => c.cmd)).to.not.include('terminal_attach');
+    expect($terminals.get()['cli:s1'].error).to.equal("Couldn't start Claude Code: held by another window");
+    link.dispose();
+  });
 
   it("closes a login's tab when its sign-in is cancelled", async () => {
     terminalController.start();
