@@ -6,7 +6,7 @@
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use serde::Serialize;
 use tokio::sync::{watch, Semaphore};
@@ -25,8 +25,10 @@ pub(super) const SYNC_TIMEOUT: Duration = Duration::from_secs(15);
 const SYNC_CONCURRENCY: usize = 2;
 /// The most sessions taken from one agent.
 const MAX_LISTED: usize = 500;
-/// Activity an agent reports within this long marks a session not running here as active elsewhere.
+/// Activity an agent reports marks a session not running here as active elsewhere for this long.
 const ELSEWHERE_MS: i64 = 2 * 60_000;
+/// An agent kept up for listing is stopped once no sync used it for this long.
+const CATALOG_IDLE: Duration = Duration::from_secs(90);
 /// Activity the agent reports up to this long after Brama's own is Brama's own.
 const OWN_ACTIVITY_SLACK_MS: i64 = 5_000;
 
@@ -64,10 +66,38 @@ pub enum SyncOutcome {
     Failed,
 }
 
-/// The syncs running, by project; a second call joins the first.
+/// The syncs running, by project (a call joins one that covers its agents, else waits for it to
+/// end), and the agents kept up between syncs to list again, by launch.
 #[derive(Default)]
 pub(super) struct SyncState {
-    running: Mutex<HashMap<PathBuf, watch::Receiver<Option<SyncReport>>>>,
+    running: Mutex<HashMap<PathBuf, RunningSync>>,
+    catalogs: Mutex<HashMap<LaunchKey, KeptCatalog>>,
+    /// A task stops the idle ones while any is kept.
+    reaping: std::sync::atomic::AtomicBool,
+}
+
+/// An agent that listed sessions, kept up for the next sync.
+pub(super) struct KeptCatalog {
+    catalog: Catalog,
+    /// Dropping it stops the agent's process group.
+    process: Option<AgentProcess>,
+    used: Instant,
+}
+
+/// A project's running sync: the agents it asks (`None`: all of them) and its report once done.
+struct RunningSync {
+    agents: Option<Vec<String>>,
+    report: watch::Receiver<Option<SyncReport>>,
+}
+
+impl RunningSync {
+    fn covers(&self, agent_ids: Option<&[String]>) -> bool {
+        match (&self.agents, agent_ids) {
+            (None, _) => true,
+            (Some(_), None) => false,
+            (Some(running), Some(wanted)) => wanted.iter().all(|id| running.contains(id)),
+        }
+    }
 }
 
 /// Forgets a project's running sync when it ends, however it ends.
@@ -88,29 +118,39 @@ impl Sessions {
     /// asked in a scratch process, two at a time. A session an agent no longer lists, and that
     /// isn't running here, goes. The project's sessions are then in [`Sessions::list`].
     pub async fn sync(&self, project: &Path, agent_ids: Option<&[String]>) -> SyncReport {
-        let joined = lock(&self.inner.sync.running).get(project).cloned();
-        if let Some(mut receiver) = joined {
-            let report = receiver.wait_for(Option::is_some).await.ok().and_then(|report| report.clone());
-            return report.unwrap_or_else(|| empty_report(project));
-        }
-        let (sender, receiver) = watch::channel(None);
-        let joined = {
-            let mut running = lock(&self.inner.sync.running);
-            let joined = running.get(project).cloned();
-            if joined.is_none() {
-                running.insert(project.to_path_buf(), receiver);
+        // One sync per project at a time: join a running one that asks every agent this call
+        // wants, else wait for it to end and look again.
+        loop {
+            let (sender, receiver) = watch::channel(None);
+            let running = {
+                let mut running = lock(&self.inner.sync.running);
+                match running.get(project) {
+                    Some(sync) => Some((sync.covers(agent_ids), sync.report.clone())),
+                    None => {
+                        let agents = agent_ids.map(<[String]>::to_vec);
+                        running.insert(project.to_path_buf(), RunningSync { agents, report: receiver });
+                        None
+                    }
+                }
+            };
+            match running {
+                Some((true, mut report)) => {
+                    let report = report.wait_for(Option::is_some).await.ok().and_then(|report| report.clone());
+                    return report.unwrap_or_else(|| empty_report(project));
+                }
+                Some((false, mut report)) => {
+                    let _ = report.wait_for(Option::is_some).await;
+                }
+                None => {
+                    let running = Running { state: &self.inner.sync, project: project.to_path_buf() };
+                    let report = self.inner.run_sync(project, agent_ids).await;
+                    // Forgotten first, so a call that waited finds the project free.
+                    drop(running);
+                    sender.send_replace(Some(report.clone()));
+                    return report;
+                }
             }
-            joined
-        };
-        if let Some(mut receiver) = joined {
-            // Another one started meanwhile.
-            let report = receiver.wait_for(Option::is_some).await.ok().and_then(|report| report.clone());
-            return report.unwrap_or_else(|| empty_report(project));
         }
-        let _running = Running { state: &self.inner.sync, project: project.to_path_buf() };
-        let report = self.inner.run_sync(project, agent_ids).await;
-        sender.send_replace(Some(report.clone()));
-        report
     }
 }
 
@@ -185,6 +225,8 @@ impl Inner {
             agents.push(sync);
         }
         self.persist();
+        self.stop_idle_catalogs().await;
+        self.reap_catalogs();
         let report = SyncReport { project_path: project.to_string_lossy().into_owned(), started_at, ended_at: iso_now(), agents };
         tracing::info!(project = %project.display(), agents = ?report.agents.iter().map(|a| (&a.agent_id, a.outcome, a.count)).collect::<Vec<_>>(), "sessions synced");
         report
@@ -218,12 +260,21 @@ impl Inner {
         }
     }
 
-    /// The agent's sessions in `folders`; its process is stopped after.
+    /// The agent's sessions in `folders`, through the agent kept up since an earlier sync, else a
+    /// new one; it's kept up after, unless listing failed (then it's stopped).
     async fn list_agent(&self, agent: &AgentConfig, folders: &[PathBuf]) -> Result<Listing, ConnectError> {
-        let (catalog, process) = self.open_catalog(agent).await?;
-        if let Some(version) = catalog.agent_version() {
-            self.opts.configs.note_version(&agent.id, version);
-        }
+        let key = LaunchKey::of(agent);
+        let kept = lock(&self.sync.catalogs).remove(&key).filter(|kept| !kept.catalog.is_closed());
+        let (catalog, process) = match kept {
+            Some(kept) => (kept.catalog, kept.process),
+            None => {
+                let (catalog, process) = self.open_catalog(agent).await?;
+                if let Some(version) = catalog.agent_version() {
+                    self.opts.configs.note_version(&agent.id, version);
+                }
+                (catalog, process)
+            }
+        };
         let listing = async {
             if !catalog.capabilities().list {
                 return Ok(Listing { can_list: false, sessions: Vec::new(), complete: true });
@@ -241,9 +292,47 @@ impl Inner {
             Ok(listing)
         }
         .await;
-        drop(catalog);
-        stop(process).await;
+        if listing.is_ok() {
+            lock(&self.sync.catalogs).insert(key, KeptCatalog { catalog, process, used: Instant::now() });
+        } else {
+            drop(catalog);
+            stop(process).await;
+        }
         listing
+    }
+
+    /// Stops the kept agents once idle, also when no sync comes (a hidden window): every
+    /// `CATALOG_IDLE` while any is kept.
+    fn reap_catalogs(self: &Arc<Self>) {
+        use std::sync::atomic::Ordering;
+        if lock(&self.sync.catalogs).is_empty() || self.sync.reaping.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let inner = Arc::downgrade(self);
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(CATALOG_IDLE).await;
+                let Some(inner) = inner.upgrade() else { return };
+                inner.stop_idle_catalogs().await;
+                if lock(&inner.sync.catalogs).is_empty() {
+                    inner.sync.reaping.store(false, Ordering::SeqCst);
+                    return;
+                }
+            }
+        });
+    }
+
+    /// Stops the agents kept for listing that no sync used for `CATALOG_IDLE`.
+    async fn stop_idle_catalogs(&self) {
+        let idle: Vec<KeptCatalog> = {
+            let mut catalogs = lock(&self.sync.catalogs);
+            let keys: Vec<LaunchKey> = catalogs.iter().filter(|(_, k)| k.used.elapsed() >= CATALOG_IDLE).map(|(key, _)| key.clone()).collect();
+            keys.into_iter().filter_map(|key| catalogs.remove(&key)).collect()
+        };
+        for kept in idle {
+            drop(kept.catalog);
+            stop(kept.process).await;
+        }
     }
 
     /// An agent's list becomes its sessions of the project: each one known here is brought up to
@@ -393,14 +482,14 @@ fn update_from_list(state: &SessionState, item: &ListedSession) {
     }
 }
 
-/// A session as the list shows it at `now` (ms).
-pub(super) fn listed(state: &SessionState, now: i64) -> Session {
+/// A session as the list shows it: until when another app may be running it, when its agent
+/// saw activity in it that wasn't Brama's own.
+pub(super) fn listed(state: &SessionState) -> Session {
     let mut session = Session::from(&*lock(&state.record));
     let ours = *lock(&state.active_here);
-    session.active_elsewhere = !session.status.is_active()
-        && lock(&state.listed_activity).is_some_and(|at| {
-            now - at < ELSEWHERE_MS && ours.is_none_or(|ours| at > ours + OWN_ACTIVITY_SLACK_MS)
-        });
+    session.active_elsewhere_until = lock(&state.listed_activity)
+        .filter(|at| ours.is_none_or(|ours| *at > ours + OWN_ACTIVITY_SLACK_MS))
+        .map(|at| iso_from_millis(at + ELSEWHERE_MS));
     session
 }
 

@@ -9,6 +9,7 @@ import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime.js';
+import { $now } from '../../stores/clock.js';
 import { $sessionSync } from '../../stores/session-sync.js';
 import { loadingProjects } from '../../models/sessions.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions.js';
@@ -38,6 +39,7 @@ export class AcpSessionColumn extends LitElement {
   #permissions = new StoreController(this, { store: $permissionRequests });
   #sync = new StoreController(this, { store: $sessionSync });
   #loaded = new StoreController(this, { store: $sessionsLoaded });
+  #now = new StoreController(this, { store: $now });
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.#dialog });
 
@@ -181,6 +183,7 @@ export class AcpSessionColumn extends LitElement {
           this.#loaded.value,
           this.#sync.value,
         )}
+        .now=${this.#now.value}
         .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}
         .home=${this.home}
         @acp-project-open-folder=${this.#onOpenFolder}

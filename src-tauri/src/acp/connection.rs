@@ -390,6 +390,11 @@ impl Catalog {
         self.agent_version.as_deref()
     }
 
+    /// The agent went away (exited, crashed, closed its side).
+    pub fn is_closed(&self) -> bool {
+        self.closed.borrow().is_some()
+    }
+
     /// The agent's sessions in `cwd`, page by page, at most `max`.
     pub async fn list_sessions(&self, cwd: &Path, max: usize) -> Result<Listed, ConnectError> {
         let mut sessions = Vec::new();

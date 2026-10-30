@@ -24,8 +24,25 @@ export function startSync(projectId) {
 
 /**
  * @param {string} projectId
- * @param {SyncReport | null} report `null`: it failed; the last report stays.
+ * @param {SyncReport | null} report Merged into the last one by agent (a sync may ask only some);
+ *   `null`: it failed, the last report stays.
  */
 export function endSync(projectId, report) {
-  $sessionSync.set({ ...$sessionSync.get(), [projectId]: { running: false, report: report ?? syncOf(projectId).report } });
+  const last = syncOf(projectId).report;
+  $sessionSync.set({
+    ...$sessionSync.get(),
+    [projectId]: { running: false, report: report === null || last === null ? (report ?? last) : merged(last, report) },
+  });
+}
+
+/**
+ * @param {SyncReport} last
+ * @param {SyncReport} report
+ * @returns {SyncReport} `report` with `last`'s agents it didn't ask, in their order; new ones last.
+ */
+function merged(last, report) {
+  const byId = new Map(report.agents.map((a) => [a.agentId, a]));
+  const agents = last.agents.map((a) => byId.get(a.agentId) ?? a);
+  const known = new Set(last.agents.map((a) => a.agentId));
+  return { ...report, agents: [...agents, ...report.agents.filter((a) => !known.has(a.agentId))] };
 }

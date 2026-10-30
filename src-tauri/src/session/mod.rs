@@ -129,9 +129,9 @@ pub struct Session {
     pub agent_id: String,
     pub agent_name: Option<String>,
     pub acp_session_id: Option<String>,
-    /// Not running here, and its agent saw activity in it within the last 2 min: another app
-    /// may be running it now.
-    pub active_elsewhere: bool,
+    /// Until when another app may be running it: its agent saw activity in it that wasn't Brama's
+    /// (2 min after that). Counts only while it doesn't run here.
+    pub active_elsewhere_until: Option<String>,
     pub config: BTreeMap<String, String>,
     pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
@@ -156,7 +156,7 @@ impl From<&SessionRecord> for Session {
             agent_id: r.agent_id.clone(),
             agent_name: r.agent_name.clone(),
             acp_session_id: r.acp_session_id.clone(),
-            active_elsewhere: false,
+            active_elsewhere_until: None,
             config: r.config.clone(),
             mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),

@@ -8,7 +8,7 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
-import { sessionIndicator } from '../../models/sessions.js';
+import { isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
@@ -18,6 +18,7 @@ import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
+import { $now } from '../../stores/clock.js';
 import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openAgents } from '../../stores/editor.js';
@@ -58,6 +59,7 @@ export class AcpAgentColumn extends LitElement {
   #notice = new StoreController(this, { store: $activeNotice });
   /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
   #signIns = new StoreController(this, { store: $signIns });
+  #now = new StoreController(this, { store: $now });
   /** Whether a login's terminal is this window's; `#loginHere()` reads it. */
   #terminals = new StoreController(this, { store: $terminals });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
@@ -239,7 +241,9 @@ export class AcpAgentColumn extends LitElement {
       ?draft=${session === null}
       ?provisional=${session?.titleSource === 'prompt'}
       ?resettable=${session?.titleSource === 'user' && session.agentTitle !== null}
-      .indicator=${session ? sessionIndicator(session.status, this.#permission.value !== null, false, session.activeElsewhere ?? false) : null}
+      .indicator=${session
+        ? sessionIndicator(session.status, this.#permission.value !== null, false, isActiveElsewhere(session, this.#now.value))
+        : null}
       @acp-session-new=${this.#onNewSession}
     ></acp-session-header>`;
   }

@@ -22,7 +22,7 @@ import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import '../acp-session-sync/acp-session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { SESSIONS_PAGE, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions.js';
+import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions.js';
 import styles from './acp-session-list.css?inline';
 
 /** @typedef {import('../../models/types.js').Project} Project */
@@ -77,6 +77,7 @@ export class AcpSessionList extends LitElement {
     failures: { attribute: false },
     sync: { attribute: false },
     loading: { attribute: false },
+    now: { attribute: false },
     home: {},
     renaming: { state: true },
     limits: { state: true },
@@ -125,6 +126,8 @@ export class AcpSessionList extends LitElement {
     this.sync = null;
     /** @type {readonly string[]} Projects whose sessions are loading; one with none to show yet shows skeleton rows. */
     this.loading = [];
+    /** @type {number} The time, ms: a session active in another app shows so until its time is up. */
+    this.now = Date.now();
     /** @type {string | null} Shown as `~` in project paths. */
     this.home = null;
     /** @type {string | null} The session whose title is being edited in its row. */
@@ -428,7 +431,7 @@ export class AcpSessionList extends LitElement {
    * @param {boolean} unread
    */
   #renderStatus(session, unread) {
-    const indicator = sessionIndicator(session.status, this.waiting.includes(session.id), unread, session.activeElsewhere ?? false);
+    const indicator = sessionIndicator(session.status, this.waiting.includes(session.id), unread, isActiveElsewhere(session, this.now));
     return indicator === null
       ? nothing
       : html`<acp-session-status class="acp-session-list__status" .indicator=${indicator}></acp-session-status>`;

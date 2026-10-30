@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { loadingProjects, orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
+import { isActiveElsewhere, loadingProjects, orderSessions, removeSessionConfirm, sessionIndicator, syncSummary, visibleSessions } from './sessions.js';
 
 /** @typedef {import('./types.js').Session} Session */
 
@@ -169,5 +169,21 @@ describe('loadingProjects', () => {
   it('is then each project in its first sync', () => {
     const syncs = { '/p': { running: true, report: null }, '/q': { running: true, report }, '/r': { running: false, report: null } };
     expect(loadingProjects(projects, true, syncs)).to.deep.equal(['/p']);
+  });
+});
+
+describe('isActiveElsewhere', () => {
+  const now = Date.parse('2026-10-23T13:00:00.000Z');
+
+  it('is another app running it until its time is up', () => {
+    const session = { ...SESSION, status: /** @type {const} */ ('stopped'), activeElsewhereUntil: '2026-10-23T13:01:00.000Z' };
+    expect(isActiveElsewhere(session, now)).to.equal(true);
+    expect(isActiveElsewhere(session, Date.parse('2026-10-23T13:01:00.000Z')), 'over').to.equal(false);
+  });
+
+  it('is never one running here, or one with no outside activity', () => {
+    expect(isActiveElsewhere({ ...SESSION, status: 'idle', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }, now)).to.equal(false);
+    expect(isActiveElsewhere({ ...SESSION, status: 'stopped', activeElsewhereUntil: null }, now)).to.equal(false);
+    expect(isActiveElsewhere({ ...SESSION, status: 'stopped' }, now)).to.equal(false);
   });
 });

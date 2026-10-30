@@ -96,8 +96,7 @@ impl Sessions {
 
     /// Most recently active first.
     pub fn list(&self) -> Vec<Session> {
-        let now = parse_iso_millis(&iso_now()).unwrap_or_default();
-        let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| sync::listed(s, now)).collect();
+        let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| sync::listed(s)).collect();
         sessions.sort_by(|a, b| (&b.last_activity_at, &b.created_at).cmp(&(&a.last_activity_at, &a.created_at)));
         sessions
     }

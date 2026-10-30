@@ -67,8 +67,9 @@
  * @property {string} agentId
  * @property {string | null} [agentName] Its agent's name as agents.json last gave it.
  * @property {string | null} [acpSessionId] The agent's own id of it; `null` until its agent first started.
- * @property {boolean} [activeElsewhere] Not running here, and its agent saw activity in it within 2 min:
- *   another app (a terminal) may be running it.
+ * @property {string | null} [activeElsewhereUntil] Until when another app (a terminal) may be running it:
+ *   its agent saw activity in it that wasn't Brama's. Counts only while it doesn't run here
+ *   (`isActiveElsewhere()`).
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.

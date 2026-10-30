@@ -19,6 +19,7 @@ import {
 } from './ipc.js';
 import { forgetSession, handleSessionEvent, trackCreate } from './acp-adapter.js';
 import { agentConfig } from './agent-config.js';
+import { log } from './logger.js';
 import { reportError } from './notices.js';
 import { notify } from '../stores/notices.js';
 import {
@@ -29,6 +30,7 @@ import {
   startComposer,
 } from '../stores/composer.js';
 import { sessionRootController } from './session-root-controller.js';
+import { isActiveElsewhere } from '../models/sessions.js';
 import { $agentList } from '../stores/agents.js';
 import { forgetContextUsage } from '../stores/context-usage.js';
 import { endSync, startSync, syncOf } from '../stores/session-sync.js';
@@ -56,6 +58,8 @@ const IDLE_STOP_MS = 10 * 60_000;
 const SYNC_STALE_MS = 5 * 60_000;
 /** Clicking a session syncs its agent's sessions, at most this often per agent and project. */
 const SELECT_SYNC_MS = 30_000;
+/** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
+const POLL_MS = 20_000;
 
 /**
  * Loads the stored sessions from the backend into `$sessions` / `$activeSessionId` and opens each
@@ -83,6 +87,8 @@ export class SessionController {
   #syncedAt = new Map();
   /** @type {Map<string, number>} When a click last synced an agent of a project (`project\0agent`), ms. */
   #selectSyncedAt = new Map();
+  /** @type {Map<string, Promise<void>>} Each project's syncs running now; settles once all have. */
+  #syncing = new Map();
   /** Sequence of workspace.json reads; only the latest answer is kept. */
   #settingsLoad = 0;
   /** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
@@ -98,9 +104,9 @@ export class SessionController {
     const sessions = await listSessions();
     setListedSessions(sessions);
     this.#openAll(sessions);
-    // A session's conversation is its agent's replay when it's shown: showing a session resumes its
-    // stopped agent (unless another app may be running it), and syncs its agent's list; the one it
-    // replaces is stopped once idle for a while.
+    // A session's conversation is its agent's replay when it's shown: showing a session syncs its
+    // agent's list, then resumes its stopped agent unless another app may be running it (asked first,
+    // or Brama would load a session a terminal is writing); the one it replaces is stopped once idle.
     /** @type {string | null} */
     let shown = null;
     $activeSessionId.subscribe((id) => {
@@ -109,14 +115,14 @@ export class SessionController {
       if (id === null) return;
       clearTimeout(this.#idleStops.get(id));
       this.#idleStops.delete(id);
-      this.#syncAgentOf(id);
-      this.#resume(id);
+      this.#show(id);
     });
     $workspacePath.subscribe((path) => {
       this.#loadSettings(path);
       if (path === null) return;
-      showProject(path);
+      // Before showing: the shown session's one-agent sync then waits for this one.
       this.sync(path);
+      showProject(path);
     });
     // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
     // last time are asked now.
@@ -130,6 +136,31 @@ export class SessionController {
       const due = agents.filter((a) => a.enabled && !settled.has(a.id)).map((a) => a.id);
       if (due.length > 0) this.sync(path, { force: true, agentIds: due });
     });
+    setInterval(() => this.#poll(), POLL_MS);
+  }
+
+  /**
+   * Asks the shown project's agents that list for its sessions again, quietly (no spinner), while
+   * the window is visible.
+   */
+  #poll() {
+    const path = $workspacePath.get();
+    if (path === null || document.visibilityState !== 'visible') return;
+    const { report, running } = syncOf(path);
+    if (report === null || running || this.#syncing.has(path)) return;
+    const listing = report.agents
+      .filter((a) => a.outcome === 'listed' || a.outcome === 'failed')
+      .map((a) => a.agentId);
+    if (listing.length > 0) this.sync(path, { agentIds: listing, quiet: true });
+  }
+
+  /**
+   * A session shown: once its agent's list is current, its stopped agent is resumed (`#resume`).
+   * @param {string} id
+   */
+  async #show(id) {
+    await this.#syncAgentOf(id);
+    if ($activeSessionId.get() === id) this.#resume(id);
   }
 
   /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
@@ -146,36 +177,55 @@ export class SessionController {
 
   /**
    * Asks a project's agents for its sessions; they arrive through `sessions://synced`. Skipped while
-   * the last sync is younger than `SYNC_STALE_MS`, unless `force`.
+   * the last sync is younger than `SYNC_STALE_MS`, unless `force` or `agentIds` are given. A `quiet`
+   * one (a poll) shows no spinner and reports no failure.
    * @param {string} projectId
-   * @param {{ force?: boolean, agentIds?: string[] | null }} [options]
+   * @param {{ force?: boolean, agentIds?: string[] | null, quiet?: boolean }} [options]
    * @returns {Promise<void>}
    */
-  async sync(projectId, { force = false, agentIds = null } = {}) {
+  async sync(projectId, { force = false, agentIds = null, quiet = false } = {}) {
     const last = this.#syncedAt.get(projectId);
     if (!force && agentIds === null && last !== undefined && Date.now() - last < SYNC_STALE_MS) return;
     if (agentIds === null) this.#syncedAt.set(projectId, Date.now());
-    startSync(projectId);
-    try {
-      endSync(projectId, await sessionsSync(projectId, agentIds));
-    } catch (err) {
-      endSync(projectId, null);
-      reportError('Syncing sessions failed', err);
-    }
+    if (!quiet) startSync(projectId);
+    const run = sessionsSync(projectId, agentIds).then(
+      (report) => endSync(projectId, report),
+      (err) => {
+        if (quiet) {
+          log('warn', `polling sessions failed: ${err}`);
+          return;
+        }
+        endSync(projectId, null);
+        reportError('Syncing sessions failed', err);
+      },
+    );
+    // Another sync of the project may still run (a click's during the full one): wait for both.
+    const before = this.#syncing.get(projectId);
+    const all = before === undefined ? run : Promise.all([before, run]).then(() => {});
+    this.#syncing.set(projectId, all);
+    all.then(() => {
+      if (this.#syncing.get(projectId) === all) this.#syncing.delete(projectId);
+    });
+    await run;
   }
 
   /**
-   * A click on a session syncs its agent's sessions of the project (at most every `SELECT_SYNC_MS`).
+   * A click on a session syncs its agent's sessions of the project (at most every `SELECT_SYNC_MS`);
+   * resolves once that sync, or the project's sync running now, answered.
    * @param {string} id
+   * @returns {Promise<void>}
    */
-  #syncAgentOf(id) {
+  async #syncAgentOf(id) {
     const session = $sessions.get().find((s) => s.id === id);
     if (!session) return;
     const key = `${session.projectId}\0${session.agentId}`;
     const last = this.#selectSyncedAt.get(key);
-    if (last !== undefined && Date.now() - last < SELECT_SYNC_MS) return;
+    if (last !== undefined && Date.now() - last < SELECT_SYNC_MS) {
+      await this.#syncing.get(session.projectId);
+      return;
+    }
     this.#selectSyncedAt.set(key, Date.now());
-    this.sync(session.projectId, { agentIds: [session.agentId] });
+    await this.sync(session.projectId, { agentIds: [session.agentId] });
   }
 
   /**
@@ -202,7 +252,7 @@ export class SessionController {
   #resume(id) {
     const session = $sessions.get().find((s) => s.id === id);
     if (session?.status !== 'stopped') return;
-    if (session.activeElsewhere) {
+    if (isActiveElsewhere(session, Date.now())) {
       // Resume (the banner's) starts it anyway.
       const message = 'Another app may be running this session now: two apps writing one session can lose messages. Resume to open it here.';
       setSessionNotice(id, { kind: 'stopped', message });

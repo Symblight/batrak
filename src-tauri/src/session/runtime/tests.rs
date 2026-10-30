@@ -17,6 +17,8 @@ struct FakeLauncher {
     env: Mutex<Vec<(String, String)>>,
     /// The command of each launch, as spawned.
     commands: Mutex<Vec<String>>,
+    /// Agents launched with this command say nothing until it turns true.
+    held: Mutex<Option<(String, tokio::sync::watch::Receiver<bool>)>>,
 }
 
 impl Launcher for FakeLauncher {
@@ -27,7 +29,42 @@ impl Launcher for FakeLauncher {
         *lock(&self.env) = process_env.to_vec();
         let (writer, reader, state) = fake_agent::start(self.options.clone());
         lock(&self.agents).push(state);
-        Ok(Launched { process: None, writer: Box::new(writer), reader: Box::new(reader) })
+        let gate = lock(&self.held).as_ref().filter(|(command, _)| *command == agent.command).map(|(_, open)| open.clone());
+        let reader: Box<dyn tokio::io::AsyncRead + Send + Unpin> = match gate {
+            Some(mut open) => Box::new(Held { gate: Some(Box::pin(async move { let _ = open.wait_for(|o| *o).await; })), inner: reader }),
+            None => Box::new(reader),
+        };
+        Ok(Launched { process: None, writer: Box::new(writer), reader })
+    }
+}
+
+impl FakeLauncher {
+    /// Holds the answers of the agents launched with `command` until the returned sender sends true.
+    fn hold(&self, command: &str) -> tokio::sync::watch::Sender<bool> {
+        let (open, opened) = tokio::sync::watch::channel(false);
+        *lock(&self.held) = Some((command.to_owned(), opened));
+        open
+    }
+
+    fn launches_of(&self, command: &str) -> usize {
+        lock(&self.commands).iter().filter(|c| *c == command).count()
+    }
+}
+
+/// An agent's output, read only once its gate opens.
+struct Held<R> {
+    gate: Option<std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>>>,
+    inner: R,
+}
+
+impl<R: tokio::io::AsyncRead + Unpin> tokio::io::AsyncRead for Held<R> {
+    fn poll_read(mut self: std::pin::Pin<&mut Self>, cx: &mut std::task::Context<'_>, buf: &mut tokio::io::ReadBuf<'_>)
+        -> std::task::Poll<std::io::Result<()>> {
+        if let Some(gate) = self.gate.as_mut() {
+            std::task::ready!(gate.as_mut().poll(cx));
+            self.gate = None;
+        }
+        std::pin::Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }
 
@@ -124,6 +161,7 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
         agents: Mutex::default(),
         env: Mutex::default(),
         commands: Mutex::default(),
+        held: Mutex::default(),
     });
     let sessions = Sessions::new(options_for(&dir, &launcher));
     let f = Fixture { dir, project, sessions, launcher };
@@ -2396,20 +2434,107 @@ async fn an_agent_that_doesnt_answer_in_time_fails_and_two_syncs_of_a_project_jo
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "one agent for both");
 }
 
+/// Two listing agents, `fake` and `other`, both trusted; `fake` answers only once the returned
+/// sender opens it. The project has one stored session, so each agent lists one.
+fn two_listing_agents(name: &str) -> (Fixture, tokio::sync::watch::Sender<bool>) {
+    let options = listing();
+    let f = fixture(name, options.clone());
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"fake":{"name":"Fake","command":"fake-agent"},
+        "other":{"name":"Other","command":"other-agent"}}}"#);
+    let configs = &f.sessions.inner.opts.configs;
+    let launches: Vec<_> = configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect();
+    configs.trust(&f.project, &launches).unwrap();
+    stored_in(&options, &[("t1", &f.project, Some("Stored"), None)]);
+    let open = f.launcher.hold("fake-agent");
+    (f, open)
+}
+
+/// Runs `second` once `first` has started `fake`, then lets `fake` answer.
+async fn sync_during(f: &Fixture, open: &tokio::sync::watch::Sender<bool>, first: Option<&[String]>, second: Option<&[String]>)
+    -> (super::SyncReport, super::SyncReport) {
+    tokio::join!(f.sessions.sync(&f.project, first), async {
+        while f.launcher.launches_of("fake-agent") == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+        let (report, ()) = tokio::join!(f.sessions.sync(&f.project, second), async {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+            open.send_replace(true);
+        });
+        report
+    })
+}
+
 #[tokio::test]
-async fn a_session_its_agent_saw_active_just_now_is_active_elsewhere_unless_it_was_here() {
+async fn a_sync_for_another_agent_waits_for_the_running_one_and_lists_its_own() {
+    use super::sync::SyncOutcome;
+    let (f, open) = two_listing_agents("sync-other");
+    let (fake, other) = (["fake".to_owned()], ["other".to_owned()]);
+    let (first, second) = sync_during(&f, &open, Some(&fake), Some(&other)).await;
+    assert_eq!(outcomes(&first), [("fake", SyncOutcome::Listed, Some(1))]);
+    assert_eq!(outcomes(&second), [("other", SyncOutcome::Listed, Some(1))]);
+    assert_eq!(f.launcher.launches_of("other-agent"), 1, "other was asked");
+    assert_eq!(f.sessions.list().len(), 1, "the agents share one store: t1, listed once");
+}
+
+#[tokio::test]
+async fn a_full_sync_during_a_one_agent_sync_reports_every_agent() {
+    use super::sync::SyncOutcome;
+    let (f, open) = two_listing_agents("sync-full-after-one");
+    let fake = ["fake".to_owned()];
+    let (_, second) = sync_during(&f, &open, Some(&fake), None).await;
+    assert_eq!(outcomes(&second), [("fake", SyncOutcome::Listed, Some(1)), ("other", SyncOutcome::Listed, Some(1))]);
+}
+
+#[tokio::test]
+async fn a_sync_for_some_agents_joins_a_running_full_sync() {
+    use super::sync::SyncOutcome;
+    let (f, open) = two_listing_agents("sync-join-full");
+    let fake = ["fake".to_owned()];
+    let (first, second) = sync_during(&f, &open, None, Some(&fake)).await;
+    assert_eq!(first, second);
+    assert_eq!(outcomes(&first), [("fake", SyncOutcome::Listed, Some(1)), ("other", SyncOutcome::Listed, Some(1))]);
+    assert_eq!(f.launcher.launches_of("fake-agent"), 1, "fake is asked once");
+    let lists: usize = lock(&f.launcher.agents).iter().map(|a| a.lists.load(Ordering::SeqCst)).sum();
+    assert_eq!(lists, 2, "each agent listed once");
+}
+
+#[tokio::test]
+async fn a_session_its_agent_saw_active_just_now_is_active_elsewhere_for_a_while_unless_it_was_here() {
     let options = listing();
     let f = fixture("sync-elsewhere", options.clone());
     let now = crate::session::iso_now();
     stored_in(&options, &[("busy", &f.project, None, Some(now.as_str())), ("old", &f.project, None, Some("2026-01-01T00:00:00Z"))]);
     f.sessions.sync(&f.project, None).await;
-    let elsewhere = |sessions: &Sessions, id: &str| sessions.list().into_iter().find(|s| s.id == id).unwrap().active_elsewhere;
-    assert!(elsewhere(&f.sessions, "fake~busy"));
-    assert!(!elsewhere(&f.sessions, "fake~old"));
+    let until = |sessions: &Sessions, id: &str| sessions.list().into_iter().find(|s| s.id == id).unwrap().active_elsewhere_until;
+    let now_ms = crate::session::parse_iso_millis(&now).unwrap();
+    assert_eq!(until(&f.sessions, "fake~busy"), Some(crate::session::iso_from_millis(now_ms + 2 * 60_000)), "its activity and two minutes");
+    let old = until(&f.sessions, "fake~old").unwrap();
+    assert!(old.as_str() < now.as_str(), "long over: {old}");
 
     let (_, events) = f.create("here", "fake").unwrap();
     assert_eq!(f.ask("here", &events, "hello").await, "Hello, world");
     f.sessions.stop("here").await.unwrap();
     f.sessions.sync(&f.project, None).await;
-    assert!(!elsewhere(&f.sessions, "here"), "its last activity was Brama's");
+    assert_eq!(until(&f.sessions, "here"), None, "its last activity was Brama's");
+}
+
+#[tokio::test]
+async fn an_agent_stays_up_between_syncs_to_list_again() {
+    let options = listing();
+    let f = fixture("sync-kept", options.clone());
+    let fake = Some(&["fake".to_owned()][..]);
+    f.sessions.sync(&f.project, fake).await;
+    stored_in(&options, &[("later", &f.project, Some("Started later"), None)]);
+    f.sessions.sync(&f.project, fake).await;
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "listed again by the same agent");
+    assert_eq!(f.sessions.list().iter().map(|s| s.title.as_str()).collect::<Vec<_>>(), ["Started later"]);
+    let agent = Arc::clone(lock(&f.launcher.agents).last().unwrap());
+    assert_eq!(agent.lists.load(Ordering::SeqCst), 2);
+
+    // One that went away is started again.
+    agent.crash.notify_one();
+    tokio::time::sleep(Duration::from_millis(50)).await;
+    let report = f.sessions.sync(&f.project, fake).await;
+    assert_eq!(report.agents[0].outcome, super::sync::SyncOutcome::Listed);
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
 }

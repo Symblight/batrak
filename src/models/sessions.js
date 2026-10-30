@@ -22,7 +22,7 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
  * @param {boolean} [unread] It has output not seen yet.
- * @param {boolean} [activeElsewhere] Another app may be running it (`Session.activeElsewhere`).
+ * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
  * @returns {SessionIndicator | null}
  */
 export function sessionIndicator(status, permissionPending, unread = false, activeElsewhere = false) {
@@ -32,6 +32,17 @@ export function sessionIndicator(status, permissionPending, unread = false, acti
   if (status === 'queued') return 'queued';
   if (activeElsewhere) return 'elsewhere';
   return unread ? 'unread' : null;
+}
+
+/**
+ * Whether another app (a terminal) may be running a session now: it doesn't run here, and its agent
+ * saw activity in it that wasn't Brama's, recently enough (`Session.activeElsewhereUntil`).
+ * @param {Session} session
+ * @param {number} now ms.
+ */
+export function isActiveElsewhere(session, now) {
+  const until = session.activeElsewhereUntil;
+  return !RUNNING.has(session.status) && typeof until === 'string' && Date.parse(until) > now;
 }
 
 /**

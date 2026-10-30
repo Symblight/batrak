@@ -298,7 +298,16 @@ describe('acp-session-list', () => {
   });
 
   it('marks a session another app may be running', async () => {
-    const { root } = await render({ sessions: [session('t', { status: 'stopped', activeElsewhere: true })] });
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    const sessions = [
+      session('t', { status: 'stopped', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
+      session('o', { status: 'stopped', activeElsewhereUntil: '2026-10-23T12:59:00.000Z' }),
+    ];
+    const { root } = await render({ sessions, now });
+    const over = /** @type {import('../../acp-session-status/acp-session-status.js').AcpSessionStatus | null} */ (
+      root.querySelector('[data-session-id="o"] acp-session-status')
+    );
+    expect(over, 'its time is up').to.equal(null);
     const status = /** @type {import('../../acp-session-status/acp-session-status.js').AcpSessionStatus | null} */ (
       root.querySelector('[data-session-id="t"] acp-session-status')
     );
