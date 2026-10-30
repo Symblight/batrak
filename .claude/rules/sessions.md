@@ -5,7 +5,7 @@ paths:
   - "src-tauri/src/commands/sessions.rs"
   - "src/services/{session-controller,session-root-controller,acp-adapter}.js"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}.js"
-  - "src/components/acp-{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker}/**"
+  - "src/components/acp-{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default}.md"
 ---
@@ -134,7 +134,13 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   category `mode`); a listed session without a composer this launch (after a reload) gets one
   from its record: its agent, `config`, run target, started. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
-  `session/new`, no prompt, stopped). A pick goes through `sessionController.setConfigOption()`: shown at once,
+  `session/new`, no prompt, stopped), one at a time; an agent picked in the composer is probed at
+  once (`agentConfig.loadOptions()`, once per launch, cached or not). `$composerOptionsStatus`
+  (`whileLoadingOptions()`: `loading` / `failed`) drives the composer's two dropdowns,
+  `<acp-agent-picker>` then `<acp-model-picker>` (model, thought level and other options; disabled
+  with a spinner while an agent with nothing cached loads). Permission options (category `mode`, and
+  `permissions` like Copilot's `allow_all`) are `<acp-mode-picker>`'s. `normalizeOptions()` keeps
+  each value once (Copilot sends `auto` twice) and drops a description that repeats the name. A pick goes through `sessionController.setConfigOption()`: shown at once,
   sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session
   keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
   every answer and update): a new start of its agent is set to them (`apply_config`, inside the

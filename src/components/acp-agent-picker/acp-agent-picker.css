@@ -27,38 +27,14 @@
   white-space: nowrap;
 }
 
+/* A narrowing composer drops the agent's name first (its logo stays), before the model picker's level;
+   the name stays in the menu and the tooltip. */
 .acp-agent-picker__agent {
   flex: none;
 
   @container acp-composer (width <= 500px) {
     display: none;
   }
-}
-
-/* A narrowing composer drops the level, then the agent's name (the badge stays), then the arrow;
-   all of it stays in the menu and the tooltip. */
-/* Only the model name gives way, through an ellipsis. */
-.acp-agent-picker__model {
-  min-width: 2ch;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.acp-agent-picker__level {
-  flex: none;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-0-5);
-  font-weight: 400;
-  color: var(--md-on-surface-variant);
-
-  @container acp-composer (width <= 560px) {
-    display: none;
-  }
-}
-
-.acp-agent-picker__level-icon {
-  font-size: var(--icon-size-xs);
 }
 
 .acp-agent-picker__arrow {
@@ -70,6 +46,12 @@
   @container acp-composer (width <= 360px) {
     display: none;
   }
+}
+
+/* A started session's agent: a lock where the arrow was. */
+.acp-agent-picker__arrow_fixed {
+  font-size: var(--icon-size-xs);
+  margin-inline-start: 0;
 }
 
 /* The agent's logo, in the button's icon slot and in menu items' leading slot. */

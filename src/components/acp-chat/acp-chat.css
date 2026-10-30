@@ -64,7 +64,11 @@
 .acp-chat__composer::part(textbox-leading) {
   min-width: 0;
 }
+/* The agent keeps its logo; the model beside it gives way first, through its name's ellipsis. */
 .acp-chat__agent-picker {
+  flex: none;
+}
+.acp-chat__model-picker {
   min-width: 0;
 }
 .acp-chat__run-target {

@@ -1,0 +1,72 @@
+:host {
+  display: inline-flex;
+  min-width: 0;
+}
+
+/* Quieter than the agent beside it: the model reads as the agent's detail. */
+.acp-model-picker__button {
+  min-width: 0;
+  --md-button-font-size: var(--font-size-md);
+  --md-button-block-start-space: var(--button-block-space-compact);
+  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-inline-start-space: 6px;
+  --md-button-inline-end-space: 4px;
+  --md-button-foreground-color: var(--md-on-surface-variant);
+}
+
+/* md-button sizes to its content; let its box and label shrink with the host. */
+.acp-model-picker__button::part(button),
+.acp-model-picker__button::part(label) {
+  min-width: 0;
+}
+
+.acp-model-picker__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+/* Only the model name gives way, through an ellipsis. */
+.acp-model-picker__model {
+  min-width: 2ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.acp-model-picker__level {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-0-5);
+  font-weight: 400;
+
+  @container acp-composer (width <= 440px) {
+    display: none;
+  }
+}
+
+.acp-model-picker__level-icon {
+  font-size: var(--icon-size-xs);
+}
+
+.acp-model-picker__spinner {
+  flex: none;
+  font-size: var(--icon-size-xs);
+}
+
+.acp-model-picker__arrow {
+  flex: none;
+  font-size: var(--icon-size-sm);
+  margin-inline-start: -2px;
+
+  @container acp-composer (width <= 360px) {
+    display: none;
+  }
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-model-picker__menu {
+  --md-menu-min-width: 13rem;
+}

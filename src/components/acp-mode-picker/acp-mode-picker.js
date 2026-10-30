@@ -4,6 +4,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
+import '@symblight/wc-material/tooltip';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import boltIcon from '@material-design-icons/svg/outlined/bolt.svg?raw';
 import checklistIcon from '@material-design-icons/svg/outlined/checklist.svg?raw';
@@ -41,7 +42,7 @@ function lookOf(value) {
 
 /**
  * @tag acp-mode-picker
- * @summary The composer's permission-mode chip (ACP config option of category `mode`) and its menu; absent when the agent has none.
+ * @summary The composer's permission chip (ACP config options of category `mode` and `permissions`) and its menu; absent when the agent has neither.
  * @fires acp-config-option `{ configId, value }`
  */
 export class AcpModePicker extends LitElement {
@@ -58,52 +59,72 @@ export class AcpModePicker extends LitElement {
   }
 
   /**
+   * @param {ConfigOption} option The value's.
    * @param {ConfigOptionValue} value
-   * @param {boolean} selected
+   * @param {boolean} withIcon Mode values show how risky they are; permissions values don't.
    */
-  #renderItem(value, selected = false) {
+  #renderItem(option, value, withIcon) {
     const { icon, risk } = lookOf(value.value);
+    const description = value.description && value.description !== value.name ? value.description : null;
     return html`
       <md-menu-item
-        class=${classMap({ 'acp-mode-picker__item': true, 'acp-mode-picker__item_danger': risk === 'full' })}
+        class=${classMap({ 'acp-mode-picker__item': true, 'acp-mode-picker__item_danger': withIcon && risk === 'full' })}
         value=${value.value}
-        ?selected=${selected}
+        data-config=${option.id}
+        ?selected=${value.value === option.currentValue}
       >
-        <md-icon slot="leading">${unsafeSVG(icon)}</md-icon>
+        ${withIcon ? html`<md-icon slot="leading">${unsafeSVG(icon)}</md-icon>` : nothing}
         ${value.name}
-        ${value.description ? html`<span slot="supporting-text">${value.description}</span>` : nothing}
+        ${description ? html`<span slot="supporting-text">${description}</span>` : nothing}
       </md-menu-item>
+    `;
+  }
+
+  /** @param {ConfigOption} mode */
+  #renderModeGroups(mode) {
+    // Full access stands apart: a gap separates the risky choice from the usual ones.
+    const usual = mode.options.filter((v) => lookOf(v.value).risk !== 'full');
+    const risky = mode.options.filter((v) => lookOf(v.value).risk === 'full');
+    return html`
+      <md-menu-group label=${mode.name}>${usual.map((v) => this.#renderItem(mode, v, true))}</md-menu-group>
+      ${risky.length ? html`<md-item-group>${risky.map((v) => this.#renderItem(mode, v, true))}</md-item-group>` : nothing}
     `;
   }
 
   #onSelect = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
-    const mode = configOf(this.options, 'mode');
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    if (!mode || value === mode.currentValue) return;
-    const detail = { configId: mode.id, value };
+    const { item } = /** @type {CustomEvent<{ value: string, item: HTMLElement }>} */ (e).detail;
+    const option = this.options.find((o) => o.id === item.dataset.config);
+    const value = item.getAttribute('value') ?? '';
+    if (!option || value === option.currentValue) return;
+    const detail = { configId: option.id, value };
     this.dispatchEvent(new CustomEvent('acp-config-option', { detail, bubbles: true, composed: true }));
   };
 
   render() {
     const mode = configOf(this.options, 'mode');
-    if (!mode) return nothing;
-    const current = mode.options.find((v) => v.value === mode.currentValue) ?? mode.options[0];
-    const { icon, risk } = lookOf(current.value);
-    // Full access stands apart: a gap separates the risky choice from the usual ones.
-    const usual = mode.options.filter((v) => lookOf(v.value).risk !== 'full');
-    const risky = mode.options.filter((v) => lookOf(v.value).risk === 'full');
+    const permissions = this.options.filter((o) => o.category === 'permissions');
+    // With no mode, the first permissions option names the chip.
+    const chip = mode ?? permissions[0];
+    if (!chip) return nothing;
+    const current = chip.options.find((v) => v.value === chip.currentValue) ?? chip.options[0];
+    const { icon, risk } = mode ? lookOf(current?.value ?? '') : lookOf('');
+    const label = mode ? (current?.name ?? '') : `${chip.name}: ${current?.name ?? ''}`;
+    const hint = [mode, ...permissions]
+      .filter((o) => o !== null)
+      .map((o) => `${o.name}: ${o.options.find((v) => v.value === o.currentValue)?.name ?? ''}`)
+      .join(' · ');
     return html`
       <md-button
         id="acp-mode-picker-button"
         class="acp-mode-picker__button acp-mode-picker__button_${risk}"
         variant=${risk === 'neutral' ? 'outlined' : 'tonal'}
-        title="${mode.name}: ${current.name}"
       >
         <md-icon slot="icon" class="acp-mode-picker__icon">${unsafeSVG(icon)}</md-icon>
-        <span class="acp-mode-picker__label">${current.name}</span>
+        <span class="acp-mode-picker__label">${label}</span>
         <md-icon class="acp-mode-picker__arrow">${unsafeSVG(arrowIcon)}</md-icon>
       </md-button>
+      <md-tooltip for="acp-mode-picker-button" show-delay="800">${hint}</md-tooltip>
       <md-menu
         class="acp-mode-picker__menu"
         for="acp-mode-picker-button"
@@ -111,12 +132,12 @@ export class AcpModePicker extends LitElement {
         focus-on-open="selected"
         @select=${this.#onSelect}
       >
-        <md-menu-group label=${mode.name}>
-          ${usual.map((v) => this.#renderItem(v, v.value === mode.currentValue))}
-        </md-menu-group>
-        ${risky.length
-          ? html`<md-item-group>${risky.map((v) => this.#renderItem(v, v.value === mode.currentValue))}</md-item-group>`
-          : nothing}
+        ${mode ? this.#renderModeGroups(mode) : nothing}
+        ${permissions.map(
+          (option) => html`
+            <md-menu-group label=${option.name}>${option.options.map((v) => this.#renderItem(option, v, false))}</md-menu-group>
+          `,
+        )}
       </md-menu>
     `;
   }

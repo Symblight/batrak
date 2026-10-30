@@ -1,6 +1,17 @@
 import { expect } from '@esm-bundle/chai';
 import { $agentList } from './agents.js';
-import { $agents, $composer, agentInfo, applyAgentOptions, selectAgent, setRunTarget, startComposer } from './composer.js';
+import {
+  $agents,
+  $composer,
+  $composerOptionsStatus,
+  agentInfo,
+  applyAgentOptions,
+  normalizeOptions,
+  selectAgent,
+  setRunTarget,
+  startComposer,
+  whileLoadingOptions,
+} from './composer.js';
 import { $activeSessionId, $sessions, newSession, startSession, upsertSession } from './sessions.js';
 import { setWorkspaceSettings } from './workspace.js';
 
@@ -121,5 +132,47 @@ describe('composer', () => {
     expect(agentInfo('a')).to.deep.include({ name: 'A', removed: false });
     expect(agentInfo('claude', 'Claude Code')).to.deep.include({ id: 'claude', name: 'Claude Code', removed: true });
     expect(agentInfo('claude')).to.deep.include({ name: 'claude', removed: true });
+  });
+
+  it("keeps one of each value an agent sends twice, and no description that only repeats the name", () => {
+    const [model] = normalizeOptions([
+      {
+        type: 'select',
+        id: 'model',
+        name: 'Model',
+        category: 'model',
+        currentValue: 'auto',
+        options: [
+          { value: 'auto', name: 'Auto', description: 'Let Copilot pick the best model' },
+          { value: 'auto', name: 'Auto', description: 'Auto' },
+          { value: 'gpt-5', name: 'GPT-5', description: 'gpt-5' },
+        ],
+      },
+    ]);
+    expect(model.options).to.deep.equal([
+      { value: 'auto', name: 'Auto', description: 'Let Copilot pick the best model' },
+      { value: 'gpt-5', name: 'GPT-5' },
+    ]);
+  });
+
+  it("says while the composer's agent's options load, and when that failed", async () => {
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    // A new session's agent may be the one last picked in an earlier test.
+    const shown = /** @type {string} */ ($composer.get().agentId);
+    const other = shown === 'a' ? 'b' : 'a';
+    /** @type {(loaded: boolean) => void} */
+    let finish = () => {};
+    const loading = whileLoadingOptions(shown, () => new Promise((resolve) => (finish = resolve)));
+    expect($composerOptionsStatus.get()).to.equal('loading');
+    finish(true);
+    await loading;
+    expect($composerOptionsStatus.get()).to.equal(null);
+
+    await whileLoadingOptions(shown, () => Promise.reject(new Error('not installed'))).catch(() => {});
+    expect($composerOptionsStatus.get()).to.equal('failed');
+    await whileLoadingOptions(other, () => Promise.resolve(false));
+    expect($composerOptionsStatus.get(), "another agent's").to.equal('failed');
+    await whileLoadingOptions(shown, () => Promise.resolve(true));
+    expect($composerOptionsStatus.get()).to.equal(null);
   });
 });

@@ -23,7 +23,7 @@ import { reportError } from './notices.js';
 import { signInAfterAdd } from '../models/agents.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, noteSignIn, whileUpdating } from '../stores/agents.js';
 import { notify } from '../stores/notices.js';
-import { cacheAgentOptions, hasAgentOptions } from '../stores/composer.js';
+import { cacheAgentOptions, hasAgentOptions, whileLoadingOptions } from '../stores/composer.js';
 import { openAgents, openTab } from '../stores/editor.js';
 import { openLoginTerminal } from '../stores/terminals.js';
 import { $workspacePath } from '../stores/workspace.js';
@@ -156,28 +156,46 @@ export class AgentConfig {
   }
 
   /**
+   * Asks an agent the user just picked for its options, once per launch, ahead of the probes
+   * queued at launch; the model picker shows it loading meanwhile.
+   * @param {string} agentId
+   */
+  loadOptions(agentId) {
+    return this.#probed.get(agentId) ?? this.#probe($workspacePath.get(), agentId, true);
+  }
+
+  /**
    * Learns an agent's options by starting it briefly; a failure (not installed, not signed in) only
    * leaves its menu without models until its first session.
    * @param {string | null} projectPath
    * @param {string} agentId
+   * @param {boolean} [now] Don't wait for the other probes: the user waits for this one.
    */
-  #probe(projectPath, agentId) {
-    const probe = this.#probing.then(async () => {
-      try {
-        const probed = await agentsProbeOptions(projectPath, agentId);
+  #probe(projectPath, agentId, now = false) {
+    /** @type {Promise<ProbedOptions | null>} */
+    const probe = (now ? Promise.resolve() : this.#probing).then(async () => {
+      /** @type {ProbedOptions | null} */
+      let probed = null;
+      await whileLoadingOptions(agentId, async () => {
+        try {
+          probed = await agentsProbeOptions(projectPath, agentId);
+        } catch (err) {
+          log('info', `couldn't ask ${agentId} for its options: ${err}`);
+          return false;
+        }
         if (Array.isArray(probed)) cacheAgentOptions(agentId, probed);
-        // The probe learned the agent's version, or that it needs a sign-in: the picker and the
-        // Agents tab's row say so.
+        return true;
+      });
+      // The probe learned the agent's version, or that it needs a sign-in: the picker and the
+      // Agents tab's row say so.
+      if (probed !== null) {
         this.refresh();
         this.search();
-        return probed;
-      } catch (err) {
-        log('info', `couldn't ask ${agentId} for its options: ${err}`);
-        return null;
       }
+      return probed;
     });
     this.#probed.set(agentId, probe);
-    this.#probing = probe;
+    if (!now) this.#probing = probe;
     return probe;
   }
 

@@ -18,6 +18,7 @@ import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
 import '../acp-context-meter/acp-context-meter.js';
 import '../acp-mode-picker/acp-mode-picker.js';
+import '../acp-model-picker/acp-model-picker.js';
 import '../acp-part-thinking/acp-part-thinking.js';
 import '../acp-run-target/acp-run-target.js';
 import '../acp-session-banner/acp-session-banner.js';
@@ -191,6 +192,8 @@ export class AcpChat extends LitElement {
     usage: { attribute: false },
     agents: { attribute: false },
     agent: { attribute: false },
+    /** Whether the composer's agent's config options are being asked for, or that failed. */
+    optionsStatus: { attribute: false },
     branches: { attribute: false },
     currentBranch: { attribute: false },
     localShared: { attribute: false },
@@ -226,6 +229,8 @@ export class AcpChat extends LitElement {
     this.agents = [];
     /** @type {AgentInfo | null} */
     this.agent = null;
+    /** @type {import('../../models/types.js').AgentOptionsStatus | null} */
+    this.optionsStatus = null;
     /** @type {readonly string[]} */
     this.branches = [];
     /** @type {string | null} */
@@ -463,6 +468,13 @@ export class AcpChat extends LitElement {
             .agents=${this.agents}
             .agent=${this.agent}
           ></acp-agent-picker>
+          <acp-model-picker
+            slot="leading"
+            class="acp-chat__model-picker"
+            .options=${this.composer?.configOptions ?? []}
+            .status=${this.optionsStatus}
+            .signIn=${this.agent?.signIn === true}
+          ></acp-model-picker>
           <chx-attachments slot="attachments"></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
           <chx-code-block-paste></chx-code-block-paste>

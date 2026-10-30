@@ -842,6 +842,8 @@
  * @property {boolean} [signIn] It asked to sign in: offered still, since picking it is how one signs in.
  */
 
+/** @typedef {'loading' | 'failed'} AgentOptionsStatus Asking an agent for its config options (a probe), or that failed. */
+
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */
 
 /**

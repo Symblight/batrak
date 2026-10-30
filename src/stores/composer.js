@@ -74,7 +74,16 @@ function withValues(options, values) {
 }
 
 /**
- * ACP config options as the composer shows them: select options only, groups flattened.
+ * @param {string} a
+ * @param {string} b
+ */
+function sameText(a, b) {
+  return a.trim().toLowerCase() === b.trim().toLowerCase();
+}
+
+/**
+ * ACP config options as the composer shows them: select options only, groups flattened, each value
+ * once, no description that only repeats its name.
  * @param {unknown} options ACP `SessionConfigOption[]` as the agent sent it (or as stored).
  * @returns {ConfigOption[]}
  */
@@ -86,11 +95,14 @@ export function normalizeOptions(options) {
       isRecord(v) && Array.isArray(v.options) ? v.options : [v],
     );
     /** @type {ConfigOption['options']} */
-    const flat = values.flatMap((/** @type {unknown} */ v) =>
-      isRecord(v) && typeof v.value === 'string'
-        ? [{ value: v.value, name: typeof v.name === 'string' ? v.name : v.value, ...(typeof v.description === 'string' ? { description: v.description } : {}) }]
-        : [],
-    );
+    const flat = [];
+    for (const v of values) {
+      // An agent may send a value twice (Copilot's `auto`): the first one stays.
+      if (!isRecord(v) || typeof v.value !== 'string' || flat.some((f) => f.value === v.value)) continue;
+      const name = typeof v.name === 'string' ? v.name : v.value;
+      const described = typeof v.description === 'string' && !sameText(v.description, name) && !sameText(v.description, v.value);
+      flat.push({ value: v.value, name, ...(described ? { description: /** @type {string} */ (v.description) } : {}) });
+    }
     if (!flat.length) return [];
     return [
       {
@@ -382,4 +394,34 @@ export function cacheAgentOptions(agentId, agentOptions) {
     };
   }
   if (Object.keys(filled).length) $composers.set({ ...composers, ...filled });
+}
+
+/** @typedef {import('../models/types.js').AgentOptionsStatus} AgentOptionsStatus */
+
+/** Agents whose options are being asked for, or whose last ask failed, by agent id. In memory. */
+const $agentOptionsStatus = atom(/** @type {Readonly<Record<string, AgentOptionsStatus>>} */ ({}));
+
+/** Whether the composer's agent's options are loading or failed to; `null` once known or not asked. */
+export const $composerOptionsStatus = computed([$composer, $agentOptionsStatus], (composer, statuses) =>
+  composer.agentId === null ? null : (statuses[composer.agentId] ?? null),
+);
+
+/**
+ * Shows the agent's options as loading while `load` runs, then as failed unless it resolved `true`.
+ * @param {string} agentId
+ * @param {() => Promise<boolean>} load Resolves whether the options were learned.
+ */
+export async function whileLoadingOptions(agentId, load) {
+  /** @param {AgentOptionsStatus | null} status */
+  const set = (status) => {
+    const { [agentId]: _, ...rest } = $agentOptionsStatus.get();
+    $agentOptionsStatus.set(status === null ? rest : { ...rest, [agentId]: status });
+  };
+  set('loading');
+  let loaded = false;
+  try {
+    loaded = await load();
+  } finally {
+    set(loaded ? null : 'failed');
+  }
 }

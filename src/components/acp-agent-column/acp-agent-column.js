@@ -21,7 +21,7 @@ import { sessionController } from '../../services/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $now } from '../../stores/clock.js';
-import { $agents, $composer, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
+import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openAgents } from '../../stores/editor.js';
 import { $gitRepo } from '../../stores/git.js';
@@ -55,6 +55,7 @@ export class AcpAgentColumn extends LitElement {
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
   #composer = new StoreController(this, { store: $composer });
+  #optionsStatus = new StoreController(this, { store: $composerOptionsStatus });
   #contextUsage = new StoreController(this, { store: $activeContextUsage });
   #agents = new StoreController(this, { store: $agents });
   #gitRepo = new StoreController(this, { store: $gitRepo });
@@ -211,15 +212,15 @@ export class AcpAgentColumn extends LitElement {
 
   /** @param {Event} e */
   #onAgentSelect(e) {
-    selectAgent(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
+    const { agentId } = /** @type {CustomEvent<{ agentId: string }>} */ (e).detail;
+    selectAgent(agentId);
+    // Its models load while the model picker waits (or shows the ones cached).
+    agentConfig.loadOptions(agentId);
   }
 
-  /** A model, level or mode; a model or level of another agent switches to that agent first. */
+  /** A model, level, mode or permission option of the composer's agent. */
   #onConfigOption = (/** @type {Event} */ e) => {
-    const { agentId, configId, value } = /** @type {CustomEvent<{ agentId?: string, configId: string, value: string }>} */ (
-      e
-    ).detail;
-    if (agentId) selectAgent(agentId);
+    const { configId, value } = /** @type {CustomEvent<{ configId: string, value: string }>} */ (e).detail;
     const id = $activeSessionId.get();
     if (id !== null) sessionController.setConfigOption(id, configId, value);
   };
@@ -371,6 +372,7 @@ export class AcpAgentColumn extends LitElement {
             .root=${this.#activeFolder.value ?? workspace.path}
             .fileOptions=${this.fileOptions}
             .composer=${composer}
+            .optionsStatus=${this.#optionsStatus.value}
             .usage=${this.#contextUsage.value}
             .agents=${this.#agents.value}
             .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
