@@ -227,6 +227,14 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   declaration would win). Never write `css\`…\`` blocks inside component JS.
 - SVG icons (`@material-design-icons/svg`) are imported with `?raw` and rendered via `unsafeSVG()`,
   inside `<md-icon>` — size it with `font-size` on a class, don't style `svg` directly.
+- **Hints are `md-tooltip`, never a `title` attribute.** Give the anchor an `id` unique in the shadow
+  root and render `<md-tooltip for=${id} show-delay="800">…</md-tooltip>` beside it (a sibling, not
+  inside a row whose text is read). The tooltip finds its anchor only when it connects, so render
+  rows with ids through keyed `repeat()`. Among slotted children give the tooltip a slot too (a
+  banner's `actions`; `trailing` in an `md-menu-item`, whose default slot is its typeahead label). Don't anchor one on a row that holds buttons with their
+  own tooltips: put it on the row's text instead. A long path gets
+  `style="width: max-content; max-inline-size: none"`. Tests read it with `tooltipOf(el)` from
+  `test/fixture.js` and check `[title]` is gone.
 - **Shared shadow styles:** `src/styles/shadow.css` is the first stylesheet of every shadow root,
   the libraries' included (`src/styles/shadow-styles.js` hooks Lit's `finalizeStyles`; imported
   first in `main.js`). It holds what must match app-wide: thin scrollbars and menu density

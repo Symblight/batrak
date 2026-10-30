@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import { DEFAULT_SETTINGS } from '../../../models/settings.js';
 import '../acp-settings.js';
 
@@ -61,6 +61,15 @@ describe('acp-settings', () => {
     scroller.scrollTo({ top: 0 });
     await rendered(el);
     expect(current(root)).to.equal('Theme');
+  });
+
+  it('explains its controls in tooltips, not titles', async () => {
+    const { root } = await render();
+    const items = [...root.querySelectorAll('.acp-settings__nav-item')];
+    expect(items.map(tooltipOf)).to.deep.equal(['Theme', 'Editor']);
+    expect(tooltipOf(root.querySelector('.acp-settings__icon-button'))).to.equal('Pick a color');
+    expect(tooltipOf(root.querySelector('.acp-settings__link'))).to.equal('Not available yet');
+    expect(root.querySelector('[title]')).to.equal(null);
   });
 
   it('scrolls to a section when asked, then says so', async () => {

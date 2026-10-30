@@ -1,8 +1,8 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-bytes.js';
 
 /** @param {Element} el */
-const text = (el) => el.shadowRoot?.textContent?.trim();
+const text = (el) => el.shadowRoot?.querySelector('.acp-bytes__value')?.textContent?.trim() ?? '';
 
 describe('acp-bytes', () => {
   it('shows the byte count formatted', async () => {
@@ -31,8 +31,9 @@ describe('acp-bytes', () => {
     expect(text(el)).to.equal('');
   });
 
-  it('exposes the exact count as the title', async () => {
+  it('exposes the exact count as a tooltip', async () => {
     const el = await fixture(html`<acp-bytes .value=${1536}></acp-bytes>`);
-    expect(el.shadowRoot?.querySelector('.acp-bytes__value')?.getAttribute('title')).to.equal('1,536 bytes');
+    expect(tooltipOf(el.shadowRoot?.querySelector('.acp-bytes__value'))).to.equal('1,536 bytes');
+    expect(el.shadowRoot?.querySelector('[title]')).to.equal(null);
   });
 });

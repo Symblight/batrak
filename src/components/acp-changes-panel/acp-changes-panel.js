@@ -430,13 +430,14 @@ export class AcpChangesPanel extends LitElement {
         <span class="acp-changes-panel__summary">${summary}</span>
         <span class="acp-changes-panel__spacer"></span>
         <md-icon-button
+          id="acp-changes-panel-refresh"
           class="acp-changes-panel__refresh"
           aria-label="Refresh"
-          title="Refresh"
           @click=${() => this.#emit('acp-changes-refresh', null)}
         >
           <md-icon class="acp-changes-panel__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
         </md-icon-button>
+        <md-tooltip for="acp-changes-panel-refresh" show-delay="800">Refresh</md-tooltip>
       </div>
       ${this.#renderBody()}
       <footer class="acp-changes-panel__footer">

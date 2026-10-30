@@ -8,6 +8,7 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/segmented-button';
 import '@symblight/wc-material/select';
 import '@symblight/wc-material/text-field';
+import '@symblight/wc-material/tooltip';
 import lightModeIcon from '@material-design-icons/svg/outlined/light_mode.svg?raw';
 import darkModeIcon from '@material-design-icons/svg/outlined/dark_mode.svg?raw';
 import systemModeIcon from '@material-design-icons/svg/outlined/settings_brightness.svg?raw';
@@ -251,15 +252,16 @@ export class AcpSettings extends LitElement {
             @input=${this.#onColorPicked}
           />
           <md-icon-button
+            id="acp-settings-pick-color"
             slot="trailing"
             class="acp-settings__icon-button"
             aria-label="Pick a color"
-            title="Pick a color"
             @click=${this.#openColorPicker}
           >
             <md-icon class="acp-settings__icon">${unsafeSVG(colorizeIcon)}</md-icon>
           </md-icon-button>
         </md-text-field>
+        <md-tooltip for="acp-settings-pick-color" show-delay="800">Pick a color</md-tooltip>
         ${accentError
           ? nothing
           : html`<span class="acp-settings__hint">Buttons, links, the caret and selection use this color.</span>`}
@@ -369,16 +371,17 @@ export class AcpSettings extends LitElement {
     return html`<nav class="acp-settings__nav" aria-label="Settings sections">
       ${SECTIONS.map(
         ({ id, label, icon }) => html`<button
+          id="acp-settings-nav-${id}"
           class=${classMap({ 'acp-settings__nav-item': true, 'acp-settings__nav-item_active': id === this.current })}
           type="button"
-          title=${label}
           aria-label=${label}
           aria-current=${id === this.current ? 'true' : 'false'}
           @click=${() => this.#scrollTo(id, 'smooth')}
         >
           <md-icon class="acp-settings__nav-icon">${unsafeSVG(icon)}</md-icon>
           <span class="acp-settings__nav-label">${label}</span>
-        </button>`,
+        </button>
+        <md-tooltip for="acp-settings-nav-${id}" placement="right" show-delay="800">${label}</md-tooltip>`,
       )}
     </nav>`;
   }
@@ -395,10 +398,11 @@ export class AcpSettings extends LitElement {
             ${this.#renderEditor(settings)}
           </div>
           <footer class="acp-settings__footer">
-            <span class="acp-settings__link" aria-disabled="true" title="Not available yet">
+            <span id="acp-settings-edit-json" class="acp-settings__link" aria-disabled="true">
               <md-icon class="acp-settings__icon">${unsafeSVG(dataObjectIcon)}</md-icon>
               Edit in settings.json
             </span>
+            <md-tooltip for="acp-settings-edit-json" show-delay="800">Not available yet</md-tooltip>
           </footer>
         </div>
       </div>`;

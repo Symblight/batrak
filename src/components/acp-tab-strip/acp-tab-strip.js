@@ -343,18 +343,22 @@ export class AcpTabStrip extends LitElement {
       @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(tab, e)}
     >
       <md-tooltip class="acp-tab-strip__tooltip" for=${id} placement="bottom" show-delay="800">${tooltip}</md-tooltip>
+      ${tab.draft !== null
+        ? html`<md-tooltip for="${id}-unsaved" placement="top" show-delay="800">Unsaved changes</md-tooltip>`
+        : nothing}
+      <md-tooltip for="${id}-close" placement="top" show-delay="800">${pinned ? 'Unpin' : 'Close'}</md-tooltip>
       <span
         class=${classMap({ 'acp-tab-strip__label': true, 'acp-tab-strip__label_deleted': tab.deletedOnDisk })}
       >
         <md-icon class="acp-tab-strip__file-icon">${unsafeSVG(icon)}</md-icon>
         ${title}
-        ${tab.draft !== null ? html`<span class="acp-tab-strip__unsaved" title="Unsaved changes">●</span>` : nothing}
+        ${tab.draft !== null ? html`<span id="${id}-unsaved" class="acp-tab-strip__unsaved">●</span>` : nothing}
         <span
+          id="${id}-close"
           class="acp-tab-strip__close"
           role="button"
           tabindex="0"
           aria-label="${pinned ? 'Unpin' : 'Close'} ${title}"
-          title=${pinned ? 'Unpin' : 'Close'}
           @click=${(/** @type {Event} */ e) => this.#onCloseClick(e, tab.id)}
           @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onCloseKey(e, tab.id)}
           ><md-icon class="acp-tab-strip__close-icon">${unsafeSVG(pinned ? pushPinIcon : closeIcon)}</md-icon></span
@@ -434,25 +438,34 @@ export class AcpTabStrip extends LitElement {
   #renderOverflowItem(tab) {
     const { title, icon, tooltip } = this.#describe(tab);
     const pinned = this.#isPinned(tab.id);
+    // Tooltips sit in the trailing slot: the default slot's text is the item's typeahead label.
+    const id = `overflow-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
     return html`<md-menu-item
+      id=${id}
       class="acp-tab-strip__overflow-item"
       value=${tab.id}
-      title=${tooltip}
       ?selected=${tab.id === this.active}
     >
       <md-icon slot="leading" class="acp-tab-strip__file-icon">${unsafeSVG(icon)}</md-icon>
       <span class=${classMap({ 'acp-tab-strip__overflow-title': true, 'acp-tab-strip__label_deleted': tab.deletedOnDisk })}
         >${title}</span
-      >${tab.draft !== null ? html`<span class="acp-tab-strip__unsaved" title="Unsaved changes">●</span>` : nothing}
+      >${tab.draft !== null ? html`<span id="${id}-unsaved" class="acp-tab-strip__unsaved">●</span>` : nothing}
       <span
+        id="${id}-close"
         slot="trailing"
         class="acp-tab-strip__close acp-tab-strip__overflow-close"
         role="button"
         aria-label="${pinned ? 'Unpin' : 'Close'} ${title}"
-        title=${pinned ? 'Unpin' : 'Close'}
         @click=${(/** @type {Event} */ e) => this.#onCloseClick(e, tab.id)}
         ><md-icon class="acp-tab-strip__close-icon">${unsafeSVG(pinned ? pushPinIcon : closeIcon)}</md-icon></span
       >
+      <md-tooltip slot="trailing" class="acp-tab-strip__tooltip" for=${id} placement="right" show-delay="800"
+        >${tooltip}</md-tooltip
+      >
+      ${tab.draft !== null
+        ? html`<md-tooltip slot="trailing" for="${id}-unsaved" placement="top" show-delay="800">Unsaved changes</md-tooltip>`
+        : nothing}
+      <md-tooltip slot="trailing" for="${id}-close" placement="top" show-delay="800">${pinned ? 'Unpin' : 'Close'}</md-tooltip>
     </md-menu-item>`;
   }
 

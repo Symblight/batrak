@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../acp-tab-strip.js';
 
 /** @typedef {import('../../../models/types.js').EditorTab} EditorTab */
@@ -62,6 +62,14 @@ describe('acp-tab-strip', () => {
     el.addEventListener('acp-tab-close-request', (e) => requests.push(/** @type {CustomEvent} */ (e).detail));
     /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-tab-strip__close')).click();
     expect(requests).to.deep.equal([{ id: '/p/a.js', scope: 'tab', ids: ['/p/a.js'] }]);
+  });
+
+  it('explains its close and unsaved marks in tooltips, not titles', async () => {
+    const el = await fixture(html`<acp-tab-strip .tabs=${[{ ...fileTab('/p/a.js'), draft: 'x' }]}></acp-tab-strip>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(tooltipOf(root.querySelector('.acp-tab-strip__close'))).to.equal('Close');
+    expect(tooltipOf(root.querySelector('.acp-tab-strip__unsaved'))).to.equal('Unsaved changes');
+    expect(root.querySelector('[title]')).to.equal(null);
   });
 
   it("shows a file tab's path relative to the project in its tooltip", async () => {

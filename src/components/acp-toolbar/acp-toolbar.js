@@ -66,7 +66,8 @@ export class AcpToolbar extends LitElement {
   /** @param {GitRepoView} git */
   #renderBranch({ repo, error }) {
     if (error) {
-      return html`<span class="acp-toolbar__git-error" title=${error}>Git unavailable</span>`;
+      return html`<span id="acp-toolbar-git-error" class="acp-toolbar__git-error">Git unavailable</span>
+        <md-tooltip for="acp-toolbar-git-error" show-delay="800" placement="bottom">${error}</md-tooltip>`;
     }
     if (!repo) return nothing;
     const name = repo.detached ? (repo.sha?.slice(0, 7) ?? 'HEAD') : (repo.branch ?? '');
@@ -79,15 +80,21 @@ export class AcpToolbar extends LitElement {
     ]
       .filter(Boolean)
       .join(', ');
-    return html`<span class="acp-toolbar__branch" title=${title}
-      >${name}${sync ? html`<span class="acp-toolbar__sync">${sync}</span>` : nothing}</span
-    >`;
+    return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch"
+        >${name}${sync ? html`<span class="acp-toolbar__sync">${sync}</span>` : nothing}</span
+      >
+      <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>`;
   }
 
   render() {
     const workspace = this.workspace;
     return html`${this.#renderColumnToggle('session', 'sessions column', 'start')}
-      <span class="acp-toolbar__name" title=${workspace?.path ?? ''}>${workspace?.name ?? ''}</span>
+      <span id="acp-toolbar-name" class="acp-toolbar__name">${workspace?.name ?? ''}</span>
+      ${workspace
+        ? html`<md-tooltip for="acp-toolbar-name" show-delay="800" placement="bottom" style="width: max-content; max-inline-size: none"
+            >${workspace.path}</md-tooltip
+          >`
+        : nothing}
       ${workspace ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
       ${this.#renderColumnToggle('side', 'file column', 'end')}`;

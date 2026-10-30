@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
+import '@symblight/wc-material/tooltip';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
@@ -191,14 +192,15 @@ export class AcpFileColumn extends LitElement {
         <h2 class="acp-file-column__title">${SIDE_TITLES[this.sideView]}</h2>
         ${this.sideView === 'files' && tree.rootId !== null
           ? html`<md-icon-button
+              id="acp-file-column-refresh"
               class="acp-file-column__refresh"
-              title="Refresh"
               aria-label="Refresh files"
               ?disabled=${this.refreshing}
               @click=${this.#refreshTree}
             >
               <md-icon class="acp-file-column__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
-            </md-icon-button>`
+            </md-icon-button>
+            <md-tooltip for="acp-file-column-refresh" show-delay="800">Refresh</md-tooltip>`
           : nothing}
       </div>
       <acp-file-tree

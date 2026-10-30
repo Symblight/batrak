@@ -1,8 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import { repeat } from 'lit/directives/repeat.js';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
+import '@symblight/wc-material/tooltip';
 import caseIcon from '@material-design-icons/svg/outlined/text_fields.svg?raw';
 import wordIcon from '@material-design-icons/svg/outlined/abc.svg?raw';
 import regexIcon from '@material-design-icons/svg/outlined/emergency.svg?raw';
@@ -190,11 +192,12 @@ export class AcpSearchPanel extends LitElement {
     const dir = slash > 0 ? result.path.slice(0, slash) : '';
     const collapsed = this.collapsed.has(result.path);
     const count = result.matches.reduce((n, l) => n + l.ranges.length, 0);
+    const id = `acp-search-panel-file-${result.path}`;
     return html`<li>
       <button
+        id=${id}
         class="acp-search-panel__file-header"
         aria-expanded=${!collapsed}
-        title=${result.path}
         @click=${() => this.#toggleFile(result.path)}
       >
         <md-icon class="acp-search-panel__chevron">${unsafeSVG(collapsed ? collapsedIcon : expandIcon)}</md-icon>
@@ -203,6 +206,7 @@ export class AcpSearchPanel extends LitElement {
         <span class="acp-search-panel__file-dir">${dir}</span>
         <span class="acp-search-panel__count">${count}</span>
       </button>
+      <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${result.path}</md-tooltip>
       ${collapsed
         ? nothing
         : html`<ul class="acp-search-panel__matches">
@@ -225,17 +229,19 @@ export class AcpSearchPanel extends LitElement {
    * @param {string} label
    */
   #renderOption(option, icon, label) {
+    const id = `acp-search-panel-${option}`;
     return html`<md-icon-button
+      id=${id}
       class="acp-search-panel__option"
       toggle
       ?selected=${this[option]}
-      title=${label}
       aria-label=${label}
       aria-pressed=${this[option] ? 'true' : 'false'}
       @click=${() => this.#toggle(option)}
     >
       <md-icon class="acp-search-panel__option-icon">${unsafeSVG(icon)}</md-icon>
-    </md-icon-button>`;
+    </md-icon-button>
+    <md-tooltip for=${id} show-delay="800">${label}</md-tooltip>`;
   }
 
   /**
@@ -279,7 +285,7 @@ export class AcpSearchPanel extends LitElement {
       </div>
       ${this.#renderSummary()}
       <ul class="acp-search-panel__results">
-        ${this.results.map((r) => this.#renderFile(r))}
+        ${repeat(this.results, (r) => r.path, (r) => this.#renderFile(r))}
       </ul>
     `;
   }

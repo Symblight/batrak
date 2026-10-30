@@ -3,6 +3,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
+import '@symblight/wc-material/tooltip';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import computerIcon from '@material-design-icons/svg/outlined/computer.svg?raw';
 import containerIcon from '@material-design-icons/svg/outlined/inventory_2.svg?raw';
@@ -93,13 +94,13 @@ export class AcpRunTarget extends LitElement {
         id="acp-run-target-branch"
         class="acp-run-target__button"
         variant="text"
-        title="Branch the worktree starts from"
         @click=${this.#onBranchesQuery}
       >
         <md-icon slot="icon" class="acp-run-target__icon">${unsafeSVG(branchIcon)}</md-icon>
         ${branch}
         <md-icon class="acp-run-target__arrow">${unsafeSVG(arrowIcon)}</md-icon>
       </md-button>
+      <md-tooltip for="acp-run-target-branch" show-delay="800">Branch the worktree starts from</md-tooltip>
       <md-menu
         class="acp-run-target__menu"
         for="acp-run-target-branch"
@@ -134,24 +135,27 @@ export class AcpRunTarget extends LitElement {
 
     if (started) {
       return html`
-        <span class="acp-run-target__fixed" title="Fixed for this session">
+        <span id="acp-run-target-fixed-kind" class="acp-run-target__fixed">
           <md-icon class="acp-run-target__icon">${unsafeSVG(kind.icon)}</md-icon>${label}
         </span>
+        <md-tooltip for="acp-run-target-fixed-kind" show-delay="800">Fixed for this session</md-tooltip>
         ${branch
-          ? html`<span class="acp-run-target__fixed" title="Fixed for this session">
-              <md-icon class="acp-run-target__icon">${unsafeSVG(branchIcon)}</md-icon>${branch}
-              <md-icon class="acp-run-target__icon">${unsafeSVG(lockIcon)}</md-icon>
-            </span>`
+          ? html`<span id="acp-run-target-fixed-branch" class="acp-run-target__fixed">
+                <md-icon class="acp-run-target__icon">${unsafeSVG(branchIcon)}</md-icon>${branch}
+                <md-icon class="acp-run-target__icon">${unsafeSVG(lockIcon)}</md-icon>
+              </span>
+              <md-tooltip for="acp-run-target-fixed-branch" show-delay="800">Fixed for this session</md-tooltip>`
           : nothing}
         ${note}
       `;
     }
     return html`
-      <md-button id="acp-run-target-kind" class="acp-run-target__button" variant="text" title="Where the agent runs">
+      <md-button id="acp-run-target-kind" class="acp-run-target__button" variant="text">
         <md-icon slot="icon" class="acp-run-target__icon">${unsafeSVG(kind.icon)}</md-icon>
         ${label}
         <md-icon class="acp-run-target__arrow">${unsafeSVG(arrowIcon)}</md-icon>
       </md-button>
+      <md-tooltip for="acp-run-target-kind" show-delay="800">Where the agent runs</md-tooltip>
       <md-menu
         class="acp-run-target__menu"
         for="acp-run-target-kind"

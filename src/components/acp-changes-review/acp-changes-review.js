@@ -8,6 +8,7 @@ import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
+import '@symblight/wc-material/tooltip';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import arrowDownwardIcon from '@material-design-icons/svg/outlined/arrow_downward.svg?raw';
 import arrowDropDownIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
@@ -290,6 +291,7 @@ export class AcpChangesReview extends LitElement {
     const picked = this.selection.has(row.id);
     const deleted = file.kind === 'deleted';
     const actions = expanded || this.hovered === row.id;
+    const id = `acp-changes-review-${row.id}`;
     return html`<div
       class=${classMap({
         'acp-changes-review__row': true,
@@ -299,7 +301,6 @@ export class AcpChangesReview extends LitElement {
       tabindex="0"
       data-id=${row.id}
       aria-expanded=${String(expanded)}
-      title=${row.file.path}
       @click=${() => this.#toggle(row.id)}
       @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onRowKeydown(e, row)}
       @pointerenter=${() => this.#hover(row.id)}
@@ -318,12 +319,12 @@ export class AcpChangesReview extends LitElement {
           ></md-checkbox>`
         : nothing}
       <span class="acp-changes-review__badge" aria-hidden="true">${typeBadge(row.name)}</span>
-      <span class=${classMap({ 'acp-changes-review__name': true, 'acp-changes-review__name_deleted': deleted })}
+      <span id="${id}-name" class=${classMap({ 'acp-changes-review__name': true, 'acp-changes-review__name_deleted': deleted })}
         >${row.name}</span
       >
       <span class="acp-changes-review__dir">${row.dir}</span>
       ${file.origPath
-        ? html`<span class="acp-changes-review__renamed" title="Renamed from ${file.origPath}"
+        ? html`<span id="${id}-renamed" class="acp-changes-review__renamed"
             >(${relativePath(row.dir, file.origPath)})</span
           >`
         : nothing}
@@ -333,19 +334,29 @@ export class AcpChangesReview extends LitElement {
         ? html`<span class="acp-changes-review__actions" @click=${(/** @type {Event} */ e) => e.stopPropagation()}>
             <md-icon-button
               class="acp-changes-review__action"
+              id="${id}-edit"
               aria-label=${`Edit ${row.name}`}
-              title="Edit"
               ?disabled=${deleted}
               @click=${() => this.#edit(row)}
             >
               <md-icon class="acp-changes-review__action-icon">${unsafeSVG(editIcon)}</md-icon>
             </md-icon-button>
-            <md-icon-button class="acp-changes-review__action" aria-label=${`Revert ${row.name}`} title=${NOT_YET} disabled>
+            <md-icon-button id="${id}-revert" class="acp-changes-review__action" aria-label=${`Revert ${row.name}`} disabled>
               <md-icon class="acp-changes-review__action-icon">${unsafeSVG(undoIcon)}</md-icon>
             </md-icon-button>
           </span>`
         : nothing}
-    </div>`;
+    </div>
+    <md-tooltip for="${id}-name" show-delay="800" style="width: max-content; max-inline-size: none">${file.path}</md-tooltip>
+    ${file.origPath
+      ? html`<md-tooltip for="${id}-renamed" show-delay="800" style="width: max-content; max-inline-size: none"
+          >Renamed from ${file.origPath}</md-tooltip
+        >`
+      : nothing}
+    ${actions
+      ? html`<md-tooltip for="${id}-edit" show-delay="800">Edit</md-tooltip>
+          <md-tooltip for="${id}-revert" show-delay="800">${NOT_YET}</md-tooltip>`
+      : nothing}`;
   }
 
   /** @param {ChangeRow} row */
@@ -401,14 +412,15 @@ export class AcpChangesReview extends LitElement {
     }
     return html`<header class="acp-changes-review__toolbar">
       <md-icon-button
+        id="acp-changes-review-collapse"
         class="acp-changes-review__tool"
         aria-label="Collapse all"
-        title="Collapse all"
         ?disabled=${this.expanded.size === 0}
         @click=${() => this.#emit('acp-changes-collapse', null)}
       >
         <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
       </md-icon-button>
+      <md-tooltip for="acp-changes-review-collapse" show-delay="800">Collapse all</md-tooltip>
       ${this.base === null
         ? html`<md-checkbox
               class="acp-changes-review__all"
@@ -426,20 +438,22 @@ export class AcpChangesReview extends LitElement {
       <span class="acp-changes-review__spacer"></span>
       ${this.base !== null
         ? html`<md-button
+              id="acp-changes-review-apply"
               class="acp-changes-review__session-action"
               variant="text"
-              title="Bring the changes into the project, unstaged"
               ?disabled=${total === 0}
               @click=${() => this.#emit('acp-session-apply', null)}
               >Apply locally</md-button
             >
             <md-button
+              id="acp-changes-review-check-out"
               class="acp-changes-review__session-action"
               variant="text"
-              title=${`Check ${this.branch} out in the project`}
               @click=${this.#checkOut}
               >Check out branch</md-button
-            >`
+            >
+            <md-tooltip for="acp-changes-review-apply" show-delay="800">Bring the changes into the project, unstaged</md-tooltip>
+            <md-tooltip for="acp-changes-review-check-out" show-delay="800">Check ${this.branch} out in the project</md-tooltip>`
         : nothing}
     </header>`;
   }

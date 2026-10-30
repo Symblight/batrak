@@ -4,6 +4,7 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/shadow';
+import '@symblight/wc-material/tooltip';
 import chevronLeftIcon from '@material-design-icons/svg/outlined/chevron_left.svg?raw';
 import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import styles from './acp-comment-bar.css?inline';
@@ -60,15 +61,17 @@ export class AcpCommentBar extends LitElement {
     if (!count) return nothing;
     return html`
       <md-shadow level="3"></md-shadow>
-      <md-icon-button class="acp-comment-bar__nav" aria-label="Previous comment" title="Previous" @click=${() => this.#step(-1)}>
+      <md-icon-button id="acp-comment-bar-previous" class="acp-comment-bar__nav" aria-label="Previous comment" @click=${() => this.#step(-1)}>
         <md-icon class="acp-comment-bar__nav-icon">${unsafeSVG(chevronLeftIcon)}</md-icon>
       </md-icon-button>
+      <md-tooltip for="acp-comment-bar-previous" show-delay="800">Previous</md-tooltip>
       <span class="acp-comment-bar__position" aria-live="polite">
         ${this.index + 1}/${count} ${count === 1 ? 'comment' : 'comments'}
       </span>
-      <md-icon-button class="acp-comment-bar__nav" aria-label="Next comment" title="Next" @click=${() => this.#step(1)}>
+      <md-icon-button id="acp-comment-bar-next" class="acp-comment-bar__nav" aria-label="Next comment" @click=${() => this.#step(1)}>
         <md-icon class="acp-comment-bar__nav-icon">${unsafeSVG(chevronRightIcon)}</md-icon>
       </md-icon-button>
+      <md-tooltip for="acp-comment-bar-next" show-delay="800">Next</md-tooltip>
       <md-button class="acp-comment-bar__send" variant="filled" @click=${() => this.#emit('acp-comments-send', null)}>
         Send to agent
       </md-button>
