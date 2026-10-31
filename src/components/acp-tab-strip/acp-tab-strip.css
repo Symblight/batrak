@@ -74,9 +74,14 @@
     transition: none;
   }
 }
-/* Its slot stays empty; the native drag preview follows the pointer. */
+/* It follows the pointer (its shift), above the others and not lagging behind. */
 .acp-tab-strip__tab_dragging {
-  opacity: 0;
+  z-index: 1;
+  transition: none;
+  border-radius: var(--shape-corner-small);
+  background: var(--md-surface-container-high);
+  box-shadow: var(--elevation-2);
+  opacity: 0.9;
 }
 .acp-tab-strip__label {
   display: inline-flex;

@@ -7,24 +7,10 @@ settings:
 overrides:
   '@symblight/wc-material': ^0.5.0
 
-patchedDependencies:
-  '@atlaskit/pragmatic-drag-and-drop-auto-scroll@3.2.1':
-    hash: 1facfec9f612d1409d908e55694fce5b89e70f73e6b432180704840ce01c7b70
-    path: patches/@atlaskit__pragmatic-drag-and-drop-auto-scroll@3.2.1.patch
-  '@atlaskit/pragmatic-drag-and-drop@4.0.0':
-    hash: 6d94d2805ce12acac521dcde4fd57a5488f4d0c146f72bb96663411de43b1e73
-    path: patches/@atlaskit__pragmatic-drag-and-drop@4.0.0.patch
-
 importers:
 
   .:
     dependencies:
-      '@atlaskit/pragmatic-drag-and-drop':
-        specifier: 4.0.0
-        version: 4.0.0(patch_hash=6d94d2805ce12acac521dcde4fd57a5488f4d0c146f72bb96663411de43b1e73)
-      '@atlaskit/pragmatic-drag-and-drop-auto-scroll':
-        specifier: 3.2.1
-        version: 3.2.1(patch_hash=1facfec9f612d1409d908e55694fce5b89e70f73e6b432180704840ce01c7b70)
       '@codemirror/view':
         specifier: 6.43.13
         version: 6.43.13
@@ -50,7 +36,7 @@ importers:
         specifier: github:Symblight/rich-components#path:/packages/tree-view
         version: git+https://git@github.com:Symblight/rich-components.git#5c5b02b49f09e7825796f7480dc68ab86337c969&path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@symblight/wc-material':
-        specifier: ^0.5.1
+        specifier: ^0.5.0
         version: 0.5.1(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@tauri-apps/api':
         specifier: ^2.12.4
@@ -107,17 +93,11 @@ importers:
 
 packages:
 
-  '@atlaskit/pragmatic-drag-and-drop-auto-scroll@3.2.1':
-    resolution: {integrity: sha512-2fhWAG48EjPoKhoHLG6RcT3/VaCzYEbRb6BtA/Vcfx4FrL0P1KrEgBJ6OAwB0X8MOV6UH22YgjFFHjv8fQD9rA==}
-
   '@atlaskit/pragmatic-drag-and-drop-hitbox@2.2.2':
     resolution: {integrity: sha512-2Or4BWVX9ZlgsCCvgbmGEwjv2134vZARL5SezP8Dsrh3ayPYThU55Ug4dBzDAqiIJE2q8aPn+zO8YYoATa4wuA==}
 
   '@atlaskit/pragmatic-drag-and-drop@3.1.0':
     resolution: {integrity: sha512-VU+2Oh6OgvC6D1xiX3lfm1gZJsaSPD+ZKjAHodOQ9IO6RfOvAyReLlK5ut9gIUpPmbD8d09wlCs7y4A6/I8c5Q==}
-
-  '@atlaskit/pragmatic-drag-and-drop@4.0.0':
-    resolution: {integrity: sha512-pyDo2B5NiaExoKGmgeXKGNUL4aR4UzzSZm8QWWjYTEyBLVqSqKyKUwtVxMw2YEkakagOGFONUdHM32LAH2nPug==}
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -2163,23 +2143,12 @@ packages:
 
 snapshots:
 
-  '@atlaskit/pragmatic-drag-and-drop-auto-scroll@3.2.1(patch_hash=1facfec9f612d1409d908e55694fce5b89e70f73e6b432180704840ce01c7b70)':
-    dependencies:
-      '@atlaskit/pragmatic-drag-and-drop': 4.0.0(patch_hash=6d94d2805ce12acac521dcde4fd57a5488f4d0c146f72bb96663411de43b1e73)
-      '@babel/runtime': 7.29.10
-
   '@atlaskit/pragmatic-drag-and-drop-hitbox@2.2.2':
     dependencies:
       '@atlaskit/pragmatic-drag-and-drop': 3.1.0
       '@babel/runtime': 7.29.10
 
   '@atlaskit/pragmatic-drag-and-drop@3.1.0':
-    dependencies:
-      '@babel/runtime': 7.29.10
-      bind-event-listener: 3.0.0
-      raf-schd: 4.0.3
-
-  '@atlaskit/pragmatic-drag-and-drop@4.0.0(patch_hash=6d94d2805ce12acac521dcde4fd57a5488f4d0c146f72bb96663411de43b1e73)':
     dependencies:
       '@babel/runtime': 7.29.10
       bind-event-listener: 3.0.0

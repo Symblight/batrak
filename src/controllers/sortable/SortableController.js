@@ -1,14 +1,12 @@
-import { combine } from '@atlaskit/pragmatic-drag-and-drop/combine';
-import {
-  draggable,
-  dropTargetForElements,
-  monitorForElements,
-} from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
-import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-scroll/element';
-
 /** @typedef {import('lit').LitElement} SortableHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('@atlaskit/pragmatic-drag-and-drop/types').DragLocationHistory} DragLocationHistory */
+
+/** Pointer travel in px before a press becomes a drag, so a click stays a click. */
+const DRAG_THRESHOLD = 3;
+/** px from either end of the container, along `axis`, where a drag scrolls it. */
+const SCROLL_EDGE = 48;
+/** px per frame the container scrolls by with the pointer at its very edge. */
+const SCROLL_SPEED = 12;
 
 /**
  * @typedef {Object} SortableConfig
@@ -23,25 +21,39 @@ import { autoScrollForElements } from '@atlaskit/pragmatic-drag-and-drop-auto-sc
  */
 
 /**
+ * @typedef {Object} SortablePress
+ * @property {number} pointerId
+ * @property {number} x clientX where it started.
+ * @property {number} y
+ * @property {Element} element The pressed item.
+ * @property {string} id
+ * @property {boolean} moved Became a drag (dropped or cancelled since, it still swallows its click).
+ */
+
+/**
  * @typedef {Object} SortableDrag
  * @property {string} id
+ * @property {Element} element
  * @property {(string | null)[]} ids The list's ids when the drag started.
  * @property {number} start Its index in the list.
  * @property {number} step px the others move by to make room: its size plus the gap after it.
  * @property {number[]} mids The other items' midpoints along `axis` when the drag started, before any
  *   moved: measured live, a slide in flight would move them and flip the landing spot back and forth.
  * @property {number} scroll The container's scroll offset then; auto-scroll shifts every midpoint.
+ * @property {number} origin The pointer along `axis` then.
+ * @property {{ x: number, y: number }} pointer The pointer now.
  * @property {number | null} index Where it would land, in the list without it; `null` outside the
  *   container.
  */
 
 /**
- * Reorders the host's items by drag and drop (Pragmatic drag and drop, patched for shadow DOM). After
- * every render it registers the items `selector` matches as draggables and forgets removed ones. While
- * an item is dragged the others make room where it would land: the host renders `offsetOf(id)` as a
- * translation, animated only while `dragging` is set, and hides the dragged item (the native preview
- * follows the pointer). The landing spot comes from the pointer against the items' resting midpoints,
- * so items moving under the pointer don't change it. Drags never cross hosts.
+ * Reorders the host's items by dragging them with the pointer (Pointer Events and pointer capture, no
+ * HTML5 drag and drop: Tauri's native file drop swallows those events in the webview). A press on an
+ * item becomes a drag after `DRAG_THRESHOLD` px; Escape or `pointercancel` cancels it, and the click
+ * that ends a drag is swallowed. While an item is dragged the host renders `offsetOf(id)` as a
+ * translation: the dragged item follows the pointer along `axis`, the others make room where it would
+ * land (animated only while `dragging` is set). The landing spot comes from the pointer against the
+ * items' resting midpoints, so items moving under the pointer don't change it. Drags never cross hosts.
  * @implements {ReactiveController}
  */
 export class SortableController {
@@ -49,16 +61,14 @@ export class SortableController {
   #host;
   /** @type {SortableConfig} */
   #config;
-  /** Marks this host's drags in their data (`sortable`). */
-  #key = Symbol('sortable');
-  /** @type {Map<Element, () => void>} Registered items and their cleanup. */
-  #items = new Map();
-  /** @type {{ element: Element, cleanup: () => void } | null} */
+  /** @type {HTMLElement | null} Where presses are listened for. */
   #container = null;
-  /** @type {(() => void) | null} */
-  #stopMonitor = null;
+  /** @type {SortablePress | null} */
+  #press = null;
   /** @type {SortableDrag | null} */
   #drag = null;
+  /** @type {number} The auto-scroll frame. */
+  #frame = 0;
 
   /**
    * @param {SortableHost} host
@@ -77,11 +87,15 @@ export class SortableController {
 
   /**
    * @param {string} id
-   * @returns {number} px to translate `id` by along `axis`, making room for the dragged item.
+   * @returns {number} px to translate `id` by along `axis`: the dragged item to stay under the pointer,
+   *   the others to make room for it.
    */
   offsetOf(id) {
     const drag = this.#drag;
-    if (!drag || drag.index === null || id === drag.id) return 0;
+    if (!drag) return 0;
+    // Inside the container: scrolled since, the item moved with the content and the pointer didn't.
+    if (id === drag.id) return this.#along(drag.pointer) - drag.origin + this.#scrollOffset() - drag.scroll;
+    if (drag.index === null) return 0;
     const i = drag.ids.indexOf(id);
     if (i === -1) return 0;
     const without = i > drag.start ? i - 1 : i;
@@ -90,52 +104,25 @@ export class SortableController {
   }
 
   hostConnected() {
-    // Items are registered in `hostUpdated()`; a reattached host may not render again by itself.
+    // The container is listened to from `hostUpdated()`; a reattached host may not render again by itself.
     this.#host.requestUpdate();
-    this.#stopMonitor = monitorForElements({
-      canMonitor: ({ source }) => source.data.sortable === this.#key,
-      onDragStart: ({ source }) => this.#start(String(source.data.id), source.element),
-      onDrag: ({ location }) => this.#move(location),
-      onDrop: ({ location }) => {
-        this.#move(location);
-        const drag = this.#drag;
-        this.#drag = null;
-        this.#host.requestUpdate();
-        // Lands in the same update: the host drops the offsets and their transition together with
-        // the reorder, which puts every item where its offset showed it, so nothing jumps.
-        if (!drag || drag.index === null || drag.index === drag.start) return;
-        // The index is into the list as it was when the drag started; if it changed since, skip.
-        const ids = this.#elements().map(this.#config.getId);
-        if (ids.length === drag.ids.length && ids.every((id, i) => id === drag.ids[i])) {
-          this.#config.onReorder(drag.id, drag.index);
-        }
-      },
-    });
   }
 
   hostUpdated() {
-    this.#syncContainer();
-    const elements = new Set(this.#elements());
-    for (const [element, cleanup] of this.#items) {
-      if (elements.has(element)) continue;
-      cleanup();
-      this.#items.delete(element);
-    }
-    for (const element of elements) {
-      if (this.#items.has(element) || !(element instanceof HTMLElement)) continue;
-      const getInitialData = () => ({ sortable: this.#key, id: this.#config.getId(element) });
-      this.#items.set(element, draggable({ element, getInitialData }));
-    }
+    const element = /** @type {HTMLElement | null} */ (this.#host.renderRoot.querySelector(this.#config.container));
+    if (element === this.#container) return;
+    this.#container?.removeEventListener('pointerdown', this.#onPointerdown);
+    this.#container?.removeEventListener('dragstart', this.#onDragstart);
+    this.#container = element;
+    element?.addEventListener('pointerdown', this.#onPointerdown);
+    element?.addEventListener('dragstart', this.#onDragstart);
   }
 
   hostDisconnected() {
-    for (const cleanup of this.#items.values()) cleanup();
-    this.#items.clear();
-    this.#container?.cleanup();
+    this.#container?.removeEventListener('pointerdown', this.#onPointerdown);
+    this.#container?.removeEventListener('dragstart', this.#onDragstart);
     this.#container = null;
-    this.#stopMonitor?.();
-    this.#stopMonitor = null;
-    this.#drag = null;
+    this.#endPress();
   }
 
   /** @returns {Element[]} The items, in list order. */
@@ -143,27 +130,120 @@ export class SortableController {
     return [...this.#host.renderRoot.querySelectorAll(this.#config.selector)];
   }
 
-  /** Registers the container as drop target and for auto-scroll, again if it was re-rendered. */
-  #syncContainer() {
-    const element = this.#host.renderRoot.querySelector(this.#config.container);
-    if (element === (this.#container?.element ?? null)) return;
-    this.#container?.cleanup();
-    const ours = (/** @type {{ source: { data: Record<string, unknown> } }} */ { source }) =>
-      source.data.sortable === this.#key;
-    this.#container = element && {
-      element,
-      cleanup: combine(
-        dropTargetForElements({ element, canDrop: ours }),
-        autoScrollForElements({ element, canScroll: ours, getAllowedAxis: () => this.#config.axis }),
-      ),
-    };
+  /**
+   * @param {{ x: number, y: number }} point
+   * @returns {number} Its coordinate along `axis`.
+   */
+  #along({ x, y }) {
+    return this.#config.axis === 'horizontal' ? x : y;
   }
 
-  /**
-   * @param {string} id
-   * @param {HTMLElement} element The dragged item.
-   */
-  #start(id, element) {
+  /** @returns {number} How far the container is scrolled along `axis`. */
+  #scrollOffset() {
+    const element = this.#container;
+    if (!element) return 0;
+    return this.#config.axis === 'horizontal' ? element.scrollLeft : element.scrollTop;
+  }
+
+  /** No native drag (an image, a selection) may start from an item: the page's would be swallowed. */
+  #onDragstart = (/** @type {Event} */ e) => e.preventDefault();
+
+  /** @param {PointerEvent} e */
+  #onPointerdown = (e) => {
+    // The main button only; Control-click is the context menu on macOS.
+    if (e.button !== 0 || !e.isPrimary || e.ctrlKey || this.#press) return;
+    const elements = this.#elements();
+    const element = /** @type {Element | undefined} */ (
+      e.composedPath().find((node) => node instanceof Element && elements.includes(node))
+    );
+    const id = element ? this.#config.getId(element) : null;
+    if (!element || id === null) return;
+    this.#press = { pointerId: e.pointerId, x: e.clientX, y: e.clientY, element, id, moved: false };
+    // At the window, capturing: the pointer's events reach it whatever stops them on the way.
+    window.addEventListener('pointermove', this.#onPointermove, true);
+    window.addEventListener('pointerup', this.#onPointerup, true);
+    window.addEventListener('pointercancel', this.#onPointercancel, true);
+    window.addEventListener('keydown', this.#onKeydown, true);
+    window.addEventListener('blur', this.#cancel);
+  };
+
+  /** @param {PointerEvent} e */
+  #onPointermove = (e) => {
+    const press = this.#press;
+    if (e.pointerId !== press?.pointerId) return;
+    // The main button is up: its release went elsewhere, this is a hover.
+    if (!(e.buttons & 1)) {
+      this.#endPress();
+      return;
+    }
+    const pointer = { x: e.clientX, y: e.clientY };
+    if (!press.moved) {
+      if (Math.hypot(pointer.x - press.x, pointer.y - press.y) < DRAG_THRESHOLD) return;
+      press.moved = true;
+      this.#start(press);
+    }
+    const drag = this.#drag;
+    if (!drag) return;
+    drag.pointer = pointer;
+    this.#move(drag);
+  };
+
+  /** @param {PointerEvent} e */
+  #onPointerup = (e) => {
+    const press = this.#press;
+    if (e.pointerId !== press?.pointerId) return;
+    const drag = this.#drag;
+    if (drag) {
+      drag.pointer = { x: e.clientX, y: e.clientY };
+      this.#move(drag);
+      this.#finish(true);
+    }
+    // The click this release is about to fire would activate the item.
+    if (press.moved) this.#swallowClick();
+    this.#endPress();
+  };
+
+  /** @param {PointerEvent} e */
+  #onPointercancel = (e) => {
+    if (e.pointerId === this.#press?.pointerId) this.#endPress();
+  };
+
+  /** @param {KeyboardEvent} e */
+  #onKeydown = (e) => {
+    if (e.key !== 'Escape' || !this.#drag) return;
+    e.preventDefault();
+    e.stopPropagation();
+    // The press goes on until release, as a drag no more.
+    this.#finish(false);
+  };
+
+  #cancel = () => this.#endPress();
+
+  #swallowClick() {
+    /** @param {Event} e */
+    const swallow = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener('click', swallow, { capture: true, once: true });
+    // A click comes right after its release, in the same task; there may be none (released elsewhere).
+    setTimeout(() => window.removeEventListener('click', swallow, true));
+  }
+
+  /** Ends the press, and the drag (not dropped) if one is on. */
+  #endPress() {
+    window.removeEventListener('pointermove', this.#onPointermove, true);
+    window.removeEventListener('pointerup', this.#onPointerup, true);
+    window.removeEventListener('pointercancel', this.#onPointercancel, true);
+    window.removeEventListener('keydown', this.#onKeydown, true);
+    window.removeEventListener('blur', this.#cancel);
+    if (this.#drag) this.#finish(false);
+    this.#press = null;
+  }
+
+  /** @param {SortablePress} press */
+  #start(press) {
+    const { element, id } = press;
     const elements = this.#elements();
     const start = elements.indexOf(element);
     if (start === -1) return;
@@ -175,7 +255,6 @@ export class SortableController {
     let gap = 0;
     if (next) gap = horizontal ? next.left - rect.right : next.top - rect.bottom;
     else if (prev) gap = horizontal ? rect.left - prev.right : rect.top - prev.bottom;
-    const ids = elements.map(this.#config.getId);
     const mids = elements
       .filter((other) => other !== element)
       .map((other) => {
@@ -184,46 +263,95 @@ export class SortableController {
       });
     this.#drag = {
       id,
-      ids,
+      element,
+      ids: elements.map(this.#config.getId),
       start,
       step: (horizontal ? rect.width : rect.height) + Math.max(0, gap),
       mids,
       scroll: this.#scrollOffset(),
+      origin: this.#along(press),
+      pointer: { x: press.x, y: press.y },
       index: start,
     };
+    try {
+      element.setPointerCapture(press.pointerId);
+    } catch {
+      // Not an active pointer (a synthetic event): the window still gets its events.
+    }
+    this.#frame = requestAnimationFrame(this.#autoScroll);
     this.#host.requestUpdate();
-  }
-
-  /** @returns {number} How far the container is scrolled along `axis`. */
-  #scrollOffset() {
-    const element = this.#container?.element;
-    if (!element) return 0;
-    return this.#config.axis === 'horizontal' ? element.scrollLeft : element.scrollTop;
   }
 
   /**
-   * Updates where the dragged item would land.
-   * @param {DragLocationHistory} location
+   * Updates where the dragged item would land; the host re-renders it under the pointer.
+   * @param {SortableDrag} drag
    */
-  #move(location) {
-    const drag = this.#drag;
-    if (!drag) return;
-    const over = location.current.dropTargets.some((target) => target.element === this.#container?.element);
-    const index = over ? this.#indexAt(drag, location.current.input) : null;
-    if (index === drag.index) return;
-    drag.index = index;
+  #move(drag) {
+    const rect = this.#container?.getBoundingClientRect();
+    const { x, y } = drag.pointer;
+    const over = !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
+    drag.index = over ? this.#indexAt(drag) : null;
     this.#host.requestUpdate();
   }
+
+  /**
+   * Ends the drag.
+   * @param {boolean} drop Reorder to where it would land, else put it back.
+   */
+  #finish(drop) {
+    const drag = this.#drag;
+    if (!drag) return;
+    this.#drag = null;
+    cancelAnimationFrame(this.#frame);
+    try {
+      drag.element.releasePointerCapture(this.#press?.pointerId ?? 0);
+    } catch {
+      // Already released.
+    }
+    this.#host.requestUpdate();
+    // Lands in the same update: the host drops the offsets and their transition together with the
+    // reorder, which puts every item where its offset showed it, so nothing jumps.
+    if (!drop || drag.index === null || drag.index === drag.start) return;
+    // The index is into the list as it was when the drag started; if it changed since, skip.
+    const ids = this.#elements().map(this.#config.getId);
+    if (ids.length === drag.ids.length && ids.every((id, i) => id === drag.ids[i])) {
+      this.#config.onReorder(drag.id, drag.index);
+    }
+  }
+
+  /** Each frame of a drag: scrolls the container while the pointer is near either end of it. */
+  #autoScroll = () => {
+    const drag = this.#drag;
+    const element = this.#container;
+    if (!drag || !element) return;
+    this.#frame = requestAnimationFrame(this.#autoScroll);
+    const horizontal = this.#config.axis === 'horizontal';
+    const rect = element.getBoundingClientRect();
+    const { x, y } = drag.pointer;
+    if (horizontal ? y < rect.top || y > rect.bottom : x < rect.left || x > rect.right) return;
+    const [low, high] = horizontal ? [rect.left, rect.right] : [rect.top, rect.bottom];
+    const edge = Math.min(SCROLL_EDGE, (high - low) / 4);
+    const pointer = horizontal ? x : y;
+    // Faster the closer it is to the edge, or past it.
+    const speed = (/** @type {number} */ distance) => Math.ceil(SCROLL_SPEED * (1 - distance / edge));
+    let delta = 0;
+    if (pointer < low + edge) delta = -speed(Math.max(0, pointer - low));
+    else if (pointer > high - edge) delta = speed(Math.max(0, high - pointer));
+    if (delta === 0) return;
+    const before = this.#scrollOffset();
+    // `instant`: a container with `scroll-behavior: smooth` would otherwise animate each step.
+    element.scrollBy({ [horizontal ? 'left' : 'top']: delta, behavior: 'instant' });
+    if (this.#scrollOffset() !== before) this.#move(drag);
+  };
 
   /**
    * @param {SortableDrag} drag
-   * @param {{ clientX: number, clientY: number }} input
    * @returns {number} Index in the list without the dragged item, kept within its group.
    */
-  #indexAt(drag, { clientX, clientY }) {
-    const { axis, group } = this.#config;
+  #indexAt(drag) {
+    const { group } = this.#config;
     // In the coordinates the midpoints were measured in.
-    const pointer = (axis === 'horizontal' ? clientX : clientY) + this.#scrollOffset() - drag.scroll;
+    const pointer = this.#along(drag.pointer) + this.#scrollOffset() - drag.scroll;
     const index = drag.mids.filter((mid) => mid < pointer).length;
     if (!group) return index;
     const own = group(drag.id);

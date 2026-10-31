@@ -12,8 +12,6 @@
     "test": "wtr"
   },
   "dependencies": {
-    "@atlaskit/pragmatic-drag-and-drop": "4.0.0",
-    "@atlaskit/pragmatic-drag-and-drop-auto-scroll": "3.2.1",
     "@codemirror/view": "6.43.13",
     "@floating-ui/dom": "^1.8.0",
     "@material-design-icons/svg": "^0.14.15",
@@ -51,10 +49,6 @@
       "@symblight/tree-view",
       "@symblight/code-editor",
       "@symblight/chat"
-    ],
-    "patchedDependencies": {
-      "@atlaskit/pragmatic-drag-and-drop@4.0.0": "patches/@atlaskit__pragmatic-drag-and-drop@4.0.0.patch",
-      "@atlaskit/pragmatic-drag-and-drop-auto-scroll@3.2.1": "patches/@atlaskit__pragmatic-drag-and-drop-auto-scroll@3.2.1.patch"
-    }
+    ]
   }
 }

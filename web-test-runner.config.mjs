@@ -2,7 +2,7 @@ import { readFile } from 'node:fs/promises';
 import { chromeLauncher } from '@web/test-runner-chrome';
 
 /**
- * Serves Pragmatic drag and drop's `bind-event-listener`, which ships only CommonJS, as ES modules:
+ * Serves `bind-event-listener` (Pragmatic drag and drop's, which `@symblight/tree-view` loads), which ships only CommonJS, as ES modules:
  * each `require('./x')` becomes an import, each `exports.x` (or getter on `exports`) an export.
  * @type {import('@web/dev-server').Plugin}
  */
