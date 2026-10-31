@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../bytes.js';
 
 /** @param {Element} el */
-const text = (el) => el.shadowRoot?.querySelector('.acp-bytes__value')?.textContent?.trim() ?? '';
+const text = (el) => el.querySelector('.acp-bytes__value')?.textContent?.trim() ?? '';
 
 describe('acp-bytes', () => {
   it('shows the byte count formatted', async () => {
@@ -41,7 +41,14 @@ describe('acp-bytes', () => {
 
   it('exposes the exact count as a tooltip', async () => {
     const el = await fixture(html`<acp-bytes .value=${1536}></acp-bytes>`);
-    expect(tooltipOf(el.shadowRoot?.querySelector('.acp-bytes__value'))).to.equal('1,536 bytes');
-    expect(el.shadowRoot?.querySelector('[title]')).to.equal(null);
+    expect(tooltipOf(el.querySelector('.acp-bytes__value'))).to.equal('1,536 bytes');
+    expect(el.querySelector('[title]') === null).to.equal(true);
+  });
+
+  it('renders into itself, and gives each count its own tooltip anchor when several share a root', async () => {
+    const box = await fixture(html`<div><acp-bytes .value=${1536}></acp-bytes><acp-bytes .value=${2048}></acp-bytes></div>`);
+    const [a, b] = [...box.querySelectorAll('acp-bytes')];
+    expect(a.shadowRoot === null, 'no shadow root').to.equal(true);
+    expect([a, b].map((el) => tooltipOf(el.querySelector('.acp-bytes__value')))).to.deep.equal(['1,536 bytes', '2,048 bytes']);
   });
 });

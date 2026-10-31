@@ -1,8 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/tooltip';
-import styles from './bytes.css?inline';
 
 const UNITS = ['B', 'KB', 'MB', 'GB'];
+
+/** Gives each instance a tooltip anchor of its own: the ids share their parent's root. */
+let count = 0;
 
 /** @param {number} bytes */
 function format(bytes) {
@@ -17,14 +19,15 @@ function format(bytes) {
 
 /**
  * @tag acp-bytes
- * @summary A byte count shown in the largest fitting unit (`1.5 KB`); the exact count is its tooltip.
+ * @summary A byte count shown in the largest fitting unit (`1.5 KB`); the exact count is its tooltip. Light DOM.
  */
 export class AcpBytes extends LitElement {
   static properties = {
     value: { type: Number },
   };
 
-  static styles = styles;
+  /** @type {string} */
+  #id = `acp-bytes-${++count}`;
 
   constructor() {
     super();
@@ -32,11 +35,21 @@ export class AcpBytes extends LitElement {
     this.value = null;
   }
 
+  /** Light DOM: in its parent's tree; the host is an inline element already. */
+  createRenderRoot() {
+    return this;
+  }
+
+  connectedCallback() {
+    this.style.fontVariantNumeric = 'tabular-nums';
+    super.connectedCallback();
+  }
+
   render() {
     const value = this.value;
     if (value === null || !Number.isFinite(value)) return nothing;
-    return html`<span id="acp-bytes-value" class="acp-bytes__value">${format(value)}</span>
-      <md-tooltip for="acp-bytes-value" show-delay="800">${value.toLocaleString('en-US')} bytes</md-tooltip>`;
+    return html`<span id=${this.#id} class="acp-bytes__value">${format(value)}</span>
+      <md-tooltip for=${this.#id} show-delay="800">${value.toLocaleString('en-US')} bytes</md-tooltip>`;
   }
 }
 
