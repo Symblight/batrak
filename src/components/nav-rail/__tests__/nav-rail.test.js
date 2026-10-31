@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../nav-rail.js';
 
 /** @typedef {import('../nav-rail.js').AcpNavRail} AcpNavRail */
@@ -26,56 +26,29 @@ function record(el, type) {
 }
 
 describe('acp-nav-rail', () => {
-  it('renders all rail items including terminal', async () => {
-    const el = await render(html`<acp-nav-rail></acp-nav-rail>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    const terminalButton = root.querySelector('#acp-nav-rail-terminal');
-    expect(terminalButton).to.not.be.null;
-    expect(terminalButton?.getAttribute('aria-label')).to.equal('Terminal');
-
-    const filesButton = root.querySelector('#acp-nav-rail-files');
-    const searchButton = root.querySelector('#acp-nav-rail-search');
-    const changesButton = root.querySelector('#acp-nav-rail-changes');
-    const notificationsButton = root.querySelector('#acp-nav-rail-notifications');
-    const settingsButton = root.querySelector('#acp-nav-rail-settings');
-
-    expect(filesButton).to.not.be.null;
-    expect(searchButton).to.not.be.null;
-    expect(changesButton).to.not.be.null;
-    expect(notificationsButton).to.not.be.null;
-    expect(settingsButton).to.not.be.null;
-  });
-
-  it('fires acp-open-terminal when terminal button is clicked', async () => {
-    const el = await render(html`<acp-nav-rail></acp-nav-rail>`);
-    const events = record(el, 'acp-open-terminal');
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    const terminalButton = /** @type {HTMLElement} */ (root.querySelector('#acp-nav-rail-terminal'));
-    terminalButton.click();
-    expect(events).to.have.length(1);
-    expect(events[0].bubbles).to.equal(true);
-    expect(events[0].composed).to.equal(true);
-  });
-
-  it('fires panel toggle events on top items', async () => {
-    const el = await render(html`<acp-nav-rail></acp-nav-rail>`);
-    const filesEvents = record(el, 'acp-show-files');
-    const searchEvents = record(el, 'acp-find-in-files');
-    const changesEvents = record(el, 'acp-show-changes');
-    const settingsEvents = record(el, 'acp-show-settings');
-
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    /** @type {HTMLElement} */ (root.querySelector('#acp-nav-rail-files')).click();
-    expect(filesEvents).to.have.length(1);
-
-    /** @type {HTMLElement} */ (root.querySelector('#acp-nav-rail-search')).click();
-    expect(searchEvents).to.have.length(1);
-
-    /** @type {HTMLElement} */ (root.querySelector('#acp-nav-rail-changes')).click();
-    expect(changesEvents).to.have.length(1);
-
-    /** @type {HTMLElement} */ (root.querySelector('#acp-nav-rail-settings')).click();
-    expect(settingsEvents).to.have.length(1);
+  it('fires its event, bubbling and composed, when each button is clicked, and names each in a tooltip', async () => {
+    const buttons = [
+      ['files', 'acp-show-files', 'Files'],
+      ['search', 'acp-find-in-files', 'Search'],
+      ['changes', 'acp-show-changes', 'Changes'],
+      ['terminal', 'acp-open-terminal', 'Terminal'],
+      ['settings', 'acp-show-settings', 'Settings'],
+    ];
+    for (const [name, type, label] of buttons) {
+      // Arrange
+      const el = await render(html`<acp-nav-rail></acp-nav-rail>`);
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const events = record(el, type);
+      const button = /** @type {HTMLElement} */ (root.querySelector(`#acp-nav-rail-${name}`));
+      // Act
+      button.click();
+      // Assert
+      expect(events, name).to.have.length(1);
+      expect([events[0].bubbles, events[0].composed], name).to.deep.equal([true, true]);
+      expect(button.getAttribute('aria-label'), name).to.equal(label);
+      expect(tooltipOf(button), name).to.contain(label);
+      expect(root.querySelector('[title]')).to.equal(null);
+    }
   });
 
   it('marks selected toggle button', async () => {

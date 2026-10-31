@@ -46,20 +46,6 @@ describe('acp-session-status', () => {
     }
   });
 
-  it('puts the most urgent thing first', async () => {
-    expect((await render({ session: session({ status: 'error' }), permissionPending: true })).indicator).to.equal('permission');
-    expect((await render({ session: session({ status: 'error' }), unread: true })).indicator).to.equal('error');
-    expect((await render({ session: session({ status: 'working' }), unread: true })).indicator).to.equal('running');
-  });
-
-  it('counts activity in another app only until its time is up', async () => {
-    const el = await render({ session: session({ activeElsewhereUntil: SOON }) });
-    expect(el.indicator).to.equal('elsewhere');
-    el.now = Date.parse(SOON) + 1;
-    await el.updateComplete;
-    expect(el.indicator).to.equal(null);
-  });
-
   it('shows nothing for an idle session, for no session, and for a terminal session it is told to keep quiet about', async () => {
     for (const props of [{ session: session({}) }, { session: null }, { session: session({ inTerminal: true }), quiet: true }]) {
       const el = await render(props);

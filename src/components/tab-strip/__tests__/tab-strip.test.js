@@ -64,39 +64,35 @@ describe('acp-tab-strip', () => {
     expect(label()).to.include('vim a.txt');
   });
 
-  it('asks to close a tab with its ×', async () => {
+  it('asks to close a tab with its ×, and explains its close and unsaved marks in tooltips, not titles', async () => {
+    // Arrange
     const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
-      await fixture(html`<acp-tab-strip .tabs=${[fileTab('/p/a.js')]}></acp-tab-strip>`)
+      await fixture(html`<acp-tab-strip .tabs=${[{ ...fileTab('/p/a.js'), draft: 'x' }]}></acp-tab-strip>`)
     );
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     /** @type {unknown[]} */
     const requests = [];
     el.addEventListener('acp-tab-close-request', (e) => requests.push(/** @type {CustomEvent} */ (e).detail));
-    /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-tab-strip__close')).click();
+    // Act
+    /** @type {HTMLElement} */ (root.querySelector('.acp-tab-strip__close')).click();
+    // Assert
     expect(requests).to.deep.equal([{ id: '/p/a.js', scope: 'tab', ids: ['/p/a.js'] }]);
-  });
-
-  it('explains its close and unsaved marks in tooltips, not titles', async () => {
-    const el = await fixture(html`<acp-tab-strip .tabs=${[{ ...fileTab('/p/a.js'), draft: 'x' }]}></acp-tab-strip>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('.acp-tab-strip__close'))).to.equal('Close');
     expect(tooltipOf(root.querySelector('.acp-tab-strip__unsaved'))).to.equal('Unsaved changes');
     expect(root.querySelector('[title]')).to.equal(null);
   });
 
-  it("shows a file tab's path relative to the project in its tooltip", async () => {
-    const el = await fixture(html`<acp-tab-strip
-      .tabs=${[fileTab('/work/app/src/main.js')]}
-      .root=${'/work/app'}
-    ></acp-tab-strip>`);
-    expect(el.shadowRoot?.querySelector('md-tooltip')?.textContent?.trim()).to.equal('src/main.js');
-  });
-
-  it('keeps the absolute path for a file outside the project', async () => {
-    const el = await fixture(html`<acp-tab-strip
-      .tabs=${[fileTab('/elsewhere/notes.md')]}
-      .root=${'/work/app'}
-    ></acp-tab-strip>`);
-    expect(el.shadowRoot?.querySelector('md-tooltip')?.textContent?.trim()).to.equal('/elsewhere/notes.md');
+  it("shows a file tab's path in its tooltip: relative inside the project, absolute outside it", async () => {
+    const cases = [
+      ['/work/app/src/main.js', 'src/main.js'],
+      ['/elsewhere/notes.md', '/elsewhere/notes.md'],
+    ];
+    for (const [path, expected] of cases) {
+      // Arrange
+      const el = await fixture(html`<acp-tab-strip .tabs=${[fileTab(path)]} .root=${'/work/app'}></acp-tab-strip>`);
+      // Assert
+      expect(el.shadowRoot?.querySelector('md-tooltip')?.textContent?.trim(), path).to.equal(expected);
+    }
   });
 
   describe('Show Hidden Tabs', () => {
@@ -149,16 +145,15 @@ describe('acp-tab-strip', () => {
       return { el, root, strip, button, menu, rows, listed, open, listen, closeRow };
     }
 
-    it('shows no button while the tabs fit', async () => {
-      const { button } = await render({ width: 900, count: 2 });
-      expect(button()).to.equal(null);
-    });
-
-    it("shows the button once they don't, and lists only the tabs out of view, in strip order", async () => {
+    it("shows no button while the tabs fit, and once they don't lists only the tabs out of view, in strip order", async () => {
+      // Arrange
+      const fits = await render({ width: 900, count: 2 });
+      expect(fits.button(), 'while they fit').to.equal(null);
       const { button, open, menu, listed } = await render();
-      expect(button()).to.exist;
-      expect(button()?.getAttribute('aria-label')).to.equal('Show Hidden Tabs');
+      // Act
       await open();
+      // Assert
+      expect(button()?.getAttribute('aria-label')).to.equal('Show Hidden Tabs');
       expect(menu().open).to.be.true;
       const hidden = listed();
       expect(hidden.length).to.be.within(1, ids.length - 1);
@@ -187,47 +182,52 @@ describe('acp-tab-strip', () => {
       expect(menu().open).to.be.false;
     });
 
-    it("closes a row's tab with its ×, keeping the menu open", async () => {
-      const { el, open, listed, menu, listen, closeRow } = await render();
-      await open();
-      const closes = listen('acp-tab-close-request');
-      const activations = listen('acp-tab-activate');
-      const id = /** @type {string} */ (listed().at(-1));
-      closeRow(id);
-      await settle(el);
+    it("closes a row's tab with its ×, or unpins a pinned row's tab with its pin, keeping the menu open", async () => {
+      // Arrange
+      const plain = await render();
+      await plain.open();
+      const closes = plain.listen('acp-tab-close-request');
+      const activations = plain.listen('acp-tab-activate');
+      const id = /** @type {string} */ (plain.listed().at(-1));
+      // Act
+      plain.closeRow(id);
+      await settle(plain.el);
+      // Assert
       expect(closes).to.deep.equal([{ id, scope: 'tab', ids: [id] }]);
       expect(activations).to.deep.equal([]);
-      expect(menu().open).to.be.true;
-    });
+      expect(plain.menu().open).to.be.true;
 
-    it("unpins a pinned row's tab with its pin", async () => {
+      // Arrange
       const { el, strip, open, menu, listen, closeRow } = await render({ pinned: [ids[0]], active: ids[5] });
       strip.scrollLeft = strip.scrollWidth;
       await settle(el);
       await open();
       const pins = listen('acp-tab-pin');
+      // Act
       closeRow(ids[0]);
       await settle(el);
+      // Assert
       expect(pins).to.deep.equal([{ id: ids[0], pinned: false }]);
       expect(menu().open).to.be.true;
     });
 
-    it('closes a row with Delete', async () => {
-      const { el, open, rows, listen } = await render();
+    it('closes a row with Delete and the menu with Escape', async () => {
+      // Arrange
+      const { el, open, rows, listen, menu } = await render();
       await open();
       const closes = listen('acp-tab-close-request');
       const row = rows()[0];
+      const id = row.getAttribute('value');
+      // Act
       row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, composed: true }));
       await settle(el);
-      const id = row.getAttribute('value');
+      // Assert
       expect(closes).to.deep.equal([{ id, scope: 'tab', ids: [id] }]);
-    });
-
-    it('closes the menu with Escape', async () => {
-      const { el, open, menu } = await render();
-      await open();
+      expect(menu().open, 'Delete keeps the menu').to.be.true;
+      // Act
       menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
       await settle(el);
+      // Assert
       expect(menu().open).to.be.false;
     });
   });
@@ -328,18 +328,32 @@ describe('acp-tab-strip', () => {
       return { el, root, strip, tab, label, center, listen, press, moveTo, release, drag, dragging };
     }
 
-    it('moves a tab forward past the midpoints the pointer crossed', async () => {
-      const { center, listen, drag } = await render();
-      const moves = listen('acp-tab-move');
-      await drag(ids[0], center(ids[2]).x + 5);
-      expect(moves).to.deep.equal([{ id: ids[0], index: 2 }]);
+    it('moves a tab to the index its pointer crossed, keeping unpinned tabs after the pinned ones', async () => {
+      /** @type {[string, { count?: number, pinned?: string[] }, number, (h: Awaited<ReturnType<typeof render>>) => number, number | null][]} */
+      const cases = [
+        // [why, props, dragged, x to drop at, expected index (null: no move)]
+        ['forward past the midpoints crossed', {}, 0, (h) => h.center(ids[2]).x + 5, 2],
+        ['backward', {}, 3, (h) => h.center(ids[1]).x - 5, 1],
+        ['an unpinned tab stays after the pinned ones', { count: 5, pinned: [ids[0], ids[1]] }, 4, (h) => h.tab(ids[0]).getBoundingClientRect().left + 2, 2],
+        ['a pinned tab stays among the pinned ones', { count: 4, pinned: [ids[0], ids[1]] }, 0, (h) => h.tab(ids[3]).getBoundingClientRect().right - 2, 1],
+        ['dropped where it was', {}, 1, (h) => h.center(ids[1]).x + 6, null],
+      ];
+      for (const [why, props, dragged, dropX, index] of cases) {
+        // Arrange
+        const h = await render(props);
+        const moves = h.listen('acp-tab-move');
+        // Act
+        await h.drag(ids[dragged], dropX(h));
+        // Assert
+        expect(moves, why).to.deep.equal(index === null ? [] : [{ id: ids[dragged], index }]);
+      }
     });
 
-    it('moves a tab backward', async () => {
-      const { center, listen, drag } = await render();
+    it('does not move a tab dropped outside the strip', async () => {
+      const { strip, center, listen, drag } = await render();
       const moves = listen('acp-tab-move');
-      await drag(ids[3], center(ids[1]).x - 5);
-      expect(moves).to.deep.equal([{ id: ids[3], index: 1 }]);
+      await drag(ids[0], center(ids[2]).x + 5, strip.getBoundingClientRect().bottom + 80);
+      expect(moves).to.deep.equal([]);
     });
 
     it('marks the dragged tab only while it is dragged', async () => {
@@ -351,34 +365,6 @@ describe('acp-tab-strip', () => {
       await moveTo(center(ids[3]).x, start.y);
       await release(center(ids[3]).x, start.y);
       expect(dragging()).to.deep.equal([]);
-    });
-
-    it('keeps an unpinned tab after the pinned ones', async () => {
-      const { tab, listen, drag } = await render({ count: 5, pinned: [ids[0], ids[1]] });
-      const moves = listen('acp-tab-move');
-      await drag(ids[4], tab(ids[0]).getBoundingClientRect().left + 2);
-      expect(moves).to.deep.equal([{ id: ids[4], index: 2 }]);
-    });
-
-    it('keeps a pinned tab among the pinned ones', async () => {
-      const { tab, listen, drag } = await render({ count: 4, pinned: [ids[0], ids[1]] });
-      const moves = listen('acp-tab-move');
-      await drag(ids[0], tab(ids[3]).getBoundingClientRect().right - 2);
-      expect(moves).to.deep.equal([{ id: ids[0], index: 1 }]);
-    });
-
-    it('does not move a tab dropped where it was', async () => {
-      const { center, listen, drag } = await render();
-      const moves = listen('acp-tab-move');
-      await drag(ids[1], center(ids[1]).x + 6);
-      expect(moves).to.deep.equal([]);
-    });
-
-    it('does not move a tab dropped outside the strip', async () => {
-      const { strip, center, listen, drag } = await render();
-      const moves = listen('acp-tab-move');
-      await drag(ids[0], center(ids[2]).x + 5, strip.getBoundingClientRect().bottom + 80);
-      expect(moves).to.deep.equal([]);
     });
 
     it('activates a clicked tab without moving it, but not a dropped one', async () => {

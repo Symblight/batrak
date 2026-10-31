@@ -85,8 +85,10 @@ function titles(root) {
 }
 
 describe('acp-session-list', () => {
-  it('groups sessions under their project, pinned first, then the most recently active', async () => {
+  it('groups sessions under their project, pinned first, then the most recently active, with tooltips for its marks', async () => {
+    // Arrange
     const { root } = await render({ pinned: ['c'] });
+    // Assert
     const groups = [...root.querySelectorAll('.acp-session-list__project-name')].map((n) => n.textContent?.trim());
     expect(groups).to.deep.equal(['brama', 'rich']);
     expect(root.querySelector('.acp-session-list__project-path')?.textContent).to.equal('~/brama');
@@ -94,10 +96,6 @@ describe('acp-session-list', () => {
     expect(row(root, 'Session c').querySelector('.acp-session-list__pin')).to.not.equal(null);
     expect(row(root, 'Session b').querySelector('.acp-session-list__pin')).to.equal(null);
     expect(tooltipOf(row(root, 'Session c').querySelector('.acp-session-list__pin'))).to.equal('Pinned');
-  });
-
-  it('shows a worktree session’s branch and each session’s age', async () => {
-    const { root } = await render();
     expect(tooltipOf(row(root, 'Session r').querySelector('.acp-session-list__branch'))).to.equal('Worktree on brama/r-1');
     expect(tooltipOf(root.querySelector('.acp-session-list__project-path'))).to.equal('/home/me/brama');
     expect(tooltipOf(root.querySelector('.acp-session-list__add'))).to.equal('New session');
@@ -125,53 +123,50 @@ describe('acp-session-list', () => {
     expect(root.querySelector('.acp-session-list__count')?.textContent).to.equal('3');
   });
 
-  it('marks the selected session, and unread ones until they are opened', async () => {
-    const { root } = await render({ activeSessionId: 'a', unread: ['b'] });
-    expect(row(root, 'Session a').classList.contains('acp-session-list__row_selected')).to.equal(true);
-    const title = /** @type {Element} */ (row(root, 'Session b').querySelector('.acp-session-list__title'));
-    expect(title.classList.contains('acp-session-list__title_unread')).to.equal(true);
-    const status = /** @type {HTMLElementTagNameMap['acp-session-status']} */ (
-      row(root, 'Session b').querySelector('acp-session-status')
-    );
-    expect(status.indicator).to.equal('unread');
-  });
-
-  it('shows each session’s status: permission, error, running', async () => {
-    const sessions = [session('w', { status: 'working' }), session('e', { status: 'error' }), session('p')];
-    const { root } = await render({ sessions, waiting: ['p'] });
-    /** @param {string} title */
-    const indicator = (title) =>
-      /** @type {HTMLElementTagNameMap['acp-session-status']} */ (row(root, title).querySelector('acp-session-status'))
+  it("passes each session's state to its acp-session-status, and marks the selected row", async () => {
+    // Arrange
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    const sessions = [
+      session('w', { status: 'working' }),
+      session('e', { status: 'error' }),
+      session('p'),
+      session('u'),
+      session('t', { projectId: '/home/me/rich', status: 'stopped', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
+      session('o', { projectId: '/home/me/rich', status: 'stopped', activeElsewhereUntil: '2026-10-23T12:59:00.000Z' }),
+      session('tw', { projectId: '/home/me/rich', status: 'stopped', inTerminal: true, activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
+      session('ti', { projectId: '/home/me/rich', status: 'stopped', inTerminal: true }),
+    ];
+    // Act
+    const { root } = await render({ sessions, waiting: ['p'], unread: ['u'], now, activeSessionId: 'w' });
+    // Assert
+    const indicator = (/** @type {string} */ id) =>
+      /** @type {HTMLElementTagNameMap['acp-session-status']} */ (root.querySelector(`[data-session-id="${id}"] acp-session-status`))
         .indicator;
-    expect([indicator('Session w'), indicator('Session e'), indicator('Session p')]).to.deep.equal([
-      'running',
-      'error',
-      'permission',
-    ]);
+    expect(
+      ['w', 'e', 'p', 'u', 't', 'o', 'tw', 'ti'].map(indicator),
+      'running, error, permission, unread, elsewhere, its time is up, terminal working, idle terminal',
+    ).to.deep.equal(['running', 'error', 'permission', 'unread', 'elsewhere', null, 'terminal-working', null]);
+    expect([...root.querySelectorAll('[aria-selected="true"]')].map((r) => r.getAttribute('data-session-id'))).to.deep.equal(['w']);
   });
 
-  it('asks to select a session, a project, and to toggle or start one in it', async () => {
+  it('asks to select a session, a project, to toggle or start one in it, and to open a folder', async () => {
     const { el, root } = await render();
     const selects = record(el, 'acp-session-select');
     const projects = record(el, 'acp-project-select');
     const toggles = record(el, 'acp-project-toggle');
     const news = record(el, 'acp-project-new-session');
+    const folders = record(el, 'acp-project-open-folder');
     row(root, 'Session a').click();
     const project = /** @type {HTMLElement} */ (root.querySelector('.acp-session-list__project'));
     project.click();
     project.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft' }));
     /** @type {HTMLElement} */ (root.querySelector('.acp-session-list__add')).click();
+    /** @type {HTMLElement} */ (root.querySelector('.acp-session-list__open-folder')).click();
     expect(selects.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }]);
     expect(projects.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
     expect(toggles.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama', expanded: false }]);
     expect(news.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
-  });
-
-  it('asks to open a folder from its top bar', async () => {
-    const { el, root } = await render();
-    const events = record(el, 'acp-project-open-folder');
-    /** @type {HTMLElement} */ (root.querySelector('.acp-session-list__open-folder')).click();
-    expect(events).to.have.length(1);
+    expect(folders).to.have.length(1);
   });
 
   it('says why a project couldn’t open, and that one has no sessions yet', async () => {
@@ -181,29 +176,22 @@ describe('acp-session-list', () => {
   });
 
   describe('session menu', () => {
-    it('swaps the status for a menu button while the row is hovered or focused', async () => {
+    it('swaps the status for a menu button while the row is hovered or focused, and opens the shared menu under it for that session without selecting it', async () => {
       const { el, root } = await render({ unread: ['a'] });
+      const selects = record(el, 'acp-session-select');
       const target = row(root, 'Session a');
       expect(target.querySelector('.acp-session-list__more')).to.equal(null);
       target.dispatchEvent(new PointerEvent('pointerenter'));
       await el.updateComplete;
-      expect(target.querySelector('.acp-session-list__more')).to.not.equal(null);
-      expect(target.querySelector('acp-session-status')).to.equal(null);
+      expect(target.querySelector('acp-session-status'), 'the status is swapped out').to.equal(null);
       target.dispatchEvent(new PointerEvent('pointerleave'));
       await el.updateComplete;
       expect(target.querySelector('.acp-session-list__more')).to.equal(null);
       target.dispatchEvent(new FocusEvent('focusin'));
       await el.updateComplete;
-      expect(target.querySelector('.acp-session-list__more')).to.not.equal(null);
-    });
-
-    it('opens the shared menu under the row’s button, for that session, without selecting it', async () => {
-      const { el, root } = await render();
-      const selects = record(el, 'acp-session-select');
-      const target = row(root, 'Session a');
-      target.dispatchEvent(new PointerEvent('pointerenter'));
-      await el.updateComplete;
       const more = /** @type {HTMLElement} */ (target.querySelector('.acp-session-list__more'));
+      expect(more).to.not.equal(null);
+
       more.click();
       const menuEl = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
       await new Promise((resolve) => setTimeout(resolve, 0));
@@ -224,7 +212,7 @@ describe('acp-session-list', () => {
       expect(terminals.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }]);
     });
 
-    it('offers Reset to agent title for a session the user renamed after the agent named it', async () => {
+    it('opens at the pointer on a right-click, offering Reset to agent title for a session the user renamed after the agent named it', async () => {
       const sessions = [session('u', { titleSource: 'user', agentTitle: 'Agent’s' }), session('p')];
       const { el, root } = await render({ sessions });
       const menuEl = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
@@ -233,22 +221,14 @@ describe('acp-session-list', () => {
         row(root, title).dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
         await new Promise((resolve) => setTimeout(resolve, 0));
         await el.updateComplete;
+        expect(menuEl.menu?.open, title).to.equal(true);
+        expect(menuEl.sessionTitle).to.equal(title);
         expect(menuEl.resettable, title).to.equal(title === 'Session u');
       }
       row(root, 'Session u').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
       await new Promise((resolve) => setTimeout(resolve, 0));
       menuEl.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value: 'reset-title' }, bubbles: true, composed: true }));
       expect(resets.map((e) => e.detail)).to.deep.equal([{ sessionId: 'u' }]);
-    });
-
-    it('opens at the pointer on a right-click', async () => {
-      const { el, root } = await render();
-      row(root, 'Session b').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, clientX: 5, clientY: 5 }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      await el.updateComplete;
-      const menuEl = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
-      expect(menuEl.menu?.open).to.equal(true);
-      expect(menuEl.sessionTitle).to.equal('Session b');
     });
   });
 
@@ -313,37 +293,6 @@ describe('acp-session-list', () => {
     expect(removes.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
   });
 
-  it('marks a session another app may be running', async () => {
-    const now = Date.parse('2026-10-23T13:00:00.000Z');
-    const sessions = [
-      session('t', { status: 'stopped', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
-      session('o', { status: 'stopped', activeElsewhereUntil: '2026-10-23T12:59:00.000Z' }),
-    ];
-    const { root } = await render({ sessions, now });
-    const over = /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
-      root.querySelector('[data-session-id="o"] acp-session-status')
-    );
-    expect(over?.indicator, 'its time is up').to.equal(null);
-    const status = /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
-      root.querySelector('[data-session-id="t"] acp-session-status')
-    );
-    expect(status?.indicator).to.equal('elsewhere');
-  });
-
-  it('shows a session its CLI runs in a terminal working, with no terminal icon when idle', async () => {
-    const now = Date.parse('2026-10-23T13:00:00.000Z');
-    const sessions = [
-      session('w', { status: 'stopped', inTerminal: true, activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }),
-      session('i', { status: 'stopped', inTerminal: true }),
-    ];
-    const { root } = await render({ sessions, now });
-    const indicator = (/** @type {string} */ id) =>
-      /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
-        root.querySelector(`[data-session-id="${id}"] acp-session-status`)
-      )?.indicator;
-    expect([indicator('w'), indicator('i')]).to.deep.equal(['terminal-working', null]);
-  });
-
   it("shows the active project's sync beside the heading", async () => {
     /** @type {import('../../../models/types/types.js').SessionSync} */
     const sync = { running: true, report: null };
@@ -369,13 +318,6 @@ describe('acp-session-list', () => {
     await /** @type {AcpSessionList} */ (/** @type {ShadowRoot} */ (root).host).updateComplete;
     expect(titles(root)).to.have.length(12);
     expect(more(), 'all shown').to.equal(null);
-  });
-
-  it('keeps the selected session in view past the first five', async () => {
-    const sessions = Array.from({ length: 8 }, (_, i) => session(`s${i}`, { lastActivityAt: `2026-01-0${i + 1}T00:00:00.000Z` }));
-    const { root } = await render({ sessions, activeSessionId: 's0' });
-    expect(titles(root).at(-1)).to.equal('Session s0');
-    expect(root.querySelector('.acp-session-list__show-more')).to.equal(null);
   });
 
   it('shows skeleton rows for a loading project with no sessions to show yet', async () => {

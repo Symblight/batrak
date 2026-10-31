@@ -103,36 +103,33 @@ describe('acp-model-picker', () => {
     expect(sonnet.querySelector('[slot="supporting-text"]')).to.equal(null);
   });
 
-  it('is disabled with a spinner while the models load', async () => {
-    const el = await fixture(html`<acp-model-picker .options=${[MODE]} .status=${'loading'}></acp-model-picker>`);
-    expect(buttonOf(el).disabled).to.equal(true);
-    expect(buttonOf(el).textContent).to.contain('Loading models…');
-    expect(rootOf(el).querySelector('md-progress-circular')).to.not.equal(null);
-    expect(tooltipOf(buttonOf(el))).to.contain('Asking the agent');
-  });
+  it('shows the state of the models: loading, refreshing, failed, signing in, or nothing to pick', async () => {
+    /** @type {[string, ConfigOption[], Record<string, unknown>, { disabled?: boolean, text?: string, spinner?: boolean, tooltip?: string }][]} */
+    const cases = [
+      ['loading', [MODE], { status: 'loading' }, { disabled: true, text: 'Loading models…', spinner: true, tooltip: 'Asking the agent' }],
+      ['refreshing known models', ALL, { status: 'loading' }, { disabled: false, text: 'Opus', spinner: true }],
+      [
+        'failed',
+        [],
+        { status: 'failed' },
+        { disabled: true, text: 'No models', spinner: false, tooltip: "Couldn't load models from the agent; they show once its session starts" },
+      ],
+      ['sign-in needed', [], { signIn: true }, { disabled: true, text: 'Sign in to load models', spinner: false }],
+    ];
+    for (const [why, options, props, want] of cases) {
+      // Arrange
+      const el = /** @type {HTMLElement} */ (await fixture(html`<acp-model-picker .options=${options}></acp-model-picker>`));
+      // Act
+      Object.assign(el, props);
+      await /** @type {import('lit').LitElement} */ (/** @type {unknown} */ (el)).updateComplete;
+      // Assert
+      expect(buttonOf(el).disabled, why).to.equal(want.disabled);
+      expect(buttonOf(el).textContent, why).to.contain(want.text);
+      expect(rootOf(el).querySelector('md-progress-circular') !== null, `${why}: spinner`).to.equal(want.spinner);
+      if (want.tooltip) expect(tooltipOf(buttonOf(el)), why).to.contain(want.tooltip);
+    }
 
-  it('stays usable while known models refresh', async () => {
-    const el = await fixture(html`<acp-model-picker .options=${ALL} .status=${'loading'}></acp-model-picker>`);
-    expect(buttonOf(el).disabled).to.equal(false);
-    expect(buttonOf(el).textContent).to.contain('Opus');
-    expect(rootOf(el).querySelector('md-progress-circular')).to.not.equal(null);
-  });
-
-  it('says when the models could not be loaded', async () => {
-    const el = await fixture(html`<acp-model-picker .options=${[]} .status=${'failed'}></acp-model-picker>`);
-    expect(buttonOf(el).disabled).to.equal(true);
-    expect(buttonOf(el).textContent).to.contain('No models');
-    expect(tooltipOf(buttonOf(el))).to.equal("Couldn't load models from the agent; they show once its session starts");
-  });
-
-  it('asks to sign in before the models can load', async () => {
-    const el = await fixture(html`<acp-model-picker .options=${[]} .signIn=${true}></acp-model-picker>`);
-    expect(buttonOf(el).disabled).to.equal(true);
-    expect(buttonOf(el).textContent).to.contain('Sign in to load models');
-  });
-
-  it('renders nothing with no options and nothing loading', async () => {
-    const el = await fixture(html`<acp-model-picker .options=${[MODE, ALLOW_ALL]}></acp-model-picker>`);
-    expect(rootOf(el).querySelector('md-button')).to.equal(null);
+    const none = await fixture(html`<acp-model-picker .options=${[MODE, ALLOW_ALL]}></acp-model-picker>`);
+    expect(rootOf(none).querySelector('md-button'), 'nothing to pick, nothing loading').to.equal(null);
   });
 });

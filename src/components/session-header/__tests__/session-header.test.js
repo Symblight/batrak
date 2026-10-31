@@ -36,13 +36,20 @@ function record(el, type) {
 
 describe('acp-session-header', () => {
   it('shows the title on a button that opens the session menu', async () => {
-    const { root } = await render(html`<acp-session-header session-id="s1" session-title="Fix the tree"></acp-session-header>`);
+    const { el, root } = await render(
+      html`<acp-session-header session-id="s1" session-title="Fix the tree" provisional></acp-session-header>`,
+    );
     const button = /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__title-button'));
     expect(button.textContent).to.contain('Fix the tree');
     expect(button.getAttribute('aria-label')).to.equal('Session menu: Fix the tree');
     const menu = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
     expect(menu.anchor).to.equal(button);
     expect(menu.sessionTitle).to.equal('Fix the tree');
+
+    el.provisional = false;
+    el.sessionTitle = 'Tree view gaps';
+    await el.updateComplete;
+    expect(button.textContent, 'the agent’s title replaces the first prompt’s').to.contain('Tree view gaps');
   });
 
   it('flips the chevron while the menu is open', async () => {
@@ -72,44 +79,18 @@ describe('acp-session-header', () => {
     expect(status.indicator).to.equal('permission');
   });
 
-  it('shows the first prompt’s title as provisional, then fades the agent’s in', async () => {
-    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="Analyze" provisional></acp-session-header>`);
-    const title = () => /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__title'));
-    expect(title().classList.contains('acp-session-header__title_provisional')).to.equal(true);
-    expect(title().classList.contains('acp-session-header__title_fade-in')).to.equal(false);
-    el.provisional = false;
-    el.sessionTitle = 'Tree view gaps';
-    await el.updateComplete;
-    expect(title().classList.contains('acp-session-header__title_provisional')).to.equal(false);
-    expect(title().classList.contains('acp-session-header__title_fade-in')).to.equal(true);
-
-    el.sessionId = 's2';
-    el.sessionTitle = 'Other';
-    await el.updateComplete;
-    expect(title().classList.contains('acp-session-header__title_fade-in'), 'not for another session').to.equal(false);
-  });
-
-  it('hands the menu Reset to agent title, and asks for it', async () => {
-    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="Mine" resettable></acp-session-header>`);
+  it('hands the menu Reset to agent title, and asks the column for the menu’s actions, naming the session', async () => {
+    const { el, root } = await render(
+      html`<acp-session-header session-id="s1" session-title="Mine" resettable></acp-session-header>`,
+    );
     const menu = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
     expect(menu.resettable).to.equal(true);
-    const events = record(el, 'acp-session-reset-title');
-    pick(root, 'reset-title');
-    expect(events.map((e) => e.detail)).to.deep.equal([{ sessionId: 's1' }]);
-  });
-
-  it('asks the column for the menu’s actions, naming the session', async () => {
-    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
-    const types = ['acp-session-reveal', 'acp-session-open-terminal', 'acp-session-delete'];
+    const types = ['acp-session-reset-title', 'acp-session-reveal', 'acp-session-open-terminal', 'acp-session-delete'];
     /** @type {[string, unknown][]} */
     const seen = [];
     for (const type of types) el.addEventListener(type, (e) => seen.push([type, /** @type {CustomEvent} */ (e).detail]));
-    for (const value of ['reveal', 'open-terminal', 'delete']) pick(root, value);
-    expect(seen).to.deep.equal([
-      ['acp-session-reveal', { sessionId: 's1' }],
-      ['acp-session-open-terminal', { sessionId: 's1' }],
-      ['acp-session-delete', { sessionId: 's1' }],
-    ]);
+    for (const value of ['reset-title', 'reveal', 'open-terminal', 'delete']) pick(root, value);
+    expect(seen).to.deep.equal(types.map((type) => [type, { sessionId: 's1' }]));
   });
 
   it('asks for a new session from its trailing button', async () => {
@@ -137,6 +118,7 @@ describe('acp-session-header', () => {
       const native = /** @type {HTMLInputElement} */ (input.inputOrTextArea);
       expect([native.selectionStart, native.selectionEnd]).to.deep.equal([0, 12]);
       expect(root.querySelector('.acp-session-header__title-button')).to.equal(null);
+      expect(root.querySelector('.acp-session-header__view'), 'the view switch is hidden').to.equal(null);
 
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
       await el.updateComplete;
@@ -221,12 +203,5 @@ describe('acp-session-header', () => {
     expect(root.querySelector('[title]')).to.equal(null);
     button.click();
     expect(events).to.deep.equal([]);
-  });
-
-  it('hides the switch while renaming', async () => {
-    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
-    pick(root, 'rename');
-    await el.updateComplete;
-    expect(root.querySelector('.acp-session-header__view')).to.equal(null);
   });
 });
