@@ -3,11 +3,24 @@
      (`chx-message-row`, out of reach here) `shadow.css` sizes from the inherited private value. */
   --_acp-chat-content-max-width: var(--acp-chat-content-max-width, none);
   --_acp-chat-messages-max-width: var(--acp-chat-messages-max-width, none);
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
 }
+/* Files from the OS dragged over the chat: the whole chat takes them. */
+:host([dropping])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  outline: 2px solid var(--md-primary);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--md-primary) 8%, transparent);
+}
 .acp-chat__chat {
+  /* Keeps the banner's and composer's raised layers under the drop highlight. */
+  isolation: isolate;
   flex: 1;
   min-height: 0;
   box-sizing: border-box;

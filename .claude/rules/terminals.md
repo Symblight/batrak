@@ -5,6 +5,9 @@ paths:
   - "src/services/terminals.js"
   - "src/stores/terminals.js"
   - "src/components/acp-terminal/**"
+  - "src/services/file-drop.js"
+  - "src/models/file-drop.js"
+  - "src/models/shell-paths.js"
   - "docs/specs/terminal-tab.md"
   - "web-test-runner.config.mjs"
 ---
@@ -32,6 +35,15 @@ memory; `$projectTabs`' `parse` drops terminal tabs) and `terminalController`
 tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
 while its tab or project isn't shown; a terminal's shell is closed once its tab leaves its project's
 tabs (any close, its project removed); exit 0 closes the tab (`closeProjectTab()`), any other exit
-keeps it with Restart. The tab view asks before closing a terminal whose foreground program isn't
+keeps it with Restart. `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
+breaks become spaces), kept until the shell is connected. Files dropped from the OS on a running terminal (a tab, or a
+session's CLI) are typed in as shell-escaped paths plus a space (`shellPaths()`,
+`models/shell-paths.js`), like a native terminal: Tauri's native drag and drop
+(`dragDropEnabled: true`) → `onFileDrag()` (`ipc.js`) → `fileDrop` (`services/file-drop.js`:
+position to CSS px — physical on Windows, logical on macOS / Linux — and the innermost
+`DROP_TARGETS` element under it through shadow roots, `models/file-drop.js`; `$fileDropTarget`
+while over one, a `drop { target, paths }` event) → the column that renders the target pastes
+(`<acp-agent-column>`; `<acp-main-column>`, which gives the tab view `droppingTerminal`) and sets
+the terminal's `dropping` outline (`acp-chat` is a target too: see `sessions.md`). The tab view asks before closing a terminal whose foreground program isn't
 its shell (`terminal_busy`). xterm draws nothing out of view: frontend tests give each test file its
 own browser window (`web-test-runner.config.mjs`) and remove their terminals after each test.

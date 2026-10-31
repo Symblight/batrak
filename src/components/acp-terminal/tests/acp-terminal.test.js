@@ -124,6 +124,40 @@ describe('acp-terminal', () => {
     expect(calls.writes).to.deep.equal(['\r']);
   });
 
+  it('reflects dropping, for files dragged over it', async () => {
+    const { el } = await render();
+    expect(el.hasAttribute('dropping')).to.equal(false);
+    el.dropping = true;
+    await el.updateComplete;
+    expect(el.hasAttribute('dropping')).to.equal(true);
+  });
+
+  it('pastes text as a bracketed paste when the program asked for one, and takes focus', async () => {
+    const { el, calls } = await render();
+    await show(calls.sink, '\x1b[?2004h');
+    el.paste('@a.js#L1 Why?\nIt looks unused');
+    expect(calls.writes).to.deep.equal(['\x1b[200~@a.js#L1 Why?\rIt looks unused\x1b[201~']);
+    expect(el.shadowRoot?.activeElement).to.equal(input(el));
+  });
+
+  it('pastes line breaks as spaces when the program takes no bracketed paste, so nothing is sent early', async () => {
+    const { el, calls } = await render();
+    el.paste('@a.js#L1 Why?\nIt looks unused');
+    expect(calls.writes).to.deep.equal(['@a.js#L1 Why? It looks unused']);
+  });
+
+  it('keeps a paste until its shell is connected', async () => {
+    const { calls, connect } = fakeConnect();
+    const el = /** @type {AcpTerminal} */ (
+      await fixture(html`<acp-terminal style="display: flex; width: 600px; height: 300px" terminal-id="t1" .info=${running} .gpu=${false}></acp-terminal>`)
+    );
+    el.paste('@a.js#L1 ');
+    el.connect = connect;
+    el.style.width = '601px';
+    await until(() => calls.sink !== null);
+    expect(calls.writes).to.deep.equal(['@a.js#L1 ']);
+  });
+
   it('leaves the app’s shortcuts to the app', async () => {
     const { el, calls } = await render();
     /** @type {KeyboardEvent[]} */

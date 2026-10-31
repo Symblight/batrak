@@ -2,10 +2,16 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $agentList } from '../../../stores/agents.js';
 import { $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views.js';
+import { $chatInserts, addToChat } from '../../../stores/chat.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions.js';
 import { $sessionNotices, setSessionNotice } from '../../../stores/session-runtime.js';
-import { $terminals, addSessionTerminal } from '../../../stores/terminals.js';
+import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalExited } from '../../../stores/terminals.js';
 import { $workspace } from '../../../stores/workspace.js';
+import { $fileDropTarget } from '../../../stores/file-drop.js';
+import { osScale } from '../../../models/file-drop.js';
+import { platformOf } from '../../../models/platform.js';
+import { shellPaths } from '../../../models/shell-paths.js';
+import { fileDrop } from '../../../services/file-drop.js';
 import '../acp-agent-column.js';
 
 /** @typedef {import('../acp-agent-column.js').AcpAgentColumn} AcpAgentColumn */
@@ -43,14 +49,37 @@ async function render() {
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
 }
 
+/**
+ * The center of `el`, in the units the webview's drag events use on this platform.
+ * @param {Element} el
+ */
+function osPointOf(el) {
+  const r = el.getBoundingClientRect();
+  const scale = osScale(platformOf(navigator.userAgent), devicePixelRatio);
+  return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
+}
+
+/**
+ * Waits until `done()` holds (the column's drop handling awaits the backend).
+ * @param {() => boolean} done
+ */
+async function until(done) {
+  for (let i = 0; i < 100 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+}
+
 /** @param {AcpAgentColumn} el */
 const header = (el) => /** @type {HTMLElementTagNameMap['acp-session-header']} */ (el.shadowRoot?.querySelector('acp-session-header'));
 
 describe('acp-agent-column', () => {
   beforeEach(() => {
     calls = [];
-    mockIPC((cmd) => {
+    mockIPC((cmd, args) => {
       calls.push(cmd);
+      if (cmd === 'dropped_kinds') {
+        const { paths } = /** @type {{ paths: string[] }} */ (args);
+        return paths.map((p) => (p.endsWith('/src') || p.endsWith('/docs') ? 'folder' : 'file'));
+      }
+      if (cmd === 'read_dropped_file') return new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
       if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
       if (cmd === 'session_cli_busy') return false;
       return null;
@@ -90,6 +119,8 @@ describe('acp-agent-column', () => {
     $agentViews.set({});
     $workspace.set(null);
     $sessionNotices.set({});
+    $chatInserts.set([]);
+    $cliStarting.set([]);
     $agentList.set({ ...$agentList.get(), agents: [] });
     clearMocks();
   });
@@ -136,6 +167,191 @@ describe('acp-agent-column', () => {
     const terminal = root.querySelector('acp-terminal');
     expect(terminal?.terminalId).to.equal('t-cli');
     expect(header(el).view).to.equal('terminal');
+  });
+
+  it("types code sent from the editors into a terminal session's CLI, as @ refs", async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const terminal = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (root.querySelector('acp-terminal'));
+    /** @type {string[]} */
+    const pasted = [];
+    terminal.paste = (text) => pasted.push(text);
+    addToChat([
+      { path: '/p/src/app.js', fromLine: 3, toLine: 5, body: '' },
+      { path: '/p/src/app.js', fromLine: 9, toLine: 9, body: 'Rename this' },
+    ]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(pasted).to.deep.equal(['@src/app.js#L3-5 \n@src/app.js#L9 Rename this']);
+    expect($chatInserts.get(), 'taken').to.deep.equal([]);
+  });
+
+  it("types files dropped on a terminal session's CLI as their escaped paths, and marks it while they're dragged over", async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    const terminal = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (root.querySelector('acp-terminal'));
+    /** @type {string[]} */
+    const pasted = [];
+    terminal.paste = (text) => pasted.push(text);
+    const paths = ['/Users/me/Screen Shot.png', '/Users/me/notes.md'];
+    fileDrop.handle({ type: 'enter', paths, position: osPointOf(terminal) });
+    await el.updateComplete;
+    expect(terminal.dropping, 'marked').to.equal(true);
+    fileDrop.handle({ type: 'drop', paths, position: osPointOf(terminal) });
+    await el.updateComplete;
+    expect(terminal.dropping, 'unmarked').to.equal(false);
+    expect(pasted).to.deep.equal([shellPaths(paths, platformOf(navigator.userAgent))]);
+  });
+
+  it('types nothing for files dropped outside its terminal', async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const terminal = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (root.querySelector('acp-terminal'));
+    /** @type {string[]} */
+    const pasted = [];
+    terminal.paste = (text) => pasted.push(text);
+    const header = /** @type {Element} */ (root.querySelector('acp-session-header'));
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(header) });
+    expect(pasted).to.deep.equal([]);
+    expect($fileDropTarget.get()).to.equal(null);
+  });
+
+  it("inserts files dropped on the chat as chips, relative to the session's folder inside it, and marks it while they're dragged over", async () => {
+    $sessions.set([session()]);
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    const paths = ['/p/src/app.js', '/p/src', '/Users/me/notes.md', '/Users/me/docs'];
+    fileDrop.handle({ type: 'enter', paths, position: osPointOf(chat) });
+    await el.updateComplete;
+    expect(chat.dropping, 'marked').to.equal(true);
+    fileDrop.handle({ type: 'drop', paths, position: osPointOf(chat) });
+    await el.updateComplete;
+    expect(chat.dropping, 'unmarked').to.equal(false);
+    await until(() => inserted.length > 0);
+    expect(inserted).to.deep.equal([
+      { path: 'src/app.js', folder: false },
+      { path: 'src', folder: true },
+      { path: '/Users/me/notes.md', folder: false },
+      { path: '/Users/me/docs', folder: true },
+    ]);
+  });
+
+  it('attaches an image dropped on the chat, read through the backend', async () => {
+    $sessions.set([session()]);
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {{ files: File[], source: string | undefined }[]} */
+    const added = [];
+    chat.attachments.addFiles = (files, source) => added.push({ files: [...files], source });
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    fileDrop.handle({ type: 'drop', paths: ['/Users/me/Screen Shot.png'], position: osPointOf(chat) });
+    await until(() => added.length > 0);
+    expect(added).to.have.length(1);
+    const [file] = added[0].files;
+    expect([file.name, file.type, file.size, added[0].source]).to.deep.equal(['Screen Shot.png', 'image/png', 4, 'drop']);
+    expect(inserted, 'no chip').to.deep.equal([]);
+  });
+
+  it('drops nothing into the composer of a session shown after the files were dropped', async () => {
+    /** @type {(kinds: string[]) => void} */
+    let answer = () => {};
+    mockIPC((cmd) => (cmd === 'dropped_kinds' ? new Promise((resolve) => (answer = resolve)) : null));
+    $sessions.set([session(), session({ id: 's2' })]);
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    fileDrop.handle({ type: 'drop', paths: ['/p/a.js'], position: osPointOf(chat) });
+    $activeSessionId.set('s2');
+    await el.updateComplete;
+    answer(['file']);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inserted).to.deep.equal([]);
+  });
+
+  it('does nothing to the chat for files dropped on it while the terminal shows', async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    fileDrop.dispatchEvent(new CustomEvent('drop', { detail: { target: chat, paths: ['/p/a.js'] } }));
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(inserted).to.deep.equal([]);
+    expect(calls).not.to.include('dropped_kinds');
+  });
+
+  it('keeps code sent while the CLI starts until its terminal shows', async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    setCliStarting('s1', true);
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    addToChat([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect($chatInserts.get(), 'waiting').to.have.length(1);
+
+    /** @type {string[]} */
+    const pasted = [];
+    const proto = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (customElements.get('acp-terminal')?.prototype);
+    const { paste } = proto;
+    proto.paste = (text) => pasted.push(text);
+    try {
+      addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+      setCliStarting('s1', false);
+      await el.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(root.querySelector('acp-terminal')).not.to.equal(null);
+      expect(pasted).to.deep.equal(['@a.js#L1 ']);
+      expect($chatInserts.get()).to.deep.equal([]);
+    } finally {
+      proto.paste = paste;
+    }
+  });
+
+  it("puts code sent while a terminal session's CLI has ended into the composer once the chat shows", async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    terminalExited('t-cli', { code: 1, signal: null });
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatInsert[]} */
+    const inserted = [];
+    chat.insertCode = (inserts) => inserted.push(...inserts);
+    addToChat([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect($chatInserts.get(), 'waiting').to.have.length(1);
+
+    const terminal = /** @type {HTMLElement} */ (root.querySelector('acp-terminal'));
+    terminal.dispatchEvent(new CustomEvent('acp-terminal-chat', { bubbles: true, composed: true }));
+    await until(() => !chat.hidden);
+    await el.updateComplete;
+    await until(() => inserted.length > 0);
+    expect(inserted).to.deep.equal([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
+    expect($chatInserts.get(), 'taken').to.deep.equal([]);
   });
 
   it('asks before stopping a running turn to continue in the terminal; Cancel changes nothing', async () => {

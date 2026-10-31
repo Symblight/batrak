@@ -555,6 +555,49 @@
  *   and Close All leave them open.
  */
 
+/** @typedef {'mac' | 'windows' | 'linux'} Platform */
+
+/**
+ * A drag of files from the OS over the window, as the webview reports it (`onFileDrag` in
+ * `services/ipc.js`). `position` is relative to the webview's top-left corner: physical pixels on
+ * Windows, logical ones on macOS and Linux (`toCssPoint()` in `models/file-drop.js`).
+ * @typedef {(
+ *   | { type: 'enter' | 'drop', paths: string[], position: { x: number, y: number } }
+ *   | { type: 'over', position: { x: number, y: number } }
+ *   | { type: 'leave' }
+ * )} FileDrag
+ */
+
+/**
+ * Files dropped from the OS on a drop target (`fileDrop`'s `drop` event): the column that renders
+ * `target` handles it.
+ * @typedef {Object} FileDrop
+ * @property {Element} target The innermost drop target under the pointer (`acp-terminal`, `acp-chat`).
+ * @property {string[]} paths Absolute.
+ */
+
+/**
+ * A dropped path and what it is on disk (`dropped_kinds`): `other` when it's gone or neither a
+ * regular file nor a folder.
+ * @typedef {Object} DroppedEntry
+ * @property {string} path Absolute.
+ * @property {'file' | 'folder' | 'other'} kind
+ */
+
+/**
+ * A file or folder for the composer, as a chip like an `@` pick (`AcpChat.insertFiles()`).
+ * @typedef {Object} ChatFile
+ * @property {string} path Relative to the session's folder, or absolute outside it.
+ * @property {boolean} folder
+ */
+
+/**
+ * Files dropped on the chat, sorted (`chatDropOf()` in `models/file-drop.js`).
+ * @typedef {Object} ChatDrop
+ * @property {ChatFile[]} files Chips.
+ * @property {{ path: string, name: string, mime: string }[]} images Attachments.
+ */
+
 /** @typedef {'starting' | 'running' | 'exited' | 'failed'} TerminalStatus */
 
 /**

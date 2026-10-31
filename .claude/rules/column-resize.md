@@ -31,6 +31,8 @@ and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads 
   change stops where either side hits its limit. A neighbor that's a resizable column too is its
   `partner` (`session` → `agent`) and gets the opposite width; otherwise it's a flex column that takes
   the slack itself.
-- **Tauri `dragDropEnabled: false`** (window in `src-tauri/tauri.conf.json`): resizing no longer needs it,
-  but any HTML5 drag-and-drop in the page does — with Tauri's native file-drop handler on, wry swallows
-  `draggingUpdated`, so the page gets no `dragover` while the button is held.
+- **Tauri `dragDropEnabled: true`** (window in `src-tauri/tauri.conf.json`): files dropped from the OS
+  arrive as the webview's native drag events (see `terminals.md`). Resizing doesn't depend on it
+  (pointer events), but HTML5 drag-and-drop in the page does: with the native handler on, wry
+  swallows `draggingUpdated` on macOS (no `dragover` while the button is held) and Windows disables
+  HTML5 drag and drop in the webview — so in-page dragging must use pointer events.

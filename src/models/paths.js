@@ -39,6 +39,14 @@ export function relPath(root, abs) {
 
 /**
  * @param {string} path
+ * @returns {boolean} Whether it's absolute: `/…`, `C:\…` or a Windows UNC path.
+ */
+export function isAbsolute(path) {
+  return /^(?:[\\/]|[A-Za-z]:[\\/])/.test(path);
+}
+
+/**
+ * @param {string} path
  * @returns {string} Its last segment.
  */
 export function basename(path) {

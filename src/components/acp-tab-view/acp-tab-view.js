@@ -77,6 +77,7 @@ export class AcpTabView extends LitElement {
     terminals: { attribute: false },
     terminalConnect: { attribute: false },
     terminalBusy: { attribute: false },
+    droppingTerminal: { attribute: false },
   };
 
   static styles = styles;
@@ -180,6 +181,8 @@ export class AcpTabView extends LitElement {
     this.terminalConnect = null;
     /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
     this.terminalBusy = async () => [];
+    /** @type {string | null} The terminal files dragged from the OS are over. */
+    this.droppingTerminal = null;
   }
 
   /**
@@ -314,6 +317,7 @@ export class AcpTabView extends LitElement {
       .info=${info}
       .fontFamily=${this.editorFont}
       .fontSize=${this.editorFontSize}
+      ?dropping=${id === this.droppingTerminal}
     ></acp-terminal>`;
   }
 

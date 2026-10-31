@@ -1,10 +1,18 @@
 import { expect } from '@esm-bundle/chai';
-import { basename, shownPath } from './paths.js';
+import { basename, isAbsolute, shownPath } from './paths.js';
 
 describe('paths', () => {
   it('takes the last segment', () => {
     expect(basename('/p/src/main.js')).to.equal('main.js');
     expect(basename('C:\\p\\a.txt')).to.equal('a.txt');
+  });
+
+  it('tells an absolute path, POSIX or Windows, from a relative one', () => {
+    expect(isAbsolute('/Users/me/a.md')).to.equal(true);
+    expect(isAbsolute('C:\\Users\\me\\a.md')).to.equal(true);
+    expect(isAbsolute('\\\\server\\share\\a.md')).to.equal(true);
+    expect(isAbsolute('src/a.js')).to.equal(false);
+    expect(isAbsolute('.brama')).to.equal(false);
   });
 
   describe('shownPath', () => {

@@ -2,6 +2,7 @@ import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
 import { MESSAGE_PART_RULES, fenceCode } from '../models/chat-parts.js';
+import { isAbsolute } from '../models/paths.js';
 import { returnPrompt } from '../stores/chat.js';
 import { applyAgentOptions } from '../stores/composer.js';
 import { setContextUsage } from '../stores/context-usage.js';
@@ -517,7 +518,8 @@ function lineRange(lines) {
 
 /**
  * The prompt of a sent message: its text with chips written inline (`@path`, `@folder/`, `path:12-23`), then a
- * resource for each file chip (a mention, or the lines it names).
+ * resource for each file chip (a mention, or the lines it names); a file outside the session's folder
+ * (an absolute path) is named in the text only.
  * @param {ChxMessage} message
  * @returns {PromptInput[]}
  */
@@ -541,7 +543,9 @@ export function promptOf(message) {
       } else if (path) {
         // A folder ends in a slash, so the agent (and a restored message) can tell it from a file.
         text += part.data?.kind === 'folder' ? `@${path}/` : `@${path}`;
-        resources.push({ type: 'mention', path });
+        // An absolute one is outside the session's folder (dropped from elsewhere), which a mention
+        // can't name: the agent reads it by its path.
+        if (!isAbsolute(path)) resources.push({ type: 'mention', path });
       } else {
         text += part.label ?? '';
       }

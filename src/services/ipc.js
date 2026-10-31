@@ -1,6 +1,7 @@
 import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { homeDir } from '@tauri-apps/api/path';
+import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 
 /** @typedef {import('../models/types.js').Session} Session */
@@ -29,6 +30,8 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').TerminalBusy} TerminalBusy */
 /** @typedef {import('../models/types.js').TerminalExit} TerminalExit */
 /** @typedef {import('../models/types.js').TerminalOpened} TerminalOpened */
+/** @typedef {import('../models/types.js').FileDrag} FileDrag */
+/** @typedef {import('../models/types.js').DroppedEntry} DroppedEntry */
 
 /** The only module that knows Rust command names. */
 
@@ -869,4 +872,36 @@ export function terminalClose(ids) {
  */
 export function closeWindowTerminals() {
   return invoke('close_window_terminals');
+}
+
+/**
+ * Files dragged from the OS over this window, and dropped (Tauri's native drag and drop, so the page
+ * gets no HTML5 `drop` for them).
+ * @param {(drag: FileDrag) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onFileDrag(callback) {
+  return getCurrentWebview().onDragDropEvent(({ payload }) => {
+    if (payload.type === 'leave') callback({ type: 'leave' });
+    else if (payload.type === 'over') callback({ type: 'over', position: { x: payload.position.x, y: payload.position.y } });
+    else callback({ type: payload.type, paths: payload.paths, position: { x: payload.position.x, y: payload.position.y } });
+  });
+}
+
+/**
+ * What paths of this window's recent file drops are on disk; fails for a path it didn't drop.
+ * @param {readonly string[]} paths Absolute, as the drop named them.
+ * @returns {Promise<DroppedEntry['kind'][]>} In the same order.
+ */
+export function droppedKinds(paths) {
+  return invoke('dropped_kinds', { paths });
+}
+
+/**
+ * Raw bytes of a file in this window's recent file drops, at most 64 MB.
+ * @param {string} path Absolute, as the drop named it.
+ * @returns {Promise<ArrayBuffer>}
+ */
+export function readDroppedFile(path) {
+  return invoke('read_dropped_file', { path });
 }

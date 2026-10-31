@@ -1,10 +1,14 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { commentAuthor } from '../../models/editor-plugins.js';
+import { composedContains } from '../../models/file-drop.js';
+import { PLATFORM } from '../../models/platform.js';
+import { shellPaths } from '../../models/shell-paths.js';
 import { agentConfig } from '../../services/agent-config.js';
 import { copyText } from '../../services/clipboard.js';
 import { listDir, openUrl } from '../../services/ipc.js';
 import { loadSystemFonts } from '../../services/fonts.js';
+import { fileDrop } from '../../services/file-drop.js';
 import { reportError } from '../../services/notices.js';
 import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
@@ -61,12 +65,15 @@ import {
 } from '../../stores/settings.js';
 import { $worktrees } from '../../stores/sessions.js';
 import { $terminals, setTerminalTitle } from '../../stores/terminals.js';
+import { $fileDropTarget } from '../../stores/file-drop.js';
 import { $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
+import { AcpTerminal } from '../acp-terminal/acp-terminal.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../models/types.js').NewAgent} NewAgent */
 /** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../../models/types.js').AgentsQuery} AgentsQuery */
@@ -109,6 +116,7 @@ export class AcpMainColumn extends LitElement {
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #commitSelection = new StoreController(this, { store: $commitSelection });
   #terminals = new StoreController(this, { store: $terminals });
+  #fileDropTarget = new StoreController(this, { store: $fileDropTarget });
 
   /** A comment to reveal: show its file; the editor that shows it then reveals it. */
   #commentFocus = new StoreController(this, {
@@ -137,13 +145,30 @@ export class AcpMainColumn extends LitElement {
     this.openFile(path, line);
   };
 
+  /**
+   * @param {Element | null} target
+   * @returns {AcpTerminal | null} A terminal tab's, when `target` is one.
+   */
+  #ownTerminal(target) {
+    return target instanceof AcpTerminal && composedContains(this, target) ? target : null;
+  }
+
+  /** Files dropped from the OS on a running terminal tab: their paths are typed in, as a native terminal does. */
+  #onFileDrop = (/** @type {Event} */ e) => {
+    const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
+    const terminal = this.#ownTerminal(target);
+    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(shellPaths(paths, PLATFORM));
+  };
+
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('acp-file-open', this.#onFileOpen);
+    fileDrop.addEventListener('drop', this.#onFileDrop);
   }
 
   disconnectedCallback() {
     this.removeEventListener('acp-file-open', this.#onFileOpen);
+    fileDrop.removeEventListener('drop', this.#onFileDrop);
     super.disconnectedCallback();
   }
 
@@ -275,6 +300,7 @@ export class AcpMainColumn extends LitElement {
         .terminals=${this.#terminals.value}
         .terminalConnect=${terminalController.connect}
         .terminalBusy=${terminalController.busy}
+        .droppingTerminal=${this.#ownTerminal(this.#fileDropTarget.value)?.terminalId ?? null}
         .worktrees=${this.#worktrees.value}
         .sessionReview=${this.#sessionReview.view}
         .languages=${this.#fileLanguages.value}

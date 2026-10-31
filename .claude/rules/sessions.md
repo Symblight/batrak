@@ -99,6 +99,17 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live
   one timed in `data` (`startedAt`, `endedAt`); the last part of a cancelled reply shows as stopped.
   It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
+  Files dropped from the OS on the shown chat (Tauri's native drop, see `terminals.md`; the page
+  gets no HTML5 drop, so `<chx-chat>`'s own drop is dead) are handled by `<acp-agent-column>`,
+  which sets `<acp-chat dropping>` while they're over it: `dropped_kinds` says what each is,
+  `chatDropOf()` (`models/file-drop.js`) sorts them, an image (by extension, anywhere) is read
+  with `read_dropped_file` and attached (`attachments.addFiles(…, 'drop')`); any other file or
+  folder becomes a chip at the caret (`AcpChat.insertFiles()`, built like an `@` pick), relative
+  to the session's folder inside it, else absolute. `promptOf()` sends a relative chip as a
+  `mention`, an absolute one only as `@path` in the text (the backend confines mentions to the
+  project). Both commands (`commands/dropped.rs`) take only paths of the window's last 4 drops,
+  which Rust records from the drag-drop event (`DroppedFiles`); reads are regular files, 64 MB at
+  most. A drop while the composer isn't up is ignored.
   `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
   (`models/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
   and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires

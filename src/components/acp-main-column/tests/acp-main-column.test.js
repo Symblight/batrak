@@ -1,0 +1,90 @@
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { expect, fixture, html } from '../../../../test/fixture.js';
+import { osScale } from '../../../models/file-drop.js';
+import { platformOf } from '../../../models/platform.js';
+import { shellPaths } from '../../../models/shell-paths.js';
+import { terminalTabId } from '../../../models/tab-ids.js';
+import { fileDrop } from '../../../services/file-drop.js';
+import { closeAllTabs, openTab } from '../../../stores/editor.js';
+import { $terminals } from '../../../stores/terminals.js';
+import { $workspace } from '../../../stores/workspace.js';
+import '../acp-main-column.js';
+
+/** @typedef {import('../acp-main-column.js').AcpMainColumn} AcpMainColumn */
+/** @typedef {import('../../acp-terminal/acp-terminal.js').AcpTerminal} AcpTerminal */
+/** @typedef {import('../../../models/types.js').TerminalInfo} TerminalInfo */
+
+/**
+ * The center of `el`, in the units the webview's drag events use on this platform.
+ * @param {Element} el
+ */
+function osPointOf(el) {
+  const r = el.getBoundingClientRect();
+  const scale = osScale(platformOf(navigator.userAgent), devicePixelRatio);
+  return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
+}
+
+/** @type {TerminalInfo} */
+const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, projectPath: '/p', status: 'running', exit: null, error: null, login: null };
+
+describe('acp-main-column', () => {
+  /** @type {string[]} */
+  let pasted;
+  const proto = /** @type {AcpTerminal} */ (customElements.get('acp-terminal')?.prototype);
+  const { paste } = proto;
+
+  beforeEach(() => {
+    mockIPC(() => null);
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $terminals.set({ t1: running });
+    openTab(terminalTabId('t1'));
+    pasted = [];
+    proto.paste = (text) => pasted.push(text);
+  });
+
+  afterEach(() => {
+    proto.paste = paste;
+    for (const el of document.querySelectorAll('acp-main-column')) el.parentElement?.remove();
+    closeAllTabs();
+    $terminals.set({});
+    $workspace.set(null);
+    clearMocks();
+  });
+
+  async function render() {
+    const el = /** @type {AcpMainColumn} */ (await fixture(html`<acp-main-column style="display: flex; width: 800px; height: 500px"></acp-main-column>`));
+    const tabView = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.shadowRoot?.querySelector('acp-tab-view'));
+    await tabView.updateComplete;
+    const terminal = /** @type {AcpTerminal} */ (tabView.shadowRoot?.querySelector('acp-terminal'));
+    return { el, tabView, terminal };
+  }
+
+  it("types files dropped on a terminal tab as their escaped paths, and marks it while they're dragged over", async () => {
+    const { el, tabView, terminal } = await render();
+    const paths = ['/Users/me/Screen Shot.png', '/Users/me/a(1).txt'];
+    fileDrop.handle({ type: 'enter', paths, position: osPointOf(terminal) });
+    await el.updateComplete;
+    await tabView.updateComplete;
+    expect(terminal.dropping, 'marked').to.equal(true);
+    fileDrop.handle({ type: 'drop', paths, position: osPointOf(terminal) });
+    await el.updateComplete;
+    await tabView.updateComplete;
+    expect(terminal.dropping, 'unmarked').to.equal(false);
+    expect(pasted).to.deep.equal([shellPaths(paths, platformOf(navigator.userAgent))]);
+  });
+
+  it('types nothing for files dropped outside the terminal', async () => {
+    const { tabView } = await render();
+    const strip = /** @type {Element} */ (tabView.shadowRoot?.querySelector('acp-tab-strip'));
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(strip) });
+    expect(pasted).to.deep.equal([]);
+  });
+
+  it('types nothing into a terminal whose shell has exited', async () => {
+    const { el, terminal } = await render();
+    $terminals.set({ t1: { ...running, status: 'exited', exit: { code: 1, signal: null } } });
+    await el.updateComplete;
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(terminal) });
+    expect(pasted).to.deep.equal([]);
+  });
+});

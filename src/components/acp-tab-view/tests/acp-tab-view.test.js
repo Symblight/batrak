@@ -76,6 +76,15 @@ describe('acp-tab-view', () => {
       expect(root.querySelector('acp-terminal')?.terminalId).to.equal('t1');
     });
 
+    it('marks the terminal files are dragged over as dropping', async () => {
+      const { el, root } = await render([]);
+      const terminal = /** @type {HTMLElement} */ (root.querySelector('acp-terminal'));
+      expect(terminal.hasAttribute('dropping')).to.equal(false);
+      el.droppingTerminal = 't1';
+      await el.updateComplete;
+      expect(terminal.hasAttribute('dropping')).to.equal(true);
+    });
+
     it('closes an idle terminal at once', async () => {
       const { asked, closes, close } = await render([]);
       close();

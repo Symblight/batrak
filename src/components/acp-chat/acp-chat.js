@@ -11,7 +11,7 @@ import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import { fileIconFor } from '../../models/file-icons.js';
-import { relPath } from '../../models/paths.js';
+import { basename, relPath } from '../../models/paths.js';
 import styles from './acp-chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
@@ -28,6 +28,7 @@ import '../acp-session-banner/acp-session-banner.js';
 /** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types.js').ChatFile} ChatFile */
 /** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
 /** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../../models/types.js').ComposerState} ComposerState */
@@ -91,6 +92,23 @@ function codeChip(schema, { path, fromLine, toLine }, root) {
     icon: fileIconFor(name) ?? fileIcon,
     data: { path: rel, lines },
   });
+}
+
+/**
+ * A file or folder chip as an `@` pick makes it: its name and icon, the path in `data-path`.
+ * @param {string} path Relative to the session's folder, or absolute outside it.
+ * @param {boolean} folder
+ */
+function fileChipAttrs(path, folder) {
+  const name = basename(path);
+  /** @type {Record<string, string>} */
+  const data = folder ? { path, kind: 'folder' } : { path };
+  return {
+    templateId: FILE_CHIP_TEMPLATE,
+    label: name,
+    icon: folder ? folderIcon : (fileIconFor(name) ?? fileIcon),
+    data,
+  };
 }
 
 /**
@@ -201,6 +219,8 @@ export class AcpChat extends LitElement {
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
+    /** Files dragged from the OS are over it. */
+    dropping: { type: Boolean, reflect: true },
   };
 
   static styles = styles;
@@ -245,6 +265,8 @@ export class AcpChat extends LitElement {
     this.notice = null;
     /** @type {import('../../models/types.js').SignInRun | null} The sign-in of the notice's agent. */
     this.signInRun = null;
+    /** @type {boolean} */
+    this.dropping = false;
   }
 
   /** The `<chx-chat>` holding every session's conversation; present after the first render. */
@@ -278,10 +300,7 @@ export class AcpChat extends LitElement {
    * @param {readonly ChatInsert[]} inserts
    */
   insertCode(inserts) {
-    const textbox = /** @type {ComposerTextbox | null} */ (
-      /** @type {import('lit').LitElement | null} */ (this.renderRoot.querySelector('chx-message-composer'))
-        ?.renderRoot.querySelector('chx-textbox') ?? null
-    );
+    const textbox = this.#readyTextbox;
     const view = textbox?.editor?.view;
     if (!textbox || !view || !inserts.length) return;
     const { schema, selection } = view.state;
@@ -297,6 +316,28 @@ export class AcpChat extends LitElement {
     view.dispatch(tr);
     if (lines.length) textbox.focusEnd();
     else textbox.focus(); // the caret stays after the chips
+  }
+
+  /**
+   * Files and folders as chips at the caret, like ones picked with `@`. Call once `composerReady()`.
+   * @param {readonly ChatFile[]} files
+   */
+  insertFiles(files) {
+    const textbox = this.#readyTextbox;
+    const view = textbox?.editor?.view;
+    if (!textbox || !view || !files.length) return;
+    const { schema, selection } = view.state;
+    const chips = files.flatMap((f) => [schema.nodes.chip.create(fileChipAttrs(f.path, f.folder)), schema.text(' ')]);
+    view.dispatch(view.state.tr.replaceWith(selection.from, selection.to, chips));
+    textbox.focus();
+  }
+
+  /** @returns {ComposerTextbox | null} The composer's textbox, as it is now. */
+  get #readyTextbox() {
+    return /** @type {ComposerTextbox | null} */ (
+      /** @type {import('lit').LitElement | null} */ (this.renderRoot.querySelector('chx-message-composer'))
+        ?.renderRoot.querySelector('chx-textbox') ?? null
+    );
   }
 
   /** Rendered unconditionally, so present after the first render. */
@@ -385,16 +426,7 @@ export class AcpChat extends LitElement {
   #onFilePicked = (/** @type {Event} */ e) => {
     const { value, setChip } = /** @type {CustomEvent<{ value: string, setChip: (chip: HTMLElement) => void }>} */ (e)
       .detail;
-    const isDir = this.#pickingFolder;
-    const name = value.slice(value.lastIndexOf('/') + 1);
-    setChip(
-      buildChipElement({
-        templateId: FILE_CHIP_TEMPLATE,
-        label: name,
-        icon: isDir ? folderIcon : (fileIconFor(name) ?? fileIcon),
-        data: isDir ? { path: value, kind: 'folder' } : { path: value },
-      }),
-    );
+    setChip(buildChipElement(fileChipAttrs(value, this.#pickingFolder)));
   };
 
   /** @param {Event} e */

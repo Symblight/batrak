@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from './acp-adapter.js';
+import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent, promptOf } from './acp-adapter.js';
 import { $terminals, addSessionTerminal } from '../stores/terminals.js';
 import { $returnedPrompts, takeReturnedPrompt } from '../stores/chat.js';
 import { $sessions, newSession, startSession } from '../stores/sessions.js';
@@ -10,6 +10,26 @@ import { $contextUsage, forgetContextUsage } from '../stores/context-usage.js';
 
 describe('acp-adapter', () => {
   afterEach(() => $sessions.set([]));
+
+  it("sends a file chip as a mention, and one with an absolute path (outside the session's folder) as its path only", () => {
+    const message = /** @type {Parameters<typeof promptOf>[0]} */ (
+      /** @type {unknown} */ ({
+        id: 'm1',
+        parts: [
+          { type: 'text', text: 'Compare ' },
+          { type: 'chip', label: 'app.js', data: { path: 'src/app.js' } },
+          { type: 'text', text: ' with ' },
+          { type: 'chip', label: 'notes.md', data: { path: '/Users/me/notes.md' } },
+          { type: 'text', text: ' in ' },
+          { type: 'chip', label: 'docs', data: { path: '/Users/me/docs', kind: 'folder' } },
+        ],
+      })
+    );
+    expect(promptOf(message)).to.deep.equal([
+      { type: 'text', text: 'Compare @src/app.js with @/Users/me/notes.md in @/Users/me/docs/' },
+      { type: 'mention', path: 'src/app.js' },
+    ]);
+  });
 
   it("shows a session's history as its agent replays it, once: a later load (after an idle stop) adds nothing", () => {
     /** @type {{ authorId?: string, delta?: { text?: string } }[]} */

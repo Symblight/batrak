@@ -34,6 +34,7 @@ export class AcpTerminal extends LitElement {
     fontSize: { attribute: false },
     gpu: { attribute: false },
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
+    dropping: { type: Boolean, reflect: true },
   };
 
   static styles = [xtermStyles, styles];
@@ -51,6 +52,8 @@ export class AcpTerminal extends LitElement {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #frame;
   #visible = false;
+  /** Pasted before the shell was connected: sent once it is. */
+  #pending = '';
 
   constructor() {
     super();
@@ -68,6 +71,8 @@ export class AcpTerminal extends LitElement {
     this.gpu = true;
     /** @type {boolean} A session's CLI: once ended it offers Continue in chat next to Restart. */
     this.chatFallback = false;
+    /** @type {boolean} Files dragged from the OS are over it: dropped, their paths are typed in. */
+    this.dropping = false;
   }
 
   /**
@@ -190,11 +195,35 @@ export class AcpTerminal extends LitElement {
           reset: () => term.reset(),
           exit: (exit) => term.write(`\r\n\x1b[2m[Process exited with ${exitText(exit)}]\x1b[0m\r\n`),
         });
+        const pending = this.#pending;
+        this.#pending = '';
+        if (pending) this.#paste(term, pending);
       } else if (term.cols !== cols || term.rows !== rows) {
         this.#link?.resize(term.cols, term.rows);
       }
       if (shown) term.focus();
     }, 16);
+  }
+
+  /**
+   * Pastes text into the shell, as if pasted by the user, and focuses the terminal; kept until the
+   * shell is connected.
+   * @param {string} text
+   */
+  paste(text) {
+    const term = this.#term;
+    if (term && this.#link) this.#paste(term, text);
+    else this.#pending += text;
+    term?.focus();
+  }
+
+  /**
+   * A program that didn't turn on bracketed paste would take a line break as Enter: it gets spaces.
+   * @param {Terminal} term
+   * @param {string} text
+   */
+  #paste(term, text) {
+    term.paste(term.modes.bracketedPasteMode ? text : text.replace(/\r?\n/g, ' '));
   }
 
   /**

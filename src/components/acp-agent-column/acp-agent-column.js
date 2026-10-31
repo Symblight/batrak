@@ -3,17 +3,22 @@ import '@symblight/wc-material/progress-circular';
 import '../acp-chat/acp-chat.js';
 import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import '../acp-session-header/acp-session-header.js';
-import '../acp-terminal/acp-terminal.js';
+import { AcpTerminal } from '../acp-terminal/acp-terminal.js';
 import '../acp-welcome/acp-welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
+import { cliInput } from '../../models/cli-input.js';
+import { chatDropOf } from '../../models/file-drop.js';
+import { PLATFORM } from '../../models/platform.js';
+import { shellPaths } from '../../models/shell-paths.js';
 import { isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
 import { copyText } from '../../services/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
-import { gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
+import { droppedKinds, gitBranches, openUrl, quickOpen, readDroppedFile } from '../../services/ipc.js';
+import { fileDrop } from '../../services/file-drop.js';
 import { reportError } from '../../services/notices.js';
 import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
@@ -21,6 +26,7 @@ import { sessionController } from '../../services/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents.js';
 import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
 import { $now } from '../../stores/clock.js';
+import { $fileDropTarget } from '../../stores/file-drop.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage.js';
 import { openAgents } from '../../stores/editor.js';
@@ -33,6 +39,7 @@ import { $editorFont, $editorFontSize } from '../../stores/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
+/** @typedef {import('../../models/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../models/types.js').SessionView} SessionView */
@@ -77,6 +84,7 @@ export class AcpAgentColumn extends LitElement {
   #sessionTerminals = new StoreController(this, { store: $sessionTerminals });
   #editorFont = new StoreController(this, { store: $editorFont });
   #editorFontSize = new StoreController(this, { store: $editorFontSize });
+  #fileDropTarget = new StoreController(this, { store: $fileDropTarget });
   /** The header's rename, reset title, reveal and delete. */
   #sessionActions = new SessionActionsController(this, {
     confirm: () => this.renderRoot.querySelector('acp-confirm-dialog'),
@@ -87,7 +95,10 @@ export class AcpAgentColumn extends LitElement {
   /** @type {ChatPartsController} */
   #parts = new ChatPartsController(this, { attachments: () => /** @type {AcpChat} */ (this.#chat).attachments });
 
-  /** Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer. */
+  /**
+   * Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer, or
+   * into the CLI of a session shown in the terminal.
+   */
   #chatInserts = new StoreController(this, {
     store: $chatInserts,
     onChange: (inserts) => {
@@ -118,9 +129,98 @@ export class AcpAgentColumn extends LitElement {
     return result;
   }
 
-  /** Takes `$chatInserts` into the composer once it is up; until then they wait in the store. */
+  /** Whether the active session shows its CLI in place of the chat. */
+  get #inTerminal() {
+    return this.#workspace.value !== null && this.#openingPath.value === null && this.#activeSessionId.value !== null && this.#shownView.value === 'terminal';
+  }
+
+  /** @returns {AcpTerminal | null} The active session's CLI while it runs. */
+  get #runningCli() {
+    const terminal = this.renderRoot.querySelector('acp-terminal');
+    return terminal && this.#terminals.value[terminal.terminalId]?.status === 'running' ? terminal : null;
+  }
+
+  /**
+   * @param {Element | null} target
+   * @returns {target is AcpTerminal} Whether it is the session's CLI shown here.
+   */
+  #isOwnTerminal(target) {
+    return target instanceof AcpTerminal && target.getRootNode() === this.renderRoot;
+  }
+
+  /**
+   * @param {Element | null} target
+   * @returns {boolean} Whether it is the chat, shown here (not the session's CLI in its place).
+   */
+  #isShownChat(target) {
+    return target !== null && target === this.#chat && !this.#inTerminal && this.#openingPath.value === null;
+  }
+
+  /**
+   * Files dropped from the OS: on the running CLI their paths are typed in, as a native terminal
+   * does; on the chat they go into the composer.
+   */
+  #onFileDrop = (/** @type {Event} */ e) => {
+    const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
+    if (this.#isOwnTerminal(target) && target === this.#runningCli) target.paste(shellPaths(paths, PLATFORM));
+    else if (this.#isShownChat(target)) this.#dropOnChat(paths);
+  };
+
+  /**
+   * Dropped images become attachments; other files and folders chips, like `@` picks. Ignored while
+   * the composer isn't up, or once another session shows.
+   * @param {readonly string[]} paths
+   */
+  async #dropOnChat(paths) {
+    const chat = this.#chat;
+    const sessionId = $activeSessionId.get();
+    try {
+      const kinds = await droppedKinds(paths);
+      if ($activeSessionId.get() !== sessionId) return;
+      const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
+      const { files, images } = chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
+      if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return;
+      chat.insertFiles(files);
+      for (const { path, name, mime } of images) {
+        const bytes = await readDroppedFile(path);
+        if ($activeSessionId.get() !== sessionId) return;
+        chat.attachments.addFiles([new File([bytes], name, { type: mime })], 'drop');
+      }
+    } catch (err) {
+      reportError('Adding dropped files failed', err);
+    }
+  }
+
+  connectedCallback() {
+    super.connectedCallback();
+    fileDrop.addEventListener('drop', this.#onFileDrop);
+  }
+
+  disconnectedCallback() {
+    fileDrop.removeEventListener('drop', this.#onFileDrop);
+    super.disconnectedCallback();
+  }
+
+  /**
+   * Code that waited goes in once it can: the session's CLI showed (it was starting), or the chat
+   * did (its CLI had ended).
+   */
+  updated() {
+    if ($chatInserts.get().length) this.#insertCode();
+  }
+
+  /**
+   * Takes `$chatInserts` into the composer once it is up, or as `@` refs into the running CLI of a
+   * session in the terminal; until then they wait in the store.
+   */
   async #insertCode() {
     await this.updateComplete;
+    if (this.#inTerminal) {
+      const cli = this.#runningCli;
+      const inserts = cli ? takeChatInserts() : [];
+      if (cli && inserts.length) cli.paste(cliInput(inserts, this.#activeFolder.value ?? this.#workspace.value?.path ?? null));
+      return;
+    }
     const chat = this.#chat;
     if (!chat || !(await chat.composerReady())) return;
     chat.insertCode(takeChatInserts());
@@ -308,6 +408,7 @@ export class AcpAgentColumn extends LitElement {
       .info=${this.#terminals.value[terminalId] ?? null}
       .fontFamily=${this.#editorFont.value}
       .fontSize=${this.#editorFontSize.value}
+      ?dropping=${this.#isOwnTerminal(this.#fileDropTarget.value)}
       @acp-terminal-restart=${this.#onTerminalRestart}
       @acp-terminal-chat=${this.#onTerminalChat}
       @acp-terminal-copy=${this.#onTerminalCopy}
@@ -356,7 +457,7 @@ export class AcpAgentColumn extends LitElement {
     const workspace = this.#workspace.value;
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
-    const inTerminal = workspace !== null && !opening && hasSession && this.#shownView.value === 'terminal';
+    const inTerminal = this.#inTerminal;
     // Hidden rather than removed while a project opens, so the chat keeps its state.
     return html`
       ${workspace !== null && !opening ? this.#renderHeader() : nothing}
@@ -384,6 +485,7 @@ export class AcpAgentColumn extends LitElement {
             .notice=${hasSession ? this.#notice.value : null}
             .signInRun=${hasSession ? this.#signInRun() : null}
             .loginHere=${hasSession && this.#loginHere()}
+            ?dropping=${this.#isShownChat(this.#fileDropTarget.value)}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}

@@ -4,12 +4,14 @@ import './styles/fonts/fonts.css';
 import './styles/shadow-styles.js';
 import { logUncaughtErrors } from './services/logger.js';
 import { showBackendNotices } from './services/notices.js';
+import { fileDrop } from './services/file-drop.js';
 import { syncTheme } from './services/theme.js';
 import './components/acp-app/acp-app.js';
 
 logUncaughtErrors();
 showBackendNotices();
 syncTheme();
+fileDrop.start();
 
 // No native context menu outside `pnpm dev` / `pnpm tauri dev` (Inspect Element stays there);
 // components still get `contextmenu` to open their own menu.

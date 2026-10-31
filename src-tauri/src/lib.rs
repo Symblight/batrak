@@ -17,6 +17,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(workspace::Workspaces::default())
+        .manage(commands::dropped::DroppedFiles::default())
         .on_menu_event(menu::on_event)
         .setup(|app| {
             #[cfg(target_os = "macos")]
@@ -68,8 +69,18 @@ pub fn run() {
             }));
             Ok(())
         })
+        // A webview window reports its file drops as window events, a child webview as its own.
+        .on_webview_event(|webview, event| {
+            if let tauri::WebviewEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                webview.state::<commands::dropped::DroppedFiles>().record(webview.window().label(), paths);
+            }
+        })
         .on_window_event(|window, event| {
+            if let tauri::WindowEvent::DragDrop(tauri::DragDropEvent::Drop { paths, .. }) = event {
+                window.state::<commands::dropped::DroppedFiles>().record(window.label(), paths);
+            }
             if let tauri::WindowEvent::Destroyed = event {
+                window.state::<commands::dropped::DroppedFiles>().forget(window.label());
                 window.state::<workspace::Workspaces>().close_group(window.label());
                 window.state::<session::Sessions>().detach_all(window.label());
                 window.state::<terminal::Terminals>().close_group(window.label());
@@ -121,6 +132,8 @@ pub fn run() {
             commands::fonts::list_fonts,
             commands::fs::read_file,
             commands::fs::read_file_bytes,
+            commands::dropped::dropped_kinds,
+            commands::dropped::read_dropped_file,
             commands::fs::write_file,
             commands::fs::reveal_path,
             commands::fs::open_url,
