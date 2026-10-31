@@ -50,7 +50,7 @@ export function setSearchDialogPrefs(patch) {
  */
 export function parseProjectSearch(raw) {
   if (!isRecord(raw)) return null;
-  const recent = Array.isArray(raw.recent) ? [...new Set(raw.recent.filter((q) => typeof q === 'string'))] : [];
+  const recent = Array.isArray(raw.recent) ? [...new Set(raw.recent.filter((q) => typeof q === 'string').map((q) => q.trim()).filter(Boolean))] : [];
   return {
     query: typeof raw.query === 'string' ? raw.query : '',
     caseSensitive: raw.caseSensitive === true,

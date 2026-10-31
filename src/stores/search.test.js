@@ -81,4 +81,11 @@ describe('search stores', () => {
     });
     expect(parseProjectSearch('x')).to.equal(null);
   });
+
+  it('trims stored recent searches, drops blank ones and keeps the first 10', () => {
+    expect(parseProjectSearch({ recent: ['a', '', '  ', 'b'] })?.recent).to.deep.equal(['a', 'b']);
+    expect(parseProjectSearch({ recent: [' a ', 'a', 'b'] })?.recent, 'trimmed like addRecentSearch, then once each').to.deep.equal(['a', 'b']);
+    const many = Array.from({ length: 12 }, (_, i) => `q${i}`);
+    expect(parseProjectSearch({ recent: many })?.recent).to.deep.equal(many.slice(0, 10));
+  });
 });

@@ -36,6 +36,10 @@ paths:
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
   stored folders as their parents load),
   `$contextUsage` (`brama:sessions:context-usage:<session id>`, see `sessions.md`),
+  `$searchDialogPrefs` (`brama:search:dialog`, shared: the search dialog's preview placement, view
+  and splits), `$projectSearch` (`brama:search:project:<project path>`, per window, one item per
+  project through `setKey()`: the dialog's last query, options, folder and mask, and the project's
+  10 recent searches; two windows on one project: last write wins),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
   shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
