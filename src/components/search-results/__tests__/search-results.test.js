@@ -68,6 +68,11 @@ describe('acp-search-results', () => {
       expect(rows(el)[0] instanceof HTMLButtonElement).to.equal(true);
     });
 
+    it('shows each file row with the icon of its file', async () => {
+      const el = await render(html`<acp-search-results .results=${RESULTS}></acp-search-results>`);
+      expect(fileRows(el).map((f) => f.querySelector('acp-file-icon')?.getAttribute('name'))).to.deep.equal(['main.js', 'README.md']);
+    });
+
     it('drops leading whitespace and highlights only the row\'s own match', async () => {
       const el = await render(html`<acp-search-results .results=${RESULTS}></acp-search-results>`);
       const [first, second] = rows(el);

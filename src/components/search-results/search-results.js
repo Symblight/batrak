@@ -5,8 +5,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import '../file-icon/file-icon.js';
 import { MAX_MATCHES, clipLine, highlightParts, matchRows, moveKey } from '../../models/search-results/search-results.js';
 import styles from './search-results.css?inline';
 
@@ -157,7 +156,7 @@ export class AcpSearchResults extends LitElement {
         @click=${() => this.#toggleFile(path)}
       >
         <md-icon class="acp-search-results__chevron">${unsafeSVG(collapsed ? collapsedIcon : expandIcon)}</md-icon>
-        <md-icon class="acp-search-results__file-icon">${unsafeSVG(fileIconFor(name) ?? fileIcon)}</md-icon>
+        <acp-file-icon class="acp-search-results__file-icon" name=${name}></acp-file-icon>
         <span class="acp-search-results__file-name">${name}</span>
         <span class="acp-search-results__file-dir">${dir}</span>
         <span class="acp-search-results__count">${count}</span>

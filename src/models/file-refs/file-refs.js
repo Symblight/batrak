@@ -1,4 +1,4 @@
-import { fileIconFor } from '../file-icons/file-icons.js';
+import { fileIcon } from '../../components/file-icon/file-icon.js';
 
 /**
  * A file or folder named in chat text: `@src/app.js`, `src/app.js:12`, `src/app.js:12-23`,
@@ -51,7 +51,7 @@ function refOf(at, path, slash, lines, strict) {
   const from = lines[0] ?? lines[2];
   const to = lines[1] ?? lines[3];
   const named = path.includes('/') || Boolean(at) || from !== undefined;
-  if (strict ? !named : !named && !fileIconFor(name)) return null;
+  if (strict ? !named : !named && !fileIcon.has(name)) return null;
   const fromLine = from === undefined ? null : Number(from);
   return { path, folder: false, fromLine, toLine: to === undefined ? fromLine : Number(to), mention: Boolean(at) };
 }

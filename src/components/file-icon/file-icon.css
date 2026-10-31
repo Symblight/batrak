@@ -1,0 +1,8 @@
+:host {
+  display: inline-flex;
+  font-size: var(--acp-icon-size-md);
+}
+
+.acp-file-icon__icon {
+  font-size: inherit;
+}

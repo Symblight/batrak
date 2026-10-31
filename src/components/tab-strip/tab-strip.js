@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { styleMap } from 'lit/directives/style-map.js';
+import { ifDefined } from 'lit/directives/if-defined.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/tabs';
 import '@symblight/wc-material/icon';
@@ -11,7 +12,6 @@ import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import '@symblight/wc-material/tooltip';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import pushPinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
 import smartToyIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
@@ -19,7 +19,7 @@ import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import '../file-icon/file-icon.js';
 import { basename, shownPath, worktreeOf } from '../../models/paths/paths.js';
 import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
@@ -297,36 +297,48 @@ export class AcpTabStrip extends LitElement {
   }
 
   /**
-   * Title, icon and tooltip of a tab.
+   * Title, icon and tooltip of a tab; `file` is set (and `icon` empty) when the icon is the file's own.
    * @param {EditorTab} tab
-   * @returns {{ title: string, icon: string, tooltip: string }}
+   * @returns {{ title: string, icon: string, file: string | null, tooltip: string }}
    */
   #describe(tab) {
-    if (tab.kind === 'settings') return { title: 'Settings', icon: settingsIcon, tooltip: 'Settings' };
-    if (tab.kind === 'agents') return { title: 'Agents', icon: smartToyIcon, tooltip: 'ACP agents: switch, update and add' };
+    if (tab.kind === 'settings') return { title: 'Settings', icon: settingsIcon, file: null, tooltip: 'Settings' };
+    if (tab.kind === 'agents') return { title: 'Agents', icon: smartToyIcon, file: null, tooltip: 'ACP agents: switch, update and add' };
     if (tab.kind === 'changes') {
-      return { title: 'Changes', icon: differenceIcon, tooltip: 'Changed files and their diffs against HEAD' };
+      return { title: 'Changes', icon: differenceIcon, file: null, tooltip: 'Changed files and their diffs against HEAD' };
     }
     if (tab.kind === 'session-changes') {
       const worktree = this.worktrees.find((w) => w.sessionId === sessionOfTab(tab.id));
       const branch = worktree?.branch ?? 'its worktree';
-      return { title: worktree?.title ?? 'Changes', icon: differenceIcon, tooltip: `Changes on ${branch} since the session started` };
+      return { title: worktree?.title ?? 'Changes', icon: differenceIcon, file: null, tooltip: `Changes on ${branch} since the session started` };
     }
     if (tab.kind === 'terminal') {
       const info = this.terminals[terminalOfTab(tab.id) ?? ''];
-      return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, tooltip: info?.login ?? info?.cwd ?? 'Terminal' };
+      return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, file: null, tooltip: info?.login ?? info?.cwd ?? 'Terminal' };
     }
-    if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, tooltip: 'Browser' };
+    if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, file: null, tooltip: 'Browser' };
     const name = basename(tab.path);
     const path = shownPath(this.root, this.worktrees, tab.path);
     const worktree = worktreeOf(this.worktrees, tab.path);
-    if (worktree) return { title: name, icon: branchIcon, tooltip: `${path} in worktree ${worktree.branch}` };
-    return { title: name, icon: fileIconFor(name) ?? fileIcon, tooltip: path };
+    if (worktree) return { title: name, icon: branchIcon, file: null, tooltip: `${path} in worktree ${worktree.branch}` };
+    return { title: name, icon: '', file: name, tooltip: path };
+  }
+
+  /**
+   * A tab's icon: the file's own, or the SVG of a view tab.
+   * @param {string} icon
+   * @param {string | null} file
+   * @param {string} [slot]
+   */
+  #renderIcon(icon, file, slot) {
+    return file !== null
+      ? html`<acp-file-icon slot=${ifDefined(slot)} class="acp-tab-strip__file-icon" name=${file}></acp-file-icon>`
+      : html`<md-icon slot=${ifDefined(slot)} class="acp-tab-strip__file-icon">${unsafeSVG(icon)}</md-icon>`;
   }
 
   /** @param {EditorTab} tab */
   #renderTab(tab) {
-    const { title, icon, tooltip } = this.#describe(tab);
+    const { title, icon, file, tooltip } = this.#describe(tab);
     const pinned = this.#isPinned(tab.id);
     const id = `tab-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
     const dragging = this.#sortable.dragging;
@@ -350,7 +362,7 @@ export class AcpTabStrip extends LitElement {
       <span
         class=${classMap({ 'acp-tab-strip__label': true, 'acp-tab-strip__label_deleted': tab.deletedOnDisk })}
       >
-        <md-icon class="acp-tab-strip__file-icon">${unsafeSVG(icon)}</md-icon>
+        ${this.#renderIcon(icon, file)}
         ${title}
         ${tab.draft !== null ? html`<span id="${id}-unsaved" class="acp-tab-strip__unsaved">●</span>` : nothing}
         <span
@@ -436,7 +448,7 @@ export class AcpTabStrip extends LitElement {
 
   /** @param {EditorTab} tab */
   #renderOverflowItem(tab) {
-    const { title, icon, tooltip } = this.#describe(tab);
+    const { title, icon, file, tooltip } = this.#describe(tab);
     const pinned = this.#isPinned(tab.id);
     // Tooltips sit in the trailing slot: the default slot's text is the item's typeahead label.
     const id = `overflow-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
@@ -446,7 +458,7 @@ export class AcpTabStrip extends LitElement {
       value=${tab.id}
       ?selected=${tab.id === this.active}
     >
-      <md-icon slot="leading" class="acp-tab-strip__file-icon">${unsafeSVG(icon)}</md-icon>
+      ${this.#renderIcon(icon, file, 'leading')}
       <span class=${classMap({ 'acp-tab-strip__overflow-title': true, 'acp-tab-strip__label_deleted': tab.deletedOnDisk })}
         >${title}</span
       >${tab.draft !== null ? html`<span id="${id}-unsaved" class="acp-tab-strip__unsaved">●</span>` : nothing}

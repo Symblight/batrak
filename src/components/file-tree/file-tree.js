@@ -3,9 +3,8 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import '../file-icon/file-icon.js';
 import { absPath } from '../../models/paths/paths.js';
 import styles from './file-tree.css?inline';
 
@@ -299,7 +298,7 @@ export class AcpFileTree extends LitElement {
       ? html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(branchIcon)}</md-icon>`
       : item.isDir
       ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
-      : html`<md-icon id=${id} style="font-size: 14px">${unsafeSVG(fileIconFor(item.label) ?? fileIcon)}</md-icon>`;
+      : html`<acp-file-icon id=${id} style="font-size: 14px" name=${item.label}></acp-file-icon>`;
     return html`${icon}<md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
   }
 

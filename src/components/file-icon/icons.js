@@ -45,7 +45,7 @@ export const fileIcons = {
 };
 
 /** @type {Record<string, keyof typeof fileIcons>} */
-const byExtension = {
+export const byExtension = {
   js: 'javascript', mjs: 'javascript', cjs: 'javascript', jsx: 'react',
   ts: 'typescript', mts: 'typescript', cts: 'typescript', tsx: 'react',
   py: 'python', rs: 'rust', go: 'go', java: 'java',
@@ -59,18 +59,7 @@ const byExtension = {
 };
 
 /** @type {Record<string, keyof typeof fileIcons>} */
-const byName = {
+export const byName = {
   dockerfile: 'docker', '.gitignore': 'git', '.gitattributes': 'git',
   'package.json': 'npm', 'package-lock.json': 'npm', 'tauri.conf.json': 'tauri',
 };
-
-/**
- * SVG markup of the language logo for a file name, or `null` when there is none.
- * @param {string} name
- * @returns {string | null}
- */
-export function fileIconFor(name) {
-  const lower = name.toLowerCase();
-  const key = byName[lower] ?? byExtension[lower.slice(lower.lastIndexOf('.') + 1)];
-  return key ? fileIcons[key] : null;
-}

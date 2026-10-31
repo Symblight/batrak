@@ -7,10 +7,9 @@ import { ChxCommandPicker } from '@symblight/chat/composer';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
+import descriptionIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { fileIcon } from '../file-icon/file-icon.js';
 import { basename, relPath } from '../../models/paths/paths.js';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
@@ -89,7 +88,7 @@ function codeChip(schema, { path, fromLine, toLine }, root) {
   return schema.nodes.chip.create({
     templateId: FILE_CHIP_TEMPLATE,
     label: `${rel}:${lines}`,
-    icon: fileIconFor(name) ?? fileIcon,
+    icon: fileIcon.svgFor(name),
     data: { path: rel, lines },
   });
 }
@@ -106,7 +105,7 @@ function fileChipAttrs(path, folder) {
   return {
     templateId: FILE_CHIP_TEMPLATE,
     label: name,
-    icon: folder ? folderIcon : (fileIconFor(name) ?? fileIcon),
+    icon: fileIcon.svgFor(name, folder),
     data,
   };
 }
@@ -160,7 +159,7 @@ function buildBrowseItem() {
   const item = createMenuItem();
   item.setAttribute('value', '');
   item.dataset.browse = '';
-  item.append(buildIcon(fileIcon, 'leading'), 'Files and Folders', buildIcon(chevronIcon, 'trailing'));
+  item.append(buildIcon(descriptionIcon, 'leading'), 'Files and Folders', buildIcon(chevronIcon, 'trailing'));
   return item;
 }
 
@@ -177,7 +176,7 @@ function buildEntryItem(entry) {
   item.setAttribute('value', entry.path);
   item.title = entry.path;
   if (entry.isDir) item.dataset.kind = 'folder';
-  const icon = entry.isDir ? folderIcon : (fileIconFor(entry.name) ?? fileIcon);
+  const icon = fileIcon.svgFor(entry.name, entry.isDir);
   item.append(buildIcon(icon, 'leading'), highlight(entry.name, hits, nameStart));
   if (dir) {
     const trailing = document.createElement('span');

@@ -41,6 +41,17 @@ const terminalInfo = {
 };
 
 describe('acp-tab-strip', () => {
+  it('shows a file tab with its file\'s icon and a view tab with its own', async () => {
+    const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
+      await fixture(
+        html`<acp-tab-strip .tabs=${[fileTab('/p/src/main.rs'), terminalTab('t1')]} .terminals=${{ t1: terminalInfo }}></acp-tab-strip>`,
+      )
+    );
+    const labels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-strip__label') ?? [])];
+    expect(labels.map((l) => l.querySelector('acp-file-icon')?.getAttribute('name') ?? null)).to.deep.equal(['main.rs', null]);
+    expect(labels[1].querySelector('md-icon')).to.not.equal(null);
+  });
+
   it('titles a terminal tab from its terminal, or the title its shell set', async () => {
     const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
       await fixture(html`<acp-tab-strip .tabs=${[terminalTab('t1')]} .terminals=${{ t1: terminalInfo }}></acp-tab-strip>`)

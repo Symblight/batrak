@@ -1,7 +1,5 @@
 import { buildChipElement } from '@symblight/chat';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs/file-refs.js';
 import { listDir } from '../../services/ipc/ipc.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
@@ -56,7 +54,7 @@ function refChip(ref) {
   const chip = buildChipElement({
     templateId: FILE_CHIP_TEMPLATE,
     label: lines ? `${name}:${lines}` : name,
-    icon: ref.folder ? folderIcon : (fileIconFor(name) ?? fileIcon),
+    icon: fileIcon.svgFor(name, ref.folder),
     data: ref.folder ? { path: ref.path, kind: 'folder' } : lines ? { path: ref.path, lines } : { path: ref.path },
   });
   chip.title = lines ? `${ref.path}:${lines}` : ref.path;
@@ -76,7 +74,7 @@ export function locationChip({ path, line }) {
   if (line !== undefined) chip.dataset.line = String(line);
   const icon = document.createElement('md-icon');
   icon.slot = 'icon';
-  icon.innerHTML = fileIconFor(name) ?? fileIcon;
+  icon.innerHTML = fileIcon.svgFor(name);
   chip.append(icon, name);
   return chip;
 }

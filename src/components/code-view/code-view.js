@@ -1,18 +1,15 @@
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { styleMap } from 'lit/directives/style-map.js';
-import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/code-editor';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import { commentAuthor, editorLanguages, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import '../file-icon/file-icon.js';
 import { fontStack } from '../../models/editor-fonts/editor-fonts.js';
 import { isAgentsFile } from '../../models/agents-file/agents-file.js';
 import { absPath, basename, projectPathOf, relPath, shownPath, worktreeOf } from '../../models/paths/paths.js';
@@ -293,9 +290,7 @@ export class AcpCodeView extends LitElement {
           value=${e.path}
           ?selected=${e.path === list?.selected}
         >
-          <md-icon slot="leading" class="acp-code-view__entry-icon"
-            >${unsafeSVG(e.isDir ? folderIcon : (fileIconFor(e.name) ?? fileIcon))}</md-icon
-          >
+          <acp-file-icon slot="leading" class="acp-code-view__entry-icon" name=${e.name} ?folder=${e.isDir}></acp-file-icon>
           ${e.name}
         </md-menu-item>`,
       )}
