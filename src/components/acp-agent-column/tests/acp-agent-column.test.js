@@ -2,7 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $agentList } from '../../../stores/agents.js';
 import { $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views.js';
-import { $chatInserts, addToChat } from '../../../stores/chat.js';
+import { $pendingInput, addToChat, hasPendingInput } from '../../../stores/chat.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions.js';
 import { $sessionNotices, setSessionNotice } from '../../../stores/session-runtime.js';
 import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalExited } from '../../../stores/terminals.js';
@@ -119,7 +119,7 @@ describe('acp-agent-column', () => {
     $agentViews.set({});
     $workspace.set(null);
     $sessionNotices.set({});
-    $chatInserts.set([]);
+    $pendingInput.set({});
     $cliStarting.set([]);
     $agentList.set({ ...$agentList.get(), agents: [] });
     clearMocks();
@@ -185,7 +185,7 @@ describe('acp-agent-column', () => {
     ]);
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(pasted).to.deep.equal(['@src/app.js#L3-5 \n@src/app.js#L9 Rename this']);
-    expect($chatInserts.get(), 'taken').to.deep.equal([]);
+    expect(hasPendingInput('s1'), 'taken').to.equal(false);
   });
 
   it("types files dropped on a terminal session's CLI as their escaped paths, and marks it while they're dragged over", async () => {
@@ -205,6 +205,7 @@ describe('acp-agent-column', () => {
     fileDrop.handle({ type: 'drop', paths, position: osPointOf(terminal) });
     await el.updateComplete;
     expect(terminal.dropping, 'unmarked').to.equal(false);
+    await until(() => pasted.length > 0);
     expect(pasted).to.deep.equal([shellPaths(paths, platformOf(navigator.userAgent))]);
   });
 
@@ -284,6 +285,33 @@ describe('acp-agent-column', () => {
     answer(['file']);
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(inserted).to.deep.equal([]);
+    expect($pendingInput.get().s1, 'kept for the session it was dropped on').to.deep.equal({ inserts: [], drops: ['/p/a.js'] });
+  });
+
+  it("keeps files dropped on a terminal session's ended CLI, says so, and puts them into the composer once the chat shows", async () => {
+    $sessions.set([session()]);
+    $sessionViews.setKey('s1', 'terminal');
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    terminalExited('t-cli', { code: 1, signal: null });
+    $activeSessionId.set('s1');
+    const { el, root } = await render();
+    const terminal = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (root.querySelector('acp-terminal'));
+    /** @type {string[]} */
+    const pasted = [];
+    terminal.paste = (text) => pasted.push(text);
+    fileDrop.handle({ type: 'drop', paths: ['/p/src/app.js'], position: osPointOf(terminal) });
+    await el.updateComplete;
+    expect(pasted, 'not into an ended CLI').to.deep.equal([]);
+    expect(terminal.waiting).to.equal(1);
+
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    terminal.dispatchEvent(new CustomEvent('acp-terminal-chat', { bubbles: true, composed: true }));
+    await until(() => inserted.length > 0);
+    expect(inserted).to.deep.equal([{ path: 'src/app.js', folder: false }]);
+    expect(hasPendingInput('s1')).to.equal(false);
   });
 
   it('does nothing to the chat for files dropped on it while the terminal shows', async () => {
@@ -310,7 +338,7 @@ describe('acp-agent-column', () => {
     const { el, root } = await render();
     addToChat([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect($chatInserts.get(), 'waiting').to.have.length(1);
+    expect(hasPendingInput('s1'), 'waiting').to.equal(true);
 
     /** @type {string[]} */
     const pasted = [];
@@ -324,7 +352,7 @@ describe('acp-agent-column', () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
       expect(root.querySelector('acp-terminal')).not.to.equal(null);
       expect(pasted).to.deep.equal(['@a.js#L1 ']);
-      expect($chatInserts.get()).to.deep.equal([]);
+      expect(hasPendingInput('s1')).to.equal(false);
     } finally {
       proto.paste = paste;
     }
@@ -343,7 +371,7 @@ describe('acp-agent-column', () => {
     chat.insertCode = (inserts) => inserted.push(...inserts);
     addToChat([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
     await new Promise((resolve) => setTimeout(resolve, 0));
-    expect($chatInserts.get(), 'waiting').to.have.length(1);
+    expect(hasPendingInput('s1'), 'waiting').to.equal(true);
 
     const terminal = /** @type {HTMLElement} */ (root.querySelector('acp-terminal'));
     terminal.dispatchEvent(new CustomEvent('acp-terminal-chat', { bubbles: true, composed: true }));
@@ -351,7 +379,7 @@ describe('acp-agent-column', () => {
     await el.updateComplete;
     await until(() => inserted.length > 0);
     expect(inserted).to.deep.equal([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);
-    expect($chatInserts.get(), 'taken').to.deep.equal([]);
+    expect(hasPendingInput('s1'), 'taken').to.equal(false);
   });
 
   it('asks before stopping a running turn to continue in the terminal; Cancel changes nothing', async () => {

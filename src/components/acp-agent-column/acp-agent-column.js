@@ -24,7 +24,7 @@ import { terminalController } from '../../services/terminals.js';
 import { projectController } from '../../services/project-controller.js';
 import { sessionController } from '../../services/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents.js';
-import { $chatInserts, takeChatInserts } from '../../stores/chat.js';
+import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat.js';
 import { $now } from '../../stores/clock.js';
 import { $fileDropTarget } from '../../stores/file-drop.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
@@ -96,15 +96,10 @@ export class AcpAgentColumn extends LitElement {
   #parts = new ChatPartsController(this, { attachments: () => /** @type {AcpChat} */ (this.#chat).attachments });
 
   /**
-   * Code sent from the editors (selections, `<acp-comment-bar>`'s comments) goes into the composer, or
-   * into the CLI of a session shown in the terminal.
+   * Code sent from the editors (selections, `<acp-comment-bar>`'s comments) and files dropped from the
+   * OS go into the composer, or into the CLI of a session shown in the terminal.
    */
-  #chatInserts = new StoreController(this, {
-    store: $chatInserts,
-    onChange: (inserts) => {
-      if (inserts.length) this.#insertCode();
-    },
-  });
+  #pendingInput = new StoreController(this, { store: $pendingInput });
 
   /** Sequence of `@` queries; only the latest answer is shown. */
   #fileQueryId = 0;
@@ -157,33 +152,59 @@ export class AcpAgentColumn extends LitElement {
   }
 
   /**
-   * Files dropped from the OS: on the running CLI their paths are typed in, as a native terminal
-   * does; on the chat they go into the composer.
+   * Files dropped from the OS on the session's CLI (its paths typed in, as a native terminal does,
+   * once it runs) or its chat (into the composer); kept until then.
    */
   #onFileDrop = (/** @type {Event} */ e) => {
     const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
-    if (this.#isOwnTerminal(target) && target === this.#runningCli) target.paste(shellPaths(paths, PLATFORM));
-    else if (this.#isShownChat(target)) this.#dropOnChat(paths);
+    if (this.#isOwnTerminal(target) || this.#isShownChat(target)) addDrop(paths);
   };
 
   /**
-   * Dropped images become attachments; other files and folders chips, like `@` picks. Ignored while
-   * the composer isn't up, or once another session shows.
+   * What waits for the shown session goes into its running CLI or its composer once up; otherwise
+   * it keeps waiting (a CLI starting or ended, a composer not up yet).
+   */
+  async #applyPending() {
+    const id = $activeSessionId.get();
+    if (id === null || !hasPendingInput(id)) return;
+    await this.updateComplete;
+    const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
+    if (this.#inTerminal) {
+      const cli = this.#runningCli;
+      if (!cli) return;
+      const { inserts, drops } = takePendingInput(id);
+      if (inserts.length) cli.paste(cliInput(inserts, root));
+      if (drops.length) cli.paste(shellPaths(drops, PLATFORM));
+      return;
+    }
+    const chat = this.#chat;
+    if (!chat || this.#openingPath.value !== null || !(await chat.composerReady())) return;
+    // Shown elsewhere meanwhile (another session, or this one's CLI): it waits.
+    if ($activeSessionId.get() !== id || this.#inTerminal) return;
+    const { inserts, drops } = takePendingInput(id);
+    if (inserts.length) chat.insertCode(inserts);
+    if (drops.length) this.#dropOnChat(id, drops);
+  }
+
+  /**
+   * Dropped images become attachments; other files and folders chips, like `@` picks. Kept for the
+   * session when another one shows meanwhile.
+   * @param {string} sessionId
    * @param {readonly string[]} paths
    */
-  async #dropOnChat(paths) {
+  async #dropOnChat(sessionId, paths) {
     const chat = this.#chat;
-    const sessionId = $activeSessionId.get();
+    const keep = () => addDrop(paths, sessionId);
     try {
       const kinds = await droppedKinds(paths);
-      if ($activeSessionId.get() !== sessionId) return;
+      if ($activeSessionId.get() !== sessionId) return keep();
       const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
       const { files, images } = chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
-      if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return;
+      if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return keep();
       chat.insertFiles(files);
-      for (const { path, name, mime } of images) {
+      for (const [i, { path, name, mime }] of images.entries()) {
         const bytes = await readDroppedFile(path);
-        if ($activeSessionId.get() !== sessionId) return;
+        if ($activeSessionId.get() !== sessionId) return addDrop(images.slice(i).map((image) => image.path), sessionId);
         chat.attachments.addFiles([new File([bytes], name, { type: mime })], 'drop');
       }
     } catch (err) {
@@ -202,28 +223,11 @@ export class AcpAgentColumn extends LitElement {
   }
 
   /**
-   * Code that waited goes in once it can: the session's CLI showed (it was starting), or the chat
-   * did (its CLI had ended).
+   * What waited goes in once it can: the session's CLI showed (it was starting) or restarted, or the
+   * chat did (its CLI had ended).
    */
   updated() {
-    if ($chatInserts.get().length) this.#insertCode();
-  }
-
-  /**
-   * Takes `$chatInserts` into the composer once it is up, or as `@` refs into the running CLI of a
-   * session in the terminal; until then they wait in the store.
-   */
-  async #insertCode() {
-    await this.updateComplete;
-    if (this.#inTerminal) {
-      const cli = this.#runningCli;
-      const inserts = cli ? takeChatInserts() : [];
-      if (cli && inserts.length) cli.paste(cliInput(inserts, this.#activeFolder.value ?? this.#workspace.value?.path ?? null));
-      return;
-    }
-    const chat = this.#chat;
-    if (!chat || !(await chat.composerReady())) return;
-    chat.insertCode(takeChatInserts());
+    this.#applyPending();
   }
 
   /** @param {Event} e */
@@ -391,6 +395,15 @@ export class AcpAgentColumn extends LitElement {
     copyText(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying failed');
   }
 
+  /**
+   * @param {string | null} id
+   * @returns {number} How many inputs wait for the session.
+   */
+  #waitingCount(id) {
+    const pending = id === null ? undefined : this.#pendingInput.value[id];
+    return pending ? pending.inserts.length + pending.drops.length : 0;
+  }
+
   /** The active session's CLI, or a spinner while it starts. */
   #renderTerminal() {
     const id = this.#activeSessionId.value;
@@ -408,6 +421,7 @@ export class AcpAgentColumn extends LitElement {
       .info=${this.#terminals.value[terminalId] ?? null}
       .fontFamily=${this.#editorFont.value}
       .fontSize=${this.#editorFontSize.value}
+      .waiting=${this.#waitingCount(id)}
       ?dropping=${this.#isOwnTerminal(this.#fileDropTarget.value)}
       @acp-terminal-restart=${this.#onTerminalRestart}
       @acp-terminal-chat=${this.#onTerminalChat}

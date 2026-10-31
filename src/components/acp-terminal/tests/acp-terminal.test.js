@@ -239,4 +239,19 @@ describe('acp-terminal', () => {
     expect(chats.map((e) => e.detail)).to.deep.equal([{ terminalId: 't1' }]);
     expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.not.equal(null);
   });
+
+  it("says how much waits for a session's ended CLI: it goes in on Restart or Continue in chat", async () => {
+    const { el, calls } = await render();
+    el.chatFallback = true;
+    calls.sink?.exit({ code: 0, signal: null });
+    el.info = { ...running, status: 'exited', exit: { code: 0, signal: null }, sessionId: 's1' };
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.acp-terminal__waiting'), 'nothing waits').to.equal(null);
+    el.waiting = 2;
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.acp-terminal__waiting')?.textContent?.trim()).to.equal('2 waiting to be sent');
+    el.waiting = 1;
+    await el.updateComplete;
+    expect(el.shadowRoot?.querySelector('.acp-terminal__waiting')?.textContent?.trim()).to.equal('1 waiting to be sent');
+  });
 });

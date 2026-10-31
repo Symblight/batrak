@@ -919,6 +919,13 @@
  */
 
 /**
+ * What waits to go into a session (`$pendingInput`): code from the editors, and paths dropped from the OS.
+ * @typedef {Object} PendingInput
+ * @property {readonly ChatInsert[]} inserts
+ * @property {readonly string[]} drops
+ */
+
+/**
  * Something from the code going into the chat's composer as a file chip labelled `path:fromLine-toLine`
  * (`path:line` for one line): a selection (`body` empty, the chip goes in at the caret) or a comment
  * (its own line: chip, then `body`).

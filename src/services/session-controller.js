@@ -55,7 +55,7 @@ import {
 } from '../stores/sessions.js';
 import { $activePermission, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../stores/session-runtime.js';
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../stores/session-views.js';
-import { resetHistory } from '../stores/chat.js';
+import { forgetPendingInput, resetHistory } from '../stores/chat.js';
 import {
   $cliStarting,
   $sessionTerminals,
@@ -724,6 +724,7 @@ export class SessionController {
     forgetSession(id);
     forgetComposer(id);
     forgetContextUsage(id);
+    forgetPendingInput(id);
     if (worktree !== null) removeProjectExpandedFolders(worktree);
     this.#opened.delete(id);
     removeSession(id);

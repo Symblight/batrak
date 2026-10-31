@@ -35,6 +35,7 @@ export class AcpTerminal extends LitElement {
     gpu: { attribute: false },
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
     dropping: { type: Boolean, reflect: true },
+    waiting: { type: Number },
   };
 
   static styles = [xtermStyles, styles];
@@ -73,6 +74,8 @@ export class AcpTerminal extends LitElement {
     this.chatFallback = false;
     /** @type {boolean} Files dragged from the OS are over it: dropped, their paths are typed in. */
     this.dropping = false;
+    /** @type {number} A session's ended CLI: how many inputs (code, drops) wait for Restart or Continue in chat. */
+    this.waiting = 0;
   }
 
   /**
@@ -263,6 +266,7 @@ export class AcpTerminal extends LitElement {
       <div class="acp-terminal__screen"></div>
       ${ended
         ? html`<div class="acp-terminal__actions">
+            ${this.waiting > 0 ? html`<span class="acp-terminal__waiting">${this.waiting} waiting to be sent</span>` : nothing}
             ${this.chatFallback
               ? html`<md-button
                   class="acp-terminal__chat"
