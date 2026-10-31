@@ -155,7 +155,7 @@ describe('acp-agents-view', () => {
     /** @param {string} id */
     const icon = (id) => row(root, id).querySelector('.acp-agents-view__glyph acp-agent-icon');
     expect(icon('claude')?.getAttribute('brand')).to.equal('claude');
-    expect(icon('claude')?.shadowRoot?.querySelector('svg')).to.not.equal(null);
+    expect(icon('claude')?.querySelector('svg')).to.not.equal(null);
     expect(icon('github-copilot-cli')?.getAttribute('brand')).to.equal('copilot');
     expect(icon('mine')?.hasAttribute('brand')).to.equal(false);
   });

@@ -7,22 +7,19 @@ import claudeIcon from '../../assets/agent-icons/claude.svg?raw';
 import codexIcon from '../../assets/agent-icons/codex.svg?raw';
 import copilotIcon from '../../assets/agent-icons/copilot.svg?raw';
 import { agentBrandOf } from '../../models/agents/agents.js';
-import styles from './agent-icon.css?inline';
 
 /** @type {Record<import('../../models/agents/agents.js').AgentBrand, string>} */
 const ICONS = { claude: claudeIcon, codex: codexIcon, copilot: copilotIcon, antigravity: antigravityIcon };
 
 /**
  * @tag acp-agent-icon
- * @summary An agent's logo; a generic icon for an agent that is none of the supported brands. Sized by `font-size`.
+ * @summary An agent's logo; a generic icon for an agent that is none of the supported brands. Light DOM, sized by `font-size`.
  */
 export class AcpAgentIcon extends LitElement {
   static properties = {
     agent: { attribute: false },
     brand: { type: String, reflect: true },
   };
-
-  static styles = styles;
 
   constructor() {
     super();
@@ -32,13 +29,23 @@ export class AcpAgentIcon extends LitElement {
     this.brand = null;
   }
 
+  /** Light DOM: an inline-flex box in its parent's tree, sized by the parent's `font-size`. */
+  createRenderRoot() {
+    return this;
+  }
+
+  connectedCallback() {
+    this.style.display = 'inline-flex';
+    super.connectedCallback();
+  }
+
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
     if (changed.has('agent')) this.brand = agentBrandOf(this.agent.id, this.agent.name);
   }
 
   render() {
-    return html`<md-icon class="acp-agent-icon__icon">${unsafeSVG(this.brand ? ICONS[this.brand] : genericIcon)}</md-icon>`;
+    return html`<md-icon>${unsafeSVG(this.brand ? ICONS[this.brand] : genericIcon)}</md-icon>`;
   }
 }
 

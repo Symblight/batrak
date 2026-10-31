@@ -112,7 +112,7 @@ describe('acp-session-list', () => {
     });
     const claude = row(root, 'Session a').querySelector('.acp-session-list__agent');
     expect(claude?.getAttribute('brand')).to.equal('claude');
-    expect(claude?.shadowRoot?.querySelector('svg')).to.not.equal(null);
+    expect(claude?.querySelector('svg')).to.not.equal(null);
     expect(tooltipOf(claude)).to.equal('Claude Code');
     const other = row(root, 'Session b').querySelector('.acp-session-list__agent');
     expect(other?.hasAttribute('brand')).to.equal(false);

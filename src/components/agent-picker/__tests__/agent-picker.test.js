@@ -156,7 +156,7 @@ describe('acp-agent-picker', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const icon = root.querySelector('acp-agent-icon.acp-agent-picker__glyph[slot="icon"]');
     expect(icon?.getAttribute('brand')).to.equal('claude');
-    expect(icon?.shadowRoot?.querySelector('svg')).to.not.equal(null);
+    expect(icon?.querySelector('svg')).to.not.equal(null);
   });
 
   it('says when a started session\'s agent is gone from agents.json', async () => {
