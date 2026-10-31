@@ -1,56 +1,27 @@
 import { LitElement, html, nothing } from 'lit';
-import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import { repeat } from 'lit/directives/repeat.js';
 import '@symblight/wc-material/text-field';
-import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/icon';
-import '@symblight/wc-material/tooltip';
-import caseIcon from '@material-design-icons/svg/outlined/text_fields.svg?raw';
-import wordIcon from '@material-design-icons/svg/outlined/abc.svg?raw';
-import regexIcon from '@material-design-icons/svg/outlined/emergency.svg?raw';
-import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { absPath } from '../../models/paths.js';
+import '../acp-search-options/acp-search-options.js';
+import '../acp-search-results/acp-search-results.js';
+import { optionForKey } from '../../models/search.js';
+import { MAX_MATCHES, summaryText } from '../../models/search-results.js';
 import styles from './acp-search-panel.css?inline';
 
-/** @typedef {import('../../models/types.js').LineMatch} LineMatch */
 /** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../models/types.js').SearchFileResult} FileResult */
+/** @typedef {import('../../models/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../models/search.js').SearchOptionKey} SearchOptionKey */
 
 /** Typing pause before a search starts. */
 const DEBOUNCE_MS = 250;
-/** Must match `workspace::search::MAX_MATCHES`. */
-const MAX_MATCHES = 2000;
-
-/**
- * Splits a line into plain and highlighted parts.
- * @param {string} text
- * @param {[number, number][]} ranges UTF-16 `[start, end)`, ascending.
- */
-function highlight(text, ranges) {
-  const parts = [];
-  let at = 0;
-  for (const [start, end] of ranges) {
-    if (start < at) continue;
-    parts.push(text.slice(at, start));
-    parts.push(html`<mark class="acp-search-panel__hit">${text.slice(start, end)}</mark>`);
-    at = end;
-  }
-  parts.push(text.slice(at));
-  return parts;
-}
 
 /**
  * @tag acp-search-panel
  * @summary Find in Files: the query, its options and filters, and the results by file.
  * @fires acp-search `{ options, delay }` Search for `options` after `delay` ms (typing pauses first).
- * @fires acp-file-open `{ path, line }` when a match is clicked
+ * @fires acp-search-panel-open `{ path, line, column, length }` when a match is clicked; `path` root-relative
  */
 export class AcpSearchPanel extends LitElement {
   static properties = {
-    root: { attribute: false },
     results: { attribute: false },
     searching: { type: Boolean },
     limitHit: { type: Boolean },
@@ -61,15 +32,12 @@ export class AcpSearchPanel extends LitElement {
     regex: { state: true },
     include: { state: true },
     exclude: { state: true },
-    collapsed: { state: true },
   };
 
   static styles = styles;
 
   constructor() {
     super();
-    /** @type {string | null} The project's path. */
-    this.root = null;
     /** @type {readonly FileResult[]} */
     this.results = [];
     /** @type {boolean} */
@@ -90,8 +58,6 @@ export class AcpSearchPanel extends LitElement {
     this.include = '';
     /** @type {string} */
     this.exclude = '';
-    /** @type {Set<string>} Paths of collapsed file groups. */
-    this.collapsed = new Set();
   }
 
   /** Focuses the query input and selects its text. */
@@ -102,10 +68,20 @@ export class AcpSearchPanel extends LitElement {
     if (field.inputOrTextArea instanceof HTMLInputElement) field.inputOrTextArea.select();
   }
 
-  /** @param {import('lit').PropertyValues<this>} changed */
-  willUpdate(changed) {
-    // A new search starts with no results: its groups start expanded.
-    if (changed.has('results') && this.results.length === 0) this.collapsed = new Set();
+  /**
+   * Fills the fields and options (a search handed over from elsewhere) and searches at once.
+   * @param {SearchOptions} options
+   */
+  setOptions(options) {
+    ({
+      query: this.query,
+      caseSensitive: this.caseSensitive,
+      wholeWord: this.wholeWord,
+      regex: this.regex,
+      include: this.include,
+      exclude: this.exclude,
+    } = options);
+    this.#schedule(0);
   }
 
   /**
@@ -125,9 +101,7 @@ export class AcpSearchPanel extends LitElement {
     this.dispatchEvent(new CustomEvent('acp-search', { detail: { options, delay }, bubbles: true, composed: true }));
   }
 
-  /**
-   * @param {'caseSensitive' | 'wholeWord' | 'regex'} option
-   */
+  /** @param {SearchOptionKey} option */
   #toggle(option) {
     this[option] = !this[option];
     this.#schedule(0);
@@ -148,100 +122,40 @@ export class AcpSearchPanel extends LitElement {
     if (e.key === 'Enter') this.#schedule(0);
   }
 
-  /** @param {string} path */
-  #toggleFile(path) {
-    const collapsed = new Set(this.collapsed);
-    if (!collapsed.delete(path)) collapsed.add(path);
-    this.collapsed = collapsed;
+  /** Alt+C / Alt+W / Alt+R in any field. @param {KeyboardEvent} e */
+  #onHostKeydown = (e) => {
+    const option = optionForKey(e);
+    if (!option) return;
+    e.preventDefault();
+    this.#toggle(option);
+  };
+
+  /** @param {Event} e */
+  #onOptionToggle(e) {
+    e.stopPropagation();
+    this.#toggle(/** @type {CustomEvent<{ option: SearchOptionKey }>} */ (e).detail.option);
   }
 
   /**
-   * @param {string} rel
-   * @param {number} line
+   * Re-fires the block's open as the pane's own, so it can't be mistaken for another list's.
+   * @param {Event} e
    */
-  #open(rel, line) {
+  #onResultOpen(e) {
+    e.stopPropagation();
+    const { path, line, column, length } = /** @type {CustomEvent<{ row: SearchMatchRow }>} */ (e).detail.row;
     this.dispatchEvent(
-      new CustomEvent('acp-file-open', {
-        detail: { path: absPath(this.root, rel), line },
-        bubbles: true,
-        composed: true,
-      }),
+      new CustomEvent('acp-search-panel-open', { detail: { path, line, column, length }, bubbles: true, composed: true }),
     );
   }
 
   /** Match/file counts, the limit notice, or the error. */
   #renderSummary() {
     if (this.error) return html`<div class="acp-search-panel__summary acp-search-panel__summary_error">${this.error}</div>`;
-    if (!this.query) return nothing;
-    const count = this.results.reduce((n, r) => n + r.matches.reduce((m, l) => m + l.ranges.length, 0), 0);
-    const files = this.results.length;
-    const text = this.searching
-      ? `Searching… ${count} results in ${files} files`
-      : count === 0
-        ? 'No results'
-        : `${count} results in ${files} files`;
+    const text = summaryText({ results: [...this.results], searching: this.searching, error: null, query: this.query });
+    if (!text) return nothing;
     return html`<div class="acp-search-panel__summary" role="status">
       ${text}${this.limitHit ? ` — showing the first ${MAX_MATCHES}` : ''}
     </div>`;
-  }
-
-  /** @param {FileResult} result */
-  #renderFile(result) {
-    const slash = result.path.lastIndexOf('/');
-    const name = result.path.slice(slash + 1);
-    const dir = slash > 0 ? result.path.slice(0, slash) : '';
-    const collapsed = this.collapsed.has(result.path);
-    const count = result.matches.reduce((n, l) => n + l.ranges.length, 0);
-    const id = `acp-search-panel-file-${result.path}`;
-    return html`<li>
-      <button
-        id=${id}
-        class="acp-search-panel__file-header"
-        aria-expanded=${!collapsed}
-        @click=${() => this.#toggleFile(result.path)}
-      >
-        <md-icon class="acp-search-panel__chevron">${unsafeSVG(collapsed ? collapsedIcon : expandIcon)}</md-icon>
-        <md-icon class="acp-search-panel__file-icon">${unsafeSVG(fileIconFor(name) ?? fileIcon)}</md-icon>
-        <span class="acp-search-panel__file-name">${name}</span>
-        <span class="acp-search-panel__file-dir">${dir}</span>
-        <span class="acp-search-panel__count">${count}</span>
-      </button>
-      <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${result.path}</md-tooltip>
-      ${collapsed
-        ? nothing
-        : html`<ul class="acp-search-panel__matches">
-            ${result.matches.map(
-              (m) => html`<li>
-                <button class="acp-search-panel__match" @click=${() => this.#open(result.path, m.line)}>
-                  <span class="acp-search-panel__line">${m.line}</span>
-                  <span class="acp-search-panel__text">${highlight(m.text, m.ranges)}</span>
-                </button>
-              </li>`,
-            )}
-          </ul>`}
-    </li>`;
-  }
-
-  /**
-   * Icon toggle inside the query field.
-   * @param {'caseSensitive' | 'wholeWord' | 'regex'} option
-   * @param {string} icon SVG markup.
-   * @param {string} label
-   */
-  #renderOption(option, icon, label) {
-    const id = `acp-search-panel-${option}`;
-    return html`<md-icon-button
-      id=${id}
-      class="acp-search-panel__option"
-      toggle
-      ?selected=${this[option]}
-      aria-label=${label}
-      aria-pressed=${this[option] ? 'true' : 'false'}
-      @click=${() => this.#toggle(option)}
-    >
-      <md-icon class="acp-search-panel__option-icon">${unsafeSVG(icon)}</md-icon>
-    </md-icon-button>
-    <md-tooltip for=${id} show-delay="800">${label}</md-tooltip>`;
   }
 
   /**
@@ -263,7 +177,7 @@ export class AcpSearchPanel extends LitElement {
 
   render() {
     return html`
-      <div class="acp-search-panel__fields">
+      <div class="acp-search-panel__fields" @keydown=${this.#onHostKeydown}>
         <md-text-field
           class="acp-search-panel__field acp-search-panel__field_query"
           variant="outlined"
@@ -274,19 +188,24 @@ export class AcpSearchPanel extends LitElement {
           @input=${(/** @type {Event} */ e) => this.#onInput('query', e)}
           @keydown=${this.#onKeydown}
         >
-          <div slot="trailing" class="acp-search-panel__options">
-            ${this.#renderOption('caseSensitive', caseIcon, 'Match case')}
-            ${this.#renderOption('wholeWord', wordIcon, 'Match whole word')}
-            ${this.#renderOption('regex', regexIcon, 'Use regular expression')}
-          </div>
+          <acp-search-options
+            slot="trailing"
+            .caseSensitive=${this.caseSensitive}
+            .wholeWord=${this.wholeWord}
+            .regex=${this.regex}
+            @acp-search-option-toggle=${this.#onOptionToggle}
+          ></acp-search-options>
         </md-text-field>
         ${this.#renderFilter('include', 'Files to include (src, *.js)')}
         ${this.#renderFilter('exclude', 'Files to exclude')}
       </div>
       ${this.#renderSummary()}
-      <ul class="acp-search-panel__results">
-        ${repeat(this.results, (r) => r.path, (r) => this.#renderFile(r))}
-      </ul>
+      <acp-search-results
+        class="acp-search-panel__results"
+        .results=${this.results}
+        .limitHit=${this.limitHit}
+        @acp-search-result-open=${this.#onResultOpen}
+      ></acp-search-results>
     `;
   }
 }

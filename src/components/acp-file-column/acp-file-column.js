@@ -15,6 +15,8 @@ import { sessionRootController } from '../../services/session-root-controller.js
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git.js';
 import { notify } from '../../stores/notices.js';
+import { absPath } from '../../models/paths.js';
+import { searchFilters } from '../../models/search-filter.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
 import '../acp-file-tree/acp-file-tree.js';
@@ -24,6 +26,7 @@ import styles from './acp-file-column.css?inline';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
 /** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types.js').SearchDialogState} SearchDialogState */
 /** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** @type {Record<SideView, string>} */
@@ -111,11 +114,20 @@ export class AcpFileColumn extends LitElement {
     this.sideView = 'files';
   }
 
-  /** Switches to Search and focuses its input. */
-  async showSearch() {
+  /**
+   * Switches to Search and focuses its input; with `state` (a search handed over from the dialog),
+   * runs that search, its folder and mask as the include / exclude filters.
+   * @param {SearchDialogState} [state]
+   */
+  async showSearch(state) {
     this.sideView = 'search';
     await this.updateComplete;
-    this.renderRoot.querySelector('acp-search-panel')?.focusInput();
+    const panel = this.renderRoot.querySelector('acp-search-panel');
+    if (state) {
+      const { query, caseSensitive, wholeWord, regex, folder, mask } = state;
+      panel?.setOptions({ query, caseSensitive, wholeWord, regex, ...searchFilters(folder, mask) });
+    }
+    panel?.focusInput();
   }
 
   /**
@@ -155,6 +167,18 @@ export class AcpFileColumn extends LitElement {
   #onSearch(e) {
     const { options, delay } = /** @type {CustomEvent<{ options: SearchOptions, delay: number }>} */ (e).detail;
     this.#search.search(options, delay);
+  }
+
+  /** @param {Event} e */
+  #onSearchOpen(e) {
+    e.stopPropagation();
+    const { path, line, column, length } = /** @type {CustomEvent<{ path: string, line: number, column: number, length: number }>} */ (
+      e
+    ).detail;
+    const root = this.#workspace.value?.path ?? null;
+    this.dispatchEvent(
+      new CustomEvent('acp-file-open', { detail: { path: absPath(root, path), line, column, length }, bubbles: true, composed: true }),
+    );
   }
 
   /** @param {Event} e */
@@ -217,12 +241,12 @@ export class AcpFileColumn extends LitElement {
       <acp-search-panel
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'search'}
-        .root=${root}
         .results=${search.results}
         .searching=${search.searching}
         .limitHit=${search.limitHit}
         .error=${search.error}
         @acp-search=${this.#onSearch}
+        @acp-search-panel-open=${this.#onSearchOpen}
       ></acp-search-panel>
       <acp-changes-panel
         class="acp-file-column__pane"

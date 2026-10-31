@@ -1,0 +1,23 @@
+:host {
+  display: flex;
+}
+
+/* 28px icon toggle: 20px icon + 3px padding + the library's 1px transparent border. */
+.acp-search-options__option {
+  --md-icon-button-font-size: var(--icon-size-lg);
+
+  &[selected] {
+    --md-icon-button-background-color: var(--md-secondary-container);
+    --md-icon-button-foreground-color: var(--md-on-secondary-container);
+  }
+}
+.acp-search-options__option::part(button) {
+  padding: 3px;
+}
+.acp-search-options__option::part(button):focus-visible {
+  outline: 2px solid var(--md-secondary);
+  outline-offset: 1px;
+}
+.acp-search-options__option-icon {
+  font-size: var(--icon-size-lg);
+}

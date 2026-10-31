@@ -1,6 +1,9 @@
 /** @typedef {import('./types.js').SearchFileResult} SearchFileResult */
 /** @typedef {import('./types.js').SearchMatchRow} SearchMatchRow */
 
+/** Must match `workspace::search::MAX_MATCHES`. */
+export const MAX_MATCHES = 2000;
+
 /** Characters kept before a match when a long line's start is cut. */
 const CONTEXT_BEFORE = 8;
 
