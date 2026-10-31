@@ -22,7 +22,7 @@ import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
 import { ownSignIns } from '../../models/agents/agents.js';
-import '../agent-form/agent-form.js';
+import '../../components/agent-form/agent-form.js';
 import styles from './agents-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */

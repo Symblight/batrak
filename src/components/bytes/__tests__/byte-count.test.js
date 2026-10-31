@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { Bytes } from '../bytes.js';
+import { Bytes } from '../byte-count.js';
 
 describe('Bytes', () => {
   it('coerces to the plain number for comparisons', () => {

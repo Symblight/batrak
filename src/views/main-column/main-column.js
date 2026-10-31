@@ -67,9 +67,9 @@ import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
-import '../tab-view/tab-view.js';
-import { AcpTerminal } from '../terminal/terminal.js';
-import '../comment-bar/comment-bar.js';
+import '../../components/tab-view/tab-view.js';
+import { AcpTerminal } from '../../components/terminal/terminal.js';
+import '../../components/comment-bar/comment-bar.js';
 import styles from './main-column.css?inline';
 
 /** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
@@ -83,7 +83,7 @@ import styles from './main-column.css?inline';
 /** @typedef {import('../../models/types/types.js').Settings} Settings */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
 /** @typedef {import('../../models/settings/settings.js').SettingsSection} SettingsSection */
-/** @typedef {import('../tab-strip/tab-strip.js').CloseScope} CloseScope */
+/** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
 /**
@@ -190,7 +190,7 @@ export class AcpMainColumn extends LitElement {
 
   /**
    * Rendered unconditionally, so present after the first render.
-   * @returns {import('../tab-view/tab-view.js').AcpTabView}
+   * @returns {import('../../components/tab-view/tab-view.js').AcpTabView}
    */
   get #tabView() {
     return /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (this.renderRoot.querySelector('acp-tab-view'));

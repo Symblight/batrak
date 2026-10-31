@@ -9,7 +9,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
-import '../confirm-dialog/confirm-dialog.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import arrowDownwardIcon from '@material-design-icons/svg/outlined/arrow_downward.svg?raw';
 import arrowDropDownIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import arrowUpwardIcon from '@material-design-icons/svg/outlined/arrow_upward.svg?raw';

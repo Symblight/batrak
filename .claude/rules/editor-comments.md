@@ -2,7 +2,8 @@
 paths:
   - "src/stores/{comments,chat}/**"
   - "src/controllers/{comments,selection-actions,floating}/**"
-  - "src/components/{comment-bar,selection-actions,main-column,code-view}/**"
+  - "src/components/{comment-bar,selection-actions,code-view}/**"
+  - "src/views/main-column/**"
   - "src/models/editor-events/editor-events.js"
 ---
 

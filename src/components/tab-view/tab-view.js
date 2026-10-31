@@ -5,9 +5,9 @@ import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmCo
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import '../tab-strip/tab-strip.js';
 import '../code-view/code-view.js';
-import '../settings/settings.js';
-import '../agents-view/agents-view.js';
-import '../changes-review/changes-review.js';
+import '../../views/settings/settings.js';
+import '../../views/agents-view/agents-view.js';
+import '../../views/changes-review/changes-review.js';
 import '../image-preview/image-preview.js';
 import '../terminal/terminal.js';
 import '../browser/browser.js';

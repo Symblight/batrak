@@ -1,6 +1,6 @@
 import { LitElement, html } from 'lit';
-import '../confirm-dialog/confirm-dialog.js';
-import '../session-list/session-list.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
+import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { getHomeDir } from '../../services/ipc/ipc.js';

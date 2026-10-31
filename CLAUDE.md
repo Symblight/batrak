@@ -28,7 +28,9 @@ Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
 and is reached through `src/services/ipc/ipc.js`.
 
-- `src/components/` — one folder per custom element (see "File structure" below).
+- `src/views/` — the container elements: `<acp-app>`, the four columns and the Settings, Agents, Search and
+  Changes views (those still get their data from a column; see `docs/specs/frontend-structure.md`).
+- `src/components/` — every other custom element, one flat folder each (see "File structure" below).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
 - `src/services/` — actions and IPC (`project-controller.js`, `session-controller.js`, `ipc.js`, `theme.js`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
@@ -300,8 +302,10 @@ full rules — load them when writing or reviewing component CSS or structure.
 
 ### File structure
 
-Flex scheme: `src/components/` is a flat list of block folders, each holding the element's JS and CSS
-under the tag name without the `acp-` prefix (`<acp-tab-view>` is `tab-view/tab-view.js`), and its tests in `__tests__/`:
+Only `src/views/`, `src/components/`, `src/controllers/`, `src/stores/` (and the models and services still being
+moved out) hold folders. Each folder directly under them is one entity (an element, a controller, a module)
+and holds its JS and CSS under the tag name without the `acp-` prefix (`<acp-tab-view>` is
+`components/tab-view/tab-view.js`) and its tests in `__tests__/`, and no other folder:
 
 ```
 src/components/
@@ -317,4 +321,8 @@ src/components/
         └── toolbar.test.js
 ```
 
-The element's tests live in a `__tests__/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../x/x.js'`; services, models and stores are one folder per module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).
+A view (`src/views/agent-column/agent-column.js`) is laid out the same way. The element's tests live in a
+`__tests__/` folder inside its own folder, not in a global tree. No category grouping and no sub-components inside an
+element's folder: a part with a tag of its own is a component in `src/components/`. Elements import each other as
+`'../x/x.js'` (a view imports `'../../components/x/x.js'`); services, models and stores are one folder per
+module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).

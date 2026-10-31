@@ -1,7 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/text-field';
-import '../search-options/search-options.js';
-import '../search-results/search-results.js';
+import '../../components/search-options/search-options.js';
+import '../../components/search-results/search-results.js';
 import { optionForKey } from '../../models/search/search.js';
 import { MAX_MATCHES, summaryText } from '../../models/search-results/search-results.js';
 import styles from './search-panel.css?inline';

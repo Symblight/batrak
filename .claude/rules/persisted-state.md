@@ -4,9 +4,9 @@ paths:
   - "src/models/tab-ids/tab-ids.js"
   - "src/controllers/tab-content/**"
   - "src/components/tab-view/**"
-  - "src/components/main-column/**"
+  - "src/views/main-column/**"
   - "src/components/image-preview/**"
-  - "src/components/settings/**"
+  - "src/views/settings/**"
   - "src/services/theme/theme.js"
 ---
 

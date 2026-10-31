@@ -1,10 +1,10 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/progress-circular';
-import '../chat/chat.js';
-import '../confirm-dialog/confirm-dialog.js';
-import '../session-header/session-header.js';
-import { AcpTerminal } from '../terminal/terminal.js';
-import '../welcome/welcome.js';
+import '../../components/chat/chat.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
+import '../../components/session-header/session-header.js';
+import { AcpTerminal } from '../../components/terminal/terminal.js';
+import '../../components/welcome/welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
@@ -47,7 +47,7 @@ const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
-/** @typedef {import('../session-banner/session-banner.js').SessionAction} SessionAction */
+/** @typedef {import('../../components/session-banner/session-banner.js').SessionAction} SessionAction */
 
 /**
  * @tag acp-agent-column
@@ -565,6 +565,6 @@ export class AcpAgentColumn extends LitElement {
   }
 }
 
-/** @typedef {import('../chat/chat.js').AcpChat} AcpChat */
+/** @typedef {import('../../components/chat/chat.js').AcpChat} AcpChat */
 
 customElements.define('acp-agent-column', AcpAgentColumn);

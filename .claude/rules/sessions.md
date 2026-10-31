@@ -7,7 +7,8 @@ paths:
   - "src/services/{session-controller,session-root-controller,adapter,session-input}/**"
   - "src/models/{session-input,cli-input}/**"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
-  - "src/components/{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
+  - "src/views/agent-column/**"
+  - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input}.md"
 ---

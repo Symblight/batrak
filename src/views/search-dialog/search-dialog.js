@@ -21,8 +21,8 @@ import noResultsIcon from '@material-design-icons/svg/outlined/search_off.svg?ra
 import errorIcon from '@material-design-icons/svg/outlined/error.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import maskIcon from '@material-design-icons/svg/outlined/filter_alt.svg?raw';
-import '../search-options/search-options.js';
-import '../search-results/search-results.js';
+import '../../components/search-options/search-options.js';
+import '../../components/search-results/search-results.js';
 import { initialQuery, optionForKey } from '../../models/search/search.js';
 import { filterLabel, searchFilters } from '../../models/search-filter/search-filter.js';
 import { summaryText } from '../../models/search-results/search-results.js';

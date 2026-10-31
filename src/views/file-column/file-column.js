@@ -19,7 +19,7 @@ import { absPath } from '../../models/paths/paths.js';
 import { searchFilters } from '../../models/search-filter/search-filter.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
-import '../file-tree/file-tree.js';
+import '../../components/file-tree/file-tree.js';
 import '../search-panel/search-panel.js';
 import '../changes-panel/changes-panel.js';
 import styles from './file-column.css?inline';

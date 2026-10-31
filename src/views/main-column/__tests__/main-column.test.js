@@ -11,7 +11,7 @@ import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../main-column.js';
 
 /** @typedef {import('../main-column.js').AcpMainColumn} AcpMainColumn */
-/** @typedef {import('../../terminal/terminal.js').AcpTerminal} AcpTerminal */
+/** @typedef {import('../../../components/terminal/terminal.js').AcpTerminal} AcpTerminal */
 /** @typedef {import('../../../models/types/types.js').TerminalInfo} TerminalInfo */
 
 /**
