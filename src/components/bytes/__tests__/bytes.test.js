@@ -10,6 +10,14 @@ describe('acp-bytes', () => {
     expect(text(el)).to.equal('1.5 KB');
   });
 
+  it('counts bytes under a kilobyte and stops at gigabytes', async () => {
+    const el = await fixture(html`<acp-bytes .value=${512}></acp-bytes>`);
+    expect(text(el)).to.equal('512.0 B');
+    el.value = 2048 * 1024 ** 3;
+    await el.updateComplete;
+    expect(text(el)).to.equal('2048.0 GB');
+  });
+
   it('keeps value a Number, also from the attribute', async () => {
     const el = await fixture(html`<acp-bytes value="2048"></acp-bytes>`);
     expect(el.value).to.equal(2048);

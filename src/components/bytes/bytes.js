@@ -1,7 +1,19 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/tooltip';
-import { Bytes } from './byte-count.js';
 import styles from './bytes.css?inline';
+
+const UNITS = ['B', 'KB', 'MB', 'GB'];
+
+/** @param {number} bytes */
+function format(bytes) {
+  let i = 0;
+  let value = bytes;
+  while (value >= 1024 && i < UNITS.length - 1) {
+    value /= 1024;
+    i += 1;
+  }
+  return `${value.toFixed(1)} ${UNITS[i]}`;
+}
 
 /**
  * @tag acp-bytes
@@ -23,7 +35,7 @@ export class AcpBytes extends LitElement {
   render() {
     const value = this.value;
     if (value === null || !Number.isFinite(value)) return nothing;
-    return html`<span id="acp-bytes-value" class="acp-bytes__value">${new Bytes(value)}</span>
+    return html`<span id="acp-bytes-value" class="acp-bytes__value">${format(value)}</span>
       <md-tooltip for="acp-bytes-value" show-delay="800">${value.toLocaleString('en-US')} bytes</md-tooltip>`;
   }
 }
