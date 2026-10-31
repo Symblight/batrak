@@ -1,6 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
 import { ifDefined } from 'lit/directives/if-defined.js';
-import styles from './datetime.css?inline';
 
 const MINUTE = 60_000;
 
@@ -15,8 +14,6 @@ export class AcpDatetime extends LitElement {
     format: { type: String },
   };
 
-  static styles = styles;
-
   constructor() {
     super();
     /** @type {string | number | null} An ISO string or milliseconds since the epoch. */
@@ -25,6 +22,11 @@ export class AcpDatetime extends LitElement {
     this.now = null;
     /** @type {'compact' | 'medium'} */
     this.format = 'medium';
+  }
+
+  /** Light DOM: text in its parent's tree; as a custom element it is `display: inline` already. */
+  createRenderRoot() {
+    return this;
   }
 
   /** @param {number} time */

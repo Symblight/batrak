@@ -147,7 +147,7 @@ describe('acp-agents-view', () => {
     expect(text(state)).to.contain('Last checked');
     const when = /** @type {HTMLElementTagNameMap['acp-datetime']} */ (state.querySelector('acp-datetime'));
     expect(when.value).to.equal('2026-10-21T08:00:00.000Z');
-    expect(when.shadowRoot?.textContent?.trim()).to.not.equal('');
+    expect(when.textContent?.trim()).to.not.equal('');
   });
 
   it('shows each agent as a logo icon, a generic one for an agent of no known brand', async () => {

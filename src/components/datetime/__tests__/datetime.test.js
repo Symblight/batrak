@@ -6,13 +6,19 @@ const ago = (/** @type {number} */ ms) => new Date(NOW - ms).toISOString();
 const MINUTE = 60_000;
 
 /** @param {Element} el */
-const text = (el) => el.shadowRoot?.textContent?.trim() ?? '';
+const text = (el) => el.textContent?.trim() ?? '';
 
 /** @param {string | number | null} value */
 const compact = async (value) =>
   text(await fixture(html`<acp-datetime .value=${value} .now=${NOW} format="compact"></acp-datetime>`));
 
 describe('acp-datetime', () => {
+  it('renders into itself: it is text in its parent’s tree, with no shadow root of its own', async () => {
+    const el = await fixture(html`<acp-datetime .value=${'2026-03-10T09:05:00Z'}></acp-datetime>`);
+    expect(el.shadowRoot === null, 'no shadow root').to.equal(true);
+    expect(el.querySelector('time') !== null, 'a <time> inside').to.equal(true);
+  });
+
   describe('compact', () => {
     it('says now for under a minute, and for a time that is not in the past', async () => {
       expect(await compact(ago(30_000))).to.equal('now');
@@ -51,9 +57,9 @@ describe('acp-datetime', () => {
 
   it('marks the machine-readable time, and shows nothing without one', async () => {
     const el = await fixture(html`<acp-datetime .value=${'2026-03-10T09:05:00Z'}></acp-datetime>`);
-    expect(el.shadowRoot?.querySelector('time')?.getAttribute('datetime')).to.equal('2026-03-10T09:05:00.000Z');
+    expect(el.querySelector('time')?.getAttribute('datetime')).to.equal('2026-03-10T09:05:00.000Z');
     const empty = await fixture(html`<acp-datetime></acp-datetime>`);
-    expect(empty.shadowRoot?.querySelector('time')).to.equal(null);
+    expect(empty.querySelector('time') === null).to.equal(true);
     expect(text(empty)).to.equal('');
   });
 });
