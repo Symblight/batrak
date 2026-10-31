@@ -97,8 +97,9 @@ pub struct Root {
     recent: Mutex<VecDeque<String>>,
     /// Bumped by every Quick Open query; a running query stops when it is no longer current.
     quick_open_generation: AtomicU64,
-    /// Cancel flag of the running Find in Files, replaced on every new search.
-    search_cancel: Mutex<Arc<AtomicBool>>,
+    /// Cancel flag of the running Find in Files per slot (the Search pane's, the dialog's),
+    /// replaced on every new search in that slot.
+    search_cancel: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// Set by `Workspaces::close`; stops a watcher rescan still running for a closed root.
     pub closed: AtomicBool,
     /// Bumped by the watcher after every batch that changed something (or lost events): a cached
@@ -133,25 +134,34 @@ impl Root {
         recent.truncate(quick_open::RECENT_CAPACITY);
     }
 
-    pub fn quick_open(&self, query: &str, dirs: bool) -> Option<Vec<quick_open::QuickOpenItem>> {
+    pub fn quick_open(&self, query: &str, kind: quick_open::QuickOpenKind) -> Option<Vec<quick_open::QuickOpenItem>> {
         let generation = self.quick_open_generation.fetch_add(1, Ordering::SeqCst) + 1;
         let recent: Vec<String> = lock(&self.recent).iter().cloned().collect();
         let snapshot = self.read();
-        quick_open::search(&snapshot, &recent, query, dirs, || {
+        quick_open::search(&snapshot, &recent, query, kind, || {
             self.quick_open_generation.load(Ordering::Relaxed) != generation
         })
     }
 
-    /// Cancels the running search (if any) and returns the flag for a new one.
-    pub fn start_search(&self) -> Arc<AtomicBool> {
+    /// Cancels the running search of `slot` (if any) and returns the flag for a new one.
+    pub fn start_search(&self, slot: &str) -> Arc<AtomicBool> {
         let fresh = Arc::new(AtomicBool::new(false));
-        let previous = std::mem::replace(&mut *lock(&self.search_cancel), Arc::clone(&fresh));
-        previous.store(true, Ordering::Relaxed);
+        if let Some(previous) = lock(&self.search_cancel).insert(slot.to_owned(), Arc::clone(&fresh)) {
+            previous.store(true, Ordering::Relaxed);
+        }
         fresh
     }
 
-    pub fn cancel_search(&self) {
-        lock(&self.search_cancel).store(true, Ordering::Relaxed);
+    pub fn cancel_search(&self, slot: &str) {
+        if let Some(cancel) = lock(&self.search_cancel).get(slot) {
+            cancel.store(true, Ordering::Relaxed);
+        }
+    }
+
+    fn cancel_all_searches(&self) {
+        for cancel in lock(&self.search_cancel).values() {
+            cancel.store(true, Ordering::Relaxed);
+        }
     }
 
     /// Scans the whole root again (the Files column's Refresh), for changes the watcher missed,
@@ -271,7 +281,7 @@ impl Workspaces {
             watcher: Mutex::new(None),
             recent: Mutex::new(VecDeque::new()),
             quick_open_generation: AtomicU64::new(0),
-            search_cancel: Mutex::new(Arc::new(AtomicBool::new(false))),
+            search_cancel: Mutex::new(HashMap::new()),
             closed: AtomicBool::new(false),
             change_epoch: AtomicU64::new(0),
             git: GitCache::default(),
@@ -286,7 +296,7 @@ impl Workspaces {
     pub fn close(&self, id: &str) {
         if let Some(root) = lock(&self.roots).remove(id) {
             root.closed.store(true, Ordering::Relaxed);
-            root.cancel_search();
+            root.cancel_all_searches();
             // Dropping the debouncer stops its thread.
             lock(&root.watcher).take();
         }
@@ -437,6 +447,48 @@ mod tests {
         assert!(workspaces.contains_project(&agents(&project)));
         assert!(workspaces.contains(&agents(&session)), "its files are readable");
         assert!(!workspaces.contains_project(&agents(&session)), "but it isn't a project");
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[test]
+    fn search_slots_cancel_only_their_own() {
+        let base = std::env::temp_dir().join(format!("brama-search-slots-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(&base).unwrap();
+        std::fs::write(base.join("a.txt"), "needle\n").unwrap();
+        let workspaces = Workspaces::default();
+        let root = workspaces.open_with(&base, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let done = |cancel: &AtomicBool| {
+            let options = search::SearchOptions {
+                query: "needle".into(),
+                case_sensitive: false,
+                whole_word: false,
+                regex: false,
+                include: String::new(),
+                exclude: String::new(),
+            };
+            let cancelled = Mutex::new(None);
+            search::run(&root.path, vec![("a.txt".into(), 7)], &options, cancel, &|event| {
+                if let search::SearchEvent::Done { cancelled: c, .. } = event {
+                    *lock(&cancelled) = Some(c);
+                }
+            });
+            cancelled.into_inner().unwrap().unwrap()
+        };
+
+        let panel = root.start_search("panel");
+        let dialog = root.start_search("dialog");
+        root.cancel_search("panel");
+        assert!(done(&panel), "the cancelled slot's search reports cancelled");
+        assert!(!done(&dialog), "the other slot's search runs on");
+
+        let dialog_again = root.start_search("dialog");
+        assert!(dialog.load(Ordering::Relaxed), "a new search cancels its own slot's");
+        let panel_again = root.start_search("panel");
+        assert!(!dialog_again.load(Ordering::Relaxed));
+
+        workspaces.close(&root.id);
+        assert!(panel_again.load(Ordering::Relaxed) && dialog_again.load(Ordering::Relaxed), "closing cancels all");
         std::fs::remove_dir_all(&base).unwrap();
     }
 

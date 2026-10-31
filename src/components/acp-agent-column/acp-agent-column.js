@@ -237,7 +237,7 @@ export class AcpAgentColumn extends LitElement {
       return;
     }
     try {
-      const { items, cancelled } = await quickOpen(rootId, query, true);
+      const { items, cancelled } = await quickOpen(rootId, query, 'all');
       if (id !== this.#fileQueryId || cancelled) return;
       this.fileOptions = items;
     } catch (err) {

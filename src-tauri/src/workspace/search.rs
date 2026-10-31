@@ -36,6 +36,9 @@ pub struct LineMatch {
     pub text: String,
     /// `[start, end)` in UTF-16 code units of `text`, ready for JS string slicing.
     pub ranges: Vec<[u32; 2]>,
+    /// UTF-16 code units cut from the line's start (a long line's window); a match's 1-based
+    /// column is `offset + start + 1`.
+    pub offset: u32,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -130,7 +133,7 @@ fn build_matcher(options: &SearchOptions) -> Result<RegexMatcher, String> {
 fn globs(list: &str) -> Result<Option<GlobSet>, String> {
     let mut builder = GlobSetBuilder::new();
     let mut any = false;
-    for glob in list.split(',').map(str::trim).filter(|g| !g.is_empty()) {
+    for glob in split_globs(list) {
         let glob = glob.trim_start_matches("./").trim_end_matches('/');
         builder.add(Glob::new(glob).map_err(|e| e.to_string())?);
         builder.add(Glob::new(&format!("{glob}/**")).map_err(|e| e.to_string())?);
@@ -140,6 +143,45 @@ fn globs(list: &str) -> Result<Option<GlobSet>, String> {
         return Ok(None);
     }
     builder.build().map(Some).map_err(|e| e.to_string())
+}
+
+/// Splits a comma-separated list on commas outside `{…}` (`*.{js,ts}` stays whole) and outside
+/// `[…]` classes (`a[,]b`, an escaped comma in a folder name), trimmed, empty parts dropped.
+fn split_globs(list: &str) -> Vec<&str> {
+    let chars: Vec<(usize, char)> = list.char_indices().collect();
+    let mut parts = Vec::new();
+    let (mut depth, mut start, mut i) = (0usize, 0, 0);
+    while i < chars.len() {
+        match chars[i].1 {
+            '[' => {
+                if let Some(close) = class_end(&chars, i) {
+                    i = close;
+                }
+            }
+            '{' => depth += 1,
+            '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                parts.push(&list[start..chars[i].0]);
+                start = chars[i].0 + 1;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    parts.push(&list[start..]);
+    parts.into_iter().map(str::trim).filter(|g| !g.is_empty()).collect()
+}
+
+/// Index of the `]` closing the class opened at `open`; a `]` right after `[` or `[!` is literal.
+fn class_end(chars: &[(usize, char)], open: usize) -> Option<usize> {
+    let mut i = open + 1;
+    if chars.get(i).is_some_and(|&(_, c)| c == '!') {
+        i += 1;
+    }
+    if chars.get(i).is_some_and(|&(_, c)| c == ']') {
+        i += 1;
+    }
+    (i..chars.len()).find(|&j| chars[j].1 == ']')
 }
 
 struct FileSink<'a> {
@@ -214,7 +256,8 @@ fn to_line_match(line_number: u64, line: &[u8], ranges: &[(usize, usize)]) -> Li
         .filter(|(s, _)| *s >= start && *s < end)
         .filter_map(|&(s, e)| Some([utf16(s)?, utf16(e)?]))
         .collect();
-    LineMatch { line: line_number, text: window.to_owned(), ranges }
+    let offset = text[..start].encode_utf16().count() as u32;
+    LineMatch { line: line_number, text: window.to_owned(), ranges, offset }
 }
 
 #[cfg(test)]
@@ -239,5 +282,47 @@ mod tests {
         assert!(set.is_match("docs/readme.md"));
         assert!(!set.is_match("lib/a.js"));
         assert!(globs("  ").unwrap().is_none());
+    }
+
+    #[test]
+    fn offset_counts_utf16_units_cut_from_a_long_lines_start() {
+        let m = to_line_match(1, "let ё = foo;".as_bytes(), &[(9, 12)]);
+        assert_eq!(m.offset, 0, "a short line isn't cut");
+
+        // 300 two-byte chars (600 bytes, 300 UTF-16 units), then the match.
+        let long = format!("{}needle{}", "ё".repeat(300), "x".repeat(600));
+        let m = to_line_match(1, long.as_bytes(), &[(600, 606)]);
+        let cut = &long[..600 - m.text.find("needle").unwrap()];
+        assert!(m.offset > 0);
+        assert_eq!(m.offset as usize, cut.encode_utf16().count());
+        assert_eq!(m.offset + m.ranges[0][0], 300, "offset + start is the match's UTF-16 column");
+    }
+
+    #[test]
+    fn globs_split_on_commas_outside_braces() {
+        assert_eq!(split_globs("*.{js,ts}, src"), vec!["*.{js,ts}", "src"]);
+        let set = globs("*.{js,ts}").unwrap().unwrap();
+        assert!(set.is_match("a.js") && set.is_match("src/b.ts"));
+        assert!(!set.is_match("c.md"));
+
+        let include = globs("src/**/*.{js,ts}").unwrap().unwrap();
+        let exclude = globs("*.test.js").unwrap().unwrap();
+        let kept = |path: &str| include.is_match(path) && !exclude.is_match(path);
+        assert!(kept("src/a/b.js") && kept("src/c.ts"));
+        assert!(!kept("src/a/b.test.js"), "excluded");
+        assert!(!kept("lib/a.js") && !kept("src/a.md"), "not included");
+    }
+    #[test]
+    fn globs_keep_bracket_classes_and_match_escaped_folders() {
+        assert_eq!(split_globs("a[,]b/**, *.md, [!,]x, []],y"), vec!["a[,]b/**", "*.md", "[!,]x", "[]]", "y"]);
+        assert_eq!(split_globs("a[b,c"), vec!["a[b", "c"]);
+
+        let set = globs("app/[[]id[]]").unwrap().unwrap();
+        assert!(set.is_match("app/[id]/page.ts"));
+        assert!(!set.is_match("app/i/page.ts") && !set.is_match("app/d/page.ts"));
+
+        let set = globs("a[,]b/**/*.ts, x").unwrap().unwrap();
+        assert!(set.is_match("a,b/c/d.ts") && set.is_match("x/y.md"));
+        assert!(!set.is_match("a/d.ts"));
     }
 }

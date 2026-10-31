@@ -1,0 +1,62 @@
+import { LitElement, html as litHtml } from 'lit';
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { expect, fixture, html } from '../../../test/fixture.js';
+import { FindInFilesController } from './FindInFilesController.js';
+import { $workspace } from '../../stores/workspace.js';
+
+class DialogSearchHost extends LitElement {
+  search = new FindInFilesController(this, { slot: 'dialog' });
+
+  render() {
+    return litHtml``;
+  }
+}
+customElements.define('test-find-in-files-host', DialogSearchHost);
+
+/** @type {import('../../models/types.js').SearchOptions} */
+const OPTIONS = { query: 'needle', caseSensitive: false, wholeWord: false, regex: false, include: '', exclude: '' };
+
+/**
+ * Polls until `pred` holds; fails after 2s.
+ * @param {() => boolean} pred
+ */
+async function until(pred) {
+  const started = Date.now();
+  while (!pred()) {
+    expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+describe('FindInFilesController', () => {
+  /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
+  let calls;
+
+  beforeEach(() => {
+    calls = [];
+    mockIPC((cmd, args) => {
+      calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
+      return null;
+    });
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+  });
+
+  afterEach(() => {
+    clearMocks();
+    $workspace.set(null);
+  });
+
+  it('searches and cancels in its own slot', async () => {
+    const el = /** @type {DialogSearchHost} */ (await fixture(html`<test-find-in-files-host></test-find-in-files-host>`));
+    el.search.setActive(true);
+    el.search.search(OPTIONS, 0);
+    await until(() => calls.some((c) => c.cmd === 'find_in_files'));
+    const search = calls.find((c) => c.cmd === 'find_in_files');
+    expect(search?.args).to.include({ rootId: 'r', slot: 'dialog' });
+    expect(search?.args.options).to.deep.equal(OPTIONS);
+
+    el.search.setActive(false);
+    await until(() => calls.some((c) => c.cmd === 'cancel_search'));
+    expect(calls.find((c) => c.cmd === 'cancel_search')?.args).to.deep.equal({ rootId: 'r', slot: 'dialog' });
+  });
+});

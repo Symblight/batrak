@@ -58,7 +58,7 @@ export class AcpFileColumn extends LitElement {
   });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #commitSelection = new StoreController(this, { store: $commitSelection });
-  #search = new FindInFilesController(this);
+  #search = new FindInFilesController(this, { slot: 'panel' });
   /** @type {(() => void) | null} Stops watching the changes; set while Changes is shown and connected. */
   #unwatch = null;
 

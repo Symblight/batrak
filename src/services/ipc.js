@@ -9,6 +9,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../models/types.js').OpenedRoot} OpenedRoot */
 /** @typedef {import('../models/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('../models/types.js').QuickOpenResult} QuickOpenResult */
+/** @typedef {import('../models/types.js').QuickOpenKind} QuickOpenKind */
 /** @typedef {import('../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../models/types.js').SearchEvent} SearchEvent */
 /** @typedef {import('../models/types.js').GitStatusReply} GitStatusReply */
@@ -607,11 +608,11 @@ export function onBackendNotice(callback) {
  * Fuzzy file search. A newer call cancels a running one (`cancelled: true`).
  * @param {string} rootId
  * @param {string} query
- * @param {boolean} [dirs] Search folders too.
+ * @param {QuickOpenKind} [kind] Files, files and folders, or folders only.
  * @returns {Promise<QuickOpenResult>}
  */
-export function quickOpen(rootId, query, dirs = false) {
-  return invoke('quick_open', { rootId, query, dirs });
+export function quickOpen(rootId, query, kind = 'files') {
+  return invoke('quick_open', { rootId, query, kind });
 }
 
 /**
@@ -625,25 +626,27 @@ export function noteFileOpened(rootId, path) {
 
 /**
  * Starts a content search; results stream into `onEvent` until a `done` or `error` event.
- * A new search on the same root cancels the previous one.
+ * A new search on the same root and slot cancels the previous one.
  * @param {string} rootId
+ * @param {string} slot Whose search it is: `'panel'`, `'dialog'`.
  * @param {SearchOptions} options
  * @param {(event: SearchEvent) => void} onEvent
  * @returns {Promise<void>} Resolves once the search has started.
  */
-export function findInFiles(rootId, options, onEvent) {
+export function findInFiles(rootId, slot, options, onEvent) {
   /** @type {Channel<SearchEvent>} */
   const channel = new Channel();
   channel.onmessage = onEvent;
-  return invoke('find_in_files', { rootId, options, channel });
+  return invoke('find_in_files', { rootId, slot, options, channel });
 }
 
 /**
  * @param {string} rootId
+ * @param {string} slot
  * @returns {Promise<void>}
  */
-export function cancelSearch(rootId) {
-  return invoke('cancel_search', { rootId });
+export function cancelSearch(rootId, slot) {
+  return invoke('cancel_search', { rootId, slot });
 }
 
 /**

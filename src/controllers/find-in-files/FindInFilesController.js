@@ -9,6 +9,11 @@ import { $rootId } from '../../stores/workspace.js';
 /** @typedef {import('../../models/types.js').SearchFileResult} SearchFileResult */
 
 /**
+ * @typedef {Object} FindInFilesConfig
+ * @property {'panel' | 'dialog'} slot The backend search slot: a new search cancels only its own.
+ */
+
+/**
  * Find in Files over the open project's snapshot: results streamed in by file, one render a frame.
  * Runs only while `active`; a newer search, or a newly opened folder, replaces it.
  * @implements {ReactiveController}
@@ -16,6 +21,8 @@ import { $rootId } from '../../stores/workspace.js';
 export class FindInFilesController {
   /** @type {ReactiveControllerHost} */
   #host;
+  /** @type {FindInFilesConfig} */
+  #config;
   /** Id of the current search; events of older ones are dropped. */
   #generation = 0;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
@@ -37,9 +44,13 @@ export class FindInFilesController {
   limitHit = false;
   error = '';
 
-  /** @param {ReactiveControllerHost & HTMLElement} host */
-  constructor(host) {
+  /**
+   * @param {ReactiveControllerHost & HTMLElement} host
+   * @param {FindInFilesConfig} config
+   */
+  constructor(host, config) {
     this.#host = host;
+    this.#config = config;
     // Re-runs the search in a newly opened folder.
     this.#rootId = new StoreController(host, { store: $rootId, onChange: () => this.#schedule(0) });
     host.addController(this);
@@ -82,7 +93,7 @@ export class FindInFilesController {
     this.#generation++;
     this.#set({ searching: false });
     const rootId = this.#rootId.value;
-    if (rootId) cancelSearch(rootId).catch(() => {});
+    if (rootId) cancelSearch(rootId, this.#config.slot).catch(() => {});
   }
 
   /** @param {Partial<Pick<FindInFilesController, 'results' | 'searching' | 'limitHit' | 'error'>>} changes */
@@ -99,12 +110,12 @@ export class FindInFilesController {
     this.#set({ results: [], limitHit: false, error: '' });
     if (!this.#active || rootId === null || this.#options.query === '') {
       this.#set({ searching: false });
-      if (rootId !== null) cancelSearch(rootId).catch(() => {});
+      if (rootId !== null) cancelSearch(rootId, this.#config.slot).catch(() => {});
       return;
     }
     this.#set({ searching: true });
     try {
-      await findInFiles(rootId, this.#options, (event) => {
+      await findInFiles(rootId, this.#config.slot, this.#options, (event) => {
         if (generation === this.#generation) this.#onEvent(event);
       });
     } catch (err) {

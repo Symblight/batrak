@@ -790,6 +790,11 @@
  */
 
 /**
+ * What Quick Open lists: files, files and folders, or folders only.
+ * @typedef {'files' | 'all' | 'dirs'} QuickOpenKind
+ */
+
+/**
  * @typedef {Object} SearchOptions
  * @property {string} query
  * @property {boolean} caseSensitive
@@ -804,6 +809,8 @@
  * @property {number} line 1-based.
  * @property {string} text
  * @property {[number, number][]} ranges `[start, end)` in UTF-16 code units of `text`.
+ * @property {number} offset UTF-16 units cut from the line's start (0 unless it was long); a
+ *   match's 1-based column is `offset + start + 1`.
  */
 
 /**
@@ -818,6 +825,49 @@
  * @typedef {{ kind: 'file', path: string, matches: LineMatch[] }
  *   | { kind: 'done', total: number, limitHit: boolean, cancelled: boolean }
  *   | { kind: 'error', message: string }} SearchEvent
+ */
+
+/**
+ * One Find in Files match, a row of `<acp-search-results>`.
+ * @typedef {Object} SearchMatchRow
+ * @property {string} key `path:line:start`, unique per match.
+ * @property {string} path Root-relative.
+ * @property {number} line 1-based.
+ * @property {number} column 1-based, in UTF-16 units of the whole line.
+ * @property {number} length In UTF-16 units.
+ * @property {string} text The line (or its window) as the backend sent it.
+ * @property {number} start `[start, end)` of the match in `text`.
+ * @property {number} end
+ */
+
+/**
+ * What the search dialog searches for; `folder` root-relative, `''` for the whole project.
+ * @typedef {Object} SearchDialogState
+ * @property {string} query
+ * @property {boolean} caseSensitive
+ * @property {boolean} wholeWord
+ * @property {boolean} regex
+ * @property {string} folder
+ * @property {string} mask Comma-separated globs, `!` excludes.
+ */
+
+/**
+ * A project's search dialog state with its recent queries, most recent first.
+ * @typedef {SearchDialogState & { recent: string[] }} ProjectSearchState
+ */
+
+/**
+ * The search dialog's layout, shared by all windows. Splits are percentages, 20–80.
+ * @typedef {Object} SearchDialogPrefs
+ * @property {'bottom' | 'right' | 'none'} preview
+ * @property {'flat' | 'grouped'} view
+ * @property {number} splitBottom
+ * @property {number} splitRight
+ */
+
+/**
+ * The file the search dialog previews, or why it couldn't be read.
+ * @typedef {{ path: string, content: string } | { path: string, error: string }} SearchPreview
  */
 
 /**

@@ -6,7 +6,7 @@ use serde::Serialize;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, State, Window};
 
-use crate::workspace::quick_open::QuickOpenItem;
+use crate::workspace::quick_open::{QuickOpenItem, QuickOpenKind};
 use crate::workspace::search::{self, SearchEvent, SearchOptions};
 use crate::workspace::snapshot::Entry;
 use crate::workspace::Workspaces;
@@ -114,10 +114,10 @@ pub async fn quick_open(
     workspaces: State<'_, Workspaces>,
     root_id: String,
     query: String,
-    dirs: Option<bool>,
+    kind: Option<QuickOpenKind>,
 ) -> Result<QuickOpenResult, String> {
     let root = workspaces.get(&root_id)?;
-    let items = blocking(move || root.quick_open(&query, dirs.unwrap_or(false))).await?;
+    let items = blocking(move || root.quick_open(&query, kind.unwrap_or_default())).await?;
     Ok(QuickOpenResult { cancelled: items.is_none(), items: items.unwrap_or_default() })
 }
 
@@ -129,16 +129,18 @@ pub async fn note_file_opened(workspaces: State<'_, Workspaces>, root_id: String
 }
 
 /// Starts a search in the background and returns immediately; results arrive on `channel`.
-/// Starting a new search cancels the previous one of this root.
+/// Starting a new search cancels the previous one of this root in the same `slot` (`"panel"`,
+/// `"dialog"`).
 #[tauri::command]
 pub async fn find_in_files(
     workspaces: State<'_, Workspaces>,
     root_id: String,
+    slot: String,
     options: SearchOptions,
     channel: Channel<SearchEvent>,
 ) -> Result<(), String> {
     let root = workspaces.get(&root_id)?;
-    let cancel = root.start_search();
+    let cancel = root.start_search(&slot);
     std::thread::spawn(move || {
         // TODO: search unsaved editor buffers too: take their text here and search it
         // instead of the disk version of the same paths.
@@ -156,7 +158,7 @@ pub async fn find_in_files(
 }
 
 #[tauri::command]
-pub async fn cancel_search(workspaces: State<'_, Workspaces>, root_id: String) -> Result<(), String> {
-    workspaces.get(&root_id)?.cancel_search();
+pub async fn cancel_search(workspaces: State<'_, Workspaces>, root_id: String, slot: String) -> Result<(), String> {
+    workspaces.get(&root_id)?.cancel_search(&slot);
     Ok(())
 }

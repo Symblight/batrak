@@ -2,7 +2,7 @@
 
 use nucleo_matcher::pattern::{CaseMatching, Normalization, Pattern};
 use nucleo_matcher::{Config, Matcher, Utf32Str};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use super::snapshot::{Entry, Snapshot};
 
@@ -16,6 +16,17 @@ const RECENT_STEP: u32 = 10;
 const NAME_WEIGHT: u32 = 2;
 /// How often the scoring loop checks for a newer query.
 const CANCEL_CHECK_EVERY: usize = 2048;
+
+/// What Quick Open lists.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum QuickOpenKind {
+    #[default]
+    Files,
+    /// Files and folders (`@` mentions).
+    All,
+    Dirs,
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -36,23 +47,28 @@ struct Scored<'a> {
 }
 
 /// Returns `None` when `is_cancelled` turns true midway (a newer query arrived).
-/// `recent` is most-recent-first. `dirs` adds folders to the candidates.
+/// `recent` is most-recent-first.
 pub fn search(
     snapshot: &Snapshot,
     recent: &[String],
     query: &str,
-    dirs: bool,
+    kind: QuickOpenKind,
     is_cancelled: impl Fn() -> bool,
 ) -> Option<Vec<QuickOpenItem>> {
     let query = query.trim();
     if query.is_empty() {
-        // No query: recently opened files that still exist, then (with `dirs`) the shallowest folders.
-        let mut items: Vec<QuickOpenItem> = recent
-            .iter()
-            .filter_map(|path| snapshot.get(path).filter(|e| !e.is_dir && !e.ignored))
-            .map(|e| QuickOpenItem { path: e.path.clone(), name: e.name.clone(), is_dir: false, indices: Vec::new() })
-            .collect();
-        if dirs {
+        // No query: recently opened files that still exist (not for `Dirs`), then (with folders)
+        // the shallowest folders.
+        let mut items: Vec<QuickOpenItem> = if kind == QuickOpenKind::Dirs {
+            Vec::new()
+        } else {
+            recent
+                .iter()
+                .filter_map(|path| snapshot.get(path).filter(|e| !e.is_dir && !e.ignored))
+                .map(|e| QuickOpenItem { path: e.path.clone(), name: e.name.clone(), is_dir: false, indices: Vec::new() })
+                .collect()
+        };
+        if kind != QuickOpenKind::Files {
             let mut folders: Vec<&Entry> = snapshot.files_and_dirs().filter(|e| e.is_dir).collect();
             let by_depth = |a: &&Entry, b: &&Entry| {
                 let depth = |e: &Entry| e.path.matches('/').count();
@@ -79,8 +95,11 @@ pub fn search(
     let mut buf = Vec::new();
     let mut scored = Vec::new();
 
-    let candidates: Box<dyn Iterator<Item = &Entry>> =
-        if dirs { Box::new(snapshot.files_and_dirs()) } else { Box::new(snapshot.files()) };
+    let candidates: Box<dyn Iterator<Item = &Entry>> = match kind {
+        QuickOpenKind::Files => Box::new(snapshot.files()),
+        QuickOpenKind::All => Box::new(snapshot.files_and_dirs()),
+        QuickOpenKind::Dirs => Box::new(snapshot.files_and_dirs().filter(|e| e.is_dir)),
+    };
     for (i, entry) in candidates.enumerate() {
         if i % CANCEL_CHECK_EVERY == 0 && is_cancelled() {
             return None;
@@ -132,4 +151,57 @@ pub fn search(
         })
         .collect();
     Some(items)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snapshot(name: &str) -> (std::path::PathBuf, Snapshot) {
+        let dir = std::env::temp_dir().join(format!("brama-quick-open-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join("src/components/deep")).unwrap();
+        std::fs::create_dir_all(dir.join("docs")).unwrap();
+        std::fs::write(dir.join("src/main.rs"), "").unwrap();
+        std::fs::write(dir.join("src/components/button.js"), "").unwrap();
+        std::fs::write(dir.join("docs/components.md"), "").unwrap();
+        let snapshot = Snapshot::scan(&dir);
+        (dir, snapshot)
+    }
+
+    fn paths(items: &[QuickOpenItem]) -> Vec<&str> {
+        items.iter().map(|i| i.path.as_str()).collect()
+    }
+
+    #[test]
+    fn files_and_all_kinds() {
+        let (dir, snap) = snapshot("kinds");
+        let files = search(&snap, &[], "comp", QuickOpenKind::Files, || false).unwrap();
+        assert!(files.iter().all(|i| !i.is_dir) && !files.is_empty());
+        let all = search(&snap, &[], "comp", QuickOpenKind::All, || false).unwrap();
+        assert!(all.iter().any(|i| i.is_dir) && all.iter().any(|i| !i.is_dir));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn dirs_lists_only_folders() {
+        let (dir, snap) = snapshot("dirs");
+        let recent = vec!["src/main.rs".to_owned()];
+
+        let empty = search(&snap, &recent, "", QuickOpenKind::Dirs, || false).unwrap();
+        assert!(empty.iter().all(|i| i.is_dir), "no recent files: {:?}", paths(&empty));
+        assert_eq!(paths(&empty), vec!["docs", "src", "src/components", "src/components/deep"], "shallowest first");
+
+        let found = search(&snap, &recent, "comp", QuickOpenKind::Dirs, || false).unwrap();
+        assert!(found.iter().all(|i| i.is_dir), "{:?}", paths(&found));
+        assert!(paths(&found).contains(&"src/components"));
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn kind_deserializes_lowercase() {
+        let kind: QuickOpenKind = serde_json::from_str("\"dirs\"").unwrap();
+        assert_eq!(kind, QuickOpenKind::Dirs);
+        assert_eq!(QuickOpenKind::default(), QuickOpenKind::Files);
+    }
 }
