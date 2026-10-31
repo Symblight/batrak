@@ -20,10 +20,10 @@ import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import '../../components/agent-icon/agent-icon.js';
-import '../../components/datetime/datetime.js';
+import '../agent-icon/agent-icon.js';
+import '../datetime/datetime.js';
 import { ownSignIns } from '../../models/agents/agents.js';
-import '../../components/agent-form/agent-form.js';
+import '../agent-form/agent-form.js';
 import styles from './agents-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */

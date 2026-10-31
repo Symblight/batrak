@@ -6,7 +6,7 @@ paths:
   - "src/components/tab-view/**"
   - "src/views/main-column/**"
   - "src/components/image-preview/**"
-  - "src/views/settings/**"
+  - "src/components/settings/**"
   - "src/services/theme/theme.js"
 ---
 

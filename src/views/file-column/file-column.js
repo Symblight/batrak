@@ -19,8 +19,8 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import '../../components/panel-header/panel-header.js';
 import '../../components/file-tree/file-tree.js';
-import '../search-panel/search-panel.js';
-import '../changes-panel/changes-panel.js';
+import '../../components/search-panel/search-panel.js';
+import '../../components/changes-panel/changes-panel.js';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
 /** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */

@@ -5,7 +5,7 @@ paths:
   - "src/services/git-controller/git-controller.js"
   - "src/stores/git/git.js"
   - "src/controllers/{changes-review,session-changes}/**"
-  - "src/views/changes-*/**"
+  - "src/components/changes-*/**"
   - "docs/specs/agent-git.md"
 ---
 

@@ -6,7 +6,7 @@ paths:
   - "src-tauri/src/commands/agents.rs"
   - "src/services/{agent-config,trust-controller}/**"
   - "src/stores/{agents,trust}/**"
-  - "src/views/agents-view/**"
+  - "src/components/agents-view/**"
   - "src/components/{agent-form,agent-picker}/**"
   - "docs/specs/{agents-tab,agent-sign-in}.md"
 ---

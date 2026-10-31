@@ -33,7 +33,7 @@ import '../main-column/main-column.js';
 import '../file-column/file-column.js';
 import '../../components/nav-rail/nav-rail.js';
 import '../../components/quick-open/quick-open.js';
-import '../search-dialog/search-dialog.js';
+import '../../components/search-dialog/search-dialog.js';
 import '../../components/resize-handle/resize-handle.js';
 import '../../components/snackbars/snackbars.js';
 import { ColumnResizeController } from '../../controllers/resize/ColumnResizeController.js';

@@ -28,9 +28,12 @@ Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
 and is reached through `src/services/ipc/ipc.js`.
 
-- `src/views/` — the container elements: `<acp-app>`, the four columns and the Settings, Agents, Search and
-  Changes views (those still get their data from a column; see `docs/specs/frontend-structure.md`).
-- `src/components/` — every other custom element, one flat folder each (see "File structure" below).
+- `src/views/` — the container elements: `<acp-app>` and the four columns. A view has no CSS: it extends
+  `ViewElement` (host `display: contents`) and composes components, with layout from `<acp-panel>`,
+  `<acp-pane>` and `<acp-split>`; inline `style` only for values JS knows (resized widths).
+- `src/components/` — every other custom element, one flat folder each (see "File structure" below). The
+  Settings, Agents, Search and Changes elements are here until their views exist (see
+  `docs/specs/frontend-structure.md`).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
 - `src/services/` — actions and IPC (`project-controller.js`, `session-controller.js`, `ipc.js`, `theme.js`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per

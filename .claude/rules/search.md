@@ -1,7 +1,7 @@
 ---
 paths:
-  - "src/views/search-dialog/**"
-  - "src/views/search-panel/**"
+  - "src/components/search-dialog/**"
+  - "src/components/search-panel/**"
   - "src/components/search-options/**"
   - "src/components/search-results/**"
   - "src/controllers/find-in-files/**"
