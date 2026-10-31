@@ -1,4 +1,4 @@
-import { editorOf } from '../../models/editor-events/editor-events.js';
+import { comments } from '../../hooks/comments/comments.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -106,7 +106,7 @@ export class EditorCommentsController {
    * @param {Event} e
    */
   #pathOf(e) {
-    if (!editorOf(e, this.#host.renderRoot)) return null;
+    if (!comments.editorOf(e, this.#host.renderRoot)) return null;
     return this.#config.pathOf(/** @type {CustomEvent<{ file: string }>} */ (e).detail.file);
   }
 
@@ -114,7 +114,7 @@ export class EditorCommentsController {
     const detail = /** @type {HTMLElementEventMap['cdx-comment-submit']} */ (e).detail;
     const path = this.#pathOf(e);
     if (path === null || detail.isReply) return;
-    const doc = editorOf(e, this.#host.renderRoot)?.view?.state.doc;
+    const doc = comments.editorOf(e, this.#host.renderRoot)?.view?.state.doc;
     const fromLine = detail.range && doc ? doc.lineAt(Math.min(detail.range.from, doc.length)).number : detail.line;
     this.#emit('acp-comment-add', { path, draft: { ...detail, fromLine: Math.min(fromLine, detail.line) } });
   };

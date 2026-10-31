@@ -2,7 +2,7 @@ import { html, nothing } from 'lit';
 import { flip, hide, offset, shift } from '@floating-ui/dom';
 import '../../components/selection-actions/selection-actions.js';
 import { FloatingController } from '../floating/FloatingController.js';
-import { editorOf } from '../../models/editor-events/editor-events.js';
+import { comments } from '../../hooks/comments/comments.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -85,7 +85,7 @@ export class SelectionActionsController {
   }
 
   #onSelectionChange = (/** @type {Event} */ e) => {
-    const editor = editorOf(e, this.#host.renderRoot);
+    const editor = comments.editorOf(e, this.#host.renderRoot);
     if (!editor) return;
     const { selection } = /** @type {HTMLElementEventMap['cdx-selection-change']} */ (e).detail;
     clearTimeout(this.#timer);
@@ -114,7 +114,7 @@ export class SelectionActionsController {
   /** In the shown editor: Escape closes the actions, Alt+F10 (`FOCUS_SHORTCUT`) moves focus into them. */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
     const shown = this.#shown;
-    if (!shown || editorOf(e, this.#host.renderRoot) !== shown.editor) return;
+    if (!shown || comments.editorOf(e, this.#host.renderRoot) !== shown.editor) return;
     if (e.key === 'Escape') this.#hide();
     else if (e.altKey && e.key === 'F10') {
       e.preventDefault();

@@ -4,7 +4,7 @@ paths:
   - "src/controllers/{comments,selection-actions,floating}/**"
   - "src/components/{comment-bar,selection-actions,code-view}/**"
   - "src/views/main-column/**"
-  - "src/models/editor-events/editor-events.js"
+  - "src/hooks/comments/**"
 ---
 
 # Agent comments and selection actions
@@ -31,4 +31,4 @@ the CLI, or the composer once the chat shows).
 while the caret is out of view. Alt+F10 focuses it, arrows move between actions, Escape closes it,
 and it closes when focus leaves both it and the editor (focus inside it returns to the editor). Editor
 events are composed, so a host also hears its children's editors (the tab view hears the Changes
-review's): controllers act only on `editorOf(event, renderRoot)` (`models/editor-events/editor-events.js`).
+review's): controllers act only on `comments.editorOf(event, renderRoot)` (`hooks/comments/comments.js`).
