@@ -1,6 +1,6 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
-import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from '../../models/settings/settings.js';
+import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from './rules.js';
 
 /** @typedef {import('../../models/types/types.js').Appearance} Appearance */
 /** @typedef {import('../../models/types/types.js').Settings} Settings */
@@ -63,7 +63,7 @@ export function setEditorFontSize(size) {
   update('editorFontSize', Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
 }
 
-/** @param {import('../../models/settings/settings.js').SettingsSection} section */
+/** @param {import('./rules.js').SettingsSection} section */
 export function resetSection(section) {
   const settings = { ...$settings.get() };
   for (const key of SECTIONS[section]) Object.assign(settings, { [key]: DEFAULTS[key] });

@@ -266,7 +266,7 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   a literal; add a token once a second place needs it. Prefer logical properties (`margin-inline-start`,
   `inset-block-end`, `text-align: start`).
 - **Dark-only CSS keys on `:root[data-theme='dark']`**, never on `prefers-color-scheme`: Appearance
-  (`$settings`, applied by `services/theme/theme.js`) can override the OS.
+  (`$settings`, applied by `settings.syncTheme()`, `hooks/settings/settings.js`) can override the OS.
 - **Derived colors use `color-mix()`** over those tokens (hover/pressed tints, translucent fills,
   borders: `color-mix(in srgb, var(--acp-color-primary) 12%, transparent)`), not a new token or an `rgba()`
   copy of one, so they follow the theme and accent.

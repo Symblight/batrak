@@ -7,7 +7,7 @@ paths:
   - "src/views/main-column/**"
   - "src/components/image-preview/**"
   - "src/components/settings/**"
-  - "src/services/theme/theme.js"
+  - "src/hooks/settings/**"
 ---
 
 # Persisted state and tabs
@@ -42,7 +42,7 @@ paths:
   10 recent searches; two windows on one project: last write wins),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
-  shared: appearance and accent, which `services/theme/theme.js` turns into the MD3 palette and `data-theme` on
+  shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/models/types/types.js`.

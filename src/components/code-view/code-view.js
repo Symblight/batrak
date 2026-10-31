@@ -1,3 +1,4 @@
+import { settings } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { styleMap } from 'lit/directives/style-map.js';
@@ -10,10 +11,8 @@ import { EditorCommentsController } from '../../controllers/comments/EditorComme
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../file-icon/file-icon.js';
-import { fontStack } from '../../models/editor-fonts/editor-fonts.js';
 import { isAgentsFile } from '../../models/agents-file/agents-file.js';
 import { absPath, basename, projectPathOf, relPath, shownPath, worktreeOf } from '../../models/paths/paths.js';
-import { lineHeightFor } from '../../models/settings/settings.js';
 import styles from './code-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
@@ -323,9 +322,9 @@ export class AcpCodeView extends LitElement {
   #editorStyle() {
     const size = this.editorFontSize;
     return styleMap({
-      '--cdx-code-editor-mono-font-family': this.editorFont ? fontStack(this.editorFont) : null,
+      '--cdx-code-editor-mono-font-family': this.editorFont ? settings.fontStack(this.editorFont) : null,
       '--cdx-code-editor-code-font-size': `${size}px`,
-      '--cdx-code-editor-code-line-height': `${lineHeightFor(size)}px`,
+      '--cdx-code-editor-code-line-height': `${settings.lineHeightFor(size)}px`,
     });
   }
 

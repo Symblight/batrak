@@ -1,3 +1,4 @@
+import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { styleMap } from 'lit/directives/style-map.js';
@@ -18,14 +19,12 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
 import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
 import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
-import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts/editor-fonts.js';
-import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings/settings.js';
 import styles from './settings.css?inline';
 
 /** @typedef {import('../../models/types/types.js').Appearance} Appearance */
 /** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
 /** @typedef {import('../../models/types/types.js').Settings} Settings */
-/** @typedef {import('../../models/settings/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
 /** @typedef {import('../../models/types/types.js').SettingsAnchor} SettingsAnchor */
 /** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
 
@@ -167,7 +166,7 @@ export class AcpSettings extends LitElement {
     const value = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
     this.fontSizeDraft = value;
     const size = Number(value.trim());
-    if (/^\d+$/.test(value.trim()) && size >= FONT_SIZE_MIN && size <= FONT_SIZE_MAX) this.#change({ editorFontSize: size });
+    if (/^\d+$/.test(value.trim()) && size >= settingsHook.fontSizeMin && size <= settingsHook.fontSizeMax) this.#change({ editorFontSize: size });
   };
 
   #onFontSizeKeydown = (/** @type {KeyboardEvent} */ e) => {
@@ -199,7 +198,7 @@ export class AcpSettings extends LitElement {
       <md-button
         class="acp-settings__header-button"
         variant="text"
-        ?disabled=${isSectionDefault(settings, section)}
+        ?disabled=${settingsHook.isSectionDefault(settings, section)}
         @click=${() => {
           this.#revertDrafts();
           this.dispatchEvent(new CustomEvent('acp-settings-reset', { detail: { section }, bubbles: true, composed: true }));
@@ -212,7 +211,7 @@ export class AcpSettings extends LitElement {
   /** @param {Settings} settings */
   #renderTheme(settings) {
     const { appearance, accent } = settings;
-    const accentError = this.accentDraft !== null && normalizeHex(this.accentDraft) === null;
+    const accentError = this.accentDraft !== null && settingsHook.normalizeHex(this.accentDraft) === null;
     return html`<section class="acp-settings__group" aria-label="Theme" data-section="theme">
       ${this.#renderGroupHeader('Theme', 'theme', settings)}
       <div class="acp-settings__field">
@@ -271,7 +270,7 @@ export class AcpSettings extends LitElement {
 
   /** @param {string} family Shown in itself. */
   #renderFontOption(family) {
-    return html`<md-option class="acp-settings__option" value=${family} style=${styleMap({ fontFamily: fontStack(family) })}>${family}</md-option>`;
+    return html`<md-option class="acp-settings__option" value=${family} style=${styleMap({ fontFamily: settingsHook.fontStack(family) })}>${family}</md-option>`;
   }
 
   /**
@@ -291,8 +290,8 @@ export class AcpSettings extends LitElement {
     const fonts = this.fonts;
     // Until the list arrives, the saved font is offered alone so the field shows it.
     const font = fonts === null || fonts.some(({ family }) => family === editorFont) ? editorFont : null;
-    const fontFamily = font ? fontStack(font) : null;
-    const lineHeight = lineHeightFor(editorFontSize);
+    const fontFamily = font ? settingsHook.fontStack(font) : null;
+    const lineHeight = settingsHook.lineHeightFor(editorFontSize);
     return html`<section class="acp-settings__group" aria-label="Editor" data-section="editor">
       ${this.#renderGroupHeader('Editor', 'editor', settings)}
       <div class="acp-settings__field">
@@ -304,7 +303,7 @@ export class AcpSettings extends LitElement {
           .value=${font ?? ''}
           @change=${this.#onFontChange}
         >
-          <md-option class="acp-settings__option acp-settings__option_default" value="">${DEFAULT_EDITOR_FONT} (default)</md-option>
+          <md-option class="acp-settings__option acp-settings__option_default" value="">${settingsHook.defaultEditorFont} (default)</md-option>
           ${fonts === null
             ? font && this.#renderFontOption(font)
             : html`${this.#renderFontGroup('Monospaced', fonts.filter((f) => f.monospace))}
@@ -327,7 +326,7 @@ export class AcpSettings extends LitElement {
             <md-icon-button
               class="acp-settings__icon-button"
               aria-label="Smaller"
-              ?disabled=${editorFontSize <= FONT_SIZE_MIN}
+              ?disabled=${editorFontSize <= settingsHook.fontSizeMin}
               @click=${() => this.#stepFontSize(-1)}
             >
               <md-icon class="acp-settings__icon">${unsafeSVG(removeIcon)}</md-icon>
@@ -335,7 +334,7 @@ export class AcpSettings extends LitElement {
             <md-icon-button
               class="acp-settings__icon-button"
               aria-label="Larger"
-              ?disabled=${editorFontSize >= FONT_SIZE_MAX}
+              ?disabled=${editorFontSize >= settingsHook.fontSizeMax}
               @click=${() => this.#stepFontSize(1)}
             >
               <md-icon class="acp-settings__icon">${unsafeSVG(addIcon)}</md-icon>
@@ -343,7 +342,7 @@ export class AcpSettings extends LitElement {
           </span>
         </md-text-field>
         <span class="acp-settings__hint"
-          >${FONT_SIZE_MIN}–${FONT_SIZE_MAX} px. Line height follows: ${editorFontSize} / ${lineHeight}.</span
+          >${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Line height follows: ${editorFontSize} / ${lineHeight}.</span
         >
       </div>
       <div

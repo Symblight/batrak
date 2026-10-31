@@ -1,5 +1,5 @@
+import { settings as settingsHook } from '../../../hooks/settings/settings.js';
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
-import { DEFAULT_SETTINGS } from '../../../models/settings/settings.js';
 import '../settings.js';
 
 /** @typedef {import('../settings.js').AcpSettings} AcpSettings */
@@ -8,7 +8,7 @@ import '../settings.js';
 async function render() {
   const el = /** @type {AcpSettings} */ (
     await fixture(
-      html`<acp-settings style="height: 320px" .settings=${DEFAULT_SETTINGS} .fonts=${[]}></acp-settings>`,
+      html`<acp-settings style="height: 320px" .settings=${settingsHook.defaults} .fonts=${[]}></acp-settings>`,
     )
   );
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };

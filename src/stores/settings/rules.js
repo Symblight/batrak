@@ -1,5 +1,5 @@
-/** @typedef {import('../types/types.js').Appearance} Appearance */
-/** @typedef {import('../types/types.js').Settings} Settings */
+/** @typedef {import('../../models/types/types.js').Appearance} Appearance */
+/** @typedef {import('../../models/types/types.js').Settings} Settings */
 
 /** Bounds of the code editor's font size, in px. */
 export const FONT_SIZE_MIN = 10;
@@ -22,17 +22,4 @@ export function normalizeHex(value) {
   if (!match) return null;
   const hex = match[1].length === 3 ? [...match[1]].map((c) => c + c).join('') : match[1];
   return `#${hex.toUpperCase()}`;
-}
-
-/** @param {number} size Font size in px. */
-export function lineHeightFor(size) {
-  return Math.round(size * 1.5);
-}
-
-/**
- * @param {Settings} settings
- * @param {SettingsSection} section
- */
-export function isSectionDefault(settings, section) {
-  return SETTINGS_SECTIONS[section].every((key) => settings[key] === DEFAULT_SETTINGS[key]);
 }

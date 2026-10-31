@@ -483,11 +483,6 @@ export function writeFile(path, content) {
   return ipc.invoke('write_file', { path, content });
 }
 
-/** @returns {Promise<FontFamily[]>} Every installed font family. */
-export function listFonts() {
-  return ipc.invoke('list_fonts');
-}
-
 /**
  * Text content of a file (UTF-8).
  * @param {string} path Absolute.

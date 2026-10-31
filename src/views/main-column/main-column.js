@@ -1,3 +1,4 @@
+import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -7,7 +8,6 @@ import { composedContains } from '../../models/file-drop/file-drop.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
-import { loadSystemFonts } from '../../services/fonts/fonts.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminalController } from '../../services/terminals/terminals.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
@@ -80,7 +80,7 @@ import '../../components/comment-bar/comment-bar.js';
 /** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types/types.js').Settings} Settings */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
-/** @typedef {import('../../models/settings/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
@@ -132,7 +132,7 @@ export class AcpMainColumn extends ViewElement {
     onChange: (path) => {
       if (path === AGENTS_TAB_ID) agentConfig.search();
       if (path !== SETTINGS_TAB_ID) return;
-      loadSystemFonts();
+      settingsHook.loadSystemFonts();
       agentConfig.refresh();
     },
   });
