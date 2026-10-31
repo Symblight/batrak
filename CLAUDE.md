@@ -26,7 +26,8 @@ the app.
 
 Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.d.ts`). Type-checking via
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
-and is reached through `src/services/ipc/ipc.js`.
+and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`) and, until each feature's hook takes its
+commands, `src/services/ipc/ipc.js`.
 
 - `src/views/` — the container elements: `<acp-app>` and the four columns. A view has no CSS: it extends
   `ViewElement` (light DOM: it renders into itself, `display: contents`, so `renderRoot` is the element and
@@ -52,7 +53,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `src/services/` (backend calls, controllers that write stores), plus every browser API that holds or
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
-  `@tauri-apps/*` (only in `services/ipc/ipc.js`). Nothing above it talks to these directly.
+  `@tauri-apps/*` (only in `hooks/ipc/ipc.js`). Nothing above it talks to these directly.
 - **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
   `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
   from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass

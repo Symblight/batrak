@@ -1,8 +1,4 @@
-import { invoke, Channel } from '@tauri-apps/api/core';
-import { listen } from '@tauri-apps/api/event';
-import { homeDir } from '@tauri-apps/api/path';
-import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { open } from '@tauri-apps/plugin-dialog';
+import { ipc } from '../../hooks/ipc/ipc.js';
 
 /** @typedef {import('../../models/types/types.js').Session} Session */
 /** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
@@ -34,11 +30,11 @@ import { open } from '@tauri-apps/plugin-dialog';
 /** @typedef {import('../../models/types/types.js').FileDrag} FileDrag */
 /** @typedef {import('../../models/types/types.js').DroppedEntry} DroppedEntry */
 
-/** The only module that knows Rust command names. */
+/** The Rust command names, until each feature's hook takes its own. The bridge is `hooks/ipc`. */
 
 /** @returns {Promise<Session[]>} The sessions as last stored or synced. */
 export function listSessions() {
-  return invoke('list_sessions');
+  return ipc.invoke('list_sessions');
 }
 
 /**
@@ -49,7 +45,7 @@ export function listSessions() {
  * @returns {Promise<SyncReport>}
  */
 export function sessionsSync(projectPath, agentIds = null) {
-  return invoke('sessions_sync', { projectPath, agentIds });
+  return ipc.invoke('sessions_sync', { projectPath, agentIds });
 }
 
 /**
@@ -58,7 +54,7 @@ export function sessionsSync(projectPath, agentIds = null) {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onSessionsSynced(callback) {
-  return listen('sessions://synced', (event) => callback(/** @type {SessionsSynced} */ (event.payload)));
+  return ipc.listen('sessions://synced', callback);
 }
 
 /**
@@ -76,7 +72,7 @@ export function onSessionsSynced(callback) {
  * @returns {Promise<Session>}
  */
 export function sessionCreate({ sessionId, projectPath, agentId, mode, title, config, baseBranch }, onEvent) {
-  return invoke('session_create', {
+  return ipc.invoke('session_create', {
     sessionId,
     projectPath,
     agentId,
@@ -95,18 +91,15 @@ export function sessionCreate({ sessionId, projectPath, agentId, mode, title, co
  * @returns {Promise<Session>}
  */
 export function sessionOpen(sessionId, onEvent) {
-  return invoke('session_open', { sessionId, channel: channelOf(onEvent) });
+  return ipc.invoke('session_open', { sessionId, channel: channelOf(onEvent) });
 }
 
 /**
  * @param {(event: SessionEnvelope) => void} onEvent
- * @returns {Channel<SessionEnvelope>}
+ * @returns {import('@tauri-apps/api/core').Channel<SessionEnvelope>}
  */
 function channelOf(onEvent) {
-  /** @type {Channel<SessionEnvelope>} */
-  const channel = new Channel();
-  channel.onmessage = onEvent;
-  return channel;
+  return ipc.channel(onEvent);
 }
 
 /**
@@ -117,7 +110,7 @@ function channelOf(onEvent) {
  * @returns {Promise<void>}
  */
 export function sessionSendPrompt(sessionId, prompt) {
-  return invoke('session_send_prompt', { sessionId, prompt });
+  return ipc.invoke('session_send_prompt', { sessionId, prompt });
 }
 
 /**
@@ -126,7 +119,7 @@ export function sessionSendPrompt(sessionId, prompt) {
  * @returns {Promise<void>}
  */
 export function sessionCancel(sessionId) {
-  return invoke('session_cancel', { sessionId });
+  return ipc.invoke('session_cancel', { sessionId });
 }
 
 /**
@@ -136,7 +129,7 @@ export function sessionCancel(sessionId) {
  * @returns {Promise<void>}
  */
 export function sessionRespondPermission(sessionId, requestId, optionId) {
-  return invoke('session_respond_permission', { sessionId, requestId, optionId });
+  return ipc.invoke('session_respond_permission', { sessionId, requestId, optionId });
 }
 
 /**
@@ -145,7 +138,7 @@ export function sessionRespondPermission(sessionId, requestId, optionId) {
  * @returns {Promise<void>}
  */
 export function sessionStop(sessionId) {
-  return invoke('session_stop', { sessionId });
+  return ipc.invoke('session_stop', { sessionId });
 }
 
 /**
@@ -155,7 +148,7 @@ export function sessionStop(sessionId) {
  * @returns {Promise<Session>} The session as it is then.
  */
 export function sessionRename(sessionId, title) {
-  return invoke('session_rename', { sessionId, title });
+  return ipc.invoke('session_rename', { sessionId, title });
 }
 
 /**
@@ -164,7 +157,7 @@ export function sessionRename(sessionId, title) {
  * @returns {Promise<Session>} The session as it is then.
  */
 export function sessionResetTitle(sessionId) {
-  return invoke('session_reset_title', { sessionId });
+  return ipc.invoke('session_reset_title', { sessionId });
 }
 
 /**
@@ -174,7 +167,7 @@ export function sessionResetTitle(sessionId) {
  * @returns {Promise<void>}
  */
 export function sessionRemove(sessionId) {
-  return invoke('session_remove', { sessionId });
+  return ipc.invoke('session_remove', { sessionId });
 }
 
 /**
@@ -183,7 +176,7 @@ export function sessionRemove(sessionId) {
  * @returns {Promise<void>}
  */
 export function sessionRestart(sessionId) {
-  return invoke('session_restart', { sessionId });
+  return ipc.invoke('session_restart', { sessionId });
 }
 
 /**
@@ -209,7 +202,7 @@ export function sessionRestart(sessionId) {
  * @returns {Promise<{ terminalId: string }>}
  */
 export function sessionOpenCli(sessionId, cols, rows, draft) {
-  return invoke('session_open_cli', draft ? { sessionId, cols, rows, draft } : { sessionId, cols, rows });
+  return ipc.invoke('session_open_cli', draft ? { sessionId, cols, rows, draft } : { sessionId, cols, rows });
 }
 
 /**
@@ -218,7 +211,7 @@ export function sessionOpenCli(sessionId, cols, rows, draft) {
  * @returns {Promise<void>}
  */
 export function sessionCloseCli(sessionId) {
-  return invoke('session_close_cli', { sessionId });
+  return ipc.invoke('session_close_cli', { sessionId });
 }
 
 /**
@@ -226,7 +219,7 @@ export function sessionCloseCli(sessionId) {
  * @returns {Promise<boolean>} Its CLI is working: a tool runs in it, or it reported activity just now.
  */
 export function sessionCliBusy(sessionId) {
-  return invoke('session_cli_busy', { sessionId });
+  return ipc.invoke('session_cli_busy', { sessionId });
 }
 
 /**
@@ -236,7 +229,7 @@ export function sessionCliBusy(sessionId) {
  *   branch checked out.
  */
 export function sessionResume(sessionId) {
-  return invoke('session_resume', { sessionId });
+  return ipc.invoke('session_resume', { sessionId });
 }
 
 /**
@@ -248,7 +241,7 @@ export function sessionResume(sessionId) {
  * @returns {Promise<void>}
  */
 export function sessionSetConfigOption(sessionId, configId, value) {
-  return invoke('session_set_config_option', { sessionId, configId, value });
+  return ipc.invoke('session_set_config_option', { sessionId, configId, value });
 }
 
 /**
@@ -257,7 +250,7 @@ export function sessionSetConfigOption(sessionId, configId, value) {
  * @returns {Promise<void>}
  */
 export function sessionOpenLog(sessionId) {
-  return invoke('session_open_log', { sessionId });
+  return ipc.invoke('session_open_log', { sessionId });
 }
 
 /**
@@ -266,7 +259,7 @@ export function sessionOpenLog(sessionId) {
  * @returns {Promise<WorkspaceSettings>}
  */
 export function workspaceSettings(projectPath) {
-  return invoke('workspace_settings', { projectPath });
+  return ipc.invoke('workspace_settings', { projectPath });
 }
 
 /**
@@ -276,7 +269,7 @@ export function workspaceSettings(projectPath) {
  * @returns {Promise<AgentList>}
  */
 export function agentsList(projectPath) {
-  return invoke('agents_list', { projectPath });
+  return ipc.invoke('agents_list', { projectPath });
 }
 
 /**
@@ -287,7 +280,7 @@ export function agentsList(projectPath) {
  * @returns {Promise<string>} Its id.
  */
 export function agentsAdd(projectPath, agent) {
-  return invoke('agents_add', { projectPath, agent });
+  return ipc.invoke('agents_add', { projectPath, agent });
 }
 
 /**
@@ -298,7 +291,7 @@ export function agentsAdd(projectPath, agent) {
  * @returns {Promise<void>}
  */
 export function agentsUpdate(projectPath, agentId, agent) {
-  return invoke('agents_update', { projectPath, agentId, agent });
+  return ipc.invoke('agents_update', { projectPath, agentId, agent });
 }
 
 /**
@@ -310,7 +303,7 @@ export function agentsUpdate(projectPath, agentId, agent) {
  * @returns {Promise<number>} How many of the project's sessions turning it off stops.
  */
 export function agentsSetEnabled(projectPath, agentId, enabled) {
-  return invoke('agents_set_enabled', { projectPath, agentId, enabled });
+  return ipc.invoke('agents_set_enabled', { projectPath, agentId, enabled });
 }
 
 /**
@@ -320,7 +313,7 @@ export function agentsSetEnabled(projectPath, agentId, enabled) {
  * @returns {Promise<void>}
  */
 export function agentsSetDefault(projectPath, agentId) {
-  return invoke('agents_set_default', { projectPath, agentId });
+  return ipc.invoke('agents_set_default', { projectPath, agentId });
 }
 
 /**
@@ -330,7 +323,7 @@ export function agentsSetDefault(projectPath, agentId) {
  * @returns {Promise<{ token: number }>} What `agentsRestore()` undoes it with.
  */
 export function agentsRemove(projectPath, agentId) {
-  return invoke('agents_remove', { projectPath, agentId });
+  return ipc.invoke('agents_remove', { projectPath, agentId });
 }
 
 /**
@@ -340,7 +333,7 @@ export function agentsRemove(projectPath, agentId) {
  * @returns {Promise<string[]>} The ids copied.
  */
 export function agentsImportUser(projectPath, agentIds = null) {
-  return invoke('agents_import_user', { projectPath, agentIds });
+  return ipc.invoke('agents_import_user', { projectPath, agentIds });
 }
 
 /**
@@ -351,7 +344,7 @@ export function agentsImportUser(projectPath, agentIds = null) {
  * @returns {Promise<import('../../models/types/types.js').AgentsView>}
  */
 export function agentsView(projectPath, query, filter) {
-  return invoke('agents_view', { projectPath, query, filter });
+  return ipc.invoke('agents_view', { projectPath, query, filter });
 }
 
 /**
@@ -368,7 +361,7 @@ export function agentsView(projectPath, query, filter) {
  * @returns {Promise<UpdatedAgent[]>} Empty: it was up to date.
  */
 export function agentsUpdateVersion(projectPath, agentId) {
-  return invoke('agents_update_version', { projectPath, agentId });
+  return ipc.invoke('agents_update_version', { projectPath, agentId });
 }
 
 /**
@@ -377,7 +370,7 @@ export function agentsUpdateVersion(projectPath, agentId) {
  * @returns {Promise<UpdatedAgent[]>}
  */
 export function agentsUpdateAll(projectPath) {
-  return invoke('agents_update_all', { projectPath });
+  return ipc.invoke('agents_update_all', { projectPath });
 }
 
 /**
@@ -385,7 +378,7 @@ export function agentsUpdateAll(projectPath) {
  * @returns {Promise<import('../../models/types/types.js').RegistryState>}
  */
 export function agentsRegistryCheck() {
-  return invoke('agents_registry_check');
+  return ipc.invoke('agents_registry_check');
 }
 
 /**
@@ -394,7 +387,7 @@ export function agentsRegistryCheck() {
  * @returns {Promise<void>}
  */
 export function agentsRestore(token) {
-  return invoke('agents_restore', { token });
+  return ipc.invoke('agents_restore', { token });
 }
 
 /**
@@ -403,9 +396,7 @@ export function agentsRestore(token) {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onAgentsChanged(callback) {
-  return listen('agents://changed', (event) =>
-    callback(/** @type {{ projectPath: string | null }} */ (event.payload).projectPath),
-  );
+  return ipc.listen('agents://changed', (/** @type {{ projectPath: string | null }} */ payload) => callback(payload.projectPath));
 }
 
 /**
@@ -415,7 +406,7 @@ export function onAgentsChanged(callback) {
  * @returns {Promise<string>} Absolute path.
  */
 export function agentsConfigFile(projectPath) {
-  return invoke('agents_config_file', { projectPath });
+  return ipc.invoke('agents_config_file', { projectPath });
 }
 
 /**
@@ -426,7 +417,7 @@ export function agentsConfigFile(projectPath) {
  * @returns {Promise<import('../../models/types/types.js').ProbedOptions>}
  */
 export function agentsProbeOptions(projectPath, agentId) {
-  return invoke('agents_probe_options', { projectPath, agentId });
+  return ipc.invoke('agents_probe_options', { projectPath, agentId });
 }
 
 /**
@@ -440,7 +431,7 @@ export function agentsProbeOptions(projectPath, agentId) {
  * @returns {Promise<import('../../models/types/types.js').LoginTab | null>} The login's terminal, for a terminal method.
  */
 export function agentsSignIn(projectPath, agentId, methodId) {
-  return invoke('agents_sign_in', { projectPath, agentId, methodId });
+  return ipc.invoke('agents_sign_in', { projectPath, agentId, methodId });
 }
 
 /**
@@ -450,7 +441,7 @@ export function agentsSignIn(projectPath, agentId, methodId) {
  * @returns {Promise<boolean>} `false`: none ran.
  */
 export function agentsSignInCancel(projectPath, agentId) {
-  return invoke('agents_sign_in_cancel', { projectPath, agentId });
+  return ipc.invoke('agents_sign_in_cancel', { projectPath, agentId });
 }
 
 /**
@@ -459,7 +450,7 @@ export function agentsSignInCancel(projectPath, agentId) {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onAgentsSignIn(callback) {
-  return listen('agents://sign-in', (event) => callback(/** @type {import('../../models/types/types.js').SignInEvent} */ (event.payload)));
+  return ipc.listen('agents://sign-in', callback);
 }
 
 /**
@@ -468,7 +459,7 @@ export function onAgentsSignIn(callback) {
  * @returns {Promise<import('../../models/types/types.js').UntrustedAgent[]>}
  */
 export function agentsUntrusted(projectPath) {
-  return invoke('agents_untrusted', { projectPath });
+  return ipc.invoke('agents_untrusted', { projectPath });
 }
 
 /**
@@ -479,7 +470,7 @@ export function agentsUntrusted(projectPath) {
  * @returns {Promise<void>}
  */
 export function agentsTrust(projectPath, launches) {
-  return invoke('agents_trust', { projectPath, launches });
+  return ipc.invoke('agents_trust', { projectPath, launches });
 }
 
 /**
@@ -489,17 +480,17 @@ export function agentsTrust(projectPath, launches) {
  * @returns {Promise<void>}
  */
 export function writeFile(path, content) {
-  return invoke('write_file', { path, content });
+  return ipc.invoke('write_file', { path, content });
 }
 
 /** @returns {Promise<AboutInfo>} Versions of the app and what it runs on. */
 export function getAbout() {
-  return invoke('about');
+  return ipc.invoke('about');
 }
 
 /** @returns {Promise<FontFamily[]>} Every installed font family. */
 export function listFonts() {
-  return invoke('list_fonts');
+  return ipc.invoke('list_fonts');
 }
 
 /**
@@ -508,7 +499,7 @@ export function listFonts() {
  * @returns {Promise<string>}
  */
 export function readFile(path) {
-  return invoke('read_file', { path });
+  return ipc.invoke('read_file', { path });
 }
 
 /**
@@ -517,7 +508,7 @@ export function readFile(path) {
  * @returns {Promise<ArrayBuffer>}
  */
 export function readFileBytes(path) {
-  return invoke('read_file_bytes', { path });
+  return ipc.invoke('read_file_bytes', { path });
 }
 
 /**
@@ -526,7 +517,7 @@ export function readFileBytes(path) {
  * @returns {Promise<OpenedRoot>}
  */
 export function openWorkspace(path) {
-  return invoke('open_workspace', { path });
+  return ipc.invoke('open_workspace', { path });
 }
 
 /**
@@ -535,7 +526,7 @@ export function openWorkspace(path) {
  * @returns {Promise<OpenedRoot>}
  */
 export function openSessionRoot(sessionId) {
-  return invoke('open_session_root', { sessionId });
+  return ipc.invoke('open_session_root', { sessionId });
 }
 
 /**
@@ -543,7 +534,7 @@ export function openSessionRoot(sessionId) {
  * @returns {Promise<void>}
  */
 export function closeWorkspace(rootId) {
-  return invoke('close_workspace', { rootId });
+  return ipc.invoke('close_workspace', { rootId });
 }
 
 /**
@@ -551,7 +542,7 @@ export function closeWorkspace(rootId) {
  * @returns {Promise<void>}
  */
 export function closeWindowWorkspaces() {
-  return invoke('close_window_workspaces');
+  return ipc.invoke('close_window_workspaces');
 }
 
 /**
@@ -561,7 +552,7 @@ export function closeWindowWorkspaces() {
  * @returns {Promise<WorkspaceEntry[]>}
  */
 export function listDir(rootId, path) {
-  return invoke('list_dir', { rootId, path });
+  return ipc.invoke('list_dir', { rootId, path });
 }
 
 /**
@@ -570,7 +561,7 @@ export function listDir(rootId, path) {
  * @returns {Promise<void>}
  */
 export function rescanWorkspace(rootId) {
-  return invoke('rescan_workspace', { rootId });
+  return ipc.invoke('rescan_workspace', { rootId });
 }
 
 /**
@@ -579,7 +570,7 @@ export function rescanWorkspace(rootId) {
  * @returns {Promise<() => void>} Unsubscribe.
  */
 export function onWorkspaceChanged(callback) {
-  return listen('workspace://changed', (event) => callback(/** @type {WorkspaceChanges} */ (event.payload)));
+  return ipc.listen('workspace://changed', callback);
 }
 
 /** @typedef {'about' | 'settings' | 'new-terminal'} MenuAction */
@@ -590,7 +581,7 @@ export function onWorkspaceChanged(callback) {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onMenuAction(callback) {
-  return listen('menu://action', (event) => callback(/** @type {MenuAction} */ (event.payload)));
+  return ipc.listen('menu://action', callback);
 }
 
 /**
@@ -599,9 +590,7 @@ export function onMenuAction(callback) {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onBackendNotice(callback) {
-  return listen('app://notice', (event) =>
-    callback(/** @type {{ level: NoticeLevel, message: string }} */ (event.payload)),
-  );
+  return ipc.listen('app://notice', callback);
 }
 
 /**
@@ -612,7 +601,7 @@ export function onBackendNotice(callback) {
  * @returns {Promise<QuickOpenResult>}
  */
 export function quickOpen(rootId, query, kind = 'files') {
-  return invoke('quick_open', { rootId, query, kind });
+  return ipc.invoke('quick_open', { rootId, query, kind });
 }
 
 /**
@@ -621,7 +610,7 @@ export function quickOpen(rootId, query, kind = 'files') {
  * @returns {Promise<void>}
  */
 export function noteFileOpened(rootId, path) {
-  return invoke('note_file_opened', { rootId, path });
+  return ipc.invoke('note_file_opened', { rootId, path });
 }
 
 /**
@@ -634,10 +623,7 @@ export function noteFileOpened(rootId, path) {
  * @returns {Promise<void>} Resolves once the search has started.
  */
 export function findInFiles(rootId, slot, options, onEvent) {
-  /** @type {Channel<SearchEvent>} */
-  const channel = new Channel();
-  channel.onmessage = onEvent;
-  return invoke('find_in_files', { rootId, slot, options, channel });
+  return ipc.invoke('find_in_files', { rootId, slot, options, channel: ipc.channel(onEvent) });
 }
 
 /**
@@ -646,7 +632,7 @@ export function findInFiles(rootId, slot, options, onEvent) {
  * @returns {Promise<void>}
  */
 export function cancelSearch(rootId, slot) {
-  return invoke('cancel_search', { rootId, slot });
+  return ipc.invoke('cancel_search', { rootId, slot });
 }
 
 /**
@@ -655,7 +641,7 @@ export function cancelSearch(rootId, slot) {
  * @returns {Promise<GitRepoState | null>} `null` when the root isn't in a repository.
  */
 export function gitHead(rootId) {
-  return invoke('git_head', { rootId });
+  return ipc.invoke('git_head', { rootId });
 }
 
 /**
@@ -667,7 +653,7 @@ export function gitHead(rootId) {
  * @returns {Promise<GitStatusReply>}
  */
 export function gitStatus(rootId, since, force = false) {
-  return invoke('git_status', { rootId, since, force });
+  return ipc.invoke('git_status', { rootId, since, force });
 }
 
 /**
@@ -676,7 +662,7 @@ export function gitStatus(rootId, since, force = false) {
  * @returns {Promise<GitFileStatus[]>} Paths relative to the session's folder.
  */
 export function sessionChanges(sessionId) {
-  return invoke('session_changes', { sessionId });
+  return ipc.invoke('session_changes', { sessionId });
 }
 
 /**
@@ -686,7 +672,7 @@ export function sessionChanges(sessionId) {
  * @returns {Promise<ApplyResult>}
  */
 export function sessionApplyLocally(sessionId) {
-  return invoke('session_apply_locally', { sessionId });
+  return ipc.invoke('session_apply_locally', { sessionId });
 }
 
 /**
@@ -696,7 +682,7 @@ export function sessionApplyLocally(sessionId) {
  * @returns {Promise<void>}
  */
 export function sessionCheckOutBranch(sessionId) {
-  return invoke('session_check_out_branch', { sessionId });
+  return ipc.invoke('session_check_out_branch', { sessionId });
 }
 
 /**
@@ -706,7 +692,7 @@ export function sessionCheckOutBranch(sessionId) {
  * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
  */
 export function sessionFileAtBase(sessionId, path) {
-  return invoke('session_file_at_base', { sessionId, path });
+  return ipc.invoke('session_file_at_base', { sessionId, path });
 }
 
 /**
@@ -716,7 +702,7 @@ export function sessionFileAtBase(sessionId, path) {
  * @returns {Promise<string[]>}
  */
 export function gitBranches(rootId) {
-  return invoke('git_branches', { rootId });
+  return ipc.invoke('git_branches', { rootId });
 }
 
 /**
@@ -725,7 +711,7 @@ export function gitBranches(rootId) {
  * @returns {Promise<string | null>} `null` before the first commit.
  */
 export function gitLastCommitMessage(rootId) {
-  return invoke('git_last_commit_message', { rootId });
+  return ipc.invoke('git_last_commit_message', { rootId });
 }
 
 /**
@@ -737,7 +723,7 @@ export function gitLastCommitMessage(rootId) {
  * @returns {Promise<GitCommitted>}
  */
 export function gitCommit(rootId, paths, message, amend) {
-  return invoke('git_commit', { rootId, paths, message, amend });
+  return ipc.invoke('git_commit', { rootId, paths, message, amend });
 }
 
 /**
@@ -747,7 +733,7 @@ export function gitCommit(rootId, paths, message, amend) {
  * @returns {Promise<string | null>} `null` when not committed, binary, too large or not in a repository.
  */
 export function gitFileAtHead(rootId, path) {
-  return invoke('git_file_at_head', { rootId, path });
+  return ipc.invoke('git_file_at_head', { rootId, path });
 }
 
 /**
@@ -756,7 +742,7 @@ export function gitFileAtHead(rootId, path) {
  * @returns {Promise<void>}
  */
 export function openUrl(url) {
-  return invoke('open_url', { url });
+  return ipc.invoke('open_url', { url });
 }
 
 /**
@@ -765,7 +751,7 @@ export function openUrl(url) {
  * @returns {Promise<void>}
  */
 export function revealPath(path) {
-  return invoke('reveal_path', { path });
+  return ipc.invoke('reveal_path', { path });
 }
 
 /**
@@ -775,21 +761,20 @@ export function revealPath(path) {
  * @returns {Promise<void>}
  */
 export function writeLog(level, message) {
-  return invoke('write_log', { level, message });
+  return ipc.invoke('write_log', { level, message });
 }
 
 /** @returns {Promise<string>} The user's home folder. */
 export function getHomeDir() {
-  return homeDir();
+  return ipc.homeDir();
 }
 
 /**
  * Native folder picker.
  * @returns {Promise<string | null>} Selected path, or null if cancelled.
  */
-export async function pickFolder() {
-  const result = await open({ directory: true, multiple: false });
-  return typeof result === 'string' ? result : null;
+export function pickFolder() {
+  return ipc.pickFolder();
 }
 
 /**
@@ -803,7 +788,7 @@ export async function pickFolder() {
  * @returns {Promise<TerminalOpened>}
  */
 export function terminalOpen(id, cwd, fallback, cols, rows) {
-  return invoke('terminal_open', { id, cwd, fallback, cols, rows });
+  return ipc.invoke('terminal_open', { id, cwd, fallback, cols, rows });
 }
 
 /**
@@ -814,13 +799,11 @@ export function terminalOpen(id, cwd, fallback, cols, rows) {
  * @returns {Promise<void>}
  */
 export function terminalAttach(id, onOutput, onExit) {
-  /** @type {Channel<ArrayBuffer>} */
-  const output = new Channel();
-  output.onmessage = (buffer) => onOutput(new Uint8Array(buffer));
-  /** @type {Channel<{ kind: 'exit', code: number | null, signal: string | null }>} */
-  const events = new Channel();
-  events.onmessage = ({ code, signal }) => onExit({ code, signal });
-  return invoke('terminal_attach', { id, output, events });
+  const output = ipc.channel((/** @type {ArrayBuffer} */ buffer) => onOutput(new Uint8Array(buffer)));
+  const events = ipc.channel(
+    (/** @type {{ kind: 'exit', code: number | null, signal: string | null }} */ { code, signal }) => onExit({ code, signal }),
+  );
+  return ipc.invoke('terminal_attach', { id, output, events });
 }
 
 /**
@@ -829,7 +812,7 @@ export function terminalAttach(id, onOutput, onExit) {
  * @returns {Promise<void>}
  */
 export function terminalWrite(id, data) {
-  return invoke('terminal_write', data, { headers: { 'terminal-id': id } });
+  return ipc.invoke('terminal_write', data, { headers: { 'terminal-id': id } });
 }
 
 /**
@@ -839,7 +822,7 @@ export function terminalWrite(id, data) {
  * @returns {Promise<void>}
  */
 export function terminalAck(id, bytes) {
-  return invoke('terminal_ack', { id, bytes });
+  return ipc.invoke('terminal_ack', { id, bytes });
 }
 
 /**
@@ -849,7 +832,7 @@ export function terminalAck(id, bytes) {
  * @returns {Promise<void>}
  */
 export function terminalResize(id, cols, rows) {
-  return invoke('terminal_resize', { id, cols, rows });
+  return ipc.invoke('terminal_resize', { id, cols, rows });
 }
 
 /**
@@ -857,7 +840,7 @@ export function terminalResize(id, cols, rows) {
  * @returns {Promise<TerminalBusy[]>} Those running a program other than their shell.
  */
 export function terminalBusy(ids) {
-  return invoke('terminal_busy', { ids });
+  return ipc.invoke('terminal_busy', { ids });
 }
 
 /**
@@ -866,7 +849,7 @@ export function terminalBusy(ids) {
  * @returns {Promise<void>}
  */
 export function terminalClose(ids) {
-  return invoke('terminal_close', { ids });
+  return ipc.invoke('terminal_close', { ids });
 }
 
 /**
@@ -874,7 +857,7 @@ export function terminalClose(ids) {
  * @returns {Promise<void>}
  */
 export function closeWindowTerminals() {
-  return invoke('close_window_terminals');
+  return ipc.invoke('close_window_terminals');
 }
 
 /**
@@ -884,11 +867,7 @@ export function closeWindowTerminals() {
  * @returns {Promise<() => void>} Stops listening.
  */
 export function onFileDrag(callback) {
-  return getCurrentWebview().onDragDropEvent(({ payload }) => {
-    if (payload.type === 'leave') callback({ type: 'leave' });
-    else if (payload.type === 'over') callback({ type: 'over', position: { x: payload.position.x, y: payload.position.y } });
-    else callback({ type: payload.type, paths: payload.paths, position: { x: payload.position.x, y: payload.position.y } });
-  });
+  return ipc.onDragDrop(callback);
 }
 
 /**
@@ -897,7 +876,7 @@ export function onFileDrag(callback) {
  * @returns {Promise<DroppedEntry['kind'][]>} In the same order.
  */
 export function droppedKinds(paths) {
-  return invoke('dropped_kinds', { paths });
+  return ipc.invoke('dropped_kinds', { paths });
 }
 
 /**
@@ -909,6 +888,6 @@ export function droppedKinds(paths) {
  */
 export async function saveAttachment(folder, file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  return invoke('save_attachment', bytes, { headers: { folder: encodeURIComponent(folder), name: encodeURIComponent(file.name) } });
+  return ipc.invoke('save_attachment', bytes, { headers: { folder: encodeURIComponent(folder), name: encodeURIComponent(file.name) } });
 }
 
