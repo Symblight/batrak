@@ -23,7 +23,7 @@ import {
   workspaceSettings,
 } from '../ipc/ipc.js';
 import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from '../adapter/adapter.js';
-import { agentConfig } from '../agent-config/agent-config.js';
+import { agents } from '../../hooks/agents/agents.js';
 import { notify } from '../../stores/notices/notices.js';
 import {
   composerOf,
@@ -94,7 +94,7 @@ const CLI_SIZE = { cols: 80, rows: 24 };
  */
 function onSessionEvent(event) {
   handleSessionEvent(event);
-  if (event.kind === 'sign-in') agentConfig.refresh();
+  if (event.kind === 'sign-in') agents.refresh();
 }
 
 export class SessionController {
@@ -153,14 +153,14 @@ export class SessionController {
     });
     // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
     // last time are asked now.
-    $agentList.subscribe(({ agents }) => {
+    $agentList.subscribe(({ agents: listed }) => {
       const path = $workspacePath.get();
       const report = path === null ? null : syncOf(path).report;
       if (path === null || report === null || syncOf(path).running) return;
       const settled = new Set(
         report.agents.filter((a) => a.outcome === 'listed' || a.outcome === 'unsupported').map((a) => a.agentId),
       );
-      const due = agents.filter((a) => a.enabled && !settled.has(a.id)).map((a) => a.id);
+      const due = listed.filter((a) => a.enabled && !settled.has(a.id)).map((a) => a.id);
       if (due.length > 0) this.sync(path, { force: true, agentIds: due });
     });
     // The shown session's view changed (the header, its agent's choice in the Agents tab, a first

@@ -1,3 +1,7 @@
+export { isAgentsFile, isUserAgentsFile } from '../../stores/agents/rules.js';
+
+/** @typedef {import('../../models/types/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
 /** @typedef {'claude' | 'codex' | 'copilot' | 'antigravity'} AgentBrand */
 
 /** @type {readonly [RegExp, AgentBrand][]} */
@@ -26,7 +30,7 @@ export function agentBrandOf(agentId, name) {
  * @param {string} text
  * @returns {string[]}
  */
-export function splitArgs(text) {
+function splitArgs(text) {
   /** @type {string[]} */
   const args = [];
   /** @type {string | null} The argument being read; `null` between arguments. */
@@ -80,7 +84,7 @@ export function parseCommandLine(line) {
 /**
  * The ways to sign in from the app: the agent's own (`authenticate`) and logins run in a terminal.
  * An API key is set in the agent's environment instead.
- * @param {readonly import('../types/types.js').SignInMethod[]} methods
+ * @param {readonly import('../../models/types/types.js').SignInMethod[]} methods
  */
 export function ownSignIns(methods) {
   return methods.filter((m) => m.apiKey === null);
@@ -89,11 +93,47 @@ export function ownSignIns(methods) {
 /**
  * How to sign in to an agent just added, from its probe: `null` when it needs no sign-in; else its
  * only method, or `methodId: null` when its row has to offer the choice (or only Retry).
- * @param {import('../types/types.js').ProbedOptions} probed
+ * @param {import('../../models/types/types.js').ProbedOptions} probed
  * @returns {{ methodId: string | null } | null}
  */
 export function signInAfterAdd(probed) {
   if (Array.isArray(probed)) return null;
   const methods = ownSignIns(probed.signIn);
   return { methodId: methods.length === 1 ? methods[0].id : null };
+}
+
+/**
+ * What the trust dialog asks when a project's agents.json chooses what its agents run.
+ * @param {TrustPrompt} prompt
+ * @returns {ConfirmOptions}
+ */
+export function trustConfirm(prompt) {
+  const project = prompt.projectPath.split(/[\\/]/).pop() || prompt.projectPath;
+  const secrets = keychainItems(prompt);
+  const asks = secrets.length ? `Its agents would read these keychain items: ${secrets.join(', ')}. ` : '';
+  return {
+    headline: 'Trust this project?',
+    message: `Brama provides features that may run potentially malicious code from "${project}".`,
+    detail: `${asks}If you don't trust the source, choose Not now to only browse its code: its agents won't start.`,
+    confirmLabel: 'Trust project',
+    cancelLabel: 'Not now',
+    placement: 'top',
+  };
+}
+
+/**
+ * The keychain items (`${keychain:name}`) the prompt's launches would read, each once.
+ * @param {TrustPrompt} prompt
+ */
+function keychainItems(prompt) {
+  const names = prompt.agents.flatMap((a) => Object.values(a.launch.env).flatMap((v) => [...v.matchAll(/\$\{keychain:([^}]+)\}/g)].map((m) => m[1])));
+  return [...new Set(names)];
+}
+
+/**
+ * Tells prompts apart by project and what they ask to trust, so "Not now" holds until that changes.
+ * @param {TrustPrompt} prompt
+ */
+export function trustKey(prompt) {
+  return JSON.stringify([prompt.projectPath, prompt.agents.map((a) => a.launch)]);
 }

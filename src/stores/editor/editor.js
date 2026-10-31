@@ -2,7 +2,7 @@ import { atom, computed } from 'nanostores';
 import { isRecord, persistentMapStore } from '../persistent/persistent.js';
 import { $sessionsLoaded, $worktrees } from '../sessions/sessions.js';
 import { $workspace } from '../workspace/workspace.js';
-import { isUserAgentsFile } from '../../models/agents-file/agents-file.js';
+import { isUserAgentsFile } from '../agents/rules.js';
 import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../models/types/types.js').EditorTabs} EditorTabs */

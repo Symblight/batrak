@@ -17,7 +17,6 @@ import { ipc } from '../../hooks/ipc/ipc.js';
 /** @typedef {import('../../models/types/types.js').LogLevel} LogLevel */
 /** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
 /** @typedef {import('../../models/types/types.js').NoticeLevel} NoticeLevel */
-/** @typedef {import('../../models/types/types.js').AgentList} AgentList */
 /** @typedef {import('../../models/types/types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('../../models/types/types.js').PromptInput} PromptInput */
 /** @typedef {import('../../models/types/types.js').SyncReport} SyncReport */
@@ -262,216 +261,26 @@ export function workspaceSettings(projectPath) {
   return ipc.invoke('workspace_settings', { projectPath });
 }
 
-/**
- * Agents configured for a project, the disabled too: `<config dir>/brama/agents.json` and
- * `.brama/agents.json` merged.
- * @param {string | null} projectPath `null`: no project open.
- * @returns {Promise<AgentList>}
- */
-export function agentsList(projectPath) {
-  return ipc.invoke('agents_list', { projectPath });
-}
 
-/**
- * Adds an ACP agent to the project's `.brama/agents.json`, trusting its launch, or to the user's
- * agents.json without a project.
- * @param {string | null} projectPath
- * @param {import('../../models/types/types.js').NewAgent} agent
- * @returns {Promise<string>} Its id.
- */
-export function agentsAdd(projectPath, agent) {
-  return ipc.invoke('agents_add', { projectPath, agent });
-}
 
-/**
- * Rewrites an agent's name and launch in the project's agents.json (the user's without a project).
- * @param {string | null} projectPath
- * @param {string} agentId
- * @param {import('../../models/types/types.js').NewAgent} agent
- * @returns {Promise<void>}
- */
-export function agentsUpdate(projectPath, agentId, agent) {
-  return ipc.invoke('agents_update', { projectPath, agentId, agent });
-}
 
-/**
- * Turns an agent of the project's agents.json (the user's without a project) on or off for this
- * user; the file isn't touched.
- * @param {string | null} projectPath
- * @param {string} agentId
- * @param {boolean} enabled
- * @returns {Promise<number>} How many of the project's sessions turning it off stops.
- */
-export function agentsSetEnabled(projectPath, agentId, enabled) {
-  return ipc.invoke('agents_set_enabled', { projectPath, agentId, enabled });
-}
 
-/**
- * Makes an agent the default for new sessions (the project's agents.json, else the user's).
- * @param {string | null} projectPath
- * @param {string} agentId
- * @returns {Promise<void>}
- */
-export function agentsSetDefault(projectPath, agentId) {
-  return ipc.invoke('agents_set_default', { projectPath, agentId });
-}
 
-/**
- * Removes an agent's entry from the project's agents.json (the user's without a project).
- * @param {string | null} projectPath
- * @param {string} agentId
- * @returns {Promise<{ token: number }>} What `agentsRestore()` undoes it with.
- */
-export function agentsRemove(projectPath, agentId) {
-  return ipc.invoke('agents_remove', { projectPath, agentId });
-}
 
-/**
- * Copies the user's own agents the project lacks into its agents.json, trusted.
- * @param {string} projectPath
- * @param {string[] | null} [agentIds] Only these; `null`: all of them.
- * @returns {Promise<string[]>} The ids copied.
- */
-export function agentsImportUser(projectPath, agentIds = null) {
-  return ipc.invoke('agents_import_user', { projectPath, agentIds });
-}
 
-/**
- * The Agents tab's data: the agents searched and filtered by the backend.
- * @param {string | null} projectPath
- * @param {string} query
- * @param {import('../../models/types/types.js').AgentsFilter} filter
- * @returns {Promise<import('../../models/types/types.js').AgentsView>}
- */
-export function agentsView(projectPath, query, filter) {
-  return ipc.invoke('agents_view', { projectPath, query, filter });
-}
 
-/**
- * @typedef {Object} UpdatedAgent
- * @property {string} agentId
- * @property {string} version
- * @property {boolean} downloaded Whether npm got the new version ahead of the next start.
- */
 
-/**
- * Pins an agent to the registry's newer version and downloads it; resolves once the download ended.
- * @param {string | null} projectPath
- * @param {string} agentId
- * @returns {Promise<UpdatedAgent[]>} Empty: it was up to date.
- */
-export function agentsUpdateVersion(projectPath, agentId) {
-  return ipc.invoke('agents_update_version', { projectPath, agentId });
-}
 
-/**
- * `agentsUpdateVersion()` for every agent with an update.
- * @param {string | null} projectPath
- * @returns {Promise<UpdatedAgent[]>}
- */
-export function agentsUpdateAll(projectPath) {
-  return ipc.invoke('agents_update_all', { projectPath });
-}
 
-/**
- * Asks the ACP registry now.
- * @returns {Promise<import('../../models/types/types.js').RegistryState>}
- */
-export function agentsRegistryCheck() {
-  return ipc.invoke('agents_registry_check');
-}
 
-/**
- * Puts back what an `agentsRemove()` took out.
- * @param {number} token
- * @returns {Promise<void>}
- */
-export function agentsRestore(token) {
-  return ipc.invoke('agents_restore', { token });
-}
 
-/**
- * An agents.json changed: a project's (on disk or saved here), or the user's (`null`, every project).
- * @param {(projectPath: string | null) => void} callback
- * @returns {Promise<() => void>} Stops listening.
- */
-export function onAgentsChanged(callback) {
-  return ipc.listen('agents://changed', (/** @type {{ projectPath: string | null }} */ payload) => callback(payload.projectPath));
-}
 
-/**
- * The agents.json to edit, created with the defaults when missing: the project's
- * `.brama/agents.json`, or the user's without a project.
- * @param {string | null} projectPath
- * @returns {Promise<string>} Absolute path.
- */
-export function agentsConfigFile(projectPath) {
-  return ipc.invoke('agents_config_file', { projectPath });
-}
 
-/**
- * An agent's models, thought levels and modes before it has a session: it's started in a scratch
- * folder, asked, and stopped (no prompt is sent).
- * @param {string | null} projectPath Its config comes from this project's agents.json.
- * @param {string} agentId
- * @returns {Promise<import('../../models/types/types.js').ProbedOptions>}
- */
-export function agentsProbeOptions(projectPath, agentId) {
-  return ipc.invoke('agents_probe_options', { projectPath, agentId });
-}
 
-/**
- * Signs an agent in: `methodId` one of its methods, or `null` to check whether it's signed in now
- * (after a login in a terminal). An `agent` method runs in the backend (it opens the browser); a
- * `terminal` / `command` one runs in a terminal the backend started, whose tab the page opens.
- * Returns once it started; how it goes comes as `agents://sign-in`.
- * @param {string | null} projectPath
- * @param {string} agentId
- * @param {string | null} methodId
- * @returns {Promise<import('../../models/types/types.js').LoginTab | null>} The login's terminal, for a terminal method.
- */
-export function agentsSignIn(projectPath, agentId, methodId) {
-  return ipc.invoke('agents_sign_in', { projectPath, agentId, methodId });
-}
 
-/**
- * Stops an agent's running sign-in.
- * @param {string | null} projectPath
- * @param {string} agentId
- * @returns {Promise<boolean>} `false`: none ran.
- */
-export function agentsSignInCancel(projectPath, agentId) {
-  return ipc.invoke('agents_sign_in_cancel', { projectPath, agentId });
-}
 
-/**
- * How sign-ins go, this window's and others'.
- * @param {(event: import('../../models/types/types.js').SignInEvent) => void} callback
- * @returns {Promise<() => void>} Stops listening.
- */
-export function onAgentsSignIn(callback) {
-  return ipc.listen('agents://sign-in', callback);
-}
 
-/**
- * The project's agents that run what its agents.json chose and wait for the user's trust.
- * @param {string} projectPath
- * @returns {Promise<import('../../models/types/types.js').UntrustedAgent[]>}
- */
-export function agentsUntrusted(projectPath) {
-  return ipc.invoke('agents_untrusted', { projectPath });
-}
 
-/**
- * Trusts what a project's agents.json runs for some agents, as `agentsUntrusted()` listed them.
- * Refused, all of them, when the file changed since.
- * @param {string} projectPath
- * @param {import('../../models/types/types.js').LaunchConfig[]} launches
- * @returns {Promise<void>}
- */
-export function agentsTrust(projectPath, launches) {
-  return ipc.invoke('agents_trust', { projectPath, launches });
-}
 
 /**
  * Saves a file from the editor; only agents.json files are accepted for now.

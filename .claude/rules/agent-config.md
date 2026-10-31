@@ -4,7 +4,7 @@ paths:
   - "src-tauri/crates/agent-acp/src/auth.rs"
   - "src-tauri/crates/agent-*/**"
   - "src-tauri/src/commands/agents.rs"
-  - "src/services/{agent-config,trust-controller}/**"
+  - "src/hooks/agents/**"
   - "src/stores/{agents,trust}/**"
   - "src/components/agents-view/**"
   - "src/components/{agent-form,agent-picker}/**"
@@ -28,7 +28,7 @@ paths:
     (case- and accent-insensitive, NFD via `icu_normalizer`; every term in the name, id, vendor,
     description or command line), ranks (name starts with it > a word of it does > it contains it >
     another field; with no query the default first, then by name), filters (`all` / `updates` /
-    `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). `agentConfig`
+    `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). The `agents` hook (`hooks/agents/agents.js`)
     keeps `$agentsView` for `$agentsQuery` (in memory; the latest answer only), asked again on
     `agents://changed`, a project switch and when the tab shows. It lists only agents that run
     Claude, Codex, Copilot or Antigravity (`registryId` set; others in an agents.json still run, unlisted).
@@ -110,7 +110,7 @@ paths:
     / `args` / `env` it sets, or any start while it lists `mcpServers`, needs the user's trust in that
     exact `LaunchConfig` for that project (`agents_trust`, kept in `<app data>/trusted-agents.json`; a
     changed launch needs trust again). Untrusted, a start fails with an `untrusted` event and a probe is
-    refused. `trustController` (`services/trust-controller/trust-controller.js`) asks in a confirm dialog at the top of
+    refused. The `agents` hook (`hooks/agents/trust.js`) asks in a confirm dialog at the top of
     `<acp-app>` when a project opens, its agents.json changes or a start is refused (`agents_untrusted`
     lists every launch waiting; `$trustPrompt`, `stores/trust/trust.js`): Trust project trusts them all
     (`agents_trust`) and restarts the sessions it held back; Not now holds until what they run changes

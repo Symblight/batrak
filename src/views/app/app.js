@@ -1,11 +1,10 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
+import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
-import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { gitController } from '../../services/git-controller/git-controller.js';
-import { trustController } from '../../services/trust-controller/trust-controller.js';
 import { terminalController } from '../../services/terminals/terminals.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
 import { $about } from '../../stores/about/about.js';
@@ -18,7 +17,6 @@ import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
-import { trustConfirm } from '../../models/trust/trust.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -160,8 +158,7 @@ export class AcpApp extends ViewElement {
     window.addEventListener('keydown', this.#onKeydown);
     this.#menuListener = onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
-    agentConfig.start();
-    trustController.start();
+    agents.start();
     sessionController.init().catch((err) => app.reportError('Loading sessions failed', err));
     gitController.start();
     terminalController.start();
@@ -189,10 +186,10 @@ export class AcpApp extends ViewElement {
       dialog.close();
       return;
     }
-    const trusted = await dialog.confirm(trustConfirm(prompt));
+    const trusted = await dialog.confirm(agents.trustConfirm(prompt));
     if ($trustPrompt.get() !== prompt) return;
-    if (trusted) trustController.trust();
-    else trustController.dismiss();
+    if (!trusted) agents.dismissTrust();
+    else for (const id of await agents.trust()) sessionController.restart(id);
   }
 
   /** Rendered unconditionally, so present after the first render. */

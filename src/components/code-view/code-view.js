@@ -12,7 +12,7 @@ import { EditorCommentsController } from '../../controllers/comments/EditorComme
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../file-icon/file-icon.js';
-import { isAgentsFile } from '../../models/agents-file/agents-file.js';
+import { agents } from '../../hooks/agents/agents.js';
 import styles from './code-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
@@ -331,7 +331,7 @@ export class AcpCodeView extends LitElement {
   render() {
     const tab = this.tab;
     if (!tab) return nothing;
-    const editable = isAgentsFile(tab.path);
+    const editable = agents.isAgentsFile(tab.path);
     return html`${tab.deletedOnDisk
         ? html`<div class="acp-code-view__notice" role="status">
             Deleted on disk.${editable ? ' Save to create it again.' : ''}

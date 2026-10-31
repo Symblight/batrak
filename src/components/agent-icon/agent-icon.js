@@ -6,9 +6,9 @@ import antigravityIcon from '../../assets/agent-icons/antigravity.svg?raw';
 import claudeIcon from '../../assets/agent-icons/claude.svg?raw';
 import codexIcon from '../../assets/agent-icons/codex.svg?raw';
 import copilotIcon from '../../assets/agent-icons/copilot.svg?raw';
-import { agentBrandOf } from '../../models/agents/agents.js';
+import { agents } from '../../hooks/agents/agents.js';
 
-/** @type {Record<import('../../models/agents/agents.js').AgentBrand, string>} */
+/** @type {Record<import('../../hooks/agents/rules.js').AgentBrand, string>} */
 const ICONS = { claude: claudeIcon, codex: codexIcon, copilot: copilotIcon, antigravity: antigravityIcon };
 
 /**
@@ -25,7 +25,7 @@ export class AcpAgentIcon extends LitElement {
     super();
     /** @type {{ id: string, name?: string | null }} */
     this.agent = { id: '' };
-    /** @type {import('../../models/agents/agents.js').AgentBrand | null} Derived from `agent`. */
+    /** @type {import('../../hooks/agents/rules.js').AgentBrand | null} Derived from `agent`. */
     this.brand = null;
   }
 
@@ -41,7 +41,7 @@ export class AcpAgentIcon extends LitElement {
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    if (changed.has('agent')) this.brand = agentBrandOf(this.agent.id, this.agent.name);
+    if (changed.has('agent')) this.brand = agents.agentBrandOf(this.agent.id, this.agent.name);
   }
 
   render() {

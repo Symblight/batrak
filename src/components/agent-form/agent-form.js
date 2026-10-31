@@ -6,7 +6,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/select';
 import '@symblight/wc-material/text-field';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
-import { commandLine, parseCommandLine } from '../../models/agents/agents.js';
+import { agents } from '../../hooks/agents/agents.js';
 import styles from './agent-form.css?inline';
 
 /** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
@@ -68,8 +68,8 @@ export class AcpAgentForm extends LitElement {
   #start() {
     const agent = this.agent;
     if (!agent) return { known: '', name: '', custom: true, command: '' };
-    const line = commandLine(agent.command, [...agent.args]);
-    const same = this.known.find((k) => commandLine(k.command, k.args) === line);
+    const line = agents.commandLine(agent.command, [...agent.args]);
+    const same = this.known.find((k) => agents.commandLine(k.command, k.args) === line);
     const named = same ?? this.known.find((k) => k.id === agent.id);
     return { known: named?.id ?? '', name: agent.name, custom: !same, command: line };
   }
@@ -95,7 +95,7 @@ export class AcpAgentForm extends LitElement {
 
   get #canSave() {
     const { name, custom, command } = this.draft;
-    return !this.saving && name.trim() !== '' && (!custom || parseCommandLine(command).command !== '');
+    return !this.saving && name.trim() !== '' && (!custom || agents.parseCommandLine(command).command !== '');
   }
 
   #save = () => {
@@ -108,7 +108,7 @@ export class AcpAgentForm extends LitElement {
     /** @type {NewAgent} */
     const agent = { name: name.trim() };
     if (known) agent.known = known;
-    if (custom) Object.assign(agent, parseCommandLine(this.draft.command));
+    if (custom) Object.assign(agent, agents.parseCommandLine(this.draft.command));
     this.#emit('acp-agent-update', { agentId, agent });
   };
 
@@ -131,14 +131,14 @@ export class AcpAgentForm extends LitElement {
   #onPick = (/** @type {Event} */ e) => {
     const known = this.#knownAgent(/** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value ?? '');
     // The agent keeps its own name.
-    if (known) this.draft = { ...this.draft, known: known.id, custom: false, command: commandLine(known.command, known.args) };
+    if (known) this.draft = { ...this.draft, known: known.id, custom: false, command: agents.commandLine(known.command, known.args) };
   };
 
   /** Checked: the command is the user's, starting from the registry's; unchecked: the registry's again. */
   #onCustom = (/** @type {Event} */ e) => {
     const custom = /** @type {HTMLElementTagNameMap['md-checkbox']} */ (e.target).checked;
     const known = this.#knownAgent(this.draft.known);
-    const command = !custom && known ? commandLine(known.command, known.args) : this.draft.command;
+    const command = !custom && known ? agents.commandLine(known.command, known.args) : this.draft.command;
     this.draft = { ...this.draft, custom, command };
   };
 

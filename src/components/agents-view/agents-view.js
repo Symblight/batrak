@@ -22,7 +22,7 @@ import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
-import { ownSignIns } from '../../models/agents/agents.js';
+import { agents } from '../../hooks/agents/agents.js';
 import '../agent-form/agent-form.js';
 import styles from './agents-view.css?inline';
 
@@ -335,7 +335,7 @@ export class AcpAgentsView extends LitElement {
         Signing in…
       </md-button>`;
     }
-    const methods = ownSignIns(agent.signIn.methods);
+    const methods = agents.ownSignIns(agent.signIn.methods);
     if (!methods.length) {
       return html`<md-button
           id=${tipId('sign-in', agent.id)}
@@ -685,7 +685,7 @@ export class AcpAgentsView extends LitElement {
       @select=${this.#signInMenu.onSelect}
       @closed=${this.#signInMenu.onClosed}
     >
-      ${ownSignIns(agent?.signIn?.methods ?? []).map(
+      ${agents.ownSignIns(agent?.signIn?.methods ?? []).map(
         (method) => html`<md-menu-item class="acp-agents-view__menu-item" value=${method.id}>
           ${method.name}
           ${method.description ? html`<span slot="supporting-text">${method.description}</span>` : nothing}

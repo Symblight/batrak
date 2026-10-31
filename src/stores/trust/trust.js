@@ -3,7 +3,7 @@ import { projectOf } from '../sessions/sessions.js';
 
 /** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
 
-/** What the trust dialog asks now; `null`: nothing waits for trust. Written by `trustController`. */
+/** What the trust dialog asks now; `null`: nothing waits for trust. Written by the `agents` hook. */
 export const $trustPrompt = atom(/** @type {TrustPrompt | null} */ (null));
 
 /** Sessions whose agent start was refused for want of trust; started again once it's given. */

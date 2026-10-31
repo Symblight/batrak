@@ -94,7 +94,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   turn's names the session it waits for, with Show session, and says when that one waits for
   your answer; the run-target picker's Local says how many local sessions share the checkout,
   `$localShared`); `$agentList`
-  (`services/agent-config/agent-config.js`) feeds the agent picker. The agent's text renders as Markdown in
+  (the `agents` hook, `hooks/agents/agents.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (marked + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
   width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in
   while their row is busy (`chx-message-row[aria-busy='true']` in `shadow.css`, CSS only: history and
@@ -148,7 +148,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   from its record: its agent, `config`, run target, started. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
   `session/new`, no prompt, stopped), one at a time; an agent picked in the composer is probed at
-  once (`agentConfig.loadOptions()`, once per launch, cached or not). `$composerOptionsStatus`
+  once (`agents.loadOptions()`, once per launch, cached or not). `$composerOptionsStatus`
   (`whileLoadingOptions()`: `loading` / `failed`) drives the composer's two dropdowns,
   `<acp-agent-picker>` then `<acp-model-picker>` (model, thought level and other options; disabled
   with a spinner while an agent with nothing cached loads). Permission options (category `mode`, and

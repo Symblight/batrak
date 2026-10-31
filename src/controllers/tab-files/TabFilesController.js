@@ -2,7 +2,7 @@ import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
-import { isUserAgentsFile } from '../../models/agents-file/agents-file.js';
+import { agents } from '../../hooks/agents/agents.js';
 import { imageTypeOf } from '../../models/image-types/image-types.js';
 import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
@@ -275,7 +275,7 @@ export class TabFilesController {
     if (id === null || this.#reading.has(id)) return;
     const tab = this.#find(id);
     // The user's agents.json lies outside every root: it reads with no project open.
-    if (this.#rootId.value === null && !(tab && isUserAgentsFile(tab.path))) return;
+    if (this.#rootId.value === null && !(tab && agents.isUserAgentsFile(tab.path))) return;
     if (tab && !tab.loaded) this.#load(id);
   }
 

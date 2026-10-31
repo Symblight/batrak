@@ -18,7 +18,7 @@ import { chatDropOf } from '../../models/file-drop/file-drop.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { inTurn } from '../../models/sessions/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
-import { agentConfig } from '../../services/agent-config/agent-config.js';
+import { agents } from '../../hooks/agents/agents.js';
 import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminalController } from '../../services/terminals/terminals.js';
@@ -312,7 +312,7 @@ export class AcpAgentColumn extends ViewElement {
     else if (action === 'restart') sessionController.restart(id);
     else if (action === 'turn-on-agent') {
       const agentId = $sessionNotices.get()[id]?.offAgent;
-      if (agentId) agentConfig.setEnabled(agentId, true);
+      if (agentId) agents.setEnabled(agentId, true);
     }
     else sessionController.dismissNotice(id);
   }
@@ -320,12 +320,12 @@ export class AcpAgentColumn extends ViewElement {
   /** @param {Event} e */
   #onSignIn(e) {
     const { agentId, methodId } = /** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ (e).detail;
-    agentConfig.signIn(agentId, methodId);
+    agents.signIn(agentId, methodId);
   }
 
   /** @param {Event} e */
   #onSignInCancel(e) {
-    agentConfig.cancelSignIn(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
+    agents.cancelSignIn(/** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId);
   }
 
   /** The sign-in running or failed for the active notice's agent. */
@@ -350,7 +350,7 @@ export class AcpAgentColumn extends ViewElement {
     const { agentId } = /** @type {CustomEvent<{ agentId: string }>} */ (e).detail;
     selectAgent(agentId);
     // Its models load while the model picker waits (or shows the ones cached).
-    agentConfig.loadOptions(agentId);
+    agents.loadOptions(agentId);
   }
 
   /** A model, level, mode or permission option of the composer's agent. */

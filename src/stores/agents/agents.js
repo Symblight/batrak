@@ -11,7 +11,7 @@ import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /**
  * The agents of the open project (its `.brama/agents.json`; the user's file with none), kept
- * current by `agentConfig` as the file changes.
+ * current by the `agents` hook as the file changes.
  */
 export const $agentList = atom(/** @type {AgentList} */ ({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] }));
 

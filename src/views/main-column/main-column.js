@@ -7,7 +7,7 @@ import '../../components/panel/panel.js';
 import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
 import { composedContains } from '../../models/file-drop/file-drop.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
-import { agentConfig } from '../../services/agent-config/agent-config.js';
+import { agents } from '../../hooks/agents/agents.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminalController } from '../../services/terminals/terminals.js';
@@ -130,10 +130,10 @@ export class AcpMainColumn extends ViewElement {
   #activePath = new StoreController(this, {
     store: $activePath,
     onChange: (path) => {
-      if (path === AGENTS_TAB_ID) agentConfig.search();
+      if (path === AGENTS_TAB_ID) agents.search();
       if (path !== SETTINGS_TAB_ID) return;
       settingsHook.loadSystemFonts();
-      agentConfig.refresh();
+      agents.refresh();
     },
   });
 
@@ -281,7 +281,7 @@ export class AcpMainColumn extends ViewElement {
     // Retargeted to the tab view out here; the form (or the Agents tab's registry row) that asked is where the event began.
     const form = /** @type {{ saveFinished(error: string | null): void }} */ (/** @type {unknown} */ (e.composedPath()[0]));
     try {
-      await (agentId ? agentConfig.update(agentId, agent) : agentConfig.add(agent));
+      await (agentId ? agents.update(agentId, agent) : agents.add(agent));
       form.saveFinished(null);
     } catch (err) {
       form.saveFinished(err instanceof Error ? err.message : String(err));
@@ -373,24 +373,24 @@ export class AcpMainColumn extends ViewElement {
           resetSection(e.detail.section)}
         @acp-settings-revealed=${(/** @type {CustomEvent<{ reveal: SettingsReveal }>} */ e) =>
           settingsRevealed(e.detail.reveal)}
-        @acp-agents-file-open=${() => agentConfig.openFile()}
+        @acp-agents-file-open=${() => agents.openFile()}
         @acp-agents-import=${(/** @type {CustomEvent<{ agentIds?: string[] } | null>} */ e) =>
-          agentConfig.importUserAgents(e.detail?.agentIds ?? null)}
-        @acp-agents-query=${(/** @type {CustomEvent<AgentsQuery>} */ e) => agentConfig.search(e.detail)}
-        @acp-agent-version-update=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.updateVersion(e.detail.agentId)}
-        @acp-agents-update-all=${() => agentConfig.updateAll()}
-        @acp-agents-registry-check=${() => agentConfig.checkRegistry()}
+          agents.importUserAgents(e.detail?.agentIds ?? null)}
+        @acp-agents-query=${(/** @type {CustomEvent<AgentsQuery>} */ e) => agents.search(e.detail)}
+        @acp-agent-version-update=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.updateVersion(e.detail.agentId)}
+        @acp-agents-update-all=${() => agents.updateAll()}
+        @acp-agents-registry-check=${() => agents.checkRegistry()}
         @acp-agents-revealed=${(/** @type {CustomEvent<{ reveal: AgentsReveal }>} */ e) => agentsRevealed(e.detail.reveal)}
         @acp-agent-add=${this.#onAgentSave}
         @acp-agent-update=${this.#onAgentSave}
         @acp-agent-enable=${(/** @type {CustomEvent<{ agentId: string, enabled: boolean }>} */ e) =>
-          agentConfig.setEnabled(e.detail.agentId, e.detail.enabled)}
+          agents.setEnabled(e.detail.agentId, e.detail.enabled)}
         @acp-agent-session-view=${(/** @type {CustomEvent<{ agentId: string, view: SessionView }>} */ e) =>
           setAgentView(e.detail.agentId, e.detail.view)}
-        @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.setDefault(e.detail.agentId)}
-        @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agentConfig.remove(e.detail.agentId)}
+        @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.setDefault(e.detail.agentId)}
+        @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.remove(e.detail.agentId)}
         @acp-agent-sign-in=${(/** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ e) =>
-          agentConfig.signIn(e.detail.agentId, e.detail.methodId)}
+          agents.signIn(e.detail.agentId, e.detail.methodId)}
       ></acp-tab-view>
       <acp-comment-bar
         placement=${this.#activePath.value === CHANGES_TAB_ID ? 'changes' : 'file'}

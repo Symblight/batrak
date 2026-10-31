@@ -2,7 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { OPTION_VARIANTS } from '@symblight/chat/agent';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/tooltip';
-import { ownSignIns } from '../../models/agents/agents.js';
+import { agents } from '../../hooks/agents/agents.js';
 import styles from './session-banner.css?inline';
 
 /** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
@@ -88,7 +88,7 @@ export class AcpSessionBanner extends LitElement {
           >Cancel</md-button
         >`;
     }
-    const own = ownSignIns(signIn.methods);
+    const own = agents.ownSignIns(signIn.methods);
     const signInWith = (/** @type {string | null} */ methodId) => this.#emit('acp-agent-sign-in', { agentId, methodId });
     return html`
       ${own.map(
@@ -136,7 +136,7 @@ export class AcpSessionBanner extends LitElement {
     }
     if (run?.state === 'waiting') return `Signing in to ${signIn.agentName}… Finish in your browser if it opened.`;
     if (run?.state === 'failed') return `Signing in to ${signIn.agentName} failed: ${run.message ?? 'unknown error'}`;
-    if (!ownSignIns(signIn.methods).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
+    if (!agents.ownSignIns(signIn.methods).length) return `${signIn.agentName} needs you to sign in. Run its login in a terminal, then Retry.`;
     return notice.message;
   }
 
