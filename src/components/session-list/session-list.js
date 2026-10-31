@@ -24,6 +24,7 @@ import '../session-status/session-status.js';
 import '../session-sync/session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../agent-icon/agent-icon.js';
+import '../datetime/datetime.js';
 import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions/sessions.js';
 import styles from './session-list.css?inline';
 
@@ -35,18 +36,6 @@ const REVEAL_LABEL = /Mac/.test(navigator.userAgent)
   : /Windows/.test(navigator.userAgent)
     ? 'Show in Explorer'
     : 'Show in File Manager';
-
-/**
- * Compact age: `now`, `12m`, `3h`, `2d`.
- * @param {string} iso
- */
-function age(iso) {
-  const minutes = Math.floor((Date.now() - Date.parse(iso)) / 60_000);
-  if (!(minutes >= 1)) return 'now';
-  if (minutes < 60) return `${minutes}m`;
-  if (minutes < 60 * 24) return `${Math.floor(minutes / 60)}h`;
-  return `${Math.floor(minutes / (60 * 24))}d`;
-}
 
 /**
  * @tag acp-session-list
@@ -432,7 +421,7 @@ export class AcpSessionList extends LitElement {
             >${unsafeSVG(branchIcon)}</md-icon
           >`
         : nothing}
-      <span class="acp-session-list__age">${age(session.lastActivityAt)}</span>
+      <acp-datetime class="acp-session-list__age" .value=${session.lastActivityAt} .now=${this.now} format="compact"></acp-datetime>
       ${showMore
         ? html`<md-icon-button
             id=${`acp-session-list-more-${session.id}`}

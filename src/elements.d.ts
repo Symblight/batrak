@@ -11,6 +11,7 @@ import type { AcpChangesPanel } from './views/changes-panel/changes-panel.js';
 import type { AcpChangesReview } from './views/changes-review/changes-review.js';
 import type { AcpContextMeter } from './components/context-meter/context-meter.js';
 import type { AcpConfirmDialog } from './components/confirm-dialog/confirm-dialog.js';
+import type { AcpDatetime } from './components/datetime/datetime.js';
 import type { AcpCommentBar } from './components/comment-bar/comment-bar.js';
 import type { AcpChat } from './components/chat/chat.js';
 import type { AcpImagePreview } from './components/image-preview/image-preview.js';
@@ -66,6 +67,7 @@ declare global {
     'acp-chat': AcpChat;
     'acp-comment-bar': AcpCommentBar;
     'acp-confirm-dialog': AcpConfirmDialog;
+    'acp-datetime': AcpDatetime;
     'acp-context-meter': AcpContextMeter;
     'acp-image-preview': AcpImagePreview;
     'acp-markdown': AcpMarkdown;

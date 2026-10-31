@@ -141,6 +141,15 @@ describe('acp-agents-view', () => {
     expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer')))).to.contain('Versions are checked against the ACP registry daily');
   });
 
+  it('shows when the registry was last checked', async () => {
+    const { root } = await render();
+    const state = /** @type {Element} */ (root.querySelector('.acp-agents-view__footer-state'));
+    expect(text(state)).to.contain('Last checked');
+    const when = /** @type {HTMLElementTagNameMap['acp-datetime']} */ (state.querySelector('acp-datetime'));
+    expect(when.value).to.equal('2026-10-21T08:00:00.000Z');
+    expect(when.shadowRoot?.textContent?.trim()).to.not.equal('');
+  });
+
   it('shows each agent as a logo icon, a generic one for an agent of no known brand', async () => {
     const { root } = await render();
     /** @param {string} id */

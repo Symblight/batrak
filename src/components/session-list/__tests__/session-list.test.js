@@ -103,7 +103,7 @@ describe('acp-session-list', () => {
     expect(tooltipOf(root.querySelector('.acp-session-list__add'))).to.equal('New session');
     expect(tooltipOf(root.querySelector('.acp-session-list__open-folder'))).to.equal('Open folder…');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
-    expect(row(root, 'Session a').querySelector('.acp-session-list__age')?.textContent).to.match(/^\d+d$/);
+    expect(row(root, 'Session a').querySelector('.acp-session-list__age')?.shadowRoot?.textContent).to.match(/^\d+d$/);
   });
 
   it('shows each session’s agent as a small icon named by its tooltip', async () => {

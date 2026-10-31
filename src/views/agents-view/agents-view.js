@@ -21,6 +21,7 @@ import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../../components/agent-icon/agent-icon.js';
+import '../../components/datetime/datetime.js';
 import { ownSignIns } from '../../models/agents/agents.js';
 import '../../components/agent-form/agent-form.js';
 import styles from './agents-view.css?inline';
@@ -627,7 +628,7 @@ export class AcpAgentsView extends LitElement {
     const { checkedAt, offline } = view.registryState;
     const checking = view.registryState.checking || this.pending.checking;
     const when = checkedAt
-      ? `Last checked ${new Date(checkedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`
+      ? html`Last checked <acp-datetime .value=${checkedAt} format="medium"></acp-datetime>`
       : 'Not checked yet';
     return html`<footer class="acp-agents-view__footer">
       <p class="acp-agents-view__footer-text">
