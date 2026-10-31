@@ -10,7 +10,7 @@ const asHtml = (/** @type {string} */ svg) => {
 };
 
 /** @param {Element} el */
-const shown = (el) => el.shadowRoot?.querySelector('md-icon')?.innerHTML.replace(/<!--.*?-->/g, '') ?? '';
+const shown = (el) => el.querySelector('md-icon')?.innerHTML.replace(/<!--.*?-->/g, '') ?? '';
 
 describe('fileIcon', () => {
   it('finds a language logo by extension, case-insensitively', () => {
@@ -37,6 +37,13 @@ describe('fileIcon', () => {
 });
 
 describe('acp-file-icon', () => {
+  it('renders into itself, an inline-flex box in its parent’s tree with no shadow root', async () => {
+    const el = await fixture(html`<acp-file-icon name="main.rs"></acp-file-icon>`);
+    expect(el.shadowRoot === null, 'no shadow root').to.equal(true);
+    expect(el.querySelector('md-icon') !== null, 'an icon inside').to.equal(true);
+    expect(el.style.display).to.equal('inline-flex');
+  });
+
   it('shows the logo of a known file', async () => {
     const el = await fixture(html`<acp-file-icon name="main.rs"></acp-file-icon>`);
     expect(shown(el)).to.equal(asHtml(fileIcon.svgFor('main.rs')));

@@ -4,7 +4,6 @@ import '@symblight/wc-material/icon';
 import genericIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import { fileIcons, byExtension, byName } from './icons.js';
-import styles from './file-icon.css?inline';
 
 /** @param {string} name */
 function logoKey(name) {
@@ -38,7 +37,7 @@ export const fileIcon = Object.freeze({
 
 /**
  * @tag acp-file-icon
- * @summary The icon of a file (its language's logo, else a generic one) or of a folder; sized by `font-size`.
+ * @summary The icon of a file (its language's logo, else a generic one) or of a folder. Light DOM, sized by `font-size`.
  */
 export class AcpFileIcon extends LitElement {
   static properties = {
@@ -46,16 +45,24 @@ export class AcpFileIcon extends LitElement {
     folder: { type: Boolean },
   };
 
-  static styles = styles;
-
   constructor() {
     super();
     this.name = '';
     this.folder = false;
   }
 
+  /** Light DOM: an inline-flex box in its parent's tree, sized by the parent's `font-size`. */
+  createRenderRoot() {
+    return this;
+  }
+
+  connectedCallback() {
+    this.style.display = 'inline-flex';
+    super.connectedCallback();
+  }
+
   render() {
-    return html`<md-icon class="acp-file-icon__icon">${unsafeSVG(fileIcon.svgFor(this.name, this.folder))}</md-icon>`;
+    return html`<md-icon>${unsafeSVG(fileIcon.svgFor(this.name, this.folder))}</md-icon>`;
   }
 }
 
