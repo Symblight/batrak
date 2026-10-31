@@ -1,4 +1,8 @@
 // Typed `querySelector('acp-…')` / `createElement('acp-…')`. Add every new custom element here.
+import type { AcpPanel } from './components/panel/panel.js';
+import type { AcpPane } from './components/pane/pane.js';
+import type { AcpSplit } from './components/split/split.js';
+import type { AcpPanelHeader } from './components/panel-header/panel-header.js';
 import type { AcpAboutDialog } from './components/about-dialog/about-dialog.js';
 import type { AcpBytes } from './components/bytes/bytes.js';
 import type { AcpFileIcon } from './components/file-icon/file-icon.js';
@@ -56,6 +60,10 @@ declare global {
     'acp-about-dialog': AcpAboutDialog;
     'acp-agent-column': AcpAgentColumn;
     'acp-agent-icon': AcpAgentIcon;
+    'acp-panel': AcpPanel;
+    'acp-pane': AcpPane;
+    'acp-split': AcpSplit;
+    'acp-panel-header': AcpPanelHeader;
     'acp-agent-picker': AcpAgentPicker;
     'acp-app': AcpApp;
     'acp-browser': AcpBrowser;

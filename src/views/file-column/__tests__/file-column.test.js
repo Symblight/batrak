@@ -39,6 +39,17 @@ describe('acp-file-column', () => {
   /** @param {AcpFileColumn} el */
   const panel = (el) => /** @type {HTMLElementTagNameMap['acp-search-panel']} */ (el.shadowRoot?.querySelector('acp-search-panel'));
 
+  it("titles its panel by the shown pane and offers a refresh only for the project's files", async () => {
+    const el = await render();
+    const header = () => /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.shadowRoot?.querySelector('acp-panel-header'));
+    expect(header().heading).to.equal('Files');
+    expect(header().action?.label).to.equal('Refresh files');
+    el.sideView = 'changes';
+    await el.updateComplete;
+    expect(header().heading).to.equal('Changes');
+    expect(header().action).to.equal(null);
+  });
+
   it("opens a search match under the project's path", async () => {
     const el = await render();
     /** @type {CustomEvent[]} */

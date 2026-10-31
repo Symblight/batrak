@@ -1,5 +1,6 @@
-import { LitElement, html } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
+import { html } from 'lit';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
 import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
 import { composedContains } from '../../models/file-drop/file-drop.js';
 import { PLATFORM } from '../../models/platform/platform.js';
@@ -70,7 +71,6 @@ import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
 import { AcpTerminal } from '../../components/terminal/terminal.js';
 import '../../components/comment-bar/comment-bar.js';
-import styles from './main-column.css?inline';
 
 /** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
@@ -90,9 +90,7 @@ import styles from './main-column.css?inline';
  * @tag acp-main-column
  * @summary The main column: everything opens in its tabs (files, Changes, Settings, terminals).
  */
-export class AcpMainColumn extends LitElement {
-  static styles = styles;
-
+export class AcpMainColumn extends ViewElement {
   #files = new TabFilesController(this);
   #review = new ChangesReviewController(this);
   #sessionReview = new SessionChangesController(this);
@@ -295,7 +293,8 @@ export class AcpMainColumn extends LitElement {
   render() {
     const { active, pinned } = this.#editorTabs.value;
     const settings = this.#settings.value;
-    return html`<acp-tab-view
+    return html`<acp-panel>
+      <acp-tab-view
         class="acp-main-column__tabs"
         .tabs=${this.#files.tabs}
         .active=${active}
@@ -396,14 +395,12 @@ export class AcpMainColumn extends LitElement {
           agentConfig.signIn(e.detail.agentId, e.detail.methodId)}
       ></acp-tab-view>
       <acp-comment-bar
-        class=${classMap({
-          'acp-main-column__comment-bar': true,
-          'acp-main-column__comment-bar_changes': this.#activePath.value === CHANGES_TAB_ID,
-        })}
+        placement=${this.#activePath.value === CHANGES_TAB_ID ? 'changes' : 'file'}
         .comments=${this.#tabComments.value}
         @acp-comment-focus=${(/** @type {CustomEvent<CommentFocus>} */ e) => focusComment(e.detail)}
         @acp-comments-send=${() => sendToChat($tabComments.get())}
-      ></acp-comment-bar>`;
+      ></acp-comment-bar>
+    </acp-panel>`;
   }
 }
 

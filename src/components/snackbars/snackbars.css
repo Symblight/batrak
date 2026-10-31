@@ -1,4 +1,9 @@
 :host {
+  position: fixed;
+  z-index: var(--acp-z-overlay);
+  inset-block-end: var(--acp-space-4);
+  inset-inline-end: calc(var(--acp-nav-rail-width) + var(--acp-space-4));
+  width: min(440px, calc(100vw - var(--acp-nav-rail-width) - 2 * var(--acp-space-4)));
   display: flex;
   /* Only the snackbars take clicks, not the gaps between them. */
   pointer-events: none;

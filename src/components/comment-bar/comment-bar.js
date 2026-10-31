@@ -21,6 +21,7 @@ export class AcpCommentBar extends LitElement {
   static properties = {
     comments: { attribute: false },
     index: { state: true },
+    placement: { type: String, reflect: true },
   };
 
   static styles = styles;
@@ -31,6 +32,8 @@ export class AcpCommentBar extends LitElement {
     this.comments = [];
     /** @type {number} The comment the arrows stepped to, in `comments`. */
     this.index = 0;
+    /** @type {'file' | 'changes'} Where it floats over its panel: above a file tab's footer, or centered over the Changes tab. */
+    this.placement = 'file';
   }
 
   /**

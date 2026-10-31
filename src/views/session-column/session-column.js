@@ -1,4 +1,6 @@
-import { LitElement, html } from 'lit';
+import { html } from 'lit';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -14,19 +16,16 @@ import { $sessionSync } from '../../stores/session-sync/session-sync.js';
 import { loadingProjects } from '../../models/sessions/sessions.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
-import styles from './session-column.css?inline';
 
 /**
  * @tag acp-session-column
  * @summary The session list's container: projects and their sessions from the stores, the active project's sync, and what the list asks for (open, select, start, rename, reveal, remove, resync).
  */
-export class AcpSessionColumn extends LitElement {
+export class AcpSessionColumn extends ViewElement {
   static properties = {
     home: { state: true },
     failures: { state: true },
   };
-
-  static styles = styles;
 
   #projects = new StoreController(this, { store: $projects });
   #collapsed = new StoreController(this, { store: $collapsedProjects });
@@ -165,7 +164,7 @@ export class AcpSessionColumn extends LitElement {
 
   render() {
     const path = this.#workspace.value?.path ?? null;
-    return html`
+    return html`<acp-panel>
       <acp-session-list
         class="acp-session-column__list"
         .projects=${this.#projects.value}
@@ -196,7 +195,7 @@ export class AcpSessionColumn extends LitElement {
         @acp-session-resync=${this.#onResync}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>
-    `;
+    </acp-panel>`;
   }
 }
 

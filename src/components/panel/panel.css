@@ -1,0 +1,46 @@
+:host {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--acp-column-background);
+  border-radius: var(--acp-shape-corner-medium);
+  overflow: hidden;
+}
+
+:host([variant='window']) {
+  flex: none;
+  height: 100vh;
+  background: var(--acp-app-background);
+  color: var(--acp-color-on-surface);
+  border-radius: 0;
+  overflow: visible;
+}
+
+::slotted(*) {
+  flex: 1;
+  min-height: 0;
+}
+
+::slotted([slot='header']) {
+  flex: none;
+}
+
+::slotted([hidden]) {
+  display: none;
+}
+
+.acp-panel__loading {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+}
+
+.acp-panel__spinner {
+  font-size: 40px;
+}

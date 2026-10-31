@@ -1,5 +1,6 @@
 :host {
   display: block;
+  flex: none;
   box-sizing: border-box;
   width: var(--acp-nav-rail-width);
   height: 100%;

@@ -1,4 +1,6 @@
-import { LitElement, html, nothing } from 'lit';
+import { html, nothing } from 'lit';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
 import '@symblight/wc-material/progress-circular';
 import '../../components/chat/chat.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -38,7 +40,6 @@ import { $sessionTerminals, $terminals, openLoginTerminal } from '../../stores/t
 import { $activeShownView, $activeView } from '../../stores/session-views/session-views.js';
 import { $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace/workspace.js';
-import styles from './agent-column.css?inline';
 
 /** Larger attachments aren't sent to be saved (the backend's cap). */
 const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
@@ -55,13 +56,11 @@ const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
-export class AcpAgentColumn extends LitElement {
+export class AcpAgentColumn extends ViewElement {
   static properties = {
     fileOptions: { state: true },
     branches: { state: true },
   };
-
-  static styles = styles;
 
   #workspace = new StoreController(this, { store: $workspace });
   #openingPath = new StoreController(this, { store: $openingPath });
@@ -438,15 +437,17 @@ export class AcpAgentColumn extends LitElement {
     return pending ? pending.inserts.length + pending.drops.length : 0;
   }
 
-  /** The active session's CLI, or a spinner while it starts. */
+  /** The terminal of the active session's CLI; `undefined` while it starts. */
+  get #cliTerminalId() {
+    const id = this.#activeSessionId.value;
+    return id === null ? undefined : this.#sessionTerminals.value[id];
+  }
+
+  /** The active session's CLI; nothing while it starts (the panel's spinner covers that). */
   #renderTerminal() {
     const id = this.#activeSessionId.value;
-    const terminalId = id === null ? undefined : this.#sessionTerminals.value[id];
-    if (terminalId === undefined) {
-      return html`<div class="acp-agent-column__loading">
-        <md-progress-circular class="acp-agent-column__spinner" aria-label="Starting the agent's CLI"></md-progress-circular>
-      </div>`;
-    }
+    const terminalId = this.#cliTerminalId;
+    if (terminalId === undefined) return nothing;
     return html`<acp-terminal
       class="acp-agent-column__terminal"
       chat-fallback
@@ -474,6 +475,7 @@ export class AcpAgentColumn extends LitElement {
     if (this.#activeSessionId.value === null) return nothing;
     const session = this.#activeSession.value;
     return html`<acp-session-header
+      slot="header"
       class="acp-agent-column__header"
       session-id=${session?.id ?? ''}
       session-title=${session?.title ?? ''}
@@ -500,8 +502,12 @@ export class AcpAgentColumn extends LitElement {
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
     const inTerminal = this.#inTerminal;
+    const startingCli = inTerminal && this.#cliTerminalId === undefined;
     // Hidden rather than removed while a project opens, so the chat keeps its state.
-    return html`
+    return html`<acp-panel
+      ?loading=${opening || startingCli}
+      loading-label=${opening ? 'Opening project' : "Starting the agent's CLI"}
+    >
       ${workspace !== null && !opening ? this.#renderHeader() : nothing}
       ${workspace !== null
         ? html`<acp-chat
@@ -549,13 +555,8 @@ export class AcpAgentColumn extends LitElement {
             @acp-open-local=${this.#onOpenLocal}
           ></acp-welcome>`}
       ${inTerminal ? this.#renderTerminal() : nothing}
-      ${opening
-        ? html`<div class="acp-agent-column__loading">
-            <md-progress-circular class="acp-agent-column__spinner" aria-label="Opening project"></md-progress-circular>
-          </div>`
-        : nothing}
       <acp-confirm-dialog></acp-confirm-dialog>
-    `;
+    </acp-panel>`;
   }
 }
 

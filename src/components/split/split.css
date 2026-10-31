@@ -1,0 +1,15 @@
+:host {
+  display: flex;
+  flex: 1;
+  gap: var(--acp-column-gap);
+  min-height: 0;
+  padding: 0 var(--acp-column-gap) var(--acp-column-gap);
+}
+
+/* Pulled in by the gaps on both sides, so the handle fills the one gap between its panes. */
+::slotted(.acp-split__handle) {
+  --acp-resize-handle-line-color: transparent;
+
+  z-index: var(--acp-z-raised);
+  margin-inline: calc((var(--acp-column-gap) + var(--acp-resize-handle-hit-width)) / -2);
+}

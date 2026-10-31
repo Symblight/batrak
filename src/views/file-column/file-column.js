@@ -1,8 +1,4 @@
-import { LitElement, html, nothing } from 'lit';
-import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import '@symblight/wc-material/icon';
-import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/tooltip';
+import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
@@ -19,10 +15,12 @@ import { absPath } from '../../models/paths/paths.js';
 import { searchFilters } from '../../models/search-filter/search-filter.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
+import '../../components/panel-header/panel-header.js';
 import '../../components/file-tree/file-tree.js';
 import '../search-panel/search-panel.js';
 import '../changes-panel/changes-panel.js';
-import styles from './file-column.css?inline';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
 /** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
@@ -32,17 +30,17 @@ import styles from './file-column.css?inline';
 /** @type {Record<SideView, string>} */
 const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };
 
+const REFRESH = { icon: refreshIcon, label: 'Refresh files', tooltip: 'Refresh' };
+
 /**
  * @tag acp-file-column
  * @summary The project column: one of Files, Search or Changes, picked from the nav rail.
  */
-export class AcpFileColumn extends LitElement {
+export class AcpFileColumn extends ViewElement {
   static properties = {
     sideView: { state: true },
     refreshing: { state: true },
   };
-
-  static styles = styles;
 
   #rootId = new StoreController(this, { store: $rootId });
   #workspace = new StoreController(this, { store: $workspace });
@@ -211,22 +209,14 @@ export class AcpFileColumn extends LitElement {
     const root = this.#workspace.value?.path ?? null;
     const search = this.#search;
     const tree = this.#treeRoot.value;
-    return html`
-      <div class="acp-file-column__header">
-        <h2 class="acp-file-column__title">${SIDE_TITLES[this.sideView]}</h2>
-        ${this.sideView === 'files' && tree.rootId !== null
-          ? html`<md-icon-button
-              id="acp-file-column-refresh"
-              class="acp-file-column__refresh"
-              aria-label="Refresh files"
-              ?disabled=${this.refreshing}
-              @click=${this.#refreshTree}
-            >
-              <md-icon class="acp-file-column__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
-            </md-icon-button>
-            <md-tooltip for="acp-file-column-refresh" show-delay="800">Refresh</md-tooltip>`
-          : nothing}
-      </div>
+    return html`<acp-panel>
+      <acp-panel-header
+        slot="header"
+        heading=${SIDE_TITLES[this.sideView]}
+        .action=${this.sideView === 'files' && tree.rootId !== null ? REFRESH : null}
+        ?action-disabled=${this.refreshing}
+        @acp-panel-header-action=${this.#refreshTree}
+      ></acp-panel-header>
       <acp-file-tree
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'files'}
@@ -260,7 +250,7 @@ export class AcpFileColumn extends LitElement {
         @acp-amend-start=${this.#onAmendStart}
         @acp-commit=${this.#onCommit}
       ></acp-changes-panel>
-    `;
+    </acp-panel>`;
   }
 }
 

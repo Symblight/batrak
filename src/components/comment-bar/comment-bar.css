@@ -1,6 +1,10 @@
 :host {
-  /* Containing block of md-shadow; the parent's placement (absolute) overrides it */
-  position: relative;
+  /* Floats over its panel; also the containing block of md-shadow */
+  position: absolute;
+  z-index: var(--acp-z-raised);
+  /* Above a file tab's footer */
+  inset-block-end: 44px;
+  inset-inline-end: var(--acp-space-4);
   display: flex;
   align-items: center;
   gap: var(--acp-space-1);
@@ -11,6 +15,12 @@
   color: var(--acp-color-on-surface);
   font-family: var(--acp-font-family);
   font-size: var(--acp-font-size-md);
+}
+:host([placement='changes']) {
+  inset-block-end: var(--acp-space-4);
+  inset-inline: 0;
+  margin-inline: auto;
+  width: fit-content;
 }
 :host([hidden]) {
   display: none;

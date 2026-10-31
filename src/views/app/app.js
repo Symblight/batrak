@@ -1,4 +1,4 @@
-import { LitElement, html, nothing } from 'lit';
+import { html, nothing } from 'lit';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
@@ -37,7 +37,10 @@ import '../search-dialog/search-dialog.js';
 import '../../components/resize-handle/resize-handle.js';
 import '../../components/snackbars/snackbars.js';
 import { ColumnResizeController } from '../../controllers/resize/ColumnResizeController.js';
-import styles from './app.css?inline';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
+import '../../components/pane/pane.js';
+import '../../components/split/split.js';
 
 /** @typedef {import('../file-column/file-column.js').SideView} SideView */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
@@ -49,19 +52,31 @@ import styles from './app.css?inline';
 /** @type {SearchDialogState} A project's search before its first one. */
 const NO_SEARCH = { query: '', caseSensitive: false, wholeWord: false, regex: false, folder: '', mask: '' };
 
+/*
+ * How the panes share the row. Session and file columns shrink, down to their resize minimums, to
+ * fit the main column's minimum only once the agent column (its far larger shrink factor) is at its
+ * own; a drag starts from the rendered width.
+ */
+const SESSION_PANE =
+  '--acp-pane-flex: 0 1 var(--acp-session-column-width); --acp-pane-width: var(--acp-session-column-width); --acp-pane-min-width: var(--acp-session-column-min-width); --acp-pane-max-width: var(--acp-column-max-width)';
+const AGENT_PANE =
+  '--acp-pane-flex: 0 1000 var(--acp-agent-column-width); --acp-pane-width: var(--acp-agent-column-width); --acp-pane-min-width: var(--acp-agent-column-min-width)';
+const AGENT_FILL_PANE = '--acp-pane-flex: 1';
+const MAIN_PANE = '--acp-pane-min-width: var(--acp-main-column-min-width)';
+const FILES_PANE =
+  '--acp-pane-flex: 0 1 var(--acp-file-tree-width); --acp-pane-width: var(--acp-file-tree-width); --acp-pane-min-width: var(--acp-file-tree-min-width); --acp-pane-max-width: var(--acp-column-max-width)';
+
 /**
  * @tag acp-app
  * @summary Root layout: toolbar, session/agent/editor/file columns, Quick Open, the search dialog, About, the project trust dialog, snackbars, global shortcuts and menu bar items.
  */
-export class AcpApp extends LitElement {
+export class AcpApp extends ViewElement {
   static properties = {
     sideView: { state: true },
     quickOpenFiles: { state: true },
     searchFolders: { state: true },
     searchFoldersQuery: { state: true },
   };
-
-  static styles = styles;
 
   #resize = new ColumnResizeController(this, {
     store: $columnWidths,
@@ -422,7 +437,7 @@ export class AcpApp extends LitElement {
   #renderResizer(name, label, edge = 'end') {
     const { value, min, max } = this.#resize.column(name);
     return html`<acp-resize-handle
-      class="acp-app__resizer"
+      class="acp-split__handle"
       name=${name}
       edge=${edge}
       label=${label}
@@ -437,46 +452,48 @@ export class AcpApp extends LitElement {
     const hidden = this.#hiddenColumns.value;
     const sessionHidden = hidden.includes('session');
     const filesHidden = hidden.includes('side');
-    // A hidden column drops its inline width, so its collapse in CSS can take it to nothing.
+    // A hidden column drops its inline width, so its collapse can take it to nothing.
     // With no tabs beside it, the agent column takes the space.
     const agentFills = !hasCode;
-    return html`
+    return html`<acp-panel variant="window">
       <acp-toolbar
-        class="acp-app__toolbar"
+        slot="header"
         .workspace=${this.#workspace.value}
         .git=${this.#gitRepo.value}
         .hiddenColumns=${hidden}
         @acp-column-toggle=${this.#onColumnToggle}
       ></acp-toolbar>
-      <div class="acp-app__columns">
-        <acp-session-column
-          class="acp-app__session"
-          style=${sessionHidden ? nothing : this.#resize.columnStyle('session')}
+      <acp-split>
+        <acp-pane
+          edge="end"
+          style=${sessionHidden ? SESSION_PANE : `${SESSION_PANE}; ${this.#resize.columnStyle('session')}`}
           ?hidden=${sessionHidden}
-        ></acp-session-column>
+        >
+          <acp-session-column></acp-session-column>
+        </acp-pane>
         ${sessionHidden ? nothing : this.#renderResizer('session', 'Resize sessions column')}
-        <acp-agent-column
-          class="acp-app__agent ${agentFills ? 'acp-app__agent_fill' : ''}"
-          style=${agentFills ? nothing : this.#resize.columnStyle('agent')}
-          @acp-file-open=${this.#onChatFileOpen}
-          @acp-file-reveal=${this.#onChatFileReveal}
-        ></acp-agent-column>
+        <acp-pane style=${agentFills ? AGENT_FILL_PANE : `${AGENT_PANE}; ${this.#resize.columnStyle('agent')}`}>
+          <acp-agent-column
+            @acp-file-open=${this.#onChatFileOpen}
+            @acp-file-reveal=${this.#onChatFileReveal}
+          ></acp-agent-column>
+        </acp-pane>
         ${agentFills ? nothing : this.#renderResizer('agent', 'Resize agent column')}
-        <acp-main-column
-          class="acp-app__main"
-          ?hidden=${!hasCode}
-          @acp-file-reveal=${this.#onFileReveal}
-        ></acp-main-column>
+        <acp-pane style=${MAIN_PANE} ?hidden=${!hasCode}>
+          <acp-main-column @acp-file-reveal=${this.#onFileReveal}></acp-main-column>
+        </acp-pane>
         ${filesHidden ? nothing : this.#renderResizer('side', 'Resize file column', 'start')}
-        <acp-file-column
-          class="acp-app__files"
-          style=${filesHidden ? nothing : this.#resize.columnStyle('side')}
+        <acp-pane
+          edge="start"
+          style=${filesHidden ? FILES_PANE : `${FILES_PANE}; ${this.#resize.columnStyle('side')}`}
           ?hidden=${filesHidden}
-          @acp-file-open=${this.#onFileOpen}
-          @acp-diff-open=${this.#onDiffOpen}
-        ></acp-file-column>
+        >
+          <acp-file-column
+            @acp-file-open=${this.#onFileOpen}
+            @acp-diff-open=${this.#onDiffOpen}
+          ></acp-file-column>
+        </acp-pane>
         <acp-nav-rail
-          class="acp-app__rail"
           .selected=${this.sideView}
           @acp-show-files=${this.#showFiles}
           @acp-find-in-files=${this.#showSearch}
@@ -484,7 +501,8 @@ export class AcpApp extends LitElement {
           @acp-open-terminal=${this.#openProjectTerminal}
           @acp-show-settings=${this.#showSettings}
         ></acp-nav-rail>
-      </div>
+      </acp-split>
+    </acp-panel>
       <acp-quick-open
         .hasProject=${this.#rootId.value !== null}
         .files=${this.quickOpenFiles}
@@ -514,7 +532,6 @@ export class AcpApp extends LitElement {
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-snackbars
-        class="acp-app__snackbars"
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}
         @acp-notice-action=${(/** @type {CustomEvent<{ id: number }>} */ e) => runNoticeAction(e.detail.id)}
