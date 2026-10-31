@@ -114,12 +114,16 @@ describe('sessionController keeps the active session in its view', () => {
   /** @type {{ cmd: string, args: unknown }[]} */
   let calls = [];
   let busy = false;
+  /** @type {Error | null} What `session_open_cli` fails with. */
+  let cliFails = null;
 
   beforeEach(() => {
     calls = [];
     busy = false;
+    cliFails = null;
     mockIPC((cmd, args) => {
       calls.push({ cmd, args });
+      if (cmd === 'session_open_cli' && cliFails) throw cliFails;
       if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
       if (cmd === 'session_cli_busy') return busy;
       return null;
@@ -252,6 +256,17 @@ describe('sessionController keeps the active session in its view', () => {
     });
     expect($sessions.get().map((s) => s.id), 'listed').to.deep.equal(['d1']);
     expect($activeShownView.get()).to.equal('terminal');
+  });
+
+  it("answers whether a draft's CLI started: a refused one is a draft again", async () => {
+    $draftSessions.set({ d1: '/p' });
+    $activeSessionId.set('d1');
+    setAgentView('claude', 'terminal');
+    cliFails = new Error('no npx');
+    expect(await sessionController.startInTerminal('d1', 'T', 'go')).to.equal(false);
+    expect($draftSessions.get()).to.have.property('d1');
+    cliFails = null;
+    expect(await sessionController.startInTerminal('d1', 'T', 'go')).to.equal(true);
   });
 
   it("sends a draft's first message to the chat when its agent's CLI can't start a session", async () => {

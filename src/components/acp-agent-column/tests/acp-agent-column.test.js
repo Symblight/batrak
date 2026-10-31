@@ -100,7 +100,7 @@ describe('acp-agent-column', () => {
     expect(/** @type {HTMLElement} */ (root.querySelector('acp-chat')).hidden, 'the composer').to.equal(false);
     expect(calls, 'nothing started yet').not.to.include('session_open_cli');
 
-    const send = new CustomEvent('chx-send-message', { detail: { value: 'fix the build' }, bubbles: true, composed: true, cancelable: true });
+    const send = new CustomEvent('chx-send-message', { detail: { value: 'fix the build', html: '<div>fix the build</div>', attachments: [] }, bubbles: true, composed: true, cancelable: true });
     /** @type {HTMLElement} */ (root.querySelector('acp-chat')).dispatchEvent(send);
     expect(send.defaultPrevented, 'not sent to the chat').to.equal(true);
     await new Promise((resolve) => setTimeout(resolve, 0));

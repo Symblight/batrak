@@ -1,11 +1,14 @@
 import { StoreController } from '../store/StoreController.js';
+import { inputOfComposer } from '../../models/session-input.js';
 import { sessionController } from '../../services/session-controller.js';
+import { sessionInput } from '../../services/session-input.js';
 import { $historyResets, $returnedPrompts, takeHistoryResets, takeReturnedPrompt } from '../../stores/chat.js';
 import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../../stores/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
+/** @typedef {import('../../models/types.js').SessionInput} SessionInput */
 
 /**
  * @typedef {Object} ChatSessionConfig
@@ -129,13 +132,13 @@ export class ChatSessionController {
   #onSend = (e) => {
     const id = this.#activeId.value;
     if (id === null || this.#session.value !== null) return;
-    const text = /** @type {CustomEvent<{ value: string }>} */ (e).detail.value;
-    if (sessionController.startsInTerminal(id)) {
-      // The CLI starts with it as its first prompt; the chat never sends it.
+    const { value: text, html, attachments } = /** @type {CustomEvent<{ value: string, html: string, attachments: File[] }>} */ (e).detail;
+    if (sessionInput.draftTarget(id) === 'terminal-draft') {
+      // The CLI starts with it as its first prompt; the chat never sends it. Cancelled, the composer
+      // keeps it until the CLI took it.
       e.stopPropagation();
       e.preventDefault();
-      this.#config.chat()?.input.setText('');
-      sessionController.startInTerminal(id, titleOf(text), text);
+      this.#startTerminal(id, inputOfComposer(id, html, attachments), titleOf(text));
       return;
     }
     if (!sessionController.start(id, titleOf(text))) {
@@ -144,6 +147,25 @@ export class ChatSessionController {
       e.preventDefault();
     }
   };
+
+  /**
+   * Starts a draft's CLI with its first message, and clears the composer once it took it (or forgets
+   * what the draft left, when another session shows by then).
+   * @param {string} id
+   * @param {SessionInput} input
+   * @param {string} title
+   */
+  async #startTerminal(id, input, title) {
+    const { taken } = await sessionInput.startTerminal(id, input, title);
+    if (!taken) return;
+    const chat = this.#config.chat();
+    if (chat && this.#activeId.value === id) {
+      chat.input.setText('');
+      chat.attachments.clear();
+    } else {
+      this.#drafts.delete(id);
+    }
+  }
 
   /**
    * A draft's first message the backend refused: the draft shows only its composer, so the message

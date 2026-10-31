@@ -1,5 +1,6 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../acp-chat.js';
+import { inputOfComposer } from '../../../models/session-input.js';
 
 /** @typedef {import('../acp-chat.js').AcpChat} AcpChat */
 /**
@@ -53,6 +54,21 @@ describe('acp-chat', () => {
     chat.cliStart = false;
     await chat.updateComplete;
     expect(pickers()).to.deep.equal(['acp-agent-picker', 'acp-model-picker', 'acp-mode-picker']);
+  });
+
+  it("sends its chips' paths in its html, which a session's input reads back", async () => {
+    const chat = /** @type {AcpChat} */ (await fixture(html`<acp-chat .root=${'/p'}></acp-chat>`));
+    await chat.composerReady();
+    chat.insertFiles([
+      { path: 'src/stores/editor.js', folder: false },
+      { path: 'src', folder: true },
+    ]);
+    const { html: sent } = /** @type {import('@symblight/chat').ChxChat} */ (chat.chat).input.getValue();
+    const refs = inputOfComposer('m', sent, []).parts.filter((p) => p.kind === 'ref');
+    expect(refs).to.deep.equal([
+      { kind: 'ref', path: 'src/stores/editor.js', folder: false },
+      { kind: 'ref', path: 'src', folder: true },
+    ]);
   });
 
   it('inserts nothing for no files', async () => {

@@ -896,6 +896,24 @@
  */
 
 /**
+ * What the user gave a session, whatever shows it (`models/session-input.js` builds it, a renderer per
+ * view writes it: `promptOfInput()` for ACP, `cliPromptOf()` for the CLI).
+ * @typedef {Object} SessionInput
+ * @property {InputPart[]} parts In order.
+ * @property {File[]} files Attachments.
+ */
+
+/**
+ * A ref's or selection's `path` is relative to the session's folder, or absolute outside it. A
+ * paste's `lang` is `null` for long text that isn't code.
+ * @typedef {{ kind: 'text', text: string }
+ *   | { kind: 'paste', text: string, lang: string | null }
+ *   | { kind: 'ref', path: string, folder: boolean }
+ *   | { kind: 'selection', path: string, fromLine: number, toLine: number, body: string }
+ *   | { kind: 'command', name: string }} InputPart
+ */
+
+/**
  * Something from the code going into the chat's composer as a file chip labelled `path:fromLine-toLine`
  * (`path:line` for one line): a selection (`body` empty, the chip goes in at the caret) or a comment
  * (its own line: chip, then `body`).

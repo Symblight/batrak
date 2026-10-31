@@ -1,8 +1,8 @@
-import { splitMessageParts } from '@symblight/chat';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './ipc.js';
 import { log } from './logger.js';
-import { MESSAGE_PART_RULES, fenceCode } from '../models/chat-parts.js';
+import { fenceCode } from '../models/chat-parts.js';
 import { isAbsolute } from '../models/paths.js';
+import { inputOfMessage, linesOf } from '../models/session-input.js';
 import { returnPrompt } from '../stores/chat.js';
 import { applyAgentOptions } from '../stores/composer.js';
 import { setContextUsage } from '../stores/context-usage.js';
@@ -28,6 +28,7 @@ import { awaitTrust } from '../stores/trust.js';
 /** @typedef {import('../models/types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('../models/types.js').AcpSessionUpdate} AcpSessionUpdate */
 /** @typedef {import('../models/types.js').PromptInput} PromptInput */
+/** @typedef {import('../models/types.js').InputPart} InputPart */
 
 /** The chat's author ids: the user (`<chx-chat>`'s `userId`) and every agent. */
 export const USER_ID = 'me';
@@ -505,54 +506,45 @@ export function forgetSession(sessionId) {
 }
 
 /**
- * A chip's lines: `12` or `12-23`.
- * @param {unknown} lines
- * @returns {[number, number] | null}
- */
-function lineRange(lines) {
-  const match = /^(\d+)(?:-(\d+))?$/.exec(String(lines ?? ''));
-  if (!match) return null;
-  const from = Number(match[1]);
-  return [from, Number(match[2] ?? from)];
-}
-
-/**
- * The prompt of a sent message: its text with chips written inline (`@path`, `@folder/`, `path:12-23`), then a
- * resource for each file chip (a mention, or the lines it names); a file outside the session's folder
- * (an absolute path) is named in the text only.
- * @param {ChxMessage} message
+ * A session's input as an ACP prompt: its text with refs written inline (`@path`, `@folder/`,
+ * `path:12-23`), then a resource for each (a mention, or the lines it names); a file outside the
+ * session's folder (an absolute path) is named in the text only.
+ * @param {readonly InputPart[]} parts
  * @returns {PromptInput[]}
  */
-export function promptOf(message) {
-  const flat = message.parts.length === 1 && typeof message.parts[0].html === 'string' ? message.parts[0] : null;
-  const parts = (flat && splitMessageParts(message.id, flat.html ?? '', MESSAGE_PART_RULES)) ?? message.parts;
+export function promptOfInput(parts) {
   let text = '';
   /** @type {PromptInput[]} */
   const resources = [];
   for (const part of parts) {
-    if (part.type === 'text' || part.type === 'longText') {
-      text += part.text ?? '';
-    } else if (part.type === 'code') {
-      text += fenceCode(part.text ?? '', part.lang ?? '');
-    } else if (part.type === 'chip') {
-      const path = typeof part.data?.path === 'string' ? part.data.path : null;
-      const range = lineRange(part.data?.lines);
-      if (path && range) {
-        text += `${path}:${part.data?.lines}`;
-        resources.push({ type: 'selection', path, fromLine: range[0], toLine: range[1] });
-      } else if (path) {
-        // A folder ends in a slash, so the agent (and a restored message) can tell it from a file.
-        text += part.data?.kind === 'folder' ? `@${path}/` : `@${path}`;
-        // An absolute one is outside the session's folder (dropped from elsewhere), which a mention
-        // can't name: the agent reads it by its path.
-        if (!isAbsolute(path)) resources.push({ type: 'mention', path });
-      } else {
-        text += part.label ?? '';
-      }
+    if (part.kind === 'text') {
+      text += part.text;
+    } else if (part.kind === 'paste') {
+      text += part.lang === null ? part.text : fenceCode(part.text, part.lang);
+    } else if (part.kind === 'command') {
+      text += `/${part.name}`;
+    } else if (part.kind === 'selection') {
+      text += `${part.path}:${linesOf(part)}${part.body ? ` ${part.body}` : ''}`;
+      resources.push({ type: 'selection', path: part.path, fromLine: part.fromLine, toLine: part.toLine });
+    } else if (part.kind === 'ref') {
+      // A folder ends in a slash, so the agent (and a restored message) can tell it from a file.
+      text += part.folder ? `@${part.path}/` : `@${part.path}`;
+      // An absolute one is outside the session's folder (dropped from elsewhere), which a mention
+      // can't name: the agent reads it by its path.
+      if (!isAbsolute(part.path)) resources.push({ type: 'mention', path: part.path });
     }
-    // TODO: attachments (images) as ACP image blocks, once the agent's promptCapabilities are known.
   }
+  // TODO: attachments (images) as ACP image blocks, once the agent's promptCapabilities are known.
   return [...(text.trim() ? [{ type: /** @type {const} */ ('text'), text: text.trim() }] : []), ...resources];
+}
+
+/**
+ * The prompt of a sent message.
+ * @param {ChxMessage} message
+ * @returns {PromptInput[]}
+ */
+export function promptOf(message) {
+  return promptOfInput(inputOfMessage(message));
 }
 
 /**

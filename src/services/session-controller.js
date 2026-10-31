@@ -319,7 +319,7 @@ export class SessionController {
    * @param {string} id
    * @param {string} title
    * @param {string} prompt
-   * @returns {Promise<boolean>}
+   * @returns {Promise<boolean>} Its CLI started.
    */
   async startInTerminal(id, title, prompt) {
     const projectPath = $draftSessions.get()[id];
@@ -340,6 +340,7 @@ export class SessionController {
     } catch (err) {
       revertToDraft(id);
       setSessionNotice(id, { kind: 'error', message: `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}` });
+      return false;
     } finally {
       setCliStarting(id, false);
     }

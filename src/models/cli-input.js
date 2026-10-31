@@ -1,24 +1,35 @@
+import { fenceCode } from './chat-parts.js';
 import { relPath } from './paths.js';
+import { inputOfInserts, linesOf } from './session-input.js';
 
 /** @typedef {import('./types.js').ChatInsert} ChatInsert */
+/** @typedef {import('./types.js').InputPart} InputPart */
 
 /**
- * @param {ChatInsert} insert
- * @param {string | null} root
+ * A session's input as text for its agent's CLI, which shows no chips: refs as `@path` (a folder
+ * `@path/`), selections as `@path#L3-5`, commands as `/name`, pasted code fenced.
+ * @param {readonly InputPart[]} parts
+ * @param {string | null} root Absolute paths inside it are written relative to it.
  */
-function refOf({ path, fromLine, toLine }, root) {
-  const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
-  return `@${relPath(root, path) ?? path}#L${lines}`;
+export function cliPromptOf(parts, root) {
+  const pathOf = (/** @type {string} */ path) => relPath(root, path) ?? path;
+  let text = '';
+  for (const part of parts) {
+    if (part.kind === 'text') text += part.text;
+    else if (part.kind === 'paste') text += part.lang === null ? part.text : fenceCode(part.text, part.lang);
+    else if (part.kind === 'ref') text += `@${pathOf(part.path)}${part.folder ? '/' : ''}`;
+    else if (part.kind === 'selection') text += `@${pathOf(part.path)}#L${linesOf(part)}${part.body ? ` ${part.body}` : ''}`;
+    else if (part.kind === 'command') text += `/${part.name}`;
+  }
+  return text.replace(/^\n+|\n+$/g, '');
 }
 
 /**
- * Code from the editors as text typed into an agent's CLI, which shows no chips: each selection an
- * `@path#L3-5` ref followed by a space, then each comment on a line of its own (its ref, then its text).
+ * Code from the editors as text typed into an agent's CLI: each selection an `@path#L3-5` ref
+ * followed by a space, then each comment on a line of its own (its ref, then its text).
  * @param {readonly ChatInsert[]} inserts
  * @param {string | null} root Refs are relative to it; a path outside it stays absolute.
  */
 export function cliInput(inserts, root) {
-  const selections = inserts.filter((i) => !i.body).map((i) => `${refOf(i, root)} `);
-  const comments = inserts.filter((i) => i.body).map((i) => `${refOf(i, root)} ${i.body}`);
-  return [...(selections.length ? [selections.join('')] : []), ...comments].join('\n');
+  return cliPromptOf(inputOfInserts(inserts), root);
 }
