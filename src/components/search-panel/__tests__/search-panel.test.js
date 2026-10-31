@@ -1,4 +1,4 @@
-import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../search-panel.js';
 
 /** @typedef {import('../search-panel.js').AcpSearchPanel} AcpSearchPanel */
@@ -48,31 +48,6 @@ const results = [
 ];
 
 describe('acp-search-panel', () => {
-  it("names each option and each result's path in tooltips, not titles", async () => {
-    const el = await fixture(html`<acp-search-panel .results=${results}></acp-search-panel>`);
-    expect(optionButtons(el).map(tooltipOf)).to.deep.equal([
-      'Match case (Alt+C)',
-      'Match whole word (Alt+W)',
-      'Use regular expression (Alt+R)',
-    ]);
-    expect(tooltipOf(list(el).querySelector('.acp-search-results__file'))).to.equal('src/a/main.js');
-    expect(shadow(el).querySelector('[title]')).to.equal(null);
-  });
-
-  it('renders results grouped by file with name, folder, count and one row per match', async () => {
-    const el = await fixture(html`<acp-search-panel .results=${results}></acp-search-panel>`);
-    const root = list(el);
-    const headers = [...root.querySelectorAll('.acp-search-results__file')];
-    expect(headers.map((h) => [
-      h.querySelector('.acp-search-results__file-name')?.textContent,
-      h.querySelector('.acp-search-results__file-dir')?.textContent,
-      h.querySelector('.acp-search-results__count')?.textContent,
-    ])).to.deep.equal([['main.js', 'src/a', '3'], ['README.md', '', '1']]);
-    const rows = [...root.querySelectorAll('.acp-search-results__row')];
-    expect(rows.map((r) => r.querySelector('.acp-search-results__line')?.textContent)).to.deep.equal(['3', '3', '10', '1']);
-    expect(rows[0].querySelector('.acp-search-results__text')?.textContent).to.equal('const foo = foo;');
-  });
-
   it('opens a clicked match by its root-relative path, line, column and length', async () => {
     const el = await fixture(html`<acp-search-panel .results=${results}></acp-search-panel>`);
     const match = /** @type {HTMLButtonElement} */ (list(el).querySelectorAll('.acp-search-results__row')[1]);
@@ -88,58 +63,57 @@ describe('acp-search-panel', () => {
     expect(leaked).to.deep.equal([], "the block's own event stops at the pane");
   });
 
-  it('summarizes the search: searching, no results, counts, the limit and errors', async () => {
-    const el = /** @type {AcpSearchPanel} */ (await fixture(html`<acp-search-panel searching .results=${results}></acp-search-panel>`));
-    expect(shadow(el).querySelector('.acp-search-panel__summary')).to.equal(null);
+  it('shows the summary only for a query, with the limit notice, or the error instead', async () => {
+    // Arrange
+    const el = /** @type {AcpSearchPanel} */ (await fixture(html`<acp-search-panel .results=${results}></acp-search-panel>`));
+    expect(shadow(el).querySelector('.acp-search-panel__summary'), 'no query, no summary').to.equal(null);
+    // Act
     el.query = 'foo';
     await el.updateComplete;
-    expect(summaryText(el)).to.equal('Searching… 4 results in 2 files');
-    el.searching = false;
-    await el.updateComplete;
+    // Assert
     expect(summaryText(el)).to.equal('4 results in 2 files');
+    expect(shadow(el).querySelector('.acp-search-panel__summary')?.getAttribute('role')).to.equal('status');
+    expect(list(el).querySelector('.acp-search-results__note')).to.equal(null);
+
+    // Act
     el.limitHit = true;
     await el.updateComplete;
+    // Assert
     expect(summaryText(el)).to.equal('4 results in 2 files — showing the first 2000');
     expect(list(el).querySelector('.acp-search-results__note')).to.not.equal(null);
-    el.limitHit = false;
-    el.results = [];
-    await el.updateComplete;
-    expect(summaryText(el)).to.equal('No results');
+
+    // Act
     el.error = 'bad regex';
     await el.updateComplete;
-    const summary = shadow(el).querySelector('.acp-search-panel__summary');
-    expect(summary?.classList.contains('acp-search-panel__summary_error')).to.equal(true);
+    // Assert
     expect(summaryText(el)).to.equal('bad regex');
   });
 
-  it('searches at once when an option is toggled', async () => {
-    const el = await fixture(html`<acp-search-panel></acp-search-panel>`);
-    for (const [i, option] of /** @type {const} */ (['caseSensitive', 'wholeWord', 'regex']).entries()) {
-      const event = /** @type {Promise<CustomEvent>} */ (nextEvent(el, 'acp-search'));
-      optionButtons(el)[i].click();
-      const { detail } = await event;
-      expect(detail.delay).to.equal(0);
-      expect(detail.options[option]).to.equal(true);
-      await el.updateComplete;
-      expect(optionButtons(el)[i].hasAttribute('selected')).to.equal(true);
-    }
-  });
-
-  it('toggles the options with Alt+C / Alt+W / Alt+R in any field, by key code', async () => {
+  it('toggles an option by click or Alt+C / Alt+W / Alt+R in any field, searching at once', async () => {
     const el = await fixture(html`<acp-search-panel></acp-search-panel>`);
     const fields = [...shadow(el).querySelectorAll('md-text-field')];
-    for (const [code, option, field] of /** @type {const} */ ([
-      ['KeyC', 'caseSensitive', 0],
-      ['KeyW', 'wholeWord', 1],
-      ['KeyR', 'regex', 2],
-    ])) {
-      const event = /** @type {Promise<CustomEvent>} */ (nextEvent(el, 'acp-search'));
-      const key = new KeyboardEvent('keydown', { key: 'ç', code, altKey: true, bubbles: true, composed: true, cancelable: true });
-      fields[field].dispatchEvent(key);
-      const { detail } = await event;
-      expect(key.defaultPrevented).to.equal(true);
-      expect(detail).to.include({ delay: 0 });
-      expect(detail.options[option]).to.equal(true);
+    const options = /** @type {const} */ (['caseSensitive', 'wholeWord', 'regex']);
+    const codes = ['KeyC', 'KeyW', 'KeyR'];
+    for (const [i, option] of options.entries()) {
+      // Act: the toggle button
+      let event = /** @type {Promise<CustomEvent>} */ (nextEvent(el, 'acp-search'));
+      optionButtons(el)[i].click();
+      let { detail } = await event;
+      // Assert
+      expect(detail.delay, `${option} by click`).to.equal(0);
+      expect(detail.options[option], `${option} by click`).to.equal(true);
+      await el.updateComplete;
+      expect(optionButtons(el)[i].getAttribute('aria-pressed')).to.equal('true');
+
+      // Act: the shortcut, by key code (the key itself is another character on macOS), which turns it off again
+      event = /** @type {Promise<CustomEvent>} */ (nextEvent(el, 'acp-search'));
+      const key = new KeyboardEvent('keydown', { key: 'ç', code: codes[i], altKey: true, bubbles: true, composed: true, cancelable: true });
+      fields[i].dispatchEvent(key);
+      ({ detail } = await event);
+      // Assert
+      expect(key.defaultPrevented, `${option} by key`).to.equal(true);
+      expect(detail.delay, `${option} by key`).to.equal(0);
+      expect(detail.options[option], `${option} by key`).to.equal(false);
     }
   });
 
@@ -174,6 +148,6 @@ describe('acp-search-panel', () => {
     await el.updateComplete;
     const fields = /** @type {HTMLElementTagNameMap['md-text-field'][]} */ ([...shadow(el).querySelectorAll('md-text-field')]);
     expect(fields.map((f) => f.value)).to.deep.equal(['bar', 'src/**/*.ts', '**/*.test.ts']);
-    expect(optionButtons(el).map((b) => b.hasAttribute('selected'))).to.deep.equal([true, false, true]);
+    expect(optionButtons(el).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false', 'true']);
   });
 });

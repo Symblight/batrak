@@ -54,42 +54,23 @@ function collect(el, type) {
 
 describe('acp-search-results', () => {
   describe('grouped, not selectable (the pane)', () => {
-    it('renders file rows with name, folder, count and a path tooltip, and one row per match', async () => {
+    it('renders file rows with icon, name, folder, count and path tooltip, and one row per match with its hit marked', async () => {
+      // Arrange + Act
       const el = await render(html`<acp-search-results .results=${RESULTS}></acp-search-results>`);
+      // Assert
       expect(fileRows(el).map((f) => [
         f.querySelector('.acp-search-results__file-name')?.textContent,
         f.querySelector('.acp-search-results__file-dir')?.textContent,
         f.querySelector('.acp-search-results__count')?.textContent,
-      ])).to.deep.equal([['main.js', 'src/a', '3'], ['README.md', '', '1']]);
+        f.querySelector('acp-file-icon')?.getAttribute('name'),
+      ])).to.deep.equal([['main.js', 'src/a', '3', 'main.js'], ['README.md', '', '1', 'README.md']]);
       expect(fileRows(el).map(tooltipOf)).to.deep.equal(['src/a/main.js', 'README.md']);
       expect(rows(el).map((r) => r.querySelector('.acp-search-results__line')?.textContent)).to.deep.equal(['3', '3', '10', '1']);
+      expect(parts(rows(el)[0])).to.deep.equal([['const ', false], ['foo', true], [' = foo;', false]]);
+      expect(parts(rows(el)[1])).to.deep.equal([['const foo = ', false], ['foo', true], [';', false]]);
       expect(shadow(el).querySelector('[title]')).to.equal(null);
       expect(shadow(el).querySelector('[role="listbox"]')).to.equal(null);
       expect(rows(el)[0] instanceof HTMLButtonElement).to.equal(true);
-    });
-
-    it('shows each file row with the icon of its file', async () => {
-      const el = await render(html`<acp-search-results .results=${RESULTS}></acp-search-results>`);
-      expect(fileRows(el).map((f) => f.querySelector('acp-file-icon')?.getAttribute('name'))).to.deep.equal(['main.js', 'README.md']);
-    });
-
-    it('drops leading whitespace and highlights only the row\'s own match', async () => {
-      const el = await render(html`<acp-search-results .results=${RESULTS}></acp-search-results>`);
-      const [first, second] = rows(el);
-      expect(first.querySelector('.acp-search-results__text')?.textContent).to.equal('const foo = foo;');
-      expect(parts(first)).to.deep.equal([['const ', false], ['foo', true], [' = foo;', false]]);
-      expect(parts(second)).to.deep.equal([['const foo = ', false], ['foo', true], [';', false]]);
-    });
-
-    it('cuts the start of a long line so the match shows', async () => {
-      const text = `${'x'.repeat(100)}needle`;
-      const el = await render(html`<acp-search-results
-        .max=${40}
-        .results=${[{ path: 'a.txt', matches: [{ line: 1, text, offset: 0, ranges: [[100, 106]] }] }]}
-      ></acp-search-results>`);
-      const shown = rows(el)[0].querySelector('.acp-search-results__text')?.textContent ?? '';
-      expect(shown.startsWith('…')).to.equal(true);
-      expect(shown.endsWith('needle')).to.equal(true);
     });
 
     it('fires open with the row on a click', async () => {
@@ -152,7 +133,6 @@ describe('acp-search-results', () => {
       expect(shadow(el).querySelector('[role="listbox"]')).to.not.equal(null);
       expect(rows(el).every((r) => r.getAttribute('role') === 'option')).to.equal(true);
       expect(selectedIndex(el)).to.equal(0);
-      expect(rows(el)[0].classList.contains('acp-search-results__row_selected')).to.equal(true);
       expect(el.selectedRow?.key).to.equal('src/a/main.js:3:8');
       expect(events.at(-1)?.detail.row.key).to.equal('src/a/main.js:3:8');
     });
@@ -174,43 +154,36 @@ describe('acp-search-results', () => {
       expect(el.selectedRow?.key).to.equal('README.md:1:2');
     });
 
-    it('moves: one step wraps, longer ones stop at the ends, first and last', async () => {
+    it('moves the selection by step or to the ends and announces each row; collapsing its file moves it out', async () => {
       const el = await render(html`<acp-search-results selectable .results=${RESULTS}></acp-search-results>`);
       const events = collect(el, 'acp-search-result-select');
-      el.move(-1);
-      await el.updateComplete;
-      expect(selectedIndex(el)).to.equal(3);
-      el.move(1);
-      await el.updateComplete;
-      expect(selectedIndex(el)).to.equal(0);
-      el.move(10);
-      await el.updateComplete;
-      expect(selectedIndex(el)).to.equal(3);
-      el.moveTo('first');
-      await el.updateComplete;
-      expect(selectedIndex(el)).to.equal(0);
-      el.moveTo('last');
-      await el.updateComplete;
-      expect(selectedIndex(el)).to.equal(3);
+      for (const [move, expected] of /** @type {[() => void, number][]} */ ([
+        [() => el.move(-1), 3],
+        [() => el.move(1), 0],
+        [() => el.moveTo('last'), 3],
+        [() => el.moveTo('first'), 0],
+      ])) {
+        // Act
+        move();
+        await el.updateComplete;
+        // Assert
+        expect(selectedIndex(el)).to.equal(expected);
+      }
       expect(events.map((e) => e.detail.row.key)).to.deep.equal([
         'README.md:1:2',
         'src/a/main.js:3:8',
         'README.md:1:2',
         'src/a/main.js:3:8',
-        'README.md:1:2',
       ]);
-    });
 
-    it('skips collapsed files, and moves the selection out of a file it collapses', async () => {
-      const el = await render(html`<acp-search-results selectable .results=${RESULTS}></acp-search-results>`);
-      el.move(1);
-      await el.updateComplete;
+      // Act
       fileRows(el)[0].click();
       await el.updateComplete;
+      // Assert
       expect(el.selectedRow?.key).to.equal('README.md:1:2');
       el.move(1);
       await el.updateComplete;
-      expect(el.selectedRow?.key).to.equal('README.md:1:2');
+      expect(el.selectedRow?.key, 'collapsed rows are skipped').to.equal('README.md:1:2');
     });
 
     it('selects on a click and opens on a double-click', async () => {

@@ -7,28 +7,22 @@ describe('acp-search-options', () => {
   /** @param {AcpSearchOptions} el */
   const buttons = (el) => /** @type {HTMLElement[]} */ ([...(/** @type {ShadowRoot} */ (el.shadowRoot)).querySelectorAll('.acp-search-options__option')]);
 
-  it('names each toggle with its Alt shortcut in a tooltip, not a title', async () => {
-    const el = /** @type {AcpSearchOptions} */ (await fixture(html`<acp-search-options></acp-search-options>`));
+  it('shows each option as selected or not, with its Alt shortcut in a tooltip and an icon', async () => {
+    // Arrange
+    const el = /** @type {AcpSearchOptions} */ (
+      await fixture(html`<acp-search-options .caseSensitive=${true} .regex=${true}></acp-search-options>`)
+    );
+    // Act
+    for (const button of buttons(el)) await /** @type {HTMLElement & { updateComplete: Promise<unknown> }} */ (button).updateComplete;
+    // Assert
+    expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false', 'true']);
     expect(buttons(el).map(tooltipOf)).to.deep.equal([
       'Match case (Alt+C)',
       'Match whole word (Alt+W)',
       'Use regular expression (Alt+R)',
     ]);
     expect(el.shadowRoot?.querySelector('[title]')).to.equal(null);
-  });
-
-  it('shows each option as selected or not', async () => {
-    const el = /** @type {AcpSearchOptions} */ (
-      await fixture(html`<acp-search-options .caseSensitive=${true} .regex=${true}></acp-search-options>`)
-    );
-    expect(buttons(el).map((b) => b.hasAttribute('selected'))).to.deep.equal([true, false, true]);
-    expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false', 'true']);
-  });
-
-  it('shows the icon of a selected option, as of an unselected one', async () => {
-    const el = /** @type {AcpSearchOptions} */ (await fixture(html`<acp-search-options .caseSensitive=${true}></acp-search-options>`));
     for (const button of buttons(el)) {
-      await /** @type {HTMLElement & { updateComplete: Promise<unknown> }} */ (button).updateComplete;
       const slot = button.shadowRoot?.querySelector('slot');
       expect(slot?.assignedElements().map((i) => i.localName), button.getAttribute('aria-label') ?? '').to.deep.equal(['md-icon']);
     }
