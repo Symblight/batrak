@@ -1,9 +1,8 @@
-import { imageTypeOf } from './image-types.js';
-import { basename, relPath } from './paths.js';
+import { relPath } from './paths.js';
 
 /** @typedef {import('./types.js').Platform} Platform */
 /** @typedef {import('./types.js').DroppedEntry} DroppedEntry */
-/** @typedef {import('./types.js').ChatDrop} ChatDrop */
+/** @typedef {import('./types.js').ChatFile} ChatFile */
 
 /**
  * The innermost element under a point, looking inside open shadow roots.
@@ -83,19 +82,14 @@ export function toCssPoint({ x, y }, platform, devicePixelRatio) {
 }
 
 /**
- * What files dropped on the chat become: an image (by extension) an attachment, any other file or
- * folder a chip, relative to the session's folder when inside it, else absolute.
+ * What files dropped on the chat become: chips, an image's too (the agent reads it by its path),
+ * relative to the session's folder when inside it, else absolute.
  * @param {readonly DroppedEntry[]} entries
  * @param {string | null} root The active session's folder.
- * @returns {ChatDrop}
+ * @returns {ChatFile[]}
  */
 export function chatDropOf(entries, root) {
-  /** @type {ChatDrop} */
-  const drop = { files: [], images: [] };
-  for (const { path, kind } of entries) {
-    const mime = kind === 'file' ? imageTypeOf(path).mime : '';
-    if (mime) drop.images.push({ path, name: basename(path), mime });
-    else if (kind !== 'other') drop.files.push({ path: relPath(root, path) ?? path, folder: kind === 'folder' });
-  }
-  return drop;
+  return entries
+    .filter(({ kind }) => kind !== 'other')
+    .map(({ path, kind }) => ({ path: relPath(root, path) ?? path, folder: kind === 'folder' }));
 }

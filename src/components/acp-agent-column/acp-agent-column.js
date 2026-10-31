@@ -17,7 +17,7 @@ import { isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
 import { copyText } from '../../services/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
-import { droppedKinds, gitBranches, openUrl, quickOpen, readDroppedFile } from '../../services/ipc.js';
+import { droppedKinds, gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
 import { fileDrop } from '../../services/file-drop.js';
 import { reportError } from '../../services/notices.js';
 import { terminalController } from '../../services/terminals.js';
@@ -187,8 +187,8 @@ export class AcpAgentColumn extends LitElement {
   }
 
   /**
-   * Dropped images become attachments; other files and folders chips, like `@` picks. Kept for the
-   * session when another one shows meanwhile.
+   * Dropped files and folders become chips, like `@` picks (an image too: the agent reads it by its
+   * path). Kept for the session when another one shows meanwhile.
    * @param {string} sessionId
    * @param {readonly string[]} paths
    */
@@ -199,14 +199,9 @@ export class AcpAgentColumn extends LitElement {
       const kinds = await droppedKinds(paths);
       if ($activeSessionId.get() !== sessionId) return keep();
       const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
-      const { files, images } = chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
+      const files = chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
       if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return keep();
       chat.insertFiles(files);
-      for (const [i, { path, name, mime }] of images.entries()) {
-        const bytes = await readDroppedFile(path);
-        if ($activeSessionId.get() !== sessionId) return addDrop(images.slice(i).map((image) => image.path), sessionId);
-        chat.attachments.addFiles([new File([bytes], name, { type: mime })], 'drop');
-      }
     } catch (err) {
       reportError('Adding dropped files failed', err);
     }

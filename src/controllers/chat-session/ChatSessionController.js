@@ -131,8 +131,15 @@ export class ChatSessionController {
   /** @param {Event} e */
   #onSend = (e) => {
     const id = this.#activeId.value;
-    if (id === null || this.#session.value !== null) return;
+    if (id === null) return;
     const { value: text, html, attachments } = /** @type {CustomEvent<{ value: string, html: string, attachments: File[] }>} */ (e).detail;
+    if (sessionInput.refuseFiles(id, attachments)) {
+      // Cancelled, so the composer keeps the message and its attachments.
+      e.stopPropagation();
+      e.preventDefault();
+      return;
+    }
+    if (this.#session.value !== null) return;
     if (sessionInput.draftTarget(id) === 'terminal-draft') {
       // The CLI starts with it as its first prompt; the chat never sends it. Cancelled, the composer
       // keeps it until the CLI took it.

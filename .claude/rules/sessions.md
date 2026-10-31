@@ -3,11 +3,12 @@ paths:
   - "src-tauri/src/session/**"
   - "src-tauri/src/acp/**"
   - "src-tauri/src/commands/sessions.rs"
-  - "src/services/{session-controller,session-root-controller,acp-adapter}.js"
+  - "src/services/{session-controller,session-root-controller,acp-adapter,session-input}.js"
+  - "src/models/{session-input,cli-input}.js"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}.js"
   - "src/components/acp-{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
-  - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default}.md"
+  - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input}.md"
 ---
 
 # Sessions over ACP
@@ -101,15 +102,14 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
   Files dropped from the OS on the shown chat (Tauri's native drop, see `terminals.md`; the page
   gets no HTML5 drop, so `<chx-chat>`'s own drop is dead) are handled by `<acp-agent-column>`,
-  which sets `<acp-chat dropping>` while they're over it: `dropped_kinds` says what each is,
-  `chatDropOf()` (`models/file-drop.js`) sorts them, an image (by extension, anywhere) is read
-  with `read_dropped_file` and attached (`attachments.addFiles(…, 'drop')`); any other file or
-  folder becomes a chip at the caret (`AcpChat.insertFiles()`, built like an `@` pick), relative
+  which sets `<acp-chat dropping>` while they're over it: `dropped_kinds` says what each is, and
+  `chatDropOf()` (`models/file-drop.js`) makes each file or folder, an image too (the agent reads
+  it by its path), a chip at the caret (`AcpChat.insertFiles()`, built like an `@` pick), relative
   to the session's folder inside it, else absolute. `promptOf()` sends a relative chip as a
   `mention`, an absolute one only as `@path` in the text (the backend confines mentions to the
-  project). Both commands (`commands/dropped.rs`) take only paths of the window's last 4 drops,
-  which Rust records from the drag-drop event (`DroppedFiles`); reads are regular files, 64 MB at
-  most. A drop while the composer isn't up is ignored.
+  project). `dropped_kinds` (`commands/dropped.rs`) takes only paths of the window's last 4
+  drops, which Rust records from the drag-drop event (`DroppedFiles`). A drop while the composer
+  isn't up waits for it (`$pendingInput`, see "Session input").
   `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
   (`models/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
   and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
@@ -165,3 +165,19 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   so a session shows its last report after a reload or restart (no agent reports on
   `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
   ring until there is one.
+- **Session input** (spec: `docs/specs/session-input.md`): what the user gives a session reaches it
+  in Chat and Terminal alike, or is refused with a reason, never dropped. A composer send is read
+  from its html (`inputOfComposer()`, `models/session-input.js`), never its plain `value` (a chip
+  is only its label there), into `InputPart`s that `promptOfInput()` (ACP) and `cliPromptOf()`
+  (`models/cli-input.js`, the CLI's `@path`, `@path#L3-5`) write. `sessionInput`
+  (`services/session-input.js`) decides a draft's first send (`draftTarget`: `startTerminal` or
+  the chat) and refuses attachments in both views (`refuseFiles`: a notice, the send cancelled so
+  the composer keeps them). A terminal draft's composer clears only once its CLI started. Editor
+  code and OS drops wait in `$pendingInput` (`stores/chat.js`, per session) until the shown
+  session's composer is up or its CLI runs (`<acp-agent-column>`'s `#applyPending`); an ended
+  CLI shows how many wait. A first prompt goes on the CLI's command line only on Unix and up to
+  `MAX_ARG_PROMPT` bytes (`config/cli.rs`, a leading space if it starts with `-`); otherwise it's
+  pasted, without Enter, once the CLI turns bracketed paste on or settles
+  (`Terminals::paste_when_ready`). For a new input or view: add an `InputPart` kind that every
+  renderer writes, route through `sessionInput` / `$pendingInput`, never an `if (inTerminal)` in a
+  caller.

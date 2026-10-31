@@ -900,11 +900,3 @@ export function droppedKinds(paths) {
   return invoke('dropped_kinds', { paths });
 }
 
-/**
- * Raw bytes of a file in this window's recent file drops, at most 64 MB.
- * @param {string} path Absolute, as the drop named it.
- * @returns {Promise<ArrayBuffer>}
- */
-export function readDroppedFile(path) {
-  return invoke('read_dropped_file', { path });
-}

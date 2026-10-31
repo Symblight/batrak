@@ -79,7 +79,6 @@ describe('acp-agent-column', () => {
         const { paths } = /** @type {{ paths: string[] }} */ (args);
         return paths.map((p) => (p.endsWith('/src') || p.endsWith('/docs') ? 'folder' : 'file'));
       }
-      if (cmd === 'read_dropped_file') return new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
       if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
       if (cmd === 'session_cli_busy') return false;
       return null;
@@ -249,23 +248,35 @@ describe('acp-agent-column', () => {
     ]);
   });
 
-  it('attaches an image dropped on the chat, read through the backend', async () => {
+  it('inserts an image dropped on the chat as a chip, like any file: nothing to attach', async () => {
     $sessions.set([session()]);
     $activeSessionId.set('s1');
     const { root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {{ files: File[], source: string | undefined }[]} */
-    const added = [];
-    chat.attachments.addFiles = (files, source) => added.push({ files: [...files], source });
     /** @type {import('../../../models/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     fileDrop.handle({ type: 'drop', paths: ['/Users/me/Screen Shot.png'], position: osPointOf(chat) });
-    await until(() => added.length > 0);
-    expect(added).to.have.length(1);
-    const [file] = added[0].files;
-    expect([file.name, file.type, file.size, added[0].source]).to.deep.equal(['Screen Shot.png', 'image/png', 4, 'drop']);
-    expect(inserted, 'no chip').to.deep.equal([]);
+    await until(() => inserted.length > 0);
+    expect(inserted).to.deep.equal([{ path: '/Users/me/Screen Shot.png', folder: false }]);
+  });
+
+  it("refuses a send with attachments, which the agent can't be sent yet: the composer keeps them, the agent gets nothing", async () => {
+    $sessions.set([session({ status: 'idle' })]);
+    setSessionNotice('s1', { kind: 'outdated', message: 'agents.json changed' });
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElement} */ (root.querySelector('acp-chat'));
+    const detail = { value: 'look', html: '<div>look</div>', attachments: [new File(['x'], 'shot.png')] };
+    const send = new CustomEvent('chx-send-message', { detail, bubbles: true, composed: true, cancelable: true });
+    chat.dispatchEvent(send);
+    expect(send.defaultPrevented, 'cancelled: the composer keeps it').to.equal(true);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(calls.filter((c) => c.startsWith('session_')), 'nothing sent').to.deep.equal([]);
+    const notice = $sessionNotices.get().s1;
+    expect(notice).to.include({ kind: 'info' });
+    expect(notice?.message).to.contain('shot.png');
+    expect(notice?.under, 'the notice it covers comes back once dismissed').to.deep.equal({ kind: 'outdated', message: 'agents.json changed' });
   });
 
   it('drops nothing into the composer of a session shown after the files were dropped', async () => {

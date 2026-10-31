@@ -98,16 +98,15 @@ describe('chatDropOf', () => {
       ],
       '/p',
     );
-    expect(drop.files).to.deep.equal([
+    expect(drop).to.deep.equal([
       { path: 'src/app.js', folder: false },
       { path: 'src', folder: true },
       { path: '/Users/me/notes.md', folder: false },
       { path: '/Users/me/docs', folder: true },
     ]);
-    expect(drop.images).to.deep.equal([]);
   });
 
-  it('attaches images, wherever they are, with their MIME type', () => {
+  it('makes images chips too, by path: the agent reads them', () => {
     const drop = chatDropOf(
       [
         { path: '/p/logo.svg', kind: 'file' },
@@ -115,11 +114,10 @@ describe('chatDropOf', () => {
       ],
       '/p',
     );
-    expect(drop.images).to.deep.equal([
-      { path: '/p/logo.svg', name: 'logo.svg', mime: 'image/svg+xml' },
-      { path: '/Users/me/Screen Shot.PNG', name: 'Screen Shot.PNG', mime: 'image/png' },
+    expect(drop).to.deep.equal([
+      { path: 'logo.svg', folder: false },
+      { path: '/Users/me/Screen Shot.PNG', folder: false },
     ]);
-    expect(drop.files).to.deep.equal([]);
   });
 
   it('skips what is neither a file nor a folder (gone, a device), and a folder named like an image', () => {
@@ -130,6 +128,6 @@ describe('chatDropOf', () => {
       ],
       null,
     );
-    expect(drop).to.deep.equal({ files: [{ path: '/Users/me/shots.png', folder: true }], images: [] });
+    expect(drop).to.deep.equal([{ path: '/Users/me/shots.png', folder: true }]);
   });
 });

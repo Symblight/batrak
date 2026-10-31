@@ -1,22 +1,17 @@
-//! Files dropped on a window from the OS (Tauri's native file drop): the page may ask what they are
-//! and read one for the chat, and nothing else outside the opened folders.
+//! Files dropped on a window from the OS (Tauri's native file drop): the page may ask what they are,
+//! and nothing else outside the opened folders.
 
 use std::collections::{HashMap, VecDeque};
 use std::fs;
-use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::Serialize;
-use tauri::ipc::Response;
 use tauri::{State, Window};
 
 use super::blocking;
 
-/// A dropped file larger than this isn't read: one IPC reply holds the whole file.
-const MAX_BYTES: u64 = 64 * 1024 * 1024;
-
-/// A window's drops kept readable: the page may still be reading one when the next lands.
+/// A window's drops kept: the page may still be asking about one when the next lands.
 const KEEP_DROPS: usize = 4;
 
 /// What a dropped path is now.
@@ -73,28 +68,6 @@ impl DroppedFiles {
             })
             .collect()
     }
-
-    /// The bytes of a regular file one of the window's kept drops named, at most `max`.
-    pub fn read(&self, window: &str, path: &str, max: u64) -> Result<Vec<u8>, String> {
-        let path = self.dropped(window, path)?;
-        let shown = path.display();
-        let file = fs::File::open(&path).map_err(|e| format!("{shown}: {e}"))?;
-        let meta = file.metadata().map_err(|e| format!("{shown}: {e}"))?;
-        if !meta.is_file() {
-            return Err(format!("{shown}: not a file"));
-        }
-        let too_large = || format!("{shown}: too large to attach (over {} MB)", max / (1024 * 1024));
-        if meta.len() > max {
-            return Err(too_large());
-        }
-        // Read through a cap: the file may have grown since.
-        let mut bytes = Vec::with_capacity(meta.len() as usize);
-        file.take(max + 1).read_to_end(&mut bytes).map_err(|e| format!("{shown}: {e}"))?;
-        if bytes.len() as u64 > max {
-            return Err(too_large());
-        }
-        Ok(bytes)
-    }
 }
 
 /// What the paths of the window's recent file drops are: `file`, `folder` or `other`.
@@ -107,19 +80,6 @@ pub async fn dropped_kinds(
     let dropped = dropped.inner().clone();
     let label = window.label().to_owned();
     blocking(move || dropped.kinds(&label, &paths)).await?
-}
-
-/// A file of the window's recent file drops as raw bytes (an `ArrayBuffer` in the page), for a chat
-/// attachment. Regular files only, at most `MAX_BYTES`.
-#[tauri::command]
-pub async fn read_dropped_file(
-    window: Window,
-    dropped: State<'_, DroppedFiles>,
-    path: String,
-) -> Result<Response, String> {
-    let dropped = dropped.inner().clone();
-    let label = window.label().to_owned();
-    blocking(move || dropped.read(&label, &path, MAX_BYTES).map(Response::new)).await?
 }
 
 #[cfg(test)]
@@ -156,39 +116,28 @@ mod tests {
     }
 
     #[test]
-    fn reads_only_files_dropped_on_the_window() {
-        let tmp = Tmp::new("read");
+    fn answers_only_for_files_dropped_on_the_window() {
+        let tmp = Tmp::new("scope");
         let dropped = DroppedFiles::default();
-        let err = dropped.read("main", &tmp.str("a.png"), 64).unwrap_err();
-        assert!(err.contains("not dropped"), "{err}");
+        let kind = |window: &str, path: &str| dropped.kinds(window, &[path.to_owned()]);
+        assert!(kind("main", &tmp.str("a.png")).unwrap_err().contains("not dropped"));
 
         dropped.record("main", &[tmp.path("a.png"), tmp.path("docs")]);
-        assert_eq!(dropped.read("main", &tmp.str("a.png"), 64).unwrap(), b"\x89PNG");
-        assert!(dropped.read("other", &tmp.str("a.png"), 64).unwrap_err().contains("not dropped"), "another window's");
-        assert!(dropped.read("main", &tmp.str("big.png"), 64).unwrap_err().contains("not dropped"), "beside a dropped one");
+        assert_eq!(kind("main", &tmp.str("a.png")).unwrap(), [DroppedKind::File]);
+        assert!(kind("other", &tmp.str("a.png")).unwrap_err().contains("not dropped"), "another window's");
+        assert!(kind("main", &tmp.str("big.png")).unwrap_err().contains("not dropped"), "beside a dropped one");
         let outside = format!("{}/../{}", tmp.str("docs"), "big.png");
-        assert!(dropped.read("main", &outside, 64).unwrap_err().contains("not dropped"), "{outside}");
+        assert!(kind("main", &outside).unwrap_err().contains("not dropped"), "{outside}");
 
         dropped.record("main", &[tmp.path("big.png")]);
-        assert_eq!(dropped.read("main", &tmp.str("a.png"), 64).unwrap(), b"\x89PNG", "a drop before, still being read");
+        assert!(kind("main", &tmp.str("a.png")).is_ok(), "a drop before, still asked about");
         for _ in 1..super::KEEP_DROPS {
             dropped.record("main", &[tmp.path("docs")]);
         }
-        assert!(dropped.read("main", &tmp.str("a.png"), 64).unwrap_err().contains("not dropped"), "older than the kept drops");
-        assert_eq!(dropped.read("main", &tmp.str("big.png"), 64).unwrap(), b"0123456789A", "the oldest kept");
+        assert!(kind("main", &tmp.str("a.png")).unwrap_err().contains("not dropped"), "older than the kept drops");
+        assert!(kind("main", &tmp.str("big.png")).is_ok(), "the oldest kept");
         dropped.forget("main");
-        assert!(dropped.read("main", &tmp.str("big.png"), 64).is_err(), "forgotten with its window");
-    }
-
-    #[test]
-    fn reads_regular_files_up_to_the_cap() {
-        let tmp = Tmp::new("cap");
-        let dropped = DroppedFiles::default();
-        dropped.record("main", &[tmp.path("a.png"), tmp.path("big.png"), tmp.path("docs"), tmp.path("gone.png")]);
-        assert_eq!(dropped.read("main", &tmp.str("big.png"), 11).unwrap(), b"0123456789A");
-        assert!(dropped.read("main", &tmp.str("big.png"), 10).unwrap_err().contains("too large"));
-        assert!(dropped.read("main", &tmp.str("docs"), 64).is_err(), "a folder");
-        assert!(dropped.read("main", &tmp.str("gone.png"), 64).is_err(), "gone");
+        assert!(kind("main", &tmp.str("big.png")).is_err(), "forgotten with its window");
     }
 
     #[test]

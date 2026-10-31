@@ -240,7 +240,7 @@
  *   `sign-in`: the agent asks for a sign-in; a prompt sent meanwhile waits for it.
  * @property {string} message
  * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
- * @property {SessionNotice} [under] `overlap`: the `info` / `outdated` notice it covers, back when it goes.
+ * @property {SessionNotice} [under] The notice it covers (`overlap`'s, a refused send's), back when it goes.
  * @property {string} [offAgent] `error`: the user turned this agent off; Turn on starts the session again.
  * @property {SessionSignIn} [signIn] `sign-in`: the agent and the ways it offers.
  */
@@ -589,13 +589,6 @@
  * @typedef {Object} ChatFile
  * @property {string} path Relative to the session's folder, or absolute outside it.
  * @property {boolean} folder
- */
-
-/**
- * Files dropped on the chat, sorted (`chatDropOf()` in `models/file-drop.js`).
- * @typedef {Object} ChatDrop
- * @property {ChatFile[]} files Chips.
- * @property {{ path: string, name: string, mime: string }[]} images Attachments.
  */
 
 /** @typedef {'starting' | 'running' | 'exited' | 'failed'} TerminalStatus */
