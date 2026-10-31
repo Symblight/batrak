@@ -52,7 +52,6 @@ export class AcpSearchOptions extends LitElement {
       return html`<md-icon-button
           id=${id}
           class="acp-search-options__option"
-          toggle
           ?selected=${this[option]}
           aria-label=${label}
           aria-pressed=${this[option] ? 'true' : 'false'}

@@ -515,7 +515,6 @@ export class AcpSearchDialog extends LitElement {
         return html`<md-icon-button
             id=${id}
             class="acp-search-dialog__layout-button"
-            toggle
             ?selected=${pressed}
             aria-label=${label}
             aria-pressed=${pressed ? 'true' : 'false'}
@@ -586,7 +585,6 @@ export class AcpSearchDialog extends LitElement {
           return html`<md-icon-button
               id=${id}
               class="acp-search-dialog__view-button"
-              toggle
               ?selected=${checked}
               role="radio"
               aria-label=${label}

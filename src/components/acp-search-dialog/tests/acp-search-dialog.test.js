@@ -405,6 +405,15 @@ describe('acp-search-dialog', () => {
       expect(shadow(el).querySelector('[title]')).to.equal(null);
     });
 
+    it('shows the icon of a pressed layout or view button, as of an unpressed one', async () => {
+      const { el } = await open({ previewPosition: 'bottom', view: 'grouped' });
+      for (const button of [...buttons(el), ...viewButtons(el)]) {
+        await /** @type {HTMLElement & { updateComplete: Promise<unknown> }} */ (button).updateComplete;
+        const slot = button.shadowRoot?.querySelector('slot');
+        expect(slot?.assignedElements().map((i) => i.localName), button.getAttribute('aria-label') ?? '').to.deep.equal(['md-icon']);
+      }
+    });
+
     it('asks for a preview position; pressing the current one hides the preview', async () => {
       const { el } = await open({ previewPosition: 'bottom' });
       expect(el.getAttribute('preview-position')).to.equal('bottom');

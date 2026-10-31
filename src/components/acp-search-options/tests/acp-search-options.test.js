@@ -25,6 +25,15 @@ describe('acp-search-options', () => {
     expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false', 'true']);
   });
 
+  it('shows the icon of a selected option, as of an unselected one', async () => {
+    const el = /** @type {AcpSearchOptions} */ (await fixture(html`<acp-search-options .caseSensitive=${true}></acp-search-options>`));
+    for (const button of buttons(el)) {
+      await /** @type {HTMLElement & { updateComplete: Promise<unknown> }} */ (button).updateComplete;
+      const slot = button.shadowRoot?.querySelector('slot');
+      expect(slot?.assignedElements().map((i) => i.localName), button.getAttribute('aria-label') ?? '').to.deep.equal(['md-icon']);
+    }
+  });
+
   it('fires the option to toggle, leaving its own state to the host', async () => {
     const el = /** @type {AcpSearchOptions} */ (await fixture(html`<acp-search-options></acp-search-options>`));
     /** @type {CustomEvent[]} */
