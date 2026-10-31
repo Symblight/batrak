@@ -46,8 +46,11 @@ function session(fields = {}) {
 let calls = [];
 
 async function render() {
-  const el = /** @type {AcpAgentColumn} */ (await fixture(html`<acp-agent-column style="display: flex; height: 500px"></acp-agent-column>`));
-  return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
+  // The view takes no box: its panel fills what the wrapper gives.
+  const wrapper = await fixture(html`<div style="display: flex; height: 500px"><acp-agent-column></acp-agent-column></div>`);
+  const el = /** @type {AcpAgentColumn} */ (wrapper.firstElementChild);
+  await el.updateComplete;
+  return { el, root: el };
 }
 
 /**
@@ -69,7 +72,7 @@ async function until(done) {
 }
 
 /** @param {AcpAgentColumn} el */
-const header = (el) => /** @type {HTMLElementTagNameMap['acp-session-header']} */ (el.shadowRoot?.querySelector('acp-session-header'));
+const header = (el) => /** @type {HTMLElementTagNameMap['acp-session-header']} */ (el.querySelector('acp-session-header'));
 
 describe('acp-agent-column', () => {
   beforeEach(() => {

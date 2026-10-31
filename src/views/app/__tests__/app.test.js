@@ -33,13 +33,13 @@ function shortcut(key, init = {}) {
 }
 
 /** @param {AcpApp} app */
-const searchDialog = (app) => /** @type {HTMLElementTagNameMap['acp-search-dialog']} */ (app.shadowRoot?.querySelector('acp-search-dialog'));
+const searchDialog = (app) => /** @type {HTMLElementTagNameMap['acp-search-dialog']} */ (app.querySelector('acp-search-dialog'));
 /** @param {AcpApp} app */
-const quickOpen = (app) => /** @type {HTMLElementTagNameMap['acp-quick-open']} */ (app.shadowRoot?.querySelector('acp-quick-open'));
+const quickOpen = (app) => /** @type {HTMLElementTagNameMap['acp-quick-open']} */ (app.querySelector('acp-quick-open'));
 /** @param {AcpApp} app */
-const mainColumn = (app) => /** @type {HTMLElementTagNameMap['acp-main-column']} */ (app.shadowRoot?.querySelector('acp-main-column'));
+const mainColumn = (app) => /** @type {HTMLElementTagNameMap['acp-main-column']} */ (app.querySelector('acp-main-column'));
 /** @param {AcpApp} app */
-const fileColumn = (app) => /** @type {HTMLElementTagNameMap['acp-file-column']} */ (app.shadowRoot?.querySelector('acp-file-column'));
+const fileColumn = (app) => /** @type {HTMLElementTagNameMap['acp-file-column']} */ (app.querySelector('acp-file-column'));
 
 /**
  * Fires one of the dialog's events, as the dialog would.

@@ -6,7 +6,7 @@
     <title>Brama</title>
   </head>
   <body>
-    <!-- Splash: <acp-app>'s shadow root has no slot, so the logo disappears once the app renders. -->
+    <!-- Splash: <acp-app> is a light-DOM view, which clears what is inside it before it renders, so the logo disappears then. -->
     <acp-app>
       <img
         src="/favicon.svg"

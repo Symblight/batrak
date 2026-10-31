@@ -143,7 +143,7 @@ export class AcpAgentColumn extends ViewElement {
    * @returns {target is AcpTerminal} Whether it is the session's CLI shown here.
    */
   #isOwnTerminal(target) {
-    return target instanceof AcpTerminal && target.getRootNode() === this.renderRoot;
+    return target instanceof AcpTerminal && this.contains(target);
   }
 
   /**

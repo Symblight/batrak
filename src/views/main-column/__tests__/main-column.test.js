@@ -53,7 +53,7 @@ describe('acp-main-column', () => {
 
   async function render() {
     const el = /** @type {AcpMainColumn} */ (await fixture(html`<acp-main-column style="display: flex; width: 800px; height: 500px"></acp-main-column>`));
-    const tabView = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.shadowRoot?.querySelector('acp-tab-view'));
+    const tabView = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view'));
     await tabView.updateComplete;
     const terminal = /** @type {AcpTerminal} */ (tabView.shadowRoot?.querySelector('acp-terminal'));
     return { el, tabView, terminal };

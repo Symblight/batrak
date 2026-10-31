@@ -37,11 +37,11 @@ describe('acp-file-column', () => {
 
   const render = async () => /** @type {AcpFileColumn} */ (await fixture(html`<acp-file-column></acp-file-column>`));
   /** @param {AcpFileColumn} el */
-  const panel = (el) => /** @type {HTMLElementTagNameMap['acp-search-panel']} */ (el.shadowRoot?.querySelector('acp-search-panel'));
+  const panel = (el) => /** @type {HTMLElementTagNameMap['acp-search-panel']} */ (el.querySelector('acp-search-panel'));
 
   it("titles its panel by the shown pane and offers a refresh only for the project's files", async () => {
     const el = await render();
-    const header = () => /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.shadowRoot?.querySelector('acp-panel-header'));
+    const header = () => /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.querySelector('acp-panel-header'));
     expect(header().heading).to.equal('Files');
     expect(header().action?.label).to.equal('Refresh files');
     el.sideView = 'changes';
