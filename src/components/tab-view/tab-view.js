@@ -10,7 +10,8 @@ import '../agents-view/agents-view.js';
 import '../changes-review/changes-review.js';
 import '../image-preview/image-preview.js';
 import '../terminal/terminal.js';
-import '../browser/browser.js';
+import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
+import '../view-placeholder/view-placeholder.js';
 import { relPath } from '../../models/paths/paths.js';
 import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import styles from './tab-view.css?inline';
@@ -122,7 +123,13 @@ export class AcpTabView extends LitElement {
       changes: () => this.#renderChanges(),
       'session-changes': (tab) => this.#renderSessionChanges(tab),
       terminal: (tab) => this.#renderTerminal(tab),
-      browser: () => html`<acp-browser class="acp-tab-view__view"></acp-browser>`,
+      browser: () =>
+        html`<acp-view-placeholder
+          class="acp-tab-view__view"
+          .icon=${languageIcon}
+          heading="Browser"
+          text="Not implemented yet."
+        ></acp-view-placeholder>`,
     },
   });
 

@@ -41,6 +41,15 @@ const terminalInfo = {
 };
 
 describe('acp-tab-view', () => {
+  it('shows the Browser tab as a placeholder, which is not implemented yet', async () => {
+    const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+      await fixture(html`<acp-tab-view .tabs=${[{ ...fileTab(''), id: 'view:browser', kind: 'browser' }]} .active=${'view:browser'}></acp-tab-view>`)
+    );
+    const placeholder = el.shadowRoot?.querySelector('acp-view-placeholder');
+    expect(placeholder?.getAttribute('heading')).to.equal('Browser');
+    expect(placeholder?.getAttribute('text')).to.equal('Not implemented yet.');
+  });
+
   describe('terminal tabs', () => {
     /** @param {import('../../../models/types/types.js').TerminalBusy[]} busy */
     async function render(busy) {
