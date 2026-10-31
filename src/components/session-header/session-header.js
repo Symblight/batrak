@@ -14,7 +14,7 @@ import '../session-menu/session-menu.js';
 import '../session-status/session-status.js';
 import styles from './session-header.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
 
 /**
@@ -35,7 +35,9 @@ export class AcpSessionHeader extends LitElement {
     draft: { type: Boolean },
     provisional: { type: Boolean },
     resettable: { type: Boolean },
-    indicator: {},
+    session: { attribute: false },
+    permissionPending: { type: Boolean, attribute: 'permission-pending' },
+    now: { attribute: false },
     view: {},
     viewDisabled: { attribute: 'view-disabled' },
     renaming: { state: true },
@@ -56,8 +58,12 @@ export class AcpSessionHeader extends LitElement {
     this.provisional = false;
     /** @type {boolean} The user renamed a session the agent had named: its menu offers that back. */
     this.resettable = false;
-    /** @type {SessionIndicator | null} */
-    this.indicator = null;
+    /** @type {Session | null} Its status icon is worked out from it; `null` for a draft. */
+    this.session = null;
+    /** @type {boolean} A permission request of the session waits for the user. */
+    this.permissionPending = false;
+    /** @type {number | null} ms; what the status judges "active in another app" against. */
+    this.now = null;
     /** @type {SessionView} */
     this.view = 'chat';
     /** @type {string} Why the session can't switch views, the button's tooltip; `''` when it can. */
@@ -225,9 +231,14 @@ export class AcpSessionHeader extends LitElement {
 
   render() {
     return html`
-      ${this.renaming || this.indicator === null
+      ${this.renaming
         ? nothing
-        : html`<acp-session-status class="acp-session-header__status" .indicator=${this.indicator}></acp-session-status>`}
+        : html`<acp-session-status
+            class="acp-session-header__status"
+            .session=${this.session}
+            .permissionPending=${this.permissionPending}
+            .now=${this.now}
+          ></acp-session-status>`}
       ${this.#renderTitle()}
       <span class="acp-session-header__spacer"></span>
       ${this.#renderViewToggle()}

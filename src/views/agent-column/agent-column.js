@@ -14,7 +14,7 @@ import { chatDropOf } from '../../models/file-drop/file-drop.js';
 import { relPath } from '../../models/paths/paths.js';
 import { PLATFORM } from '../../models/platform/platform.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
-import { inTurn, isActiveElsewhere, sessionIndicator } from '../../models/sessions/sessions.js';
+import { inTurn } from '../../models/sessions/sessions.js';
 import { copyText } from '../../services/clipboard/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
@@ -480,15 +480,9 @@ export class AcpAgentColumn extends LitElement {
       ?draft=${session === null}
       ?provisional=${session?.titleSource === 'prompt'}
       ?resettable=${session?.titleSource === 'user' && session.agentTitle !== null}
-      .indicator=${session
-        ? sessionIndicator(
-            session.status,
-            this.#permission.value !== null,
-            false,
-            isActiveElsewhere(session, this.#now.value),
-            session.inTerminal === true,
-          )
-        : null}
+      .session=${session}
+      .permissionPending=${this.#permission.value !== null}
+      .now=${this.#now.value}
       .view=${this.#shownView.value}
       view-disabled=${this.#activeView.value.disabled}
       @acp-session-new=${this.#onNewSession}

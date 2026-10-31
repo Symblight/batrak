@@ -7,28 +7,60 @@ import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import queuedIcon from '@material-design-icons/svg/outlined/hourglass_empty.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import { INDICATOR_LABELS } from '../../models/sessions/sessions.js';
+import { INDICATOR_LABELS, isActiveElsewhere, sessionIndicator } from '../../models/sessions/sessions.js';
 import styles from './session-status.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 
 const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon, terminal: terminalIcon };
 
 /**
  * @tag acp-session-status
- * @summary A session's status icon, the same in its header and its list row: permission, error, a spinner while the agent works (here, in its terminal or in another app), an hourglass while its turn waits for the project, a terminal while its CLI runs it, a dot for new output.
+ * @summary A session's status icon, the same in its header and its list row, worked out from the session: permission, error, a spinner while the agent works (here, in its terminal or in another app), an hourglass while its turn waits for the project, a terminal while its CLI runs it, a dot for new output. Nothing shows when there's nothing to say.
  */
 export class AcpSessionStatus extends LitElement {
   static properties = {
-    indicator: {},
+    session: { attribute: false },
+    permissionPending: { type: Boolean, attribute: 'permission-pending' },
+    unread: { type: Boolean },
+    now: { attribute: false },
+    quiet: { type: Boolean },
+    indicator: { reflect: true },
   };
 
   static styles = styles;
 
   constructor() {
     super();
-    /** @type {SessionIndicator | null} Nothing shows for `null`. */
+    /** @type {Session | null} */
+    this.session = null;
+    /** @type {boolean} A permission request of the session waits for the user. */
+    this.permissionPending = false;
+    /** @type {boolean} The session has output not seen yet. */
+    this.unread = false;
+    /** @type {number | null} ms; what "active in another app" is judged against, the current time while `null`. */
+    this.now = null;
+    /** @type {boolean} Leave an idle terminal session unmarked (a list row; its header still says it). */
+    this.quiet = false;
+    /** @type {SessionIndicator | null} Derived from the rest; nothing shows for `null`. */
     this.indicator = null;
+  }
+
+  /** @param {Map<PropertyKey, unknown>} changed */
+  willUpdate(changed) {
+    if (!['session', 'permissionPending', 'unread', 'now', 'quiet'].some((name) => changed.has(name))) return;
+    const session = this.session;
+    const indicator = session
+      ? sessionIndicator(
+          session.status,
+          this.permissionPending,
+          this.unread,
+          isActiveElsewhere(session, this.now ?? Date.now()),
+          session.inTerminal === true,
+        )
+      : null;
+    this.indicator = this.quiet && indicator === 'terminal' ? null : indicator;
   }
 
   #renderGlyph() {

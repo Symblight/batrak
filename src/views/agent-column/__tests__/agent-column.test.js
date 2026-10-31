@@ -154,7 +154,8 @@ describe('acp-agent-column', () => {
     $terminals.set({ ...$terminals.get(), 't-cli': { ...$terminals.get()['t-cli'], status: 'exited', exit: { code: 0, signal: null } } });
     $activeSessionId.set('s1');
     const { el } = await render();
-    expect(header(el).indicator, 'its CLI exited').to.equal('elsewhere');
+    const status = /** @type {HTMLElementTagNameMap['acp-session-status'] | null} */ (header(el).shadowRoot?.querySelector('acp-session-status'));
+    expect(status?.indicator, 'its CLI exited').to.equal('elsewhere');
   });
 
   it('shows no chat banner above a terminal session', async () => {

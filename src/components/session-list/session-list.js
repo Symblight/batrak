@@ -25,7 +25,7 @@ import '../session-sync/session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
-import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions/sessions.js';
+import { SESSIONS_PAGE, orderSessions, visibleSessions } from '../../models/sessions/sessions.js';
 import styles from './session-list.css?inline';
 
 /** @typedef {import('../../models/types/types.js').Project} Project */
@@ -449,17 +449,15 @@ export class AcpSessionList extends LitElement {
    * @param {boolean} unread
    */
   #renderStatus(session, unread) {
-    const indicator = sessionIndicator(
-      session.status,
-      this.waiting.includes(session.id),
-      unread,
-      isActiveElsewhere(session, this.now),
-      session.inTerminal === true,
-    );
-    // An idle terminal session looks like any other in the list; the header still says it.
-    return indicator === null || indicator === 'terminal'
-      ? nothing
-      : html`<acp-session-status class="acp-session-list__status" .indicator=${indicator}></acp-session-status>`;
+    // An idle terminal session looks like any other in the list (`quiet`); the header still says it.
+    return html`<acp-session-status
+      class="acp-session-list__status"
+      .session=${session}
+      .permissionPending=${this.waiting.includes(session.id)}
+      .unread=${unread}
+      .now=${this.now}
+      quiet
+    ></acp-session-status>`;
   }
 
   #renderProjectMenu() {

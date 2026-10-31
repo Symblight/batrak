@@ -2,6 +2,10 @@
   display: inline-flex;
 }
 
+:host(:not([indicator])) {
+  display: none;
+}
+
 .acp-session-status__icon {
   display: inline-flex;
   align-items: center;

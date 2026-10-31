@@ -323,7 +323,7 @@ describe('acp-session-list', () => {
     const over = /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
       root.querySelector('[data-session-id="o"] acp-session-status')
     );
-    expect(over, 'its time is up').to.equal(null);
+    expect(over?.indicator, 'its time is up').to.equal(null);
     const status = /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
       root.querySelector('[data-session-id="t"] acp-session-status')
     );
@@ -341,7 +341,7 @@ describe('acp-session-list', () => {
       /** @type {import('../../session-status/session-status.js').AcpSessionStatus | null} */ (
         root.querySelector(`[data-session-id="${id}"] acp-session-status`)
       )?.indicator;
-    expect([indicator('w'), indicator('i')]).to.deep.equal(['terminal-working', undefined]);
+    expect([indicator('w'), indicator('i')]).to.deep.equal(['terminal-working', null]);
   });
 
   it("shows the active project's sync beside the heading", async () => {
