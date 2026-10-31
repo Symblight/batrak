@@ -1,6 +1,6 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { closeWorkspace, onWorkspaceChanged, openSessionRoot } from '../ipc/ipc.js';
-import { projectController } from '../project-controller/project-controller.js';
 import { $activeSession, $sessions } from '../../stores/sessions/sessions.js';
 import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSessionRoot } from '../../stores/session-root/session-root.js';
 
@@ -10,7 +10,7 @@ import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSe
 
 /**
  * Worktree sessions whose folder stays open (scan + watcher), the shown one included, like
- * `projectController`'s projects: showing one of them again needs no scan.
+ * the `projects` hook's open projects: showing one of them again needs no scan.
  */
 const KEEP_OPEN = 3;
 
@@ -84,7 +84,7 @@ export class SessionRootController extends EventTarget {
     setSessionRoot(null);
     $sessionRootOpening.set(true);
     try {
-      await projectController.ready;
+      await projects.ready();
       if (generation !== this.#generation) return;
       const opened = await openSessionRoot(session.id);
       const label = (session.worktreePath ?? opened.path).split('/').pop() ?? opened.path;

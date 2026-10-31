@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -22,7 +23,6 @@ import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
 import { commentAuthor, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
-import { absPath } from '../../models/paths/paths.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './changes-review.css?inline';
@@ -130,11 +130,11 @@ export class AcpChangesReview extends LitElement {
   static styles = styles;
 
   #comments = new EditorCommentsController(this, {
-    pathOf: (file) => absPath(this.root, file),
+    pathOf: (file) => projects.abs(this.root, file),
     comments: () => this.comments,
     focus: () => this.commentFocus,
   });
-  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => absPath(this.root, file) });
+  #selectionActions = new SelectionActionsController(this, { pathOf: (file) => projects.abs(this.root, file) });
   /** @type {ChangeRow[]} */
   #rows = [];
   /** @type {string | null} A file to scroll to once its row is rendered. */
@@ -248,7 +248,7 @@ export class AcpChangesReview extends LitElement {
 
   /** @param {ChangeRow} row */
   #edit(row) {
-    this.#emit('acp-file-open', { path: absPath(this.root, row.id) });
+    this.#emit('acp-file-open', { path: projects.abs(this.root, row.id) });
   }
 
   /** The project switches branch and the session's agent stops: asked first. */
@@ -384,7 +384,7 @@ export class AcpChangesReview extends LitElement {
         mode="single"
         .noResolve=${true}
         .author=${commentAuthor}
-        .comments=${this.#comments.threadsOf(absPath(this.root, row.id))}
+        .comments=${this.#comments.threadsOf(projects.abs(this.root, row.id))}
       ></cdx-comments>
     </cdx-code-editor>`;
   }

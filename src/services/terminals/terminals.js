@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { app } from '../../hooks/app/app.js';
 import {
@@ -11,7 +12,6 @@ import {
   terminalResize,
   terminalWrite,
 } from '../ipc/ipc.js';
-import { projectController } from '../project-controller/project-controller.js';
 import { sessionController } from '../session-controller/session-controller.js';
 import { $projectTabs, closeProjectTab } from '../../stores/editor/editor.js';
 import { $activeFolder, $sessions } from '../../stores/sessions/sessions.js';
@@ -165,7 +165,7 @@ class TerminalController {
     const session = $sessions.get().find((s) => s.id === sessionId);
     if (!session) return;
     try {
-      await projectController.activate(session.projectId);
+      await projects.activate(session.projectId);
     } catch (err) {
       app.reportError('Opening project failed', err);
       return;

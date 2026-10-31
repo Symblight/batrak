@@ -1,4 +1,4 @@
-import { relPath } from '../paths/paths.js';
+import { relPath } from '../../hooks/projects/rules.js';
 
 /** @typedef {import('../types/types.js').Platform} Platform */
 /** @typedef {import('../types/types.js').DroppedEntry} DroppedEntry */

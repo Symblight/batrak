@@ -14,7 +14,7 @@ paths:
 
 - Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$hiddenColumns`
   (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$workspace` (`brama:workspace`, reopened
-  on launch by `projectController.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
+  on launch by `projects.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
@@ -40,7 +40,7 @@ paths:
   and splits), `$projectSearch` (`brama:search:project:<project path>`, per window, one item per
   project through `setKey()`: the dialog's last query, options, folder and mask, and the project's
   10 recent searches; two windows on one project: last write wins),
-  `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
+  `$projects` (`brama:projects`, shared; every opened folder is added, `projects.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on

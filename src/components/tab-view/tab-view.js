@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
@@ -13,7 +14,6 @@ import '../image-preview/image-preview.js';
 import '../terminal/terminal.js';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import '../view-placeholder/view-placeholder.js';
-import { relPath } from '../../models/paths/paths.js';
 import styles from './tab-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
@@ -226,7 +226,7 @@ export class AcpTabView extends LitElement {
    */
   async revealChange(path) {
     await this.updateComplete;
-    const rel = relPath(this.root, path);
+    const rel = projects.rel(this.root, path);
     if (rel !== null) this.renderRoot.querySelector('acp-changes-review')?.scrollToChange(rel);
   }
 

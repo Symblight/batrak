@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
@@ -10,7 +11,6 @@ import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminalController } from '../../services/terminals/terminals.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
@@ -200,7 +200,7 @@ export class AcpMainColumn extends ViewElement {
   openFile(path, at = null) {
     if (at !== null) this.#tabView.revealLine(path, at);
     openTab(path);
-    projectController.noteOpened(path);
+    projects.noteOpened(path);
   }
 
   /**
@@ -209,7 +209,7 @@ export class AcpMainColumn extends ViewElement {
    */
   async showChange(path) {
     openChangesTab();
-    const rel = projectController.relPath(path);
+    const rel = projects.relPath(path);
     if (rel === null) return;
     this.#review.expand(rel);
     await this.updateComplete;

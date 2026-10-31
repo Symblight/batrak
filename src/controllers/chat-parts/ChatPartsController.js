@@ -1,9 +1,8 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { buildChipElement } from '@symblight/chat';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs/file-refs.js';
 import { listDir } from '../../services/ipc/ipc.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
-import { projectPathOf } from '../../models/paths/paths.js';
 import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
@@ -156,8 +155,8 @@ export function formatFileRefs(root, { links }) {
  * @param {string} absolute
  */
 async function isFolder(absolute) {
-  const rel = projectController.relPath(absolute);
-  const rootId = projectController.rootId;
+  const rel = projects.relPath(absolute);
+  const rootId = projects.rootId();
   if (rel === null || rootId === null) return false;
   const slash = rel.lastIndexOf('/');
   try {
@@ -313,10 +312,10 @@ export class ChatPartsController {
    * @param {boolean} folder Known to be a folder (a folder chip, `@path/`).
    */
   async #open(path, line, folder) {
-    const root = folderOf($activeSessionId.get() ?? '') ?? projectController.path;
+    const root = folderOf($activeSessionId.get() ?? '') ?? projects.path();
     const absolute = absoluteRefPath(path, root);
     if (!absolute) return;
-    const inProject = projectPathOf($worktrees.get(), absolute);
+    const inProject = projects.projectPathOf($worktrees.get(), absolute);
     const isDir = folder || (await isFolder(inProject));
     const detail = isDir ? { path: inProject } : { path: absolute, line };
     this.#host.dispatchEvent(

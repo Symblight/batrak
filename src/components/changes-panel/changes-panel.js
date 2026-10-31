@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
@@ -11,7 +12,6 @@ import '@symblight/wc-material/tooltip';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
-import { absPath } from '../../models/paths/paths.js';
 import styles from './changes-panel.css?inline';
 
 /** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
@@ -278,7 +278,7 @@ export class AcpChangesPanel extends LitElement {
   /** @param {ChangeNode} node */
   #open(node) {
     if (!node.file) return;
-    this.#emit('acp-diff-open', { path: absPath(this.root, node.id) });
+    this.#emit('acp-diff-open', { path: projects.abs(this.root, node.id) });
   }
 
   #commit() {

@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { html, nothing } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -14,7 +15,6 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { cliInput } from '../../models/cli-input/cli-input.js';
 import { chatDropOf } from '../../models/file-drop/file-drop.js';
-import { relPath } from '../../models/paths/paths.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { inTurn } from '../../models/sessions/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
@@ -22,7 +22,6 @@ import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminalController } from '../../services/terminals/terminals.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat/chat.js';
@@ -241,7 +240,7 @@ export class AcpAgentColumn extends ViewElement {
     if (failed.length) app.reportError('Attaching the files failed', new Error(failed.join('; ')));
     const chat = this.#chat;
     if ($activeSessionId.get() !== sessionId || !chat) return addDrop(paths, sessionId);
-    chat.insertFiles(paths.map((path) => ({ path: draft ? path : (relPath(folder, path) ?? path), folder: false })));
+    chat.insertFiles(paths.map((path) => ({ path: draft ? path : (projects.rel(folder, path) ?? path), folder: false })));
   }
 
   connectedCallback() {
@@ -266,7 +265,7 @@ export class AcpAgentColumn extends ViewElement {
   async #onFileQuery(e) {
     const { query } = /** @type {CustomEvent<{ query: string | null }>} */ (e).detail;
     const id = ++this.#fileQueryId;
-    const rootId = projectController.rootId;
+    const rootId = projects.rootId();
     if (query === null) return;
     if (rootId === null) {
       this.fileOptions = [];
@@ -491,7 +490,7 @@ export class AcpAgentColumn extends ViewElement {
   }
 
   #onOpenLocal() {
-    projectController.open().catch((err) => app.reportError('Opening folder failed', err));
+    projects.open().catch((err) => app.reportError('Opening folder failed', err));
   }
 
   render() {

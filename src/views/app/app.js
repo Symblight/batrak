@@ -1,8 +1,8 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { html, nothing } from 'lit';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { gitController } from '../../services/git-controller/git-controller.js';
 import { trustController } from '../../services/trust-controller/trust-controller.js';
@@ -18,7 +18,6 @@ import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
-import { projectPathOf, relPath } from '../../models/paths/paths.js';
 import { trustConfirm } from '../../models/trust/trust.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
@@ -167,7 +166,7 @@ export class AcpApp extends ViewElement {
     gitController.start();
     terminalController.start();
     sessionRootController.start();
-    projectController.restore().catch((err) => app.reportError('Reopening folder failed', err));
+    projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }
 
   disconnectedCallback() {
@@ -266,7 +265,7 @@ export class AcpApp extends ViewElement {
 
   /** @param {Event} e */
   #onPalettePick(e) {
-    this.#main.openFile(projectController.absPath(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path));
+    this.#main.openFile(projects.absPath(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path));
   }
 
   /** @returns {HTMLElementTagNameMap['acp-search-dialog'] | null} */
@@ -328,7 +327,7 @@ export class AcpApp extends ViewElement {
       e
     ).detail;
     this.#recordSearch(state.query);
-    this.#main.openFile(projectController.absPath(path), { line, column, length });
+    this.#main.openFile(projects.absPath(path), { line, column, length });
   }
 
   /**
@@ -408,7 +407,7 @@ export class AcpApp extends ViewElement {
    */
   async #revealInTree(path, options) {
     // The tree lists a worktree's folder or the project; a path of the other is shown by its twin.
-    const rel = relPath($treeRoot.get().path, path) ?? relPath(projectController.path, projectPathOf($worktrees.get(), path));
+    const rel = projects.rel($treeRoot.get().path, path) ?? projects.rel(projects.path(), projects.projectPathOf($worktrees.get(), path));
     if (rel === null) return;
     this.sideView = 'files';
     showColumn('side');

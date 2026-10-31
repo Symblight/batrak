@@ -1,7 +1,26 @@
 import { expect } from '@esm-bundle/chai';
-import { basename, isAbsolute, shownPath } from '../paths.js';
+import { projects } from '../projects.js';
 
-describe('paths', () => {
+const { abs, basename, isAbsolute, projectPathOf, rel, shownPath, worktreeOf } = projects;
+
+describe('projects: path rules', () => {
+  it('joins a root and a relative path, and splits them again; outside the root there is none', () => {
+    expect(abs('/p', 'src/a.js')).to.equal('/p/src/a.js');
+    expect(abs('/p', '')).to.equal('/p');
+    expect(abs(null, '')).to.equal('');
+    expect(rel('/p', '/p/src/a.js')).to.equal('src/a.js');
+    expect(rel('/p', '/q/a.js')).to.equal(null);
+    expect(rel(null, '/p/a.js')).to.equal(null);
+  });
+
+  it('finds the worktree session folder a path lies in, and its place in the project', () => {
+    const worktrees = [{ sessionId: 's', projectId: '/p', folder: '/wt/s', branch: 'b', title: 't' }];
+    expect(worktreeOf(worktrees, '/wt/s/src/a.js')?.sessionId).to.equal('s');
+    expect(worktreeOf(worktrees, '/p/src/a.js')).to.equal(null);
+    expect(projectPathOf(worktrees, '/wt/s/src/a.js')).to.equal('/p/src/a.js');
+    expect(projectPathOf(worktrees, '/p/src/a.js')).to.equal('/p/src/a.js');
+  });
+
   it('takes the last segment', () => {
     expect(basename('/p/src/main.js')).to.equal('main.js');
     expect(basename('C:\\p\\a.txt')).to.equal('a.txt');

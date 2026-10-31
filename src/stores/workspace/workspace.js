@@ -5,7 +5,7 @@ import { isRecord, persistentStore } from '../persistent/persistent.js';
 /** @typedef {import('../../models/types/types.js').WorkspaceSettings} WorkspaceSettings */
 
 /**
- * The opened folder, reopened on launch by `projectController.restore()`. Per window: `rootId` is
+ * The opened folder, reopened on launch by `projects.restore()`. Per window: `rootId` is
  * never stored, and another window's folder must not replace this one's.
  */
 export const $workspace = persistentStore('brama:workspace', /** @type {Workspace | null} */ (null), {
@@ -18,7 +18,7 @@ export const $workspace = persistentStore('brama:workspace', /** @type {Workspac
 });
 
 /**
- * Folder being scanned to become `$workspace`, `null` when none is. Written by `projectController`;
+ * Folder being scanned to become `$workspace`, `null` when none is. Written by `projects`;
  * the previous workspace stays in `$workspace` meanwhile.
  */
 export const $openingPath = atom(/** @type {string | null} */ (null));

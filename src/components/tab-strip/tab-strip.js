@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
@@ -21,7 +22,6 @@ import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import '../file-icon/file-icon.js';
-import { basename, shownPath, worktreeOf } from '../../models/paths/paths.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
 import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflowController.js';
@@ -317,9 +317,9 @@ export class AcpTabStrip extends LitElement {
       return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, file: null, tooltip: info?.login ?? info?.cwd ?? 'Terminal' };
     }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, file: null, tooltip: 'Browser' };
-    const name = basename(tab.path);
-    const path = shownPath(this.root, this.worktrees, tab.path);
-    const worktree = worktreeOf(this.worktrees, tab.path);
+    const name = projects.basename(tab.path);
+    const path = projects.shownPath(this.root, this.worktrees, tab.path);
+    const worktree = projects.worktreeOf(this.worktrees, tab.path);
     if (worktree) return { title: name, icon: branchIcon, file: null, tooltip: `${path} in worktree ${worktree.branch}` };
     return { title: name, icon: '', file: name, tooltip: path };
   }

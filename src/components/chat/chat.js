@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
@@ -10,7 +11,6 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import descriptionIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import { fileIcon } from '../file-icon/file-icon.js';
-import { basename, relPath } from '../../models/paths/paths.js';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { MESSAGE_PART_RULES } from '../../models/chat-parts/chat-parts.js';
@@ -82,7 +82,7 @@ function buildMenuItem(value, headline, supportingText) {
  * @param {string | null} root The project's path; the chip names a file inside it relative to it.
  */
 function codeChip(schema, { path, fromLine, toLine }, root) {
-  const rel = relPath(root, path) ?? path;
+  const rel = projects.rel(root, path) ?? path;
   const name = rel.slice(rel.lastIndexOf('/') + 1);
   const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
   return schema.nodes.chip.create({
@@ -99,7 +99,7 @@ function codeChip(schema, { path, fromLine, toLine }, root) {
  * @param {boolean} folder
  */
 function fileChipAttrs(path, folder) {
-  const name = basename(path);
+  const name = projects.basename(path);
   /** @type {Record<string, string>} */
   const data = folder ? { path, kind: 'folder' } : { path };
   return {

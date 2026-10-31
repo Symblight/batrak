@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -7,7 +8,6 @@ import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { getHomeDir } from '../../services/ipc/ipc.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime/session-runtime.js';
@@ -73,7 +73,7 @@ export class AcpSessionColumn extends ViewElement {
    */
   async #activate(id) {
     try {
-      await projectController.activate(id);
+      await projects.activate(id);
       this.#clearFailure(id);
     } catch (err) {
       app.reportError('Opening project failed', err);
@@ -89,7 +89,7 @@ export class AcpSessionColumn extends ViewElement {
   }
 
   #onOpenFolder() {
-    projectController.open().catch((err) => app.reportError('Opening folder failed', err));
+    projects.open().catch((err) => app.reportError('Opening folder failed', err));
   }
 
   /**
@@ -125,7 +125,7 @@ export class AcpSessionColumn extends ViewElement {
 
   /** @param {Event} e */
   #onProjectReveal(e) {
-    projectController.reveal(this.#projectIdOf(e)).catch((err) => app.reportError('Revealing folder failed', err));
+    projects.reveal(this.#projectIdOf(e)).catch((err) => app.reportError('Revealing folder failed', err));
   }
 
   /**
@@ -144,7 +144,7 @@ export class AcpSessionColumn extends ViewElement {
       destructive: true,
     });
     if (!confirmed) return;
-    projectController.remove(project.id);
+    projects.remove(project.id);
     this.#clearFailure(project.id);
   }
 

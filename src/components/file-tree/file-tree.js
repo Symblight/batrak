@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
@@ -5,7 +6,6 @@ import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import '../file-icon/file-icon.js';
-import { absPath } from '../../models/paths/paths.js';
 import styles from './file-tree.css?inline';
 
 /** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
@@ -330,7 +330,7 @@ export class AcpFileTree extends LitElement {
   #open(rel) {
     this.dispatchEvent(
       new CustomEvent('acp-file-open', {
-        detail: { path: absPath(this.root, rel) },
+        detail: { path: projects.abs(this.root, rel) },
         bubbles: true,
         composed: true,
       }),

@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { search } from '../../hooks/search/search.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
@@ -6,12 +7,10 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { gitController } from '../../services/git-controller/git-controller.js';
 import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
-import { absPath } from '../../models/paths/paths.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -62,10 +61,12 @@ export class AcpFileColumn extends ViewElement {
   /** @type {(() => void) | null} Stops watching the changes; set while Changes is shown and connected. */
   #unwatch = null;
 
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { rootId, dirs } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+  #onFsChange = (/** @type {WorkspaceChanges} */ { rootId, dirs }) => {
     if (rootId === $treeRoot.get().rootId) this.renderRoot.querySelector('acp-file-tree')?.reload(dirs);
   };
+  #onSessionRootFsChange = (/** @type {Event} */ e) => this.#onFsChange(/** @type {CustomEvent<WorkspaceChanges>} */ (e).detail);
+  /** Stops listening to the active project's files changing on disk. */
+  #stopWatching = () => {};
 
   constructor() {
     super();
@@ -77,14 +78,14 @@ export class AcpFileColumn extends ViewElement {
 
   connectedCallback() {
     super.connectedCallback();
-    projectController.addEventListener('fs-change', this.#onFsChange);
-    sessionRootController.addEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching = projects.onFsChange(this.#onFsChange);
+    sessionRootController.addEventListener('fs-change', this.#onSessionRootFsChange);
     this.#watchChanges(this.sideView === 'changes');
   }
 
   disconnectedCallback() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
-    sessionRootController.removeEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching();
+    sessionRootController.removeEventListener('fs-change', this.#onSessionRootFsChange);
     this.#watchChanges(false);
     super.disconnectedCallback();
   }
@@ -174,7 +175,7 @@ export class AcpFileColumn extends ViewElement {
     ).detail;
     const root = this.#workspace.value?.path ?? null;
     this.dispatchEvent(
-      new CustomEvent('acp-file-open', { detail: { path: absPath(root, path), line, column, length }, bubbles: true, composed: true }),
+      new CustomEvent('acp-file-open', { detail: { path: projects.abs(root, path), line, column, length }, bubbles: true, composed: true }),
     );
   }
 

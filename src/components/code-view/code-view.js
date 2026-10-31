@@ -1,3 +1,4 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { settings } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
@@ -12,7 +13,6 @@ import { SelectionActionsController } from '../../controllers/selection-actions/
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../file-icon/file-icon.js';
 import { isAgentsFile } from '../../models/agents-file/agents-file.js';
-import { absPath, basename, projectPathOf, relPath, shownPath, worktreeOf } from '../../models/paths/paths.js';
 import styles from './code-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
@@ -168,7 +168,7 @@ export class AcpCodeView extends LitElement {
    * @param {FooterTarget} target
    */
   #onFileMenuSelect(value, { path, folder }) {
-    if (value === 'reveal') this.#emit('acp-file-reveal', { path: projectPathOf(this.worktrees, path), expand: folder });
+    if (value === 'reveal') this.#emit('acp-file-reveal', { path: projects.projectPathOf(this.worktrees, path), expand: folder });
     else if (value === 'copy-path') this.#emit('acp-copy-path', { path });
     else if (value === 'copy-relative-path') this.#emit('acp-copy-path', { path: this.#pathOf(path) });
   }
@@ -180,7 +180,7 @@ export class AcpCodeView extends LitElement {
   #onFolderMenuSelect(value, list) {
     const entry = list.entries.find((e) => e.path === value);
     if (!entry) return;
-    const path = absPath(this.root, entry.path);
+    const path = projects.abs(this.root, entry.path);
     if (entry.isDir) this.#emit('acp-file-reveal', { path, expand: true });
     else this.#emit('acp-file-open', { path });
   }
@@ -205,7 +205,7 @@ export class AcpCodeView extends LitElement {
 
   /** @param {string} path Absolute. */
   #pathOf(path) {
-    return shownPath(this.root, this.worktrees, path);
+    return projects.shownPath(this.root, this.worktrees, path);
   }
 
   /**
@@ -214,7 +214,7 @@ export class AcpCodeView extends LitElement {
    * @param {string} path Absolute.
    */
   #listedRel(path) {
-    return worktreeOf(this.worktrees, path) ? null : relPath(this.root, path);
+    return projects.worktreeOf(this.worktrees, path) ? null : projects.rel(this.root, path);
   }
 
   /**
@@ -223,7 +223,7 @@ export class AcpCodeView extends LitElement {
    */
   #footerPath(path) {
     const rel = this.#listedRel(path);
-    return rel !== null && this.root ? `${basename(this.root)}/${rel}` : this.#pathOf(path);
+    return rel !== null && this.root ? `${projects.basename(this.root)}/${rel}` : this.#pathOf(path);
   }
 
   #onStatusPress = (/** @type {Event} */ e) => {
@@ -262,7 +262,7 @@ export class AcpCodeView extends LitElement {
     const target = this.#fileMenu.target;
     return html`<md-menu
       class="acp-code-view__file-menu acp-code-view__menu"
-      aria-label=${target ? basename(target.path) : 'File'}
+      aria-label=${target ? projects.basename(target.path) : 'File'}
       @select=${this.#fileMenu.onSelect}
       @closed=${this.#fileMenu.onClosed}
     >
@@ -278,7 +278,7 @@ export class AcpCodeView extends LitElement {
     const list = this.#folderMenu.target;
     return html`<md-menu
       class="acp-code-view__folder-menu acp-code-view__menu"
-      aria-label=${list ? basename(absPath(this.root, list.folder)) : 'Folder'}
+      aria-label=${list ? projects.basename(projects.abs(this.root, list.folder)) : 'Folder'}
       focus-on-open="selected"
       @select=${this.#folderMenu.onSelect}
       @closed=${this.#folderMenu.onClosed}

@@ -1,5 +1,5 @@
 import { fenceCode } from '../chat-parts/chat-parts.js';
-import { relPath } from '../paths/paths.js';
+import { relPath } from '../../hooks/projects/rules.js';
 import { inputOfInserts, linesOf } from '../session-input/session-input.js';
 
 /** @typedef {import('../types/types.js').ChatInsert} ChatInsert */

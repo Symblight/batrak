@@ -37,7 +37,7 @@ commands, `src/services/ipc/ipc.js`.
   Settings, Agents, Search and Changes elements are here until their views exist (see
   `docs/specs/frontend-structure.md`).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
-- `src/services/` — actions and IPC (`project-controller.js`, `session-controller.js`, `ipc.js`, `theme.js`).
+- `src/services/` — actions and IPC (`session-controller.js`, `ipc.js`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
@@ -80,7 +80,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
   `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`,
   `ContextMenuController`, `TabContentController`. `models/` stays pure (no stores, no services):
-  shared pure helpers live there (`paths.js`, `settings.js`, `config-options.js`, `about.js`), not in a
+  shared pure helpers live there (`config-options.js`), not in a
   store module.
 
 ### Global state
@@ -89,10 +89,10 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 
 - **State → store, streams → events.** Anything a component renders or another component needs lives in a
   store. One-off happenings stay events: DOM `acp-*` events for UI intents (`acp-file-open`), and
-  `projectController`'s `fs-change` for watcher batches. Don't mirror a store into a reactive property or
+  `projects.onFsChange()` for watcher batches. Don't mirror a store into a reactive property or
   re-announce it with an event.
 - **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor/editor.js`) or, when they
-  call the backend, in a service that writes the store (`projectController.open()` / `restore()` →
+  call the backend, in a service that writes the store (`projects.open()` / `restore()` (`hooks/projects/`) →
   `$workspace`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
 - **Narrow with `computed`.** `$rootId` (from `$workspace`) and `$activePath` (from `$editorTabs`) notify
   only when their slice changes, so subscribe to the narrowest store you need.
@@ -131,10 +131,10 @@ Commands are `async` and push disk/process work to `spawn_blocking`; nothing blo
 Work that can be superseded must be cancellable, not just have its result dropped: Quick Open and
 Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops when a newer
 `open_workspace` from the same window starts (it then fails with `workspace::SUPERSEDED`, which
-`projectController` ignores) or when its root closes. The editor reads only the active tab; other
+`projects` ignores) or when its root closes. The editor reads only the active tab; other
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
-**Open projects:** `projectController` keeps the backend roots (snapshot + watcher) of the last
+**Open projects:** the `projects` hook keeps the backend roots (snapshot + watcher) of the last
 `KEEP_OPEN` (3) active projects; activating one of them only switches `$workspace`, no scan. Older
 ones are closed and scanned again when activated. Only the active root's changes reach the frontend
 (`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
@@ -193,7 +193,7 @@ test that reproduces it.
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
   every `src/**/*.test.js`. Every entity has a folder of its own, with its tests in a `__tests__/` folder inside it, named
-  after it (`components/x/__tests__/x.test.js`, `models/paths/__tests__/paths.test.js`). Keep logic in plain functions
+  after it (`components/x/__tests__/x.test.js`, `hooks/projects/__tests__/rules.test.js`). Keep logic in plain functions
   (`stores/`, `models/`, `services/adapter/adapter.js`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and

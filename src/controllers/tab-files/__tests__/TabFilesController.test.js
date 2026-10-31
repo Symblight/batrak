@@ -1,8 +1,8 @@
 import { LitElement, html as litHtml } from 'lit';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { TabFilesController } from '../TabFilesController.js';
-import { projectController } from '../../../services/project-controller/project-controller.js';
 import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
@@ -36,13 +36,12 @@ async function until(pred) {
  * @param {{ added?: string[], removed?: string[], modified?: string[] }} changes Root-relative paths.
  */
 function report({ added = [], removed = [], modified = [] }) {
-  const detail = { rootId: 'r', dirs: [], added, removed, modified, git: false };
-  projectController.dispatchEvent(new CustomEvent('fs-change', { detail }));
+  return emit('workspace://changed', { rootId: 'r', dirs: [], added, removed, modified, git: false });
 }
 
 /** The watcher reports the file changed. */
 function changedOnDisk() {
-  report({ modified: ['.brama/agents.json'] });
+  return report({ modified: ['.brama/agents.json'] });
 }
 
 describe('TabFilesController', () => {
@@ -73,7 +72,7 @@ describe('TabFilesController', () => {
         writes.push(content);
       }
       return null;
-    });
+    }, { shouldMockEvents: true });
     $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
@@ -97,7 +96,7 @@ describe('TabFilesController', () => {
   it('marks an edited tab whose file changed on disk, and saves over it only when told', async () => {
     const { files, tab } = await edited();
     disk[PATH] = '{ "theirs": 1 }';
-    changedOnDisk();
+    await changedOnDisk();
     await until(() => tab().changedOnDisk);
     expect(await files.save(PATH)).to.equal(false);
     expect(writes).to.deep.equal([]);
@@ -110,7 +109,7 @@ describe('TabFilesController', () => {
     const { files, tab } = await edited();
     expect(await files.save(PATH)).to.equal(true);
     files.edit(PATH, '{ "mine": 2 }');
-    changedOnDisk();
+    await changedOnDisk();
     await new Promise((r) => setTimeout(r, 50));
     expect(tab().changedOnDisk).to.equal(false);
   });
@@ -126,7 +125,7 @@ describe('TabFilesController', () => {
   it('reloads the file from disk, dropping the edits', async () => {
     const { files, tab } = await edited();
     disk[PATH] = '{ "theirs": 1 }';
-    changedOnDisk();
+    await changedOnDisk();
     await until(() => tab().changedOnDisk);
     files.reload(PATH);
     await until(() => tab().content === '{ "theirs": 1 }');
@@ -136,7 +135,7 @@ describe('TabFilesController', () => {
   it('keeps edits typed while a reload reads, and asks before saving them over the file', async () => {
     const { files, tab } = await edited();
     disk[PATH] = '{ "theirs": 1 }';
-    changedOnDisk();
+    await changedOnDisk();
     await until(() => tab().changedOnDisk);
     /** @type {() => void} */
     let release = () => {};
@@ -165,7 +164,7 @@ describe('TabFilesController', () => {
         writes.push(content);
       }
       return null;
-    });
+    }, { shouldMockEvents: true });
     const first = files.save(PATH);
     const second = files.save(PATH);
     expect(await first).to.equal(true);
@@ -217,20 +216,20 @@ describe('TabFilesController', () => {
   describe('a file deleted on disk', () => {
     const REL = '.brama/agents.json';
 
-    function deleted() {
+    async function deleted() {
       delete disk[PATH];
-      report({ removed: [REL] });
+      await report({ removed: [REL] });
     }
 
     it('keeps showing the file and its edits, marked deleted', async () => {
       const { tab } = await edited();
-      deleted();
+      await deleted();
       expect(tab()).to.include({ error: '', content: '{}', draft: '{ "mine": 1 }', deletedOnDisk: true });
     });
 
     it('saves the edits without asking, creating the file again', async () => {
       const { files, tab } = await edited();
-      deleted();
+      await deleted();
       expect(await files.save(PATH)).to.equal(true);
       expect(disk[PATH]).to.equal('{ "mine": 1 }');
       expect(tab()).to.include({ draft: null, deletedOnDisk: false });
@@ -239,7 +238,7 @@ describe('TabFilesController', () => {
     it('saves an unedited file again too', async () => {
       const { files, tab } = await edited();
       files.edit(PATH, '{}');
-      deleted();
+      await deleted();
       expect(await files.save(PATH)).to.equal(true);
       expect(disk[PATH]).to.equal('{}');
       expect(tab().deletedOnDisk).to.equal(false);
@@ -247,9 +246,9 @@ describe('TabFilesController', () => {
 
     it('shows the edits as before when the file is created again, marked when it differs', async () => {
       const { files, tab } = await edited();
-      deleted();
+      await deleted();
       disk[PATH] = '{ "theirs": 1 }';
-      report({ added: [REL] });
+      await report({ added: [REL] });
       await until(() => tab().changedOnDisk);
       expect(tab()).to.include({ deletedOnDisk: false, content: '{}', draft: '{ "mine": 1 }' });
       expect(await files.save(PATH)).to.equal(false);
@@ -257,9 +256,9 @@ describe('TabFilesController', () => {
 
     it('unmarks it when the same file is created again', async () => {
       const { tab } = await edited();
-      deleted();
+      await deleted();
       disk[PATH] = '{}';
-      report({ added: [REL] });
+      await report({ added: [REL] });
       await new Promise((r) => setTimeout(r, 50));
       expect(tab()).to.include({ deletedOnDisk: false, draft: '{ "mine": 1 }', changedOnDisk: false });
     });

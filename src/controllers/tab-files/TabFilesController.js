@@ -1,10 +1,10 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
 import { isUserAgentsFile } from '../../models/agents-file/agents-file.js';
 import { imageTypeOf } from '../../models/image-types/image-types.js';
 import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
-import { projectController } from '../../services/project-controller/project-controller.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
@@ -120,18 +120,20 @@ export class TabFilesController {
     return this.#editorTabs.value.active;
   }
 
+  /** Stops listening to the files changing on disk. */
+  #stopWatching = () => {};
+
   hostConnected() {
-    projectController.addEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching = projects.onFsChange(this.#onFsChange);
   }
 
   hostDisconnected() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching();
   }
 
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { modified, added, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+  #onFsChange = (/** @type {WorkspaceChanges} */ { modified, added, removed }) => {
     for (const tab of this.#tabs) {
-      const rel = projectController.relPath(tab.path);
+      const rel = projects.relPath(tab.path);
       if (rel === null) continue;
       if (removed.includes(rel)) {
         // A shown text stays, like the edits on it; anything else has nothing left to show.
@@ -332,7 +334,7 @@ export class TabFilesController {
    */
   async #readBaseline(path) {
     const rootId = this.#rootId.value;
-    const rel = projectController.relPath(path);
+    const rel = projects.relPath(path);
     if (rootId === null || rel === null) return null;
     return gitFileAtHead(rootId, rel).catch(() => null);
   }

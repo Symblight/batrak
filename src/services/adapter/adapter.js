@@ -1,7 +1,7 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from '../ipc/ipc.js';
 import { fenceCode } from '../../models/chat-parts/chat-parts.js';
-import { isAbsolute } from '../../models/paths/paths.js';
 import { inputOfMessage, linesOf } from '../../models/session-input/session-input.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
@@ -531,7 +531,7 @@ export function promptOfInput(parts) {
       text += part.folder ? `@${part.path}/` : `@${part.path}`;
       // An absolute one is outside the session's folder (dropped from elsewhere), which a mention
       // can't name: the agent reads it by its path.
-      if (!isAbsolute(part.path)) resources.push({ type: 'mention', path: part.path });
+      if (!projects.isAbsolute(part.path)) resources.push({ type: 'mention', path: part.path });
     }
   }
   // TODO: attachments (images) as ACP image blocks, once the agent's promptCapabilities are known.

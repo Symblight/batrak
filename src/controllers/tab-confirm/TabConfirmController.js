@@ -1,7 +1,7 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { html } from 'lit';
 import '../../components/confirm-dialog/confirm-dialog.js';
-import { basename } from '../../models/paths/paths.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
@@ -54,7 +54,7 @@ export class TabConfirmController {
     if (!dirty.length) return true;
     return this.#dialog.confirm({
       headline: 'Discard unsaved changes?',
-      message: dirty.map((t) => basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
+      message: dirty.map((t) => projects.basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
       detail: 'Press ⌘S / Ctrl+S in the editor to save.',
       confirmLabel: 'Discard',
       destructive: true,
@@ -86,7 +86,7 @@ export class TabConfirmController {
    */
   overwrite(tab) {
     return this.#dialog.choose({
-      headline: `${basename(tab.path)} changed on disk`,
+      headline: `${projects.basename(tab.path)} changed on disk`,
       message: 'It was changed since you started editing it, by an agent or another program.',
       detail: 'Overwrite replaces that change with your edits; Reload drops your edits.',
       confirmLabel: 'Overwrite',

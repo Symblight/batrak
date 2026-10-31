@@ -1,5 +1,5 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { gitCommit, gitHead, gitStatus } from '../ipc/ipc.js';
-import { projectController } from '../project-controller/project-controller.js';
 import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
 
@@ -92,8 +92,10 @@ export class GitController {
   #head = new SerialTask(() => this.#readHead());
   #changes = new SerialTask(() => this.#readChanges());
 
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { git } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+  /** Stops listening to the files changing on disk. */
+  #stopWatching = () => {};
+
+  #onFsChange = (/** @type {WorkspaceChanges} */ { git }) => {
     if (git) this.#head.schedule(REFRESH_DELAY_MS);
     if (this.#watchers) this.#changes.schedule(REFRESH_DELAY_MS);
   };
@@ -106,7 +108,7 @@ export class GitController {
   start() {
     if (this.#unsubscribe) return;
     this.#unsubscribe = $rootId.subscribe((rootId) => this.#switchRoot(rootId));
-    projectController.addEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching = projects.onFsChange(this.#onFsChange);
     window.addEventListener('focus', this.#onFocus);
   }
 
@@ -118,7 +120,7 @@ export class GitController {
   #switchRoot(rootId) {
     const previous = this.#rootId;
     this.#rootId = rootId;
-    if (previous !== null && previous !== rootId && projectController.isOpen(previous)) {
+    if (previous !== null && previous !== rootId && projects.isOpen(previous)) {
       this.#saved.set(previous, {
         repo: $gitRepo.get(),
         changes: { ...$gitChanges.get(), loading: false },
@@ -127,7 +129,7 @@ export class GitController {
       });
     }
     for (const id of this.#saved.keys()) {
-      if (!projectController.isOpen(id)) this.#saved.delete(id);
+      if (!projects.isOpen(id)) this.#saved.delete(id);
     }
     const saved = rootId === null ? undefined : this.#saved.get(rootId);
     if (rootId !== null) this.#saved.delete(rootId);
@@ -145,7 +147,8 @@ export class GitController {
   stop() {
     this.#unsubscribe?.();
     this.#unsubscribe = null;
-    projectController.removeEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching();
+    this.#stopWatching = () => {};
     window.removeEventListener('focus', this.#onFocus);
     this.#head.cancel();
     this.#changes.cancel();

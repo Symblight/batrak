@@ -30,7 +30,7 @@ Spec: `docs/specs/search-dialog.md`.
 
 - `<acp-search-options>` (match case / whole word / regex, Alt+C / W / R) and `<acp-search-results>`
   (grouped or flat rows, selection by key, `move()` / `moveTo()`) are presentational and used by both.
-  Results carry root-relative paths; the container makes them absolute (`projectController.absPath`).
+  Results carry root-relative paths; the container makes them absolute (`projects.absPath`).
 - A match opens selected: `<acp-main-column>.openFile(abs, { line, column, length })`; the 1-based
   column is `offset + start + 1` (`LineMatch.offset` counts UTF-16 units cut from a long line's start).
 

@@ -501,14 +501,6 @@ export function readFileBytes(path) {
   return ipc.invoke('read_file_bytes', { path });
 }
 
-/**
- * Scans a folder into a snapshot and starts watching it.
- * @param {string} path
- * @returns {Promise<OpenedRoot>}
- */
-export function openWorkspace(path) {
-  return ipc.invoke('open_workspace', { path });
-}
 
 /**
  * Scans a worktree session's folder for the Files tree and starts watching it.
@@ -527,13 +519,6 @@ export function closeWorkspace(rootId) {
   return ipc.invoke('close_workspace', { rootId });
 }
 
-/**
- * Closes every root this window opened, e.g. ones a previous load of the page kept open.
- * @returns {Promise<void>}
- */
-export function closeWindowWorkspaces() {
-  return ipc.invoke('close_window_workspaces');
-}
 
 /**
  * Children of a directory from the snapshot.
@@ -585,14 +570,6 @@ export function quickOpen(rootId, query, kind = 'files') {
   return ipc.invoke('quick_open', { rootId, query, kind });
 }
 
-/**
- * @param {string} rootId
- * @param {string} path Relative.
- * @returns {Promise<void>}
- */
-export function noteFileOpened(rootId, path) {
-  return ipc.invoke('note_file_opened', { rootId, path });
-}
 
 /**
  * Starts a content search; results stream into `onEvent` until a `done` or `error` event.
