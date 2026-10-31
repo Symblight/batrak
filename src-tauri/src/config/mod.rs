@@ -286,7 +286,7 @@ impl Merged {
             sign_in: false,
             command: a.command.clone(),
             args: a.args.clone(),
-            terminal: cli::cli_for(a).map(|spec| spec.mode()),
+            terminal: cli::cli_for(crate::agents::standard(), a, &BTreeMap::new()).map(|spec| spec.mode()),
         };
         let mut agents: Vec<AgentSummary> = self.agents.iter().map(summary).collect();
         agents.sort_by(|a, b| a.id.cmp(&b.id));

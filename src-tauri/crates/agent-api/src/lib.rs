@@ -69,6 +69,16 @@ impl CliSpec {
         Some((self.program.clone(), args))
     }
 
+    /// With `flags` (the composer's picks, `Agent::cli_args`) after the resume and new-session args,
+    /// so before a first prompt.
+    pub fn with_flags(mut self, flags: Vec<String>) -> CliSpec {
+        if let Some(new_args) = &mut self.new_args {
+            new_args.extend(flags.iter().cloned());
+        }
+        self.resume_args.extend(flags);
+        self
+    }
+
     pub fn mode(&self) -> TerminalMode {
         TerminalMode { resume: true, new: self.new_args.is_some() }
     }
@@ -112,6 +122,16 @@ pub trait Agent: Send + Sync + 'static {
     fn cli_args(&self, _config: &BTreeMap<String, String>) -> Vec<String> {
         Vec::new()
     }
+}
+
+/// Whether an option's value may go on a CLI's command line as a flag's value: it looks like an id
+/// (a model's, a mode's), never like a flag, and holds nothing a shell such as Windows' `cmd.exe`
+/// (which runs `npx.cmd`) would read. A value can come from the agent, which reads the project's
+/// settings, so it isn't trusted as is.
+pub fn is_flag_value(value: &str) -> bool {
+    value.len() <= 200
+        && value.starts_with(|c: char| c.is_ascii_alphanumeric())
+        && value.chars().all(|c| c.is_ascii_alphanumeric() || "._:/[]-".contains(c))
 }
 
 /// Owned strings, for building argument lists.
@@ -184,5 +204,23 @@ mod tests {
         assert_eq!(last("-v what changed?").as_deref(), Some(" -v what changed?"), "never parsed as a flag");
         assert_eq!(spec.resume("abc").1, ["--resume", "abc"]);
         assert_eq!(spec.mode(), TerminalMode { resume: true, new: true });
+    }
+
+    #[test]
+    fn takes_only_id_like_values_for_flags() {
+        for ok in ["opus", "claude-sonnet-5", "claude-opus-4-8[1m]", "bypassPermissions", "anthropic/claude:v1.2"] {
+            assert!(is_flag_value(ok), "{ok}");
+        }
+        for bad in ["", "-v", "--dangerously-skip-permissions", "opus & calc", "a%PATH%", "a\"b", "a b", "^x", "a|b"] {
+            assert!(!is_flag_value(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn flags_go_after_the_resume_and_new_args_before_the_prompt() {
+        let spec = CliSpec { program: "cli".into(), args: strings(&["--cli"]), resume_args: strings(&["--resume", ID]), new_args: Some(strings(&["--session-id", ID])), prompt_args: strings(&[PROMPT]) }
+            .with_flags(strings(&["--model", "opus"]));
+        assert_eq!(spec.resume("s").1, ["--cli", "--resume", "s", "--model", "opus"]);
+        assert_eq!(spec.start_new("s", Some("fix it")).unwrap().1, ["--cli", "--session-id", "s", "--model", "opus", "fix it"]);
     }
 }

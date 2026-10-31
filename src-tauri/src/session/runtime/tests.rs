@@ -189,8 +189,27 @@ fn git_fixture(name: &str) -> Fixture {
     f
 }
 
+/// The fake agent's kind: its CLI is agents.json's `cli`; it maps `model` to `--model`, as a real
+/// agent crate maps the composer's picks to its CLI's flags.
+struct FakeKind;
+
+impl agent_api::Agent for FakeKind {
+    fn kind(&self) -> &'static str {
+        "fake"
+    }
+
+    fn matches(&self, launch: &agent_api::Launch) -> bool {
+        launch.command == "fake-agent"
+    }
+
+    fn cli_args(&self, config: &BTreeMap<String, String>) -> Vec<String> {
+        config.get("model").map(|m| vec!["--model".to_owned(), m.clone()]).unwrap_or_default()
+    }
+}
+
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
+        agents: Arc::new(crate::agents::AgentHub::of(vec![Box::new(FakeKind)])),
         data_dir: dir.join("data"),
         configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json")))
             .with_registry(crate::config::registry::Registry::of(crate::config::registry::tests::FIXTURE)),
@@ -2726,6 +2745,27 @@ async fn a_first_prompt_too_long_for_the_command_line_is_pasted_once_the_cli_rea
     let shown = attach(&terminals, &opened.terminal_id).wait_for("END").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} READY")), "not on the command line: {shown}");
     assert!(shown.contains("^[200~fix xxxx"), "pasted, bracketed: {shown}");
+    terminals.close(&[opened.terminal_id]);
+}
+
+#[tokio::test]
+async fn a_cli_starts_with_the_model_picked_in_the_composer() {
+    let f = fixture("cli-draft-picks", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let id = "5cb916db-26aa-40f2-86b5-1ba81b225fd2";
+    let config = BTreeMap::from([("model".to_owned(), "opus".to_owned())]);
+    let draft = CliDraft { prompt: Some("fix it".into()), config, ..f.draft("fake", Mode::Local) };
+    let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
+    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    assert!(shown.contains(&format!("ARGS:--session-id {id} --model opus fix it")), "{shown}");
+    terminals.close(std::slice::from_ref(&opened.terminal_id));
+    f.sessions.close_cli(id).await.unwrap();
+
+    // Continued in the terminal later: the session's own picks again.
+    let opened = f.sessions.open_cli(id, None, window(&terminals)).await.unwrap();
+    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    assert!(shown.contains(&format!("ARGS:--resume {id} --model opus")), "{shown}");
     terminals.close(&[opened.terminal_id]);
 }
 

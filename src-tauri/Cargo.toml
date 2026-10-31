@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 agent-api = { path = "crates/agent-api" }
+agent-claude = { path = "crates/agent-claude" }
 agent-generic = { path = "crates/agent-generic" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }

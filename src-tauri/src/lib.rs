@@ -1,4 +1,5 @@
 mod acp;
+mod agents;
 mod commands;
 mod config;
 mod git;

@@ -149,7 +149,7 @@ impl Sessions {
         let project = dunce::canonicalize(&draft.project_path).map_err(|e| format!("{}: {e}", draft.project_path))?;
         let merged = self.inner.opts.configs.merged(Some(&project));
         if let Some(agent) = merged.agent(&draft.agent_id) {
-            match crate::config::cli::cli_for(agent) {
+            match crate::config::cli::cli_for(&self.inner.opts.agents, agent, &draft.config) {
                 None => return Err(format!("{} has no terminal mode", agent.name)),
                 Some(spec) if spec.new_args.is_none() => {
                     return Err(format!("{}'s CLI can't start a session Brama names: send a first message in the chat", agent.name));
@@ -220,7 +220,9 @@ impl Inner {
                 .map_err(|_| Absence::of(&merged, &record.agent_id).message(&merged, &record.agent_id))?,
         };
         self.check_trust(&record.project_path, &merged, &agent.id).map_err(|untrusted| untrusted.message)?;
-        let spec = crate::config::cli::cli_for(&agent).ok_or_else(|| format!("{} has no terminal mode", agent.name))?;
+        // The session's picks (the composer's, then each the chat applied) as its CLI's flags.
+        let spec = crate::config::cli::cli_for(&self.opts.agents, &agent, &record.config)
+            .ok_or_else(|| format!("{} has no terminal mode", agent.name))?;
         let acp_id = record.acp_session_id.clone().ok_or("This session hasn't started yet: send its first message in the chat")?;
         // A first prompt that can't go on the command line is pasted once the CLI reads.
         let mut pasted = None;

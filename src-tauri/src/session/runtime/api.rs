@@ -52,6 +52,8 @@ impl Launcher for ProcessLauncher {
 }
 
 pub struct SessionsOptions {
+    /// The agent crates (`agents::AgentHub`): what an agent's CLI runs and takes.
+    pub agents: Arc<crate::agents::AgentHub>,
     /// App data: `sessions.json` and `sessions/<id>/agent.log`.
     pub data_dir: PathBuf,
     pub configs: AgentConfigs,
@@ -75,6 +77,7 @@ pub(super) const OVERLAP_GRACE: Duration = Duration::from_secs(1);
 impl SessionsOptions {
     pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
         SessionsOptions {
+            agents: Arc::clone(crate::agents::standard()),
             data_dir,
             configs,
             secrets: Arc::new(crate::config::env::OsKeychain),

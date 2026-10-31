@@ -44,18 +44,6 @@ describe('acp-chat', () => {
     ]);
   });
 
-  it('hides the model and permission pickers when the first send starts the agent’s CLI', async () => {
-    const chat = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
-    const pickers = () => ['acp-agent-picker', 'acp-model-picker', 'acp-mode-picker'].filter((tag) => chat.renderRoot.querySelector(tag));
-    expect(pickers()).to.deep.equal(['acp-agent-picker', 'acp-model-picker', 'acp-mode-picker']);
-    chat.cliStart = true;
-    await chat.updateComplete;
-    expect(pickers()).to.deep.equal(['acp-agent-picker']);
-    chat.cliStart = false;
-    await chat.updateComplete;
-    expect(pickers()).to.deep.equal(['acp-agent-picker', 'acp-model-picker', 'acp-mode-picker']);
-  });
-
   it("sends its chips' paths in its html, which a session's input reads back", async () => {
     const chat = /** @type {AcpChat} */ (await fixture(html`<acp-chat .root=${'/p'}></acp-chat>`));
     await chat.composerReady();

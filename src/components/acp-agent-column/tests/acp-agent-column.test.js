@@ -125,6 +125,17 @@ describe('acp-agent-column', () => {
     clearMocks();
   });
 
+  it("shows the model and permission pickers for a new session that starts in the terminal: its CLI starts with them", async () => {
+    setAgentView('claude', 'terminal');
+    $draftSessions.set({ d1: '/p' });
+    $activeSessionId.set('d1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    await chat.updateComplete;
+    expect(chat.renderRoot.querySelector('acp-model-picker'), 'model').not.to.equal(null);
+    expect(chat.renderRoot.querySelector('acp-mode-picker'), 'permissions').not.to.equal(null);
+  });
+
   it('shows the chat, not a spinner, while a terminal view waits for a running turn to end', async () => {
     $sessions.set([session({ status: 'working' })]);
     $sessionViews.setKey('s1', 'terminal');

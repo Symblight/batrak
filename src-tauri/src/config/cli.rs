@@ -3,10 +3,12 @@
 //! Known for the registry's agents by what they run (the package, not agents.json's id), or set
 //! by an agents.json entry's `cli`, which wins.
 
+use std::collections::BTreeMap;
+
 use serde::{Deserialize, Serialize};
 
 pub use agent_api::{prompt_fits_argv, CliSpec, TerminalMode};
-use agent_api::{strings, Launch, ID, PROMPT};
+use agent_api::{strings, ID, PROMPT};
 
 use super::AgentConfig;
 
@@ -30,8 +32,18 @@ pub struct CliOverride {
     pub prompt_args: Option<Vec<String>>,
 }
 
-/// The CLI of `agent`: its `cli` entry, else the one of the registry agent it runs (by package).
-pub fn cli_for(agent: &AgentConfig) -> Option<CliSpec> {
+/// The CLI of `agent`: its `cli` entry, else its crate's (`hub`), else the one of the registry agent
+/// it runs (by package; moving into crates). `config` (a session's picks) becomes flags through the
+/// crate of the agent's launch, also under a `cli` entry: what an option means is the agent's.
+pub fn cli_for(hub: &crate::agents::AgentHub, agent: &AgentConfig, config: &BTreeMap<String, String>) -> Option<CliSpec> {
+    let launch = crate::agents::launch_of(agent);
+    let kind = hub.for_launch(&launch);
+    let spec = cli_of(kind, &launch, agent)?;
+    Some(spec.with_flags(kind.cli_args(config)))
+}
+
+/// `agent`'s CLI, no flags.
+fn cli_of(kind: &dyn agent_api::Agent, launch: &agent_api::Launch, agent: &AgentConfig) -> Option<CliSpec> {
     if let Some(cli) = &agent.cli {
         let (program, args) = match &cli.command {
             Some(command) => (command.clone(), cli.args.clone().unwrap_or_default()),
@@ -40,14 +52,11 @@ pub fn cli_for(agent: &AgentConfig) -> Option<CliSpec> {
         let prompt_args = cli.prompt_args.clone().unwrap_or_else(|| vec![PROMPT.to_owned()]);
         return Some(CliSpec { program, args, resume_args: cli.resume_args.clone(), new_args: cli.new_args.clone(), prompt_args });
     }
-    let launch = Launch { command: agent.command.clone(), args: agent.args.clone() };
+    if let Some(spec) = kind.cli(launch) {
+        return Some(spec);
+    }
     let (at, package, _) = launch.npx_package()?;
     let (args, resume_args, new_args, prompt_args) = match package {
-        // The adapter bundles Claude Code, which `--cli` runs (as its terminal sign-in does).
-        "@agentclientprotocol/claude-agent-acp" => {
-            let args = agent.args.iter().cloned().chain(["--cli".to_owned()]).collect();
-            (args, strings(&["--resume", ID]), Some(strings(&["--session-id", ID])), strings(&[PROMPT]))
-        }
         // The adapter is a library over Codex's own threads; its CLI is a package of its own.
         "@agentclientprotocol/codex-acp" => {
             let before = agent.args[..at].iter().filter(|a| a.starts_with('-'));
@@ -83,7 +92,7 @@ mod tests {
 
     #[test]
     fn claude_runs_the_adapters_bundled_cli() {
-        let cli = cli_for(&agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"])).unwrap();
+        let cli = cli_for(crate::agents::standard(), &agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"]), &BTreeMap::new()).unwrap();
         assert_eq!(line(&cli.resume("abc")), "npx -y @agentclientprotocol/claude-agent-acp@0.99.1 --cli --resume abc");
         assert_eq!(line(&cli.start_new("abc", None).unwrap()), "npx -y @agentclientprotocol/claude-agent-acp@0.99.1 --cli --session-id abc");
         assert_eq!(
@@ -101,7 +110,7 @@ mod tests {
 
     #[test]
     fn codex_runs_the_codex_cli_and_cant_start_a_session_by_id() {
-        let cli = cli_for(&agent("/usr/local/bin/npx", &["-y", "@agentclientprotocol/codex-acp@2.5.0"])).unwrap();
+        let cli = cli_for(crate::agents::standard(), &agent("/usr/local/bin/npx", &["-y", "@agentclientprotocol/codex-acp@2.5.0"]), &BTreeMap::new()).unwrap();
         assert_eq!(line(&cli.resume("t-1")), "/usr/local/bin/npx -y @openai/codex resume t-1");
         assert_eq!(cli.start_new("t-1", None), None);
         assert_eq!(cli.mode(), TerminalMode { resume: true, new: false });
@@ -109,7 +118,7 @@ mod tests {
 
     #[test]
     fn copilot_runs_its_launch_without_acp() {
-        let cli = cli_for(&agent("npx", &["-y", "@github/copilot@1.0.105", "--acp"])).unwrap();
+        let cli = cli_for(crate::agents::standard(), &agent("npx", &["-y", "@github/copilot@1.0.105", "--acp"]), &BTreeMap::new()).unwrap();
         assert_eq!(line(&cli.resume("s")), "npx -y @github/copilot@1.0.105 --resume s");
         assert_eq!(line(&cli.start_new("s", None).unwrap()), "npx -y @github/copilot@1.0.105 --session-id s");
         assert_eq!(line(&cli.start_new("s", Some("hi there")).unwrap()), "npx -y @github/copilot@1.0.105 --session-id s --interactive=hi there");
@@ -124,19 +133,19 @@ mod tests {
     fn matched_by_what_it_runs_not_its_id() {
         let mut claude = agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp"]);
         claude.id = "my-claude".into();
-        assert!(cli_for(&claude).is_some());
-        assert_eq!(cli_for(&agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"])), None, "another package");
-        assert_eq!(cli_for(&agent("agy_acp_server.par", &[])), None, "Antigravity has none");
-        assert_eq!(cli_for(&agent("my-agent", &["--acp"])), None, "custom");
+        assert!(cli_for(crate::agents::standard(), &claude, &BTreeMap::new()).is_some());
+        assert_eq!(cli_for(crate::agents::standard(), &agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"]), &BTreeMap::new()), None, "another package");
+        assert_eq!(cli_for(crate::agents::standard(), &agent("agy_acp_server.par", &[]), &BTreeMap::new()), None, "Antigravity has none");
+        assert_eq!(cli_for(crate::agents::standard(), &agent("my-agent", &["--acp"]), &BTreeMap::new()), None, "custom");
     }
 
     #[test]
     fn a_prompt_like_an_option_stays_a_prompt() {
-        let claude = cli_for(&agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"])).unwrap();
+        let claude = cli_for(crate::agents::standard(), &agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"]), &BTreeMap::new()).unwrap();
         let last = |prompt: &str| claude.start_new("abc", Some(prompt)).unwrap().1.last().cloned();
         assert_eq!(last("-v what changed?").as_deref(), Some(" -v what changed?"), "a leading space: never parsed as a flag");
         assert_eq!(last("--help me").as_deref(), Some(" --help me"));
-        let copilot = cli_for(&agent("npx", &["-y", "@github/copilot", "--acp"])).unwrap();
+        let copilot = cli_for(crate::agents::standard(), &agent("npx", &["-y", "@github/copilot", "--acp"]), &BTreeMap::new()).unwrap();
         assert_eq!(
             copilot.start_new("abc", Some("-v now")).unwrap().1.last().map(String::as_str),
             Some("--interactive=-v now"),
@@ -148,7 +157,7 @@ mod tests {
     fn a_cli_entry_wins_and_reuses_the_launch_without_a_command() {
         let mut custom = agent("my-agent", &["--acp"]);
         custom.cli = Some(CliOverride { resume_args: vec!["--resume".into(), "{id}".into()], ..CliOverride::default() });
-        let cli = cli_for(&custom).unwrap();
+        let cli = cli_for(crate::agents::standard(), &custom, &BTreeMap::new()).unwrap();
         assert_eq!(line(&cli.resume("x")), "my-agent --acp --resume x");
         assert_eq!(cli.mode(), TerminalMode { resume: true, new: false });
 
@@ -159,13 +168,13 @@ mod tests {
             new_args: Some(vec!["--session-id={id}".into()]),
             ..CliOverride::default()
         });
-        let cli = cli_for(&claude).unwrap();
+        let cli = cli_for(crate::agents::standard(), &claude, &BTreeMap::new()).unwrap();
         assert_eq!(line(&cli.resume("x")), "claude -r x", "a command runs without the launch's args");
         assert_eq!(line(&cli.start_new("x", None).unwrap()), "claude --session-id=x");
         assert_eq!(cli.start_new("x", Some("go on")).unwrap().1.last().map(String::as_str), Some("go on"), "no promptArgs: the prompt goes last");
 
         let mut args_only = agent("my-agent", &["--acp"]);
         args_only.cli = Some(CliOverride { args: Some(vec!["chat".into()]), resume_args: vec!["{id}".into()], ..CliOverride::default() });
-        assert_eq!(line(&cli_for(&args_only).unwrap().resume("x")), "my-agent chat x");
+        assert_eq!(line(&cli_for(crate::agents::standard(), &args_only, &BTreeMap::new()).unwrap().resume("x")), "my-agent chat x");
     }
 }

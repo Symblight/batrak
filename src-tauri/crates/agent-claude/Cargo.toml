@@ -1,0 +1,8 @@
+[package]
+name = "agent-claude"
+version = "0.1.0"
+edition = "2021"
+description = "Claude Code for Brama: claude-agent-acp, its bundled CLI, and the composer's picks as its flags"
+
+[dependencies]
+agent-api = { path = "../agent-api" }
