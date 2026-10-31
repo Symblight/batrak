@@ -13,6 +13,8 @@ import styles from './acp-terminal.css?inline';
 /** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../models/types.js').TerminalLink} TerminalLink */
 
+/** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
+const FULL_RESET = '\x1bc';
 const MAC = /Mac/.test(navigator.userAgent);
 const MONO = 'ui-monospace, Menlo, monospace';
 
@@ -55,6 +57,10 @@ export class AcpTerminal extends LitElement {
   #visible = false;
   /** Pasted before the shell was connected: sent once it is. */
   #pending = '';
+  /** @type {string} The terminal `#link` is to (`terminalId` may already name the next). */
+  #linkId = '';
+  /** @type {string} The terminal `#pending`'s text is for. */
+  #pendingId = '';
 
   constructor() {
     super();
@@ -156,6 +162,17 @@ export class AcpTerminal extends LitElement {
   updated(changed) {
     const term = this.#term;
     if (!term) return;
+    if (changed.get('terminalId')) {
+      // Another terminal shown in this element (the agent column's next session): its own screen and
+      // link, never the last one's. Connecting again replays its kept output.
+      this.#link?.dispose();
+      this.#link = null;
+      if (this.#pendingId !== this.terminalId) this.#pending = '';
+      // Behind what xterm still has to draw of the last terminal, so none of it lands on this one.
+      term.write(FULL_RESET);
+      this.#visible = false;
+      this.#scheduleFit();
+    }
     if (changed.has('fontFamily') || changed.has('fontSize')) {
       term.options.fontFamily = this.#font();
       term.options.fontSize = this.fontSize;
@@ -193,9 +210,11 @@ export class AcpTerminal extends LitElement {
       const { cols, rows } = term;
       fit.fit();
       if (!this.#link && this.connect) {
+        this.#linkId = this.terminalId;
         this.#link = this.connect(this.terminalId, { cols: term.cols, rows: term.rows }, {
           output: (bytes, done) => term.write(bytes, done),
-          reset: () => term.reset(),
+          // Queued like output: drawn after what came before it.
+          reset: () => term.write(FULL_RESET),
           exit: (exit) => term.write(`\r\n\x1b[2m[Process exited with ${exitText(exit)}]\x1b[0m\r\n`),
         });
         const pending = this.#pending;
@@ -215,8 +234,14 @@ export class AcpTerminal extends LitElement {
    */
   paste(text) {
     const term = this.#term;
-    if (term && this.#link) this.#paste(term, text);
-    else this.#pending += text;
+    // Only through a link to the terminal shown now (`updated()` relinks after `terminalId` changes).
+    if (term && this.#link && this.#linkId === this.terminalId) {
+      this.#paste(term, text);
+    } else {
+      if (this.#pendingId !== this.terminalId) this.#pending = '';
+      this.#pending += text;
+      this.#pendingId = this.terminalId;
+    }
     term?.focus();
   }
 

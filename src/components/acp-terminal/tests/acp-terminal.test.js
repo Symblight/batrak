@@ -226,6 +226,72 @@ describe('acp-terminal', () => {
     expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.not.equal(null);
   });
 
+  it('follows a new terminal id: drops the old link and screen, and connects the new terminal', async () => {
+    /** @type {{ id: string, sink: TerminalSink, writes: (string | Uint8Array)[], disposed: boolean }[]} */
+    const links = [];
+    /** @type {import('../../../models/types.js').TerminalConnect} */
+    const connect = (id, _size, sink) => {
+      const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]), disposed: false };
+      links.push(link);
+      return { write: (data) => link.writes.push(data), resize: () => {}, dispose: () => (link.disposed = true) };
+    };
+    const el = /** @type {AcpTerminal} */ (
+      await fixture(html`<acp-terminal
+        style="display: flex; width: 600px; height: 300px"
+        terminal-id="t1"
+        .connect=${connect}
+        .info=${running}
+        .gpu=${false}
+      ></acp-terminal>`)
+    );
+    await until(() => links.length === 1);
+    await show(links[0].sink, 'old session');
+    await until(() => text(el).includes('old session'));
+
+    el.terminalId = 't2';
+    await until(() => links.length === 2);
+    expect(links.map((l) => l.id)).to.deep.equal(['t1', 't2']);
+    expect(links[0].disposed, 'the old link goes').to.equal(true);
+    expect(text(el), "the old terminal's screen goes").not.to.include('old session');
+    await show(links[1].sink, 'new session');
+    await until(() => text(el).includes('new session'));
+    input(el).dispatchEvent(new InputEvent('input', { data: 'x', inputType: 'insertText', bubbles: true }));
+    el.paste('typed');
+    await until(() => links[1].writes.length > 0);
+    expect(links[0].writes, 'nothing goes to the old terminal').to.deep.equal([]);
+  });
+
+  it("never draws the old terminal's output on the new one, nor sends the new one's paste to the old", async () => {
+    /** @type {{ id: string, sink: TerminalSink, writes: (string | Uint8Array)[] }[]} */
+    const links = [];
+    /** @type {import('../../../models/types.js').TerminalConnect} */
+    const connect = (id, _size, sink) => {
+      const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]) };
+      links.push(link);
+      return { write: (data) => link.writes.push(data), resize: () => {}, dispose: () => {} };
+    };
+    const el = /** @type {AcpTerminal} */ (
+      await fixture(html`<acp-terminal
+        style="display: flex; width: 600px; height: 300px"
+        terminal-id="t1"
+        .connect=${connect}
+        .info=${running}
+        .gpu=${false}
+      ></acp-terminal>`)
+    );
+    await until(() => links.length === 1);
+    // Output still queued in xterm when the next session shows, and a paste meant for that session.
+    links[0].sink.output(new TextEncoder().encode('late old output'), () => {});
+    el.terminalId = 't2';
+    el.paste('for the new one');
+    await until(() => links.length === 2);
+    await show(links[1].sink, 'new session');
+    await until(() => text(el).includes('new session'));
+    expect(text(el)).not.to.include('late old output');
+    await until(() => links[1].writes.length > 0);
+    expect(links[0].writes, 'nothing typed into the old terminal').to.deep.equal([]);
+  });
+
   it("offers Continue in chat next to Restart once a session's CLI ended", async () => {
     const { el, calls } = await render();
     el.chatFallback = true;
