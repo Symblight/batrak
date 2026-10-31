@@ -1,3 +1,4 @@
+import { search } from '../../hooks/search/search.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -6,7 +7,6 @@ import '@symblight/wc-material/tooltip';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import '../file-icon/file-icon.js';
-import { MAX_MATCHES, clipLine, highlightParts, matchRows, moveKey } from '../../models/search-results/search-results.js';
 import styles from './search-results.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
@@ -69,7 +69,7 @@ export class AcpSearchResults extends LitElement {
    * @param {number} step
    */
   move(step) {
-    this.selectedKey = moveKey(this.#rows, this.collapsed, this.selectedKey, step);
+    this.selectedKey = search.moveKey(this.#rows, this.collapsed, this.selectedKey, step);
   }
 
   /** @param {'first' | 'last'} end */
@@ -85,7 +85,7 @@ export class AcpSearchResults extends LitElement {
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
     if (changed.has('results')) {
-      this.#rows = matchRows([...this.results]);
+      this.#rows = search.matchRows([...this.results]);
       // A new search starts empty: its files start expanded, its first row selected.
       if (this.results.length === 0) {
         this.collapsed = new Set();
@@ -166,8 +166,8 @@ export class AcpSearchResults extends LitElement {
 
   /** @param {SearchMatchRow} row */
   #renderText(row) {
-    const clipped = clipLine(row.text, row.start, row.end, this.max);
-    const parts = highlightParts(clipped.text, [[clipped.start, clipped.end]]).map((part) =>
+    const clipped = search.clipLine(row.text, row.start, row.end, this.max);
+    const parts = search.highlightParts(clipped.text, [[clipped.start, clipped.end]]).map((part) =>
       part.hit ? html`<mark class="acp-search-results__hit">${part.text}</mark>` : part.text,
     );
     return html`<span class="acp-search-results__text">${parts}</span>`;
@@ -214,7 +214,7 @@ export class AcpSearchResults extends LitElement {
       )}
       ${this.limitHit
         ? html`<div class="acp-search-results__note">
-            Showing the first ${MAX_MATCHES} results. Narrow the search with a folder or a mask.
+            Showing the first ${search.maxMatches} results. Narrow the search with a folder or a mask.
           </div>`
         : nothing}
     </div>`;

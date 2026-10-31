@@ -1,3 +1,4 @@
+import { search } from '../../hooks/search/search.js';
 import { LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
@@ -23,9 +24,6 @@ import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import maskIcon from '@material-design-icons/svg/outlined/filter_alt.svg?raw';
 import '../search-options/search-options.js';
 import '../search-results/search-results.js';
-import { initialQuery, optionForKey } from '../../models/search/search.js';
-import { filterLabel, searchFilters } from '../../models/search-filter/search-filter.js';
-import { summaryText } from '../../models/search-results/search-results.js';
 import styles from './search-dialog.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
@@ -35,7 +33,7 @@ import styles from './search-dialog.css?inline';
 /** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
 /** @typedef {import('../../models/types/types.js').SearchErrorSource} SearchErrorSource */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/search/search.js').SearchOptionKey} SearchOptionKey */
+/** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
 /** @typedef {'folder' | 'mask'} Filter */
 
 /** Typing pause before a search starts. */
@@ -197,7 +195,7 @@ export class AcpSearchDialog extends LitElement {
         folder: this.folder,
         mask: this.mask,
       } = state);
-      this.query = initialQuery(selection, state.query);
+      this.query = search.initialQuery(selection, state.query);
       this.recentIndex = 0;
       this.status = '';
       dialog.showModal();
@@ -218,7 +216,7 @@ export class AcpSearchDialog extends LitElement {
     const state = this.#state;
     const { query, caseSensitive, wholeWord, regex } = state;
     /** @type {SearchOptions} */
-    const options = { query, caseSensitive, wholeWord, regex, ...searchFilters(state.folder, state.mask) };
+    const options = { query, caseSensitive, wholeWord, regex, ...search.filters(state.folder, state.mask) };
     this.#emit('acp-search-dialog-query', { options, state, delay });
   }
 
@@ -267,7 +265,7 @@ export class AcpSearchDialog extends LitElement {
       } else this.close();
       return;
     }
-    const option = optionForKey(e);
+    const option = search.optionForKey(e);
     if (option) {
       e.preventDefault();
       this.#toggle(option);
@@ -452,7 +450,7 @@ export class AcpSearchDialog extends LitElement {
       return;
     }
     // Esc and the arrows go on to the menu; Alt+C / W / R to the dialog.
-    if (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || optionForKey(e)) return;
+    if (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || search.optionForKey(e)) return;
     e.stopPropagation();
     if (e.key !== 'Enter') return;
     e.preventDefault();
@@ -572,7 +570,7 @@ export class AcpSearchDialog extends LitElement {
 
   #renderFilters() {
     const summary = this.hasProject
-      ? summaryText({ results: [...this.results], searching: this.searching, error: this.error || null, query: this.query })
+      ? search.summary({ results: [...this.results], searching: this.searching, error: this.error || null, query: this.query })
       : '';
     return html`<div class="acp-search-dialog__filters">
       ${this.#renderChip('folder', folderIcon, 'Folder', this.folder)} ${this.#renderChip('mask', maskIcon, 'File mask', this.mask)}
@@ -731,7 +729,7 @@ export class AcpSearchDialog extends LitElement {
       return this.recent.length > 0 ? this.#renderRecent() : html`<p class="acp-search-dialog__message">Type to search in files</p>`;
     }
     if (!this.searching && this.results.length === 0) {
-      const where = filterLabel(this.folder, this.mask);
+      const where = search.filterLabel(this.folder, this.mask);
       return this.#renderEmpty(
         noResultsIcon,
         html`<p class="acp-search-dialog__empty-title">No results for <code class="acp-search-dialog__code">${this.query}</code></p>

@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
-import { clipLine, countMatches, highlightParts, matchRows, moveKey, summaryText } from '../search-results.js';
+import { clipLine, countMatches, highlightParts, matchRows, moveKey, summaryText } from '../results.js';
 
-/** @typedef {import('../../types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../../models/types/types.js').SearchFileResult} SearchFileResult */
 
 // A match the backend's window moved (`offset`), written apart so it type-checks with or without `LineMatch.offset`.
 const CUT = { line: 1, text: '…foo', ranges: /** @type {[number, number][]} */ ([[1, 4]]), offset: 40 };

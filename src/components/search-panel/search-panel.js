@@ -1,15 +1,14 @@
+import { search } from '../../hooks/search/search.js';
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/text-field';
 import '../search-options/search-options.js';
 import '../search-results/search-results.js';
-import { optionForKey } from '../../models/search/search.js';
-import { MAX_MATCHES, summaryText } from '../../models/search-results/search-results.js';
 import styles from './search-panel.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../models/types/types.js').SearchFileResult} FileResult */
 /** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
-/** @typedef {import('../../models/search/search.js').SearchOptionKey} SearchOptionKey */
+/** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
 
 /** Typing pause before a search starts. */
 const DEBOUNCE_MS = 250;
@@ -124,7 +123,7 @@ export class AcpSearchPanel extends LitElement {
 
   /** Alt+C / Alt+W / Alt+R in any field. @param {KeyboardEvent} e */
   #onHostKeydown = (e) => {
-    const option = optionForKey(e);
+    const option = search.optionForKey(e);
     if (!option) return;
     e.preventDefault();
     this.#toggle(option);
@@ -151,10 +150,10 @@ export class AcpSearchPanel extends LitElement {
   /** Match/file counts, the limit notice, or the error. */
   #renderSummary() {
     if (this.error) return html`<div class="acp-search-panel__summary acp-search-panel__summary_error">${this.error}</div>`;
-    const text = summaryText({ results: [...this.results], searching: this.searching, error: null, query: this.query });
+    const text = search.summary({ results: [...this.results], searching: this.searching, error: null, query: this.query });
     if (!text) return nothing;
     return html`<div class="acp-search-panel__summary" role="status">
-      ${text}${this.limitHit ? ` — showing the first ${MAX_MATCHES}` : ''}
+      ${text}${this.limitHit ? ` — showing the first ${search.maxMatches}` : ''}
     </div>`;
   }
 

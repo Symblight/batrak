@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { initialQuery, optionForKey } from '../search.js';
+import { initialQuery, optionForKey } from '../options.js';
 
 /**
  * @param {string} code

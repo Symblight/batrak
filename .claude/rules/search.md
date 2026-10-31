@@ -5,9 +5,7 @@ paths:
   - "src/components/search-options/**"
   - "src/components/search-results/**"
   - "src/controllers/find-in-files/**"
-  - "src/models/search/search.js"
-  - "src/models/search-filter/search-filter.js"
-  - "src/models/search-results/search-results.js"
+  - "src/hooks/search/**"
   - "src/stores/search/search.js"
   - "src-tauri/src/workspace/search.rs"
   - "docs/specs/search-dialog.md"
@@ -38,8 +36,8 @@ Spec: `docs/specs/search-dialog.md`.
 
 ## Folder and mask filters
 
-- The dialog keeps a root-relative `folder` and a `mask`; `searchFilters(folder, mask)`
-  (`models/search-filter/search-filter.js`) turns them into the backend's `include` / `exclude`: comma-separated
+- The dialog keeps a root-relative `folder` and a `mask`; `search.filters(folder, mask)`
+  (`hooks/search/`, `filters.js`) turns them into the backend's `include` / `exclude`: comma-separated
   globs (commas inside `{…}` or `[…]` don't split), a leading `!` excludes, a pattern without `/`
   matches a name at any depth; includes go inside the (glob-escaped) folder, and with none the folder
   alone is the include.

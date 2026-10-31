@@ -1,3 +1,4 @@
+import { search } from '../../hooks/search/search.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
@@ -11,7 +12,6 @@ import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/fil
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
 import { absPath } from '../../models/paths/paths.js';
-import { searchFilters } from '../../models/search-filter/search-filter.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -122,7 +122,7 @@ export class AcpFileColumn extends ViewElement {
     const panel = this.renderRoot.querySelector('acp-search-panel');
     if (state) {
       const { query, caseSensitive, wholeWord, regex, folder, mask } = state;
-      panel?.setOptions({ query, caseSensitive, wholeWord, regex, ...searchFilters(folder, mask) });
+      panel?.setOptions({ query, caseSensitive, wholeWord, regex, ...search.filters(folder, mask) });
     }
     panel?.focusInput();
   }

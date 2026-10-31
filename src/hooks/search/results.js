@@ -1,5 +1,5 @@
-/** @typedef {import('../types/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../types/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
 
 /** Must match `workspace::search::MAX_MATCHES`. */
 export const MAX_MATCHES = 2000;

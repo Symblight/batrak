@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { filterLabel, searchFilters, splitPatterns } from '../search-filter.js';
+import { filterLabel, searchFilters, splitPatterns } from '../filters.js';
 
 describe('search filters', () => {
   it('splits on commas outside braces, trimmed, empties dropped', () => {
