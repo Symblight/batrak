@@ -221,6 +221,8 @@ export class AcpChat extends LitElement {
     signInRun: { attribute: false },
     /** Files dragged from the OS are over it. */
     dropping: { type: Boolean, reflect: true },
+    /** The draft's first send starts its agent's CLI, which keeps its own model and permissions: their pickers hide. */
+    cliStart: { type: Boolean, attribute: 'cli-start' },
   };
 
   static styles = styles;
@@ -267,6 +269,8 @@ export class AcpChat extends LitElement {
     this.signInRun = null;
     /** @type {boolean} */
     this.dropping = false;
+    /** @type {boolean} */
+    this.cliStart = false;
   }
 
   /** The `<chx-chat>` holding every session's conversation; present after the first render. */
@@ -500,13 +504,15 @@ export class AcpChat extends LitElement {
             .agents=${this.agents}
             .agent=${this.agent}
           ></acp-agent-picker>
-          <acp-model-picker
-            slot="leading"
-            class="acp-chat__model-picker"
-            .options=${this.composer?.configOptions ?? []}
-            .status=${this.optionsStatus}
-            .signIn=${this.agent?.signIn === true}
-          ></acp-model-picker>
+          ${this.cliStart
+            ? nothing
+            : html`<acp-model-picker
+                slot="leading"
+                class="acp-chat__model-picker"
+                .options=${this.composer?.configOptions ?? []}
+                .status=${this.optionsStatus}
+                .signIn=${this.agent?.signIn === true}
+              ></acp-model-picker>`}
           <chx-attachments slot="attachments"></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
           <chx-code-block-paste></chx-code-block-paste>
@@ -526,7 +532,9 @@ export class AcpChat extends LitElement {
             @chx-command-query=${this.#onCommandQuery}
             @chx-command-picked=${this.#onCommandPicked}
           ></chx-command-picker>
-          <acp-mode-picker slot="actions" .options=${this.composer?.configOptions ?? []}></acp-mode-picker>
+          ${this.cliStart
+            ? nothing
+            : html`<acp-mode-picker slot="actions" .options=${this.composer?.configOptions ?? []}></acp-mode-picker>`}
           ${this.composer?.agentId
             ? html`<acp-context-meter slot="actions" .usage=${this.usage}></acp-context-meter>`
             : nothing}

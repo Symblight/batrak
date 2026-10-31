@@ -486,6 +486,7 @@ export class AcpAgentColumn extends LitElement {
             .signInRun=${hasSession ? this.#signInRun() : null}
             .loginHere=${hasSession && this.#loginHere()}
             ?dropping=${this.#isShownChat(this.#fileDropTarget.value)}
+            ?cli-start=${this.#activeSession.value === null && this.#activeView.value.view === 'terminal'}
             @acp-chat-file-query=${this.#onFileQuery}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
