@@ -11,6 +11,8 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
+pub use agent_api::{package_arg, split_spec};
+
 /// The only URL this module fetches.
 pub const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
 /// How old the last check may be before the next.
@@ -112,14 +114,6 @@ impl RegistryAgent {
     pub fn command_line(&self) -> String {
         let known = self.known();
         std::iter::once(known.command.as_str()).chain(known.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ")
-    }
-}
-
-/// `<package>@<version>` (a scope's leading `@` is not the separator).
-pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
-    match spec.rfind('@') {
-        Some(at) if at > 0 => (&spec[..at], Some(&spec[at + 1..])),
-        _ => (spec, None),
     }
 }
 
@@ -225,27 +219,6 @@ pub struct Matched<'a> {
     pub pinned: Option<String>,
 }
 
-/// Where npx's args name the package it runs: the first `-p` / `--package` value, else the first
-/// argument that isn't a flag. Returns its index and the spec (`--package=` taken off).
-pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
-    let mut i = 0;
-    while let Some(arg) = args.get(i) {
-        match arg.as_str() {
-            "-p" | "--package" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
-            "--" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
-            _ => {}
-        }
-        if let Some(spec) = arg.strip_prefix("--package=") {
-            return Some((i, spec));
-        }
-        if !arg.starts_with('-') {
-            return Some((i, arg));
-        }
-        i += 1;
-    }
-    None
-}
-
 /// The registry agent a launch runs: its program on PATH (by name), or `npx` whose package
 /// (`package_arg`) is the entry's, with or without `@version`. agents.json's ids aren't compared:
 /// it names its agents as it likes.
@@ -253,10 +226,8 @@ pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[Stri
     if let Some(agent) = program_of(agents, command) {
         return Some(Matched { agent, pinned: None });
     }
-    if Path::new(command).file_stem().is_none_or(|stem| stem != "npx") {
-        return None;
-    }
-    let (package, version) = split_spec(package_arg(args)?.1);
+    let launch = agent_api::Launch { command: command.to_owned(), args: args.to_vec() };
+    let (_, package, version) = launch.npx_package()?;
     let agent = agents.iter().find(|a| matches!(&a.launch, Launch::Npx(npx) if npx.package == package))?;
     let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
     Some(Matched { agent, pinned })

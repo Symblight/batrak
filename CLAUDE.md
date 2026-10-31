@@ -19,6 +19,11 @@ cd src-tauri && cargo test --lib real_npm -- --ignored        # a real `npm cach
 
 ## Architecture
 
+`src-tauri/` is a Cargo workspace: the app, plus one crate per agent kind under `src-tauri/crates/`
+(`agent-api`'s `Agent` trait, `agent-generic`, …; spec: `docs/specs/agent-plugins.md`), all default
+members, so the commands above check every crate. Agent-specific behavior goes in its crate, never in
+the app.
+
 Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.d.ts`). Type-checking via
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
 and is reached through `src/services/ipc.js`.

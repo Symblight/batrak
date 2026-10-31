@@ -3,26 +3,12 @@
 //! Known for the registry's agents by what they run (the package, not agents.json's id), or set
 //! by an agents.json entry's `cli`, which wins.
 
-use std::path::Path;
-
 use serde::{Deserialize, Serialize};
 
+pub use agent_api::{prompt_fits_argv, CliSpec, TerminalMode};
+use agent_api::{strings, Launch, ID, PROMPT};
+
 use super::AgentConfig;
-
-/// Stands for the ACP session id in `resumeArgs` / `newArgs`.
-const ID: &str = "{id}";
-/// Stands for a new session's first prompt in `promptArgs`.
-const PROMPT: &str = "{prompt}";
-/// A first prompt longer than this, in bytes, is pasted once the CLI reads instead of going on its
-/// command line: well under Windows' 32 K and `ARG_MAX`, with room for the launch.
-pub const MAX_ARG_PROMPT: usize = 8000;
-
-/// Whether a first prompt can go on the CLI's command line. Never on Windows: the CLI runs as
-/// `npx.cmd`, so through `cmd.exe`, which caps the whole line at 8191 and rewrites `%`, `^`, `&`, `|`
-/// and `"` inside arguments.
-pub fn prompt_fits_argv(prompt: &str, windows: bool) -> bool {
-    !windows && prompt.len() <= MAX_ARG_PROMPT
-}
 
 /// agents.json's `cli`: what the agent's CLI runs. No `command`: the agent's own (with `args`,
 /// else its args); a `command` without `args` runs with none.
@@ -44,62 +30,6 @@ pub struct CliOverride {
     pub prompt_args: Option<Vec<String>>,
 }
 
-/// How an agent's CLI runs.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct CliSpec {
-    pub program: String,
-    pub args: Vec<String>,
-    pub resume_args: Vec<String>,
-    pub new_args: Option<Vec<String>>,
-    /// See `CliOverride::prompt_args`.
-    pub prompt_args: Vec<String>,
-}
-
-/// What the agent list says about an agent's CLI.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalMode {
-    /// It continues a session by id.
-    pub resume: bool,
-    /// It starts a new one under an id Brama chooses.
-    pub new: bool,
-}
-
-impl CliSpec {
-    /// The command line that continues ACP session `id`.
-    pub fn resume(&self, id: &str) -> (String, Vec<String>) {
-        (self.program.clone(), self.with(&self.resume_args, id))
-    }
-
-    /// The command line that starts a new session under `id`, with `prompt` as its first message;
-    /// `None` when the CLI can't.
-    pub fn start_new(&self, id: &str, prompt: Option<&str>) -> Option<(String, Vec<String>)> {
-        let extra = self.new_args.as_ref()?;
-        let mut args = self.with(extra, id);
-        if let Some(prompt) = prompt.filter(|p| !p.trim().is_empty()) {
-            // One word could name one of the CLI's commands (`claude update` runs the updater); a
-            // trailing space keeps it a prompt.
-            let prompt = if prompt.contains(char::is_whitespace) { prompt.to_owned() } else { format!("{prompt} ") };
-            // One pass over the template: what the prompt holds is never expanded. An argument of its
-            // own that starts like an option gets a leading space, so it stays a prompt; `--`
-            // might not survive `npx` and the adapter's wrapper.
-            args.extend(self.prompt_args.iter().map(|a| match a == PROMPT && prompt.starts_with('-') {
-                true => format!(" {prompt}"),
-                false => a.replacen(PROMPT, &prompt, 1),
-            }));
-        }
-        Some((self.program.clone(), args))
-    }
-
-    pub fn mode(&self) -> TerminalMode {
-        TerminalMode { resume: true, new: self.new_args.is_some() }
-    }
-
-    fn with(&self, extra: &[String], id: &str) -> Vec<String> {
-        self.args.iter().cloned().chain(extra.iter().map(|a| a.replace(ID, id))).collect()
-    }
-}
-
 /// The CLI of `agent`: its `cli` entry, else the one of the registry agent it runs (by package).
 pub fn cli_for(agent: &AgentConfig) -> Option<CliSpec> {
     if let Some(cli) = &agent.cli {
@@ -110,12 +40,9 @@ pub fn cli_for(agent: &AgentConfig) -> Option<CliSpec> {
         let prompt_args = cli.prompt_args.clone().unwrap_or_else(|| vec![PROMPT.to_owned()]);
         return Some(CliSpec { program, args, resume_args: cli.resume_args.clone(), new_args: cli.new_args.clone(), prompt_args });
     }
-    if Path::new(&agent.command).file_stem().is_none_or(|stem| stem != "npx") {
-        return None;
-    }
-    let (at, spec) = super::registry::package_arg(&agent.args)?;
-    let strings = |args: &[&str]| args.iter().map(|a| (*a).to_owned()).collect::<Vec<_>>();
-    let (args, resume_args, new_args, prompt_args) = match super::registry::split_spec(spec).0 {
+    let launch = Launch { command: agent.command.clone(), args: agent.args.clone() };
+    let (at, package, _) = launch.npx_package()?;
+    let (args, resume_args, new_args, prompt_args) = match package {
         // The adapter bundles Claude Code, which `--cli` runs (as its terminal sign-in does).
         "@agentclientprotocol/claude-agent-acp" => {
             let args = agent.args.iter().cloned().chain(["--cli".to_owned()]).collect();
@@ -215,15 +142,6 @@ mod tests {
             Some("--interactive=-v now"),
             "inside an argument it's already a value"
         );
-    }
-
-    #[test]
-    fn a_first_prompt_goes_on_the_command_line_only_where_it_is_safe() {
-        assert!(prompt_fits_argv("fix the build", false));
-        assert!(!prompt_fits_argv("fix the build", true), "Windows: npx.cmd runs through cmd.exe, which rewrites % ^ & | \"");
-        assert!(prompt_fits_argv(&"x".repeat(MAX_ARG_PROMPT), false));
-        assert!(!prompt_fits_argv(&"x".repeat(MAX_ARG_PROMPT + 1), false), "too long for a command line");
-        assert!(!prompt_fits_argv(&"é".repeat(MAX_ARG_PROMPT / 2 + 1), false), "counted in bytes");
     }
 
     #[test]

@@ -2720,7 +2720,7 @@ async fn a_first_prompt_too_long_for_the_command_line_is_pasted_once_the_cli_rea
     f.give_cli_agents();
     let terminals = terminals();
     let id = "4cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let prompt = format!("fix {}", "x".repeat(crate::config::cli::MAX_ARG_PROMPT));
+    let prompt = format!("fix {}", "x".repeat(agent_api::MAX_ARG_PROMPT));
     let draft = CliDraft { prompt: Some(prompt), ..f.draft("reader", Mode::Local) };
     let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("END").await;
