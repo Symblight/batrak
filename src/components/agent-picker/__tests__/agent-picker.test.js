@@ -154,9 +154,9 @@ describe('acp-agent-picker', () => {
     const composer = { ...NO_AGENT, agentId: 'claude-code' };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[agent]} .agent=${agent}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    const icon = root.querySelector('md-icon.acp-agent-picker__glyph[slot="icon"]');
-    expect(icon?.getAttribute('data-brand')).to.equal('claude');
-    expect(icon?.querySelector('svg')).to.not.equal(null);
+    const icon = root.querySelector('acp-agent-icon.acp-agent-picker__glyph[slot="icon"]');
+    expect(icon?.getAttribute('brand')).to.equal('claude');
+    expect(icon?.shadowRoot?.querySelector('svg')).to.not.equal(null);
   });
 
   it('says when a started session\'s agent is gone from agents.json', async () => {

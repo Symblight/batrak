@@ -111,11 +111,11 @@ describe('acp-session-list', () => {
       sessions: [session('a', { agentId: 'claude-code', agentName: 'Claude Code' }), session('b', { agentId: 'mine' })],
     });
     const claude = row(root, 'Session a').querySelector('.acp-session-list__agent');
-    expect(claude?.getAttribute('data-brand')).to.equal('claude');
-    expect(claude?.querySelector('svg')).to.not.equal(null);
+    expect(claude?.getAttribute('brand')).to.equal('claude');
+    expect(claude?.shadowRoot?.querySelector('svg')).to.not.equal(null);
     expect(tooltipOf(claude)).to.equal('Claude Code');
     const other = row(root, 'Session b').querySelector('.acp-session-list__agent');
-    expect(other?.hasAttribute('data-brand')).to.equal(false);
+    expect(other?.hasAttribute('brand')).to.equal(false);
     expect(tooltipOf(other)).to.equal('mine');
   });
 

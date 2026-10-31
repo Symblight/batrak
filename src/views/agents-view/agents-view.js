@@ -20,7 +20,7 @@ import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
+import '../../components/agent-icon/agent-icon.js';
 import { ownSignIns } from '../../models/agents/agents.js';
 import '../../components/agent-form/agent-form.js';
 import styles from './agents-view.css?inline';
@@ -465,9 +465,8 @@ export class AcpAgentsView extends LitElement {
    * @param {boolean} [off]
    */
   #renderGlyph(agent, off = false) {
-    const { brand, svg } = agentIconOf(agent.id, agent.name);
     return html`<span class=${classMap({ 'acp-agents-view__glyph': true, 'acp-agents-view__glyph_off': off })} aria-hidden="true"
-      ><md-icon class="acp-agents-view__glyph-icon" data-brand=${brand ?? nothing}>${unsafeSVG(svg)}</md-icon></span
+      ><acp-agent-icon class="acp-agents-view__glyph-icon" .agent=${agent}></acp-agent-icon></span
     >`;
   }
 

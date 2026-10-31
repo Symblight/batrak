@@ -3,6 +3,7 @@ import type { AcpAboutDialog } from './components/about-dialog/about-dialog.js';
 import type { AcpBytes } from './components/bytes/bytes.js';
 import type { AcpFileIcon } from './components/file-icon/file-icon.js';
 import type { AcpBrowser } from './components/browser/browser.js';
+import type { AcpAgentIcon } from './components/agent-icon/agent-icon.js';
 import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
 import type { AcpApp } from './views/app/app.js';
@@ -53,6 +54,7 @@ declare global {
   interface HTMLElementTagNameMap {
     'acp-about-dialog': AcpAboutDialog;
     'acp-agent-column': AcpAgentColumn;
+    'acp-agent-icon': AcpAgentIcon;
     'acp-agent-picker': AcpAgentPicker;
     'acp-app': AcpApp;
     'acp-browser': AcpBrowser;

@@ -23,7 +23,7 @@ import '../session-menu/session-menu.js';
 import '../session-status/session-status.js';
 import '../session-sync/session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
+import '../agent-icon/agent-icon.js';
 import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions/sessions.js';
 import styles from './session-list.css?inline';
 
@@ -372,14 +372,12 @@ export class AcpSessionList extends LitElement {
    * @param {Session} session
    */
   #renderAgent(session) {
-    const { brand, svg } = agentIconOf(session.agentId, session.agentName);
-    return html`<md-icon
+    return html`<acp-agent-icon
       id=${`acp-session-list-agent-${session.id}`}
       class="acp-session-list__agent"
-      data-brand=${brand ?? nothing}
+      .agent=${{ id: session.agentId, name: session.agentName }}
       aria-label=${session.agentName ?? session.agentId}
-      >${unsafeSVG(svg)}</md-icon
-    >`;
+    ></acp-agent-icon>`;
   }
 
   /** @param {Session} session */
