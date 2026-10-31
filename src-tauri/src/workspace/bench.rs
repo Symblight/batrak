@@ -46,7 +46,7 @@ fn bench() {
                 first.lock().unwrap().get_or_insert(t.elapsed());
             }
             SearchEvent::Done { total, limit_hit, .. } => *done.lock().unwrap() = Some((total, limit_hit)),
-            SearchEvent::Error { message } => panic!("{message}"),
+            SearchEvent::Error { message, .. } => panic!("{message}"),
         });
         println!(
             "find {label:>8}: first result {:?}, done {:?}, (total, limit_hit) = {:?}",

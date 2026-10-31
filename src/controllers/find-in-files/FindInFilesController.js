@@ -7,6 +7,7 @@ import { $rootId } from '../../stores/workspace.js';
 /** @typedef {import('../../models/types.js').SearchEvent} SearchEvent */
 /** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../models/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../models/types.js').SearchErrorSource} SearchErrorSource */
 
 /**
  * @typedef {Object} FindInFilesConfig
@@ -43,6 +44,8 @@ export class FindInFilesController {
   searching = false;
   limitHit = false;
   error = '';
+  /** @type {SearchErrorSource | null} What the error is about; `null` without one, or for a failed call. */
+  errorSource = null;
 
   /**
    * @param {ReactiveControllerHost & HTMLElement} host
@@ -96,7 +99,7 @@ export class FindInFilesController {
     if (rootId) cancelSearch(rootId, this.#config.slot).catch(() => {});
   }
 
-  /** @param {Partial<Pick<FindInFilesController, 'results' | 'searching' | 'limitHit' | 'error'>>} changes */
+  /** @param {Partial<Pick<FindInFilesController, 'results' | 'searching' | 'limitHit' | 'error' | 'errorSource'>>} changes */
   #set(changes) {
     Object.assign(this, changes);
     this.#host.requestUpdate();
@@ -107,7 +110,7 @@ export class FindInFilesController {
     const generation = ++this.#generation;
     const rootId = this.#rootId.value;
     this.#incoming = [];
-    this.#set({ results: [], limitHit: false, error: '' });
+    this.#set({ results: [], limitHit: false, error: '', errorSource: null });
     if (!this.#active || rootId === null || this.#options.query === '') {
       this.#set({ searching: false });
       if (rootId !== null) cancelSearch(rootId, this.#config.slot).catch(() => {});
@@ -136,7 +139,7 @@ export class FindInFilesController {
     } else if (event.kind === 'done') {
       this.#set({ searching: false, limitHit: event.limitHit });
     } else {
-      this.#set({ searching: false, error: event.message });
+      this.#set({ searching: false, error: event.message, errorSource: event.source });
     }
   }
 }

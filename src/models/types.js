@@ -824,7 +824,12 @@
  * Streamed Find in Files message; mirrors `workspace::search::SearchEvent`.
  * @typedef {{ kind: 'file', path: string, matches: LineMatch[] }
  *   | { kind: 'done', total: number, limitHit: boolean, cancelled: boolean }
- *   | { kind: 'error', message: string }} SearchEvent
+ *   | { kind: 'error', message: string, source: SearchErrorSource }} SearchEvent
+ */
+
+/**
+ * What made a search fail: the query (a bad regex) or an include / exclude glob.
+ * @typedef {'query' | 'filter'} SearchErrorSource
  */
 
 /**

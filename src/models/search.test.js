@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { optionForKey } from './search.js';
+import { initialQuery, optionForKey } from './search.js';
 
 /**
  * @param {string} code
@@ -19,5 +19,23 @@ describe('search options shortcuts', () => {
     expect(optionForKey(key('KeyC', {}))).to.equal(null);
     expect(optionForKey(key('KeyC', { altKey: true, metaKey: true }))).to.equal(null);
     expect(optionForKey(key('KeyC', { altKey: true, ctrlKey: true }))).to.equal(null);
+  });
+});
+
+describe('the query a search opens with', () => {
+  it('takes a selection on one line, trimmed', () => {
+    expect(initialQuery('  foo  ', 'last')).to.equal('foo');
+  });
+
+  it("falls back to the project's last query", () => {
+    expect(initialQuery('', 'last')).to.equal('last');
+    expect(initialQuery('   ', 'last')).to.equal('last');
+    expect(initialQuery('a\nb', 'last'), 'more than one line').to.equal('last');
+    expect(initialQuery('x'.repeat(201), 'last'), 'over 200 characters').to.equal('last');
+    expect(initialQuery(undefined, 'last')).to.equal('last');
+  });
+
+  it('takes 200 characters', () => {
+    expect(initialQuery('x'.repeat(200), 'last')).to.equal('x'.repeat(200));
   });
 });

@@ -59,4 +59,28 @@ describe('FindInFilesController', () => {
     await until(() => calls.some((c) => c.cmd === 'cancel_search'));
     expect(calls.find((c) => c.cmd === 'cancel_search')?.args).to.deep.equal({ rootId: 'r', slot: 'dialog' });
   });
+
+  it("keeps an error's source: the query or a filter", async () => {
+    /** @type {((event: unknown) => void) | null} */
+    let send = null;
+    mockIPC((cmd, args) => {
+      if (cmd === 'find_in_files') send = /** @type {{ channel: { onmessage: (event: unknown) => void } }} */ (args).channel.onmessage;
+      return null;
+    });
+    const el = /** @type {DialogSearchHost} */ (await fixture(html`<test-find-in-files-host></test-find-in-files-host>`));
+    el.search.setActive(true);
+    el.search.search({ ...OPTIONS, regex: true, query: '(' }, 0);
+    await until(() => send !== null);
+    /** @type {(event: unknown) => void} */ (/** @type {unknown} */ (send))({ kind: 'error', message: 'unclosed group', source: 'query' });
+    expect(el.search.error).to.equal('unclosed group');
+    expect(el.search.errorSource).to.equal('query');
+
+    send = null;
+    el.search.search({ ...OPTIONS, include: 'src/[' }, 0);
+    await until(() => send !== null);
+    expect(el.search.error, 'a new search clears the error').to.equal('');
+    expect(el.search.errorSource).to.equal(null);
+    /** @type {(event: unknown) => void} */ (/** @type {unknown} */ (send))({ kind: 'error', message: 'unclosed class', source: 'filter' });
+    expect(el.search.errorSource).to.equal('filter');
+  });
 });

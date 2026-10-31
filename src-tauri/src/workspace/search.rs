@@ -46,7 +46,15 @@ pub struct LineMatch {
 pub enum SearchEvent {
     File { path: String, matches: Vec<LineMatch> },
     Done { total: usize, limit_hit: bool, cancelled: bool },
-    Error { message: String },
+    Error { message: String, source: ErrorSource },
+}
+
+/// What made a search fail before it started: the query (a bad regex) or an include / exclude glob.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ErrorSource {
+    Query,
+    Filter,
 }
 
 /// Searches `files` (relative paths with sizes) and calls `emit` from worker threads
@@ -60,11 +68,13 @@ pub fn run(
 ) {
     let matcher = match build_matcher(options) {
         Ok(m) => m,
-        Err(message) => return emit(SearchEvent::Error { message }),
+        Err(message) => return emit(SearchEvent::Error { message, source: ErrorSource::Query }),
     };
     let (include, exclude) = match (globs(&options.include), globs(&options.exclude)) {
         (Ok(i), Ok(e)) => (i, e),
-        (Err(message), _) | (_, Err(message)) => return emit(SearchEvent::Error { message }),
+        (Err(message), _) | (_, Err(message)) => {
+            return emit(SearchEvent::Error { message, source: ErrorSource::Filter });
+        }
     };
     let files: Vec<String> = files
         .into_iter()
@@ -324,5 +334,36 @@ mod tests {
         let set = globs("a[,]b/**/*.ts, x").unwrap().unwrap();
         assert!(set.is_match("a,b/c/d.ts") && set.is_match("x/y.md"));
         assert!(!set.is_match("a/d.ts"));
+    }
+
+    #[test]
+    fn errors_say_whether_the_query_or_a_filter_is_bad() {
+        let options = |query: &str, regex: bool, include: &str| SearchOptions {
+            query: query.into(),
+            case_sensitive: false,
+            whole_word: false,
+            regex,
+            include: include.into(),
+            exclude: String::new(),
+        };
+        let error = |options: &SearchOptions| {
+            let event = std::sync::Mutex::new(None);
+            run(Path::new("."), Vec::new(), options, &AtomicBool::new(false), &|e| {
+                if let SearchEvent::Error { message, source } = e {
+                    *event.lock().unwrap() = Some((message, source));
+                }
+            });
+            event.into_inner().unwrap()
+        };
+
+        let (message, source) = error(&options("(", true, "")).expect("a bad regex fails");
+        assert_eq!(source, ErrorSource::Query);
+        assert!(!message.is_empty());
+        assert_eq!(error(&options("a", false, "src/[")).map(|e| e.1), Some(ErrorSource::Filter));
+        assert_eq!(error(&options("(", true, "src/[")).map(|e| e.1), Some(ErrorSource::Query), "the query is checked first");
+        assert_eq!(error(&options("(", false, "")), None, "plain text never fails");
+
+        let json = serde_json::to_value(SearchEvent::Error { message: "m".into(), source: ErrorSource::Filter }).unwrap();
+        assert_eq!(json, serde_json::json!({ "kind": "error", "message": "m", "source": "filter" }));
     }
 }
