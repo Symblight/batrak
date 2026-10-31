@@ -27,51 +27,36 @@ function session(fields) {
 
 describe('terminal folders', () => {
   const home = '/Users/me';
+  const wt = session({ mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
 
-  it('starts a new terminal in the active worktree session’s folder, the project as fallback', () => {
-    expect(newTerminalFolder({ activeFolder: '/wt/s1/app', project: '/p', home })).to.deep.equal({
-      cwd: '/wt/s1/app',
-      fallback: '/p',
-    });
-  });
-
-  it('starts a new terminal in the project for a draft or a local session', () => {
-    expect(newTerminalFolder({ activeFolder: '/p', project: '/p', home })).to.deep.equal({ cwd: '/p', fallback: '/p' });
-    expect(newTerminalFolder({ activeFolder: null, project: '/p', home })).to.deep.equal({ cwd: '/p', fallback: '/p' });
-  });
-
-  it('starts a new terminal at home with no project', () => {
-    expect(newTerminalFolder({ activeFolder: null, project: null, home })).to.deep.equal({ cwd: home, fallback: null });
-  });
-
-  it('starts a project terminal in the project root, ignoring any active worktree folder', () => {
-    expect(projectTerminalFolder({ project: '/p', home })).to.deep.equal({ cwd: '/p', fallback: '/p' });
-  });
-
-  it('starts a project terminal at home with no project', () => {
-    expect(projectTerminalFolder({ project: null, home })).to.deep.equal({ cwd: home, fallback: null });
-  });
-
-  it('starts a session’s terminal in that session’s folder', () => {
-    const wt = session({ mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
-    expect(sessionTerminalFolder(wt)).to.deep.equal({ cwd: '/wt/s1/app', fallback: '/p' });
-    expect(sessionTerminalFolder(session({}))).to.deep.equal({ cwd: '/p', fallback: '/p' });
-  });
-
-  it('names a folder after itself, or a worktree’s after the worktree', () => {
-    const sessions = [session({ mode: 'worktree', folder: '/wt/brama-1a2b/app', worktreePath: '/wt/brama-1a2b' })];
-    expect(folderLabel('/home/me/app', sessions)).to.equal('app');
-    expect(folderLabel('/wt/brama-1a2b/app', sessions)).to.equal('brama-1a2b');
-    expect(folderLabel('/wt/brama-1a2b', sessions)).to.equal('brama-1a2b');
-    expect(folderLabel('/wt/brama-1a2bc', sessions)).to.equal('brama-1a2bc', 'not a folder in it');
-  });
-
-  it('names a worktree’s folder after the worktree with Windows separators too', () => {
-    const sessions = [
-      session({ mode: 'worktree', folder: 'C:\\wt\\brama-1a2b\\app', worktreePath: 'C:\\wt\\brama-1a2b' }),
+  it('picks where each kind of terminal starts: the session’s folder, the project, or home', () => {
+    const cases = [
+      ['new, in a worktree session', newTerminalFolder({ activeFolder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
+      ['new, in a local session', newTerminalFolder({ activeFolder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, in a draft', newTerminalFolder({ activeFolder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, with no project', newTerminalFolder({ activeFolder: null, project: null, home }), { cwd: home, fallback: null }],
+      ['project', projectTerminalFolder({ project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['project, with no project', projectTerminalFolder({ project: null, home }), { cwd: home, fallback: null }],
+      ['a worktree session’s', sessionTerminalFolder(wt), { cwd: '/wt/s1/app', fallback: '/p' }],
+      ['a local session’s', sessionTerminalFolder(session({})), { cwd: '/p', fallback: '/p' }],
     ];
-    expect(folderLabel('C:\\wt\\brama-1a2b\\app', sessions)).to.equal('brama-1a2b');
-    expect(folderLabel('C:\\wt\\brama-1a2bc', sessions)).to.equal('brama-1a2bc');
+    for (const [why, folder, expected] of cases) expect(folder, String(why)).to.deep.equal(expected);
+  });
+
+  it('names a folder after itself, or a worktree’s after the worktree (either separator)', () => {
+    const posix = [session({ mode: 'worktree', folder: '/wt/brama-1a2b/app', worktreePath: '/wt/brama-1a2b' })];
+    const windows = [session({ mode: 'worktree', folder: 'C:\\wt\\brama-1a2b\\app', worktreePath: 'C:\\wt\\brama-1a2b' })];
+    const cases = [
+      ['/home/me/app', posix, 'app'],
+      ['/wt/brama-1a2b/app', posix, 'brama-1a2b'],
+      ['/wt/brama-1a2b', posix, 'brama-1a2b'],
+      ['/wt/brama-1a2bc', posix, 'brama-1a2bc'],
+      ['C:\\wt\\brama-1a2b\\app', windows, 'brama-1a2b'],
+      ['C:\\wt\\brama-1a2bc', windows, 'brama-1a2bc'],
+    ];
+    for (const [folder, sessions, label] of cases) {
+      expect(folderLabel(/** @type {string} */ (folder), /** @type {Session[]} */ (sessions)), String(folder)).to.equal(label);
+    }
   });
 });
 
@@ -137,10 +122,16 @@ describe('terminalController', () => {
     addSessionTerminal('cli:s1', 's1', '/p', 'Claude Code');
     terminalFailed('cli:s1', "Couldn't start Claude Code: held by another window");
     const link = terminalController.connect('cli:s1', { cols: 80, rows: 24 }, view().sink);
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(calls.map((c) => c.cmd)).to.not.include('terminal_attach');
+    // Attaches run in connect order, so once this shell's has, the CLI's would have.
+    const id = openTerminal('/p', '/p', 'p');
+    const other = terminalController.connect(id, { cols: 80, rows: 24 }, view().sink);
+    await until(() => release !== null);
+    release?.();
+    await until(() => calls.some((c) => c.cmd === 'terminal_attach'));
+    expect(calls.filter((c) => c.cmd === 'terminal_attach')).to.have.length(1);
     expect($terminals.get()['cli:s1'].error).to.equal("Couldn't start Claude Code: held by another window");
     link.dispose();
+    other.dispose();
   });
 
   it("closes a login's tab when its sign-in is cancelled", async () => {
@@ -161,7 +152,6 @@ describe('terminalController', () => {
     terminalController.connect(id, { cols: 80, rows: 24 }, view().sink).dispose();
     terminalController.connect(id, { cols: 80, rows: 24 }, view().sink);
     await until(() => release !== null);
-    await new Promise((resolve) => setTimeout(resolve, 20));
     release?.();
     await until(() => calls.some((c) => c.cmd === 'terminal_attach'));
     expect(calls.filter((c) => c.cmd === 'terminal_open')).to.have.length(1);
@@ -194,11 +184,9 @@ describe('terminalController', () => {
     send?.(new Uint8Array(20).buffer);
     const acks = () => calls.filter((c) => c.cmd === 'terminal_ack').map((c) => c.args.bytes);
     pending[0]();
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(acks()).to.deep.equal([], 'batched');
     pending[1]();
-    await until(() => acks().length === 1);
-    expect(acks()).to.deep.equal([ACK_EVERY + 9]);
+    await until(() => acks().length >= 1);
+    expect(acks()).to.deep.equal([ACK_EVERY + 9], 'batched into one');
     link.dispose();
     await until(() => acks().length === 2);
     expect(acks()[1]).to.equal(20);
@@ -210,10 +198,7 @@ describe('terminalController', () => {
     $activeSessionId.set('s1');
     await terminalController.projectTerminal();
     const terminals = Object.values($terminals.get());
-    expect(terminals).to.have.length(1);
-    expect(terminals[0].cwd).to.equal('/p');
-    expect(terminals[0].fallback).to.equal('/p');
-    expect(terminals[0].label).to.equal('p');
+    expect(terminals.map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([['/p', '/p', 'p']]);
     $workspace.set(null);
     $sessions.set([]);
     $activeSessionId.set(null);

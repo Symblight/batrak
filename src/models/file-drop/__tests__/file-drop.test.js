@@ -45,27 +45,15 @@ describe('file drop hit-testing', () => {
 
   afterEach(() => page.remove());
 
-  it('finds the innermost element under a point, through open shadow roots', () => {
-    const { x, y } = centerOf(screen);
-    expect(deepElementFromPoint(document, x, y)).to.equal(screen);
-  });
-
-  it('finds the drop target the point is over, from anywhere inside it', () => {
-    const { x, y } = centerOf(screen);
-    expect(dropTargetAt(document, x, y, 'acp-terminal')).to.equal(terminal);
-  });
-
-  it('finds no target over anything else, or outside the page', () => {
-    const { x, y } = centerOf(other);
-    expect(dropTargetAt(document, x, y, 'acp-terminal')).to.equal(null);
-    expect(dropTargetAt(document, -10, -10, 'acp-terminal')).to.equal(null);
-  });
-
-  it('takes the innermost target when targets nest', () => {
-    const { x, y } = centerOf(screen);
-    expect(dropTargetAt(document, x, y, 'test-column, acp-terminal')).to.equal(terminal);
+  it('finds the innermost target under a point through shadow roots, none outside the page', () => {
+    const inside = centerOf(screen);
     const beside = centerOf(other);
+    expect(deepElementFromPoint(document, inside.x, inside.y), 'innermost element').to.equal(screen);
+    expect(dropTargetAt(document, inside.x, inside.y, 'acp-terminal')).to.equal(terminal);
+    expect(dropTargetAt(document, inside.x, inside.y, 'test-column, acp-terminal'), 'nested targets').to.equal(terminal);
     expect(dropTargetAt(document, beside.x, beside.y, 'test-column, acp-terminal')).to.equal(column);
+    expect(dropTargetAt(document, beside.x, beside.y, 'acp-terminal'), 'not over a target').to.equal(null);
+    expect(dropTargetAt(document, -10, -10, 'acp-terminal'), 'outside the page').to.equal(null);
   });
 
   it('tells whether a node is inside a host, across shadow roots', () => {
@@ -77,24 +65,28 @@ describe('file drop hit-testing', () => {
 });
 
 describe('toCssPoint', () => {
-  it('scales Windows physical pixels down by the device pixel ratio', () => {
-    expect(toCssPoint({ x: 300, y: 150 }, 'windows', 1.5)).to.deep.equal({ x: 200, y: 100 });
-  });
-
-  it('keeps macOS and Linux positions, which are already in logical pixels', () => {
-    expect(toCssPoint({ x: 300, y: 150 }, 'mac', 2)).to.deep.equal({ x: 300, y: 150 });
-    expect(toCssPoint({ x: 300, y: 150 }, 'linux', 2)).to.deep.equal({ x: 300, y: 150 });
+  it('scales Windows physical pixels by the device pixel ratio, keeps macOS and Linux logical ones', () => {
+    const cases = [
+      ['windows', 1.5, { x: 200, y: 100 }],
+      ['mac', 2, { x: 300, y: 150 }],
+      ['linux', 2, { x: 300, y: 150 }],
+    ];
+    for (const [platform, ratio, expected] of cases) {
+      expect(toCssPoint({ x: 300, y: 150 }, /** @type {any} */ (platform), /** @type {number} */ (ratio)), String(platform)).to.deep.equal(expected);
+    }
   });
 });
 
 describe('chatDropOf', () => {
-  it('mentions files and folders in the session folder by their relative path, others by their absolute one', () => {
+  it('mentions files and folders in the session folder by their relative path, others by their absolute one, images too (the agent reads them)', () => {
     const drop = chatDropOf(
       [
         { path: '/p/src/app.js', kind: 'file' },
         { path: '/p/src', kind: 'folder' },
         { path: '/Users/me/notes.md', kind: 'file' },
         { path: '/Users/me/docs', kind: 'folder' },
+        { path: '/p/logo.svg', kind: 'file' },
+        { path: '/Users/me/Screen Shot.PNG', kind: 'file' },
       ],
       '/p',
     );
@@ -103,18 +95,6 @@ describe('chatDropOf', () => {
       { path: 'src', folder: true },
       { path: '/Users/me/notes.md', folder: false },
       { path: '/Users/me/docs', folder: true },
-    ]);
-  });
-
-  it('makes images chips too, by path: the agent reads them', () => {
-    const drop = chatDropOf(
-      [
-        { path: '/p/logo.svg', kind: 'file' },
-        { path: '/Users/me/Screen Shot.PNG', kind: 'file' },
-      ],
-      '/p',
-    );
-    expect(drop).to.deep.equal([
       { path: 'logo.svg', folder: false },
       { path: '/Users/me/Screen Shot.PNG', folder: false },
     ]);

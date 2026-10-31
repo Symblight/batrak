@@ -13,26 +13,29 @@ const compact = async (value) =>
   text(await fixture(html`<acp-datetime .value=${value} .now=${NOW} format="compact"></acp-datetime>`));
 
 describe('acp-datetime', () => {
-  it('renders into itself: it is text in its parent’s tree, with no shadow root of its own', async () => {
+  it('renders into itself a <time> with the machine-readable time, and nothing without a value', async () => {
     const el = await fixture(html`<acp-datetime .value=${'2026-03-10T09:05:00Z'}></acp-datetime>`);
     expect(el.shadowRoot === null, 'no shadow root').to.equal(true);
-    expect(el.querySelector('time') !== null, 'a <time> inside').to.equal(true);
+    expect(el.querySelector('time')?.getAttribute('datetime')).to.equal('2026-03-10T09:05:00.000Z');
+    const empty = await fixture(html`<acp-datetime></acp-datetime>`);
+    expect(empty.querySelector('time') === null).to.equal(true);
+    expect(text(empty)).to.equal('');
   });
 
   describe('compact', () => {
-    it('says now for under a minute, and for a time that is not in the past', async () => {
-      expect(await compact(ago(30_000))).to.equal('now');
-      expect(await compact(new Date(NOW + 5 * MINUTE).toISOString())).to.equal('now');
-      expect(await compact('not a date')).to.equal('now');
-    });
-
-    it('counts minutes, then hours, then days, rounding down', async () => {
-      expect(await compact(ago(12 * MINUTE + 59_000))).to.equal('12m');
-      expect(await compact(ago(59 * MINUTE))).to.equal('59m');
-      expect(await compact(ago(60 * MINUTE))).to.equal('1h');
-      expect(await compact(ago(23 * 60 * MINUTE))).to.equal('23h');
-      expect(await compact(ago(24 * 60 * MINUTE))).to.equal('1d');
-      expect(await compact(ago(75 * 24 * 60 * MINUTE))).to.equal('75d');
+    it('says now for under a minute or a time not in the past, then counts minutes, hours and days, rounding down', async () => {
+      const cases = [
+        [ago(30_000), 'now'],
+        [new Date(NOW + 5 * MINUTE).toISOString(), 'now'],
+        ['not a date', 'now'],
+        [ago(12 * MINUTE + 59_000), '12m'],
+        [ago(59 * MINUTE), '59m'],
+        [ago(60 * MINUTE), '1h'],
+        [ago(23 * 60 * MINUTE), '23h'],
+        [ago(24 * 60 * MINUTE), '1d'],
+        [ago(75 * 24 * 60 * MINUTE), '75d'],
+      ];
+      for (const [value, expected] of cases) expect(await compact(value), String(value)).to.equal(expected);
     });
 
     it('takes the time to count from as `now`, the current time without it', async () => {
@@ -53,13 +56,5 @@ describe('acp-datetime', () => {
       expect(text(await fixture(html`<acp-datetime .value=${iso} format="medium"></acp-datetime>`))).to.equal(expected);
       expect(text(await fixture(html`<acp-datetime .value=${Date.parse(iso)}></acp-datetime>`))).to.equal(expected);
     });
-  });
-
-  it('marks the machine-readable time, and shows nothing without one', async () => {
-    const el = await fixture(html`<acp-datetime .value=${'2026-03-10T09:05:00Z'}></acp-datetime>`);
-    expect(el.querySelector('time')?.getAttribute('datetime')).to.equal('2026-03-10T09:05:00.000Z');
-    const empty = await fixture(html`<acp-datetime></acp-datetime>`);
-    expect(empty.querySelector('time') === null).to.equal(true);
-    expect(text(empty)).to.equal('');
   });
 });

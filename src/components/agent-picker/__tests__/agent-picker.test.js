@@ -20,13 +20,8 @@ describe('acp-agent-picker', () => {
     const items = [...root.querySelectorAll('md-menu-item')];
     expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent', 'manage-agents']);
     expect(root.querySelector('md-menu-group')).to.equal(null);
-  });
-
-  it('says what its button does in a tooltip, not a title', async () => {
-    const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('#acp-agent-picker-button'))).to.equal('Add an ACP agent');
-    expect(root.querySelector('[title]')).to.equal(null);
+    expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
   });
 
   it('opens its menu from the button once the agents arrive', async () => {
@@ -118,6 +113,10 @@ describe('acp-agent-picker', () => {
     // The model is the model picker's: the agent button names only the agent.
     expect(root.querySelector('.acp-agent-picker__button')?.textContent).to.not.contain('Opus');
     expect(tooltipOf(root.querySelector('#acp-agent-picker-button'))).to.equal('Agent: A');
+    const icon = /** @type {import('../../agent-icon/agent-icon.js').AcpAgentIcon | null} */ (
+      root.querySelector('acp-agent-icon.acp-agent-picker__glyph[slot="icon"]')
+    );
+    expect(icon?.agent, 'its agent as a logo icon').to.equal(a);
   });
 
   it('picks an agent', async () => {
@@ -147,16 +146,6 @@ describe('acp-agent-picker', () => {
     expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Fixed for this session');
     expect(root.querySelector('.acp-agent-picker__lock')).to.not.equal(null);
     expect(tooltipOf(root.querySelector('#acp-agent-picker-button'))).to.equal('Agent: A · fixed for this session');
-  });
-
-  it('shows its agent as a logo icon', async () => {
-    const agent = { id: 'claude-code', name: 'Claude Code', configOptions: [] };
-    const composer = { ...NO_AGENT, agentId: 'claude-code' };
-    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[agent]} .agent=${agent}></acp-agent-picker>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    const icon = root.querySelector('acp-agent-icon.acp-agent-picker__glyph[slot="icon"]');
-    expect(icon?.getAttribute('brand')).to.equal('claude');
-    expect(icon?.querySelector('svg')).to.not.equal(null);
   });
 
   it('says when a started session\'s agent is gone from agents.json', async () => {

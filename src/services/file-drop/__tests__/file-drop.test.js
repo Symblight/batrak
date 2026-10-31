@@ -64,15 +64,12 @@ describe('fileDrop', () => {
     expect($fileDropTarget.get()).to.equal(null);
   });
 
-  it('delivers a drop on a target with its paths, and unmarks it', () => {
+  it('delivers a drop on a target with its paths and unmarks it, nothing for a drop elsewhere', () => {
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(other) });
+    expect(drops, 'drop elsewhere').to.deep.equal([]);
     fileDrop.handle({ type: 'enter', paths: ['/a.png', '/b c'], position: osPointOf(terminal) });
     fileDrop.handle({ type: 'drop', paths: ['/a.png', '/b c'], position: osPointOf(terminal) });
     expect(drops).to.deep.equal([{ target: terminal, paths: ['/a.png', '/b c'] }]);
     expect($fileDropTarget.get()).to.equal(null);
-  });
-
-  it('delivers nothing for a drop anywhere else', () => {
-    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(other) });
-    expect(drops).to.deep.equal([]);
   });
 });

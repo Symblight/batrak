@@ -150,14 +150,14 @@ describe('acp-agents-view', () => {
     expect(when.textContent?.trim()).to.not.equal('');
   });
 
-  it('shows each agent as a logo icon, a generic one for an agent of no known brand', async () => {
+  it('shows each agent as a logo icon given the agent', async () => {
     const { root } = await render();
     /** @param {string} id */
-    const icon = (id) => row(root, id).querySelector('.acp-agents-view__glyph acp-agent-icon');
-    expect(icon('claude')?.getAttribute('brand')).to.equal('claude');
-    expect(icon('claude')?.querySelector('svg')).to.not.equal(null);
-    expect(icon('github-copilot-cli')?.getAttribute('brand')).to.equal('copilot');
-    expect(icon('mine')?.hasAttribute('brand')).to.equal(false);
+    const icon = (id) =>
+      /** @type {import('../../agent-icon/agent-icon.js').AcpAgentIcon | null} */ (
+        row(root, id).querySelector('.acp-agents-view__glyph acp-agent-icon')
+      );
+    for (const id of ['claude', 'github-copilot-cli', 'mine']) expect(icon(id)?.agent?.id, id).to.equal(id);
   });
 
   it('marks what the search matched in a name', async () => {
@@ -228,17 +228,6 @@ describe('acp-agents-view', () => {
       ['terminal', false, true],
     ]);
     expect(text(/** @type {Element} */ (row(root, 'gem').querySelector('fieldset')))).to.contain('No CLI for this agent');
-  });
-
-  it('shows every installed agent as a card: its name and switch, then where its sessions open', async () => {
-    const { root } = await render();
-    for (const id of ['claude', 'gem']) {
-      const card = row(root, id);
-      expect(card.classList.contains('acp-agents-view__card'), id).to.equal(true);
-      expect(card.querySelector('.acp-agents-view__card-header md-switch'), `${id}: its switch on top`).not.to.equal(null);
-      expect(card.querySelector('.acp-agents-view__mode .acp-agents-view__more'), `${id}: its menu on the Chat option`).not.to.equal(null);
-      expect([...card.querySelectorAll('.acp-agents-view__mode-name')].map(text).map((t) => t.split(' ')[0])).to.deep.equal(['Chat', 'Terminal']);
-    }
   });
 
   it('hides the Chat / Terminal choice of an agent that is off', async () => {

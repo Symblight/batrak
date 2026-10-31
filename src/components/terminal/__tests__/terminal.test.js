@@ -80,11 +80,13 @@ const text = (el) => el.shadowRoot?.querySelector('.xterm-rows')?.textContent ??
 const input = (el) => /** @type {HTMLTextAreaElement} */ (el.shadowRoot?.querySelector('textarea'));
 
 describe('acp-terminal', () => {
-  it('connects at its size and shows the shell’s output', async () => {
+  it('connects at its size, shows the shell’s output and sends what is typed', async () => {
     const { el, calls } = await render();
     expect(calls.connects[0].cols).to.be.greaterThan(10);
     await show(calls.sink, 'hello from the shell\r\n');
     await until(() => text(el).includes('hello from the shell'));
+    input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
+    expect(calls.writes).to.deep.equal(['\r']);
   });
 
   it('connects again with a fresh screen when it is moved, as a tab reorder does', async () => {
@@ -113,12 +115,6 @@ describe('acp-terminal', () => {
     expect(/** @type {Uint8Array} */ (report)[4]).to.be.greaterThan(127);
   });
 
-  it('sends what is typed to the shell', async () => {
-    const { el, calls } = await render();
-    input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
-    expect(calls.writes).to.deep.equal(['\r']);
-  });
-
   it('reflects dropping, for files dragged over it', async () => {
     const { el } = await render();
     expect(el.hasAttribute('dropping')).to.equal(false);
@@ -127,18 +123,18 @@ describe('acp-terminal', () => {
     expect(el.hasAttribute('dropping')).to.equal(true);
   });
 
-  it('pastes text as a bracketed paste when the program asked for one, and takes focus', async () => {
-    const { el, calls } = await render();
-    await show(calls.sink, '\x1b[?2004h');
-    el.paste('@a.js#L1 Why?\nIt looks unused');
-    expect(calls.writes).to.deep.equal(['\x1b[200~@a.js#L1 Why?\rIt looks unused\x1b[201~']);
-    expect(el.shadowRoot?.activeElement).to.equal(input(el));
-  });
-
-  it('pastes line breaks as spaces when the program takes no bracketed paste, so nothing is sent early', async () => {
-    const { el, calls } = await render();
-    el.paste('@a.js#L1 Why?\nIt looks unused');
-    expect(calls.writes).to.deep.equal(['@a.js#L1 Why? It looks unused']);
+  it('pastes as a bracketed paste when the program asked for one, else with line breaks as spaces, and takes focus', async () => {
+    const cases = [
+      ['bracketed', '\x1b[?2004h', '\x1b[200~@a.js#L1 Why?\rIt looks unused\x1b[201~'],
+      ['plain', '', '@a.js#L1 Why? It looks unused'],
+    ];
+    for (const [why, mode, written] of cases) {
+      const { el, calls } = await render();
+      if (mode) await show(calls.sink, mode);
+      el.paste('@a.js#L1 Why?\nIt looks unused');
+      expect(calls.writes, why).to.deep.equal([written]);
+      expect(el.shadowRoot?.activeElement, `${why}: focused`).to.equal(input(el));
+    }
   });
 
   it('keeps a paste until its shell is connected', async () => {
@@ -176,18 +172,23 @@ describe('acp-terminal', () => {
     expect(calls.resizes.at(-1)?.[0]).to.be.lessThan(before);
   });
 
-  it('says how the shell ended and offers Restart', async () => {
-    const { el, calls } = await render();
-    calls.sink?.exit({ code: 2, signal: null });
-    el.info = { ...running, status: 'exited', exit: { code: 2, signal: null } };
-    await until(() => text(el).includes('[Process exited with code 2]'));
-    await el.updateComplete;
-    /** @type {Event[]} */
-    const restarts = [];
-    el.addEventListener('acp-terminal-restart', (e) => restarts.push(e));
-    const restart = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-terminal__restart'));
-    restart.click();
-    expect(restarts).to.have.length(1);
+  it('says how the shell ended, by exit code or by signal, and offers Restart', async () => {
+    const cases = [
+      { exit: { code: 2, signal: null }, message: '[Process exited with code 2]' },
+      { exit: { code: null, signal: 'SIGKILL' }, message: '[Process exited with SIGKILL]' },
+    ];
+    for (const { exit, message } of cases) {
+      const { el, calls } = await render();
+      calls.sink?.exit(exit);
+      el.info = { ...running, status: 'exited', exit };
+      await until(() => text(el).includes(message));
+      await el.updateComplete;
+      /** @type {Event[]} */
+      const restarts = [];
+      el.addEventListener('acp-terminal-restart', (e) => restarts.push(e));
+      /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-terminal__restart')).click();
+      expect(restarts, message).to.have.length(1);
+    }
   });
 
   it("offers no Restart for a sign-in's login: the sign-in runs it again", async () => {
@@ -198,12 +199,6 @@ describe('acp-terminal', () => {
     await until(() => text(el).includes('[Process exited with code 1]'));
     await el.updateComplete;
     expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.equal(null);
-  });
-
-  it('names the signal that ended the shell', async () => {
-    const { el, calls } = await render();
-    calls.sink?.exit({ code: null, signal: 'SIGKILL' });
-    await until(() => text(el).includes('[Process exited with SIGKILL]'));
   });
 
   it('shows why the shell didn’t start, with Restart', async () => {
