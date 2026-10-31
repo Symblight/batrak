@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import { html, nothing } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
@@ -14,15 +15,12 @@ import { SessionActionsController } from '../../controllers/session-actions/Sess
 import { cliInput } from '../../models/cli-input/cli-input.js';
 import { chatDropOf } from '../../models/file-drop/file-drop.js';
 import { relPath } from '../../models/paths/paths.js';
-import { PLATFORM } from '../../models/platform/platform.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { inTurn } from '../../models/sessions/sessions.js';
-import { copyText } from '../../services/clipboard/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
-import { reportError } from '../../services/notices/notices.js';
 import { terminalController } from '../../services/terminals/terminals.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
@@ -177,7 +175,7 @@ export class AcpAgentColumn extends ViewElement {
       if (!cli) return;
       const { inserts, drops } = takePendingInput(id);
       if (inserts.length) cli.paste(cliInput(inserts, root));
-      if (drops.length) cli.paste(shellPaths(drops, PLATFORM));
+      if (drops.length) cli.paste(shellPaths(drops, app.platform));
       return;
     }
     const chat = this.#chat;
@@ -206,7 +204,7 @@ export class AcpAgentColumn extends ViewElement {
       if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return keep();
       chat.insertFiles(files);
     } catch (err) {
-      reportError('Adding dropped files failed', err);
+      app.reportError('Adding dropped files failed', err);
     }
   }
 
@@ -221,7 +219,7 @@ export class AcpAgentColumn extends ViewElement {
     const sessionId = $activeSessionId.get();
     const folder = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
     if (sessionId === null || folder === null) {
-      reportError('Attaching the files failed', new Error('No session to attach them to'));
+      app.reportError('Attaching the files failed', new Error('No session to attach them to'));
       return;
     }
     const draft = this.#activeSession.value === null;
@@ -240,7 +238,7 @@ export class AcpAgentColumn extends ViewElement {
         failed.push(err instanceof Error ? err.message : String(err));
       }
     }
-    if (failed.length) reportError('Attaching the files failed', new Error(failed.join('; ')));
+    if (failed.length) app.reportError('Attaching the files failed', new Error(failed.join('; ')));
     const chat = this.#chat;
     if ($activeSessionId.get() !== sessionId || !chat) return addDrop(paths, sessionId);
     chat.insertFiles(paths.map((path) => ({ path: draft ? path : (relPath(folder, path) ?? path), folder: false })));
@@ -279,7 +277,7 @@ export class AcpAgentColumn extends ViewElement {
       if (id !== this.#fileQueryId || cancelled) return;
       this.fileOptions = items;
     } catch (err) {
-      reportError('File search failed', err);
+      app.reportError('File search failed', err);
     }
   }
 
@@ -290,7 +288,7 @@ export class AcpAgentColumn extends ViewElement {
       const names = await gitBranches(rootId);
       if (rootId === $rootId.get()) this.branches = { rootId, names };
     } catch (err) {
-      reportError('Listing branches failed', err);
+      app.reportError('Listing branches failed', err);
     }
   }
 
@@ -371,7 +369,7 @@ export class AcpAgentColumn extends ViewElement {
   /** @param {Event} e */
   #onLinkOpen(e) {
     const { url } = /** @type {CustomEvent<{ url: string }>} */ (e).detail;
-    openUrl(url).catch((err) => reportError('Opening the link failed', err));
+    openUrl(url).catch((err) => app.reportError('Opening the link failed', err));
   }
 
   /** Continue in the other view: ⌘⇧T, or the header's button. */
@@ -425,7 +423,7 @@ export class AcpAgentColumn extends ViewElement {
 
   /** @param {Event} e */
   #onTerminalCopy(e) {
-    copyText(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying failed');
+    app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying failed');
   }
 
   /**
@@ -493,7 +491,7 @@ export class AcpAgentColumn extends ViewElement {
   }
 
   #onOpenLocal() {
-    projectController.open().catch((err) => reportError('Opening folder failed', err));
+    projectController.open().catch((err) => app.reportError('Opening folder failed', err));
   }
 
   render() {

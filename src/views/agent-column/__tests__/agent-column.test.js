@@ -1,3 +1,4 @@
+import { app } from '../../../hooks/app/app.js';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $agentList } from '../../../stores/agents/agents.js';
@@ -9,7 +10,6 @@ import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalE
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { osScale } from '../../../models/file-drop/file-drop.js';
-import { platformOf } from '../../../models/platform/platform.js';
 import { shellPaths } from '../../../models/shell-paths/shell-paths.js';
 import { fileDrop } from '../../../services/file-drop/file-drop.js';
 import { $notices } from '../../../stores/notices/notices.js';
@@ -59,7 +59,7 @@ async function render() {
  */
 function osPointOf(el) {
   const r = el.getBoundingClientRect();
-  const scale = osScale(platformOf(navigator.userAgent), devicePixelRatio);
+  const scale = osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
   return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
 }
 
@@ -221,7 +221,7 @@ describe('acp-agent-column', () => {
     await el.updateComplete;
     expect(terminal.dropping, 'unmarked').to.equal(false);
     await until(() => pasted.length > 0);
-    expect(pasted).to.deep.equal([shellPaths(paths, platformOf(navigator.userAgent))]);
+    expect(pasted).to.deep.equal([shellPaths(paths, app.platformOf(navigator.userAgent))]);
   });
 
   it('types nothing for files dropped outside its terminal', async () => {

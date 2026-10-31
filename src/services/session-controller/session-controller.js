@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import {
   listSessions,
   sessionApplyLocally,
@@ -23,8 +24,6 @@ import {
 } from '../ipc/ipc.js';
 import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from '../adapter/adapter.js';
 import { agentConfig } from '../agent-config/agent-config.js';
-import { log } from '../logger/logger.js';
-import { reportError } from '../notices/notices.js';
 import { notify } from '../../stores/notices/notices.js';
 import {
   composerOf,
@@ -126,7 +125,7 @@ export class SessionController {
       endSync(projectPath, report);
       setProjectSessions(projectPath, sessions);
       this.#openAll(sessions);
-    }).catch((err) => reportError('Listening for session syncs failed', err));
+    }).catch((err) => app.reportError('Listening for session syncs failed', err));
     const sessions = await listSessions();
     setListedSessions(sessions);
     this.#openAll(sessions);
@@ -297,7 +296,7 @@ export class SessionController {
     forgetHistory(id);
     // Not `#resume`: the activity another app showed was this CLI's.
     if ($sessions.get().find((s) => s.id === id)?.status === 'stopped')
-      await sessionResume(id).catch((err) => reportError('Starting the agent failed', err));
+      await sessionResume(id).catch((err) => app.reportError('Starting the agent failed', err));
   }
 
   /**
@@ -392,7 +391,7 @@ export class SessionController {
         try {
           await sessionStop(id);
         } catch (err) {
-          reportError('Stopping the agent failed', err);
+          app.reportError('Stopping the agent failed', err);
           return;
         }
       }
@@ -416,7 +415,7 @@ export class SessionController {
     const terminalId = sessionTerminalOf(id);
     if (terminalId === null) return;
     const status = $terminals.get()[terminalId]?.status;
-    if (status === 'running') await sessionCloseCli(id).catch((err) => reportError('Closing the terminal failed', err));
+    if (status === 'running') await sessionCloseCli(id).catch((err) => app.reportError('Closing the terminal failed', err));
     // Exited by itself: the backend let the session go, but keeps its terminal's output.
     else if (status === 'exited') await terminalClose([terminalId]).catch(() => {});
     forgetTerminal(terminalId);
@@ -429,7 +428,7 @@ export class SessionController {
       this.#opened.add(session.id);
       sessionOpen(session.id, onSessionEvent).catch((err) => {
         this.#opened.delete(session.id);
-        reportError(`Opening "${session.title}" failed`, err);
+        app.reportError(`Opening "${session.title}" failed`, err);
       });
     }
   }
@@ -451,11 +450,11 @@ export class SessionController {
       (report) => endSync(projectId, report),
       (err) => {
         if (quiet) {
-          log('warn', `polling sessions failed: ${err}`);
+          app.log('warn', `polling sessions failed: ${err}`);
           return;
         }
         endSync(projectId, null);
-        reportError('Syncing sessions failed', err);
+        app.reportError('Syncing sessions failed', err);
       },
     );
     // Another sync of the project may still run (a click's during the full one): wait for both.
@@ -499,7 +498,7 @@ export class SessionController {
       const settings = await workspaceSettings(path);
       if (load === this.#settingsLoad) setWorkspaceSettings(settings);
     } catch (err) {
-      reportError('Reading .brama/workspace.json failed', err);
+      app.reportError('Reading .brama/workspace.json failed', err);
     }
   }
 
@@ -517,7 +516,7 @@ export class SessionController {
       setSessionNotice(id, { kind: 'stopped', message });
       return;
     }
-    sessionResume(id).catch((err) => reportError('Starting the agent failed', err));
+    sessionResume(id).catch((err) => app.reportError('Starting the agent failed', err));
   }
 
   /**
@@ -602,7 +601,7 @@ export class SessionController {
     if (status !== 'idle' && status !== 'working' && status !== 'waiting') return;
     sessionSetConfigOption(id, configId, value).catch((err) => {
       if (previous !== undefined) revertConfigOption(id, configId, previous);
-      reportError('The agent refused the change', err);
+      app.reportError('The agent refused the change', err);
     });
   }
 
@@ -614,7 +613,7 @@ export class SessionController {
    */
   respondPermission(id, requestId, optionId) {
     removePermissionRequest(id, requestId);
-    sessionRespondPermission(id, requestId, optionId).catch((err) => reportError('Answering the agent failed', err));
+    sessionRespondPermission(id, requestId, optionId).catch((err) => app.reportError('Answering the agent failed', err));
   }
 
   /**
@@ -622,7 +621,7 @@ export class SessionController {
    * @param {string} id
    */
   stop(id) {
-    sessionStop(id).catch((err) => reportError('Stopping the agent failed', err));
+    sessionStop(id).catch((err) => app.reportError('Stopping the agent failed', err));
   }
 
   /**
@@ -638,7 +637,7 @@ export class SessionController {
       else if (result.outcome === 'empty') notify('info', `"${title}" has no changes to apply`);
       else notify('info', `Applied "${title}" to the project, unstaged`);
     } catch (err) {
-      reportError('Applying the session failed', err);
+      app.reportError('Applying the session failed', err);
     }
   }
 
@@ -652,7 +651,7 @@ export class SessionController {
       await sessionCheckOutBranch(id);
       notify('info', `Checked out ${branch}`);
     } catch (err) {
-      reportError(`Checking out ${branch} failed`, err);
+      app.reportError(`Checking out ${branch} failed`, err);
     }
   }
 
@@ -662,7 +661,7 @@ export class SessionController {
    */
   restart(id) {
     setSessionNotice(id, { kind: 'progress', message: 'Starting agent…' });
-    sessionRestart(id).catch((err) => reportError('Restarting the agent failed', err));
+    sessionRestart(id).catch((err) => app.reportError('Restarting the agent failed', err));
   }
 
   /**
@@ -677,7 +676,7 @@ export class SessionController {
     try {
       upsertSession(await sessionRename(id, trimmed));
     } catch (err) {
-      reportError('Renaming the session failed', err);
+      app.reportError('Renaming the session failed', err);
     }
   }
 
@@ -689,7 +688,7 @@ export class SessionController {
     try {
       upsertSession(await sessionResetTitle(id));
     } catch (err) {
-      reportError('Resetting the title failed', err);
+      app.reportError('Resetting the title failed', err);
     }
   }
 
@@ -707,7 +706,7 @@ export class SessionController {
     try {
       await sessionRemove(id);
     } catch (err) {
-      reportError('Removing the session failed', err);
+      app.reportError('Removing the session failed', err);
       return;
     }
     clearTimeout(this.#idleStops.get(id));
@@ -730,7 +729,7 @@ export class SessionController {
 
   /** @param {string} id */
   openLog(id) {
-    sessionOpenLog(id).catch((err) => reportError('Opening the agent log failed', err));
+    sessionOpenLog(id).catch((err) => app.reportError('Opening the agent log failed', err));
   }
 
   /** @param {string} id */

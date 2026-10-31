@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import {
   closeWindowTerminals,
   getHomeDir,
@@ -9,7 +10,6 @@ import {
   terminalResize,
   terminalWrite,
 } from '../ipc/ipc.js';
-import { reportError } from '../notices/notices.js';
 import { projectController } from '../project-controller/project-controller.js';
 import { sessionController } from '../session-controller/session-controller.js';
 import { $projectTabs, closeProjectTab } from '../../stores/editor/editor.js';
@@ -112,7 +112,7 @@ export function folderLabel(folder, sessions) {
  */
 class TerminalController {
   /** A previous page load's shells are closed before any opens. */
-  #ready = closeWindowTerminals().catch((err) => reportError('Closing previous terminals failed', err));
+  #ready = closeWindowTerminals().catch((err) => app.reportError('Closing previous terminals failed', err));
   /** @type {Map<string, Route>} The view each terminal streams to, by terminal id. */
   #routes = new Map();
   /** @type {Map<string, { pending: Uint8Array[], sending: boolean }>} Input waiting while a write is in flight. */
@@ -167,7 +167,7 @@ class TerminalController {
     try {
       await projectController.activate(session.projectId);
     } catch (err) {
-      reportError('Opening project failed', err);
+      app.reportError('Opening project failed', err);
       return;
     }
     sessionController.select(session.id);
@@ -369,7 +369,7 @@ class TerminalController {
       forgetTerminal(id);
       this.#forget(id);
     }
-    this.#ready.then(() => terminalClose(ids)).catch((err) => reportError('Closing terminals failed', err));
+    this.#ready.then(() => terminalClose(ids)).catch((err) => app.reportError('Closing terminals failed', err));
   }
 }
 

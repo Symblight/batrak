@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import {
   agentsAdd,
   agentsConfigFile,
@@ -18,8 +19,6 @@ import {
   onAgentsChanged,
   onAgentsSignIn,
 } from '../ipc/ipc.js';
-import { log } from '../logger/logger.js';
-import { reportError } from '../notices/notices.js';
 import { signInAfterAdd } from '../../models/agents/agents.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, noteSignIn, whileUpdating } from '../../stores/agents/agents.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -61,7 +60,7 @@ export class AgentConfig {
         this.#refresh($workspacePath.get());
         this.search();
       }
-    }).catch((err) => reportError('Watching agents.json failed', err));
+    }).catch((err) => app.reportError('Watching agents.json failed', err));
     onAgentsSignIn((event) => {
       noteSignIn(event);
       if (event.state === 'done' && event.message) notify('info', event.message);
@@ -70,7 +69,7 @@ export class AgentConfig {
         this.search();
         this.refresh();
       }
-    }).catch((err) => reportError('Watching sign-ins failed', err));
+    }).catch((err) => app.reportError('Watching sign-ins failed', err));
   }
 
   /**
@@ -84,7 +83,7 @@ export class AgentConfig {
       const login = await agentsSignIn(projectPath, agentId, methodId);
       if (login) openLoginTerminal(login, projectPath);
     } catch (err) {
-      reportError(`Signing in to ${this.#nameOf(agentId)} failed`, err);
+      app.reportError(`Signing in to ${this.#nameOf(agentId)} failed`, err);
     }
   }
 
@@ -93,7 +92,7 @@ export class AgentConfig {
     try {
       await agentsSignInCancel($workspacePath.get(), agentId);
     } catch (err) {
-      reportError('Cancelling the sign-in failed', err);
+      app.reportError('Cancelling the sign-in failed', err);
     }
   }
 
@@ -109,7 +108,7 @@ export class AgentConfig {
       const view = await agentsView($workspacePath.get(), query.query, query.filter);
       if (search === this.#search) $agentsView.set(view);
     } catch (err) {
-      if (search === this.#search) reportError('Loading agents failed', err);
+      if (search === this.#search) app.reportError('Loading agents failed', err);
     }
   }
 
@@ -121,7 +120,7 @@ export class AgentConfig {
     try {
       await whileUpdating([agentId], () => agentsUpdateVersion($workspacePath.get(), agentId));
     } catch (err) {
-      reportError(`Updating ${this.#nameOf(agentId)} failed`, err);
+      app.reportError(`Updating ${this.#nameOf(agentId)} failed`, err);
     }
     // Its download ended: the backend no longer says it's updating.
     this.search();
@@ -133,7 +132,7 @@ export class AgentConfig {
     try {
       await whileUpdating(ids, () => agentsUpdateAll($workspacePath.get()));
     } catch (err) {
-      reportError('Updating agents failed', err);
+      app.reportError('Updating agents failed', err);
     }
     this.search();
   }
@@ -144,7 +143,7 @@ export class AgentConfig {
     try {
       await agentsRegistryCheck();
     } catch (err) {
-      reportError('Checking the ACP registry failed', err);
+      app.reportError('Checking the ACP registry failed', err);
     }
     $agentsPending.set({ ...$agentsPending.get(), checking: false });
     this.search();
@@ -180,7 +179,7 @@ export class AgentConfig {
         try {
           probed = await agentsProbeOptions(projectPath, agentId);
         } catch (err) {
-          log('info', `couldn't ask ${agentId} for its options: ${err}`);
+          app.log('info', `couldn't ask ${agentId} for its options: ${err}`);
           return false;
         }
         if (Array.isArray(probed)) cacheAgentOptions(agentId, probed);
@@ -204,7 +203,7 @@ export class AgentConfig {
     try {
       openTab(await agentsConfigFile($workspacePath.get()));
     } catch (err) {
-      reportError('Opening agents.json failed', err);
+      app.reportError('Opening agents.json failed', err);
     }
   }
 
@@ -217,7 +216,7 @@ export class AgentConfig {
   async add(agent) {
     const projectPath = $workspacePath.get();
     const id = await agentsAdd(projectPath, agent);
-    log('info', `agent ${id} added`);
+    app.log('info', `agent ${id} added`);
     this.#announceAdded(projectPath, id);
     return id;
   }
@@ -259,7 +258,7 @@ export class AgentConfig {
     try {
       await agentsSetDefault($workspacePath.get(), agentId);
     } catch (err) {
-      reportError('Setting the default agent failed', err);
+      app.reportError('Setting the default agent failed', err);
     }
   }
 
@@ -275,7 +274,7 @@ export class AgentConfig {
       const stopped = await agentsSetEnabled($workspacePath.get(), agentId, enabled);
       if (stopped > 0) notify('info', `${name} off · ${stopped} ${stopped === 1 ? 'session' : 'sessions'} stopped`);
     } catch (err) {
-      reportError(`Turning ${name} ${enabled ? 'on' : 'off'} failed`, err);
+      app.reportError(`Turning ${name} ${enabled ? 'on' : 'off'} failed`, err);
     }
   }
 
@@ -293,11 +292,11 @@ export class AgentConfig {
         timeout: UNDO_MS,
         action: {
           label: 'Undo',
-          run: () => agentsRestore(token).catch((err) => reportError(`Restoring ${name} failed`, err)),
+          run: () => agentsRestore(token).catch((err) => app.reportError(`Restoring ${name} failed`, err)),
         },
       });
     } catch (err) {
-      reportError(`Removing ${name} failed`, err);
+      app.reportError(`Removing ${name} failed`, err);
     }
   }
 
@@ -310,9 +309,9 @@ export class AgentConfig {
     if (projectPath === null) return;
     try {
       const ids = await agentsImportUser(projectPath, agentIds);
-      log('info', `agents added to the project: ${ids.join(', ')}`);
+      app.log('info', `agents added to the project: ${ids.join(', ')}`);
     } catch (err) {
-      reportError('Adding your agents to the project failed', err);
+      app.reportError('Adding your agents to the project failed', err);
     }
   }
 
@@ -332,7 +331,7 @@ export class AgentConfig {
         if (!hasAgentOptions(id) && !this.#probed.has(id)) this.#probe(projectPath, id);
       }
     } catch (err) {
-      reportError('Loading agents failed', err);
+      app.reportError('Loading agents failed', err);
     }
   }
 }

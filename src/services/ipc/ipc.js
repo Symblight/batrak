@@ -483,11 +483,6 @@ export function writeFile(path, content) {
   return ipc.invoke('write_file', { path, content });
 }
 
-/** @returns {Promise<AboutInfo>} Versions of the app and what it runs on. */
-export function getAbout() {
-  return ipc.invoke('about');
-}
-
 /** @returns {Promise<FontFamily[]>} Every installed font family. */
 export function listFonts() {
   return ipc.invoke('list_fonts');
@@ -582,15 +577,6 @@ export function onWorkspaceChanged(callback) {
  */
 export function onMenuAction(callback) {
   return ipc.listen('menu://action', callback);
-}
-
-/**
- * The backend's own warnings and errors (panics included), sent to every window as they are logged.
- * @param {(notice: { level: NoticeLevel, message: string }) => void} callback
- * @returns {Promise<() => void>} Stops listening.
- */
-export function onBackendNotice(callback) {
-  return ipc.listen('app://notice', callback);
 }
 
 /**
@@ -752,16 +738,6 @@ export function openUrl(url) {
  */
 export function revealPath(path) {
   return ipc.invoke('reveal_path', { path });
-}
-
-/**
- * Appends a line to the app log, target `frontend`.
- * @param {LogLevel} level
- * @param {string} message
- * @returns {Promise<void>}
- */
-export function writeLog(level, message) {
-  return ipc.invoke('write_log', { level, message });
 }
 
 /** @returns {Promise<string>} The user's home folder. */

@@ -1,16 +1,14 @@
+import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
 import { composedContains } from '../../models/file-drop/file-drop.js';
-import { PLATFORM } from '../../models/platform/platform.js';
 import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
-import { copyText } from '../../services/clipboard/clipboard.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { loadSystemFonts } from '../../services/fonts/fonts.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
-import { reportError } from '../../services/notices/notices.js';
 import { terminalController } from '../../services/terminals/terminals.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
@@ -156,7 +154,7 @@ export class AcpMainColumn extends ViewElement {
   #onFileDrop = (/** @type {Event} */ e) => {
     const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
     const terminal = this.#ownTerminal(target);
-    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(shellPaths(paths, PLATFORM));
+    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(shellPaths(paths, app.platform));
   };
 
   connectedCallback() {
@@ -265,7 +263,7 @@ export class AcpMainColumn extends ViewElement {
   /** @param {Event} e */
   #onCopyPath(e) {
     const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
-    copyText(path, 'Copying the path failed');
+    app.copy(path, 'Copying the path failed');
   }
 
   /** @param {Event} e */
@@ -342,13 +340,13 @@ export class AcpMainColumn extends ViewElement {
         @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
         @acp-terminal-copy=${(/** @type {CustomEvent<{ text: string }>} */ e) =>
-          copyText(e.detail.text, 'Copying failed')}
+          app.copy(e.detail.text, 'Copying failed')}
         @acp-terminal-restart=${(/** @type {CustomEvent<{ terminalId: string }>} */ e) =>
           terminalController.restart(e.detail.terminalId)}
         @acp-terminal-title=${(/** @type {CustomEvent<{ terminalId: string, title: string }>} */ e) =>
           setTerminalTitle(e.detail.terminalId, e.detail.title)}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
-          openUrl(e.detail.url).catch((err) => reportError('Opening link failed', err))}
+          openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
         @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
           setFileLanguage(e.detail.path, e.detail.language)}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>

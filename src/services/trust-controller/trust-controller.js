@@ -1,5 +1,5 @@
+import { app } from '../../hooks/app/app.js';
 import { agentsTrust, agentsUntrusted, onAgentsChanged } from '../ipc/ipc.js';
-import { reportError } from '../notices/notices.js';
 import { sessionController } from '../session-controller/session-controller.js';
 import { $awaitingTrust, $trustPrompt, takeAwaitingTrust } from '../../stores/trust/trust.js';
 import { projectOf } from '../../stores/sessions/sessions.js';
@@ -23,7 +23,7 @@ export class TrustController {
     $workspacePath.subscribe((path) => this.#refresh(path, false));
     onAgentsChanged((projectPath) => {
       if (projectPath === null || projectPath === $workspacePath.get()) this.#refresh($workspacePath.get(), false);
-    }).catch((err) => reportError('Watching agents.json failed', err));
+    }).catch((err) => app.reportError('Watching agents.json failed', err));
     $awaitingTrust.listen((waiting) => {
       const projectPath = waiting.length ? projectOf(waiting[waiting.length - 1]) : null;
       if (projectPath !== null && $trustPrompt.get()?.projectPath !== projectPath) this.#refresh(projectPath, true);
@@ -48,7 +48,7 @@ export class TrustController {
       const ask = agents.length > 0 && (force || !this.#dismissed.has(trustKey(prompt)));
       $trustPrompt.set(ask ? prompt : null);
     } catch (err) {
-      reportError('Checking the project’s agents failed', err);
+      app.reportError('Checking the project’s agents failed', err);
     }
   }
 
@@ -60,7 +60,7 @@ export class TrustController {
     try {
       await agentsTrust(prompt.projectPath, prompt.agents.map((a) => a.launch));
     } catch (err) {
-      reportError('Trusting the project failed', err);
+      app.reportError('Trusting the project failed', err);
       this.#refresh(prompt.projectPath, true);
       return;
     }

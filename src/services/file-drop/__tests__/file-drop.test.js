@@ -1,6 +1,6 @@
+import { app } from '../../../hooks/app/app.js';
 import { expect } from '@esm-bundle/chai';
 import { osScale } from '../../../models/file-drop/file-drop.js';
-import { platformOf } from '../../../models/platform/platform.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { fileDrop } from '../file-drop.js';
 
@@ -12,7 +12,7 @@ import { fileDrop } from '../file-drop.js';
  */
 function osPointOf(el) {
   const r = el.getBoundingClientRect();
-  const scale = osScale(platformOf(navigator.userAgent), devicePixelRatio);
+  const scale = osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
   return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
 }
 

@@ -1,6 +1,5 @@
+import { app } from '../../hooks/app/app.js';
 import { closeWorkspace, onWorkspaceChanged, openSessionRoot } from '../ipc/ipc.js';
-import { log } from '../logger/logger.js';
-import { reportError } from '../notices/notices.js';
 import { projectController } from '../project-controller/project-controller.js';
 import { $activeSession, $sessions } from '../../stores/sessions/sessions.js';
 import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSessionRoot } from '../../stores/session-root/session-root.js';
@@ -38,7 +37,7 @@ export class SessionRootController extends EventTarget {
     onWorkspaceChanged((changes) => {
       if (changes.rootId !== $sessionRoot.get()?.rootId) return;
       this.dispatchEvent(new CustomEvent('fs-change', { detail: changes }));
-    }).catch((err) => reportError('File watching unavailable', err));
+    }).catch((err) => app.reportError('File watching unavailable', err));
     const active = $activeSession.subscribe((session) => {
       const open = $sessionRoot.get() !== null || $sessionRootOpening.get();
       const action = sessionRootAction(session, this.#previous, open);
@@ -99,7 +98,7 @@ export class SessionRootController extends EventTarget {
       setSessionRoot(root);
     } catch (err) {
       // Not checked out yet, gone, or superseded by a newer open: the tree lists the project.
-      if (generation === this.#generation) log('debug', `session root not opened: ${err}`);
+      if (generation === this.#generation) app.log('debug', `session root not opened: ${err}`);
     } finally {
       if (generation === this.#generation) $sessionRootOpening.set(false);
     }

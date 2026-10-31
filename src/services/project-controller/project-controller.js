@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import {
   closeWindowWorkspaces,
   closeWorkspace,
@@ -11,7 +12,6 @@ import { $openingPath, $rootId, $workspace } from '../../stores/workspace/worksp
 import { removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $projects, addProject, removeProject } from '../../stores/projects/projects.js';
-import { reportError } from '../notices/notices.js';
 import { absPath, relPath } from '../../models/paths/paths.js';
 
 /** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
@@ -39,7 +39,7 @@ export class ProjectController extends EventTarget {
    */
   #roots = new Map();
   /** Roots this window's previous page load left open are closed before anything opens. */
-  #ready = closeWindowWorkspaces().catch((err) => reportError('Closing previous projects failed', err));
+  #ready = closeWindowWorkspaces().catch((err) => app.reportError('Closing previous projects failed', err));
   /** @type {{ path: string, done: Promise<void> } | null} The latest `#openFolder()` call, until it settles. */
   #pending = null;
 
@@ -48,7 +48,7 @@ export class ProjectController extends EventTarget {
     onWorkspaceChanged((changes) => {
       if (changes.rootId !== this.rootId) return;
       this.dispatchEvent(new CustomEvent('fs-change', { detail: changes }));
-    }).catch((err) => reportError('File watching unavailable', err));
+    }).catch((err) => app.reportError('File watching unavailable', err));
   }
 
   /** Settles once the roots this window's previous page load left open are closed; open nothing before. */
@@ -233,7 +233,7 @@ export class ProjectController extends EventTarget {
     this.#close();
     removeProjectTabs(id);
     removeProjectExpandedFolders(id);
-    if (next) this.activate(next.path).catch((err) => reportError('Opening project failed', err));
+    if (next) this.activate(next.path).catch((err) => app.reportError('Opening project failed', err));
   }
 
   /** Makes an `#openFolder()` call still in flight discard its result. */

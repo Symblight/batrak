@@ -1,8 +1,7 @@
+import { app } from '../../hooks/app/app.js';
 import { dropTargetAt, toCssPoint } from '../../models/file-drop/file-drop.js';
-import { PLATFORM } from '../../models/platform/platform.js';
 import { setFileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { onFileDrag } from '../ipc/ipc.js';
-import { reportError } from '../notices/notices.js';
 
 /** @typedef {import('../../models/types/types.js').FileDrag} FileDrag */
 /** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
@@ -21,7 +20,7 @@ export class FileDropController extends EventTarget {
 
   /** Listens to the webview's drags, for the page's lifetime. */
   start() {
-    onFileDrag((drag) => this.handle(drag)).catch((err) => reportError('Listening for dropped files failed', err));
+    onFileDrag((drag) => this.handle(drag)).catch((err) => app.reportError('Listening for dropped files failed', err));
   }
 
   /**
@@ -29,7 +28,7 @@ export class FileDropController extends EventTarget {
    * @returns {Element | null}
    */
   #targetAt(position) {
-    const { x, y } = toCssPoint(position, PLATFORM, devicePixelRatio);
+    const { x, y } = toCssPoint(position, app.platform, devicePixelRatio);
     return dropTargetAt(document, x, y, DROP_TARGETS);
   }
 

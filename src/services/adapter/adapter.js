@@ -1,5 +1,5 @@
+import { app } from '../../hooks/app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from '../ipc/ipc.js';
-import { log } from '../logger/logger.js';
 import { fenceCode } from '../../models/chat-parts/chat-parts.js';
 import { isAbsolute } from '../../models/paths/paths.js';
 import { inputOfMessage, linesOf } from '../../models/session-input/session-input.js';
@@ -359,7 +359,7 @@ export function handleSessionEvent(event) {
       // Picks made before the agent ran (or while it started) go to it now.
       for (const { configId, value } of applyAgentOptions(sessionId, event.payload.configOptions)) {
         sessionSetConfigOption(sessionId, configId, value).catch((err) =>
-          log('warn', `the agent refused ${configId}=${value}: ${err}`),
+          app.log('warn', `the agent refused ${configId}=${value}: ${err}`),
         );
       }
       return;
@@ -595,7 +595,7 @@ export const acpAdapter = {
       () => {
         if (turns.get(sessionId) !== turn) return;
         stopped.add(sessionId);
-        sessionCancel(sessionId).catch((err) => log('warn', `cancel failed: ${err}`));
+        sessionCancel(sessionId).catch((err) => app.log('warn', `cancel failed: ${err}`));
         endTurn(sessionId, { cancelled: true });
       },
       { once: true },

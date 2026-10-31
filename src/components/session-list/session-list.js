@@ -25,17 +25,12 @@ import '../session-sync/session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
+import { app } from '../../hooks/app/app.js';
 import { SESSIONS_PAGE, orderSessions, visibleSessions } from '../../models/sessions/sessions.js';
 import styles from './session-list.css?inline';
 
 /** @typedef {import('../../models/types/types.js').Project} Project */
 /** @typedef {import('../../models/types/types.js').Session} Session */
-
-const REVEAL_LABEL = /Mac/.test(navigator.userAgent)
-  ? 'Show in Finder'
-  : /Windows/.test(navigator.userAgent)
-    ? 'Show in Explorer'
-    : 'Show in File Manager';
 
 /**
  * @tag acp-session-list
@@ -473,7 +468,7 @@ export class AcpSessionList extends LitElement {
       </md-menu-item>
       <md-menu-item class="acp-session-list__menu-item" value="reveal">
         <md-icon slot="leading" class="acp-session-list__menu-icon">${unsafeSVG(folderOpenIcon)}</md-icon>
-        ${REVEAL_LABEL}
+        ${app.revealLabel}
       </md-menu-item>
       <md-hr></md-hr>
       <md-menu-item class="acp-session-list__menu-item" value="remove">

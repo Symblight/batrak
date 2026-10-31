@@ -1,6 +1,6 @@
+import { app } from '../../hooks/app/app.js';
 import { listFonts } from '../ipc/ipc.js';
 import { $systemFonts } from '../../stores/fonts/fonts.js';
-import { reportError } from '../notices/notices.js';
 
 /** @type {Promise<void> | null} */
 let loading = null;
@@ -11,7 +11,7 @@ export function loadSystemFonts() {
     .then((fonts) => $systemFonts.set(fonts.sort((a, b) => a.family.localeCompare(b.family))))
     .catch((err) => {
       loading = null;
-      reportError('Listing fonts failed', err);
+      app.reportError('Listing fonts failed', err);
     });
   return loading;
 }

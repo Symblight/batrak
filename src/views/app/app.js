@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import { html, nothing } from 'lit';
 import { agentConfig } from '../../services/agent-config/agent-config.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
@@ -6,10 +7,7 @@ import { sessionRootController } from '../../services/session-root-controller/se
 import { gitController } from '../../services/git-controller/git-controller.js';
 import { trustController } from '../../services/trust-controller/trust-controller.js';
 import { terminalController } from '../../services/terminals/terminals.js';
-import { loadAbout } from '../../services/about/about.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
-import { log } from '../../services/logger/logger.js';
-import { reportError } from '../../services/notices/notices.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $gitRepo } from '../../stores/git/git.js';
@@ -111,11 +109,11 @@ export class AcpApp extends ViewElement {
   };
 
   #newTerminal() {
-    terminalController.newTerminal().catch((err) => reportError('Opening a terminal failed', err));
+    terminalController.newTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   #openProjectTerminal() {
-    terminalController.projectTerminal().catch((err) => reportError('Opening a terminal failed', err));
+    terminalController.projectTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   /**
@@ -162,14 +160,14 @@ export class AcpApp extends ViewElement {
     super.connectedCallback();
     window.addEventListener('keydown', this.#onKeydown);
     this.#menuListener = onMenuAction(this.#onMenuAction);
-    this.#menuListener.catch((err) => log('warn', `menu bar not connected: ${err}`));
+    this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agentConfig.start();
     trustController.start();
-    sessionController.init().catch((err) => reportError('Loading sessions failed', err));
+    sessionController.init().catch((err) => app.reportError('Loading sessions failed', err));
     gitController.start();
     terminalController.start();
     sessionRootController.start();
-    projectController.restore().catch((err) => reportError('Reopening folder failed', err));
+    projectController.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }
 
   disconnectedCallback() {
@@ -235,7 +233,7 @@ export class AcpApp extends ViewElement {
   }
 
   #showAbout() {
-    loadAbout();
+    app.loadAbout();
     /** @type {HTMLElementTagNameMap['acp-about-dialog']} */ (this.renderRoot.querySelector('acp-about-dialog')).show();
   }
 
@@ -262,7 +260,7 @@ export class AcpApp extends ViewElement {
       if (id !== this.#quickOpenRequest || result.cancelled) return;
       this.quickOpenFiles = result.items;
     } catch (err) {
-      reportError('File search failed', err);
+      app.reportError('File search failed', err);
     }
   }
 
@@ -317,7 +315,7 @@ export class AcpApp extends ViewElement {
       this.searchFolders = result.items;
       this.searchFoldersQuery = query;
     } catch (err) {
-      reportError('Folder search failed', err);
+      app.reportError('Folder search failed', err);
     }
   }
 
@@ -364,7 +362,7 @@ export class AcpApp extends ViewElement {
   /** @param {Event} e */
   #onRevealPath(e) {
     const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
-    revealPath(path).catch((err) => log('warn', `showing logs failed: ${err}`));
+    revealPath(path).catch((err) => app.log('warn', `showing logs failed: ${err}`));
   }
 
   /** @param {Event} e */

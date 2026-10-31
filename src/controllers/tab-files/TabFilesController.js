@@ -1,9 +1,9 @@
+import { app } from '../../hooks/app/app.js';
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
 import { isUserAgentsFile } from '../../models/agents-file/agents-file.js';
 import { imageTypeOf } from '../../models/image-types/image-types.js';
 import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
-import { reportError } from '../../services/notices/notices.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
@@ -187,7 +187,7 @@ export class TabFilesController {
       const now = this.#find(id);
       if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false, deletedOnDisk: false });
     } catch (err) {
-      reportError(`Saving ${basename(tab.path)} failed`, err);
+      app.reportError(`Saving ${basename(tab.path)} failed`, err);
     }
     return true;
   }

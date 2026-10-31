@@ -151,8 +151,8 @@ is destroyed, and `close_window_workspaces` when its page loads again (before an
 `brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the agent crates that log,
 `agent_acp`: `OWN_TARGETS` in `logging.rs`, where a new logging crate goes too); `BRAMA_LOG` overrides it (an `EnvFilter`
 directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
-`services/logger/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
-calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at `info` for
+`app.log(level, message)` (`hooks/app/app.js`, `write_log` command, target `frontend`); `main.js`
+calls `app.init()` for uncaught errors, unhandled rejections and the backend's own notices. Log at `info` for
 what a user did or what took noticeable time (a scan), `warn` for failures, and `debug` for every
 git call; never log file contents.
 
@@ -161,7 +161,7 @@ git call; never log file contents.
 8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
 sends every warn/error of ours (`brama_lib`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
 says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
-with no inline error goes through `reportError(what, err)` (`services/notices/notices.js`: logs + snackbar);
+with no inline error goes through `app.reportError(what, err)` (`hooks/app/app.js`: logs + snackbar);
 uncaught errors and rejections show one too.
 
 ### Git

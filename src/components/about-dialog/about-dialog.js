@@ -1,10 +1,10 @@
+import { app } from '../../hooks/app/app.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/dialog';
 import '@symblight/wc-material/icon';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
-import { aboutRows } from '../../models/about/about.js';
 import styles from './about-dialog.css?inline';
 
 /** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
@@ -52,7 +52,7 @@ export class AcpAboutDialog extends LitElement {
       </div>
       ${about
         ? html`<dl class="acp-about-dialog__rows">
-            ${aboutRows(about).map(
+            ${app.aboutRows(about).map(
               ([label, value]) => html`<dt class="acp-about-dialog__label">${label}</dt>
                 <dd class="acp-about-dialog__value">${value}</dd>`,
             )}

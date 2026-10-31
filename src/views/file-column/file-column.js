@@ -1,11 +1,10 @@
+import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { gitController } from '../../services/git-controller/git-controller.js';
 import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
-import { log } from '../../services/logger/logger.js';
-import { reportError } from '../../services/notices/notices.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
@@ -155,7 +154,7 @@ export class AcpFileColumn extends ViewElement {
         this.renderRoot.querySelector('acp-file-tree')?.reload(['', ...$expandedFolders.get()]);
       }
     } catch (err) {
-      reportError('Refresh failed', err);
+      app.reportError('Refresh failed', err);
     } finally {
       this.refreshing = false;
     }
@@ -198,8 +197,8 @@ export class AcpFileColumn extends ViewElement {
       notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
       panel.commitFinished(true);
     } catch (err) {
-      // Not `reportError`: a hook's output may quote file contents, which stay out of the log.
-      log('warn', `${amend ? 'amend' : 'commit'} failed`);
+      // Not `app.reportError`: a hook's output may quote file contents, which stay out of the log.
+      app.log('warn', `${amend ? 'amend' : 'commit'} failed`);
       notify('error', `Commit failed: ${err instanceof Error ? err.message : String(err)}`);
       panel.commitFinished(false);
     }

@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
@@ -6,7 +7,6 @@ import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { getHomeDir } from '../../services/ipc/ipc.js';
-import { reportError } from '../../services/notices/notices.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
@@ -76,7 +76,7 @@ export class AcpSessionColumn extends ViewElement {
       await projectController.activate(id);
       this.#clearFailure(id);
     } catch (err) {
-      reportError('Opening project failed', err);
+      app.reportError('Opening project failed', err);
       this.failures = { ...this.failures, [id]: String(err) };
     }
   }
@@ -89,7 +89,7 @@ export class AcpSessionColumn extends ViewElement {
   }
 
   #onOpenFolder() {
-    projectController.open().catch((err) => reportError('Opening folder failed', err));
+    projectController.open().catch((err) => app.reportError('Opening folder failed', err));
   }
 
   /**
@@ -125,7 +125,7 @@ export class AcpSessionColumn extends ViewElement {
 
   /** @param {Event} e */
   #onProjectReveal(e) {
-    projectController.reveal(this.#projectIdOf(e)).catch((err) => reportError('Revealing folder failed', err));
+    projectController.reveal(this.#projectIdOf(e)).catch((err) => app.reportError('Revealing folder failed', err));
   }
 
   /**
