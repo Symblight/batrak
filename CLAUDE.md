@@ -62,7 +62,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
   Overwrite / Reload dialog answers; a text file deleted on disk stays shown, `deletedOnDisk`, and
   a save creates it again, like VS Code) and `ChangesReviewController`
-  (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column).
+  (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column, for the
+  Search pane, and `<acp-app>`, for the search dialog; one backend slot each).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
   `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`,
@@ -107,6 +108,8 @@ files. Specs are in `docs/specs/`.
 - `agent-config.md` — `.brama/agents.json`, the Agents tab, writing the file, on/off, the ACP registry,
   updates, following the list, secrets and trust, signing in.
 - `editor-comments.md` — agent comments and the selection toolbar.
+- `search.md` — the search dialog and the Search pane: slots, shared blocks, folder and mask filters,
+  persistence.
 - `terminals.md`, `git.md` (commit, worktree / apply, frontend stores, cached state),
   `drag-drop.md`, `column-resize.md`.
 
