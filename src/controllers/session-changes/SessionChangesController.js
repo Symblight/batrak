@@ -1,6 +1,6 @@
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { StoreController } from '../store/StoreController.js';
 import { readFile, sessionChanges, sessionFileAtBase } from '../../services/ipc/ipc.js';
-import { sessionOfTab } from '../../models/tab-ids/tab-ids.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
 
@@ -67,7 +67,7 @@ export class SessionChangesController {
     this.#host = host;
     new StoreController(host, {
       store: $activePath,
-      onChange: (active) => this.#show(active === null ? null : sessionOfTab(active)),
+      onChange: (active) => this.#show(active === null ? null : tabs.sessionOf(active)),
     });
     new StoreController(host, {
       store: $sessions,

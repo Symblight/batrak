@@ -1,8 +1,8 @@
-import { hiddenTabs } from '../../models/tab-overflow/tab-overflow.js';
+import { tabs } from '../../hooks/tabs/tabs.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/tab-overflow/tab-overflow.js').TabSpan} TabSpan */
+/** @typedef {import('../../hooks/tabs/tabs.js').TabSpan} TabSpan */
 
 /**
  * @typedef {Object} TabOverflowConfig
@@ -90,7 +90,7 @@ export class TabOverflowController {
     if (overflowing) {
       const start = strip.getBoundingClientRect().left + strip.clientLeft;
       const fade = parseFloat(getComputedStyle(strip).getPropertyValue(this.#config.fade)) || 0;
-      hidden = hiddenTabs(this.#config.spans(), { start, end: start + strip.clientWidth }, fade);
+      hidden = tabs.hidden(this.#config.spans(), { start, end: start + strip.clientWidth }, fade);
     }
     if (overflowing === this.#overflowing && hidden.join('\n') === this.#hidden.join('\n')) return;
     this.#overflowing = overflowing;

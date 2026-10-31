@@ -129,7 +129,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `sessionRootController` keeps open; Search, Changes and Quick Open stay on the project
   (spec: `docs/specs/worktree-default.md`). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
-  A session's own Changes tab (`view:session-changes:<id>`, `models/tab-ids/tab-ids.js`, opened by
+  A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
   `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no
   longer offers it, so nothing in the UI opens it now): `SessionChangesController`
   (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,

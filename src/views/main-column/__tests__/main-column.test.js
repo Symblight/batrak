@@ -1,9 +1,9 @@
+import { tabs } from '../../../hooks/tabs/tabs.js';
 import { app } from '../../../hooks/app/app.js';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { osScale } from '../../../models/file-drop/file-drop.js';
 import { shellPaths } from '../../../models/shell-paths/shell-paths.js';
-import { terminalTabId } from '../../../models/tab-ids/tab-ids.js';
 import { fileDrop } from '../../../services/file-drop/file-drop.js';
 import { closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
@@ -37,7 +37,7 @@ describe('acp-main-column', () => {
     mockIPC(() => null);
     $workspace.set({ path: '/p', name: 'p', rootId: null });
     $terminals.set({ t1: running });
-    openTab(terminalTabId('t1'));
+    openTab(tabs.terminalId('t1'));
     pasted = [];
     proto.paste = (text) => pasted.push(text);
   });

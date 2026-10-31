@@ -1,7 +1,7 @@
 import { atom } from 'nanostores';
 import { closeProjectTab } from '../editor/editor.js';
 import { $terminals } from '../terminals/terminals.js';
-import { terminalTabId } from '../../models/tab-ids/tab-ids.js';
+import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../models/types/types.js').AgentList} AgentList */
 /** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */

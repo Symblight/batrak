@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { openProjectTab, openTab } from '../editor/editor.js';
 import { $workspace } from '../workspace/workspace.js';
-import { terminalTabId } from '../../models/tab-ids/tab-ids.js';
+import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../models/types/types.js').TerminalExit} TerminalExit */
 /** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */

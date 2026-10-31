@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/stores/**"
-  - "src/models/tab-ids/tab-ids.js"
+  - "src/hooks/tabs/**"
   - "src/controllers/tab-content/**"
   - "src/components/tab-view/**"
   - "src/views/main-column/**"
@@ -21,7 +21,7 @@ paths:
   and the tab scrolls there and answers `acp-settings-revealed`; `AGENTS_TAB_ID`, the Agents tab
   (see `agent-config.md`), opened by `openAgents(reveal)` (`$agentsReveal`: the registry's agents
   to add, or an agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
-  click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids/tab-ids.js`), one per
+  click in the Changes side pane opens, expands and scrolls to; `tabs.terminalId(id)` (`stores/tab-ids/tab-ids.js`, re-exported by `hooks/tabs/tabs.js`), one per
   terminal, see `terminals.md`; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
   (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its

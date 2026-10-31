@@ -1,3 +1,4 @@
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import '@symblight/wc-material/tabs';
@@ -13,7 +14,6 @@ import '../terminal/terminal.js';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import '../view-placeholder/view-placeholder.js';
 import { relPath } from '../../models/paths/paths.js';
-import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import styles from './tab-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
@@ -308,7 +308,7 @@ export class AcpTabView extends LitElement {
   /** @param {EditorTab} tab */
   #renderSessionChanges(tab) {
     const review = this.sessionReview;
-    if (!review || review.sessionId !== sessionOfTab(tab.id)) return nothing;
+    if (!review || review.sessionId !== tabs.sessionOf(tab.id)) return nothing;
     return html`<acp-changes-review
       class="acp-tab-view__view"
       .changes=${review.changes}
@@ -324,7 +324,7 @@ export class AcpTabView extends LitElement {
 
   /** @param {EditorTab} tab */
   #renderTerminal(tab) {
-    const id = terminalOfTab(tab.id);
+    const id = tabs.terminalOf(tab.id);
     const info = id === null ? undefined : this.terminals[id];
     if (!info) return nothing;
     return html`<acp-terminal

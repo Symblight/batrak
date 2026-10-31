@@ -1,3 +1,4 @@
+import { tabs } from '../../../hooks/tabs/tabs.js';
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import {
@@ -13,7 +14,6 @@ import { $editorTabs } from '../../../stores/editor/editor.js';
 import { noteSignIn } from '../../../stores/agents/agents.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
-import { terminalTabId } from '../../../models/tab-ids/tab-ids.js';
 
 /** @typedef {import('../../../models/types/types.js').Session} Session */
 
@@ -150,7 +150,7 @@ describe('terminalController', () => {
     openLoginTerminal(terminal, '/p');
     noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'waiting', message: null, terminal });
     noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'cancelled', message: null, terminal });
-    expect($editorTabs.get().paths).to.not.include(terminalTabId('sign-in-1'));
+    expect($editorTabs.get().paths).to.not.include(tabs.terminalId('sign-in-1'));
     expect($terminals.get()['sign-in-1']).to.equal(undefined);
     await until(() => calls.some((c) => c.cmd === 'terminal_close'));
     $workspace.set(null);

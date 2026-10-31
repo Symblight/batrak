@@ -12,7 +12,7 @@ import {
   terminalsOfProject,
 } from '../terminals.js';
 import { $workspace } from '../../workspace/workspace.js';
-import { terminalTabId } from '../../../models/tab-ids/tab-ids.js';
+import { terminalTabId } from '../../tab-ids/tab-ids.js';
 
 describe('terminals', () => {
   afterEach(() => {

@@ -1,3 +1,4 @@
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { app } from '../../hooks/app/app.js';
 import {
   closeWindowTerminals,
@@ -24,7 +25,6 @@ import {
   terminalStarted,
 } from '../../stores/terminals/terminals.js';
 import { $workspace } from '../../stores/workspace/workspace.js';
-import { terminalTabId } from '../../models/tab-ids/tab-ids.js';
 
 /** @typedef {import('../../models/types/types.js').Session} Session */
 /** @typedef {import('../../models/types/types.js').TerminalBusy} TerminalBusy */
@@ -129,7 +129,7 @@ class TerminalController {
     this.#started = true;
     $projectTabs.listen((projects) => {
       const gone = Object.entries($terminals.get())
-        .filter(([id, t]) => !t.sessionId && !projects[t.projectPath ?? '']?.paths.includes(terminalTabId(id)))
+        .filter(([id, t]) => !t.sessionId && !projects[t.projectPath ?? '']?.paths.includes(tabs.terminalId(id)))
         .map(([id]) => id);
       if (gone.length) this.#close(gone);
     });
@@ -296,7 +296,7 @@ class TerminalController {
     const info = $terminals.get()[id];
     if (!info || info.status === 'exited') return;
     if (info.sessionId) terminalExited(id, exit);
-    else if (exit.code === 0 && exit.signal === null) closeProjectTab(info.projectPath, terminalTabId(id));
+    else if (exit.code === 0 && exit.signal === null) closeProjectTab(info.projectPath, tabs.terminalId(id));
     else terminalExited(id, exit);
   }
 

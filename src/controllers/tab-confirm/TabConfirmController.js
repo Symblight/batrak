@@ -1,7 +1,7 @@
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { html } from 'lit';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import { basename } from '../../models/paths/paths.js';
-import { terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
@@ -63,7 +63,7 @@ export class TabConfirmController {
 
   /** @param {readonly string[]} ids */
   async #confirmTerminate(ids) {
-    const terminals = ids.map(terminalOfTab).filter(/** @returns {t is string} */ (t) => t !== null);
+    const terminals = ids.map(tabs.terminalOf).filter(/** @returns {t is string} */ (t) => t !== null);
     if (!terminals.length) return true;
     const busy = await this.#config.terminalBusy()(terminals);
     if (!busy.length) return true;

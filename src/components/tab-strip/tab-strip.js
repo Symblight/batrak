@@ -1,3 +1,4 @@
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
@@ -21,7 +22,6 @@ import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import '../file-icon/file-icon.js';
 import { basename, shownPath, worktreeOf } from '../../models/paths/paths.js';
-import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
 import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflowController.js';
@@ -308,12 +308,12 @@ export class AcpTabStrip extends LitElement {
       return { title: 'Changes', icon: differenceIcon, file: null, tooltip: 'Changed files and their diffs against HEAD' };
     }
     if (tab.kind === 'session-changes') {
-      const worktree = this.worktrees.find((w) => w.sessionId === sessionOfTab(tab.id));
+      const worktree = this.worktrees.find((w) => w.sessionId === tabs.sessionOf(tab.id));
       const branch = worktree?.branch ?? 'its worktree';
       return { title: worktree?.title ?? 'Changes', icon: differenceIcon, file: null, tooltip: `Changes on ${branch} since the session started` };
     }
     if (tab.kind === 'terminal') {
-      const info = this.terminals[terminalOfTab(tab.id) ?? ''];
+      const info = this.terminals[tabs.terminalOf(tab.id) ?? ''];
       return { title: info?.title ?? info?.label ?? 'Terminal', icon: terminalIcon, file: null, tooltip: info?.login ?? info?.cwd ?? 'Terminal' };
     }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, file: null, tooltip: 'Browser' };
