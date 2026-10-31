@@ -1,5 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import {
+  inTurn,
   isActiveElsewhere,
   loadingProjects,
   orderSessions,
@@ -240,5 +241,18 @@ describe('isActiveElsewhere', () => {
     expect(isActiveElsewhere({ ...SESSION, status: 'idle', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }, now)).to.equal(false);
     expect(isActiveElsewhere({ ...SESSION, status: 'stopped', activeElsewhereUntil: null }, now)).to.equal(false);
     expect(isActiveElsewhere({ ...SESSION, status: 'stopped' }, now)).to.equal(false);
+  });
+});
+
+describe('inTurn', () => {
+  it('is a turn working, queued or waiting for an answer, or a permission asked', () => {
+    expect(inTurn('working')).to.equal(true);
+    expect(inTurn('queued')).to.equal(true);
+    expect(inTurn('waiting')).to.equal(true);
+    expect(inTurn('idle')).to.equal(false);
+    expect(inTurn('stopped')).to.equal(false);
+    expect(inTurn('starting')).to.equal(false);
+    expect(inTurn('idle', true), 'a permission asked').to.equal(true);
+    expect(inTurn(null)).to.equal(false);
   });
 });

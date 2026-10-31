@@ -34,7 +34,7 @@ import {
   startComposer,
 } from '../stores/composer.js';
 import { sessionRootController } from './session-root-controller.js';
-import { RUNNING, isActiveElsewhere } from '../models/sessions.js';
+import { RUNNING, inTurn, isActiveElsewhere } from '../models/sessions.js';
 import { $agentList } from '../stores/agents.js';
 import { forgetContextUsage } from '../stores/context-usage.js';
 import { endSync, startSync, syncOf } from '../stores/session-sync.js';
@@ -78,8 +78,6 @@ const SELECT_SYNC_MS = 30_000;
 const POLL_MS = 20_000;
 /** A CLI starts at this size; its view sends the real one once attached. */
 const CLI_SIZE = { cols: 80, rows: 24 };
-/** A session in these is in a turn (or waits for an answer): its view's change waits for the turn's end. */
-const IN_TURN = new Set(['working', 'queued', 'waiting']);
 
 /**
  * Loads the stored sessions from the backend into `$sessions` / `$activeSessionId` and opens each
@@ -203,7 +201,7 @@ export class SessionController {
     const early =
       session !== undefined &&
       viewOfSession(id) === 'terminal' &&
-      !IN_TURN.has(session.status) &&
+      !inTurn(session.status) &&
       sessionTerminalOf(id) === null &&
       !$cliStarting.get().includes(id);
     if (early) setCliStarting(id, true);
@@ -247,7 +245,7 @@ export class SessionController {
       const session = $sessions.get().find((s) => s.id === id);
       // A draft shows its composer: its first message starts the CLI (`startInTerminal`).
       if (!session) return false;
-      if (!force && (IN_TURN.has(session.status) || $activePermission.get() !== null)) return false;
+      if (!force && inTurn(session.status, $activePermission.get() !== null)) return false;
       await this.#openCli(id);
       return true;
     }

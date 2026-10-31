@@ -9,6 +9,16 @@
 /** Statuses in which a session holds (or is getting) an agent process. */
 export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
 
+/**
+ * Whether a session is in a turn: working, queued, waiting for an answer, or asking a permission.
+ * Switching its view then waits for the turn's end, unless the user agreed to stop it.
+ * @param {SessionStatus | null} status
+ * @param {boolean} [permissionPending]
+ */
+export function inTurn(status, permissionPending = false) {
+  return permissionPending || status === 'working' || status === 'queued' || status === 'waiting';
+}
+
 /** What a session's status icon says, also its tooltip. */
 export const INDICATOR_LABELS = /** @type {const} */ ({
   permission: 'Waiting for your permission',

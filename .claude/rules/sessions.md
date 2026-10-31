@@ -180,4 +180,4 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   pasted, without Enter, once the CLI turns bracketed paste on or settles
   (`Terminals::paste_when_ready`). For a new input or view: add an `InputPart` kind that every
   renderer writes, route through `sessionInput` / `$pendingInput`, never an `if (inTerminal)` in a
-  caller.
+  caller; "in a turn" is `inTurn()` (`models/sessions.js`).

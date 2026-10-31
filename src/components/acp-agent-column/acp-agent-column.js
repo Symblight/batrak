@@ -13,7 +13,7 @@ import { cliInput } from '../../models/cli-input.js';
 import { chatDropOf } from '../../models/file-drop.js';
 import { PLATFORM } from '../../models/platform.js';
 import { shellPaths } from '../../models/shell-paths.js';
-import { isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
+import { inTurn, isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
 import { copyText } from '../../services/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
@@ -357,9 +357,8 @@ export class AcpAgentColumn extends LitElement {
     const dialog = this.renderRoot.querySelector('acp-confirm-dialog');
     const status = this.#activeSession.value?.id === id ? this.#activeSession.value.status : null;
     if (view === 'terminal') {
-      const busy = status === 'working' || status === 'queued' || status === 'waiting' || this.#permission.value !== null;
       const asked = { headline: 'Stop the current turn?', message: 'Stop the current turn and continue in the terminal?', confirmLabel: 'Stop and continue' };
-      if (busy && !(await dialog?.confirm(asked))) return;
+      if (inTurn(status, this.#permission.value !== null) && !(await dialog?.confirm(asked))) return;
       await sessionController.continueInTerminal(id);
       return;
     }
