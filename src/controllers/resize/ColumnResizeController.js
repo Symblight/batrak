@@ -8,7 +8,7 @@ import { StoreController } from '../store/StoreController.js';
  * One resizable column.
  * @typedef {Object} ResizableColumn
  * @property {string} property CSS custom property on `:root` whose value (any length, e.g. a share of
- *   `100vw`, in `tokens.css`) is the default width, e.g. `--session-column-width`.
+ *   `100vw`, in `tokens.css`) is the default width, e.g. `--acp-session-column-width`.
  * @property {number} min px
  * @property {number} max px
  * @property {string} [partner] The column across the handle, when it's resizable too: it gets the

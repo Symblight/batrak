@@ -249,19 +249,19 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   (`md-menu` / `md-menu-item` row height and padding; type sizes stay the library's). It's the one
   place tag selectors are allowed, because it must reach menus inside third-party shadow roots. A
   component sets only what differs (e.g. a menu's `--md-menu-min-width`), never menu density.
-- Colors come from the app tokens in `src/styles/tokens.css` (`--md-surface`, `--md-on-surface-variant`,
-  `--md-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--space-*`. No raw hex.
-- **Scales live in `tokens.css`; no literals for them in components:** type (`--font-size-xs/sm/md/lg`,
-  `--font-weight-medium`), icons (`--icon-size-xs…lg`, set as `font-size` on the icon's class), spacing
-  (`--space-0-5…4`), corners (`--shape-corner-extra-small/small/medium/full`), state layers
-  (`--state-hover/focus/pressed/disabled`), elevation (`--elevation-*`), stacking (`--z-*`), column limits
-  and `md-button` vertical padding (`--button-block-space-compact/regular`). A one-off optical value stays
+- Colors come from the app tokens in `src/styles/tokens.css` (`--acp-color-surface`, `--acp-color-on-surface-variant`,
+  `--acp-color-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--acp-space-*`. No raw hex.
+- **Scales live in `tokens.css`; no literals for them in components:** type (`--acp-font-size-xs/sm/md/lg`,
+  `--acp-font-weight-medium`), icons (`--acp-icon-size-xs…lg`, set as `font-size` on the icon's class), spacing
+  (`--acp-space-0-5…4`), corners (`--acp-shape-corner-extra-small/small/medium/full`), state layers
+  (`--acp-state-hover/focus/pressed/disabled`), elevation (`--acp-elevation-*`), stacking (`--acp-z-*`), column limits
+  and `md-button` vertical padding (`--acp-button-block-space-compact/regular`). A one-off optical value stays
   a literal; add a token once a second place needs it. Prefer logical properties (`margin-inline-start`,
   `inset-block-end`, `text-align: start`).
 - **Dark-only CSS keys on `:root[data-theme='dark']`**, never on `prefers-color-scheme`: Appearance
   (`$settings`, applied by `services/theme/theme.js`) can override the OS.
 - **Derived colors use `color-mix()`** over those tokens (hover/pressed tints, translucent fills,
-  borders: `color-mix(in srgb, var(--md-primary) 12%, transparent)`), not a new token or an `rgba()`
+  borders: `color-mix(in srgb, var(--acp-color-primary) 12%, transparent)`), not a new token or an `rgba()`
   copy of one, so they follow the theme and accent.
 - **Layout that depends on available space uses container queries** (`container-type: inline-size` on
   the host or a wrapper, `@container (width < …)`), not `@media` on the viewport: columns are resized
@@ -293,6 +293,7 @@ full rules — load them when writing or reviewing component CSS or structure.
 - **Native CSS nesting** only via `&`, for one node's own states: `&:hover`, `&::placeholder`,
   `&[active]`, `@container (…) { … }`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
   creates a descendant combinator — don't. The `safari >= 18.2` build target (Tauri's WebKit on current macOS; no older fallbacks) keeps nesting, `@scope` and `scrollbar-color` native.
+- App tokens in `tokens.css` are `--acp-<name>` (`--acp-space-2`, `--acp-color-primary`), so a component's public property must not reuse a token's name.
 - Component custom properties are namespaced `--acp-<component>-*` (public) / `--_acp-<component>-*`
   (internal). Theme third-party elements through their own documented properties
   (`--tvx-tree-view-*`, `--cdx-status-bar-*`, `--md-tab-*`).

@@ -2,7 +2,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  color: var(--md-on-surface);
+  color: var(--acp-color-on-surface);
 }
 
 .acp-session-list__top {
@@ -10,56 +10,56 @@
   display: flex;
   align-items: center;
   height: 40px;
-  padding-inline: var(--space-4) var(--space-1);
+  padding-inline: var(--acp-space-4) var(--acp-space-1);
 }
 
 .acp-session-list__heading {
   flex: 1;
   margin: 0;
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-title);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-font-size-title);
+  font-weight: var(--acp-font-weight-title);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__open-folder-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 .acp-session-list__list {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 var(--space-1) var(--space-2);
+  padding: 0 var(--acp-space-1) var(--acp-space-2);
 }
 
 /* Project group */
 .acp-session-list__project {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--acp-space-1);
   min-width: 0;
   height: 32px;
-  margin-block-start: var(--space-0-5);
-  padding-inline: var(--space-0-5) var(--space-1);
-  border-radius: var(--shape-corner-full);
+  margin-block-start: var(--acp-space-0-5);
+  padding-inline: var(--acp-space-0-5) var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-full);
   cursor: pointer;
   outline: none;
 
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--md-secondary);
+    outline: 2px solid var(--acp-color-secondary);
     outline-offset: -2px;
   }
 }
 
 .acp-session-list__project_menu-open {
-  background: var(--state-focus);
+  background: var(--acp-state-focus);
 
   &:hover {
-    background: var(--state-focus);
+    background: var(--acp-state-focus);
   }
 }
 
@@ -69,8 +69,8 @@
 
 .acp-session-list__chevron {
   flex: none;
-  font-size: var(--icon-size-lg);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-icon-size-lg);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__project-name {
@@ -79,105 +79,105 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--acp-font-size-md);
+  font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
 }
 
 .acp-session-list__project-name_active {
-  color: var(--md-primary);
+  color: var(--acp-color-primary);
 }
 
 .acp-session-list__project-path {
   flex: 1;
   min-width: 0;
-  margin-inline-start: var(--space-1);
+  margin-inline-start: var(--acp-space-1);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-sm);
+  font-size: var(--acp-font-size-sm);
   line-height: 16px;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__count {
   flex: none;
-  padding-inline: var(--space-0-5);
-  font-size: var(--font-size-xs);
-  font-weight: var(--font-weight-medium);
+  padding-inline: var(--acp-space-0-5);
+  font-size: var(--acp-font-size-xs);
+  font-weight: var(--acp-font-weight-medium);
   font-variant-numeric: tabular-nums;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 /* 24px icon button: 18px icon + 2px padding + the library's 1px transparent border. */
 .acp-session-list__add {
   flex: none;
-  --md-icon-button-font-size: var(--icon-size-md);
+  --md-icon-button-font-size: var(--acp-icon-size-md);
 }
 
 .acp-session-list__add::part(button) {
-  padding: var(--space-0-5);
+  padding: var(--acp-space-0-5);
 }
 
 .acp-session-list__add-icon {
-  font-size: var(--icon-size-md);
+  font-size: var(--acp-icon-size-md);
 }
 
 /* Session rows */
 .acp-session-list__sessions {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
-  padding-block: var(--space-0-5) var(--space-1-5);
+  gap: var(--acp-space-0-5);
+  padding-block: var(--acp-space-0-5) var(--acp-space-1-5);
 }
 
 .acp-session-list__row {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
   min-width: 0;
   height: 28px;
   box-sizing: border-box;
   /* Indented under the project's name, past its chevron. */
-  padding-inline: 28px var(--space-1);
-  border-radius: var(--shape-corner-full);
-  color: var(--md-on-surface);
-  font-size: var(--font-size-md);
+  padding-inline: 28px var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-full);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-md);
   line-height: 20px;
   cursor: pointer;
   outline: none;
 
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
 
   &:focus-visible {
-    outline: 2px solid var(--md-secondary);
+    outline: 2px solid var(--acp-color-secondary);
     outline-offset: -2px;
   }
 }
 
 .acp-session-list__row_selected {
-  background: var(--md-secondary-container);
-  color: var(--md-on-secondary-container);
+  background: var(--acp-color-secondary-container);
+  color: var(--acp-color-on-secondary-container);
 
   &:hover {
-    background: var(--md-secondary-container);
+    background: var(--acp-color-secondary-container);
   }
 }
 
 .acp-session-list__pin {
   flex: none;
   /* In the indent, so a pinned title lines up with the others. */
-  margin-inline-start: calc(-1 * (var(--icon-size-sm) + var(--space-1-5)));
-  font-size: var(--icon-size-sm);
-  color: var(--md-on-surface-variant);
+  margin-inline-start: calc(-1 * (var(--acp-icon-size-sm) + var(--acp-space-1-5)));
+  font-size: var(--acp-icon-size-sm);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__agent {
   flex: none;
-  font-size: var(--icon-size-xs);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
 }
 
 /* Fades out at its end instead of an ellipsis, so the status never meets the text. */
@@ -190,27 +190,27 @@
 }
 
 .acp-session-list__title_unread {
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--acp-font-weight-medium);
 }
 
 .acp-session-list__rename {
   flex: 1;
   min-width: 0;
-  margin-inline-start: calc(-1 * var(--space-1));
+  margin-inline-start: calc(-1 * var(--acp-space-1));
   --md-text-field-top-space: 0px;
   --md-text-field-bottom-space: 0px;
-  --md-text-field-inline-start-space: var(--space-1);
-  --md-text-field-inline-end-space: var(--space-1);
-  --md-text-field-font-size: var(--font-size-md);
+  --md-text-field-inline-start-space: var(--acp-space-1);
+  --md-text-field-inline-end-space: var(--acp-space-1);
+  --md-text-field-font-size: var(--acp-font-size-md);
   --md-text-field-line-height: 20px;
   --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--md-on-surface);
-  --md-text-field-background-color: var(--md-surface-container-lowest);
-  --md-text-field-border-color: var(--md-outline);
-  --md-text-field-primary-color: var(--md-primary);
-  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-background-color: var(--acp-color-surface-container-lowest);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
 
-  caret-color: var(--md-primary);
+  caret-color: var(--acp-color-primary);
 }
 
 /* The library's focused outline is 3px; the spec asks for 2px. */
@@ -220,15 +220,15 @@
 
 .acp-session-list__branch {
   flex: none;
-  font-size: var(--icon-size-xs);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__age {
   flex: none;
-  font-size: var(--font-size-xs);
+  font-size: var(--acp-font-size-xs);
   font-variant-numeric: tabular-nums;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__status {
@@ -238,37 +238,37 @@
 /* 22px icon button, inside the row: 16px icon + 2px padding + the library's 1px transparent border. */
 .acp-session-list__more {
   flex: none;
-  --md-icon-button-font-size: var(--icon-size-sm);
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
 }
 
 .acp-session-list__more::part(button) {
-  padding: var(--space-0-5);
+  padding: var(--acp-space-0-5);
 }
 
 .acp-session-list__more-icon {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-session-list__show-more {
   align-self: flex-start;
   margin-inline-start: 22px;
-  --md-button-block-start-space: var(--button-block-space-compact);
-  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
 
 .acp-session-list__loading {
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
-  padding-block: var(--space-0-5) var(--space-1-5);
+  gap: var(--acp-space-0-5);
+  padding-block: var(--acp-space-0-5) var(--acp-space-1-5);
 }
 
 .acp-session-list__skeleton-row {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
   height: 28px;
-  padding-inline: 28px var(--space-3);
+  padding-inline: 28px var(--acp-space-3);
 }
 
 .acp-session-list__skeleton-title {
@@ -282,23 +282,23 @@
 }
 
 .acp-session-list__empty {
-  padding: var(--space-1) var(--space-3) 10px 30px;
-  font-size: var(--font-size-sm);
+  padding: var(--acp-space-1) var(--acp-space-3) 10px 30px;
+  font-size: var(--acp-font-size-sm);
   line-height: 20px;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-list__empty-icon {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
   vertical-align: -3px;
 }
 
 .acp-session-list__error {
-  padding: var(--space-1) var(--space-3) var(--space-1-5) 30px;
-  font-size: var(--font-size-sm);
+  padding: var(--acp-space-1) var(--acp-space-3) var(--acp-space-1-5) 30px;
+  font-size: var(--acp-font-size-sm);
   line-height: 16px;
   overflow-wrap: anywhere;
-  color: var(--md-error);
+  color: var(--acp-color-error);
 }
 
 /* Menu density comes from src/styles/shadow.css. */
@@ -307,5 +307,5 @@
 }
 
 .acp-session-list__menu-icon {
-  font-size: var(--icon-size-md);
+  font-size: var(--acp-icon-size-md);
 }

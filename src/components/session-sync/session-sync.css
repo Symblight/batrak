@@ -4,7 +4,7 @@
 }
 
 .acp-session-sync__icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 .acp-session-sync__icon_running {
@@ -22,8 +22,8 @@
   inset-inline-end: 6px;
   width: 8px;
   height: 8px;
-  border-radius: var(--shape-corner-full);
-  background: var(--md-error);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-error);
   pointer-events: none;
 }
 

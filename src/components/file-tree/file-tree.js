@@ -311,7 +311,7 @@ export class AcpFileTree extends LitElement {
     const id = `acp-file-tree-label:${item.id}`;
     return html`<span
         id=${id}
-        style=${item.ignored ? 'color: var(--md-on-surface-variant); opacity: 0.6' : ''}
+        style=${item.ignored ? 'color: var(--acp-color-on-surface-variant); opacity: 0.6' : ''}
         >${item.label}</span
       >
       <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;

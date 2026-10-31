@@ -63,7 +63,7 @@ describe('acp-image-preview', () => {
 
   it('draws a checkerboard behind the image by default; auto keeps the column background', async () => {
     // The app's tokens, which the checkerboard is drawn with.
-    const tokens = '--md-surface-container: #eee; --md-surface-container-high: #ddd';
+    const tokens = '--acp-color-surface-container: #eee; --acp-color-surface-container-high: #ddd';
     const el = await fixture(html`<acp-image-preview style=${tokens} path="/p/a.png"></acp-image-preview>`);
     expect(el.background).to.equal('grid');
     const canvas = /** @type {HTMLElement} */ (query(el, '.acp-image-preview__canvas'));

@@ -14,9 +14,9 @@
   position: absolute;
   inset: 0;
   pointer-events: none;
-  outline: 2px solid var(--md-primary);
+  outline: 2px solid var(--acp-color-primary);
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--md-primary) 8%, transparent);
+  background: color-mix(in srgb, var(--acp-color-primary) 8%, transparent);
 }
 .acp-chat__chat {
   /* Keeps the banner's and composer's raised layers under the drop highlight. */
@@ -24,18 +24,18 @@
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  padding-block-end: var(--space-3);
+  padding-block-end: var(--acp-space-3);
   /* Compact type: the app's scale instead of MD3's 16/14/12px body. */
-  --chx-chat-body-large-font-size: var(--font-size-lg);
+  --chx-chat-body-large-font-size: var(--acp-font-size-lg);
   --chx-chat-body-large-line-height: 20px;
-  --chx-chat-body-medium-font-size: var(--font-size-md);
+  --chx-chat-body-medium-font-size: var(--acp-font-size-md);
   --chx-chat-body-medium-line-height: 18px;
-  --chx-chat-body-small-font-size: var(--font-size-xs);
+  --chx-chat-body-small-font-size: var(--acp-font-size-xs);
   --chx-chat-body-small-line-height: 16px;
-  --chx-chat-label-large-font-size: var(--font-size-md);
-  --chx-chat-label-medium-font-size: var(--font-size-sm);
-  --chx-chat-label-small-font-size: var(--font-size-xs);
-  --chx-chat-code-font-size: var(--font-size-sm);
+  --chx-chat-label-large-font-size: var(--acp-font-size-md);
+  --chx-chat-label-medium-font-size: var(--acp-font-size-sm);
+  --chx-chat-label-small-font-size: var(--acp-font-size-xs);
+  --chx-chat-code-font-size: var(--acp-font-size-sm);
   --chx-chat-code-line-height: 1.6;
 }
 /* Fades the end of the message list into the column: the banner always sits right below the list
@@ -44,12 +44,12 @@
 .acp-chat__banner {
   max-width: var(--_acp-chat-content-max-width);
   position: relative;
-  z-index: var(--z-raised);
+  z-index: var(--acp-z-raised);
   padding-block-end: 0;
-  box-shadow: 0 0 calc(2 * var(--space-3)) var(--space-3) var(--column-background);
+  box-shadow: 0 0 calc(2 * var(--acp-space-3)) var(--acp-space-3) var(--acp-column-background);
 }
 .acp-chat__attach-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 /* Agent composer: an outlined field on a tray that holds where the session runs. */
 .acp-chat__composer {
@@ -57,21 +57,21 @@
   width: 100%;
   max-width: var(--_acp-chat-content-max-width);
   position: relative;
-  z-index: var(--z-raised);
+  z-index: var(--acp-z-raised);
   /* The pickers in its bar compress by the composer's width, not the window's (`@container acp-composer`). */
   container: acp-composer / inline-size;
-  --chx-message-composer-background: var(--md-surface-container-high);
-  --chx-message-composer-footer-padding: 2px var(--space-1);
+  --chx-message-composer-background: var(--acp-color-surface-container-high);
+  --chx-message-composer-footer-padding: 2px var(--acp-space-1);
   --chx-message-composer-footer-min-height: 28px;
 }
 .acp-chat__composer::part(textbox) {
-  --chx-textbox-background-color: var(--md-surface-container-lowest);
-  --chx-textbox-outline-color: var(--md-outline-variant);
-  --chx-textbox-focus-outline-color: var(--md-primary);
+  --chx-textbox-background-color: var(--acp-color-surface-container-lowest);
+  --chx-textbox-outline-color: var(--acp-color-outline-variant);
+  --chx-textbox-focus-outline-color: var(--acp-color-primary);
 }
 /* No hover tint on the field: keep its own background. */
 .acp-chat__composer::part(textbox-box):hover {
-  background-color: var(--md-surface-container-lowest);
+  background-color: var(--acp-color-surface-container-lowest);
 }
 /* A grid item keeps its min-content width; let the leading actions shrink so the model name can ellipsize. */
 .acp-chat__composer::part(textbox-leading) {
@@ -108,17 +108,17 @@
   position: absolute;
   inset-block-start: 0;
   inset-inline: 0;
-  z-index: var(--z-raised);
-  height: calc(2 * var(--space-3));
-  background: linear-gradient(to bottom, var(--column-background), transparent);
+  z-index: var(--acp-z-raised);
+  height: calc(2 * var(--acp-space-3));
+  background: linear-gradient(to bottom, var(--acp-column-background), transparent);
   pointer-events: none;
 }
 .acp-chat__message-list::part(viewport) {
-  padding-block-start: calc(2 * var(--space-3));
+  padding-block-start: calc(2 * var(--acp-space-3));
 }
 .acp-chat__message-list::part(item) {
   box-sizing: border-box;
-  padding-inline: var(--space-4);
+  padding-inline: var(--acp-space-4);
 }
 /* The reply's thinking, in the list's footer (a block, not the rows' flex column), sized and
    centered like a row: `translate` instead of an auto margin. */
@@ -129,7 +129,7 @@
   translate: -50% 0;
   width: 100%;
   max-width: var(--_acp-chat-messages-max-width);
-  padding-inline: var(--space-4);
+  padding-inline: var(--acp-space-4);
 }
 /* The scrollbar's width on the other side too: the rows then center on the composer's axis, and
    nothing shifts when the scrollbar comes and goes. */
@@ -141,7 +141,7 @@
 @supports (scrollbar-color: auto) {
   .acp-chat__message-list::part(scroller) {
     scrollbar-width: thin;
-    scrollbar-color: var(--md-outline-variant) transparent;
+    scrollbar-color: var(--acp-color-outline-variant) transparent;
   }
 }
 @supports not (scrollbar-color: auto) {
@@ -152,7 +152,7 @@
     background: transparent;
   }
   .acp-chat__message-list::part(scroller)::-webkit-scrollbar-thumb {
-    background: var(--md-outline-variant);
+    background: var(--acp-color-outline-variant);
     border-radius: 3px;
   }
 }

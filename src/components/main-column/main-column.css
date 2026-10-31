@@ -3,8 +3,8 @@
   display: flex;
   height: 100%;
   min-width: 0;
-  background: var(--column-background);
-  border-radius: var(--shape-corner-medium);
+  background: var(--acp-column-background);
+  border-radius: var(--acp-shape-corner-medium);
   overflow: hidden;
 }
 .acp-main-column__tabs {
@@ -13,13 +13,13 @@
 }
 .acp-main-column__comment-bar {
   position: absolute;
-  z-index: var(--z-raised);
+  z-index: var(--acp-z-raised);
   /* Above a file tab's footer */
   inset-block-end: 44px;
-  inset-inline-end: var(--space-4);
+  inset-inline-end: var(--acp-space-4);
 }
 .acp-main-column__comment-bar_changes {
-  inset-block-end: var(--space-4);
+  inset-block-end: var(--acp-space-4);
   inset-inline: 0;
   margin-inline: auto;
   width: fit-content;

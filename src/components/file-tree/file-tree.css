@@ -3,15 +3,15 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--column-background);
+  background: var(--acp-column-background);
 }
 .acp-file-tree__tree {
   flex: 1;
   min-height: 0;
-  --tvx-tree-view-color-on-surface: var(--md-on-surface);
-  --tvx-tree-view-color-on-surface-variant: var(--md-on-surface-variant);
-  --tvx-tree-view-color-outline-variant: var(--md-outline-variant);
-  --tvx-tree-view-color-primary: var(--md-primary);
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
 
   &[hidden] {
     display: none;

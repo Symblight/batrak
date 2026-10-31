@@ -2,8 +2,8 @@
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--app-background);
-  color: var(--md-on-surface);
+  background: var(--acp-app-background);
+  color: var(--acp-color-on-surface);
 }
 .acp-app__toolbar {
   flex: 0 0 auto;
@@ -11,34 +11,34 @@
 .acp-app__columns {
   display: flex;
   flex: 1;
-  gap: var(--column-gap);
+  gap: var(--acp-column-gap);
   min-height: 0;
-  padding: 0 var(--column-gap) var(--column-gap);
+  padding: 0 var(--acp-column-gap) var(--acp-column-gap);
 }
 .acp-app__session {
   /* Session and file columns shrink, down to their resize minimums, to fit the main column's
      minimum only once the agent column (its far larger shrink factor) is at its own; a drag
      starts from the rendered width. */
-  flex: 0 1 var(--session-column-width);
-  width: var(--session-column-width);
-  min-width: var(--session-column-min-width);
-  max-width: var(--column-max-width);
-  animation: acp-app-session-in var(--column-toggle-duration) var(--motion-easing-standard);
+  flex: 0 1 var(--acp-session-column-width);
+  width: var(--acp-session-column-width);
+  min-width: var(--acp-session-column-min-width);
+  max-width: var(--acp-column-max-width);
+  animation: acp-app-session-in var(--acp-column-toggle-duration) var(--acp-motion-easing-standard);
 
   &[hidden] {
     display: none;
     flex-basis: 0;
     width: 0;
     min-width: 0;
-    margin-inline-end: calc(-1 * var(--column-gap));
+    margin-inline-end: calc(-1 * var(--acp-column-gap));
     opacity: 0;
     transition-property: display, flex-basis, width, min-width, margin-inline-end, opacity;
   }
 }
 .acp-app__agent {
-  flex: 0 1000 var(--agent-column-width);
-  width: var(--agent-column-width);
-  min-width: var(--agent-column-min-width);
+  flex: 0 1000 var(--acp-agent-column-width);
+  width: var(--acp-agent-column-width);
+  min-width: var(--acp-agent-column-min-width);
 }
 .acp-app__agent_fill {
   flex: 1;
@@ -48,30 +48,30 @@
   /* Pull in by the gaps on both sides, so the handle fills the one gap between its columns. */
   --acp-resize-handle-line-color: transparent;
 
-  z-index: var(--z-raised);
-  margin-inline: calc((var(--column-gap) + var(--acp-resize-handle-hit-width)) / -2);
+  z-index: var(--acp-z-raised);
+  margin-inline: calc((var(--acp-column-gap) + var(--acp-resize-handle-hit-width)) / -2);
 }
 .acp-app__main {
   flex: 1;
-  min-width: var(--main-column-min-width);
+  min-width: var(--acp-main-column-min-width);
 
   &[hidden] {
     display: none;
   }
 }
 .acp-app__files {
-  flex: 0 1 var(--file-tree-width);
-  width: var(--file-tree-width);
-  min-width: var(--file-tree-min-width);
-  max-width: var(--column-max-width);
-  animation: acp-app-files-in var(--column-toggle-duration) var(--motion-easing-standard);
+  flex: 0 1 var(--acp-file-tree-width);
+  width: var(--acp-file-tree-width);
+  min-width: var(--acp-file-tree-min-width);
+  max-width: var(--acp-column-max-width);
+  animation: acp-app-files-in var(--acp-column-toggle-duration) var(--acp-motion-easing-standard);
 
   &[hidden] {
     display: none;
     flex-basis: 0;
     width: 0;
     min-width: 0;
-    margin-inline-start: calc(-1 * var(--column-gap));
+    margin-inline-start: calc(-1 * var(--acp-column-gap));
     opacity: 0;
     transition-property: display, flex-basis, width, min-width, margin-inline-start, opacity;
   }
@@ -83,8 +83,8 @@
 .acp-app__session,
 .acp-app__files {
   &[hidden] {
-    transition-duration: var(--column-toggle-duration);
-    transition-timing-function: var(--motion-easing-standard);
+    transition-duration: var(--acp-column-toggle-duration);
+    transition-timing-function: var(--acp-motion-easing-standard);
     transition-behavior: allow-discrete;
   }
 
@@ -101,7 +101,7 @@
     flex-basis: 0;
     width: 0;
     min-width: 0;
-    margin-inline-end: calc(-1 * var(--column-gap));
+    margin-inline-end: calc(-1 * var(--acp-column-gap));
     opacity: 0;
   }
 }
@@ -110,7 +110,7 @@
     flex-basis: 0;
     width: 0;
     min-width: 0;
-    margin-inline-start: calc(-1 * var(--column-gap));
+    margin-inline-start: calc(-1 * var(--acp-column-gap));
     opacity: 0;
   }
 }
@@ -119,8 +119,8 @@
 }
 .acp-app__snackbars {
   position: fixed;
-  z-index: var(--z-overlay);
-  inset-block-end: var(--space-4);
-  inset-inline-end: calc(var(--nav-rail-width) + var(--space-4));
-  width: min(440px, calc(100vw - var(--nav-rail-width) - 2 * var(--space-4)));
+  z-index: var(--acp-z-overlay);
+  inset-block-end: var(--acp-space-4);
+  inset-inline-end: calc(var(--acp-nav-rail-width) + var(--acp-space-4));
+  width: min(440px, calc(100vw - var(--acp-nav-rail-width) - 2 * var(--acp-space-4)));
 }

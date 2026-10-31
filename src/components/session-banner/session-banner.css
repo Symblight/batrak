@@ -7,7 +7,7 @@
    to a few characters: the actions are grouped and move below the label once it would get less than
    its basis. */
 .acp-session-banner__banner {
-  margin-block-end: var(--space-2);
+  margin-block-end: var(--acp-space-2);
   &[hidden] {
     display: none;
   }
@@ -22,7 +22,7 @@
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--space-1) var(--space-2);
+    gap: var(--acp-space-1) var(--acp-space-2);
     margin-inline-start: auto;
   }
   @container acp-session-banner (width < 360px) {
@@ -37,8 +37,8 @@
 }
 
 .acp-session-banner__action {
-  --md-button-font-size: var(--font-size-sm);
+  --md-button-font-size: var(--acp-font-size-sm);
   --md-button-line-height: 16px;
-  --md-button-block-start-space: var(--button-block-space-compact);
-  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
 }

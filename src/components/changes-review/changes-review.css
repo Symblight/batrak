@@ -3,8 +3,8 @@
   flex-direction: column;
   box-sizing: border-box;
   min-height: 0;
-  background: var(--column-background);
-  color: var(--md-on-surface);
+  background: var(--acp-column-background);
+  color: var(--acp-color-on-surface);
 }
 
 /* Toolbar: collapse all, all-files checkbox, summary, totals; view, navigation, revert, review */
@@ -13,33 +13,33 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
   min-height: 48px;
   box-sizing: border-box;
-  padding: 10px var(--space-3) var(--space-1-5) var(--space-2);
+  padding: 10px var(--acp-space-3) var(--acp-space-1-5) var(--acp-space-2);
 }
 .acp-changes-review__tool {
-  --md-icon-button-font-size: var(--icon-size-lg);
-  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__tool::part(button) {
   padding: 5px;
 }
 .acp-changes-review__tool-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 .acp-changes-review__session-action {
   flex: none;
-  --md-button-font-size: var(--font-size-md);
-  --md-button-block-start-space: var(--button-block-space-compact);
-  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
 .acp-changes-review__all {
   flex: none;
 }
 .acp-changes-review__summary {
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--acp-font-size-md);
+  font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
@@ -49,39 +49,39 @@
 .acp-changes-review__tools {
   display: flex;
   align-items: center;
-  gap: var(--space-0-5);
+  gap: var(--acp-space-0-5);
 }
 .acp-changes-review__view-mode {
-  --md-button-font-size: var(--font-size-md);
-  --md-button-foreground-color: var(--md-on-surface-variant);
-  --md-button-block-start-space: var(--button-block-space-regular);
-  --md-button-block-end-space: var(--button-block-space-regular);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-foreground-color: var(--acp-color-on-surface-variant);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
 }
 /* Split button: two tonal halves, full outer corners, 4px inner ones, 2px apart. */
 .acp-changes-review__review {
   display: inline-flex;
-  gap: var(--space-0-5);
-  margin-inline-start: var(--space-2);
+  gap: var(--acp-space-0-5);
+  margin-inline-start: var(--acp-space-2);
 }
 .acp-changes-review__review-main {
-  --md-button-font-size: var(--font-size-md);
-  --md-button-block-start-space: var(--button-block-space-regular);
-  --md-button-block-end-space: var(--button-block-space-regular);
-  --md-button-border-start-end-radius: var(--shape-corner-extra-small);
-  --md-button-border-end-end-radius: var(--shape-corner-extra-small);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+  --md-button-border-start-end-radius: var(--acp-shape-corner-extra-small);
+  --md-button-border-end-end-radius: var(--acp-shape-corner-extra-small);
 }
 .acp-changes-review__review-menu {
-  --md-icon-button-font-size: var(--icon-size-md);
-  --md-icon-button-background-color: var(--md-secondary-container);
-  --md-icon-button-foreground-color: var(--md-on-secondary-container);
-  --md-icon-button-border-start-start-radius: var(--shape-corner-extra-small);
-  --md-icon-button-border-end-start-radius: var(--shape-corner-extra-small);
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+  --md-icon-button-background-color: var(--acp-color-secondary-container);
+  --md-icon-button-foreground-color: var(--acp-color-on-secondary-container);
+  --md-icon-button-border-start-start-radius: var(--acp-shape-corner-extra-small);
+  --md-icon-button-border-end-start-radius: var(--acp-shape-corner-extra-small);
 }
 .acp-changes-review__review-menu::part(button) {
-  padding: var(--space-1-5);
+  padding: var(--acp-space-1-5);
 }
 .acp-changes-review__review-icon {
-  font-size: var(--icon-size-md);
+  font-size: var(--acp-icon-size-md);
 }
 
 /* Files */
@@ -90,30 +90,30 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-0-5);
+  gap: var(--acp-space-0-5);
   overflow: auto;
   /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
-  padding: 0 var(--space-2) 72px;
+  padding: 0 var(--acp-space-2) 72px;
 }
 .acp-changes-review__row {
   flex: none;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   min-width: 0;
   height: 40px;
   box-sizing: border-box;
-  padding: 0 var(--space-1) 0 var(--space-2);
-  border-radius: var(--shape-corner-full);
+  padding: 0 var(--acp-space-1) 0 var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-full);
   cursor: pointer;
   outline: none;
   scroll-margin-top: 6px;
 
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
   &:focus-visible {
-    outline: 2px solid var(--md-primary);
+    outline: 2px solid var(--acp-color-primary);
     outline-offset: -2px;
   }
 }
@@ -128,8 +128,8 @@
 }
 .acp-changes-review__chevron {
   flex: none;
-  font-size: var(--icon-size-lg);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-icon-size-lg);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__pick {
   flex: none;
@@ -141,86 +141,86 @@
   box-sizing: border-box;
   padding: 0 3px;
   border-radius: 3px;
-  background: var(--md-surface-container-highest);
-  font: 500 9px/16px var(--font-family-mono);
+  background: var(--acp-color-surface-container-highest);
+  font: 500 9px/16px var(--acp-font-family-mono);
   letter-spacing: 0.2px;
   text-align: center;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__name {
   flex: none;
-  font-size: var(--font-size-md);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--acp-font-size-md);
+  font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
   white-space: nowrap;
-  color: var(--md-on-surface);
+  color: var(--acp-color-on-surface);
 }
 .acp-changes-review__name_deleted {
   text-decoration: line-through;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__dir,
 .acp-changes-review__renamed {
   flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
-  font-size: var(--font-size-sm);
+  font-size: var(--acp-font-size-sm);
   line-height: 16px;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .acp-changes-review__dir {
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__renamed {
   text-decoration: line-through;
-  color: color-mix(in srgb, var(--md-on-surface-variant) 70%, transparent);
+  color: color-mix(in srgb, var(--acp-color-on-surface-variant) 70%, transparent);
 }
 .acp-changes-review__counts {
   flex: none;
   display: inline-flex;
-  gap: var(--space-1-5);
-  font: 500 11.5px/16px var(--font-family-mono);
+  gap: var(--acp-space-1-5);
+  font: 500 11.5px/16px var(--acp-font-family-mono);
   font-variant-numeric: tabular-nums;
 }
 .acp-changes-review__added {
-  color: var(--diff-add-fg);
+  color: var(--acp-diff-add-fg);
 }
 .acp-changes-review__removed {
-  color: var(--diff-del-fg);
+  color: var(--acp-diff-del-fg);
 }
 .acp-changes-review__actions {
   flex: none;
   display: flex;
 }
 .acp-changes-review__action {
-  --md-icon-button-font-size: var(--icon-size-lg);
-  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__action::part(button) {
   padding: 5px;
 }
 .acp-changes-review__action-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 /* Expanded file: header row and diff in an outlined card, on the column's surface */
 .acp-changes-review__card {
   flex: none;
-  margin-block: var(--space-1);
-  border: 1px solid var(--md-outline-variant);
+  margin-block: var(--acp-space-1);
+  border: 1px solid var(--acp-color-outline-variant);
   border-radius: 12px;
-  background: var(--column-background);
+  background: var(--acp-column-background);
 }
 .acp-changes-review__diff {
-  border-top: 1px solid var(--md-outline-variant);
+  border-top: 1px solid var(--acp-color-outline-variant);
   border-radius: 0 0 11px 11px;
   overflow: hidden;
 }
 .acp-changes-review__editor {
   --cdx-content-border-radius: 0;
   --cdx-content-min-height: 0;
-  --cdx-content-background-color: var(--column-background);
+  --cdx-content-background-color: var(--acp-column-background);
   /* Room for the diff sign (+ / −), drawn 2px into this padding, plus a gap before the code */
   --cdx-line-padding-inline: 0.875rem;
 }
@@ -233,9 +233,9 @@
   align-items: center;
   justify-content: center;
   min-height: 64px;
-  padding: var(--space-3);
-  font-size: var(--font-size-sm);
-  color: var(--md-on-surface-variant);
+  padding: var(--acp-space-3);
+  font-size: var(--acp-font-size-sm);
+  color: var(--acp-color-on-surface-variant);
 }
 
 /* Loading, empty, not a repository, error */
@@ -245,24 +245,24 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-1);
+  gap: var(--acp-space-1);
   padding: 24px;
-  font-size: var(--font-size-sm);
+  font-size: var(--acp-font-size-sm);
   line-height: 16px;
   text-align: center;
   overflow-wrap: anywhere;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-changes-review__state-icon {
-  margin-bottom: var(--space-1);
+  margin-bottom: var(--acp-space-1);
   font-size: 28px;
-  color: var(--vcs-add);
+  color: var(--acp-vcs-add);
 }
 .acp-changes-review__state-title {
-  font-size: var(--font-size-lg);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--acp-font-size-lg);
+  font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
-  color: var(--md-on-surface);
+  color: var(--acp-color-on-surface);
 }
 .acp-changes-review__spinner {
   font-size: 32px;

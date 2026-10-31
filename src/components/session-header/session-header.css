@@ -1,11 +1,11 @@
 :host {
   display: flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--acp-space-1);
   box-sizing: border-box;
   height: 48px;
-  padding-inline: var(--space-3) var(--space-2);
-  background: var(--column-background);
+  padding-inline: var(--acp-space-3) var(--acp-space-2);
+  background: var(--acp-column-background);
 }
 
 .acp-session-header__status {
@@ -14,12 +14,12 @@
 
 .acp-session-header__title-button {
   min-width: 0;
-  --md-button-font-size: var(--font-size-title);
-  --md-button-block-start-space: var(--button-block-space-regular);
-  --md-button-block-end-space: var(--button-block-space-regular);
-  --md-button-inline-start-space: var(--space-2);
-  --md-button-inline-end-space: var(--space-1-5);
-  --md-button-foreground-color: var(--md-on-surface);
+  --md-button-font-size: var(--acp-font-size-title);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+  --md-button-inline-start-space: var(--acp-space-2);
+  --md-button-inline-end-space: var(--acp-space-1-5);
+  --md-button-foreground-color: var(--acp-color-on-surface);
 }
 
 /* md-button sizes to its content; let its box and label shrink with the host. */
@@ -29,13 +29,13 @@
 }
 
 .acp-session-header__title-button_open::part(button) {
-  background: var(--state-hover);
+  background: var(--acp-state-hover);
 }
 
 .acp-session-header__label {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--acp-space-1);
   min-width: 0;
 }
 
@@ -44,18 +44,18 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: var(--font-size-title);
-  font-weight: var(--font-weight-medium);
+  font-size: var(--acp-font-size-title);
+  font-weight: var(--acp-font-weight-medium);
 }
 
 /* The first prompt's words, until the agent names the session. */
 .acp-session-header__title_provisional {
   font-style: italic;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-session-header__title_fade-in {
-  animation: acp-session-header-fade-in 200ms var(--motion-easing-standard);
+  animation: acp-session-header-fade-in 200ms var(--acp-motion-easing-standard);
 
   @media (prefers-reduced-motion: reduce) {
     animation: none;
@@ -70,14 +70,14 @@
 
 /* Not in a button: lines up with where the button's label starts. */
 .acp-session-header__title_draft {
-  padding-inline-start: var(--space-2);
+  padding-inline-start: var(--acp-space-2);
 }
 
 .acp-session-header__chevron {
   flex: none;
-  font-size: var(--icon-size-lg);
-  color: var(--md-on-surface-variant);
-  transition: transform 200ms var(--motion-easing-standard);
+  font-size: var(--acp-icon-size-lg);
+  color: var(--acp-color-on-surface-variant);
+  transition: transform 200ms var(--acp-motion-easing-standard);
 
   @media (prefers-reduced-motion: reduce) {
     transition: none;
@@ -91,20 +91,20 @@
 .acp-session-header__rename {
   flex: 1;
   min-width: 0;
-  --md-text-field-top-space: var(--space-1-5);
-  --md-text-field-bottom-space: var(--space-1-5);
-  --md-text-field-inline-start-space: var(--space-3);
-  --md-text-field-inline-end-space: var(--space-3);
-  --md-text-field-font-size: var(--font-size-title);
+  --md-text-field-top-space: var(--acp-space-1-5);
+  --md-text-field-bottom-space: var(--acp-space-1-5);
+  --md-text-field-inline-start-space: var(--acp-space-3);
+  --md-text-field-inline-end-space: var(--acp-space-3);
+  --md-text-field-font-size: var(--acp-font-size-title);
   --md-text-field-line-height: 20px;
   --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--md-on-surface);
-  --md-text-field-background-color: var(--md-surface-container-lowest);
-  --md-text-field-border-color: var(--md-outline);
-  --md-text-field-primary-color: var(--md-primary);
-  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-background-color: var(--acp-color-surface-container-lowest);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
 
-  caret-color: var(--md-primary);
+  caret-color: var(--acp-color-primary);
 }
 
 /* The library's focused outline is 3px; the spec asks for 2px. */
@@ -114,15 +114,15 @@
 
 .acp-session-header__hint {
   flex: none;
-  margin-inline: var(--space-2) var(--space-1);
-  color: var(--md-on-surface-variant);
-  font-size: var(--font-size-xs);
+  margin-inline: var(--acp-space-2) var(--acp-space-1);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-xs);
   white-space: nowrap;
 }
 
 .acp-session-header__spacer {
   flex: 1;
-  min-width: var(--space-2);
+  min-width: var(--acp-space-2);
 }
 
 .acp-session-header__new,
@@ -132,5 +132,5 @@
 
 .acp-session-header__new-icon,
 .acp-session-header__view-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }

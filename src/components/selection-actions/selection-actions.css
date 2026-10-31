@@ -12,7 +12,7 @@
   background: transparent;
   overflow: visible;
   color: inherit;
-  font-family: var(--font-family);
+  font-family: var(--acp-font-family);
   animation: acp-selection-actions-enter 120ms ease-out;
 }
 
@@ -20,17 +20,17 @@
    8dp inner ones. */
 .acp-selection-actions__group {
   display: flex;
-  gap: var(--space-0-5);
+  gap: var(--acp-space-0-5);
 }
 
 .acp-selection-actions__action {
-  --md-button-font-size: var(--font-size-md);
-  --md-button-block-start-space: var(--button-block-space-regular);
-  --md-button-block-end-space: var(--button-block-space-regular);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
   --md-button-inline-start-space: 12px;
   --md-button-inline-end-space: 12px;
-  --md-button-foreground-color: var(--md-on-surface);
-  --md-button-border-radius: var(--shape-corner-full);
+  --md-button-foreground-color: var(--acp-color-on-surface);
+  --md-button-border-radius: var(--acp-shape-corner-full);
   --_acp-selection-actions-inner-corner: 8px;
 }
 .acp-selection-actions__action_leading {
@@ -42,7 +42,7 @@
   --md-button-border-end-start-radius: var(--_acp-selection-actions-inner-corner);
 }
 .acp-selection-actions__icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 @keyframes acp-selection-actions-enter {

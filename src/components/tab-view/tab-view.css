@@ -3,7 +3,7 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--column-background);
+  background: var(--acp-column-background);
 }
 :host([hidden]) {
   display: none;
@@ -30,11 +30,11 @@
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  padding: var(--space-2);
+  padding: var(--acp-space-2);
 }
 .acp-tab-view__error {
   margin: 0;
-  padding: var(--space-4);
-  color: var(--md-on-surface-variant);
+  padding: var(--acp-space-4);
+  color: var(--acp-color-on-surface-variant);
   white-space: pre-wrap;
 }

@@ -3,28 +3,28 @@
   position: relative;
   display: flex;
   align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-1);
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--shape-corner-full);
-  background: var(--md-surface-container-high);
-  color: var(--md-on-surface);
-  font-family: var(--font-family);
-  font-size: var(--font-size-md);
+  gap: var(--acp-space-1);
+  padding: var(--acp-space-1);
+  border: 1px solid var(--acp-color-outline-variant);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-surface-container-high);
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+  font-size: var(--acp-font-size-md);
 }
 :host([hidden]) {
   display: none;
 }
 
 .acp-comment-bar__nav {
-  --md-icon-button-font-size: var(--icon-size-lg);
-  --md-icon-button-foreground-color: var(--md-on-surface-variant);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
 .acp-comment-bar__nav::part(button) {
   padding: 5px;
 }
 .acp-comment-bar__nav-icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 .acp-comment-bar__position {
@@ -36,9 +36,9 @@
 
 /* Sized like the Changes panel's Commit button; colours are the theme's filled button. */
 .acp-comment-bar__send {
-  --md-button-font-size: var(--font-size-md);
-  --md-button-block-start-space: var(--button-block-space-regular);
-  --md-button-block-end-space: var(--button-block-space-regular);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
   --md-button-inline-start-space: 16px;
   --md-button-inline-end-space: 16px;
 }

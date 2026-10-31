@@ -3,13 +3,13 @@
   width: min(600px, calc(100vw - 32px));
   margin: 10vh auto auto;
   padding: 0;
-  border: 1px solid var(--md-outline-variant);
-  border-radius: var(--shape-corner-small);
-  background: var(--md-surface-container-high);
-  color: var(--md-on-surface);
-  font-family: var(--font-family);
-  font-size: var(--font-size-md);
-  box-shadow: var(--elevation-3);
+  border: 1px solid var(--acp-color-outline-variant);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-surface-container-high);
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+  font-size: var(--acp-font-size-md);
+  box-shadow: var(--acp-elevation-3);
 
   &::backdrop {
     background: transparent;
@@ -18,49 +18,49 @@
 .acp-quick-open__input {
   box-sizing: border-box;
   width: 100%;
-  padding: var(--space-3);
+  padding: var(--acp-space-3);
   border: none;
-  border-bottom: 1px solid var(--md-outline-variant);
+  border-bottom: 1px solid var(--acp-color-outline-variant);
   outline: none;
   background: transparent;
   color: inherit;
   font: inherit;
-  font-size: var(--font-size-lg);
+  font-size: var(--acp-font-size-lg);
 
   &::placeholder {
-    color: var(--md-on-surface-variant);
+    color: var(--acp-color-on-surface-variant);
   }
 }
 .acp-quick-open__list {
   max-height: 50vh;
   overflow: auto;
   margin: 0;
-  padding: var(--space-1);
+  padding: var(--acp-space-1);
   list-style: none;
 }
 .acp-quick-open__item {
   display: flex;
   align-items: baseline;
-  gap: var(--space-2);
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--shape-corner-extra-small);
+  gap: var(--acp-space-2);
+  padding: var(--acp-space-1) var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-extra-small);
   white-space: nowrap;
   cursor: pointer;
 }
 .acp-quick-open__item_selected {
-  background: color-mix(in srgb, var(--md-primary) 16%, transparent);
+  background: color-mix(in srgb, var(--acp-color-primary) 16%, transparent);
 }
 .acp-quick-open__detail {
   overflow: hidden;
   text-overflow: ellipsis;
-  color: var(--md-on-surface-variant);
-  font-size: var(--font-size-sm);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
 }
 .acp-quick-open__hit {
-  color: var(--md-primary);
+  color: var(--acp-color-primary);
   font-weight: 700;
 }
 .acp-quick-open__message {
-  padding: var(--space-2) var(--space-3);
-  color: var(--md-on-surface-variant);
+  padding: var(--acp-space-2) var(--acp-space-3);
+  color: var(--acp-color-on-surface-variant);
 }

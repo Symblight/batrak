@@ -1,7 +1,7 @@
 :host {
   display: block;
   min-width: 0;
-  color: var(--md-on-surface);
+  color: var(--acp-color-on-surface);
   font-size: inherit;
   line-height: 1.55;
   overflow-wrap: anywhere;
@@ -10,7 +10,7 @@
 .acp-markdown__body {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
 }
 
 .acp-markdown__paragraph {
@@ -18,7 +18,7 @@
 }
 
 .acp-markdown__heading {
-  margin: var(--space-2) 0 0;
+  margin: var(--acp-space-2) 0 0;
   font-size: 1em;
   font-weight: 600;
   line-height: 1.35;
@@ -35,15 +35,15 @@
   padding-inline-start: 1.4em;
 }
 .acp-markdown__item {
-  margin-block: var(--space-0-5);
-  padding-inline-start: var(--space-0-5);
+  margin-block: var(--acp-space-0-5);
+  padding-inline-start: var(--acp-space-0-5);
 }
 
 .acp-markdown__code {
   padding: 1px 5px;
   border-radius: 6px;
-  background: var(--md-surface-container-high);
-  font-family: var(--font-family-mono);
+  background: var(--acp-color-surface-container-high);
+  font-family: var(--acp-font-family-mono);
   font-size: 0.88em;
 }
 
@@ -52,7 +52,7 @@
 }
 
 .acp-markdown__link {
-  color: var(--md-primary);
+  color: var(--acp-color-primary);
   text-decoration: underline;
   text-underline-offset: 2px;
   cursor: pointer;
@@ -60,16 +60,16 @@
 
 .acp-markdown__quote {
   margin: 0;
-  padding-inline-start: var(--space-3);
-  border-inline-start: 3px solid var(--md-outline-variant);
-  color: var(--md-on-surface-variant);
+  padding-inline-start: var(--acp-space-3);
+  border-inline-start: 3px solid var(--acp-color-outline-variant);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-markdown__rule {
   width: 100%;
-  margin: var(--space-1) 0;
+  margin: var(--acp-space-1) 0;
   border: none;
-  border-top: 1px solid var(--md-outline-variant);
+  border-top: 1px solid var(--acp-color-outline-variant);
 }
 
 .acp-markdown__table {
@@ -80,18 +80,18 @@
   font-size: 0.94em;
 }
 .acp-markdown__cell {
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid var(--md-outline-variant);
+  padding: var(--acp-space-1) var(--acp-space-2);
+  border: 1px solid var(--acp-color-outline-variant);
   text-align: start;
   vertical-align: top;
 }
 .acp-markdown__cell_head {
-  background: var(--md-surface-container);
+  background: var(--acp-color-surface-container);
   font-weight: 600;
 }
 
 .acp-markdown__checkbox {
-  margin-inline-end: var(--space-1);
+  margin-inline-end: var(--acp-space-1);
 }
 
 /* A caret after the text while it streams. */

@@ -95,7 +95,7 @@ export class AcpTerminal extends LitElement {
   #theme() {
     const style = getComputedStyle(this);
     const token = (/** @type {string} */ name) => style.getPropertyValue(name).trim();
-    const tokens = { background: token('--md-surface'), foreground: token('--md-on-surface'), primary: token('--md-primary') };
+    const tokens = { background: token('--acp-color-surface'), foreground: token('--acp-color-on-surface'), primary: token('--acp-color-primary') };
     return terminalTheme(tokens, document.documentElement.dataset.theme === 'dark');
   }
 

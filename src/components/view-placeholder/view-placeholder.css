@@ -3,10 +3,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   box-sizing: border-box;
-  padding: var(--space-4);
-  color: var(--md-on-surface-variant);
+  padding: var(--acp-space-4);
+  color: var(--acp-color-on-surface-variant);
   text-align: center;
 }
 .acp-view-placeholder__icon {
@@ -15,14 +15,14 @@
 .acp-view-placeholder__heading {
   margin: 0;
   font-size: 16px;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--acp-font-weight-medium);
   line-height: 24px;
-  color: var(--md-on-surface);
+  color: var(--acp-color-on-surface);
 }
 .acp-view-placeholder__text {
   margin: 0;
   max-width: 360px;
-  font-size: var(--font-size-md);
+  font-size: var(--acp-font-size-md);
   line-height: 20px;
   overflow-wrap: anywhere;
 }

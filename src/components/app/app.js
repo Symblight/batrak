@@ -66,9 +66,9 @@ export class AcpApp extends LitElement {
   #resize = new ColumnResizeController(this, {
     store: $columnWidths,
     columns: {
-      session: { property: '--session-column-width', min: 180, max: 524, partner: 'agent' },
-      agent: { property: '--agent-column-width', min: 280, max: 1600 },
-      side: { property: '--file-tree-width', min: 200, max: 524 },
+      session: { property: '--acp-session-column-width', min: 180, max: 524, partner: 'agent' },
+      agent: { property: '--acp-agent-column-width', min: 280, max: 1600 },
+      side: { property: '--acp-file-tree-width', min: 200, max: 524 },
     },
   });
   #activePath = new StoreController(this, { store: $activePath });

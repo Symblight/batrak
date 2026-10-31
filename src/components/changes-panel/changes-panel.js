@@ -35,13 +35,13 @@ import styles from './changes-panel.css?inline';
 
 /** @type {Record<GitFileKind, { letter: string, label: string, color: string }>} */
 const STATUS = {
-  modified: { letter: 'M', label: 'Modified', color: 'var(--md-primary)' },
-  typeChanged: { letter: 'M', label: 'Type changed', color: 'var(--md-primary)' },
-  renamed: { letter: 'R', label: 'Renamed', color: 'var(--md-primary)' },
-  added: { letter: 'A', label: 'Added', color: 'var(--vcs-add)' },
-  untracked: { letter: 'U', label: 'Untracked', color: 'var(--vcs-add)' },
-  deleted: { letter: 'D', label: 'Deleted', color: 'var(--md-error)' },
-  conflicted: { letter: '!', label: 'Conflicted', color: 'var(--md-error)' },
+  modified: { letter: 'M', label: 'Modified', color: 'var(--acp-color-primary)' },
+  typeChanged: { letter: 'M', label: 'Type changed', color: 'var(--acp-color-primary)' },
+  renamed: { letter: 'R', label: 'Renamed', color: 'var(--acp-color-primary)' },
+  added: { letter: 'A', label: 'Added', color: 'var(--acp-vcs-add)' },
+  untracked: { letter: 'U', label: 'Untracked', color: 'var(--acp-vcs-add)' },
+  deleted: { letter: 'D', label: 'Deleted', color: 'var(--acp-color-error)' },
+  conflicted: { letter: '!', label: 'Conflicted', color: 'var(--acp-color-error)' },
 };
 
 /** @type {Record<ChangeGroup, string>} */
@@ -305,7 +305,7 @@ export class AcpChangesPanel extends LitElement {
     const id = `acp-changes-panel-status:${node.id}`;
     return html`<span
         id=${id}
-        style="width: 14px; text-align: center; font: 500 11px/16px var(--font-family-mono); color: ${color}"
+        style="width: 14px; text-align: center; font: 500 11px/16px var(--acp-font-family-mono); color: ${color}"
         aria-label=${label}
         >${letter}</span
       >
@@ -319,14 +319,14 @@ export class AcpChangesPanel extends LitElement {
   #renderLabel = (node) => {
     if (!node.file) {
       return html`<span style="display: flex; align-items: center; gap: 6px">
-        <span style="font-size: 13px; font-weight: 500; line-height: 20px; color: var(--md-on-surface)"
+        <span style="font-size: 13px; font-weight: 500; line-height: 20px; color: var(--acp-color-on-surface)"
           >${node.label}</span
         >
         <span
           style="min-width: 20px; height: 20px; box-sizing: border-box; padding: 0 6px; border-radius: 9999px;
-            background: var(--md-surface-container-highest); font-size: 11px; font-weight: 500;
+            background: var(--acp-color-surface-container-highest); font-size: 11px; font-weight: 500;
             line-height: 20px; text-align: center; font-variant-numeric: tabular-nums;
-            color: var(--md-on-surface-variant)"
+            color: var(--acp-color-on-surface-variant)"
           >${node.children?.length ?? 0}</span
         >
       </span>`;
@@ -340,13 +340,13 @@ export class AcpChangesPanel extends LitElement {
       >
         <span
           style="flex: none; font-size: 13px; line-height: 20px;
-            color: ${deleted ? 'var(--md-on-surface-variant)' : 'var(--md-on-surface)'};
+            color: ${deleted ? 'var(--acp-color-on-surface-variant)' : 'var(--acp-color-on-surface)'};
             ${deleted ? 'text-decoration: line-through;' : ''}"
           >${node.label}</span
         >
         <span
           style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-            font-size: 11.5px; line-height: 16px; color: var(--md-on-surface-variant)"
+            font-size: 11.5px; line-height: 16px; color: var(--acp-color-on-surface-variant)"
           >${node.dir}</span
         >
       </span>
@@ -359,10 +359,10 @@ export class AcpChangesPanel extends LitElement {
     const { added, removed } = node;
     if (!added && !removed) return nothing;
     return html`<span
-      style="display: flex; gap: 6px; font: 500 11px/16px var(--font-family-mono); font-variant-numeric: tabular-nums"
+      style="display: flex; gap: 6px; font: 500 11px/16px var(--acp-font-family-mono); font-variant-numeric: tabular-nums"
     >
-      ${added ? html`<span style="color: var(--diff-add-fg)">+${added}</span>` : nothing}
-      ${removed ? html`<span style="color: var(--diff-del-fg)">−${removed}</span>` : nothing}
+      ${added ? html`<span style="color: var(--acp-diff-add-fg)">+${added}</span>` : nothing}
+      ${removed ? html`<span style="color: var(--acp-diff-del-fg)">−${removed}</span>` : nothing}
     </span>`;
   };
 

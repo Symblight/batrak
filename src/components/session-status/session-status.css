@@ -11,24 +11,24 @@
 }
 
 .acp-session-status__icon_permission {
-  color: var(--md-tertiary);
+  color: var(--acp-color-tertiary);
 }
 
 .acp-session-status__icon_error {
-  color: var(--md-error);
+  color: var(--acp-color-error);
 }
 
 .acp-session-status__glyph {
-  font-size: var(--icon-size-md);
+  font-size: var(--acp-icon-size-md);
 }
 
 .acp-session-status__spinner {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-session-status__dot {
   width: 8px;
   height: 8px;
-  border-radius: var(--shape-corner-full);
-  background: var(--md-primary);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-primary);
 }

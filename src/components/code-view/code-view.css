@@ -7,9 +7,9 @@
   flex: 1;
   min-height: 0;
   box-sizing: border-box;
-  padding-inline: var(--space-2);
-  --cdx-content-background-color: var(--column-background);
-  --cdx-status-bar-background-color: var(--column-background);
+  padding-inline: var(--acp-space-2);
+  --cdx-content-background-color: var(--acp-column-background);
+  --cdx-status-bar-background-color: var(--acp-column-background);
   --cdx-content-border-color: transparent;
   --cdx-content-focus-border-color: transparent;
   --cdx-status-bar-border-color: transparent;
@@ -22,30 +22,30 @@
 }
 /* A file deleted on disk, still shown: a strip over its editor. */
 .acp-code-view__notice {
-  padding: var(--space-1) var(--space-4);
-  background: color-mix(in srgb, var(--md-error) 12%, transparent);
-  color: var(--md-on-surface);
-  font-size: var(--font-size-sm);
+  padding: var(--acp-space-1) var(--acp-space-4);
+  background: color-mix(in srgb, var(--acp-color-error) 12%, transparent);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-sm);
 }
 /* The footer's menus: dense rows, like the IDE's breadcrumb popups. */
 .acp-code-view__menu {
   --md-menu-min-width: 8rem;
   --md-menu-max-height: 24rem;
-  --md-menu-shape: var(--shape-corner-small);
+  --md-menu-shape: var(--acp-shape-corner-small);
 }
 .acp-code-view__menu-item {
   --md-menu-item-min-block-size: 1.375rem;
   --md-menu-item-padding-block: 0;
-  --md-menu-item-padding-inline: var(--space-1-5);
-  --md-menu-item-label-text-size: var(--font-size-sm);
+  --md-menu-item-padding-inline: var(--acp-space-1-5);
+  --md-menu-item-label-text-size: var(--acp-font-size-sm);
   --md-menu-item-label-text-line-height: 1.375rem;
-  --md-menu-item-leading-icon-size: var(--icon-size-xs);
+  --md-menu-item-leading-icon-size: var(--acp-icon-size-xs);
 
-  margin-inline: var(--space-0-5);
+  margin-inline: var(--acp-space-0-5);
 }
 .acp-code-view__menu-item_ignored {
-  --md-menu-item-label-text-color: var(--md-on-surface-variant);
+  --md-menu-item-label-text-color: var(--acp-color-on-surface-variant);
 }
 .acp-code-view__entry-icon {
-  font-size: var(--icon-size-xs);
+  font-size: var(--acp-icon-size-xs);
 }

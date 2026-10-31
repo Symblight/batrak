@@ -1,7 +1,7 @@
 :host {
   --acp-resize-handle-hit-width: 8px;
-  --acp-resize-handle-line-color: var(--md-outline-variant);
-  --acp-resize-handle-active-color: var(--md-primary);
+  --acp-resize-handle-line-color: var(--acp-color-outline-variant);
+  --acp-resize-handle-active-color: var(--acp-color-primary);
   --_acp-resize-handle-line-width: 1px;
   --_acp-resize-handle-color: var(--acp-resize-handle-line-color);
 

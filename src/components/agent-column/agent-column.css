@@ -3,8 +3,8 @@
   flex-direction: column;
   box-sizing: border-box;
   height: 100%;
-  background: var(--column-background);
-  border-radius: var(--shape-corner-medium);
+  background: var(--acp-column-background);
+  border-radius: var(--acp-shape-corner-medium);
   overflow: hidden;
 }
 .acp-agent-column__chat,
@@ -16,11 +16,6 @@
   &[hidden] {
     display: none;
   }
-}
-/* A readable line length in a wide column; the chat still spans it, so its scrollbar sits at the edge. */
-.acp-agent-column__chat {
-  --acp-chat-content-max-width: var(--chat-content-max-width);
-  --acp-chat-messages-max-width: var(--chat-messages-max-width);
 }
 .acp-agent-column__loading {
   flex: 1;

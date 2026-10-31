@@ -12,7 +12,7 @@ const scrollbarPlugin = defineCdxPlugin({
     EditorView.theme({
       '.cm-scroller': {
         scrollbarWidth: 'thin',
-        scrollbarColor: 'var(--md-outline-variant) transparent',
+        scrollbarColor: 'var(--acp-color-outline-variant) transparent',
       },
     }),
   ],

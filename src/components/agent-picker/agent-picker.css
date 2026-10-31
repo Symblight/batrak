@@ -5,12 +5,12 @@
 
 .acp-agent-picker__button {
   min-width: 0;
-  --md-button-font-size: var(--font-size-md);
-  --md-button-block-start-space: var(--button-block-space-compact);
-  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
   --md-button-inline-start-space: 6px;
   --md-button-inline-end-space: 4px;
-  --md-button-foreground-color: var(--md-on-surface);
+  --md-button-foreground-color: var(--acp-color-on-surface);
 }
 
 /* md-button sizes to its content; let its box and label shrink with the host. */
@@ -22,7 +22,7 @@
 .acp-agent-picker__label {
   display: inline-flex;
   align-items: center;
-  gap: var(--space-1);
+  gap: var(--acp-space-1);
   min-width: 0;
   white-space: nowrap;
 }
@@ -39,9 +39,9 @@
 
 .acp-agent-picker__arrow {
   flex: none;
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
   margin-inline-start: -2px;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
 
   @container acp-composer (width <= 360px) {
     display: none;
@@ -50,17 +50,17 @@
 
 /* A started session's agent: a lock where the arrow was. */
 .acp-agent-picker__arrow_fixed {
-  font-size: var(--icon-size-xs);
+  font-size: var(--acp-icon-size-xs);
   margin-inline-start: 0;
 }
 
 /* The agent's logo, in the button's icon slot and in menu items' leading slot. */
 .acp-agent-picker__glyph {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-agent-picker__agent-icon {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }
 
 /* Menu density comes from src/styles/shadow.css. */
@@ -69,5 +69,5 @@
 }
 
 .acp-agent-picker__lock {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }

@@ -4,25 +4,25 @@
   min-height: 0;
   width: 100%;
   overflow-y: auto;
-  background: var(--md-surface-container-lowest);
-  color: var(--md-on-surface);
+  background: var(--acp-color-surface-container-lowest);
+  color: var(--acp-color-on-surface);
   container: acp-agents-view / inline-size;
 }
 
 .acp-agents-view__page {
   display: flex;
   flex-direction: column;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   box-sizing: border-box;
   max-width: 640px;
   margin-inline: auto;
-  padding: var(--space-4) var(--space-4) var(--space-4);
+  padding: var(--acp-space-4) var(--acp-space-4) var(--acp-space-4);
 }
 
 .acp-agents-view__header {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
 
   @container acp-agents-view (width < 420px) {
     flex-wrap: wrap;
@@ -31,16 +31,16 @@
 .acp-agents-view__title-text {
   flex: 1;
   margin: 0;
-  font: 400 24px/32px var(--font-family);
+  font: 400 24px/32px var(--acp-font-family);
 }
 
 .acp-agents-view__problem {
   margin: 0;
-  padding: var(--space-2) var(--space-3);
-  border-radius: var(--shape-corner-small);
-  background: var(--md-error-container);
-  color: var(--md-on-error-container);
-  font: 400 12px/16px var(--font-family-mono);
+  padding: var(--acp-space-2) var(--acp-space-3);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-error-container);
+  color: var(--acp-color-on-error-container);
+  font: 400 12px/16px var(--acp-font-family-mono);
   overflow-wrap: anywhere;
 }
 
@@ -48,22 +48,22 @@
 .acp-agents-view__search {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   height: 36px;
   box-sizing: border-box;
-  padding-inline: var(--space-3) var(--space-0-5);
-  border-radius: var(--shape-corner-full);
-  background: var(--md-surface-container-high);
+  padding-inline: var(--acp-space-3) var(--acp-space-0-5);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-surface-container-high);
 
   &:focus-within {
-    outline: 2px solid var(--md-primary);
+    outline: 2px solid var(--acp-color-primary);
     outline-offset: -2px;
   }
 }
 .acp-agents-view__search-icon {
   flex: none;
-  font-size: var(--icon-size-md);
-  color: var(--md-on-surface-variant);
+  font-size: var(--acp-icon-size-md);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-agents-view__search-input {
   flex: 1;
@@ -72,12 +72,12 @@
   border: none;
   outline: none;
   background: none;
-  color: var(--md-on-surface);
-  font: 400 var(--font-size-lg) / 20px var(--font-family);
-  caret-color: var(--md-primary);
+  color: var(--acp-color-on-surface);
+  font: 400 var(--acp-font-size-lg) / 20px var(--acp-font-family);
+  caret-color: var(--acp-color-primary);
 
   &::placeholder {
-    color: var(--md-on-surface-variant);
+    color: var(--acp-color-on-surface-variant);
   }
   &::-webkit-search-cancel-button {
     appearance: none;
@@ -90,43 +90,43 @@
 .acp-agents-view__chips {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
 }
 /* Compact: the library's chip is 32px with 16px sides; its padding has no property, so `::part`. */
 .acp-agents-view__chip {
   --md-chip-height: 1.5rem;
-  --md-chip-border-radius: var(--shape-corner-small);
-  --md-chip-label-text-size: var(--font-size-sm);
+  --md-chip-border-radius: var(--acp-shape-corner-small);
+  --md-chip-label-text-size: var(--acp-font-size-sm);
   --md-chip-label-text-line-height: 1rem;
 
   &::part(chip) {
-    padding-inline: var(--space-2);
+    padding-inline: var(--acp-space-2);
   }
 }
 .acp-agents-view__count {
   /* The chip's label is a flex row, which drops the space before it. */
-  margin-inline-start: var(--space-1);
-  color: var(--md-on-surface-variant);
+  margin-inline-start: var(--acp-space-1);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-agents-view__group {
   display: flex;
   flex-direction: column;
-  padding: var(--space-1);
-  border-radius: var(--shape-corner-medium);
-  background: var(--md-surface-container-low);
+  padding: var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container-low);
 }
 .acp-agents-view__group-header {
   display: flex;
   align-items: center;
   min-height: 32px;
-  padding-inline: var(--space-2);
+  padding-inline: var(--acp-space-2);
 }
 .acp-agents-view__group-title {
   flex: 1;
   margin: 0;
-  font: var(--font-weight-medium) var(--font-size-md)/18px var(--font-family);
-  color: var(--md-on-surface-variant);
+  font: var(--acp-font-weight-medium) var(--acp-font-size-md)/18px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-agents-view__list {
   display: flex;
@@ -139,36 +139,36 @@
 .acp-agents-view__row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   min-height: 44px;
   box-sizing: border-box;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
-  border-radius: var(--shape-corner-small);
+  padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-1) var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-small);
 
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
 }
 .acp-agents-view__card {
   position: relative;
   display: flex;
   flex-direction: column;
-  margin-block: var(--space-1);
-  border-radius: var(--shape-corner-medium);
-  background: var(--md-surface-container-high);
+  margin-block: var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container-high);
 }
 .acp-agents-view__card-header,
 .acp-agents-view__mode {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   box-sizing: border-box;
   min-height: 44px;
-  padding: var(--space-1) var(--space-1) var(--space-1) var(--space-2);
+  padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-1) var(--acp-space-2);
 }
 .acp-agents-view__card-header {
   /* The switch lines up with the options' menu buttons. */
-  padding-inline-end: var(--space-2);
+  padding-inline-end: var(--acp-space-2);
 }
 .acp-agents-view__mode {
   position: relative;
@@ -178,17 +178,17 @@
     content: '';
     position: absolute;
     inset-block-start: 0;
-    inset-inline: var(--space-2);
-    border-block-start: 1px solid var(--md-outline-variant);
+    inset-inline: var(--acp-space-2);
+    border-block-start: 1px solid var(--acp-color-outline-variant);
   }
 
   &:last-child {
-    border-end-start-radius: var(--shape-corner-medium);
-    border-end-end-radius: var(--shape-corner-medium);
+    border-end-start-radius: var(--acp-shape-corner-medium);
+    border-end-end-radius: var(--acp-shape-corner-medium);
   }
 
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
 }
 .acp-agents-view__modes {
@@ -216,17 +216,17 @@
   cursor: default;
 }
 .acp-agents-view__mode-name {
-  font: var(--font-weight-medium) var(--font-size-md)/20px var(--font-family);
+  font: var(--acp-font-weight-medium) var(--acp-font-size-md)/20px var(--acp-font-family);
 }
 .acp-agents-view__mode-version {
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
   font-weight: 400;
 }
 .acp-agents-view__row_revealed {
-  background: color-mix(in srgb, var(--md-primary) 10%, transparent);
+  background: color-mix(in srgb, var(--acp-color-primary) 10%, transparent);
 }
 .acp-agents-view__edit {
-  padding: var(--space-2) var(--space-2) var(--space-3);
+  padding: var(--acp-space-2) var(--acp-space-2) var(--acp-space-3);
 }
 .acp-agents-view__glyph {
   flex: none;
@@ -235,11 +235,11 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  border-radius: var(--shape-corner-extra-small);
-  background: var(--md-surface-container-highest);
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: var(--acp-color-surface-container-highest);
 }
 .acp-agents-view__glyph-icon {
-  font-size: var(--icon-size-sm);
+  font-size: var(--acp-icon-size-sm);
 }
 /* Off: its name and glyph fade; the switch and menu keep full contrast. */
 .acp-agents-view__glyph_off,
@@ -253,39 +253,39 @@
 .acp-agents-view__title {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
   min-width: 0;
 }
 .acp-agents-view__name {
   overflow: hidden;
-  font: 400 var(--font-size-lg)/20px var(--font-family);
+  font: 400 var(--acp-font-size-lg)/20px var(--acp-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .acp-agents-view__mark {
   border-radius: 2px;
-  background: color-mix(in srgb, var(--md-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--acp-color-primary) 22%, transparent);
   color: inherit;
 }
 .acp-agents-view__default {
   flex: none;
-  padding: 0 var(--space-2);
-  border-radius: var(--shape-corner-small);
-  background: var(--md-secondary-container);
-  color: var(--md-on-secondary-container);
-  font: var(--font-weight-medium) var(--font-size-xs)/16px var(--font-family);
+  padding: 0 var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-secondary-container);
+  color: var(--acp-color-on-secondary-container);
+  font: var(--acp-font-weight-medium) var(--acp-font-size-xs)/16px var(--acp-font-family);
 }
 .acp-agents-view__details {
   overflow: hidden;
-  font: 400 var(--font-size-sm)/16px var(--font-family);
-  color: var(--md-on-surface-variant);
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .acp-agents-view__error {
   overflow: hidden;
-  font: 400 var(--font-size-sm)/16px var(--font-family);
-  color: var(--md-error);
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-error);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -300,16 +300,16 @@
 }
 .acp-agents-view__more {
   flex: none;
-  --md-icon-button-font-size: var(--icon-size-lg);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
 }
 
 .acp-agents-view__button {
   flex: none;
-  --md-button-block-start-space: var(--button-block-space-compact);
-  --md-button-block-end-space: var(--button-block-space-compact);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
 .acp-agents-view__icon {
-  font-size: var(--icon-size-md);
+  font-size: var(--acp-icon-size-md);
 }
 .acp-agents-view__spinner {
   --md-progress-circular-size: 16px;
@@ -317,25 +317,25 @@
 
 .acp-agents-view__note {
   margin: 0;
-  padding: 0 var(--space-2) var(--space-1);
-  font: 400 var(--font-size-sm)/16px var(--font-family);
-  color: var(--md-on-surface-variant);
+  padding: 0 var(--acp-space-2) var(--acp-space-1);
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-agents-view__empty {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: var(--space-1);
-  padding-block: var(--space-2);
+  gap: var(--acp-space-1);
+  padding-block: var(--acp-space-2);
 }
 
 .acp-agents-view__footer {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-2) 0;
-  font: 400 var(--font-size-sm)/16px var(--font-family);
-  color: var(--md-on-surface-variant);
+  gap: var(--acp-space-1);
+  padding: var(--acp-space-2) var(--acp-space-2) 0;
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
 }
 .acp-agents-view__footer-text {
   margin: 0;
@@ -343,7 +343,7 @@
 .acp-agents-view__footer-state {
   display: flex;
   align-items: center;
-  gap: var(--space-1-5);
+  gap: var(--acp-space-1-5);
 }
 
 /* Menu density comes from src/styles/shadow.css. */
@@ -351,6 +351,6 @@
   --md-menu-min-width: 13.75rem;
 }
 .acp-agents-view__menu-item_danger {
-  --md-menu-item-label-text-color: var(--md-error);
-  --md-menu-item-leading-icon-color: var(--md-error);
+  --md-menu-item-label-text-color: var(--acp-color-error);
+  --md-menu-item-leading-icon-color: var(--acp-color-error);
 }

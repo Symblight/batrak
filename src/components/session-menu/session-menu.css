@@ -9,10 +9,10 @@
 }
 
 .acp-session-menu__icon {
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
 }
 
 .acp-session-menu__item_danger {
-  --md-menu-item-label-text-color: var(--md-error);
-  --md-menu-item-leading-icon-color: var(--md-error);
+  --md-menu-item-label-text-color: var(--acp-color-error);
+  --md-menu-item-leading-icon-color: var(--acp-color-error);
 }

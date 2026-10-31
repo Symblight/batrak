@@ -8,7 +8,7 @@
   align-items: flex-start;
   min-width: 0;
   max-width: 100%;
-  font-size: var(--font-size-md);
+  font-size: var(--acp-font-size-md);
   line-height: var(--_acp-part-thinking-line-height);
 }
 
@@ -17,25 +17,25 @@
   position: relative;
   display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  gap: var(--acp-space-2);
   max-width: 100%;
   height: 28px;
-  padding: 0 var(--space-2) 0 var(--space-1-5);
+  padding: 0 var(--acp-space-2) 0 var(--acp-space-1-5);
   border: none;
-  border-radius: var(--shape-corner-full);
+  border-radius: var(--acp-shape-corner-full);
   background: transparent;
-  color: var(--md-on-surface-variant);
+  color: var(--acp-color-on-surface-variant);
   font: inherit;
-  font-weight: var(--font-weight-medium);
+  font-weight: var(--acp-font-weight-medium);
   cursor: pointer;
   &:hover {
-    background: var(--state-hover);
+    background: var(--acp-state-hover);
   }
   &:active {
-    background: var(--state-pressed);
+    background: var(--acp-state-pressed);
   }
   &:focus-visible {
-    outline: 2px solid var(--md-secondary);
+    outline: 2px solid var(--acp-color-secondary);
     outline-offset: 2px;
   }
   /* Nothing to expand: a plain line. */
@@ -49,13 +49,13 @@
 .acp-part-thinking__indicator {
   position: relative;
   flex: none;
-  width: var(--icon-size-lg);
-  height: var(--icon-size-lg);
+  width: var(--acp-icon-size-lg);
+  height: var(--acp-icon-size-lg);
 }
 .acp-part-thinking__shape {
   position: absolute;
   inset: 1px;
-  background: var(--md-primary);
+  background: var(--acp-color-primary);
   opacity: 0;
   transform: scale(0.4) rotate(90deg);
   /* Always on, paused once it ends: the shape leaves as it was, not as a square. */
@@ -81,7 +81,7 @@
 .acp-part-thinking__icon {
   position: absolute;
   inset: 0;
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
   transition:
     opacity 200ms var(--_acp-part-thinking-ease) 100ms,
     transform 300ms var(--_acp-part-thinking-ease-decelerate) 100ms;
@@ -100,9 +100,9 @@
     color: transparent;
     background: linear-gradient(
         90deg,
-        var(--md-on-surface-variant) 0 35%,
-        var(--md-on-surface) 50%,
-        var(--md-on-surface-variant) 65% 100%
+        var(--acp-color-on-surface-variant) 0 35%,
+        var(--acp-color-on-surface) 50%,
+        var(--acp-color-on-surface-variant) 65% 100%
       )
       0 0 / 250% 100%;
     background-clip: text;
@@ -123,7 +123,7 @@
 }
 .acp-part-thinking__chevron {
   flex: none;
-  font-size: var(--icon-size-lg);
+  font-size: var(--acp-icon-size-lg);
   transition: transform 300ms var(--_acp-part-thinking-ease);
   :host([open]) & {
     transform: rotate(180deg);
@@ -150,15 +150,15 @@
 }
 .acp-part-thinking__text {
   /* The rail runs under the indicator's center. */
-  margin: var(--space-1) 0 var(--space-0-5) calc(var(--space-1-5) + var(--icon-size-lg) / 2 - 1px);
-  padding: var(--space-0-5) 0 var(--space-0-5) var(--space-4);
-  border-inline-start: 2px solid var(--md-outline-variant);
-  color: var(--md-on-surface-variant);
+  margin: var(--acp-space-1) 0 var(--acp-space-0-5) calc(var(--acp-space-1-5) + var(--acp-icon-size-lg) / 2 - 1px);
+  padding: var(--acp-space-0-5) 0 var(--acp-space-0-5) var(--acp-space-4);
+  border-inline-start: 2px solid var(--acp-color-outline-variant);
+  color: var(--acp-color-on-surface-variant);
   font-weight: 400;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   :host([status='streaming']) & {
-    border-image: linear-gradient(var(--md-primary), var(--md-outline-variant)) 1;
+    border-image: linear-gradient(var(--acp-color-primary), var(--acp-color-outline-variant)) 1;
   }
   /* Its last three lines, fading out at the top. */
   &.acp-part-thinking__text_peek {
