@@ -6,3 +6,4 @@ description = "Claude Code for Brama: claude-agent-acp, its bundled CLI, and the
 
 [dependencies]
 agent-api = { path = "../agent-api" }
+agent-kit = { path = "../agent-kit" }

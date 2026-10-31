@@ -2,7 +2,6 @@
 //! launch, its CLI and how a first prompt goes on the CLI's command line. No I/O.
 
 use std::collections::BTreeMap;
-use std::path::Path;
 
 use serde::Serialize;
 
@@ -95,23 +94,51 @@ pub struct Launch {
     pub args: Vec<String>,
 }
 
-impl Launch {
-    /// The package an `npx` launch runs: its argument's index, its name and the version it pins.
-    pub fn npx_package(&self) -> Option<(usize, &str, Option<&str>)> {
-        if Path::new(&self.command).file_stem().is_none_or(|stem| stem != "npx") {
-            return None;
-        }
-        let (at, spec) = package_arg(&self.args)?;
-        let (name, version) = split_spec(spec);
-        Some((at, name, version))
-    }
+
+/// How an agent is installed and updated.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Install {
+    /// npx runs this package; Brama pins its version and downloads an update ahead of a start.
+    Npx { package: &'static str },
+    /// A program the user installs and updates (the registry ships an archive); Brama never
+    /// downloads it.
+    Program,
+}
+
+/// An update to a version: the argument of the agent's launch that pins it, and what downloads it
+/// ahead of the agent's next start (so that isn't a cold download).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Update {
+    /// Where the pinning argument goes in the launch's `args`, and the argument.
+    pub pin: (usize, String),
+    pub download: Command,
+}
+
+/// A program to run, and its arguments.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Command {
+    pub program: String,
+    pub args: Vec<String>,
 }
 
 /// One kind of agent. Default methods are plain ACP with no CLI; a crate overrides what its agent
 /// does differently. The app's hub picks the crate for a launch and calls only this.
 pub trait Agent: Send + Sync + 'static {
-    /// Stable id of the kind (`claude`, `copilot`, `codex`, `generic`).
+    /// Stable id of the kind (`claude`, `copilot`, `codex`, `antigravity`, `generic`).
     fn kind(&self) -> &'static str;
+    /// Its id in the ACP registry, if it's one Brama offers there.
+    fn registry_id(&self) -> Option<&'static str> {
+        None
+    }
+    /// How it's installed and updated.
+    fn install(&self) -> Option<Install> {
+        None
+    }
+    /// The update of a launch with these `args` to `version`; `None` when Brama doesn't update it
+    /// (a program the user installs, or a launch it can't pin).
+    fn update(&self, _args: &[String], _version: &str) -> Option<Update> {
+        None
+    }
     /// Whether this crate drives an agent with this launch.
     fn matches(&self, launch: &Launch) -> bool;
     /// Its CLI, if it has one: how to resume a session and start one under our id.
@@ -139,52 +166,9 @@ pub fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|a| (*a).to_owned()).collect()
 }
 
-/// `<package>@<version>` (a scope's leading `@` is not the separator).
-pub fn split_spec(spec: &str) -> (&str, Option<&str>) {
-    match spec.rfind('@') {
-        Some(at) if at > 0 => (&spec[..at], Some(&spec[at + 1..])),
-        _ => (spec, None),
-    }
-}
-
-/// Where npx's args name the package it runs: the first `-p` / `--package` value, else the first
-/// argument that isn't a flag. Returns its index and the spec (`--package=` taken off).
-pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
-    let mut i = 0;
-    while let Some(arg) = args.get(i) {
-        match arg.as_str() {
-            "-p" | "--package" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
-            "--" => return args.get(i + 1).map(|spec| (i + 1, spec.as_str())),
-            _ => {}
-        }
-        if let Some(spec) = arg.strip_prefix("--package=") {
-            return Some((i, spec));
-        }
-        if !arg.starts_with('-') {
-            return Some((i, arg));
-        }
-        i += 1;
-    }
-    None
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn launch(command: &str, args: &[&str]) -> Launch {
-        Launch { command: command.into(), args: strings(args) }
-    }
-
-    #[test]
-    fn names_the_package_an_npx_launch_runs() {
-        assert_eq!(
-            launch("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"]).npx_package(),
-            Some((1, "@agentclientprotocol/claude-agent-acp", Some("0.99.1")))
-        );
-        assert_eq!(launch("/usr/local/bin/npx", &["--package=@github/copilot", "copilot"]).npx_package(), Some((0, "@github/copilot", None)));
-        assert_eq!(launch("claude", &["--acp"]).npx_package(), None, "not npx");
-    }
 
     #[test]
     fn a_first_prompt_goes_on_the_command_line_only_where_it_is_safe() {

@@ -118,7 +118,7 @@ pub struct Inputs<'a> {
 
 pub fn build(inputs: Inputs<'_>) -> AgentsView {
     let Inputs { mut list, registry: entries, registry_state, reported, updating, sign_in, query, filter } = inputs;
-    // Only agents that run a supported registry agent (`registry::SUPPORTED`) are the tab's.
+    // Only agents that run a supported registry agent (an agent crate names its registry id, `AgentHub::for_registry_id`) are the tab's.
     list.agents.retain(|a| a.registry_id.is_some());
     list.user_agents.retain(|a| a.registry_id.is_some());
     let query = Query::new(query);

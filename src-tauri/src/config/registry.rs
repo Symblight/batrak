@@ -11,7 +11,7 @@ use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-pub use agent_api::{package_arg, split_spec};
+use agent_kit::split_spec;
 
 /// The only URL this module fetches.
 pub const REGISTRY_URL: &str = "https://cdn.agentclientprotocol.com/registry/v1/latest/registry.json";
@@ -66,8 +66,7 @@ pub struct Program {
     pub archive: String,
 }
 
-/// The registry agents Brama offers; the registry's others are left out.
-pub const SUPPORTED: [&str; 4] = ["claude-acp", "codex-acp", "github-copilot-cli", "antigravity-acp"];
+
 
 /// This machine's key in the registry's `binary` map (`darwin-aarch64`, `windows-x86_64`…).
 fn platform() -> String {
@@ -95,7 +94,8 @@ impl RegistryAgent {
     pub fn known(&self) -> KnownAgent {
         let (command, args) = match &self.launch {
             Launch::Npx(Npx { package, version, args, .. }) => {
-                ("npx".to_owned(), ["-y".to_owned(), format!("{package}@{version}")].into_iter().chain(args.iter().cloned()).collect())
+                let launch = agent_kit::npx_launch(package, version, args);
+                (launch.command, launch.args)
             }
             Launch::Program(program) => (program.command.clone(), program.args.clone()),
         };
@@ -117,7 +117,7 @@ impl RegistryAgent {
     }
 }
 
-/// The registry's agents Brama offers (`SUPPORTED`), each with its `npx` launch or this
+/// The registry's agents Brama offers (an agent crate names them, `AgentHub::for_registry_id`, and installs them as the registry distributes them), each with its `npx` launch or this
 /// platform's archive; the others, and one that doesn't read, are left out.
 pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     #[derive(Deserialize)]
@@ -164,10 +164,11 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     }
     let platform = platform();
     let mut agents = Vec::new();
+    let hub = crate::agents::standard();
     for value in file.agents {
-        if !value.get("id").and_then(serde_json::Value::as_str).is_some_and(|id| SUPPORTED.contains(&id)) {
+        let Some(install) = value.get("id").and_then(serde_json::Value::as_str).and_then(|id| hub.for_registry_id(id)).and_then(|a| a.install()) else {
             continue;
-        }
+        };
         let agent: Agent = match serde_json::from_value(value) {
             Ok(agent) => agent,
             Err(e) => {
@@ -197,6 +198,16 @@ pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
             },
             _ => continue,
         };
+        // Its crate installs and updates it: the registry's way of distributing it must be the crate's.
+        let as_crate_installs = match (&launch, install) {
+            (Launch::Npx(npx), agent_api::Install::Npx { package }) => npx.package == package,
+            (Launch::Program(_), agent_api::Install::Program) => true,
+            _ => false,
+        };
+        if !as_crate_installs {
+            tracing::debug!(agent = %agent.id, "registry agent skipped: not distributed as its crate installs it");
+            continue;
+        }
         agents.push(RegistryAgent {
             id: agent.id,
             name: agent.name,
@@ -227,7 +238,7 @@ pub fn match_launch<'a>(agents: &'a [RegistryAgent], command: &str, args: &[Stri
         return Some(Matched { agent, pinned: None });
     }
     let launch = agent_api::Launch { command: command.to_owned(), args: args.to_vec() };
-    let (_, package, version) = launch.npx_package()?;
+    let (_, package, version) = agent_kit::npx_package(&launch)?;
     let agent = agents.iter().find(|a| matches!(&a.launch, Launch::Npx(npx) if npx.package == package))?;
     let pinned = version.filter(|v| parse_version(v).is_some()).map(str::to_owned);
     Some(Matched { agent, pinned })
@@ -614,6 +625,19 @@ pub(crate) mod tests {
         assert!(antigravity.archive.starts_with("https://dl.example.com/agy-"), "where to get it");
         assert_eq!(agents[3].latest(), None, "the user updates it");
         assert!(parse(r#"{"version":"2.0.0","agents":[]}"#).unwrap_err().contains("unsupported version"));
+    }
+
+    #[test]
+    fn leaves_out_an_entry_its_crate_doesnt_install_that_way() {
+        let entry = |id: &str, dist: &str| format!(r#"{{"id":"{id}","name":"X","version":"1.0.0","distribution":{dist}}}"#);
+        let text = format!(
+            r#"{{"version":"1.0.0","agents":[{},{},{}]}}"#,
+            entry("claude-acp", r#"{"npx":{"package":"@someone-else/claude-agent-acp@1.0.0"}}"#),
+            entry("codex-acp", r#"{"npx":{"package":"@agentclientprotocol/codex-acp@1.0.0"}}"#),
+            entry("github-copilot-cli", r#"{"binary":{}}"#),
+        );
+        let ids: Vec<String> = parse(&text).unwrap().into_iter().map(|a| a.id).collect();
+        assert_eq!(ids, ["codex-acp"], "another package, or a binary for an npx agent: its crate couldn't update it");
     }
 
     #[test]

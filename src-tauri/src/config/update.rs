@@ -19,9 +19,10 @@ const PREFETCH_TIMEOUT: Duration = Duration::from_secs(5 * 60);
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
-/// Downloads `<package>@<version>` ahead of the agent's next start. Tests replace it.
+/// Runs what downloads an update ahead of the agent's next start (its crate's `update_command`).
+/// Tests replace it.
 pub trait Prefetch: Send + Sync {
-    fn prefetch(&self, spec: String) -> BoxFuture<Result<(), String>>;
+    fn prefetch(&self, command: agent_api::Command) -> BoxFuture<Result<(), String>>;
 }
 
 /// An agent `update` pinned, and whether its download went through.
@@ -105,7 +106,7 @@ impl Updater {
         (self.changed)(project.as_deref());
         let mut updated = Vec::new();
         for (pin, key) in pinned.into_iter().zip(&keys) {
-            let downloaded = match self.prefetch.prefetch(pin.spec.clone()).await {
+            let downloaded = match self.prefetch.prefetch(pin.download.clone()).await {
                 Ok(()) => true,
                 Err(e) => {
                     // The pin stays: the next start downloads it anyway.
@@ -124,15 +125,16 @@ fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// `npm cache add <spec>` in the user's login-shell environment, in its own process group (stopped
-/// with the agents on app exit), at most `PREFETCH_TIMEOUT`.
+/// An update's download (`npm cache add <package>@<version>` for an npx agent) in the user's
+/// login-shell environment, in its own process group (stopped with the agents on app exit), at most
+/// `PREFETCH_TIMEOUT`.
 pub struct NpmPrefetch {
     /// Where npm runs and writes its output (`npm-prefetch.log`).
     pub dir: PathBuf,
 }
 
 impl Prefetch for NpmPrefetch {
-    fn prefetch(&self, spec: String) -> BoxFuture<Result<(), String>> {
+    fn prefetch(&self, command: agent_api::Command) -> BoxFuture<Result<(), String>> {
         let dir = self.dir.clone();
         Box::pin(async move {
             let log_path = dir.join("npm-prefetch.log");
@@ -148,12 +150,11 @@ impl Prefetch for NpmPrefetch {
             })
             .await
             .map_err(|e| e.to_string())??;
-            let program = if cfg!(windows) { "npm.cmd" } else { "npm" };
-            let args = ["cache".to_owned(), "add".to_owned(), spec.clone()];
             let cwd = log_path.parent().unwrap_or(Path::new("."));
-            let command = crate::acp::process::AgentCommand { program, args: &args, cwd, env: &env };
-            let (mut process, _pipes) = crate::acp::process::spawn(&command, log)?;
-            tracing::info!(%spec, "downloading an agent update");
+            let line = std::iter::once(command.program.as_str()).chain(command.args.iter().map(String::as_str)).collect::<Vec<_>>().join(" ");
+            let spawned = crate::acp::process::AgentCommand { program: &command.program, args: &command.args, cwd, env: &env };
+            let (mut process, _pipes) = crate::acp::process::spawn(&spawned, log)?;
+            tracing::info!(%line, "downloading an agent update");
             let status = match tokio::time::timeout(PREFETCH_TIMEOUT, process.wait()).await {
                 Ok(status) => status.map_err(|e| e.to_string())?,
                 Err(_) => {
@@ -168,7 +169,7 @@ impl Prefetch for NpmPrefetch {
             // npm's last lines say why (`npm error 404 …`).
             let mut tail: Vec<&str> = output.lines().rev().map(str::trim).filter(|l| !l.is_empty()).take(3).collect();
             tail.reverse();
-            Err(if tail.is_empty() { format!("npm exited with {status}") } else { tail.join(" ") })
+            Err(if tail.is_empty() { format!("{} exited with {status}", command.program) } else { tail.join(" ") })
         })
     }
 }
@@ -188,8 +189,9 @@ mod tests {
     }
 
     impl Prefetch for FakePrefetch {
-        fn prefetch(&self, spec: String) -> BoxFuture<Result<(), String>> {
-            lock(&self.specs).push(spec);
+        fn prefetch(&self, command: agent_api::Command) -> BoxFuture<Result<(), String>> {
+            // The package it downloads: `npm cache add <spec>`'s last argument.
+            lock(&self.specs).push(command.args.last().cloned().unwrap_or_default());
             let (fail, delay) = (self.fail, self.delay);
             Box::pin(async move {
                 tokio::time::sleep(delay).await;
@@ -278,8 +280,8 @@ mod tests {
     async fn real_npm_prefetch_downloads_and_says_why_it_failed() {
         let dir = std::env::temp_dir().join(format!("brama-npm-{}", std::process::id()));
         let npm = NpmPrefetch { dir: dir.clone() };
-        npm.prefetch("is-number@7.0.0".to_owned()).await.unwrap();
-        let failed = npm.prefetch("@brama-test/no-such-package@0.0.1".to_owned()).await.unwrap_err();
+        npm.prefetch(agent_kit::npm_prefetch("is-number", "7.0.0")).await.unwrap();
+        let failed = npm.prefetch(agent_kit::npm_prefetch("@brama-test/no-such-package", "0.0.1")).await.unwrap_err();
         assert!(failed.contains("404"), "{failed}");
         let _ = fs::remove_dir_all(dir);
     }

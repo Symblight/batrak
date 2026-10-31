@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Launch, ID, PROMPT};
+use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Update, Launch, ID, PROMPT};
 
 /// The adapter's npm package.
 pub const PACKAGE: &str = "@agentclientprotocol/claude-agent-acp";
@@ -15,8 +15,20 @@ impl Agent for Claude {
         "claude"
     }
 
+    fn registry_id(&self) -> Option<&'static str> {
+        Some("claude-acp")
+    }
+
+    fn install(&self) -> Option<Install> {
+        Some(Install::Npx { package: PACKAGE })
+    }
+
+    fn update(&self, args: &[String], version: &str) -> Option<Update> {
+        agent_kit::npx_update(args, PACKAGE, version)
+    }
+
     fn matches(&self, launch: &Launch) -> bool {
-        launch.npx_package().is_some_and(|(_, package, _)| package == PACKAGE)
+        agent_kit::runs(launch, PACKAGE)
     }
 
     fn cli(&self, launch: &Launch) -> Option<CliSpec> {

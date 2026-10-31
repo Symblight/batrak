@@ -62,7 +62,8 @@ paths:
     One check at a time, 15 s; a failure keeps
     what's there and marks it offline (`info`, not `warn`). A change emits `agents://changed` with
     `projectPath: null`. Only Claude, Codex, Copilot and Antigravity are read from it
-    (`registry::SUPPORTED`; the rest are left out), and can be added (`AgentList.known`, pinned
+    (an agent crate names each, `Agent::registry_id` / `AgentHub::for_registry_id`, and the registry
+    must distribute it as the crate installs it, `Agent::install`; the rest are left out), and can be added (`AgentList.known`, pinned
     launches). Claude, Codex and Copilot run with `npx`; Antigravity, a `binary` in the registry,
     runs its archive's program (`cmd`'s file name, `agy_acp_server.par`) from PATH
     (`Launch::Program`, this platform's args): the user installs and updates it, Brama never
@@ -77,8 +78,10 @@ paths:
   - **Updates** (`config/update.rs`, `Updater`): `agents_update_version` / `agents_update_all`
     pin the registry's version in place (`AgentConfigs::pin_versions`, one write; a trusted launch
     stays trusted when the pin is all that changed), emit `agents://changed` (running sessions get
-    `agent-outdated`; nothing restarts), then `npm cache add <pkg>@<version>` (login-shell env, own
-    process group, 5 min; a failure keeps the pin and `warn`s). A second Update of an agent joins
+    `agent-outdated`; nothing restarts), then the agent crate's download (`Agent::update`: the pin and `npm cache add <pkg>@<version>` for an npx agent,
+    `agent-kit`; login-shell env, own process group, 5 min; a failure keeps the pin and `warn`s).
+    How an agent installs, pins and updates is its crate's (`Agent::install`, `update`;
+    spec: `docs/specs/agent-plugins.md`). A second Update of an agent joins
     the running one. The tab shows "Updating…" from the call until it returns (`$agentsPending`)
     and while the backend says an update runs (another window's).
   - **Following the list:** the watcher flags `.brama/agents.json` (`Changes.config`) → reload →

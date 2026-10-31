@@ -529,13 +529,12 @@ struct Removed {
 }
 
 /// An agent whose launch `pin_versions` pinned to the registry's version.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pinned {
     pub agent_id: String,
     pub name: String,
-    /// What the update downloads: `<package>@<version>` as `npm` takes it.
-    pub spec: String,
+    /// What downloads it ahead of the agent's next start (its crate's `Agent::update`).
+    pub download: agent_api::Command,
     pub version: String,
 }
 
@@ -579,17 +578,6 @@ fn resolve(agent: &NewAgent, known: &[registry::KnownAgent]) -> Result<Resolved,
         return Err("an agent needs a command".to_owned());
     }
     Ok(Resolved { name, command, args, known })
-}
-
-/// The argument that pins npx's `package` (`registry::package_arg`) to `spec`, and where it goes;
-/// `None` when npx runs another package.
-fn pinned_arg(args: &[String], package: &str, spec: &str) -> Option<(usize, String)> {
-    let (at, current) = registry::package_arg(args)?;
-    if registry::split_spec(current).0 != package {
-        return None;
-    }
-    let arg = if args[at].starts_with("--package=") { format!("--package={spec}") } else { spec.to_owned() };
-    Some((at, arg))
 }
 
 /// Writes an entry's name and launch, keeping its other fields.
@@ -719,7 +707,7 @@ impl AgentConfigs {
         }
     }
 
-    /// Adds a supported registry agent (`registry::SUPPORTED`), with the registry's pinned launch,
+    /// Adds a supported registry agent (an agent crate names its registry id, `AgentHub::for_registry_id`), with the registry's pinned launch,
     /// to the open project's `.brama/agents.json`, trusting it, or without a project to the user's
     /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
@@ -840,19 +828,18 @@ impl AgentConfigs {
         let _editing = self.editing();
         let entries = self.registry.agents();
         let merged = self.merged(project);
-        // Only an `npx` agent has an update: its package gets the new version.
-        let targets: Vec<(AgentSummary, String, String)> = self
+        // Only an agent its crate updates (an `npx` one) has an update: the pin and the download.
+        let hub = crate::agents::standard();
+        let targets: Vec<(AgentSummary, String, agent_api::Update)> = self
             .list(project)
             .agents
             .into_iter()
             .filter(|a| agent_id.is_none_or(|id| a.id == id))
             .filter_map(|a| {
                 let to = a.update.as_ref()?.to.clone();
-                let matched = registry::match_launch(&entries, &a.command, &a.args)?;
-                let registry::Launch::Npx(npx) = &matched.agent.launch else { return None };
-                let package = npx.package.clone();
-                let spec = format!("{package}@{to}");
-                Some((a, package, spec))
+                registry::match_launch(&entries, &a.command, &a.args)?;
+                let update = hub.for_launch(&crate::agents::launch_of_parts(&a.command, &a.args)).update(&a.args, &to)?;
+                Some((a, to, update))
             })
             .collect();
         if targets.is_empty() {
@@ -868,27 +855,22 @@ impl AgentConfigs {
             .collect();
         edit_file(&self.file_of(project)?, |root| {
             let agents = agents_of(root)?;
-            for (agent, package, spec) in &targets {
+            for (agent, to, update) in &targets {
                 let args = agents
                     .get_mut(&agent.id)
                     .and_then(|entry| entry.get_mut("args"))
                     .and_then(serde_json::Value::as_array_mut)
                     .ok_or_else(|| format!("agent \"{}\" has no args to pin", agent.id))?;
-                let texts: Vec<String> = args.iter().map(|arg| arg.as_str().unwrap_or_default().to_owned()).collect();
-                let (at, arg) = pinned_arg(&texts, package, spec).ok_or_else(|| format!("agent \"{}\" doesn't run {package}", agent.id))?;
-                args[at] = arg.into();
+                let (at, arg) = &update.pin;
+                let slot = args.get_mut(*at).ok_or_else(|| format!("agent \"{}\" can't be pinned to {to}", agent.id))?;
+                *slot = arg.as_str().into();
             }
             Ok(())
         })?;
         self.reload_file(project);
         let pinned: Vec<Pinned> = targets
             .iter()
-            .map(|(a, _, spec)| Pinned {
-                agent_id: a.id.clone(),
-                name: a.name.clone(),
-                spec: spec.clone(),
-                version: a.update.as_ref().map(|u| u.to.clone()).unwrap_or_default(),
-            })
+            .map(|(a, to, update)| Pinned { agent_id: a.id.clone(), name: a.name.clone(), download: update.download.clone(), version: to.clone() })
             .collect();
         for p in &pinned {
             tracing::info!(agent = %p.agent_id, version = %p.version, "agent pinned to the registry's version");
@@ -899,10 +881,10 @@ impl AgentConfigs {
                 .iter()
                 .zip(&was_trusted)
                 .zip(&pinned)
-                .filter_map(|(((_, package, _), before), pin)| {
+                .filter_map(|(((_, _, update), before), pin)| {
                     let mut expected = before.clone()?;
-                    let (at, arg) = pinned_arg(&expected.args, package, &pin.spec)?;
-                    expected.args[at] = arg;
+                    let (at, arg) = &update.pin;
+                    *expected.args.get_mut(*at)? = arg.clone();
                     now.launch(&pin.agent_id).filter(|launch| *launch == expected)
                 })
                 .collect();
@@ -1959,7 +1941,15 @@ mod tests {
         let configs = with_fixture(Some(user_file.clone()), None);
 
         let pinned = configs.pin_versions(None, Some("claude")).unwrap();
-        assert_eq!(pinned, [Pinned { agent_id: "claude".into(), name: "Claude".into(), spec: "@agentclientprotocol/claude-agent-acp@0.94.0".into(), version: "0.94.0".into() }]);
+        assert_eq!(
+            pinned,
+            [Pinned {
+                agent_id: "claude".into(),
+                name: "Claude".into(),
+                download: agent_kit::npm_prefetch("@agentclientprotocol/claude-agent-acp", "0.94.0"),
+                version: "0.94.0".into()
+            }]
+        );
         let after: serde_json::Value = serde_json::from_str(&fs::read_to_string(&user_file).unwrap()).unwrap();
         let mut expected: serde_json::Value = serde_json::from_str(text).unwrap();
         expected["agents"]["claude"]["args"][1] = "@agentclientprotocol/claude-agent-acp@0.94.0".into();
@@ -1971,7 +1961,11 @@ mod tests {
         assert!(configs.pin_versions(None, Some("custom")).unwrap().is_empty(), "not in the registry");
 
         let all = configs.pin_versions(None, None).unwrap();
-        assert_eq!(all.iter().map(|p| p.spec.as_str()).collect::<Vec<_>>(), ["@agentclientprotocol/codex-acp@0.65.0"], "every update: an unpinned one gets pinned");
+        assert_eq!(
+            all.iter().map(|p| p.download.args.last().map(String::as_str)).collect::<Vec<_>>(),
+            [Some("@agentclientprotocol/codex-acp@0.65.0")],
+            "every update: an unpinned one gets pinned"
+        );
         assert_eq!(configs.merged(None).agent("gem").unwrap().args, ["-y", "@agentclientprotocol/codex-acp@0.65.0", "--acp"]);
 
         fs::write(

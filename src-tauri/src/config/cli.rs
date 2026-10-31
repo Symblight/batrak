@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 pub use agent_api::{prompt_fits_argv, CliSpec, TerminalMode};
-use agent_api::{strings, ID, PROMPT};
+use agent_api::PROMPT;
 
 use super::AgentConfig;
 
@@ -32,8 +32,7 @@ pub struct CliOverride {
     pub prompt_args: Option<Vec<String>>,
 }
 
-/// The CLI of `agent`: its `cli` entry, else its crate's (`hub`), else the one of the registry agent
-/// it runs (by package; moving into crates). `config` (a session's picks) becomes flags through the
+/// The CLI of `agent`: its `cli` entry, else its crate's (`hub`). `config` (a session's picks) becomes flags through the
 /// crate of the agent's launch, also under a `cli` entry: what an option means is the agent's.
 pub fn cli_for(hub: &crate::agents::AgentHub, agent: &AgentConfig, config: &BTreeMap<String, String>) -> Option<CliSpec> {
     let launch = crate::agents::launch_of(agent);
@@ -52,24 +51,7 @@ fn cli_of(kind: &dyn agent_api::Agent, launch: &agent_api::Launch, agent: &Agent
         let prompt_args = cli.prompt_args.clone().unwrap_or_else(|| vec![PROMPT.to_owned()]);
         return Some(CliSpec { program, args, resume_args: cli.resume_args.clone(), new_args: cli.new_args.clone(), prompt_args });
     }
-    if let Some(spec) = kind.cli(launch) {
-        return Some(spec);
-    }
-    let (at, package, _) = launch.npx_package()?;
-    let (args, resume_args, new_args, prompt_args) = match package {
-        // The adapter is a library over Codex's own threads; its CLI is a package of its own.
-        "@agentclientprotocol/codex-acp" => {
-            let before = agent.args[..at].iter().filter(|a| a.starts_with('-'));
-            (before.cloned().chain(["@openai/codex".to_owned()]).collect(), strings(&["resume", ID]), None, Vec::new())
-        }
-        // The CLI itself, which `--acp` turns into the agent.
-        "@github/copilot" => {
-            let args = agent.args.iter().filter(|a| *a != "--acp").cloned().collect();
-            (args, strings(&["--resume", ID]), Some(strings(&["--session-id", ID])), vec![format!("--interactive={PROMPT}")])
-        }
-        _ => return None,
-    };
-    Some(CliSpec { program: agent.command.clone(), args, resume_args, new_args, prompt_args })
+    kind.cli(launch)
 }
 
 #[cfg(test)]

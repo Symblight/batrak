@@ -1,0 +1,9 @@
+[package]
+name = "agent-codex"
+version = "0.1.0"
+edition = "2021"
+description = "Codex for Brama: codex-acp, a library over Codex's threads, whose CLI is @openai/codex"
+
+[dependencies]
+agent-api = { path = "../agent-api" }
+agent-kit = { path = "../agent-kit" }

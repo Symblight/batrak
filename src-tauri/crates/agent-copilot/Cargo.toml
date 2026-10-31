@@ -1,0 +1,9 @@
+[package]
+name = "agent-copilot"
+version = "0.1.0"
+edition = "2021"
+description = "GitHub Copilot for Brama: the copilot CLI, which --acp makes the agent"
+
+[dependencies]
+agent-api = { path = "../agent-api" }
+agent-kit = { path = "../agent-kit" }
