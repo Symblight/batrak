@@ -692,7 +692,7 @@ mod tests {
     use tokio::sync::mpsc;
 
     use super::*;
-    use crate::acp::fake_agent::{self, FakeAgentOptions};
+    use crate::fake_agent::{self, FakeAgentOptions};
 
     /// Everything the agent sent, in order: updates' text and permission requests.
     #[derive(Debug, Clone, PartialEq)]

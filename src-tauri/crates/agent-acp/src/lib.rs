@@ -1,5 +1,6 @@
-//! Host for the Agent Client Protocol (ACP): runs one external coding agent per session and talks
-//! to it over its stdio. The only module that uses `agent_client_protocol` types; the rest of the
+//! Host for the Agent Client Protocol (ACP), shared by every agent crate (spec:
+//! `docs/specs/agent-plugins.md`): runs one external coding agent per session and talks to it over
+//! its stdio. The only module that uses `agent_client_protocol` types; the rest of the
 //! app sees [`Connection`], [`PromptBlock`], [`ClientHost`] and session updates as JSON (the ACP
 //! `SessionUpdate`, serialized by the crate, forwarded to the frontend as is).
 
@@ -7,8 +8,8 @@ pub mod auth;
 mod connection;
 pub mod process;
 
-#[cfg(test)]
-pub(crate) mod fake_agent;
+#[cfg(any(test, feature = "test-support"))]
+pub mod fake_agent;
 
 pub use connection::{Catalog, CatalogOptions, ConnectError, Connection, ListedSession, StartOptions, Started};
 

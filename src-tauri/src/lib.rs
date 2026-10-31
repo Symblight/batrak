@@ -1,4 +1,5 @@
-mod acp;
+/// The generic ACP driver, its own crate; `crate::acp::…` paths read as before.
+use agent_acp as acp;
 mod agents;
 mod commands;
 mod config;

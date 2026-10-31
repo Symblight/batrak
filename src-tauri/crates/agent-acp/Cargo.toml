@@ -1,0 +1,20 @@
+[package]
+name = "agent-acp"
+version = "0.1.0"
+edition = "2021"
+description = "Brama's generic ACP driver: an agent process over its stdio (Connection, Catalog, sign-in methods)"
+
+[features]
+# The in-process fake agent the app's tests drive.
+test-support = []
+
+[dependencies]
+agent-client-protocol = "=3.3.0"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
+tokio-util = { version = "0.7", features = ["compat"] }
+tracing = "0.1"
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"

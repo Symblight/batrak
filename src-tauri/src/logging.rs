@@ -1,6 +1,6 @@
 //! Logs: one file per day in the app log dir (`~/Library/Logs/dev.brama.app` on macOS), the
 //! last `KEEP_FILES` kept, and stderr too in dev builds. `BRAMA_LOG` overrides the level with an
-//! `EnvFilter` directive (`debug`, `brama_lib::git=trace`). Our own warnings and errors also
+//! `EnvFilter` directive (`debug`, `brama_lib::git=trace`, `agent_acp=debug`). Our own warnings and errors also
 //! reach every window as `app://notice`, which shows them as snackbars.
 
 use std::backtrace::Backtrace;
@@ -22,10 +22,19 @@ const NOTICE_EVENT: &str = "app://notice";
 /// A notice is a snackbar line, not a log: longer text is cut (the log file keeps all of it).
 const MAX_NOTICE: usize = 500;
 
+/// Our crates' log targets: the app's, and the agent crates' that log (`agent-acp`). Their lines get
+/// the app's level, and their warnings and errors reach the windows.
+const OWN_TARGETS: [&str; 2] = ["brama_lib", "agent_acp"];
+
 #[cfg(debug_assertions)]
-const DEFAULT_FILTER: &str = "info,brama_lib=debug";
+const DEFAULT_FILTER: &str = "info,brama_lib=debug,agent_acp=debug";
 #[cfg(not(debug_assertions))]
-const DEFAULT_FILTER: &str = "warn,brama_lib=info";
+const DEFAULT_FILTER: &str = "warn,brama_lib=info,agent_acp=info";
+
+/// Whether a line is one of our crates' (`OWN_TARGETS`, or a module of one).
+fn is_own(target: &str) -> bool {
+    OWN_TARGETS.iter().any(|own| target.strip_prefix(own).is_some_and(|rest| rest.is_empty() || rest.starts_with("::")))
+}
 
 /// Starts logging to `dir`, and sends notices to `app`'s windows when given. Lines are written synchronously, without `non_blocking`'s worker:
 /// the event loop exits the process without running destructors, so the worker's guard would
@@ -73,7 +82,7 @@ struct Notice {
     message: String,
 }
 
-/// Forwards `brama_lib` warnings and errors, and panics, to every window. Not under `BRAMA_LOG`:
+/// Forwards our crates' warnings and errors (`is_own`), and panics, to every window. Not under `BRAMA_LOG`:
 /// a quieter log must not hide failures from the user. `frontend` lines came from the page, which
 /// has shown them already.
 struct NoticeLayer {
@@ -94,7 +103,7 @@ impl<S: Subscriber> Layer<S> for NoticeLayer {
             _ => return,
         };
         let target = meta.target();
-        if !(target == "brama_lib" || target.starts_with("brama_lib::") || target == "panic") {
+        if !(is_own(target) || target == "panic") {
             return;
         }
         if EMITTING.with(|emitting| emitting.replace(true)) {
@@ -149,6 +158,19 @@ impl Visit for NoticeText {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn our_crates_lines_are_ours_wherever_they_log() {
+        for target in ["brama_lib", "brama_lib::git", "agent_acp", "agent_acp::connection"] {
+            assert!(is_own(target), "{target}");
+        }
+        for target in ["hyper", "agent_acpx", "brama_libs"] {
+            assert!(!is_own(target), "{target}");
+        }
+        for target in OWN_TARGETS {
+            assert!(DEFAULT_FILTER.contains(&format!("{target}=")), "the default filter keeps {target}'s lines");
+        }
+    }
 
     // The only test that installs the global subscriber and hook; other tests' lines land here too.
     #[test]

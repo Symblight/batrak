@@ -141,7 +141,8 @@ is destroyed, and `close_window_workspaces` when its page loads again (before an
 `tracing` everywhere in Rust (`tracing::info!` / `warn!` / `debug!`, never `println!`), set up in
 `src-tauri/src/logging.rs`: daily files `brama.<date>.log` in the app log dir (macOS:
 `~/Library/Logs/dev.brama.app`, last 7 kept), plus stderr in dev builds. Default level is
-`brama_lib=debug` in dev, `brama_lib=info` in release; `BRAMA_LOG` overrides it (an `EnvFilter`
+`brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the agent crates that log,
+`agent_acp`: `OWN_TARGETS` in `logging.rs`, where a new logging crate goes too); `BRAMA_LOG` overrides it (an `EnvFilter`
 directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
 `services/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
 calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at `info` for
@@ -151,7 +152,7 @@ git call; never log file contents.
 **Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices.js`:
 `notify(level, message)`, the same message counts up instead of stacking, at most 4, info 5s / warn
 8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
-sends every `brama_lib` warn/error and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
+sends every warn/error of ours (`brama_lib`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
 says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
 with no inline error goes through `reportError(what, err)` (`services/notices.js`: logs + snackbar);
 uncaught errors and rejections show one too.
@@ -180,7 +181,7 @@ test that reproduces it.
   test, and no test asserts computed styles or custom properties, unless I allow it for that change.
 
 - **Backend:** tests live next to the code (`#[cfg(test)] mod tests`, or `<module>/tests.rs` when
-  long). Agent behavior is tested against the in-process fake agent (`acp/fake_agent.rs`; extend
+  long). Agent behavior is tested against the in-process fake agent (`crates/agent-acp/src/fake_agent.rs`, the `test-support` feature; extend
   its scripts rather than mocking `Connection`), files against temp folders, git against
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs

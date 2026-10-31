@@ -1,7 +1,8 @@
 ---
 paths:
   - "src-tauri/src/session/**"
-  - "src-tauri/src/acp/**"
+  - "src-tauri/crates/agent-acp/**"
+  - "src-tauri/src/agents/**"
   - "src-tauri/src/commands/sessions.rs"
   - "src/services/{session-controller,session-root-controller,acp-adapter,session-input}.js"
   - "src/models/{session-input,cli-input}.js"
@@ -79,10 +80,10 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   with uncommitted work is kept (a warning). At launch `Sessions::tidy_worktrees` (background)
   prunes worktree metadata and removes app-data worktrees no session owns, unless dirty (a
   warning); branches stay.
-- **ACP host** (`src-tauri/src/acp/`): the only module using `agent-client-protocol` (pinned). One
+- **ACP host** (`src-tauri/crates/agent-acp/`, the app's `crate::acp`): the only crate using `agent-client-protocol` (pinned). One
   process per session in its own process group (stopped as a group; `process::stop_all` on app
   exit), stderr → `<app data>/sessions/<id>/agent.log`. Dispatch-loop callbacks never wait:
-  permission responders are parked until the user answers. Tests run `acp/fake_agent.rs`
+  permission responders are parked until the user answers. Tests run `agent-acp`'s `fake_agent.rs` (feature `test-support`)
   in-process; `real_claude_agent_end_to_end` (ignored) runs the real agent.
 - **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
   `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/acp-adapter.js`), which

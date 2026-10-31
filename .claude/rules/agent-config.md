@@ -1,7 +1,8 @@
 ---
 paths:
   - "src-tauri/src/config/**"
-  - "src-tauri/src/acp/auth.rs"
+  - "src-tauri/crates/agent-acp/src/auth.rs"
+  - "src-tauri/crates/agent-*/**"
   - "src-tauri/src/commands/agents.rs"
   - "src/services/{agent-config,trust-controller}.js"
   - "src/stores/{agents,trust}.js"
@@ -121,7 +122,7 @@ paths:
   Stop, cancel or the agent leaving drop it (`prompt-returned`, back into the composer). The banner
   offers the agent's `agent` methods and Retry (`agents_sign_in`, `methodId: null` only checks, for
   a login done in a terminal); once a sign-in, Retry or probe works, every session waiting on that
-  launch starts again and sends its held prompt. A `terminal` / `command` method (`acp/auth.rs`
+  launch starts again and sends its held prompt. A `terminal` / `command` method (`agent-acp`'s `auth.rs`
   `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd
   `<app data>/probe`); `agents_sign_in` returns its `LoginTab` (also in `agents://sign-in`'s

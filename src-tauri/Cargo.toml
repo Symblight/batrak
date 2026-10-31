@@ -19,6 +19,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 agent-api = { path = "crates/agent-api" }
+agent-acp = { path = "crates/agent-acp" }
 agent-antigravity = { path = "crates/agent-antigravity" }
 agent-claude = { path = "crates/agent-claude" }
 agent-codex = { path = "crates/agent-codex" }
@@ -77,3 +78,6 @@ libc = "0.2"
 # 10x slower unoptimized, which makes Quick Open lag in `tauri dev`. Our own crate stays debug.
 [profile.dev.package."*"]
 opt-level = 2
+
+[dev-dependencies]
+agent-acp = { path = "crates/agent-acp", features = ["test-support"] }
