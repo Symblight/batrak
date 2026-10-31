@@ -84,10 +84,7 @@ async function open(props = {}, state = STATE, selection) {
 }
 
 afterEach(() => {
-  for (const el of document.querySelectorAll('acp-search-dialog')) {
-    el.close();
-    el.parentElement?.remove();
-  }
+  for (const el of document.querySelectorAll('acp-search-dialog')) el.close();
 });
 
 describe('acp-search-dialog', () => {

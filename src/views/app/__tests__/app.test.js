@@ -84,10 +84,7 @@ describe('acp-app: search dialog', () => {
   });
 
   afterEach(() => {
-    for (const el of document.querySelectorAll('acp-app')) {
-      searchDialog(/** @type {AcpApp} */ (el))?.close();
-      el.parentElement?.remove();
-    }
+    for (const el of document.querySelectorAll('acp-app')) searchDialog(/** @type {AcpApp} */ (el))?.close();
     $projectSearch.setKey('/p', undefined);
     $workspace.set(null);
     clearMocks();

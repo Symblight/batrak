@@ -113,7 +113,6 @@ describe('acp-agent-column', () => {
   });
 
   afterEach(() => {
-    for (const el of document.querySelectorAll('acp-agent-column')) el.parentElement?.remove();
     for (const id of Object.keys($sessionViews.get())) forgetSessionView(id);
     $terminals.set({});
     $activeSessionId.set(null);

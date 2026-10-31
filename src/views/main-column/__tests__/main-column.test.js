@@ -44,7 +44,6 @@ describe('acp-main-column', () => {
 
   afterEach(() => {
     proto.paste = paste;
-    for (const el of document.querySelectorAll('acp-main-column')) el.parentElement?.remove();
     closeAllTabs();
     $terminals.set({});
     $workspace.set(null);

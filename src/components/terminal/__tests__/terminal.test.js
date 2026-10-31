@@ -80,11 +80,6 @@ const text = (el) => el.shadowRoot?.querySelector('.xterm-rows')?.textContent ??
 const input = (el) => /** @type {HTMLTextAreaElement} */ (el.shadowRoot?.querySelector('textarea'));
 
 describe('acp-terminal', () => {
-  // xterm draws nothing while it's out of view: each test's terminal goes once it's done.
-  afterEach(() => {
-    for (const el of document.querySelectorAll('acp-terminal')) el.parentElement?.remove();
-  });
-
   it('connects at its size and shows the shell’s output', async () => {
     const { el, calls } = await render();
     expect(calls.connects[0].cols).to.be.greaterThan(10);
