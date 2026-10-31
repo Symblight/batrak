@@ -20,7 +20,6 @@ import type { AcpCommentBar } from './components/comment-bar/comment-bar.js';
 import type { AcpChat } from './components/chat/chat.js';
 import type { AcpImagePreview } from './components/image-preview/image-preview.js';
 import type { AcpMarkdown } from './components/markdown/markdown.js';
-import type { AcpMarkdownPreview } from './components/markdown-preview/markdown-preview.js';
 import type { AcpCodeView } from './components/code-view/code-view.js';
 import type { AcpTabStrip } from './components/tab-strip/tab-strip.js';
 import type { AcpTabView } from './components/tab-view/tab-view.js';
@@ -79,7 +78,6 @@ declare global {
     'acp-context-meter': AcpContextMeter;
     'acp-image-preview': AcpImagePreview;
     'acp-markdown': AcpMarkdown;
-    'acp-markdown-preview': AcpMarkdownPreview;
     'acp-tab-strip': AcpTabStrip;
     'acp-tab-view': AcpTabView;
     'acp-main-column': AcpMainColumn;
