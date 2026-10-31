@@ -1,14 +1,14 @@
 import { StoreController } from '../store/StoreController.js';
-import { readFile, sessionChanges, sessionFileAtBase } from '../../services/ipc.js';
-import { sessionOfTab } from '../../models/tab-ids.js';
-import { $activePath } from '../../stores/editor.js';
-import { $sessions } from '../../stores/sessions.js';
+import { readFile, sessionChanges, sessionFileAtBase } from '../../services/ipc/ipc.js';
+import { sessionOfTab } from '../../models/tab-ids/tab-ids.js';
+import { $activePath } from '../../stores/editor/editor.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 
 /**
  * What a worktree session's Changes tab shows.

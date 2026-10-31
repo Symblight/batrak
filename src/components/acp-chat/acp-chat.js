@@ -10,11 +10,11 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { basename, relPath } from '../../models/paths.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { basename, relPath } from '../../models/paths/paths.js';
 import styles from './acp-chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
-import { MESSAGE_PART_RULES } from '../../models/chat-parts.js';
+import { MESSAGE_PART_RULES } from '../../models/chat-parts/chat-parts.js';
 import '../acp-agent-picker/acp-agent-picker.js';
 import '../acp-context-meter/acp-context-meter.js';
 import '../acp-mode-picker/acp-mode-picker.js';
@@ -25,15 +25,15 @@ import '../acp-session-banner/acp-session-banner.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
-/** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
-/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types.js').ChatFile} ChatFile */
-/** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
-/** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
-/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
-/** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
+/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types/types.js').ChatFile} ChatFile */
+/** @typedef {import('../../models/types/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../models/types/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 
 /**
@@ -250,7 +250,7 @@ export class AcpChat extends LitElement {
     this.agents = [];
     /** @type {AgentInfo | null} */
     this.agent = null;
-    /** @type {import('../../models/types.js').AgentOptionsStatus | null} */
+    /** @type {import('../../models/types/types.js').AgentOptionsStatus | null} */
     this.optionsStatus = null;
     /** @type {readonly string[]} */
     this.branches = [];
@@ -258,13 +258,13 @@ export class AcpChat extends LitElement {
     this.currentBranch = null;
     /** @type {number} Other local sessions of the project with a running agent, for the run target. */
     this.localShared = 0;
-    /** @type {import('../../models/types.js').LocalTurns} */
+    /** @type {import('../../models/types/types.js').LocalTurns} */
     this.localTurns = 'queue';
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
     this.notice = null;
-    /** @type {import('../../models/types.js').SignInRun | null} The sign-in of the notice's agent. */
+    /** @type {import('../../models/types/types.js').SignInRun | null} The sign-in of the notice's agent. */
     this.signInRun = null;
     /** @type {boolean} */
     this.dropping = false;

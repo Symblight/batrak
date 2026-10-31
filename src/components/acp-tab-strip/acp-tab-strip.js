@@ -19,17 +19,17 @@ import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { basename, shownPath, worktreeOf } from '../../models/paths.js';
-import { sessionOfTab, terminalOfTab } from '../../models/tab-ids.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { basename, shownPath, worktreeOf } from '../../models/paths/paths.js';
+import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
 import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflowController.js';
 import styles from './acp-tab-strip.css?inline';
 
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
 
 /** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
 

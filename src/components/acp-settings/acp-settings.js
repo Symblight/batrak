@@ -18,16 +18,16 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
 import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
 import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
-import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts.js';
-import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings.js';
+import { DEFAULT_EDITOR_FONT, fontStack } from '../../models/editor-fonts/editor-fonts.js';
+import { FONT_SIZE_MAX, FONT_SIZE_MIN, isSectionDefault, lineHeightFor, normalizeHex } from '../../models/settings/settings.js';
 import styles from './acp-settings.css?inline';
 
-/** @typedef {import('../../models/types.js').Appearance} Appearance */
-/** @typedef {import('../../models/types.js').FontFamily} FontFamily */
-/** @typedef {import('../../models/types.js').Settings} Settings */
-/** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
-/** @typedef {import('../../models/types.js').SettingsAnchor} SettingsAnchor */
-/** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../models/types/types.js').Appearance} Appearance */
+/** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../models/settings/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../../models/types/types.js').SettingsAnchor} SettingsAnchor */
+/** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
 
 /** @type {{ id: SettingsAnchor, label: string, icon: string }[]} The sections, top to bottom. */
 const SECTIONS = [

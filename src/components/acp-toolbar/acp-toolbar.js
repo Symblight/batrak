@@ -6,8 +6,8 @@ import '@symblight/wc-material/tooltip';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import styles from './acp-toolbar.css?inline';
 
-/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types.js').Workspace} Workspace */
+/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types/types.js').Workspace} Workspace */
 
 /**
  * @tag acp-toolbar

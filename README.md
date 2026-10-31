@@ -52,7 +52,7 @@ Timing on a real repo: `BRAMA_BENCH_ROOT=/path/to/repo cargo test --release benc
 src/
   main.js                  entry
   styles/tokens.css        MD3-style tokens, light/dark
-  models/types.js          JSDoc typedefs (Session mirrors Rust struct)
+  models/types/types.js  JSDoc typedefs (Session mirrors Rust struct)
   services/
     ipc.js                 only place that knows Rust command names
     project-controller.js  opened folder + workspace rootId, re-emits fs changes

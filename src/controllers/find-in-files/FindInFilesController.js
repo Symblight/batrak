@@ -1,13 +1,13 @@
 import { StoreController } from '../store/StoreController.js';
-import { cancelSearch, findInFiles } from '../../services/ipc.js';
-import { $rootId } from '../../stores/workspace.js';
+import { cancelSearch, findInFiles } from '../../services/ipc/ipc.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').SearchEvent} SearchEvent */
-/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../models/types.js').SearchErrorSource} SearchErrorSource */
+/** @typedef {import('../../models/types/types.js').SearchEvent} SearchEvent */
+/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../models/types/types.js').SearchErrorSource} SearchErrorSource */
 
 /**
  * @typedef {Object} FindInFilesConfig

@@ -1,17 +1,17 @@
 import { StoreController } from '../store/StoreController.js';
-import { gitController } from '../../services/git-controller.js';
-import { gitFileAtHead, readFile } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor.js';
-import { $gitChanges, $gitHead } from '../../stores/git.js';
-import { $rootId } from '../../stores/workspace.js';
+import { gitController } from '../../services/git-controller/git-controller.js';
+import { gitFileAtHead, readFile } from '../../services/ipc/ipc.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
+import { $gitChanges, $gitHead } from '../../stores/git/git.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /**
  * Whether two status entries of one file describe the same change.

@@ -26,7 +26,7 @@ the app.
 
 Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.d.ts`). Type-checking via
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
-and is reached through `src/services/ipc.js`.
+and is reached through `src/services/ipc/ipc.js`.
 
 - `src/components/` — one folder per custom element (see "File structure" below).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
@@ -34,7 +34,7 @@ and is reached through `src/services/ipc.js`.
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
-- `src/models/types.js` — shared JSDoc typedefs.
+- `src/models/types/types.js` — shared JSDoc typedefs.
 - `src/styles/tokens.css` — global app tokens, imported once from `src/main.js`.
 
 Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor` (`cdx-*`),
@@ -46,7 +46,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `src/services/` (backend calls, controllers that write stores), plus every browser API that holds or
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
-  `@tauri-apps/*` (only in `services/ipc.js`). Nothing above it talks to these directly.
+  `@tauri-apps/*` (only in `services/ipc/ipc.js`). Nothing above it talks to these directly.
 - **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
   `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
   from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass
@@ -84,7 +84,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   store. One-off happenings stay events: DOM `acp-*` events for UI intents (`acp-file-open`), and
   `projectController`'s `fs-change` for watcher batches. Don't mirror a store into a reactive property or
   re-announce it with an event.
-- **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor.js`) or, when they
+- **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor/editor.js`) or, when they
   call the backend, in a service that writes the store (`projectController.open()` / `restore()` →
   `$workspace`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
 - **Narrow with `computed`.** `$rootId` (from `$workspace`) and `$activePath` (from `$editorTabs`) notify
@@ -93,7 +93,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `#workspace = new StoreController(this, { store: $workspace })`, read `this.#workspace.value` in
   `render()`. It re-renders the host on change; `onChange(value, oldValue)` runs a side effect (also once
   on connect). Outside a component, or for a one-off read in a handler, use `$store.get()`.
-- **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent.js`)
+- **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent/persistent.js`)
   keeps an atom as JSON in `localStorage` under a `brama:` key. `parse` validates what was stored (`null`
   → `initial`), `serialize` drops runtime-only fields (`Workspace.rootId`). `listen: false` for per-window
   state (folder, tabs); leave it on for shared preferences (column widths, settings) so all windows
@@ -144,17 +144,17 @@ is destroyed, and `close_window_workspaces` when its page loads again (before an
 `brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the agent crates that log,
 `agent_acp`: `OWN_TARGETS` in `logging.rs`, where a new logging crate goes too); `BRAMA_LOG` overrides it (an `EnvFilter`
 directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
-`services/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
+`services/logger/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
 calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at `info` for
 what a user did or what took noticeable time (a scan), `warn` for failures, and `debug` for every
 git call; never log file contents.
 
-**Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices.js`:
+**Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices/notices.js`:
 `notify(level, message)`, the same message counts up instead of stacking, at most 4, info 5s / warn
 8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
 sends every warn/error of ours (`brama_lib`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
 says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
-with no inline error goes through `reportError(what, err)` (`services/notices.js`: logs + snackbar);
+with no inline error goes through `reportError(what, err)` (`services/notices/notices.js`: logs + snackbar);
 uncaught errors and rejections show one too.
 
 ### Git
@@ -185,10 +185,9 @@ test that reproduces it.
   its scripts rather than mocking `Connection`), files against temp folders, git against
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
-  every `src/**/*.test.js`. A component's tests go in a `tests/` folder inside its own folder, named
-  after it (`components/acp-x/tests/acp-x.test.js`); a plain module's sit beside it
-  (`models/paths.test.js`). Keep logic in plain functions
-  (`stores/`, `models/`, `services/acp-adapter.js`) and test it directly; test a component through its
+  every `src/**/*.test.js`. Every entity has a folder of its own, with its tests in a `__tests__/` folder inside it, named
+  after it (`components/acp-x/__tests__/acp-x.test.js`, `models/paths/__tests__/paths.test.js`). Keep logic in plain functions
+  (`stores/`, `models/`, `services/acp-adapter/acp-adapter.js`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
@@ -219,8 +218,8 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 - Every function/method with parameters gets `@param` types; add a one-line description when the
   name doesn't say it all. Lifecycle methods (`constructor`, `connectedCallback`, `render`,
   `willUpdate`…) need no comment beyond types.
-- Shared shapes are `@typedef`s in `src/models/types.js`, imported with
-  `/** @typedef {import('../../models/types.js').X} X */`.
+- Shared shapes are `@typedef`s in `src/models/types/types.js`, imported with
+  `/** @typedef {import('../../models/types/types.js').X} X */`.
 - No `any`. `src/elements.d.ts` maps every `acp-*` tag in `HTMLElementTagNameMap` (the `@symblight`
   libraries ship their own), so `querySelector('acp-x')` is typed — register each new element there.
   Cast an event once at the top of a handler: `/** @type {CustomEvent<{ path: string }>} */ (e).detail`.
@@ -260,7 +259,7 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   a literal; add a token once a second place needs it. Prefer logical properties (`margin-inline-start`,
   `inset-block-end`, `text-align: start`).
 - **Dark-only CSS keys on `:root[data-theme='dark']`**, never on `prefers-color-scheme`: Appearance
-  (`$settings`, applied by `services/theme.js`) can override the OS.
+  (`$settings`, applied by `services/theme/theme.js`) can override the OS.
 - **Derived colors use `color-mix()`** over those tokens (hover/pressed tints, translucent fills,
   borders: `color-mix(in srgb, var(--md-primary) 12%, transparent)`), not a new token or an `rgba()`
   copy of one, so they follow the theme and accent.
@@ -301,21 +300,20 @@ full rules — load them when writing or reviewing component CSS or structure.
 ### File structure
 
 Flex scheme: `src/components/` is a flat list of block folders, each holding the element's JS and CSS
-under the tag name, and its tests in `tests/`:
+under the tag name, and its tests in `__tests__/`:
 
 ```
 src/components/
 ├── acp-tab-view/
 │   ├── acp-tab-view.js
 │   ├── acp-tab-view.css
-│   └── tests/
+│   └── __tests__/
 │       └── acp-tab-view.test.js
 └── acp-toolbar/
     ├── acp-toolbar.js
     ├── acp-toolbar.css
-    └── tests/
+    └── __tests__/
         └── acp-toolbar.test.js
 ```
 
-The element's tests live in a `tests/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../acp-x/acp-x.js'` and services as
-`'../../services/x.js'`.
+The element's tests live in a `__tests__/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../acp-x/acp-x.js'`; services, models and stores are one folder per module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).

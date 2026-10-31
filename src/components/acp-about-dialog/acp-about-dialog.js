@@ -4,10 +4,10 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/dialog';
 import '@symblight/wc-material/icon';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
-import { aboutRows } from '../../models/about.js';
+import { aboutRows } from '../../models/about/about.js';
 import styles from './acp-about-dialog.css?inline';
 
-/** @typedef {import('../../models/types.js').AboutInfo} AboutInfo */
+/** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
 
 /**
  * @tag acp-about-dialog

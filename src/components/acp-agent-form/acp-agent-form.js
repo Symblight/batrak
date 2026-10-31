@@ -6,11 +6,11 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/select';
 import '@symblight/wc-material/text-field';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
-import { commandLine, parseCommandLine } from '../../models/agents.js';
+import { commandLine, parseCommandLine } from '../../models/agents/agents.js';
 import styles from './acp-agent-form.css?inline';
 
-/** @typedef {import('../../models/types.js').KnownAgent} KnownAgent */
-/** @typedef {import('../../models/types.js').NewAgent} NewAgent */
+/** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../models/types/types.js').NewAgent} NewAgent */
 
 /**
  * An agent the form edits: what it's called and runs.

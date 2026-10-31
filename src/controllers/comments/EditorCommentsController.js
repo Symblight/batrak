@@ -1,9 +1,9 @@
-import { editorOf } from '../../models/editor-events.js';
+import { editorOf } from '../../models/editor-events/editor-events.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
 
 /**
  * @typedef {Object} EditorCommentsConfig

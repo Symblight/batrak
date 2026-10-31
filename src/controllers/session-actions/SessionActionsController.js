@@ -1,13 +1,13 @@
-import { removeSessionConfirm } from '../../models/sessions.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionController } from '../../services/session-controller.js';
-import { terminalController } from '../../services/terminals.js';
-import { $sessions } from '../../stores/sessions.js';
+import { removeSessionConfirm } from '../../models/sessions/sessions.js';
+import { reportError } from '../../services/notices/notices.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionController } from '../../services/session-controller/session-controller.js';
+import { terminalController } from '../../services/terminals/terminals.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} SessionActionsHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 
 /**
  * @typedef {Object} SessionActionsConfig

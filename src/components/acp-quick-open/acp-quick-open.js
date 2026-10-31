@@ -1,7 +1,7 @@
 import { LitElement, html, nothing } from 'lit';
 import styles from './acp-quick-open.css?inline';
 
-/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 
 /**
  * A palette row. `run` is called on Enter / click.

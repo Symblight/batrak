@@ -3,17 +3,17 @@ import '../acp-confirm-dialog/acp-confirm-dialog.js';
 import '../acp-session-list/acp-session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
-import { getHomeDir } from '../../services/ipc.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionController } from '../../services/session-controller.js';
-import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects.js';
-import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime.js';
-import { $now } from '../../stores/clock.js';
-import { $sessionSync } from '../../stores/session-sync.js';
-import { loadingProjects } from '../../models/sessions.js';
-import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions.js';
-import { $openingPath, $workspace } from '../../stores/workspace.js';
+import { getHomeDir } from '../../services/ipc/ipc.js';
+import { reportError } from '../../services/notices/notices.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionController } from '../../services/session-controller/session-controller.js';
+import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
+import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime/session-runtime.js';
+import { $now } from '../../stores/clock/clock.js';
+import { $sessionSync } from '../../stores/session-sync/session-sync.js';
+import { loadingProjects } from '../../models/sessions/sessions.js';
+import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
+import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
 import styles from './acp-session-column.css?inline';
 
 /**

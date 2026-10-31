@@ -14,8 +14,8 @@ import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import styles from './acp-session-header.css?inline';
 
-/** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
-/** @typedef {import('../../models/types.js').SessionView} SessionView */
+/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
 
 /**
  * @tag acp-session-header

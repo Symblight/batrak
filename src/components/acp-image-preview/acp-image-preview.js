@@ -3,7 +3,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import brokenImageIcon from '@material-design-icons/svg/outlined/broken_image.svg?raw';
 import '../acp-bytes/acp-bytes.js';
 import '../acp-view-placeholder/acp-view-placeholder.js';
-import { imageTypeOf } from '../../models/image-types.js';
+import { imageTypeOf } from '../../models/image-types/image-types.js';
 import styles from './acp-image-preview.css?inline';
 
 /** @typedef {'grid' | 'auto'} ImageBackground */

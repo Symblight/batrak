@@ -21,18 +21,18 @@ import keyboardArrowDownIcon from '@material-design-icons/svg/outlined/keyboard_
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
-import { commentAuthor, editorPlugins } from '../../models/editor-plugins.js';
-import { absPath } from '../../models/paths.js';
+import { commentAuthor, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
+import { absPath } from '../../models/paths/paths.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './acp-changes-review.css?inline';
 
-/** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
 
 /**
  * A changed file as a row.

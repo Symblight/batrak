@@ -6,12 +6,12 @@ import '@symblight/wc-material/tooltip';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { MAX_MATCHES, clipLine, highlightParts, matchRows, moveKey } from '../../models/search-results.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { MAX_MATCHES, clipLine, highlightParts, matchRows, moveKey } from '../../models/search-results/search-results.js';
 import styles from './acp-search-results.css?inline';
 
-/** @typedef {import('../../models/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../models/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
 /** @typedef {{ kind: 'file', key: string, path: string, count: number } | { kind: 'row', key: string, row: SearchMatchRow }} Item */
 
 /** @param {string} path */

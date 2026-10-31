@@ -11,23 +11,23 @@ import '../acp-changes-review/acp-changes-review.js';
 import '../acp-image-preview/acp-image-preview.js';
 import '../acp-terminal/acp-terminal.js';
 import '../acp-browser/acp-browser.js';
-import { relPath } from '../../models/paths.js';
-import { sessionOfTab, terminalOfTab } from '../../models/tab-ids.js';
+import { relPath } from '../../models/paths/paths.js';
+import { sessionOfTab, terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 import styles from './acp-tab-view.css?inline';
 
-/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types.js').Settings} Settings */
-/** @typedef {import('../../models/types.js').FontFamily} FontFamily */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../models/types.js').TerminalConnect} TerminalConnect */
-/** @typedef {import('../../models/types.js').TerminalBusyQuery} TerminalBusyQuery */
+/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../models/types/types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('../../models/types/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../acp-file-tree/acp-file-tree.js').ListDir} ListDir */
 /** @typedef {import('../acp-tab-strip/acp-tab-strip.js').CloseScope} CloseScope */
 /** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
@@ -150,21 +150,21 @@ export class AcpTabView extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} For the Settings tab. */
     this.fonts = null;
-    /** @type {import('../../models/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
+    /** @type {import('../../models/types/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
     this.agents = null;
-    /** @type {import('../../models/types.js').SettingsReveal | null} For the Settings tab. */
+    /** @type {import('../../models/types/types.js').SettingsReveal | null} For the Settings tab. */
     this.settingsReveal = null;
-    /** @type {import('../../models/types.js').AgentsView | null} For the Agents tab. */
+    /** @type {import('../../models/types/types.js').AgentsView | null} For the Agents tab. */
     this.agentsView = null;
-    /** @type {import('../../models/types.js').AgentsQuery} For the Agents tab. */
+    /** @type {import('../../models/types/types.js').AgentsQuery} For the Agents tab. */
     this.agentsQuery = { query: '', filter: 'all' };
     /** @type {{ updating: readonly string[], checking: boolean }} For the Agents tab: calls this window waits for. */
     this.agentsPending = { updating: [], checking: false };
-    /** @type {Readonly<Record<string, import('../../models/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
+    /** @type {Readonly<Record<string, import('../../models/types/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
     this.agentsSignIns = {};
     /** @type {readonly string[]} For the Agents tab: the agents whose sessions open in the terminal. */
     this.agentsTerminal = [];
-    /** @type {import('../../models/types.js').AgentsReveal | null} For the Agents tab. */
+    /** @type {import('../../models/types/types.js').AgentsReveal | null} For the Agents tab. */
     this.agentsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;

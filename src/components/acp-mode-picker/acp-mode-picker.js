@@ -11,13 +11,13 @@ import checklistIcon from '@material-design-icons/svg/outlined/checklist.svg?raw
 import handIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import shieldIcon from '@material-design-icons/svg/outlined/shield.svg?raw';
 import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
-import { configOf } from '../../models/config-options.js';
+import { configOf } from '../../models/config-options/config-options.js';
 import styles from './acp-mode-picker.css?inline';
 
-/** @typedef {import('../../models/types.js').ConfigOptionValue} ConfigOptionValue */
-/** @typedef {import('../../models/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../models/types/types.js').ConfigOptionValue} ConfigOptionValue */
+/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
 
-/** @typedef {import('../../models/types.js').ModeRisk} ModeRisk */
+/** @typedef {import('../../models/types/types.js').ModeRisk} ModeRisk */
 
 /** Each risk's icon; a value its agent's crate didn't tag gets the shield. */
 const RISK_ICONS = { plan: checklistIcon, neutral: handIcon, agent: boltIcon, full: warningIcon };

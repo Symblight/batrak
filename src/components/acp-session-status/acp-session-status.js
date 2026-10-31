@@ -7,10 +7,10 @@ import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import queuedIcon from '@material-design-icons/svg/outlined/hourglass_empty.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import { INDICATOR_LABELS } from '../../models/sessions.js';
+import { INDICATOR_LABELS } from '../../models/sessions/sessions.js';
 import styles from './acp-session-status.css?inline';
 
-/** @typedef {import('../../models/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
 
 const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon, terminal: terminalIcon };
 

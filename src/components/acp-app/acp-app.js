@@ -1,27 +1,27 @@
 import { LitElement, html, nothing } from 'lit';
-import { agentConfig } from '../../services/agent-config.js';
-import { sessionController } from '../../services/session-controller.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionRootController } from '../../services/session-root-controller.js';
-import { gitController } from '../../services/git-controller.js';
-import { trustController } from '../../services/trust-controller.js';
-import { terminalController } from '../../services/terminals.js';
-import { loadAbout } from '../../services/about.js';
-import { onMenuAction, quickOpen, revealPath } from '../../services/ipc.js';
-import { log } from '../../services/logger.js';
-import { reportError } from '../../services/notices.js';
-import { $about } from '../../stores/about.js';
-import { $activePath } from '../../stores/editor.js';
-import { $gitRepo } from '../../stores/git.js';
-import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout.js';
-import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices.js';
-import { $projectSearch, $searchDialogPrefs, addRecentSearch, saveProjectSearch, setSearchDialogPrefs } from '../../stores/search.js';
-import { $treeRoot } from '../../stores/session-root.js';
-import { $worktrees } from '../../stores/sessions.js';
-import { $trustPrompt } from '../../stores/trust.js';
-import { $rootId, $workspace } from '../../stores/workspace.js';
-import { projectPathOf, relPath } from '../../models/paths.js';
-import { trustConfirm } from '../../models/trust.js';
+import { agentConfig } from '../../services/agent-config/agent-config.js';
+import { sessionController } from '../../services/session-controller/session-controller.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
+import { gitController } from '../../services/git-controller/git-controller.js';
+import { trustController } from '../../services/trust-controller/trust-controller.js';
+import { terminalController } from '../../services/terminals/terminals.js';
+import { loadAbout } from '../../services/about/about.js';
+import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
+import { log } from '../../services/logger/logger.js';
+import { reportError } from '../../services/notices/notices.js';
+import { $about } from '../../stores/about/about.js';
+import { $activePath } from '../../stores/editor/editor.js';
+import { $gitRepo } from '../../stores/git/git.js';
+import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
+import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
+import { $projectSearch, $searchDialogPrefs, addRecentSearch, saveProjectSearch, setSearchDialogPrefs } from '../../stores/search/search.js';
+import { $treeRoot } from '../../stores/session-root/session-root.js';
+import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $trustPrompt } from '../../stores/trust/trust.js';
+import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { projectPathOf, relPath } from '../../models/paths/paths.js';
+import { trustConfirm } from '../../models/trust/trust.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import '../acp-about-dialog/acp-about-dialog.js';
@@ -40,11 +40,11 @@ import { ColumnResizeController } from '../../controllers/resize/ColumnResizeCon
 import styles from './acp-app.css?inline';
 
 /** @typedef {import('../acp-file-column/acp-file-column.js').SideView} SideView */
-/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types.js').TrustPrompt} TrustPrompt */
-/** @typedef {import('../../models/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
+/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
 
 /** @type {SearchDialogState} A project's search before its first one. */
 const NO_SEARCH = { query: '', caseSensitive: false, wholeWord: false, regex: false, folder: '', mask: '' };
@@ -89,7 +89,7 @@ export class AcpApp extends LitElement {
   /** @type {Promise<() => void> | null} */
   #menuListener = null;
 
-  #onMenuAction = (/** @type {import('../../services/ipc.js').MenuAction} */ id) => {
+  #onMenuAction = (/** @type {import('../../services/ipc/ipc.js').MenuAction} */ id) => {
     if (id === 'about') this.#showAbout();
     else if (id === 'new-terminal') this.#newTerminal();
     else this.#showSettings();

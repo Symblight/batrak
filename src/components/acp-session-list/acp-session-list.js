@@ -23,12 +23,12 @@ import '../acp-session-menu/acp-session-menu.js';
 import '../acp-session-status/acp-session-status.js';
 import '../acp-session-sync/acp-session-sync.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { agentIconOf } from '../../models/agent-icons.js';
-import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions.js';
+import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
+import { SESSIONS_PAGE, isActiveElsewhere, orderSessions, sessionIndicator, visibleSessions } from '../../models/sessions/sessions.js';
 import styles from './acp-session-list.css?inline';
 
-/** @typedef {import('../../models/types.js').Project} Project */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../models/types/types.js').Project} Project */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 
 const REVEAL_LABEL = /Mac/.test(navigator.userAgent)
   ? 'Show in Finder'
@@ -124,7 +124,7 @@ export class AcpSessionList extends LitElement {
     this.waiting = [];
     /** @type {Readonly<Record<string, string>>} Why a project's folder couldn't be opened, by project id. */
     this.failures = {};
-    /** @type {import('../../models/types.js').SessionSync | null} The active project's sync with its agents. */
+    /** @type {import('../../models/types/types.js').SessionSync | null} The active project's sync with its agents. */
     this.sync = null;
     /** @type {readonly string[]} Projects whose sessions are loading; one with none to show yet shows skeleton rows. */
     this.loading = [];

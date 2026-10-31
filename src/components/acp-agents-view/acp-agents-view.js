@@ -20,19 +20,19 @@ import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { agentIconOf } from '../../models/agent-icons.js';
-import { ownSignIns } from '../../models/agents.js';
+import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
+import { ownSignIns } from '../../models/agents/agents.js';
 import '../acp-agent-form/acp-agent-form.js';
 import styles from './acp-agents-view.css?inline';
 
-/** @typedef {import('../../models/types.js').AgentsView} AgentsView */
-/** @typedef {import('../../models/types.js').AgentRow} AgentRow */
-/** @typedef {import('../../models/types.js').RegistryRow} RegistryRow */
-/** @typedef {import('../../models/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types.js').AgentsFilter} AgentsFilter */
-/** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
-/** @typedef {import('../../models/types.js').KnownAgent} KnownAgent */
-/** @typedef {import('../../models/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */
+/** @typedef {import('../../models/types/types.js').AgentRow} AgentRow */
+/** @typedef {import('../../models/types/types.js').RegistryRow} RegistryRow */
+/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../models/types/types.js').AgentsFilter} AgentsFilter */
+/** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
+/** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
 
 /** @type {Record<AgentRow['status'], string>} */
 const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off', signIn: 'Needs sign-in' };

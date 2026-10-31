@@ -6,28 +6,28 @@ import '@symblight/wc-material/tooltip';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
-import { gitController } from '../../services/git-controller.js';
-import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc.js';
-import { log } from '../../services/logger.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionRootController } from '../../services/session-root-controller.js';
-import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree.js';
-import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git.js';
-import { notify } from '../../stores/notices.js';
-import { absPath } from '../../models/paths.js';
-import { searchFilters } from '../../models/search-filter.js';
-import { $sessionRootOpening, $treeRoot } from '../../stores/session-root.js';
-import { $openingPath, $rootId, $workspace } from '../../stores/workspace.js';
+import { gitController } from '../../services/git-controller/git-controller.js';
+import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
+import { log } from '../../services/logger/logger.js';
+import { reportError } from '../../services/notices/notices.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
+import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
+import { notify } from '../../stores/notices/notices.js';
+import { absPath } from '../../models/paths/paths.js';
+import { searchFilters } from '../../models/search-filter/search-filter.js';
+import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
+import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../acp-file-tree/acp-file-tree.js';
 import '../acp-search-panel/acp-search-panel.js';
 import '../acp-changes-panel/acp-changes-panel.js';
 import styles from './acp-file-column.css?inline';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
-/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** @type {Record<SideView, string>} */
 const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };

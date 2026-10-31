@@ -8,23 +8,23 @@ import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import { commentAuthor, editorLanguages, editorPlugins } from '../../models/editor-plugins.js';
+import { commentAuthor, editorLanguages, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
-import { fileIconFor } from '../../models/file-icons.js';
-import { fontStack } from '../../models/editor-fonts.js';
-import { isAgentsFile } from '../../models/agents-file.js';
-import { absPath, basename, projectPathOf, relPath, shownPath, worktreeOf } from '../../models/paths.js';
-import { lineHeightFor } from '../../models/settings.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { fontStack } from '../../models/editor-fonts/editor-fonts.js';
+import { isAgentsFile } from '../../models/agents-file/agents-file.js';
+import { absPath, basename, projectPathOf, relPath, shownPath, worktreeOf } from '../../models/paths/paths.js';
+import { lineHeightFor } from '../../models/settings/settings.js';
 import styles from './acp-code-view.css?inline';
 
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
 /** @typedef {import('../acp-file-tree/acp-file-tree.js').ListDir} ListDir */
 
 /**

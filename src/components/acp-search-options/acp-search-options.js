@@ -8,7 +8,7 @@ import wordIcon from '@material-design-icons/svg/outlined/abc.svg?raw';
 import regexIcon from '@material-design-icons/svg/outlined/emergency.svg?raw';
 import styles from './acp-search-options.css?inline';
 
-/** @typedef {import('../../models/search.js').SearchOptionKey} SearchOptionKey */
+/** @typedef {import('../../models/search/search.js').SearchOptionKey} SearchOptionKey */
 
 /** @type {{ option: SearchOptionKey, icon: string, label: string }[]} */
 const OPTIONS = [

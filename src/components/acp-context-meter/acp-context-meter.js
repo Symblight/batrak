@@ -7,7 +7,7 @@ import '@symblight/wc-material/tooltip';
 import { FloatingController } from '../../controllers/floating/FloatingController.js';
 import styles from './acp-context-meter.css?inline';
 
-/** @typedef {import('../../models/types.js').ContextUsage} ContextUsage */
+/** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
 
 /**
  * How the meter is coloured for a share of the window used.

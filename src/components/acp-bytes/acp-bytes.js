@@ -1,6 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/tooltip';
-import { Bytes } from './bytes.js';
+import { Bytes } from './bytes/bytes.js';
 import styles from './acp-bytes.css?inline';
 
 /**

@@ -7,12 +7,12 @@ import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
-import { configOf, currentName } from '../../models/config-options.js';
+import { configOf, currentName } from '../../models/config-options/config-options.js';
 import styles from './acp-model-picker.css?inline';
 
-/** @typedef {import('../../models/types.js').ConfigOption} ConfigOption */
-/** @typedef {import('../../models/types.js').ConfigOptionValue} ConfigOptionValue */
-/** @typedef {import('../../models/types.js').AgentOptionsStatus} AgentOptionsStatus */
+/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../models/types/types.js').ConfigOptionValue} ConfigOptionValue */
+/** @typedef {import('../../models/types/types.js').AgentOptionsStatus} AgentOptionsStatus */
 
 /** Categories with a chip of their own (`<acp-mode-picker>`). */
 const ELSEWHERE = new Set(['mode', 'permissions']);

@@ -9,7 +9,7 @@ import chevronLeftIcon from '@material-design-icons/svg/outlined/chevron_left.sv
 import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import styles from './acp-comment-bar.css?inline';
 
-/** @typedef {import('../../models/types.js').QueuedComment} QueuedComment */
+/** @typedef {import('../../models/types/types.js').QueuedComment} QueuedComment */
 
 /**
  * @tag acp-comment-bar

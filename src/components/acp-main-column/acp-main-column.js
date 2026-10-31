@@ -1,18 +1,18 @@
 import { LitElement, html } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { commentAuthor } from '../../models/editor-plugins.js';
-import { composedContains } from '../../models/file-drop.js';
-import { PLATFORM } from '../../models/platform.js';
-import { shellPaths } from '../../models/shell-paths.js';
-import { agentConfig } from '../../services/agent-config.js';
-import { copyText } from '../../services/clipboard.js';
-import { listDir, openUrl } from '../../services/ipc.js';
-import { loadSystemFonts } from '../../services/fonts.js';
-import { fileDrop } from '../../services/file-drop.js';
-import { reportError } from '../../services/notices.js';
-import { terminalController } from '../../services/terminals.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionController } from '../../services/session-controller.js';
+import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
+import { composedContains } from '../../models/file-drop/file-drop.js';
+import { PLATFORM } from '../../models/platform/platform.js';
+import { shellPaths } from '../../models/shell-paths/shell-paths.js';
+import { agentConfig } from '../../services/agent-config/agent-config.js';
+import { copyText } from '../../services/clipboard/clipboard.js';
+import { listDir, openUrl } from '../../services/ipc/ipc.js';
+import { loadSystemFonts } from '../../services/fonts/fonts.js';
+import { fileDrop } from '../../services/file-drop/file-drop.js';
+import { reportError } from '../../services/notices/notices.js';
+import { terminalController } from '../../services/terminals/terminals.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionController } from '../../services/session-controller/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
@@ -39,10 +39,10 @@ import {
   setFileLanguage,
   setTabPinned,
   settingsRevealed,
-} from '../../stores/editor.js';
-import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents.js';
-import { $agentViews, setAgentView } from '../../stores/session-views.js';
-import { addToChat } from '../../stores/chat.js';
+} from '../../stores/editor/editor.js';
+import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents/agents.js';
+import { $agentViews, setAgentView } from '../../stores/session-views/session-views.js';
+import { addToChat } from '../../stores/chat/chat.js';
 import {
   $commentFocus,
   $comments,
@@ -52,9 +52,9 @@ import {
   editComment,
   focusComment,
   sendToChat,
-} from '../../stores/comments.js';
-import { $systemFonts } from '../../stores/fonts.js';
-import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git.js';
+} from '../../stores/comments/comments.js';
+import { $systemFonts } from '../../stores/fonts/fonts.js';
+import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
 import {
   $settings,
   resetSection,
@@ -62,27 +62,27 @@ import {
   setAppearance,
   setEditorFont,
   setEditorFontSize,
-} from '../../stores/settings.js';
-import { $worktrees } from '../../stores/sessions.js';
-import { $terminals, setTerminalTitle } from '../../stores/terminals.js';
-import { $fileDropTarget } from '../../stores/file-drop.js';
-import { $rootId, $workspace } from '../../stores/workspace.js';
+} from '../../stores/settings/settings.js';
+import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
+import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
+import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../acp-tab-view/acp-tab-view.js';
 import { AcpTerminal } from '../acp-terminal/acp-terminal.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
-/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types.js').FileDrop} FileDrop */
-/** @typedef {import('../../models/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../models/types.js').SettingsReveal} SettingsReveal */
-/** @typedef {import('../../models/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types.js').AgentsReveal} AgentsReveal */
-/** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types.js').Settings} Settings */
-/** @typedef {import('../../models/types.js').SessionView} SessionView */
-/** @typedef {import('../../models/settings.js').SettingsSection} SettingsSection */
+/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
+/** @typedef {import('../../models/types/types.js').NewAgent} NewAgent */
+/** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
+/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+/** @typedef {import('../../models/settings/settings.js').SettingsSection} SettingsSection */
 /** @typedef {import('../acp-tab-strip/acp-tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 

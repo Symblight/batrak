@@ -1,13 +1,13 @@
 ---
 paths:
   - "src/stores/**"
-  - "src/models/tab-ids.js"
+  - "src/models/tab-ids/tab-ids.js"
   - "src/controllers/tab-content/**"
   - "src/components/acp-tab-view/**"
   - "src/components/acp-main-column/**"
   - "src/components/acp-image-preview/**"
   - "src/components/acp-settings/**"
-  - "src/services/theme.js"
+  - "src/services/theme/theme.js"
 ---
 
 # Persisted state and tabs
@@ -21,7 +21,7 @@ paths:
   and the tab scrolls there and answers `acp-settings-revealed`; `AGENTS_TAB_ID`, the Agents tab
   (see `agent-config.md`), opened by `openAgents(reveal)` (`$agentsReveal`: the registry's agents
   to add, or an agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
-  click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids.js`), one per
+  click in the Changes side pane opens, expands and scrolls to; `terminalTabId(id)` (`models/tab-ids/tab-ids.js`), one per
   terminal, see `terminals.md`; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
   (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its
@@ -42,7 +42,7 @@ paths:
   10 recent searches; two windows on one project: last write wins),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projectController.remove()` drops it
   from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
-  shared: appearance and accent, which `services/theme.js` turns into the MD3 palette and `data-theme` on
+  shared: appearance and accent, which `services/theme/theme.js` turns into the MD3 palette and `data-theme` on
   `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
-  `src/models/types.js`.
+  `src/models/types/types.js`.

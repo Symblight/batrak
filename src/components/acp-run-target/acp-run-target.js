@@ -10,13 +10,13 @@ import containerIcon from '@material-design-icons/svg/outlined/inventory_2.svg?r
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
-import { configOf } from '../../models/config-options.js';
+import { configOf } from '../../models/config-options/config-options.js';
 import styles from './acp-run-target.css?inline';
 
-/** @typedef {import('../../models/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../../models/types.js').RunTarget} RunTarget */
-/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../models/types.js').LocalTurns} LocalTurns */
+/** @typedef {import('../../models/types/types.js').RunTargetKind} RunTargetKind */
+/** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../models/types/types.js').LocalTurns} LocalTurns */
 
 /** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string, disabled?: boolean }[]} */
 const KINDS = [

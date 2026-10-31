@@ -4,8 +4,8 @@ paths:
   - "src-tauri/crates/agent-acp/src/auth.rs"
   - "src-tauri/crates/agent-*/**"
   - "src-tauri/src/commands/agents.rs"
-  - "src/services/{agent-config,trust-controller}.js"
-  - "src/stores/{agents,trust}.js"
+  - "src/services/{agent-config,trust-controller}/**"
+  - "src/stores/{agents,trust}/**"
   - "src/components/acp-{agents-view,agent-form,agent-picker}/**"
   - "docs/specs/{agents-tab,agent-sign-in}.md"
 ---
@@ -109,9 +109,9 @@ paths:
     / `args` / `env` it sets, or any start while it lists `mcpServers`, needs the user's trust in that
     exact `LaunchConfig` for that project (`agents_trust`, kept in `<app data>/trusted-agents.json`; a
     changed launch needs trust again). Untrusted, a start fails with an `untrusted` event and a probe is
-    refused. `trustController` (`services/trust-controller.js`) asks in a confirm dialog at the top of
+    refused. `trustController` (`services/trust-controller/trust-controller.js`) asks in a confirm dialog at the top of
     `<acp-app>` when a project opens, its agents.json changes or a start is refused (`agents_untrusted`
-    lists every launch waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all
+    lists every launch waiting; `$trustPrompt`, `stores/trust/trust.js`): Trust project trusts them all
     (`agents_trust`) and restarts the sessions it held back; Not now holds until what they run changes
     or a start is refused again (the session keeps its error notice, whose Restart asks again). A
     launch's `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't

@@ -2,14 +2,14 @@ import { LitElement, html, nothing } from 'lit';
 import '@symblight/wc-material/text-field';
 import '../acp-search-options/acp-search-options.js';
 import '../acp-search-results/acp-search-results.js';
-import { optionForKey } from '../../models/search.js';
-import { MAX_MATCHES, summaryText } from '../../models/search-results.js';
+import { optionForKey } from '../../models/search/search.js';
+import { MAX_MATCHES, summaryText } from '../../models/search-results/search-results.js';
 import styles from './acp-search-panel.css?inline';
 
-/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types.js').SearchFileResult} FileResult */
-/** @typedef {import('../../models/types.js').SearchMatchRow} SearchMatchRow */
-/** @typedef {import('../../models/search.js').SearchOptionKey} SearchOptionKey */
+/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types/types.js').SearchFileResult} FileResult */
+/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../models/search/search.js').SearchOptionKey} SearchOptionKey */
 
 /** Typing pause before a search starts. */
 const DEBOUNCE_MS = 250;

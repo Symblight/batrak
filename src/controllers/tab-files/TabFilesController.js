@@ -1,21 +1,21 @@
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
-import { isUserAgentsFile } from '../../models/agents-file.js';
-import { imageTypeOf } from '../../models/image-types.js';
-import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor.js';
-import { $gitHead } from '../../stores/git.js';
-import { $sessions } from '../../stores/sessions.js';
-import { $rootId } from '../../stores/workspace.js';
+import { isUserAgentsFile } from '../../models/agents-file/agents-file.js';
+import { imageTypeOf } from '../../models/image-types/image-types.js';
+import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
+import { reportError } from '../../services/notices/notices.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
+import { $gitHead } from '../../stores/git/git.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../models/types/types.js').Session} Session */
 
 /** @param {string} path */
 function basename(path) {

@@ -9,44 +9,44 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
-import { cliInput } from '../../models/cli-input.js';
-import { chatDropOf } from '../../models/file-drop.js';
-import { relPath } from '../../models/paths.js';
-import { PLATFORM } from '../../models/platform.js';
-import { shellPaths } from '../../models/shell-paths.js';
-import { inTurn, isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
-import { copyText } from '../../services/clipboard.js';
-import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
-import { agentConfig } from '../../services/agent-config.js';
-import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc.js';
-import { fileDrop } from '../../services/file-drop.js';
-import { reportError } from '../../services/notices.js';
-import { terminalController } from '../../services/terminals.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionController } from '../../services/session-controller.js';
-import { $signIns, signInOf } from '../../stores/agents.js';
-import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat.js';
-import { $now } from '../../stores/clock.js';
-import { $fileDropTarget } from '../../stores/file-drop.js';
-import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer.js';
-import { $activeContextUsage } from '../../stores/context-usage.js';
-import { openAgents } from '../../stores/editor.js';
-import { $gitRepo } from '../../stores/git.js';
-import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions.js';
-import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime.js';
-import { $sessionTerminals, $terminals, openLoginTerminal } from '../../stores/terminals.js';
-import { $activeShownView, $activeView } from '../../stores/session-views.js';
-import { $editorFont, $editorFontSize } from '../../stores/settings.js';
-import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
+import { cliInput } from '../../models/cli-input/cli-input.js';
+import { chatDropOf } from '../../models/file-drop/file-drop.js';
+import { relPath } from '../../models/paths/paths.js';
+import { PLATFORM } from '../../models/platform/platform.js';
+import { shellPaths } from '../../models/shell-paths/shell-paths.js';
+import { inTurn, isActiveElsewhere, sessionIndicator } from '../../models/sessions/sessions.js';
+import { copyText } from '../../services/clipboard/clipboard.js';
+import { USER_ID, acpAdapter } from '../../services/acp-adapter/acp-adapter.js';
+import { agentConfig } from '../../services/agent-config/agent-config.js';
+import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
+import { fileDrop } from '../../services/file-drop/file-drop.js';
+import { reportError } from '../../services/notices/notices.js';
+import { terminalController } from '../../services/terminals/terminals.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { sessionController } from '../../services/session-controller/session-controller.js';
+import { $signIns, signInOf } from '../../stores/agents/agents.js';
+import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat/chat.js';
+import { $now } from '../../stores/clock/clock.js';
+import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
+import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
+import { $activeContextUsage } from '../../stores/context-usage/context-usage.js';
+import { openAgents } from '../../stores/editor/editor.js';
+import { $gitRepo } from '../../stores/git/git.js';
+import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions/sessions.js';
+import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
+import { $sessionTerminals, $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
+import { $activeShownView, $activeView } from '../../stores/session-views/session-views.js';
+import { $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
+import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace/workspace.js';
 import styles from './acp-agent-column.css?inline';
 
 /** Larger attachments aren't sent to be saved (the backend's cap). */
 const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
 
-/** @typedef {import('../../models/types.js').FileDrop} FileDrop */
-/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types.js').RunTarget} RunTarget */
-/** @typedef {import('../../models/types.js').SessionView} SessionView */
+/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
+/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
 /** @typedef {import('../acp-session-banner/acp-session-banner.js').SessionAction} SessionAction */
 
 /**

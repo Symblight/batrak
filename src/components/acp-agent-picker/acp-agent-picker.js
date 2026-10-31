@@ -9,12 +9,12 @@ import agentIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import tuneIcon from '@material-design-icons/svg/outlined/tune.svg?raw';
-import { agentIconOf } from '../../models/agent-icons.js';
+import { agentIconOf } from '../../models/agent-icons/agent-icons.js';
 import styles from './acp-agent-picker.css?inline';
 
-/** @typedef {import('../../models/types.js').AgentInfo} AgentInfo */
-/** @typedef {import('../../models/types.js').CatalogAgent} CatalogAgent */
-/** @typedef {import('../../models/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../models/types/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../models/types/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
 
 /**
  * @tag acp-agent-picker

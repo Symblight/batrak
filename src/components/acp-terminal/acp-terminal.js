@@ -5,13 +5,13 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
-import { terminalTheme } from '../../models/terminal-theme.js';
+import { terminalTheme } from '../../models/terminal-theme/terminal-theme.js';
 import styles from './acp-terminal.css?inline';
 
-/** @typedef {import('../../models/types.js').TerminalConnect} TerminalConnect */
-/** @typedef {import('../../models/types.js').TerminalExit} TerminalExit */
-/** @typedef {import('../../models/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../models/types.js').TerminalLink} TerminalLink */
+/** @typedef {import('../../models/types/types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('../../models/types/types.js').TerminalExit} TerminalExit */
+/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../models/types/types.js').TerminalLink} TerminalLink */
 
 /** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
 const FULL_RESET = '\x1bc';

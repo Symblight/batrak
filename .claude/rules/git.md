@@ -2,8 +2,8 @@
 paths:
   - "src-tauri/src/git/**"
   - "src-tauri/src/commands/git.rs"
-  - "src/services/git-controller.js"
-  - "src/stores/git.js"
+  - "src/services/git-controller/git-controller.js"
+  - "src/stores/git/git.js"
   - "src/controllers/{changes-review,session-changes}/**"
   - "src/components/acp-changes-*/**"
   - "docs/specs/agent-git.md"
@@ -29,7 +29,7 @@ paths:
   slot while they run (`SlotGuard`), so no prompt starts under them. A worktree whose
   branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
   dirty worktree is removed only after its work was committed (`remove_saved`).
-- Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
+- Frontend: `gitController` (`services/git-controller/git-controller.js`) writes `stores/git/git.js` for the active root.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
   scans the working tree) is computed **only on demand**: `gitController.watchChanges()` starts it and

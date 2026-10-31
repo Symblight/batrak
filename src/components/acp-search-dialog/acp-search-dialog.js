@@ -23,19 +23,19 @@ import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import maskIcon from '@material-design-icons/svg/outlined/filter_alt.svg?raw';
 import '../acp-search-options/acp-search-options.js';
 import '../acp-search-results/acp-search-results.js';
-import { initialQuery, optionForKey } from '../../models/search.js';
-import { filterLabel, searchFilters } from '../../models/search-filter.js';
-import { summaryText } from '../../models/search-results.js';
+import { initialQuery, optionForKey } from '../../models/search/search.js';
+import { filterLabel, searchFilters } from '../../models/search-filter/search-filter.js';
+import { summaryText } from '../../models/search-results/search-results.js';
 import styles from './acp-search-dialog.css?inline';
 
-/** @typedef {import('../../models/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../models/types.js').SearchMatchRow} SearchMatchRow */
-/** @typedef {import('../../models/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types.js').SearchErrorSource} SearchErrorSource */
-/** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/search.js').SearchOptionKey} SearchOptionKey */
+/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../models/types/types.js').SearchErrorSource} SearchErrorSource */
+/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../models/search/search.js').SearchOptionKey} SearchOptionKey */
 /** @typedef {'folder' | 'mask'} Filter */
 
 /** Typing pause before a search starts. */

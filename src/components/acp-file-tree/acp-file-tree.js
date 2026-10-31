@@ -5,11 +5,11 @@ import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { absPath } from '../../models/paths.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { absPath } from '../../models/paths/paths.js';
 import styles from './acp-file-tree.css?inline';
 
-/** @typedef {import('../../models/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
 /** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean, path?: string }} TreeItem `path`: the root row's folder. */
 /** @typedef {(rootId: string, rel: string) => Promise<WorkspaceEntry[]>} ListDir A folder's entries; `''` is the root. */
 

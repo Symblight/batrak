@@ -4,8 +4,8 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/dialog';
 import styles from './acp-confirm-dialog.css?inline';
 
-/** @typedef {import('../../models/types.js').ConfirmOptions} ConfirmOptions */
-/** @typedef {import('../../models/types.js').ConfirmChoice} ConfirmChoice */
+/** @typedef {import('../../models/types/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('../../models/types/types.js').ConfirmChoice} ConfirmChoice */
 
 /**
  * @tag acp-confirm-dialog

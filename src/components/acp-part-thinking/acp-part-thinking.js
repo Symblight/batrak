@@ -5,7 +5,7 @@ import '@symblight/wc-material/icon';
 import thoughtIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
 import stoppedIcon from '@material-design-icons/svg/outlined/pause_circle.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import { formatElapsed, splitThought } from '../../models/thinking.js';
+import { formatElapsed, splitThought } from '../../models/thinking/thinking.js';
 import styles from './acp-part-thinking.css?inline';
 
 /** @typedef {'streaming' | 'done' | 'stopped'} ThinkingStatus */

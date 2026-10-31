@@ -11,13 +11,13 @@ import '@symblight/wc-material/tooltip';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
-import { absPath } from '../../models/paths.js';
+import { absPath } from '../../models/paths/paths.js';
 import styles from './acp-changes-panel.css?inline';
 
-/** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types.js').GitFileKind} GitFileKind */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../models/types/types.js').GitFileKind} GitFileKind */
+/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
 /** @typedef {'changes' | 'untracked'} ChangeGroup */
 
 /**

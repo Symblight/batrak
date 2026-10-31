@@ -2,13 +2,13 @@ import { LitElement, html, nothing } from 'lit';
 import { OPTION_VARIANTS } from '@symblight/chat/agent';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/tooltip';
-import { ownSignIns } from '../../models/agents.js';
+import { ownSignIns } from '../../models/agents/agents.js';
 import styles from './acp-session-banner.css?inline';
 
-/** @typedef {import('../../models/types.js').PermissionRequest} PermissionRequest */
-/** @typedef {import('../../models/types.js').SessionNotice} SessionNotice */
-/** @typedef {import('../../models/types.js').SessionSignIn} SessionSignIn */
-/** @typedef {import('../../models/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../models/types/types.js').SessionSignIn} SessionSignIn */
+/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
 /** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice' | 'open-terminal' | 'show-login'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */

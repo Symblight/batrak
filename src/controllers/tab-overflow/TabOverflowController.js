@@ -1,8 +1,8 @@
-import { hiddenTabs } from '../../models/tab-overflow.js';
+import { hiddenTabs } from '../../models/tab-overflow/tab-overflow.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/tab-overflow.js').TabSpan} TabSpan */
+/** @typedef {import('../../models/tab-overflow/tab-overflow.js').TabSpan} TabSpan */
 
 /**
  * @typedef {Object} TabOverflowConfig

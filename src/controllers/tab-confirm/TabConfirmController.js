@@ -1,12 +1,12 @@
 import { html } from 'lit';
 import '../../components/acp-confirm-dialog/acp-confirm-dialog.js';
-import { basename } from '../../models/paths.js';
-import { terminalOfTab } from '../../models/tab-ids.js';
+import { basename } from '../../models/paths/paths.js';
+import { terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').TerminalBusyQuery} TerminalBusyQuery */
-/** @typedef {import('../../models/types.js').ConfirmChoice} ConfirmChoice */
+/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types/types.js').TerminalBusyQuery} TerminalBusyQuery */
+/** @typedef {import('../../models/types/types.js').ConfirmChoice} ConfirmChoice */
 
 /**
  * @typedef {Object} TabConfirmConfig

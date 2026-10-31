@@ -1,12 +1,12 @@
 import { buildChipElement } from '@symblight/chat';
 import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs.js';
-import { listDir } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { projectPathOf } from '../../models/paths.js';
-import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions.js';
+import { fileIconFor } from '../../models/file-icons/file-icons.js';
+import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs/file-refs.js';
+import { listDir } from '../../services/ipc/ipc.js';
+import { projectController } from '../../services/project-controller/project-controller.js';
+import { projectPathOf } from '../../models/paths/paths.js';
+import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
 import { AcpMarkdown } from '../../components/acp-markdown/acp-markdown.js';
 import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thinking.js';
 
@@ -18,7 +18,7 @@ import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thi
 /** @typedef {import('@symblight/chat/agent').ChxPlan} ChxPlan */
 /** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
-/** @typedef {import('../../models/file-refs.js').FileRef} FileRef */
+/** @typedef {import('../../models/file-refs/file-refs.js').FileRef} FileRef */
 
 /**
  * @typedef {Object} ChatPartsConfig

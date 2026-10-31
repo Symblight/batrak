@@ -5,10 +5,10 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/tooltip';
 import syncIcon from '@material-design-icons/svg/outlined/sync.svg?raw';
-import { syncSummary } from '../../models/sessions.js';
+import { syncSummary } from '../../models/sessions/sessions.js';
 import styles from './acp-session-sync.css?inline';
 
-/** @typedef {import('../../models/types.js').SessionSync} SessionSync */
+/** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
 
 /**
  * @tag acp-session-sync
