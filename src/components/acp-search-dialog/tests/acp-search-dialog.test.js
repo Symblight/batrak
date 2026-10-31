@@ -436,4 +436,241 @@ describe('acp-search-dialog', () => {
       expect(el.open).to.equal(false);
     });
   });
+
+  describe('filter chips', () => {
+    /**
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     */
+    const chip = (el, which) => /** @type {HTMLElement} */ (shadow(el).querySelector(`.acp-search-dialog__chip[data-filter="${which}"]`));
+    /**
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     */
+    const menu = (el, which) => /** @type {HTMLElementTagNameMap['md-menu']} */ (shadow(el).querySelector(`.acp-search-dialog__menu[data-filter="${which}"]`));
+    /**
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     */
+    const field = (el, which) => /** @type {HTMLElementTagNameMap['md-text-field']} */ (menu(el, which).querySelector('.acp-search-dialog__menu-field'));
+
+    /**
+     * Polls until `pred` holds; fails after 2s.
+     * @param {() => boolean} pred
+     */
+    async function until(pred) {
+      const started = Date.now();
+      while (!pred()) {
+        expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+
+    /**
+     * Opens a chip's menu and waits for it.
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     */
+    async function openMenu(el, which) {
+      chip(el, which).click();
+      await el.updateComplete;
+      await until(() => menu(el, which).open);
+    }
+
+    /**
+     * Picks a menu item as a click would.
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     * @param {string} value
+     */
+    function pick(el, which, value) {
+      const item = /** @type {HTMLElement} */ (menu(el, which).querySelector(`md-menu-item[value="${CSS.escape(value)}"]`));
+      item.dispatchEvent(new CustomEvent('select', { detail: { value, item }, bubbles: true, composed: true }));
+    }
+
+    /**
+     * Types into a menu's field and presses `key`.
+     * @param {AcpSearchDialog} el
+     * @param {'folder' | 'mask'} which
+     * @param {string} value
+     */
+    function typeIn(el, which, value) {
+      field(el, which).value = value;
+      field(el, which).dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+    }
+
+    it('shows an unset filter as a filter chip and a set one as a removable input chip', async () => {
+      const { el } = await open({}, { ...STATE, folder: '', mask: '' });
+      expect(chip(el, 'folder').localName).to.equal('md-filter-chip');
+      expect(chip(el, 'folder').textContent?.trim()).to.equal('Folder');
+      expect(chip(el, 'mask').localName).to.equal('md-filter-chip');
+      expect(chip(el, 'mask').textContent?.trim()).to.equal('File mask');
+      el.close();
+
+      const set = await open();
+      expect(chip(set.el, 'folder').localName).to.equal('md-input-chip');
+      expect(chip(set.el, 'folder').textContent?.trim()).to.equal('src');
+      expect(chip(set.el, 'mask').textContent?.trim()).to.equal('*.ts');
+    });
+
+    it('clears a filter with its remove button and searches at once', async () => {
+      const { el, queries } = await open();
+      chip(el, 'folder').dispatchEvent(new Event('remove', { bubbles: true, composed: true }));
+      await el.updateComplete;
+      expect(queries.at(-1)?.detail).to.deep.include({ delay: 0 });
+      expect(queries.at(-1)?.detail.state).to.deep.include({ folder: '', mask: '*.ts' });
+      expect(queries.at(-1)?.detail.options).to.deep.include({ include: '**/*.ts', exclude: '' });
+      expect(chip(el, 'folder').localName).to.equal('md-filter-chip');
+      expect(menu(el, 'folder').open).to.equal(false);
+      expect(shadow(el).activeElement, 'not lost with the removed chip').to.equal(input(el));
+    });
+
+    it("asks for the project's folders as the folder menu opens and as its field is typed in", async () => {
+      const { el } = await open({}, { ...STATE, folder: '' });
+      const asked = collect(el, 'acp-search-dialog-folders');
+      await openMenu(el, 'folder');
+      expect(asked.map((e) => e.detail)).to.deep.equal([{ query: '' }]);
+      typeIn(el, 'folder', 'comp');
+      expect(asked.map((e) => e.detail)).to.deep.equal([{ query: '' }, { query: 'comp' }]);
+    });
+
+    it('lists the folders with the current one checked; a pick sets it and searches', async () => {
+      const { el, queries } = await open();
+      el.folders = [
+        { path: 'src', name: 'src', isDir: true, indices: [] },
+        { path: 'src/components', name: 'components', isDir: true, indices: [] },
+      ];
+      await openMenu(el, 'folder');
+      const items = [...menu(el, 'folder').querySelectorAll('md-menu-item')];
+      expect(items.map((i) => i.getAttribute('value'))).to.deep.equal(['src', 'src/components']);
+      expect(items.map((i) => i.hasAttribute('selected'))).to.deep.equal([true, false]);
+      const leaked = collect(el, 'select');
+      const before = queries.length;
+      pick(el, 'folder', 'src/components');
+      await el.updateComplete;
+      expect(leaked, "the menu's select stays inside").to.deep.equal([]);
+      expect(queries.length - before, 'one search per pick').to.equal(1);
+      expect(queries.at(-1)?.detail).to.deep.include({ delay: 0 });
+      expect(queries.at(-1)?.detail.state.folder).to.equal('src/components');
+      expect(queries.at(-1)?.detail.options.include).to.equal('src/components/**/*.ts');
+      expect(chip(el, 'folder').textContent?.trim()).to.equal('src/components');
+    });
+
+    it('sets the mask from its field on Enter, and searches with it', async () => {
+      const { el, queries } = await open({}, { ...STATE, folder: '', mask: '' });
+      await openMenu(el, 'mask');
+      typeIn(el, 'mask', ' *.ts, !*.test.ts ');
+      expect(queries.at(-1)?.detail.state.mask, 'typing alone does not search').to.equal('');
+      const enter = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true });
+      field(el, 'mask').dispatchEvent(enter);
+      await el.updateComplete;
+      expect(queries.at(-1)?.detail.state.mask).to.equal('*.ts, !*.test.ts');
+      expect(queries.at(-1)?.detail.options).to.deep.include({ include: '**/*.ts', exclude: '**/*.test.ts' });
+      await until(() => !menu(el, 'mask').open);
+      expect(chip(el, 'mask').textContent?.trim()).to.equal('*.ts, !*.test.ts');
+    });
+
+    it('offers mask presets; a pick sets the mask', async () => {
+      const { el, queries } = await open({}, { ...STATE, mask: '' });
+      await openMenu(el, 'mask');
+      const presets = [...menu(el, 'mask').querySelectorAll('md-menu-item')].map((i) => i.getAttribute('value'));
+      expect(presets).to.deep.equal(['*.{js,ts}', '*.css', '*.md', '!*.test.js', '!pnpm-lock.yaml']);
+      pick(el, 'mask', '*.css');
+      await el.updateComplete;
+      expect(queries.at(-1)?.detail.state.mask).to.equal('*.css');
+      expect(queries.at(-1)?.detail.options.include).to.equal('src/**/*.css');
+    });
+
+    it("keeps typing in a menu's field instead of jumping to an item", async () => {
+      const { el } = await open({}, { ...STATE, mask: '' });
+      await openMenu(el, 'mask');
+      field(el, 'mask').focus();
+      const key = new KeyboardEvent('keydown', { key: 'c', bubbles: true, composed: true, cancelable: true });
+      field(el, 'mask').dispatchEvent(key);
+      expect(key.defaultPrevented).to.equal(false);
+      expect(shadow(el).activeElement).to.equal(field(el, 'mask'));
+    });
+
+    it('closes only the menu on Escape in it', async () => {
+      const { el } = await open();
+      await openMenu(el, 'mask');
+      field(el, 'mask').focus();
+      field(el, 'mask').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
+      await until(() => !menu(el, 'mask').open);
+      expect(el.open).to.equal(true);
+      expect(shadow(el).activeElement, 'the keys work again').to.equal(input(el));
+    });
+
+    it('closes an open menu with the dialog', async () => {
+      const { el } = await open();
+      await openMenu(el, 'folder');
+      const closed = new Promise((r) => dialog(el).addEventListener('close', r, { once: true }));
+      el.close();
+      await closed;
+      await until(() => !menu(el, 'folder').open);
+    });
+
+    it('picks the first folder on Enter only from a list that answers the latest typing', async () => {
+      const { el, queries } = await open({}, { ...STATE, folder: '' });
+      el.folders = [{ path: 'old', name: 'old', isDir: true, indices: [] }];
+      await openMenu(el, 'folder');
+      const enter = () => field(el, 'folder').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true }));
+      enter();
+      expect(queries.at(-1)?.detail.state.folder, 'an empty field picks nothing').to.equal('');
+      typeIn(el, 'folder', 'comp');
+      enter();
+      expect(queries.at(-1)?.detail.state.folder, 'the list is for an older query').to.equal('');
+      el.folders = [{ path: 'src/components', name: 'components', isDir: true, indices: [] }];
+      el.foldersQuery = 'comp';
+      await el.updateComplete;
+      enter();
+      expect(queries.at(-1)?.detail.state.folder).to.equal('src/components');
+    });
+
+    it('ignores a late answer to an older folder query on Enter', async () => {
+      const { el, queries } = await open({}, { ...STATE, folder: '' });
+      await openMenu(el, 'folder');
+      typeIn(el, 'folder', 'co');
+      typeIn(el, 'folder', 'comp');
+      el.folders = [{ path: 'docs/co', name: 'co', isDir: true, indices: [] }];
+      el.foldersQuery = 'co';
+      await el.updateComplete;
+      field(el, 'folder').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true }));
+      expect(queries.at(-1)?.detail.state.folder).to.equal('');
+    });
+
+    it('picks from an answer that repeats the previous list for the latest query', async () => {
+      const { el, queries } = await open({}, { ...STATE, folder: '' });
+      const list = [{ path: 'src/components', name: 'components', isDir: true, indices: [] }];
+      await openMenu(el, 'folder');
+      typeIn(el, 'folder', 'comp');
+      el.folders = list;
+      el.foldersQuery = 'comp';
+      await el.updateComplete;
+      typeIn(el, 'folder', 'compo');
+      el.folders = list;
+      el.foldersQuery = 'compo';
+      await el.updateComplete;
+      field(el, 'folder').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, composed: true, cancelable: true }));
+      expect(queries.at(-1)?.detail.state.folder).to.equal('src/components');
+    });
+
+    it('closes the open menu when its filter is removed', async () => {
+      const { el } = await open();
+      await openMenu(el, 'mask');
+      chip(el, 'mask').dispatchEvent(new Event('remove', { bubbles: true, composed: true }));
+      await el.updateComplete;
+      await until(() => !menu(el, 'mask').open);
+    });
+
+    it("keeps Esc in a menu's field while an IME composes, and lets Alt+C / W / R through", async () => {
+      const { el, queries } = await open();
+      await openMenu(el, 'mask');
+      field(el, 'mask').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', isComposing: true, bubbles: true, composed: true, cancelable: true }));
+      await new Promise((r) => setTimeout(r, 50));
+      expect(menu(el, 'mask').open).to.equal(true);
+      field(el, 'mask').dispatchEvent(new KeyboardEvent('keydown', { key: 'ç', code: 'KeyC', altKey: true, bubbles: true, composed: true, cancelable: true }));
+      expect(queries.at(-1)?.detail.options.caseSensitive).to.equal(true);
+    });
+  });
 });

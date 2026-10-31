@@ -152,6 +152,59 @@
   min-height: 36px;
   gap: var(--space-1-5);
 }
+/* Compact chips: 24px, small corners. */
+.acp-search-dialog__chip {
+  --md-chip-height: 24px;
+  --md-chip-border-radius: var(--shape-corner-small);
+  --md-chip-border-color: var(--md-outline-variant);
+  --md-chip-icon-size: var(--icon-size-sm);
+  --md-chip-label-text-size: var(--font-size-sm);
+  --md-chip-label-text-weight: var(--font-weight-medium);
+
+  flex: none;
+  max-width: 40%;
+}
+.acp-search-dialog__chip_set {
+  --md-chip-container-color: var(--md-secondary-container);
+  --md-chip-label-color: var(--md-on-secondary-container);
+  --md-chip-icon-color: var(--md-on-secondary-container);
+  --md-chip-border-color: transparent;
+}
+.acp-search-dialog__chip-icon {
+  font-size: var(--icon-size-sm);
+}
+.acp-search-dialog__chip-value {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-family-mono);
+}
+
+.acp-search-dialog__menu {
+  --md-menu-min-width: 240px;
+  --md-menu-max-height: 320px;
+}
+.acp-search-dialog__menu-field {
+  --md-text-field-top-space: 6px;
+  --md-text-field-bottom-space: 6px;
+  --md-text-field-font-size: var(--font-size-md);
+  --md-text-field-font-family: var(--font-family-mono);
+  --md-outlined-text-field-shape: var(--shape-corner-extra-small);
+
+  box-sizing: border-box;
+  width: calc(100% - 2 * var(--space-2));
+  margin: var(--space-1) var(--space-2);
+}
+.acp-search-dialog__menu-path {
+  font-family: var(--font-family-mono);
+}
+.acp-search-dialog__menu-empty {
+  padding: var(--space-2) var(--space-3);
+  color: var(--md-on-surface-variant);
+  font-size: var(--font-size-sm);
+}
+
 .acp-search-dialog__summary {
   flex: 1;
   min-width: 0;
