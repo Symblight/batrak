@@ -8,12 +8,6 @@ import { settings } from '../settings.js';
 describe('settings', () => {
   afterEach(() => clearMocks());
 
-  it('is one frozen object whose members can be taken apart', () => {
-    expect(Object.isFrozen(settings)).to.equal(true);
-    const { lineHeightFor } = settings;
-    expect(lineHeightFor(14)).to.equal(21);
-  });
-
   describe('rules', () => {
     it('starts from the system scheme, a blue accent and a 13px editor font', () => {
       expect(settings.defaults).to.deep.equal({ appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13 });

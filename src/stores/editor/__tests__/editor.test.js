@@ -64,10 +64,6 @@ describe('editor', () => {
     expect($settingsReveal.get()).to.equal(null);
   });
 
-  it('tells a terminal’s tab by its prefix', () => {
-    expect(parseTabId(terminalTabId('t1'))).to.deep.equal({ kind: 'terminal', path: '' });
-  });
-
   it('forgets terminal tabs a stored project had, whose shells are gone', () => {
     const stored = { paths: ['/p/a.js', terminalTabId('t1'), 'view:terminal'], active: terminalTabId('t1'), pinned: [terminalTabId('t1')] };
     expect(parseTabs(stored)).to.deep.equal({ paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });

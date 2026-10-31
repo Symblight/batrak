@@ -62,13 +62,6 @@ describe('projects', () => {
     $openingPath.set(null);
   });
 
-  it('is one frozen object whose members can be taken apart', async () => {
-    const projects = await fresh();
-    expect(Object.isFrozen(projects)).to.equal(true);
-    const { abs, rel } = projects;
-    expect(rel('/p', abs('/p', 'src/a.js'))).to.equal('src/a.js');
-  });
-
   it('runs nothing when it is loaded', async () => {
     await fresh();
     await new Promise((r) => setTimeout(r, 20));

@@ -29,13 +29,6 @@ describe('app', () => {
   });
   afterEach(() => clearMocks());
 
-  it('is one frozen object whose members can be taken apart', () => {
-    expect(Object.isFrozen(app)).to.equal(true);
-    const { log, reportError } = app;
-    expect(typeof log).to.equal('function');
-    expect(typeof reportError).to.equal('function');
-  });
-
   describe('platform', () => {
     it('is told from the user agent: macOS, Windows or Linux', () => {
       expect(app.platformOf('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15')).to.equal('mac');

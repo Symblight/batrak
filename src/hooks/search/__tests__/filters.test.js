@@ -2,35 +2,42 @@ import { expect } from '@esm-bundle/chai';
 import { filterLabel, searchFilters, splitPatterns } from '../filters.js';
 
 describe('search filters', () => {
-  it('splits on commas outside braces, trimmed, empties dropped', () => {
-    expect(splitPatterns('src/**/*.{js,ts}, !*.test.js')).to.deep.equal(['src/**/*.{js,ts}', '!*.test.js']);
-    expect(splitPatterns(' *.css ,, ,*.md,')).to.deep.equal(['*.css', '*.md']);
-    expect(splitPatterns('')).to.deep.equal([]);
+  it('splits a mask on commas outside braces and bracket classes, trimmed, empties dropped', () => {
+    const cases = [
+      // [mask, patterns]
+      ['src/**/*.{js,ts}, !*.test.js', ['src/**/*.{js,ts}', '!*.test.js']],
+      [' *.css ,, ,*.md,', ['*.css', '*.md']],
+      ['', []],
+      ['a[,]b, *.md, [!,]x', ['a[,]b', '*.md', '[!,]x']],
+      ['[]],x', ['[]]', 'x']],
+      ['a[b,c', ['a[b', 'c']],
+    ];
+    for (const [mask, patterns] of cases) {
+      // Act + Assert
+      expect(splitPatterns(/** @type {string} */ (mask)), JSON.stringify(mask)).to.deep.equal(patterns);
+    }
   });
 
-  it('matches a pattern without a slash at any depth', () => {
-    expect(searchFilters('', '*.ts')).to.deep.equal({ include: '**/*.ts', exclude: '' });
-    expect(searchFilters('', '*.{js,ts}')).to.deep.equal({ include: '**/*.{js,ts}', exclude: '' });
-  });
-
-  it('matches a pattern with a slash from the root', () => {
-    expect(searchFilters('', 'src/**/*.{js,ts}, !*.test.js')).to.deep.equal({
-      include: 'src/**/*.{js,ts}',
-      exclude: '**/*.test.js',
-    });
-  });
-
-  it('prefixes includes with the folder, never excludes', () => {
-    expect(searchFilters('src/components', '*.ts, lib/*.js, !*.test.ts, !src/gen/**')).to.deep.equal({
-      include: 'src/components/**/*.ts, src/components/lib/*.js',
-      exclude: '**/*.test.ts, src/gen/**',
-    });
-  });
-
-  it('includes the folder alone without an include pattern', () => {
-    expect(searchFilters('src', '')).to.deep.equal({ include: 'src', exclude: '' });
-    expect(searchFilters('src', '!*.md')).to.deep.equal({ include: 'src', exclude: '**/*.md' });
-    expect(searchFilters('', '')).to.deep.equal({ include: '', exclude: '' });
+  it('turns a folder and a mask into the backend’s include and exclude', () => {
+    const cases = [
+      // [folder, mask, include, exclude, why]
+      ['', '*.ts', '**/*.ts', '', 'no slash: any depth'],
+      ['', '*.{js,ts}', '**/*.{js,ts}', '', 'braces stay whole'],
+      ['', 'src/**/*.{js,ts}, !*.test.js', 'src/**/*.{js,ts}', '**/*.test.js', 'a slash: from the root'],
+      ['src/components', '*.ts, lib/*.js, !*.test.ts, !src/gen/**', 'src/components/**/*.ts, src/components/lib/*.js', '**/*.test.ts, src/gen/**', 'includes go in the folder, excludes never'],
+      ['src', '', 'src', '', 'the folder alone'],
+      ['src', '!*.md', 'src', '**/*.md', 'only excludes: the folder alone is the include'],
+      ['', '', '', '', 'nothing'],
+      ['app/[id]', '', 'app/[[]id[]]', '', 'the folder literally'],
+      ['a,b/{x}', '*.ts', 'a[,]b/[{]x[}]/**/*.ts', '', 'commas and braces of the folder'],
+      ['what?/*', '', 'what[?]/[*]', '', 'wildcards of the folder'],
+      ['src', './lib/*.js, !./gen/**', 'src/lib/*.js', 'gen/**', 'a leading ./ goes'],
+    ];
+    for (const [folder, mask, include, exclude, why] of cases) {
+      // Act + Assert
+      expect(searchFilters(folder, mask), why).to.deep.equal({ include, exclude });
+    }
+    expect(splitPatterns(searchFilters('a,b', '*.ts, *.js').include), 'a folder comma never splits the includes').to.deep.equal(['a[,]b/**/*.ts', 'a[,]b/**/*.js']);
   });
 
   it('labels where it searches', () => {
@@ -38,21 +45,5 @@ describe('search filters', () => {
     expect(filterLabel('src', '')).to.equal('in src');
     expect(filterLabel('', ' *.ts, !*.test.ts ')).to.equal('*.ts, !*.test.ts');
     expect(filterLabel('', '')).to.equal('');
-  });
-  it('keeps a bracket class with a comma whole', () => {
-    expect(splitPatterns('a[,]b, *.md, [!,]x')).to.deep.equal(['a[,]b', '*.md', '[!,]x']);
-    expect(splitPatterns('[]],x')).to.deep.equal(['[]]', 'x']);
-    expect(splitPatterns('a[b,c')).to.deep.equal(['a[b', 'c']);
-  });
-
-  it('matches the folder literally, glob characters and commas included', () => {
-    expect(searchFilters('app/[id]', '')).to.deep.equal({ include: 'app/[[]id[]]', exclude: '' });
-    expect(searchFilters('a,b/{x}', '*.ts')).to.deep.equal({ include: 'a[,]b/[{]x[}]/**/*.ts', exclude: '' });
-    expect(searchFilters('what?/*', '')).to.deep.equal({ include: 'what[?]/[*]', exclude: '' });
-    expect(splitPatterns(searchFilters('a,b', '*.ts, *.js').include)).to.deep.equal(['a[,]b/**/*.ts', 'a[,]b/**/*.js']);
-  });
-
-  it('drops a leading ./ from a pattern before the folder prefix', () => {
-    expect(searchFilters('src', './lib/*.js, !./gen/**')).to.deep.equal({ include: 'src/lib/*.js', exclude: 'gen/**' });
   });
 });

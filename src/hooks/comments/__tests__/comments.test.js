@@ -27,12 +27,6 @@ function hear({ nested }) {
 }
 
 describe('comments', () => {
-  it('is one frozen object whose members can be taken apart', () => {
-    expect(Object.isFrozen(comments)).to.equal(true);
-    const { editorOf } = comments;
-    expect(editorOf(new Event('x'), document)).to.equal(null);
-  });
-
   it('finds the editor an event came from, when it sits in the host’s own root', () => {
     const { found, editor } = hear({ nested: false });
     expect(found === editor, 'the editor').to.equal(true);

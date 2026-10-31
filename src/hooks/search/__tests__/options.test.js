@@ -7,35 +7,38 @@ import { initialQuery, optionForKey } from '../options.js';
  */
 const key = (code, mods = { altKey: true }) => ({ code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, ...mods });
 
-describe('search options shortcuts', () => {
-  it('reads Alt+C / W / R by the physical key', () => {
-    expect(optionForKey(key('KeyC'))).to.equal('caseSensitive');
-    expect(optionForKey(key('KeyW'))).to.equal('wholeWord');
-    expect(optionForKey(key('KeyR'))).to.equal('regex');
+describe('search options', () => {
+  it('reads Alt+C / W / R by the physical key, and nothing else', () => {
+    const cases = [
+      // [key, option]
+      [key('KeyC'), 'caseSensitive'],
+      [key('KeyW'), 'wholeWord'],
+      [key('KeyR'), 'regex'],
+      [key('KeyX'), null],
+      [key('KeyC', {}), null],
+      [key('KeyC', { altKey: true, metaKey: true }), null],
+      [key('KeyC', { altKey: true, ctrlKey: true }), null],
+    ];
+    for (const [event, option] of cases) {
+      // Act + Assert
+      expect(optionForKey(/** @type {ReturnType<typeof key>} */ (event)), JSON.stringify(event)).to.equal(option);
+    }
   });
 
-  it('ignores other keys, no Alt, and Alt with Mod', () => {
-    expect(optionForKey(key('KeyX'))).to.equal(null);
-    expect(optionForKey(key('KeyC', {}))).to.equal(null);
-    expect(optionForKey(key('KeyC', { altKey: true, metaKey: true }))).to.equal(null);
-    expect(optionForKey(key('KeyC', { altKey: true, ctrlKey: true }))).to.equal(null);
-  });
-});
-
-describe('the query a search opens with', () => {
-  it('takes a selection on one line, trimmed', () => {
-    expect(initialQuery('  foo  ', 'last')).to.equal('foo');
-  });
-
-  it("falls back to the project's last query", () => {
-    expect(initialQuery('', 'last')).to.equal('last');
-    expect(initialQuery('   ', 'last')).to.equal('last');
-    expect(initialQuery('a\nb', 'last'), 'more than one line').to.equal('last');
-    expect(initialQuery('x'.repeat(201), 'last'), 'over 200 characters').to.equal('last');
-    expect(initialQuery(undefined, 'last')).to.equal('last');
-  });
-
-  it('takes 200 characters', () => {
-    expect(initialQuery('x'.repeat(200), 'last')).to.equal('x'.repeat(200));
+  it('opens a search with a selection on one line (200 characters at most), else the last query', () => {
+    const cases = [
+      // [selection, query]
+      ['  foo  ', 'foo'],
+      ['x'.repeat(200), 'x'.repeat(200)],
+      ['', 'last'],
+      ['   ', 'last'],
+      ['a\nb', 'last'],
+      ['x'.repeat(201), 'last'],
+      [undefined, 'last'],
+    ];
+    for (const [selection, query] of cases) {
+      // Act + Assert
+      expect(initialQuery(selection, 'last'), JSON.stringify(selection)?.slice(0, 20)).to.equal(query);
+    }
   });
 });

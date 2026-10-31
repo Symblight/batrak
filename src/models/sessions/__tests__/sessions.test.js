@@ -34,225 +34,187 @@ const SESSION = {
   agentTitle: null,
 };
 
-describe('sessionIndicator', () => {
-  it('shows nothing for an idle or stopped session', () => {
-    expect(sessionIndicator('idle', false)).to.equal(null);
-    expect(sessionIndicator('stopped', false)).to.equal(null);
-  });
-
-  it('shows the agent working while it starts or runs a turn', () => {
-    for (const status of /** @type {const} */ (['preparing', 'starting', 'working'])) {
-      expect(sessionIndicator(status, false)).to.equal('running');
+describe('sessions model', () => {
+  it('shows one indicator per session: a permission request above all, then failure, elsewhere, running, queued and new output', () => {
+    /** @type {any[][]} */
+    const cases = [
+      // [status, permission, unread, elsewhere, terminal, indicator, why]
+      ['idle', false, false, false, false, null, 'idle shows nothing'],
+      ['stopped', false, false, false, false, null, 'stopped shows nothing'],
+      ['preparing', false, false, false, false, 'running', 'starting up works'],
+      ['starting', false, false, false, false, 'running', 'starting works'],
+      ['working', false, false, false, false, 'running', 'a turn works'],
+      ['queued', false, false, false, false, 'queued', 'queued is not working'],
+      ['queued', false, true, false, false, 'queued', 'queued above new output'],
+      ['error', false, false, false, false, 'error', 'a failure'],
+      ['idle', false, true, false, false, 'unread', 'new output, below the rest'],
+      ['stopped', false, true, false, false, 'unread', 'new output of a stopped one'],
+      ['working', false, true, false, false, 'running', 'working above new output'],
+      ['error', false, true, false, false, 'error', 'a failure above new output'],
+      ['stopped', false, false, true, false, 'elsewhere', 'another app runs it'],
+      ['stopped', false, true, true, false, 'elsewhere', 'elsewhere above new output'],
+      ['error', false, false, true, false, 'error', 'a failure above elsewhere'],
+      ['waiting', false, false, false, false, 'permission', 'waiting for an answer'],
+      ['working', true, false, false, false, 'permission', 'a permission above working'],
+      ['error', true, false, false, false, 'permission', 'a permission above a failure'],
+      ['stopped', false, false, false, true, 'terminal', 'the CLI runs it'],
+      ['stopped', false, true, true, true, 'terminal-working', 'the CLI works'],
+      ['error', false, false, true, true, 'error', 'a failure above the CLI'],
+    ];
+    for (const [status, permission, unread, elsewhere, terminal, indicator, why] of cases) {
+      // Act + Assert
+      expect(sessionIndicator(/** @type {any} */ (status), /** @type {boolean} */ (permission), /** @type {boolean} */ (unread), /** @type {boolean} */ (elsewhere), /** @type {boolean} */ (terminal)), why).to.equal(indicator);
     }
   });
 
-  it('shows a queued turn as queued, not working', () => {
-    expect(sessionIndicator('queued', false)).to.equal('queued');
-    expect(sessionIndicator('queued', false, true)).to.equal('queued');
+  it("picks the session's view: its own over the setting, chat without a terminal mode, a draft's terminal only when the CLI can start", () => {
+    const both = { resume: true, new: true };
+    const resumeOnly = { resume: true, new: false };
+    /** @type {any[][]} */
+    const cases = [
+      // [own, setting, mode, draft, view, why]
+      ['terminal', 'chat', both, false, 'terminal', 'its own'],
+      ['chat', 'terminal', both, false, 'chat', 'its own'],
+      [undefined, 'terminal', both, false, 'terminal', 'the setting'],
+      [undefined, 'chat', both, false, 'chat', 'the setting'],
+      ['terminal', 'terminal', null, false, 'chat', 'no terminal mode'],
+      ['terminal', 'terminal', undefined, false, 'chat', 'no terminal mode'],
+      [undefined, 'terminal', resumeOnly, true, 'chat', 'a draft cannot start there'],
+      [undefined, 'terminal', both, true, 'terminal', 'a draft can'],
+    ];
+    for (const [own, setting, mode, draft, view, why] of cases) {
+      // Act + Assert
+      expect(viewOf(/** @type {any} */ (own), /** @type {any} */ (setting), /** @type {any} */ (mode), /** @type {boolean} */ (draft)), why).to.equal(view);
+    }
   });
 
-  it('shows a failed session as an error', () => {
-    expect(sessionIndicator('error', false)).to.equal('error');
-  });
-
-  it('shows new output last, below any other status', () => {
-    expect(sessionIndicator('idle', false, true)).to.equal('unread');
-    expect(sessionIndicator('stopped', false, true)).to.equal('unread');
-    expect(sessionIndicator('working', false, true)).to.equal('running');
-    expect(sessionIndicator('error', false, true)).to.equal('error');
-  });
-
-  it('shows a session another app may be running, below a failure and above new output', () => {
-    expect(sessionIndicator('stopped', false, false, true)).to.equal('elsewhere');
-    expect(sessionIndicator('stopped', false, true, true)).to.equal('elsewhere');
-    expect(sessionIndicator('error', false, false, true)).to.equal('error');
-  });
-
-  it('puts a pending permission request above everything else', () => {
-    expect(sessionIndicator('waiting', false)).to.equal('permission');
-    expect(sessionIndicator('working', true)).to.equal('permission');
-    expect(sessionIndicator('error', true)).to.equal('permission');
-  });
-});
-
-describe('sessionIndicator in a terminal', () => {
-  it('says the CLI runs it, with a spinner while it works', () => {
-    expect(sessionIndicator('stopped', false, false, false, true)).to.equal('terminal');
-    expect(sessionIndicator('stopped', false, true, true, true)).to.equal('terminal-working');
-    expect(sessionIndicator('error', false, false, true, true)).to.equal('error');
-  });
-});
-
-describe('viewOf', () => {
-  const both = { resume: true, new: true };
-  const resumeOnly = { resume: true, new: false };
-
-  it("takes the session's own view over the setting", () => {
-    expect(viewOf('terminal', 'chat', both, false)).to.equal('terminal');
-    expect(viewOf('chat', 'terminal', both, false)).to.equal('chat');
-  });
-
-  it('takes the setting when the session has none', () => {
-    expect(viewOf(undefined, 'terminal', both, false)).to.equal('terminal');
-    expect(viewOf(undefined, 'chat', both, false)).to.equal('chat');
-  });
-
-  it('is chat for an agent with no terminal mode', () => {
-    expect(viewOf('terminal', 'terminal', null, false)).to.equal('chat');
-    expect(viewOf('terminal', 'terminal', undefined, false)).to.equal('chat');
-  });
-
-  it('is terminal for a draft only when the CLI can start a session', () => {
-    expect(viewOf(undefined, 'terminal', resumeOnly, true)).to.equal('chat');
-    expect(viewOf(undefined, 'terminal', both, true)).to.equal('terminal');
-  });
-
-  it('forgets a choice that is what the setting says', () => {
+  it('forgets a view choice that is what the setting says, and says why the view button is disabled', () => {
+    const resumeOnly = { resume: true, new: false };
     expect(ownView('chat', 'chat')).to.equal(undefined);
     expect(ownView('terminal', 'chat')).to.equal('terminal');
-  });
-
-  it('says why the button is disabled', () => {
     expect(viewDisabledReason(null, false, 'Copilot')).to.equal('Copilot has no terminal mode');
     expect(viewDisabledReason(resumeOnly, true, 'Codex')).to.equal('Send a first message, then continue in the terminal');
     expect(viewDisabledReason(resumeOnly, false, 'Codex')).to.equal('');
   });
-});
 
-describe('removeSessionConfirm', () => {
-  it('says the session is deleted in its agent, a running agent is stopped and the project files stay', () => {
-    const options = removeSessionConfirm({ ...SESSION, status: 'working', agentName: 'Claude Code' });
-    expect(options.message).to.equal(
-      '"Fix the tree" will be deleted from Claude Code, for every app that uses it, and its agent stopped.',
-    );
-    expect(options.detail).to.equal('Files the agent changed in the project stay as they are.');
-    expect(options.destructive).to.equal(true);
+  it('asks before removing: deleted in its agent, a running agent stopped, files stay; a worktree’s work goes to its branch', () => {
+    // Act
+    const running = removeSessionConfirm({ ...SESSION, status: 'working', agentName: 'Claude Code' });
+    const worktree = removeSessionConfirm({ ...SESSION, status: 'stopped', mode: 'worktree', branch: 'brama/fix-1' });
+    // Assert
+    expect(running.message).to.equal('"Fix the tree" will be deleted from Claude Code, for every app that uses it, and its agent stopped.');
+    expect(running.detail).to.equal('Files the agent changed in the project stay as they are.');
+    expect(running.destructive).to.equal(true);
+    expect(worktree.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
+    expect(worktree.detail).to.contain('brama/fix-1');
   });
 
-  it('says where a worktree session’s uncommitted work goes', () => {
-    const options = removeSessionConfirm({ ...SESSION, status: 'stopped', mode: 'worktree', branch: 'brama/fix-1' });
-    expect(options.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
-    expect(options.detail).to.contain('brama/fix-1');
-  });
-});
-
-describe('orderSessions', () => {
-  /**
-   * @param {string} id
-   * @param {string} lastActivityAt
-   * @returns {Session}
-   */
-  const at = (id, lastActivityAt) => ({ ...SESSION, id, lastActivityAt });
-
-  it('lists pinned sessions first, each part most recently active first', () => {
+  it('lists pinned sessions first, each part most recently active first, leaving the given list as it was', () => {
+    // Arrange
+    /** @param {string} id @param {string} lastActivityAt @returns {Session} */
+    const at = (id, lastActivityAt) => ({ ...SESSION, id, lastActivityAt });
     const sessions = [at('a', '2026-01-01'), at('b', '2026-03-01'), at('c', '2026-02-01'), at('d', '2026-04-01')];
-    expect(orderSessions(sessions, ['c', 'a']).map((s) => s.id)).to.deep.equal(['c', 'a', 'd', 'b']);
+    // Act
+    const ordered = orderSessions(sessions, ['c', 'a']).map((s) => s.id);
+    // Assert
+    expect(ordered).to.deep.equal(['c', 'a', 'd', 'b']);
+    expect(sessions.map((s) => s.id), 'untouched').to.deep.equal(['a', 'b', 'c', 'd']);
   });
 
-  it('leaves the given list as it was', () => {
-    const sessions = [at('a', '2026-01-01'), at('b', '2026-03-01')];
-    orderSessions(sessions, []);
-    expect(sessions.map((s) => s.id)).to.deep.equal(['a', 'b']);
-  });
-});
-
-describe('syncSummary', () => {
-  /** @type {import('../../types/types.js').SyncReport} */
-  const report = {
-    projectPath: '/p',
-    startedAt: '2026-10-23T10:00:00.000Z',
-    endedAt: '2026-10-23T10:00:02.000Z',
-    agents: [
-      { agentId: 'claude', agentName: 'Claude Code', outcome: 'listed', count: 12, error: null },
-      { agentId: 'codex', agentName: 'Codex', outcome: 'signIn', count: null, error: null },
-      { agentId: 'copilot', agentName: 'Copilot', outcome: 'unsupported', count: null, error: null },
-      { agentId: 'agy', agentName: 'Antigravity', outcome: 'failed', count: null, error: 'no answer' },
-    ],
-  };
-  const now = Date.parse('2026-10-23T10:03:30.000Z');
-
-  it('says nothing before the first sync, and that one runs', () => {
+  it('sums up a sync: not yet, running, when it ended and how each agent did, warning when one needs the user', () => {
+    // Arrange
+    /** @type {import('../../types/types.js').SyncReport} */
+    const report = {
+      projectPath: '/p',
+      startedAt: '2026-10-23T10:00:00.000Z',
+      endedAt: '2026-10-23T10:00:02.000Z',
+      agents: [
+        { agentId: 'claude', agentName: 'Claude Code', outcome: 'listed', count: 12, error: null },
+        { agentId: 'codex', agentName: 'Codex', outcome: 'signIn', count: null, error: null },
+        { agentId: 'copilot', agentName: 'Copilot', outcome: 'unsupported', count: null, error: null },
+        { agentId: 'agy', agentName: 'Antigravity', outcome: 'failed', count: null, error: 'no answer' },
+      ],
+    };
+    const now = Date.parse('2026-10-23T10:03:30.000Z');
+    const one = { ...report, agents: [{ ...report.agents[0], count: 1 }, report.agents[2]] };
+    // Act + Assert
     expect(syncSummary({ running: false, report: null }, now)).to.deep.equal({ label: 'Not synced yet', lines: [], warn: false });
     expect(syncSummary({ running: true, report: null }, now).label).to.equal('Syncing sessions…');
-  });
-
-  it('says when it last synced and how each agent did, warning when one needs the user', () => {
     expect(syncSummary({ running: false, report }, now)).to.deep.equal({
       label: 'Synced 3 min ago',
       lines: ['Claude Code · 12 sessions', 'Codex · needs sign-in', "Copilot · can't list sessions", 'Antigravity · failed: no answer'],
       warn: true,
     });
+    expect(syncSummary({ running: false, report: one }, Date.parse(one.endedAt) + 5_000)).to.deep.equal({
+      label: 'Synced just now',
+      lines: ['Claude Code · 1 session', "Copilot · can't list sessions"],
+      warn: false,
+    });
   });
 
-  it('counts one session, says just now, and warns of nothing when all listed or can’t list', () => {
-    const one = { ...report, agents: [{ ...report.agents[0], count: 1 }, report.agents[2]] };
-    const summary = syncSummary({ running: false, report: one }, Date.parse(one.endedAt) + 5_000);
-    expect(summary).to.deep.equal({ label: 'Synced just now', lines: ['Claude Code · 1 session', "Copilot · can't list sessions"], warn: false });
-  });
-});
-
-describe('visibleSessions', () => {
-  /** @param {string[]} ids */
-  const of = (ids) => ids.map((id) => ({ ...SESSION, id }));
-  const ten = of(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
-
-  it('shows the first `limit` and counts the rest', () => {
-    const { shown, hidden } = visibleSessions(ten, 5, null);
-    expect(shown.map((s) => s.id)).to.deep.equal(['a', 'b', 'c', 'd', 'e']);
-    expect(hidden).to.equal(5);
-  });
-
-  it('shows everything when it fits', () => {
-    expect(visibleSessions(of(['a', 'b']), 5, null)).to.deep.equal({ shown: of(['a', 'b']), hidden: 0 });
+  it('shows the first `limit` sessions and counts the rest, reaching down to the selected one', () => {
+    /** @param {string[]} ids */
+    const of = (ids) => ids.map((id) => ({ ...SESSION, id }));
+    const ten = of(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j']);
+    /** @type {any[][]} */
+    const cases = [
+      // [sessions, selected, shown, hidden, why]
+      [ten, null, 'abcde', 5, 'the first five'],
+      [of(['a', 'b']), null, 'ab', 0, 'all fit'],
+      [ten, 'g', 'abcdefg', 3, 'up to the selected one'],
+    ];
+    for (const [sessions, selected, shown, hidden, why] of cases) {
+      // Act
+      const result = visibleSessions(/** @type {Session[]} */ (sessions), 5, /** @type {string | null} */ (selected));
+      // Assert
+      expect(result.shown.map((x) => x.id).join(''), why).to.equal(shown);
+      expect(result.hidden, why).to.equal(hidden);
+    }
   });
 
-  it('shows up to the selected session when it is further down', () => {
-    const { shown, hidden } = visibleSessions(ten, 5, 'g');
-    expect(shown.map((s) => s.id)).to.deep.equal(['a', 'b', 'c', 'd', 'e', 'f', 'g']);
-    expect(hidden).to.equal(3);
-  });
-});
-
-describe('loadingProjects', () => {
-  const projects = ['/p', '/q', '/r'];
-  /** @type {import('../../types/types.js').SyncReport} */
-  const report = { projectPath: '/q', startedAt: 'a', endedAt: 'b', agents: [] };
-
-  it('is every project until the stored list arrives', () => {
-    expect(loadingProjects(projects, false, {})).to.deep.equal(projects);
-  });
-
-  it('is then each project in its first sync', () => {
+  it('loads every project until the stored list arrives, then each project in its first sync', () => {
+    const projects = ['/p', '/q', '/r'];
+    /** @type {import('../../types/types.js').SyncReport} */
+    const report = { projectPath: '/q', startedAt: 'a', endedAt: 'b', agents: [] };
     const syncs = { '/p': { running: true, report: null }, '/q': { running: true, report }, '/r': { running: false, report: null } };
+    expect(loadingProjects(projects, false, {})).to.deep.equal(projects);
     expect(loadingProjects(projects, true, syncs)).to.deep.equal(['/p']);
   });
-});
 
-describe('isActiveElsewhere', () => {
-  const now = Date.parse('2026-10-23T13:00:00.000Z');
-
-  it('is another app running it until its time is up', () => {
-    const session = { ...SESSION, status: /** @type {const} */ ('stopped'), activeElsewhereUntil: '2026-10-23T13:01:00.000Z' };
-    expect(isActiveElsewhere(session, now)).to.equal(true);
-    expect(isActiveElsewhere(session, Date.parse('2026-10-23T13:01:00.000Z')), 'over').to.equal(false);
+  it('is active elsewhere until its time is up, never when it runs here or has no outside activity', () => {
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    const until = '2026-10-23T13:01:00.000Z';
+    /** @type {any[][]} */
+    const cases = [
+      // [session, at, active, why]
+      [{ ...SESSION, status: 'stopped', activeElsewhereUntil: until }, now, true, 'time left'],
+      [{ ...SESSION, status: 'stopped', activeElsewhereUntil: until }, Date.parse(until), false, 'over'],
+      [{ ...SESSION, status: 'idle', activeElsewhereUntil: until }, now, false, 'runs here'],
+      [{ ...SESSION, status: 'stopped', activeElsewhereUntil: null }, now, false, 'no outside activity'],
+      [{ ...SESSION, status: 'stopped' }, now, false, 'never seen'],
+    ];
+    for (const [session, at, active, why] of cases) {
+      // Act + Assert
+      expect(isActiveElsewhere(/** @type {Session} */ (session), /** @type {number} */ (at)), why).to.equal(active);
+    }
   });
 
-  it('is never one running here, or one with no outside activity', () => {
-    expect(isActiveElsewhere({ ...SESSION, status: 'idle', activeElsewhereUntil: '2026-10-23T13:01:00.000Z' }, now)).to.equal(false);
-    expect(isActiveElsewhere({ ...SESSION, status: 'stopped', activeElsewhereUntil: null }, now)).to.equal(false);
-    expect(isActiveElsewhere({ ...SESSION, status: 'stopped' }, now)).to.equal(false);
-  });
-});
-
-describe('inTurn', () => {
-  it('is a turn working, queued or waiting for an answer, or a permission asked', () => {
-    expect(inTurn('working')).to.equal(true);
-    expect(inTurn('queued')).to.equal(true);
-    expect(inTurn('waiting')).to.equal(true);
-    expect(inTurn('idle')).to.equal(false);
-    expect(inTurn('stopped')).to.equal(false);
-    expect(inTurn('starting')).to.equal(false);
-    expect(inTurn('idle', true), 'a permission asked').to.equal(true);
-    expect(inTurn(null)).to.equal(false);
+  it('is in a turn when working, queued or waiting for an answer, or a permission is asked', () => {
+    /** @type {any[][]} */
+    const cases = [
+      // [status, permission, in a turn]
+      ['working', false, true],
+      ['queued', false, true],
+      ['waiting', false, true],
+      ['idle', false, false],
+      ['stopped', false, false],
+      ['starting', false, false],
+      ['idle', true, true],
+      [null, false, false],
+    ];
+    for (const [status, permission, inside] of cases) {
+      // Act + Assert
+      expect(inTurn(/** @type {any} */ (status), /** @type {boolean} */ (permission)), `${status} ${permission}`).to.equal(inside);
+    }
   });
 });
