@@ -20,6 +20,7 @@ import { lineHeightFor } from '../../models/settings.js';
 import styles from './acp-code-view.css?inline';
 
 /** @typedef {import('../../models/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../models/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../models/types.js').WorktreeFolder} WorktreeFolder */
@@ -132,16 +133,27 @@ export class AcpCodeView extends LitElement {
   }
 
   /**
-   * Puts the caret on a line and focuses the editor.
-   * @param {number} line 1-based.
+   * Puts the caret on a line, or selects a range on it, and focuses the editor.
+   * @param {RevealAt} at
    */
-  async revealLine(line) {
+  async revealLine(at) {
     await this.updateComplete;
     const editor = this.renderRoot.querySelector('cdx-code-editor');
     if (!editor) return;
     await editor.updateComplete;
-    editor.navigation.goToLine(line);
+    if (typeof at === 'number') {
+      editor.navigation.goToLine(at);
+    } else {
+      editor.navigation.goToLine(at.line, at.column);
+      const from = editor.doc.posAt(at.line, at.column);
+      editor.selection.set(from, from + at.length);
+    }
     editor.focus();
+  }
+
+  /** The editor's selected text, `''` when none. */
+  selectedText() {
+    return this.renderRoot.querySelector('cdx-code-editor')?.selection.getText() ?? '';
   }
 
   /**

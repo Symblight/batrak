@@ -15,6 +15,7 @@ import { relPath } from '../../models/paths.js';
 import { sessionOfTab, terminalOfTab } from '../../models/tab-ids.js';
 import styles from './acp-tab-view.css?inline';
 
+/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../models/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../models/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../models/types.js').CommentFocus} CommentFocus */
@@ -82,7 +83,7 @@ export class AcpTabView extends LitElement {
 
   static styles = styles;
 
-  /** @type {{ id: string, line: number } | null} Line to reveal in a tab once it is active and loaded (1-based). */
+  /** @type {{ id: string, at: RevealAt } | null} Where to put the caret in a tab once it is active and loaded. */
   #pendingLine = null;
   /** @type {TabConfirmController} */
   #confirm = new TabConfirmController(this, {
@@ -194,13 +195,22 @@ export class AcpTabView extends LitElement {
   }
 
   /**
-   * Puts the caret on a line of a tab once it is active and loaded.
+   * Puts the caret on a line of a tab, or selects a range there, once it is active and loaded.
    * @param {string} id
-   * @param {number} line 1-based.
+   * @param {RevealAt} at
    */
-  revealLine(id, line) {
-    this.#pendingLine = { id, line };
+  revealLine(id, at) {
+    this.#pendingLine = { id, at };
     this.requestUpdate();
+  }
+
+  /** The active code tab's selected text, `''` when none. */
+  selectedText() {
+    return this.#activeCodeView()?.selectedText() ?? '';
+  }
+
+  #activeCodeView() {
+    return this.renderRoot.querySelector('.acp-tab-view__panel[active]')?.querySelector('acp-code-view') ?? null;
   }
 
   /**
@@ -230,7 +240,7 @@ export class AcpTabView extends LitElement {
     const pending = this.#pendingLine;
     if (pending === null || pending.id !== this.active || !this.tabs.find((t) => t.id === pending.id)?.loaded) return;
     this.#pendingLine = null;
-    this.renderRoot.querySelector('.acp-tab-view__panel[active]')?.querySelector('acp-code-view')?.revealLine(pending.line);
+    this.#activeCodeView()?.revealLine(pending.at);
   }
 
   /** The strip asks to close tabs: confirm what they'd lose first. */

@@ -224,4 +224,34 @@ describe('acp-code-view', () => {
       expect(reveals).to.deep.equal([{ path: '/work/app/src', expand: true }]);
     });
   });
+
+  describe('revealLine', () => {
+    const path = '/p/a.js';
+    const content = 'one\n  two foo bar\nthree';
+
+    async function render() {
+      const tab = { ...fileTab(path), loaded: true, content };
+      const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (
+        await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'}></acp-code-view>`)
+      );
+      const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (el.shadowRoot?.querySelector('cdx-code-editor'));
+      return { el, editor };
+    }
+
+    it('selects a match by its line, 1-based column and length', async () => {
+      const { el, editor } = await render();
+      await el.revealLine({ line: 2, column: 7, length: 3 });
+      expect(editor.selection.getText()).to.equal('foo');
+      expect(el.selectedText()).to.equal('foo');
+      expect(editor.selection.getCursor()).to.deep.equal({ line: 2, column: 10 });
+    });
+
+    it('puts the caret on a plain line, selecting nothing', async () => {
+      const { el, editor } = await render();
+      await el.revealLine({ line: 2, column: 7, length: 3 });
+      await el.revealLine(3);
+      expect(el.selectedText()).to.equal('');
+      expect(editor.selection.getCursor()?.line).to.equal(3);
+    });
+  });
 });

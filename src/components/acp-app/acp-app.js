@@ -242,8 +242,12 @@ export class AcpApp extends LitElement {
 
   /** @param {Event} e */
   #onFileOpen(e) {
-    const { path, line } = /** @type {CustomEvent<{ path: string, line?: number }>} */ (e).detail;
-    this.#main.openFile(path, line);
+    const { path, line, column, length } = /** @type {CustomEvent<{ path: string, line?: number, column?: number, length?: number }>} */ (
+      e
+    ).detail;
+    // A search match comes with its range, selected in the tab.
+    const at = line !== undefined && column !== undefined && length !== undefined ? { line, column, length } : line;
+    this.#main.openFile(path, at);
   }
 
   /**

@@ -87,4 +87,17 @@ describe('acp-main-column', () => {
     fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(terminal) });
     expect(pasted).to.deep.equal([]);
   });
+
+  it('opens a file with a match selected, and reads the selection back', async () => {
+    mockIPC((cmd) => (cmd === 'read_file' ? 'first\nsecond needle\n' : null));
+    // Files are read only once the project's root is open.
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    const { el } = await render();
+    el.openFile('/p/a.txt', { line: 2, column: 8, length: 6 });
+    const started = Date.now();
+    while (el.selectedText() !== 'needle') {
+      expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+  });
 });

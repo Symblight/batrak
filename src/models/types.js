@@ -828,6 +828,12 @@
  */
 
 /**
+ * Where to put the caret in a file: a 1-based line, or a range on it (a search match) to select;
+ * `column` 1-based and `length` in UTF-16 units.
+ * @typedef {number | { line: number, column: number, length: number }} RevealAt
+ */
+
+/**
  * One Find in Files match, a row of `<acp-search-results>`.
  * @typedef {Object} SearchMatchRow
  * @property {string} key `path:line:start`, unique per match.

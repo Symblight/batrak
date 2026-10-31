@@ -72,6 +72,7 @@ import { AcpTerminal } from '../acp-terminal/acp-terminal.js';
 import '../acp-comment-bar/acp-comment-bar.js';
 import styles from './acp-main-column.css?inline';
 
+/** @typedef {import('../../models/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../models/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../models/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../models/types.js').NewAgent} NewAgent */
@@ -198,10 +199,10 @@ export class AcpMainColumn extends LitElement {
   /**
    * Opens a file in a tab, or switches to its tab.
    * @param {string} path Absolute.
-   * @param {number | null} [line] 1-based line to put the caret on.
+   * @param {RevealAt | null} [at] Where to put the caret: a 1-based line, or a match to select.
    */
-  openFile(path, line = null) {
-    if (line !== null) this.#tabView.revealLine(path, line);
+  openFile(path, at = null) {
+    if (at !== null) this.#tabView.revealLine(path, at);
     openTab(path);
     projectController.noteOpened(path);
   }
@@ -232,6 +233,11 @@ export class AcpMainColumn extends LitElement {
   /** Opens the Settings tab, or switches to it. */
   openSettings() {
     openSettingsTab();
+  }
+
+  /** The active code tab's selected text, `''` when none. */
+  selectedText() {
+    return this.#tabView.selectedText();
   }
 
   /**

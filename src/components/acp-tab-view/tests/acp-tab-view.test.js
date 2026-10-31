@@ -185,4 +185,54 @@ describe('acp-tab-view', () => {
     });
   });
 
+  describe('revealLine', () => {
+    const path = '/p/a.js';
+
+    /** @param {HTMLElementTagNameMap['acp-tab-view']} el */
+    const codeView = (el) => /** @type {HTMLElementTagNameMap['acp-code-view']} */ (el.shadowRoot?.querySelector('.acp-tab-view__panel[active] acp-code-view'));
+
+    /**
+     * Waits for the editor's selection to settle on `text`; fails after 2s.
+     * @param {HTMLElementTagNameMap['acp-tab-view']} el
+     * @param {string} text
+     */
+    async function untilSelected(el, text) {
+      const started = Date.now();
+      while (el.selectedText() !== text) {
+        expect(Date.now() - started, `timed out waiting for "${text}"`).to.be.lessThan(2000);
+        await new Promise((r) => setTimeout(r, 10));
+      }
+    }
+
+    it('selects a match in a tab once it is loaded', async () => {
+      const tab = { ...fileTab(path), content: '' };
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+      );
+      el.revealLine(path, { line: 2, column: 3, length: 6 });
+      await el.updateComplete;
+      expect(el.selectedText()).to.equal('');
+      el.tabs = [{ ...tab, loaded: true, content: 'a\nb needle c' }];
+      await untilSelected(el, 'needle');
+      expect(codeView(el)).to.exist;
+    });
+
+    it('still takes a plain line', async () => {
+      const tab = { ...fileTab(path), loaded: true, content: 'a\nb needle c\nd' };
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+      );
+      el.revealLine(path, { line: 2, column: 3, length: 6 });
+      await untilSelected(el, 'needle');
+      el.revealLine(path, 3);
+      await untilSelected(el, '');
+      const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (codeView(el).shadowRoot?.querySelector('cdx-code-editor'));
+      expect(editor.selection.getCursor()?.line).to.equal(3);
+    });
+
+    it('has no selected text without a code tab', async () => {
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (await fixture(html`<acp-tab-view></acp-tab-view>`));
+      expect(el.selectedText()).to.equal('');
+    });
+  });
 });
