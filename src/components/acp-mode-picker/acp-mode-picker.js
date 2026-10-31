@@ -17,27 +17,18 @@ import styles from './acp-mode-picker.css?inline';
 /** @typedef {import('../../models/types.js').ConfigOptionValue} ConfigOptionValue */
 /** @typedef {import('../../models/types.js').ConfigOption} ConfigOption */
 
+/** @typedef {import('../../models/types.js').ModeRisk} ModeRisk */
+
+/** Each risk's icon; a value its agent's crate didn't tag gets the shield. */
+const RISK_ICONS = { plan: checklistIcon, neutral: handIcon, agent: boltIcon, full: warningIcon };
+
 /**
- * How risky a mode is decides its chip's color; the agent names the modes, Brama knows a few ids.
- * @typedef {'neutral' | 'plan' | 'agent' | 'full'} ModeRisk
+ * How risky a mode is decides its icon and color: the risk the backend tagged it with.
+ * @param {ConfigOptionValue | undefined} value
+ * @returns {{ icon: string, risk: ModeRisk }}
  */
-
-/** @type {Record<string, { icon: string, risk: ModeRisk }>} */
-const KNOWN_MODES = {
-  plan: { icon: checklistIcon, risk: 'plan' },
-  ask: { icon: handIcon, risk: 'neutral' },
-  agent: { icon: boltIcon, risk: 'agent' },
-  full: { icon: warningIcon, risk: 'full' },
-  // Claude Code's
-  default: { icon: handIcon, risk: 'neutral' },
-  acceptEdits: { icon: boltIcon, risk: 'agent' },
-  auto: { icon: boltIcon, risk: 'agent' },
-  bypassPermissions: { icon: warningIcon, risk: 'full' },
-};
-
-/** @param {string} value */
 function lookOf(value) {
-  return KNOWN_MODES[value] ?? { icon: shieldIcon, risk: /** @type {ModeRisk} */ ('neutral') };
+  return value?.risk ? { icon: RISK_ICONS[value.risk], risk: value.risk } : { icon: shieldIcon, risk: 'neutral' };
 }
 
 /**
@@ -64,7 +55,7 @@ export class AcpModePicker extends LitElement {
    * @param {boolean} withIcon Mode values show how risky they are; permissions values don't.
    */
   #renderItem(option, value, withIcon) {
-    const { icon, risk } = lookOf(value.value);
+    const { icon, risk } = lookOf(value);
     const description = value.description && value.description !== value.name ? value.description : null;
     return html`
       <md-menu-item
@@ -83,8 +74,8 @@ export class AcpModePicker extends LitElement {
   /** @param {ConfigOption} mode */
   #renderModeGroups(mode) {
     // Full access stands apart: a gap separates the risky choice from the usual ones.
-    const usual = mode.options.filter((v) => lookOf(v.value).risk !== 'full');
-    const risky = mode.options.filter((v) => lookOf(v.value).risk === 'full');
+    const usual = mode.options.filter((v) => lookOf(v).risk !== 'full');
+    const risky = mode.options.filter((v) => lookOf(v).risk === 'full');
     return html`
       <md-menu-group label=${mode.name}>${usual.map((v) => this.#renderItem(mode, v, true))}</md-menu-group>
       ${risky.length ? html`<md-item-group>${risky.map((v) => this.#renderItem(mode, v, true))}</md-item-group>` : nothing}
@@ -108,7 +99,7 @@ export class AcpModePicker extends LitElement {
     const chip = mode ?? permissions[0];
     if (!chip) return nothing;
     const current = chip.options.find((v) => v.value === chip.currentValue) ?? chip.options[0];
-    const { icon, risk } = mode ? lookOf(current?.value ?? '') : lookOf('');
+    const { icon, risk } = lookOf(mode ? current : undefined);
     const label = mode ? (current?.name ?? '') : `${chip.name}: ${current?.name ?? ''}`;
     const hint = [mode, ...permissions]
       .filter((o) => o !== null)

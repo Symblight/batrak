@@ -121,7 +121,7 @@ impl ClientHost for SessionHost {
         if let Some(options) = options {
             // Saved with the next status change.
             remember_config(&state, &options);
-            state.emit("config-options", json!({ "configOptions": options }));
+            state.emit_options(options);
         }
     }
 

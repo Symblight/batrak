@@ -4,6 +4,7 @@ import { $agentList } from './agents.js';
 import { $workspaceSettings } from './workspace.js';
 import { isRecord, persistentStore } from './persistent.js';
 
+/** @typedef {import('../models/types.js').ModeRisk} ModeRisk */
 /** @typedef {import('../models/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../models/types.js').ConfigOption} ConfigOption */
 /** @typedef {import('../models/types.js').ComposerState} ComposerState */
@@ -16,10 +17,12 @@ import { isRecord, persistentStore } from './persistent.js';
 /**
  * Each agent's config options by agent id, so a new session shows the agent's real models and
  * levels before it starts. `currentValue` is the agent's own default as first learned (a probe
- * replaces it), not what some session was switched to. Shared by every window.
+ * replaces it), not what some session was switched to. Shared by every window. `:2`: options kept
+ * before modes were tagged with their risk aren't read (they'd show a full-access mode as a usual
+ * one), so each agent is probed once again.
  */
 const $agentOptions = persistentStore(
-  'brama:agents:config-options',
+  'brama:agents:config-options:2',
   /** @type {Readonly<Record<string, ConfigOption[]>>} */ ({}),
   {
     parse: (raw) =>
@@ -81,6 +84,9 @@ function sameText(a, b) {
   return a.trim().toLowerCase() === b.trim().toLowerCase();
 }
 
+/** The mode risks the backend tags values with. */
+const RISKS = ['plan', 'neutral', 'agent', 'full'];
+
 /**
  * ACP config options as the composer shows them: select options only, groups flattened, each value
  * once, no description that only repeats its name.
@@ -101,7 +107,13 @@ export function normalizeOptions(options) {
       if (!isRecord(v) || typeof v.value !== 'string' || flat.some((f) => f.value === v.value)) continue;
       const name = typeof v.name === 'string' ? v.name : v.value;
       const described = typeof v.description === 'string' && !sameText(v.description, name) && !sameText(v.description, v.value);
-      flat.push({ value: v.value, name, ...(described ? { description: /** @type {string} */ (v.description) } : {}) });
+      const risk = typeof v.risk === 'string' && RISKS.includes(v.risk) ? /** @type {ModeRisk} */ (v.risk) : null;
+      flat.push({
+        value: v.value,
+        name,
+        ...(described ? { description: /** @type {string} */ (v.description) } : {}),
+        ...(risk ? { risk } : {}),
+      });
     }
     if (!flat.length) return [];
     return [

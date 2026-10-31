@@ -155,6 +155,28 @@ describe('composer', () => {
     ]);
   });
 
+  it("keeps the risk the backend tagged a mode with, and only a known one", () => {
+    const [mode] = normalizeOptions([
+      {
+        type: 'select',
+        id: 'mode',
+        name: 'Mode',
+        category: 'mode',
+        currentValue: 'plan',
+        options: [
+          { value: 'plan', name: 'Plan', risk: 'plan' },
+          { value: 'yolo', name: 'Yolo', risk: 'full' },
+          { value: 'odd', name: 'Odd', risk: 'reckless' },
+        ],
+      },
+    ]);
+    expect(mode.options).to.deep.equal([
+      { value: 'plan', name: 'Plan', risk: 'plan' },
+      { value: 'yolo', name: 'Yolo', risk: 'full' },
+      { value: 'odd', name: 'Odd' },
+    ]);
+  });
+
   it("says while the composer's agent's options load, and when that failed", async () => {
     $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     // A new session's agent may be the one last picked in an earlier test.

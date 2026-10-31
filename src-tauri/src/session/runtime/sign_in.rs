@@ -123,7 +123,8 @@ impl Sessions {
                 tracing::info!(agent = %agent.id, options = started.config_options.len(), "probed the agent's options");
                 // It's signed in (a login elsewhere): whatever waited for that needn't.
                 self.inner.signed_in(&LaunchKey::of(&agent));
-                Ok(Probed::Options(started.config_options))
+                let kind = self.inner.opts.agents.for_launch(&crate::agents::launch_of(&agent));
+                Ok(Probed::Options(crate::agents::tag_modes(kind, started.config_options)))
             }
             Err(ConnectError::SignIn { methods, .. }) => {
                 tracing::info!(agent = %agent.id, methods = methods.len(), "the probed agent asks to sign in");

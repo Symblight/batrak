@@ -114,6 +114,43 @@ pub struct Update {
     pub download: Command,
 }
 
+/// How much a mode lets the agent do without asking: the picker's icon and color.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ModeRisk {
+    /// Plans, changes nothing.
+    Plan,
+    /// Asks before acting.
+    Neutral,
+    /// Edits on its own.
+    Agent,
+    /// Anything, never asking.
+    Full,
+}
+
+impl ModeRisk {
+    /// As the page reads it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ModeRisk::Plan => "plan",
+            ModeRisk::Neutral => "neutral",
+            ModeRisk::Agent => "agent",
+            ModeRisk::Full => "full",
+        }
+    }
+}
+
+/// The risk of the mode names many agents share (`plan`, `ask`, `default`, `agent`, `auto`,
+/// `full`); a crate's own `mode_risk` falls back to it.
+pub fn common_mode_risk(value: &str) -> Option<ModeRisk> {
+    match value {
+        "plan" => Some(ModeRisk::Plan),
+        "ask" | "default" => Some(ModeRisk::Neutral),
+        "agent" | "auto" => Some(ModeRisk::Agent),
+        "full" => Some(ModeRisk::Full),
+        _ => None,
+    }
+}
+
 /// A program to run, and its arguments.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Command {
@@ -144,6 +181,10 @@ pub trait Agent: Send + Sync + 'static {
     /// Its CLI, if it has one: how to resume a session and start one under our id.
     fn cli(&self, _launch: &Launch) -> Option<CliSpec> {
         None
+    }
+    /// The risk of one of its modes (a value of its `mode` category option); `None`: unknown.
+    fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
+        common_mode_risk(value)
     }
     /// The composer's picks (option id → value) as the CLI's flags; those it doesn't know left out.
     fn cli_args(&self, _config: &BTreeMap<String, String>) -> Vec<String> {

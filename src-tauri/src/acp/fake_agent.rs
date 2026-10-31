@@ -329,7 +329,8 @@ impl FakeAgentOptions {
     }
 }
 
-/// A model option (`smart` / `fast`) and a thought level that only `smart` has.
+/// A model option (`smart` / `fast`), a thought level that only `smart` has, and a mode (`ask` /
+/// `full`).
 fn config_options(model: &str) -> Vec<SessionConfigOption> {
     let model_option = SessionConfigOption::select(
         "model",
@@ -350,6 +351,10 @@ fn config_options(model: &str) -> Vec<SessionConfigOption> {
             .category(SessionConfigOptionCategory::ThoughtLevel),
         );
     }
+    options.push(
+        SessionConfigOption::select("mode", "Mode", "ask", vec![SessionConfigSelectOption::new("ask", "Ask"), SessionConfigSelectOption::new("full", "Full access")])
+            .category(SessionConfigOptionCategory::Mode),
+    );
     options
 }
 

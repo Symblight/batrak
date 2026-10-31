@@ -209,7 +209,7 @@ impl agent_api::Agent for FakeKind {
 
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
-        agents: Arc::new(crate::agents::AgentHub::of(vec![Box::new(FakeKind)])),
+        agents: Arc::new(crate::agents::AgentHub::of(vec![Arc::new(FakeKind)])),
         data_dir: dir.join("data"),
         configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json")))
             .with_registry(crate::config::registry::Registry::of(crate::config::registry::tests::FIXTURE)),
@@ -1271,15 +1271,22 @@ async fn config_options_arrive_at_start_and_follow_a_change() {
     let ids = |e: &Envelope| -> Vec<String> {
         e.payload["configOptions"].as_array().unwrap().iter().map(|o| o["id"].as_str().unwrap().to_owned()).collect()
     };
-    assert_eq!(ids(&first), ["model", "effort"]);
+    assert_eq!(ids(&first), ["model", "effort", "mode"]);
     assert_eq!(first.payload["configOptions"][0]["category"], "model");
     assert_eq!(first.payload["configOptions"][1]["category"], "thought_level");
+    let risks = |e: &Envelope| -> Vec<Value> {
+        let mode = e.payload["configOptions"].as_array().unwrap().iter().find(|o| o["id"] == "mode").unwrap();
+        mode["options"].as_array().unwrap().iter().map(|v| v["risk"].clone()).collect()
+    };
+    assert_eq!(risks(&first), [json!("neutral"), json!("full")], "its modes tagged by its crate");
+    assert!(first.payload["configOptions"][0]["options"][0].get("risk").is_none(), "only modes");
 
     events.clear();
     f.sessions.set_config_option("o", "model", "fast").await.unwrap();
     let after = events.wait_for("options after set", |e| e.kind == "config-options").await;
     assert_eq!(after.payload["configOptions"][0]["currentValue"], "fast");
-    assert_eq!(ids(&after), ["model"], "the fast model has no effort option");
+    assert_eq!(ids(&after), ["model", "mode"], "the fast model has no effort option");
+    assert_eq!(risks(&after), [json!("neutral"), json!("full")], "tagged after a change too");
     assert_eq!(*lock(&lock(&f.launcher.agents)[0].model), "fast");
 
     assert!(f.sessions.set_config_option("o", "model", "huge").await.is_err(), "the agent's refusal comes back");
@@ -1413,7 +1420,8 @@ async fn probing_an_agent_returns_its_options_and_leaves_nothing_behind() {
     let f = fixture("probe", FakeAgentOptions::default());
     let options = options_of(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap());
     let ids: Vec<_> = options.iter().map(|o| o["id"].as_str().unwrap()).collect();
-    assert_eq!(ids, ["model", "effort"]);
+    assert_eq!(ids, ["model", "effort", "mode"]);
+    assert_eq!(options[2]["options"][1]["risk"], "full", "a probe's modes are tagged too");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
     assert_eq!(listed_version(&f, "fake").as_deref(), Some("1.2.3"), "the agent's version is kept");
     assert!(f.sessions.list().is_empty(), "no session is listed");

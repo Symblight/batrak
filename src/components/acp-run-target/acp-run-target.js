@@ -125,7 +125,9 @@ export class AcpRunTarget extends LitElement {
     const kind = KINDS.find((k) => k.kind === runTarget.kind) ?? KINDS[0];
     const label = kind.kind === 'worktree' && started ? 'Worktree' : kind.label;
     const branch = runTarget.branch ?? this.currentBranch;
-    const fullAccess = configOf(configOptions, 'mode')?.currentValue === 'full';
+    const mode = configOf(configOptions, 'mode');
+    // Its risk, which the backend tagged it with (the agent's crate knows its modes).
+    const fullAccess = mode?.options.find((v) => v.value === mode.currentValue)?.risk === 'full';
     const note = fullAccess
       ? html`<span class="acp-run-target__note">
           <md-icon class="acp-run-target__note-icon">${unsafeSVG(publicIcon)}</md-icon>

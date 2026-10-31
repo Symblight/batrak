@@ -333,7 +333,7 @@ impl Sessions {
         let options = conn.set_config_option(config_id, value).await?;
         remember_config(&state, &options);
         self.inner.persist();
-        state.emit("config-options", json!({ "configOptions": options }));
+        state.emit_options(options);
         Ok(())
     }
 

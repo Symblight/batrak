@@ -1,7 +1,7 @@
 //! Codex, run by `@agentclientprotocol/codex-acp`: a library over Codex's own threads. Its CLI is a
 //! package of its own (`@openai/codex`), which resumes a thread but can't start one under our id.
 
-use agent_api::{strings, Agent, CliSpec, Install, Update, Launch, ID};
+use agent_api::{strings, Agent, CliSpec, Install, Launch, ModeRisk, Update, ID};
 
 pub const PACKAGE: &str = "@agentclientprotocol/codex-acp";
 /// The CLI a session continues in.
@@ -30,6 +30,15 @@ impl Agent for Codex {
         agent_kit::runs(launch, PACKAGE)
     }
 
+    /// codex-acp's modes: `read-only`, `auto`, `full-access`.
+    fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
+        match value {
+            "read-only" => Some(ModeRisk::Plan),
+            "full-access" => Some(ModeRisk::Full),
+            _ => agent_api::common_mode_risk(value),
+        }
+    }
+
     /// npx's own flags (before the package), then its CLI's package.
     fn cli(&self, launch: &Launch) -> Option<CliSpec> {
         let (at, _, _) = agent_kit::npx_package(launch)?;
@@ -55,5 +64,10 @@ mod tests {
         let cli = Codex.cli(&launch).unwrap();
         assert_eq!(cli.resume("t-1"), ("/usr/local/bin/npx".to_owned(), strings(&["-y", "@openai/codex", "resume", "t-1"])));
         assert_eq!(cli.start_new("t-1", None), None);
+    }
+
+    #[test]
+    fn tags_its_modes_by_risk() {
+        assert_eq!(["read-only", "auto", "full-access"].map(|m| Codex.mode_risk(m)), [Some(ModeRisk::Plan), Some(ModeRisk::Agent), Some(ModeRisk::Full)]);
     }
 }

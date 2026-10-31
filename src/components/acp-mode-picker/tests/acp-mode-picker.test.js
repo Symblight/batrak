@@ -19,6 +19,27 @@ const OPTIONS = [
 ];
 
 describe('acp-mode-picker', () => {
+  it("takes a mode's risk from its tag, never from its name: the agent's crate knows its modes", async () => {
+    /** @type {ConfigOption[]} */
+    const options = [
+      {
+        id: 'mode',
+        name: 'Mode',
+        category: 'mode',
+        type: 'select',
+        currentValue: 'careful',
+        options: [
+          { value: 'careful', name: 'Careful', risk: 'neutral' },
+          { value: 'yolo', name: 'Yolo', risk: 'full' },
+          { value: 'bypassPermissions', name: 'Untagged' },
+        ],
+      },
+    ];
+    const el = /** @type {import('../acp-mode-picker.js').AcpModePicker} */ (await fixture(html`<acp-mode-picker .options=${options}></acp-mode-picker>`));
+    const danger = [...(el.shadowRoot?.querySelectorAll('.acp-mode-picker__item_danger') ?? [])].map((i) => i.getAttribute('value'));
+    expect(danger).to.deep.equal(['yolo']);
+  });
+
   it('names the option and its value in a tooltip, not a title', async () => {
     const el = await fixture(html`<acp-mode-picker .options=${OPTIONS}></acp-mode-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);

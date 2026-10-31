@@ -35,6 +35,19 @@ describe('acp-run-target', () => {
     expect(item?.hasAttribute('disabled')).to.equal(false);
   });
 
+  it("notes network and files outside the workspace for a full-access mode, by its risk, not its name", async () => {
+    /** @param {import('../../../models/types.js').ConfigOptionValue[]} options @param {string} current */
+    const withMode = (options, current) => ({
+      ...DRAFT,
+      configOptions: [{ id: 'mode', name: 'Mode', category: 'mode', type: /** @type {const} */ ('select'), currentValue: current, options }],
+    });
+    const note = (/** @type {Element} */ el) => /** @type {ShadowRoot} */ (el.shadowRoot).querySelector('.acp-run-target__note');
+    const bypass = await fixture(html`<acp-run-target .composer=${withMode([{ value: 'bypassPermissions', name: 'Bypass', risk: 'full' }], 'bypassPermissions')}></acp-run-target>`);
+    expect(note(bypass)?.textContent).to.contain('Network and files outside the workspace');
+    const untagged = await fixture(html`<acp-run-target .composer=${withMode([{ value: 'full', name: 'Full' }], 'full')}></acp-run-target>`);
+    expect(note(untagged), 'a name alone says nothing').to.equal(null);
+  });
+
   it('explains its buttons and the fixed target in tooltips, not titles', async () => {
     const el = await fixture(html`<acp-run-target .composer=${{ ...DRAFT, runTarget: { kind: 'worktree', branch: 'main' } }}></acp-run-target>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);

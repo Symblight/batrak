@@ -94,7 +94,7 @@ impl Inner {
         if let Some(held) = lock(&state.held).take() {
             let _ = held.send(true);
         }
-        state.emit("config-options", json!({ "configOptions": started.config_options }));
+        state.emit_options(started.config_options.clone());
         let message = match (started.resumed, started.continued, started.history_restored) {
             (true, false, _) => Some("Agent history not restored"),
             (true, true, false) => Some("The agent continues this session but doesn't give its history"),
@@ -278,6 +278,7 @@ impl Inner {
         state.outdated.store(false, Ordering::SeqCst);
         // Its agent is there: whatever said it was gone is over.
         lock(&state.unconfigured).take();
+        *lock(&state.agent) = Some(Arc::clone(self.opts.agents.shared_for_launch(&crate::agents::launch_of(&agent))));
         let launch = AgentLaunch { command: agent.command.clone(), args: agent.args.clone() };
         if record.launch.as_ref() != Some(&launch) || record.agent_name.as_ref() != Some(&agent.name) {
             let mut record = lock(&state.record);

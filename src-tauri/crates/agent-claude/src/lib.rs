@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Update, Launch, ID, PROMPT};
+use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, Update, ID, PROMPT};
 
 /// The adapter's npm package.
 pub const PACKAGE: &str = "@agentclientprotocol/claude-agent-acp";
@@ -39,6 +39,15 @@ impl Agent for Claude {
             new_args: Some(strings(&["--session-id", ID])),
             prompt_args: strings(&[PROMPT]),
         })
+    }
+
+    /// Claude Code's permission modes.
+    fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
+        match value {
+            "acceptEdits" => Some(ModeRisk::Agent),
+            "bypassPermissions" => Some(ModeRisk::Full),
+            _ => agent_api::common_mode_risk(value),
+        }
     }
 
     /// The adapter's `model`, `mode` and `effort` options (read from claude-agent-acp 0.99.1's
@@ -80,6 +89,12 @@ mod tests {
         assert_eq!(Claude.cli_args(&config(&[("model", "opus"), ("mode", "plan")])), ["--model", "opus", "--permission-mode", "plan"]);
         assert_eq!(Claude.cli_args(&config(&[("model", "claude-sonnet-5"), ("mode", "bypassPermissions")])), ["--model", "claude-sonnet-5", "--permission-mode", "bypassPermissions"]);
         assert_eq!(Claude.cli_args(&config(&[("effort", "high")])), ["--effort", "high"]);
+    }
+
+    #[test]
+    fn tags_its_permission_modes_by_risk() {
+        let risks: Vec<_> = ["default", "plan", "acceptEdits", "auto", "bypassPermissions", "dontAsk"].map(|m| Claude.mode_risk(m)).into();
+        assert_eq!(risks, [Some(ModeRisk::Neutral), Some(ModeRisk::Plan), Some(ModeRisk::Agent), Some(ModeRisk::Agent), Some(ModeRisk::Full), None]);
     }
 
     #[test]

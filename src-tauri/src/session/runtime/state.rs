@@ -12,6 +12,8 @@ pub(super) struct Live {
 
 pub(super) struct SessionState {
     pub(super) id: String,
+    /// Its agent's crate, from its last start: what its modes mean (`emit_options`).
+    pub(super) agent: Mutex<Option<Arc<dyn agent_api::Agent>>>,
     pub(super) record: Mutex<SessionRecord>,
     pub(super) sinks: Mutex<HashMap<String, Arc<dyn EventSink>>>,
     /// Guarded by `sinks`, so the order of `seq` is the order of sending.
@@ -85,6 +87,17 @@ impl SessionState {
         lock(&self.conn).clone()
     }
 
+    /// The agent's config options to the page (`config-options`), its modes tagged with their risk
+    /// by its crate (`agents::tag_modes`).
+    pub(super) fn emit_options(&self, options: Vec<Value>) {
+        let agent = lock(&self.agent).clone();
+        let options = match agent {
+            Some(agent) => crate::agents::tag_modes(&*agent, options),
+            None => options,
+        };
+        self.emit("config-options", serde_json::json!({ "configOptions": options }));
+    }
+
     pub(super) fn emit(&self, kind: &'static str, payload: Value) {
         let mut sinks = lock(&self.sinks);
         let envelope = Envelope {
@@ -112,6 +125,7 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         sign_in: Mutex::default(),
         held: Mutex::default(),
         cli: Mutex::default(),
+        agent: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),
         sinks: Mutex::default(),

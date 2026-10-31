@@ -969,11 +969,19 @@
 /** @typedef {AgentInfo & { configOptions: ConfigOption[] }} CatalogAgent An agent with its config options as last seen. */
 
 /**
+ * How much a mode lets the agent do without asking (`plan`: changes nothing; `neutral`: asks;
+ * `agent`: edits on its own; `full`: anything). The backend tags an agent's mode values with it (its
+ * crate's `Agent::mode_risk`): the page never names an agent's modes.
+ * @typedef {'plan' | 'neutral' | 'agent' | 'full'} ModeRisk
+ */
+
+/**
  * One value of an ACP session config option.
  * @typedef {Object} ConfigOptionValue
  * @property {string} value
  * @property {string} name
  * @property {string} [description]
+ * @property {ModeRisk} [risk] A mode value's, when its agent's crate knows it.
  */
 
 /**

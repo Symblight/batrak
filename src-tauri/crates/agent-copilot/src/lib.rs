@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Update, Launch, ID, PROMPT};
+use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, Update, ID, PROMPT};
 
 pub const PACKAGE: &str = "@github/copilot";
 
@@ -38,6 +38,14 @@ impl Agent for Copilot {
             new_args: Some(strings(&["--session-id", ID])),
             prompt_args: vec![format!("--interactive={PROMPT}")],
         })
+    }
+
+    /// Its modes are URLs ending in `#agent`, `#plan` or `#autopilot` (which goes on unasked).
+    fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
+        match value.rsplit_once('#')?.1 {
+            "autopilot" => Some(ModeRisk::Agent),
+            other => agent_api::common_mode_risk(other),
+        }
     }
 
     /// Its `model`, `mode` and `allow_all` options (read from copilot 1.0.103's `session/new`) as
@@ -90,6 +98,14 @@ mod tests {
         assert_eq!(Copilot.cli_args(&config(&[("mode", &mode("plan")), ("allow_all", "on")])), ["--mode", "plan", "--allow-all"]);
         assert_eq!(Copilot.cli_args(&config(&[("mode", &mode("autopilot"))])), ["--mode", "autopilot"]);
         assert!(Copilot.cli_args(&config(&[("mode", &mode("unknown")), ("model", "a b")])).is_empty(), "nothing guessed");
+    }
+
+    #[test]
+    fn tags_its_mode_urls_by_risk() {
+        let mode = |m: &str| format!("https://agentclientprotocol.com/protocol/session-modes#{m}");
+        assert_eq!(Copilot.mode_risk(&mode("plan")), Some(ModeRisk::Plan));
+        assert_eq!(Copilot.mode_risk(&mode("autopilot")), Some(ModeRisk::Agent));
+        assert_eq!(Copilot.mode_risk("plan"), None, "not one of its URLs");
     }
 
     #[test]

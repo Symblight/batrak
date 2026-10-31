@@ -139,7 +139,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
   through `session/set_mode`). `applyAgentOptions()` (`stores/composer.js`) replaces the session's
-  options and caches them per agent (`brama:agents:config-options`, keeping the agent's defaults
+  options and caches them per agent (`brama:agents:config-options:2`, keeping the agent's defaults
   as first learned), so a new session shows the real models before it starts. A new session starts
   with the user's last picks for its agent (`brama:agents:last-picks`; never a permission mode,
   category `mode`); a listed session without a composer this launch (after a reload) gets one
@@ -150,7 +150,9 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`whileLoadingOptions()`: `loading` / `failed`) drives the composer's two dropdowns,
   `<acp-agent-picker>` then `<acp-model-picker>` (model, thought level and other options; disabled
   with a spinner while an agent with nothing cached loads). Permission options (category `mode`, and
-  `permissions` like Copilot's `allow_all`) are `<acp-mode-picker>`'s. `normalizeOptions()` keeps
+  `permissions` like Copilot's `allow_all`) are `<acp-mode-picker>`'s; a mode value's icon and
+  color come from its `risk`, which the backend tags it with (its agent crate's `mode_risk`,
+  `agents::tag_modes`), never from its name. `normalizeOptions()` keeps
   each value once (Copilot sends `auto` twice) and drops a description that repeats the name. A pick goes through `sessionController.setConfigOption()`: shown at once,
   sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session
   keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
