@@ -30,6 +30,23 @@ const FLOW_RESUME_AT: usize = 32 * 1024;
 /// How long the shell's last output gets to arrive before its exit is reported: a background job
 /// may hold the terminal open after the shell is gone (and ConPTY's never ends while it's open).
 const EXIT_DRAIN: Duration = Duration::from_millis(100);
+/// A program turns bracketed paste on (`ESC[?2004h`) when it reads its input, and off (`…l`).
+const BRACKETED_ON: &[u8] = b"\x1b[?2004h";
+const BRACKETED_OFF: &[u8] = b"\x1b[?2004l";
+const PASTE_START: &[u8] = b"\x1b[200~";
+const PASTE_END: &[u8] = b"\x1b[201~";
+/// How often `paste_when_ready` looks whether the program reads.
+const READY_POLL: Duration = Duration::from_millis(50);
+
+/// When `paste_when_ready` takes a program as reading its input.
+#[derive(Debug, Clone, Copy)]
+pub struct PasteWait {
+    /// After its last output: settled once bracketed paste is on; reading anyway without it (ConPTY
+    /// may not pass `ESC[?2004h` through) after this much again.
+    pub quiet: Duration,
+    /// Given up, nothing pasted, when it has printed nothing this long after its start.
+    pub give_up: Duration,
+}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -141,6 +158,48 @@ struct Stream {
     unacked: usize,
     /// The reader waits for the page.
     paused: bool,
+    /// The program last turned bracketed paste on (it reads its input), not off.
+    bracketed: bool,
+    /// The last output's end, where a mode switch cut between two reads begins.
+    mode_tail: Vec<u8>,
+    /// When the program last printed something.
+    last_output: Option<std::time::Instant>,
+}
+
+impl Stream {
+    /// Follows the program's bracketed paste mode through `bytes`, the last switch winning.
+    fn note_modes(&mut self, bytes: &[u8]) {
+        let mut seen = std::mem::take(&mut self.mode_tail);
+        seen.extend_from_slice(&bytes[..bytes.len().min(BRACKETED_ON.len())]);
+        let head = last_switch(&seen);
+        let body = last_switch(bytes);
+        if let Some(on) = body.or(head) {
+            self.bracketed = on;
+        }
+        let keep = bytes.len().min(BRACKETED_ON.len() - 1);
+        self.mode_tail = bytes[bytes.len() - keep..].to_vec();
+    }
+}
+
+/// Whether `bytes`' last bracketed paste switch turns it on; `None` without one.
+fn last_switch(bytes: &[u8]) -> Option<bool> {
+    let at = |needle: &[u8]| bytes.windows(needle.len()).rposition(|w| w == needle);
+    match (at(BRACKETED_ON), at(BRACKETED_OFF)) {
+        (Some(on), Some(off)) => Some(on > off),
+        (on, off) => on.map(|_| true).or(off.map(|_| false)),
+    }
+}
+
+/// `text` as a paste: bracketed (with any end marker inside it defused) while the program reads
+/// bracketed pastes, else on one line (line breaks would each be an Enter).
+fn paste_bytes(text: &str, bracketed: bool) -> Vec<u8> {
+    if !bracketed {
+        return text.replace("\r\n", " ").replace(['\n', '\r'], " ").replace('\x1b', "").into_bytes();
+    }
+    let mut bytes = PASTE_START.to_vec();
+    bytes.extend_from_slice(text.replace('\x1b', "").as_bytes());
+    bytes.extend_from_slice(PASTE_END);
+    bytes
 }
 
 impl Terminals {
@@ -269,6 +328,8 @@ impl Terminals {
                         Ok(n) => {
                             let mut stream = lock(&reading.stream);
                             stream.output.push(&buf[..n]);
+                            stream.note_modes(&buf[..n]);
+                            stream.last_output = Some(std::time::Instant::now());
                             match stream.sink.as_ref().map(|sink| sink.output(&buf[..n])) {
                                 Some(true) => stream.unacked += n,
                                 Some(false) => stream.sink = None,
@@ -361,10 +422,46 @@ impl Terminals {
 
     /// Input for the shell. Blocking (a shell that doesn't read fills the PTY).
     pub fn write(&self, id: &str, data: &[u8]) -> Result<(), String> {
-        let terminal = self.get(id)?;
-        let mut writer = lock(&terminal.writer);
-        let writer = writer.as_mut().ok_or("the terminal is closed")?;
-        writer.write_all(data).and_then(|()| writer.flush()).map_err(|e| e.to_string())
+        self.get(id)?.write(data)
+    }
+
+    /// Pastes `text` once the program reads its input (`wait`), into the terminal open now (never a
+    /// later one under the same id). No Enter: a dialog the program shows first (a folder's trust)
+    /// mustn't be answered for the user. In the background; given up if the terminal ends first.
+    pub fn paste_when_ready(&self, id: &str, text: &str, wait: PasteWait) {
+        let Ok(terminal) = self.get(id) else { return };
+        let (id, text) = (id.to_owned(), text.to_owned());
+        let spawned = std::thread::Builder::new().name(format!("terminal-{id}-paste")).spawn(move || {
+            let started = std::time::Instant::now();
+            let bracketed = loop {
+                if terminal.closed.load(Ordering::SeqCst) {
+                    return;
+                }
+                let (exited, bracketed, last_output) = {
+                    let stream = lock(&terminal.stream);
+                    (stream.exit.is_some(), stream.bracketed, stream.last_output)
+                };
+                if exited {
+                    return;
+                }
+                match last_output {
+                    Some(at) if bracketed && at.elapsed() >= READY_POLL * 4 => break true,
+                    Some(at) if at.elapsed() >= wait.quiet => break false,
+                    None if started.elapsed() >= wait.give_up => {
+                        tracing::warn!(id, "the agent's CLI printed nothing; its first prompt wasn't pasted");
+                        return;
+                    }
+                    _ => {}
+                }
+                std::thread::sleep(READY_POLL);
+            };
+            if let Err(e) = terminal.write(&paste_bytes(&text, bracketed)) {
+                tracing::warn!(id, "pasting the first prompt failed: {e}");
+            }
+        });
+        if let Err(e) = spawned {
+            tracing::warn!(%e, "couldn't wait to paste into a terminal");
+        }
     }
 
     /// The page has drawn `bytes` of what it was sent.
@@ -436,6 +533,12 @@ impl Terminals {
 }
 
 impl Terminal {
+    fn write(&self, data: &[u8]) -> Result<(), String> {
+        let mut writer = lock(&self.writer);
+        let writer = writer.as_mut().ok_or("the terminal is closed")?;
+        writer.write_all(data).and_then(|()| writer.flush()).map_err(|e| e.to_string())
+    }
+
     /// Once the page is `FLOW_PAUSE_AT` behind, waits until it's caught up to `FLOW_RESUME_AT` (or
     /// is gone), leaving the shell's output in the PTY meanwhile.
     fn wait_for_page(&self) {

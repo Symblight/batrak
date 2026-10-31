@@ -13,6 +13,16 @@ use super::AgentConfig;
 const ID: &str = "{id}";
 /// Stands for a new session's first prompt in `promptArgs`.
 const PROMPT: &str = "{prompt}";
+/// A first prompt longer than this, in bytes, is pasted once the CLI reads instead of going on its
+/// command line: well under Windows' 32 K and `ARG_MAX`, with room for the launch.
+pub const MAX_ARG_PROMPT: usize = 8000;
+
+/// Whether a first prompt can go on the CLI's command line. Never on Windows: the CLI runs as
+/// `npx.cmd`, so through `cmd.exe`, which caps the whole line at 8191 and rewrites `%`, `^`, `&`, `|`
+/// and `"` inside arguments.
+pub fn prompt_fits_argv(prompt: &str, windows: bool) -> bool {
+    !windows && prompt.len() <= MAX_ARG_PROMPT
+}
 
 /// agents.json's `cli`: what the agent's CLI runs. No `command`: the agent's own (with `args`,
 /// else its args); a `command` without `args` runs with none.
@@ -70,8 +80,13 @@ impl CliSpec {
             // One word could name one of the CLI's commands (`claude update` runs the updater); a
             // trailing space keeps it a prompt.
             let prompt = if prompt.contains(char::is_whitespace) { prompt.to_owned() } else { format!("{prompt} ") };
-            // One pass over the template: what the prompt holds is never expanded.
-            args.extend(self.prompt_args.iter().map(|a| a.replacen(PROMPT, &prompt, 1)));
+            // One pass over the template: what the prompt holds is never expanded. An argument of its
+            // own that starts like an option gets a leading space, so it stays a prompt; `--`
+            // might not survive `npx` and the adapter's wrapper.
+            args.extend(self.prompt_args.iter().map(|a| match a == PROMPT && prompt.starts_with('-') {
+                true => format!(" {prompt}"),
+                false => a.replacen(PROMPT, &prompt, 1),
+            }));
         }
         Some((self.program.clone(), args))
     }
@@ -186,6 +201,29 @@ mod tests {
         assert_eq!(cli_for(&agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp-extra"])), None, "another package");
         assert_eq!(cli_for(&agent("agy_acp_server.par", &[])), None, "Antigravity has none");
         assert_eq!(cli_for(&agent("my-agent", &["--acp"])), None, "custom");
+    }
+
+    #[test]
+    fn a_prompt_like_an_option_stays_a_prompt() {
+        let claude = cli_for(&agent("npx", &["-y", "@agentclientprotocol/claude-agent-acp@0.99.1"])).unwrap();
+        let last = |prompt: &str| claude.start_new("abc", Some(prompt)).unwrap().1.last().cloned();
+        assert_eq!(last("-v what changed?").as_deref(), Some(" -v what changed?"), "a leading space: never parsed as a flag");
+        assert_eq!(last("--help me").as_deref(), Some(" --help me"));
+        let copilot = cli_for(&agent("npx", &["-y", "@github/copilot", "--acp"])).unwrap();
+        assert_eq!(
+            copilot.start_new("abc", Some("-v now")).unwrap().1.last().map(String::as_str),
+            Some("--interactive=-v now"),
+            "inside an argument it's already a value"
+        );
+    }
+
+    #[test]
+    fn a_first_prompt_goes_on_the_command_line_only_where_it_is_safe() {
+        assert!(prompt_fits_argv("fix the build", false));
+        assert!(!prompt_fits_argv("fix the build", true), "Windows: npx.cmd runs through cmd.exe, which rewrites % ^ & | \"");
+        assert!(prompt_fits_argv(&"x".repeat(MAX_ARG_PROMPT), false));
+        assert!(!prompt_fits_argv(&"x".repeat(MAX_ARG_PROMPT + 1), false), "too long for a command line");
+        assert!(!prompt_fits_argv(&"é".repeat(MAX_ARG_PROMPT / 2 + 1), false), "counted in bytes");
     }
 
     #[test]

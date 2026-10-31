@@ -3,7 +3,7 @@
 //! id. One process per session at a time: while the CLI holds it, the ACP agent isn't started.
 
 use super::*;
-use crate::terminal::{OpenRequest, Program, TerminalEvent, Terminals};
+use crate::terminal::{OpenRequest, PasteWait, Program, TerminalEvent, Terminals};
 
 /// How long closing the CLI waits for it to be gone.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
@@ -62,6 +62,10 @@ pub struct CliWindow<'a> {
 pub fn terminal_id(session_id: &str) -> String {
     format!("cli-{session_id}")
 }
+
+/// When a first prompt that isn't on the command line is pasted: `npx` may install the CLI first, in
+/// silence; a CLI that shows its screen and settles reads.
+const FIRST_PROMPT_WAIT: PasteWait = PasteWait { quiet: Duration::from_secs(3), give_up: Duration::from_secs(180) };
 
 /// Why the agent doesn't start, or take a prompt, while the CLI holds the session.
 pub(super) const OPEN_IN_TERMINAL: &str = "This session is open in the terminal: continue in the chat to send it a message";
@@ -218,10 +222,18 @@ impl Inner {
         self.check_trust(&record.project_path, &merged, &agent.id).map_err(|untrusted| untrusted.message)?;
         let spec = crate::config::cli::cli_for(&agent).ok_or_else(|| format!("{} has no terminal mode", agent.name))?;
         let acp_id = record.acp_session_id.clone().ok_or("This session hasn't started yet: send its first message in the chat")?;
+        // A first prompt that can't go on the command line is pasted once the CLI reads.
+        let mut pasted = None;
         let (program, args) = match start {
-            CliStart::New { prompt } => spec
-                .start_new(&acp_id, prompt.as_deref())
-                .ok_or_else(|| format!("{}'s CLI can't start a session Brama names", agent.name))?,
+            CliStart::New { prompt } => {
+                let prompt = prompt.filter(|p| !p.trim().is_empty());
+                let on_argv = prompt.as_deref().is_none_or(|p| crate::config::cli::prompt_fits_argv(p, cfg!(windows)));
+                let command = spec.start_new(&acp_id, if on_argv { prompt.as_deref() } else { None });
+                if !on_argv {
+                    pasted = prompt;
+                }
+                command.ok_or_else(|| format!("{}'s CLI can't start a session Brama names", agent.name))?
+            }
             CliStart::Resume => spec.resume(&acp_id),
         };
 
@@ -262,6 +274,9 @@ impl Inner {
         .await
         .map_err(|e| e.to_string())??;
         tracing::info!(session = %state.id, agent = %agent.id, terminal = %terminal_id, "session continues in its agent's CLI");
+        if let Some(prompt) = pasted {
+            window.terminals.paste_when_ready(terminal_id, &prompt, FIRST_PROMPT_WAIT);
+        }
         let kept = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
             Some(held) => {
                 held.terminals = Some(window.terminals.clone());

@@ -452,3 +452,38 @@ fn closing_a_programs_terminal_reports_no_exit() {
     assert_eq!(ended.recv_timeout(Duration::from_secs(5)).unwrap(), None);
     assert!(started.elapsed() < Duration::from_secs(1), "heard once it's gone, not after the kill's grace: {:?}", started.elapsed());
 }
+
+const WAIT: PasteWait = PasteWait { quiet: Duration::from_secs(5), give_up: Duration::from_secs(5) };
+
+#[test]
+fn a_paste_waits_until_the_program_reads_bracketed_pastes_and_presses_no_enter() {
+    let f = fixture("paste-ready");
+    // Its input is unread until it says it takes bracketed pastes; what it then reads, byte by byte.
+    let (out, _) = run_program(&f, "cli", "stty raw -echo; sleep 0.3; printf 'READY\\033[?2004h'; dd bs=1 count=30 2>/dev/null | tr '\\033' '^'; echo END; sleep 1");
+    f.terminals.paste_when_ready("cli", "fix\nthe \u{1b}[201~build", WAIT);
+    out.wait_for("END");
+    let shown = out.text();
+    assert!(shown.contains("^[200~fix\nthe [201~build^[201~END"), "bracketed, inner end marker defused, no Enter: {shown:?}");
+}
+
+#[test]
+fn a_paste_goes_as_one_line_once_a_program_that_never_says_it_reads_settles() {
+    let f = fixture("paste-quiet");
+    let (out, _) = run_program(&f, "cli", "stty raw -echo; printf 'hello'; dd bs=1 count=6 2>/dev/null; echo END");
+    f.terminals.paste_when_ready("cli", "fix\nit", PasteWait { quiet: Duration::from_millis(300), ..WAIT });
+    out.wait_for("END");
+    assert!(out.text().contains("hellofix itEND"), "line breaks become spaces: {:?}", out.text());
+}
+
+#[test]
+fn a_paste_never_goes_into_a_later_terminal_under_the_same_id() {
+    let f = fixture("paste-replaced");
+    let _ = run_program(&f, "cli", "sleep 30");
+    f.terminals.paste_when_ready("cli", "old prompt", PasteWait { quiet: Duration::from_millis(200), ..WAIT });
+    f.terminals.close(&["cli".to_owned()]);
+    let (out, _) = run_program(&f, "cli", "stty raw -echo; printf 'resumed'; dd bs=1 count=3 2>/dev/null; echo END");
+    std::thread::sleep(Duration::from_millis(600));
+    f.terminals.write("cli", b"new").unwrap();
+    out.wait_for("END");
+    assert!(!out.text().contains("old prompt"), "{:?}", out.text());
+}

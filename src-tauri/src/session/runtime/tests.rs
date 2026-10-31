@@ -2545,6 +2545,9 @@ const CLI_AGENTS: &str = r#"{"version":1,"agents":{
     "fake":{"name":"Fake","command":"fake-agent","env":{"TOKEN":"${keychain:token}"},
         "cli":{"command":"/bin/sh","args":["-c","echo \"ARGS:$*\" \"PWD:$(pwd)\" \"TOKEN:$TOKEN\"; [ \"$1\" = --exit ] && exit 3; sleep 30","cli"],
             "resumeArgs":["--resume","{id}"],"newArgs":["--session-id","{id}"]}},
+    "reader":{"name":"Reader","command":"fake-agent",
+        "cli":{"command":"/bin/sh","args":["-c","stty -icanon -echo; printf 'ARGS:%s READY\\033[?2004h' \"$*\"; dd bs=1 count=16 2>/dev/null | tr '\\033' '^'; echo END","cli"],
+            "resumeArgs":["--resume","{id}"],"newArgs":["--session-id","{id}"]}},
     "quitter":{"name":"Quitter","command":"fake-agent","cli":{"command":"/bin/sh","args":["-c","exit 3","cli"],"resumeArgs":["{id}"]}},
     "plain":{"name":"Plain","command":"fake-agent"},
     "missing":{"name":"Missing","command":"fake-agent","cli":{"command":"/nonexistent/brama-cli","resumeArgs":["{id}"],"newArgs":["{id}"]}}}}"#;
@@ -2708,6 +2711,21 @@ async fn a_draft_sent_to_the_cli_starts_it_with_its_first_prompt() {
     let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} fix the build")), "{shown}");
+    terminals.close(&[opened.terminal_id]);
+}
+
+#[tokio::test]
+async fn a_first_prompt_too_long_for_the_command_line_is_pasted_once_the_cli_reads() {
+    let f = fixture("cli-draft-long", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let id = "4cb916db-26aa-40f2-86b5-1ba81b225fd2";
+    let prompt = format!("fix {}", "x".repeat(crate::config::cli::MAX_ARG_PROMPT));
+    let draft = CliDraft { prompt: Some(prompt), ..f.draft("reader", Mode::Local) };
+    let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
+    let shown = attach(&terminals, &opened.terminal_id).wait_for("END").await;
+    assert!(shown.contains(&format!("ARGS:--session-id {id} READY")), "not on the command line: {shown}");
+    assert!(shown.contains("^[200~fix xxxx"), "pasted, bracketed: {shown}");
     terminals.close(&[opened.terminal_id]);
 }
 
