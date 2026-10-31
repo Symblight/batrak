@@ -171,8 +171,14 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   is only its label there), into `InputPart`s that `promptOfInput()` (ACP) and `cliPromptOf()`
   (`models/cli-input.js`, the CLI's `@path`, `@path#L3-5`) write. `sessionInput`
   (`services/session-input.js`) decides a draft's first send (`draftTarget`: `startTerminal` or
-  the chat) and refuses attachments in both views (`refuseFiles`: a notice, the send cancelled so
-  the composer keeps them). A terminal draft's composer clears only once its CLI started. Editor
+  the chat). A file attached in the composer (picked, pasted) never stays an attachment:
+  `<acp-chat>` hands it to the column (`acp-chat-attach`), which saves it into the session's
+  folder (`save_attachment`, `commands/attachments.rs`: `.brama/attachments/`, self-ignoring in
+  git, one-word unique names claimed with `create_new`, 64 MB at most, never through a symlink;
+  a draft's chips are absolute) and puts its path chip in, so both views send
+  a path (an image read by path works in a CLI; the chat's own file reads are text only). An
+  attachment that still reaches a send is refused (`refuseFiles`: a notice, the send cancelled so
+  the composer keeps it). A terminal draft's composer clears only once its CLI started. Editor
   code and OS drops wait in `$pendingInput` (`stores/chat.js`, per session) until the shown
   session's composer is up or its CLI runs (`<acp-agent-column>`'s `#applyPending`); an ended
   CLI shows how many wait. A first prompt goes on the CLI's command line only on Unix and up to

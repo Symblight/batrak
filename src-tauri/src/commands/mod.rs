@@ -2,6 +2,7 @@
 
 pub mod about;
 pub mod agents;
+pub mod attachments;
 pub mod dropped;
 pub mod fonts;
 pub mod fs;

@@ -133,6 +133,7 @@ pub fn run() {
             commands::fs::read_file,
             commands::fs::read_file_bytes,
             commands::dropped::dropped_kinds,
+            commands::attachments::save_attachment,
             commands::fs::write_file,
             commands::fs::reveal_path,
             commands::fs::open_url,

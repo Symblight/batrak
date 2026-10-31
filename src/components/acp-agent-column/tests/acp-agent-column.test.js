@@ -12,6 +12,7 @@ import { osScale } from '../../../models/file-drop.js';
 import { platformOf } from '../../../models/platform.js';
 import { shellPaths } from '../../../models/shell-paths.js';
 import { fileDrop } from '../../../services/file-drop.js';
+import { $notices } from '../../../stores/notices.js';
 import '../acp-agent-column.js';
 
 /** @typedef {import('../acp-agent-column.js').AcpAgentColumn} AcpAgentColumn */
@@ -259,6 +260,64 @@ describe('acp-agent-column', () => {
     fileDrop.handle({ type: 'drop', paths: ['/Users/me/Screen Shot.png'], position: osPointOf(chat) });
     await until(() => inserted.length > 0);
     expect(inserted).to.deep.equal([{ path: '/Users/me/Screen Shot.png', folder: false }]);
+  });
+
+  it("saves files attached in the composer into the session's folder and puts their path chips in", async () => {
+    /** @type {{ headers?: Record<string, string> }[]} */
+    const saved = [];
+    mockIPC(() => null);
+    // `mockIPC` leaves out the options, where a raw body's folder and name go.
+    const internals = /** @type {{ invoke: (cmd: string, args: unknown, options?: { headers?: Record<string, string> }) => Promise<unknown> }} */ (
+      /** @type {{ __TAURI_INTERNALS__: unknown }} */ (/** @type {unknown} */ (window)).__TAURI_INTERNALS__
+    );
+    internals.invoke = async (cmd, _args, options) => {
+      if (cmd !== 'save_attachment') return null;
+      saved.push({ headers: options?.headers });
+      return `/p/.brama/attachments/${decodeURIComponent(options?.headers?.name ?? '')}`;
+    };
+    $sessions.set([session()]);
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    const files = [new File(['x'], 'Screen Shot é.png'), new File(['y'], 'log.txt')];
+    chat.dispatchEvent(new CustomEvent('acp-chat-attach', { detail: { files }, bubbles: true, composed: true }));
+    await until(() => inserted.length === 2);
+    expect(saved.map((c) => c.headers)).to.deep.equal([
+      { folder: '%2Fp', name: 'Screen%20Shot%20%C3%A9.png' },
+      { folder: '%2Fp', name: 'log.txt' },
+    ]);
+    expect(inserted).to.deep.equal([
+      { path: '.brama/attachments/Screen Shot é.png', folder: false },
+      { path: '.brama/attachments/log.txt', folder: false },
+    ]);
+  });
+
+  it('puts in the chips of the files that saved and names the ones that failed', async () => {
+    mockIPC(() => null);
+    const internals = /** @type {{ invoke: (cmd: string, args: unknown, options?: { headers?: Record<string, string> }) => Promise<unknown> }} */ (
+      /** @type {{ __TAURI_INTERNALS__: unknown }} */ (/** @type {unknown} */ (window)).__TAURI_INTERNALS__
+    );
+    internals.invoke = async (cmd, _args, options) => {
+      if (cmd !== 'save_attachment') return null;
+      const name = decodeURIComponent(options?.headers?.name ?? '');
+      if (name === 'bad.txt') throw new Error('bad.txt: disk full');
+      return `/p/.brama/attachments/${name}`;
+    };
+    $sessions.set([session()]);
+    $activeSessionId.set('s1');
+    const { root } = await render();
+    const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    /** @type {import('../../../models/types.js').ChatFile[]} */
+    const inserted = [];
+    chat.insertFiles = (files) => inserted.push(...files);
+    const files = [new File(['x'], 'a.txt'), new File(['y'], 'bad.txt')];
+    chat.dispatchEvent(new CustomEvent('acp-chat-attach', { detail: { files }, bubbles: true, composed: true }));
+    await until(() => inserted.length > 0);
+    expect(inserted).to.deep.equal([{ path: '.brama/attachments/a.txt', folder: false }]);
+    expect($notices.get().map((n) => n.message).join()).to.contain('bad.txt: disk full');
   });
 
   it("refuses a send with attachments, which the agent can't be sent yet: the composer keeps them, the agent gets nothing", async () => {

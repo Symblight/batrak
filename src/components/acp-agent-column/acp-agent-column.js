@@ -11,13 +11,14 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { cliInput } from '../../models/cli-input.js';
 import { chatDropOf } from '../../models/file-drop.js';
+import { relPath } from '../../models/paths.js';
 import { PLATFORM } from '../../models/platform.js';
 import { shellPaths } from '../../models/shell-paths.js';
 import { inTurn, isActiveElsewhere, sessionIndicator } from '../../models/sessions.js';
 import { copyText } from '../../services/clipboard.js';
 import { USER_ID, acpAdapter } from '../../services/acp-adapter.js';
 import { agentConfig } from '../../services/agent-config.js';
-import { droppedKinds, gitBranches, openUrl, quickOpen } from '../../services/ipc.js';
+import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc.js';
 import { fileDrop } from '../../services/file-drop.js';
 import { reportError } from '../../services/notices.js';
 import { terminalController } from '../../services/terminals.js';
@@ -38,6 +39,9 @@ import { $activeShownView, $activeView } from '../../stores/session-views.js';
 import { $editorFont, $editorFontSize } from '../../stores/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace.js';
 import styles from './acp-agent-column.css?inline';
+
+/** Larger attachments aren't sent to be saved (the backend's cap). */
+const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
 
 /** @typedef {import('../../models/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../models/types.js').QuickOpenItem} QuickOpenItem */
@@ -205,6 +209,42 @@ export class AcpAgentColumn extends LitElement {
     } catch (err) {
       reportError('Adding dropped files failed', err);
     }
+  }
+
+  /**
+   * Files attached in the composer: each saved into the session's folder, the saved ones' path chips
+   * put in, the others named in an error. A draft's chips are absolute: its folder may yet be a
+   * worktree's, where the project's attachments aren't.
+   * @param {Event} e
+   */
+  async #onAttach(e) {
+    const { files } = /** @type {CustomEvent<{ files: File[] }>} */ (e).detail;
+    const sessionId = $activeSessionId.get();
+    const folder = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
+    if (sessionId === null || folder === null) {
+      reportError('Attaching the files failed', new Error('No session to attach them to'));
+      return;
+    }
+    const draft = this.#activeSession.value === null;
+    /** @type {string[]} */
+    const paths = [];
+    /** @type {string[]} */
+    const failed = [];
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_BYTES) {
+        failed.push(`${file.name}: too large to attach (over ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)`);
+        continue;
+      }
+      try {
+        paths.push(await saveAttachment(folder, file));
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : String(err));
+      }
+    }
+    if (failed.length) reportError('Attaching the files failed', new Error(failed.join('; ')));
+    const chat = this.#chat;
+    if ($activeSessionId.get() !== sessionId || !chat) return addDrop(paths, sessionId);
+    chat.insertFiles(paths.map((path) => ({ path: draft ? path : (relPath(folder, path) ?? path), folder: false })));
   }
 
   connectedCallback() {
@@ -496,6 +536,7 @@ export class AcpAgentColumn extends LitElement {
             ?dropping=${this.#isShownChat(this.#fileDropTarget.value)}
             ?cli-start=${this.#activeSession.value === null && this.#activeView.value.view === 'terminal'}
             @acp-chat-file-query=${this.#onFileQuery}
+            @acp-chat-attach=${this.#onAttach}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
             @acp-session-select=${this.#onSessionSelect}

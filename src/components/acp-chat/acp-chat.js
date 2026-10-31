@@ -192,6 +192,7 @@ function buildEntryItem(entry) {
  * @tag acp-chat
  * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
  * @fires acp-chat-file-query `{ query }` Files and folders for `@` to search for; `null` drops the search.
+ * @fires acp-chat-attach `{ files }` Files attached (picked, pasted): saved, they come back as path chips (`insertFiles()`).
  */
 export class AcpChat extends LitElement {
   static properties = {
@@ -347,6 +348,17 @@ export class AcpChat extends LitElement {
   /** Rendered unconditionally, so present after the first render. */
   get #attachments() {
     return /** @type {ChxAttachments} */ (this.renderRoot.querySelector('chx-attachments'));
+  }
+
+  /**
+   * Files being attached (picked, pasted) go to the column instead, which saves them where the agent
+   * reads them and puts their path chips in (`insertFiles()`): the composer keeps no attachments,
+   * which no view could send.
+   * @param {Event} e
+   */
+  #onAttach(e) {
+    e.preventDefault();
+    this.#emit('acp-chat-attach', { files: [.../** @type {CustomEvent<{ files: File[] }>} */ (e).detail.files] });
   }
 
   /** @param {Event} e */
@@ -513,7 +525,7 @@ export class AcpChat extends LitElement {
                 .status=${this.optionsStatus}
                 .signIn=${this.agent?.signIn === true}
               ></acp-model-picker>`}
-          <chx-attachments slot="attachments"></chx-attachments>
+          <chx-attachments slot="attachments" @chx-attach=${this.#onAttach}></chx-attachments>
           <chx-paste-long-text></chx-paste-long-text>
           <chx-code-block-paste></chx-code-block-paste>
           <chx-command-picker

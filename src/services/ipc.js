@@ -900,3 +900,15 @@ export function droppedKinds(paths) {
   return invoke('dropped_kinds', { paths });
 }
 
+/**
+ * Saves a file attached in the composer into `folder`'s attachments (`.brama/attachments/`, which
+ * git ignores), where the agent reads it by its path.
+ * @param {string} folder A folder of an open project or a session's.
+ * @param {File} file
+ * @returns {Promise<string>} Its absolute path.
+ */
+export async function saveAttachment(folder, file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return invoke('save_attachment', bytes, { headers: { folder: encodeURIComponent(folder), name: encodeURIComponent(file.name) } });
+}
+
