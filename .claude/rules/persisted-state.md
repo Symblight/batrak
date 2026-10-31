@@ -3,10 +3,10 @@ paths:
   - "src/stores/**"
   - "src/models/tab-ids/tab-ids.js"
   - "src/controllers/tab-content/**"
-  - "src/components/acp-tab-view/**"
-  - "src/components/acp-main-column/**"
-  - "src/components/acp-image-preview/**"
-  - "src/components/acp-settings/**"
+  - "src/components/tab-view/**"
+  - "src/components/main-column/**"
+  - "src/components/image-preview/**"
+  - "src/components/settings/**"
   - "src/services/theme/theme.js"
 ---
 

@@ -7,8 +7,8 @@ import { listDir } from '../../services/ipc/ipc.js';
 import { projectController } from '../../services/project-controller/project-controller.js';
 import { projectPathOf } from '../../models/paths/paths.js';
 import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
-import { AcpMarkdown } from '../../components/acp-markdown/acp-markdown.js';
-import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thinking.js';
+import { AcpMarkdown } from '../../components/markdown/markdown.js';
+import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */

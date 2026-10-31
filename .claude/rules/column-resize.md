@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/controllers/resize/**"
-  - "src/components/acp-resize-handle/**"
+  - "src/components/resize-handle/**"
   - "src/stores/layout/layout.js"
   - "src-tauri/tauri.conf.json"
 ---

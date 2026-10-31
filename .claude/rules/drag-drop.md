@@ -1,7 +1,7 @@
 ---
 paths:
   - "src/controllers/sortable/**"
-  - "src/components/acp-tab-strip/**"
+  - "src/components/tab-strip/**"
 ---
 
 # Drag and drop

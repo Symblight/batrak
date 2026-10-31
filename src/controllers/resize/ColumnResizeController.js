@@ -1,7 +1,7 @@
 import { StoreController } from '../store/StoreController.js';
 
-/** @typedef {import('../../components/acp-resize-handle/acp-resize-handle.js').ResizeEventDetail} ResizeEventDetail */
-/** @typedef {import('../../components/acp-resize-handle/acp-resize-handle.js').ResizeMeasure} ResizeMeasure */
+/** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeEventDetail} ResizeEventDetail */
+/** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeMeasure} ResizeMeasure */
 /** @typedef {import('../../models/types/types.js').ColumnWidths} ColumnWidths */
 
 /**

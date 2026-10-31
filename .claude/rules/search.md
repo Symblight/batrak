@@ -1,9 +1,9 @@
 ---
 paths:
-  - "src/components/acp-search-dialog/**"
-  - "src/components/acp-search-panel/**"
-  - "src/components/acp-search-options/**"
-  - "src/components/acp-search-results/**"
+  - "src/components/search-dialog/**"
+  - "src/components/search-panel/**"
+  - "src/components/search-options/**"
+  - "src/components/search-results/**"
   - "src/controllers/find-in-files/**"
   - "src/models/search/search.js"
   - "src/models/search-filter/search-filter.js"

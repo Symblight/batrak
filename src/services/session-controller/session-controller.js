@@ -21,7 +21,7 @@ import {
   terminalClose,
   workspaceSettings,
 } from '../ipc/ipc.js';
-import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from '../acp-adapter/acp-adapter.js';
+import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from '../adapter/adapter.js';
 import { agentConfig } from '../agent-config/agent-config.js';
 import { log } from '../logger/logger.js';
 import { reportError } from '../notices/notices.js';

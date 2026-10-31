@@ -1,6 +1,6 @@
 import { html, nothing } from 'lit';
 import { flip, hide, offset, shift } from '@floating-ui/dom';
-import '../../components/acp-selection-actions/acp-selection-actions.js';
+import '../../components/selection-actions/selection-actions.js';
 import { FloatingController } from '../floating/FloatingController.js';
 import { editorOf } from '../../models/editor-events/editor-events.js';
 

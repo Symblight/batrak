@@ -6,7 +6,7 @@ import { logUncaughtErrors } from './services/logger/logger.js';
 import { showBackendNotices } from './services/notices/notices.js';
 import { fileDrop } from './services/file-drop/file-drop.js';
 import { syncTheme } from './services/theme/theme.js';
-import './components/acp-app/acp-app.js';
+import './components/app/app.js';
 
 logUncaughtErrors();
 showBackendNotices();

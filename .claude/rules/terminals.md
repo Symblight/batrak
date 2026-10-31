@@ -4,7 +4,7 @@ paths:
   - "src-tauri/src/commands/terminal.rs"
   - "src/services/terminals/terminals.js"
   - "src/stores/terminals/terminals.js"
-  - "src/components/acp-terminal/**"
+  - "src/components/terminal/**"
   - "src/services/file-drop/file-drop.js"
   - "src/models/file-drop/file-drop.js"
   - "src/models/shell-paths/shell-paths.js"

@@ -1,5 +1,5 @@
 import { html } from 'lit';
-import '../../components/acp-confirm-dialog/acp-confirm-dialog.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import { basename } from '../../models/paths/paths.js';
 import { terminalOfTab } from '../../models/tab-ids/tab-ids.js';
 

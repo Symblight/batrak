@@ -4,10 +4,10 @@ paths:
   - "src-tauri/crates/agent-acp/**"
   - "src-tauri/src/agents/**"
   - "src-tauri/src/commands/sessions.rs"
-  - "src/services/{session-controller,session-root-controller,acp-adapter,session-input}/**"
+  - "src/services/{session-controller,session-root-controller,adapter,session-input}/**"
   - "src/models/{session-input,cli-input}/**"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
-  - "src/components/acp-{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
+  - "src/components/{agent-column,chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input}.md"
 ---
@@ -86,7 +86,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   permission responders are parked until the user answers. Tests run `agent-acp`'s `fake_agent.rs` (feature `test-support`)
   in-process; `real_claude_agent_end_to_end` (ignored) runs the real agent.
 - **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
-  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/acp-adapter/acp-adapter.js`), which
+  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/adapter/adapter.js`), which
   maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
   or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
   notices live in `stores/session-runtime/session-runtime.js`, shown by `<acp-session-banner>` (a queued
@@ -160,7 +160,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   every answer and update): a new start of its agent is set to them (`apply_config`, inside the
   start Stop aborts, each answer bounded by `initialize_timeout`) before anyone gets the connection, so an agent that forgets its model on restart or `session/load` doesn't drop it.
 - **History**: Brama stores no messages. A session's conversation is its agent's replay
-  (`session/load`, when it's shown), shown once per launch (`acp-adapter.js` `loaded`: a later load
+  (`session/load`, when it's shown), shown once per launch (`adapter.js` `loaded`: a later load
   after an idle stop adds nothing); an agent with only `session/resume` continues it without
   history (the banner says so). Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
   `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`

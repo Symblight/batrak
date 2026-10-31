@@ -186,8 +186,8 @@ test that reproduces it.
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
   every `src/**/*.test.js`. Every entity has a folder of its own, with its tests in a `__tests__/` folder inside it, named
-  after it (`components/acp-x/__tests__/acp-x.test.js`, `models/paths/__tests__/paths.test.js`). Keep logic in plain functions
-  (`stores/`, `models/`, `services/acp-adapter/acp-adapter.js`) and test it directly; test a component through its
+  after it (`components/x/__tests__/x.test.js`, `models/paths/__tests__/paths.test.js`). Keep logic in plain functions
+  (`stores/`, `models/`, `services/adapter/adapter.js`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
@@ -229,7 +229,7 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 ## Styling conventions
 
 - **CSS lives in a `.css` file next to its component**, imported with `?inline` and assigned directly:
-  `import styles from './acp-toolbar.css?inline';` → `static styles = styles;`. `scripts/lit-css-loader.cjs`
+  `import styles from './toolbar.css?inline';` → `static styles = styles;`. `scripts/lit-css-loader.cjs`
   (wired in `rsbuild.config.js`) turns the import into a Lit `CSSResult`; `src/env.d.ts` types `*.css?inline` as
   `CSSResultGroup` (it deliberately doesn't reference `@rsbuild/core/types`, whose `*?inline` → `string`
   declaration would win). Never write `css\`…\`` blocks inside component JS.
@@ -300,20 +300,20 @@ full rules — load them when writing or reviewing component CSS or structure.
 ### File structure
 
 Flex scheme: `src/components/` is a flat list of block folders, each holding the element's JS and CSS
-under the tag name, and its tests in `__tests__/`:
+under the tag name without the `acp-` prefix (`<acp-tab-view>` is `tab-view/tab-view.js`), and its tests in `__tests__/`:
 
 ```
 src/components/
-├── acp-tab-view/
-│   ├── acp-tab-view.js
-│   ├── acp-tab-view.css
+├── tab-view/
+│   ├── tab-view.js
+│   ├── tab-view.css
 │   └── __tests__/
-│       └── acp-tab-view.test.js
-└── acp-toolbar/
-    ├── acp-toolbar.js
-    ├── acp-toolbar.css
+│       └── tab-view.test.js
+└── toolbar/
+    ├── toolbar.js
+    ├── toolbar.css
     └── __tests__/
-        └── acp-toolbar.test.js
+        └── toolbar.test.js
 ```
 
-The element's tests live in a `__tests__/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../acp-x/acp-x.js'`; services, models and stores are one folder per module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).
+The element's tests live in a `__tests__/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../x/x.js'`; services, models and stores are one folder per module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).
