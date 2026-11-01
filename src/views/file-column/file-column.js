@@ -6,7 +6,6 @@ import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { git } from '../../hooks/git/git.js';
-import { listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
@@ -151,7 +150,7 @@ export class AcpFileColumn extends ViewElement {
     if (rootId === null || this.refreshing) return;
     this.refreshing = true;
     try {
-      await rescanWorkspace(rootId);
+      await projects.rescan(rootId);
       if ($treeRoot.get().rootId === rootId) {
         this.renderRoot.querySelector('acp-file-tree')?.reload(['', ...$expandedFolders.get()]);
       }
@@ -224,7 +223,7 @@ export class AcpFileColumn extends ViewElement {
         .rootId=${tree.rootId}
         .root=${tree.path}
         .rootLabel=${tree.label}
-        .listDir=${listDir}
+        .listDir=${projects.listDir}
         .expanded=${this.#expandedFolders.value}
         .opening=${this.#openingPath.value !== null || this.#sessionRootOpening.value}
         @acp-expanded-change=${(/** @type {CustomEvent<{ paths: string[] }>} */ e) => setExpandedFolders(e.detail.paths)}

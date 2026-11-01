@@ -5,7 +5,7 @@ import { html, nothing } from 'lit';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { git } from '../../hooks/git/git.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
-import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
+import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $gitRepo } from '../../stores/git/git.js';
@@ -98,7 +98,7 @@ export class AcpApp extends ViewElement {
   /** @type {Promise<() => void> | null} */
   #menuListener = null;
 
-  #onMenuAction = (/** @type {import('../../services/ipc/ipc.js').MenuAction} */ id) => {
+  #onMenuAction = (/** @type {import('../../hooks/app/app.js').MenuAction} */ id) => {
     if (id === 'about') this.#showAbout();
     else if (id === 'new-terminal') this.#newTerminal();
     else this.#showSettings();
@@ -157,7 +157,7 @@ export class AcpApp extends ViewElement {
     // First: the previous page load's shells must be closed before anything opens one.
     terminals.start();
     window.addEventListener('keydown', this.#onKeydown);
-    this.#menuListener = onMenuAction(this.#onMenuAction);
+    this.#menuListener = app.onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agents.start();
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
@@ -252,7 +252,7 @@ export class AcpApp extends ViewElement {
       return;
     }
     try {
-      const result = await quickOpen(rootId, query);
+      const result = await search.quickOpen(rootId, query);
       if (id !== this.#quickOpenRequest || result.cancelled) return;
       this.quickOpenFiles = result.items;
     } catch (err) {
@@ -306,7 +306,7 @@ export class AcpApp extends ViewElement {
       return;
     }
     try {
-      const result = await quickOpen(rootId, query, 'dirs');
+      const result = await search.quickOpen(rootId, query, 'dirs');
       if (id !== this.#foldersRequest || result.cancelled) return;
       this.searchFolders = result.items;
       this.searchFoldersQuery = query;
@@ -358,7 +358,7 @@ export class AcpApp extends ViewElement {
   /** @param {Event} e */
   #onRevealPath(e) {
     const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
-    revealPath(path).catch((err) => app.log('warn', `showing logs failed: ${err}`));
+    projects.reveal(path).catch((err) => app.log('warn', `showing logs failed: ${err}`));
   }
 
   /** @param {Event} e */

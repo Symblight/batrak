@@ -74,12 +74,15 @@ const indentGuidePlugin = defineCdxPlugin({
  * Byline of line comments typed in the app: notes for the agent, kept in `$comments` until sent.
  * @type {import('@symblight/code-editor').CdxCommentAuthor}
  */
-export const commentAuthor = { id: 'me', name: 'You' };
+const commentAuthor = { id: 'me', name: 'You' };
 
 /** Plugins of every read-only code view: the tabs here and the diffs in the Changes tab. */
-export const editorPlugins = [...allPreset, scrollbarPlugin, gutterPlugin, indentGuidePlugin];
+const editorPlugins = [...allPreset, scrollbarPlugin, gutterPlugin, indentGuidePlugin];
 
 /** Names of the languages `editorPlugins` can highlight, sorted, for the footer's language menu. */
-export const editorLanguages = [...new Set(editorPlugins.flatMap((p) => (p.languages ?? []).map((l) => l.name)))].sort(
+const editorLanguages = [...new Set(editorPlugins.flatMap((p) => (p.languages ?? []).map((l) => l.name)))].sort(
   (a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }),
 );
+
+/** The code editor's shared setup: plugins, the languages they highlight, and the byline of comments typed here. */
+export const codeEditor = Object.freeze({ plugins: editorPlugins, languages: editorLanguages, author: commentAuthor });

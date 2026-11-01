@@ -3,7 +3,7 @@ import { classMap } from 'lit/directives/class-map.js';
 import brokenImageIcon from '@material-design-icons/svg/outlined/broken_image.svg?raw';
 import '../bytes/bytes.js';
 import '../view-placeholder/view-placeholder.js';
-import { imageTypeOf } from '../../models/image-types/image-types.js';
+import { imageType } from './image-type.js';
 import styles from './image-preview.css?inline';
 
 /** @typedef {'grid' | 'auto'} ImageBackground */
@@ -124,7 +124,7 @@ export class AcpImagePreview extends LitElement {
         <span class="acp-image-preview__value">${this._size.width} × ${this._size.height}</span> px
       </span>`);
     }
-    const { label } = imageTypeOf(this.path);
+    const { label } = imageType.of(this.path);
     if (label) facts.push(html`<span class="acp-image-preview__fact">${label}</span>`);
     if (this.image) {
       facts.push(html`<acp-bytes class="acp-image-preview__fact" .value=${this.image.size}></acp-bytes>`);

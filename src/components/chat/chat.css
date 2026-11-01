@@ -136,7 +136,7 @@
 .acp-chat__message-list::part(scroller) {
   scrollbar-gutter: stable both-edges;
 }
-/* Compact scrollbar, like the editor's (`models/editor-plugins.js`): WebKit (Tauri on macOS) lacks
+/* Compact scrollbar, like the editor's (`components/code-view/code-editor.js`): WebKit (Tauri on macOS) lacks
    `scrollbar-color` and gets the pseudo-elements. Separate rules: a selector the engine rejects drops only its own. */
 @supports (scrollbar-color: auto) {
   .acp-chat__message-list::part(scroller) {

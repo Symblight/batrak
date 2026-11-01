@@ -15,7 +15,7 @@ import { ChatSessionController } from '../../controllers/chat-session/ChatSessio
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { agents } from '../../hooks/agents/agents.js';
-import { openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
+import { search } from '../../hooks/search/search.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -230,7 +230,7 @@ export class AcpAgentColumn extends ViewElement {
         continue;
       }
       try {
-        paths.push(await saveAttachment(folder, file));
+        paths.push(await sessions.saveAttachment(folder, file));
       } catch (err) {
         failed.push(err instanceof Error ? err.message : String(err));
       }
@@ -270,7 +270,7 @@ export class AcpAgentColumn extends ViewElement {
       return;
     }
     try {
-      const { items, cancelled } = await quickOpen(rootId, query, 'all');
+      const { items, cancelled } = await search.quickOpen(rootId, query, 'all');
       if (id !== this.#fileQueryId || cancelled) return;
       this.fileOptions = items;
     } catch (err) {
@@ -366,7 +366,7 @@ export class AcpAgentColumn extends ViewElement {
   /** @param {Event} e */
   #onLinkOpen(e) {
     const { url } = /** @type {CustomEvent<{ url: string }>} */ (e).detail;
-    openUrl(url).catch((err) => app.reportError('Opening the link failed', err));
+    app.openUrl(url).catch((err) => app.reportError('Opening the link failed', err));
   }
 
   /** Continue in the other view: ⌘⇧T, or the header's button. */

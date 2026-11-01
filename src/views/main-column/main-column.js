@@ -4,9 +4,8 @@ import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
-import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
+import { codeEditor } from '../../components/code-view/code-editor.js';
 import { agents } from '../../hooks/agents/agents.js';
-import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -299,7 +298,7 @@ export class AcpMainColumn extends ViewElement {
         .pinned=${pinned}
         .root=${this.#workspace.value?.path ?? null}
         .rootId=${this.#rootId.value}
-        .listDir=${listDir}
+        .listDir=${projects.listDir}
         .terminals=${this.#terminals.value}
         .terminalConnect=${terminals.connect}
         .terminalBusy=${terminals.busy}
@@ -346,11 +345,11 @@ export class AcpMainColumn extends ViewElement {
         @acp-terminal-title=${(/** @type {CustomEvent<{ terminalId: string, title: string }>} */ e) =>
           setTerminalTitle(e.detail.terminalId, e.detail.title)}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
-          openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
+          app.openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
         @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
           setFileLanguage(e.detail.path, e.detail.language)}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>
-          addComment(e.detail.path, e.detail.draft, commentAuthor)}
+          addComment(e.detail.path, e.detail.draft, codeEditor.author)}
         @acp-comment-edit=${(
           /** @type {CustomEvent<{ path: string, threadId: string, commentId: string, body: string }>} */ e,
         ) => editComment(e.detail.path, e.detail.threadId, e.detail.commentId, e.detail.body)}

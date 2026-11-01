@@ -26,8 +26,7 @@ the app.
 
 Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.d.ts`). Type-checking via
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
-and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`) and, until each feature's hook takes its
-commands, `src/services/ipc/ipc.js`.
+and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`); each feature's Rust commands live in its hook.
 
 - `src/views/` — the container elements: `<acp-app>` and the four columns. A view has no CSS: it extends
   `ViewElement` (light DOM: it renders into itself, `display: contents`, so `renderRoot` is the element and
@@ -37,7 +36,8 @@ commands, `src/services/ipc/ipc.js`.
   Settings, Agents, Search and Changes elements are here until their views exist (see
   `docs/specs/frontend-structure.md`).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
-- `src/services/` — the IPC commands still to move into hooks (`ipc.js`).
+- `src/hooks/<feature>/` — one frozen object per feature (`projects`, `sessions`, `git`, …) holding its rules,
+  its backend calls and the actions that call them, with private part files (spec: `docs/specs/frontend-structure.md`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
@@ -50,18 +50,19 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 ### Layers
 
 - **Data layer** (infrastructure): `src/stores/` (nanostores atoms and their actions) and
-  `src/services/` (backend calls, controllers that write stores), plus every browser API that holds or
+  `src/hooks/` (backend calls, actions that write stores), plus every browser API that holds or
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
   `@tauri-apps/*` (only in `hooks/ipc/ipc.js`). Nothing above it talks to these directly.
 - **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
   `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
-  from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass
+  from `stores/`. They subscribe (`StoreController`), call actions and hooks, and pass
   data down as properties, through their children to the leaves (`<acp-chat>` hands the composer's
   pickers theirs, `<acp-tab-view>` the Settings, Agents and Changes tabs theirs).
 - **Every other component is presentational:** data in through properties, intents out as `acp-*`
   events that the column handles (they bubble, composed, through the components in between). No
-  imports from `stores/` or `services/`, no `StoreController`, no storage, network or clipboard APIs.
+  imports from `stores/`, no `StoreController`, no storage, network or clipboard APIs; a hook's pure
+  rules may be called, its actions never (they go out as events).
   A child that needs data gets a property; one that must change data fires an event. Where an answer
   belongs to one request, the container calls the child back (`<acp-changes-panel>`'s
   `commitFinished()`, `fillAmendMessage()`; `saveFinished()` of `<acp-agent-form>` and `<acp-agents-view>`); a lazy loader is a property (`<acp-file-tree>`'s
@@ -328,5 +329,5 @@ src/components/
 A view (`src/views/agent-column/agent-column.js`) is laid out the same way. The element's tests live in a
 `__tests__/` folder inside its own folder, not in a global tree. No category grouping and no sub-components inside an
 element's folder: a part with a tag of its own is a component in `src/components/`. Elements import each other as
-`'../x/x.js'` (a view imports `'../../components/x/x.js'`); services, models and stores are one folder per
-module as well (`'../../services/x/x.js'`, tests in `services/x/__tests__/`).
+`'../x/x.js'` (a view imports `'../../components/x/x.js'`); hooks and stores are one folder per
+module as well (`'../../hooks/x/x.js'`, tests in `hooks/x/__tests__/`).

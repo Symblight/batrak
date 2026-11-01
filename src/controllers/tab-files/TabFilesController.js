@@ -3,8 +3,7 @@ import { app } from '../../hooks/app/app.js';
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
 import { agents } from '../../hooks/agents/agents.js';
-import { imageTypeOf } from '../../models/image-types/image-types.js';
-import { readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
+import { imageType } from '../../components/image-preview/image-type.js';
 import { git } from '../../hooks/git/git.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
@@ -185,7 +184,7 @@ export class TabFilesController {
     }
     const content = tab.draft ?? tab.content;
     try {
-      await writeFile(tab.path, content);
+      await projects.writeFile(tab.path, content);
       // Edits typed while saving stay a draft.
       const now = this.#find(id);
       if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false, deletedOnDisk: false });
@@ -225,7 +224,7 @@ export class TabFilesController {
    */
   async #diskDiffers(tab) {
     try {
-      return (await readFile(tab.path)) !== tab.content;
+      return (await projects.readFile(tab.path)) !== tab.content;
     } catch {
       return true;
     }
@@ -311,8 +310,8 @@ export class TabFilesController {
     let changes;
     try {
       changes = image
-        ? { image: new Blob([await readFileBytes(path)], { type: imageTypeOf(path).mime }), error: '', deletedOnDisk: false }
-        : { content: await readFile(path), error: '', deletedOnDisk: false };
+        ? { image: new Blob([await projects.readFileBytes(path)], { type: imageType.of(path).mime }), error: '', deletedOnDisk: false }
+        : { content: await projects.readFile(path), error: '', deletedOnDisk: false };
     } catch (err) {
       changes = { content: '', image: null, error: String(err) };
     }

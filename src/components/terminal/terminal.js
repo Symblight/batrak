@@ -5,7 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
-import { terminalTheme } from '../../models/terminal-theme/terminal-theme.js';
+import { terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
 
 /** @typedef {import('../../models/types/types.js').TerminalConnect} TerminalConnect */

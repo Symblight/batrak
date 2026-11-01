@@ -7,7 +7,6 @@ import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
-import { getHomeDir } from '../../services/ipc/ipc.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime/session-runtime.js';
@@ -51,7 +50,7 @@ export class AcpSessionColumn extends ViewElement {
 
   connectedCallback() {
     super.connectedCallback();
-    getHomeDir()
+    projects.homeDir()
       .then((home) => (this.home = home.replace(/[\\/]+$/, '')))
       .catch(() => {});
   }

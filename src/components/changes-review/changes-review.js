@@ -22,7 +22,7 @@ import keyboardArrowDownIcon from '@material-design-icons/svg/outlined/keyboard_
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
-import { commentAuthor, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
+import { codeEditor } from '../code-view/code-editor.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './changes-review.css?inline';
@@ -372,7 +372,7 @@ export class AcpChangesReview extends LitElement {
       class="acp-changes-review__editor"
       read-only
       aria-label=${`Diff of ${row.name}`}
-      .plugins=${editorPlugins}
+      .plugins=${codeEditor.plugins}
       filename=${row.file.path}
       .value=${diff.content}
       .reviewBase=${diff.baseline}
@@ -383,7 +383,7 @@ export class AcpChangesReview extends LitElement {
         slot="comments"
         mode="single"
         .noResolve=${true}
-        .author=${commentAuthor}
+        .author=${codeEditor.author}
         .comments=${this.#comments.threadsOf(projects.abs(this.root, row.id))}
       ></cdx-comments>
     </cdx-code-editor>`;

@@ -1,7 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../store/StoreController.js';
 import { git } from '../../hooks/git/git.js';
-import { readFile } from '../../services/ipc/ipc.js';
 import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
 import { $gitChanges, $gitHead } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
@@ -259,7 +258,7 @@ export class ChangesReviewController {
     const rootId = projects.rootId();
     const path = projects.absPath(id);
     const [content, baseline] = await Promise.all([
-      readFile(path).catch(() => null),
+      projects.readFile(path).catch(() => null),
       rootId ? git.fileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
     ]);
     if (this.#loads.get(id) !== load) return;

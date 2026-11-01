@@ -44,7 +44,7 @@ const ANSI_DARK = {
  * @param {string} color `#rrggbb` or `rgb(r, g, b)`; anything else is returned as is.
  * @param {number} alpha 0–1.
  */
-export function withAlpha(color, alpha) {
+function withAlpha(color, alpha) {
   const hex = /^#([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(color);
   if (hex) return `rgba(${hex.slice(1).map((h) => parseInt(h, 16)).join(', ')}, ${alpha})`;
   const rgb = /^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/.exec(color);

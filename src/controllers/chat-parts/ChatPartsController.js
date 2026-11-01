@@ -2,7 +2,6 @@ import { projects } from '../../hooks/projects/projects.js';
 import { buildChipElement } from '@symblight/chat';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { chat } from '../../hooks/chat/chat.js';
-import { listDir } from '../../services/ipc/ipc.js';
 import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
@@ -160,7 +159,7 @@ async function isFolder(absolute) {
   if (rel === null || rootId === null) return false;
   const slash = rel.lastIndexOf('/');
   try {
-    const entries = await listDir(rootId, slash === -1 ? '' : rel.slice(0, slash));
+    const entries = await projects.listDir(rootId, slash === -1 ? '' : rel.slice(0, slash));
     return entries.some((entry) => entry.path === rel && entry.isDir);
   } catch {
     return false;

@@ -7,6 +7,8 @@ import { ipc } from '../ipc/ipc.js';
 /** @typedef {import('../../models/types/types.js').NoticeLevel} NoticeLevel */
 /** @typedef {import('../../models/types/types.js').Platform} Platform */
 
+/** @typedef {'about' | 'settings' | 'new-terminal'} MenuAction */
+
 /**
  * @param {string} userAgent
  * @returns {Platform}
@@ -87,6 +89,24 @@ export const app = Object.freeze({
     const reason = error instanceof Error ? error.message : String(error);
     app.log('warn', `${what}: ${reason}`);
     notify('error', `${what}: ${reason}`);
+  },
+
+  /**
+   * Clicks on the app's own menu bar items (macOS), sent to the focused window.
+   * @param {(id: MenuAction) => void} callback
+   * @returns {Promise<() => void>} Stops listening.
+   */
+  onMenuAction(callback) {
+    return ipc.listen('menu://action', callback);
+  },
+
+  /**
+   * Opens a web or mail link in the default app.
+   * @param {string} url `http(s):` or `mailto:`; anything else is refused.
+   * @returns {Promise<void>}
+   */
+  openUrl(url) {
+    return ipc.invoke('open_url', { url });
   },
 
   /**

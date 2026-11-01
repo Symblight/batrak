@@ -22,10 +22,13 @@ const TYPES = {
  * @param {string} path
  * @returns {ImageType} By the file's extension. An SVG needs its MIME type to render from a Blob.
  */
-export function imageTypeOf(path) {
+function imageTypeOf(path) {
   const name = path.split(/[\\/]/).pop() ?? '';
   const dot = name.lastIndexOf('.');
   if (dot <= 0) return { label: '', mime: '' };
   const ext = name.slice(dot + 1).toLowerCase();
   return TYPES[ext] ?? { label: ext.toUpperCase(), mime: '' };
 }
+
+/** An image file's format, from its path. */
+export const imageType = Object.freeze({ of: imageTypeOf });

@@ -1,6 +1,5 @@
 import { projects } from '../projects/projects.js';
 import { app } from '../app/app.js';
-import { closeWorkspace, onWorkspaceChanged } from '../../services/ipc/ipc.js';
 import { openSessionRoot } from './commands.js';
 import { $activeSession, $sessions } from '../../stores/sessions/sessions.js';
 import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSessionRoot } from '../../stores/session-root/session-root.js';
@@ -46,7 +45,7 @@ function keep(root) {
   for (const id of kept.evicted) {
     const old = roots.get(id);
     roots.delete(id);
-    if (old) closeWorkspace(old.rootId).catch(() => {});
+    if (old) projects.closeRoot(old.rootId).catch(() => {});
   }
 }
 
@@ -70,7 +69,7 @@ async function show(session) {
     const root = { sessionId: session.id, rootId: opened.rootId, path: opened.path, label };
     // Kept only while shown: a late one would push out the root that is.
     if (mine !== generation || !$sessions.get().some((s) => s.id === session.id)) {
-      closeWorkspace(opened.rootId).catch(() => {});
+      projects.closeRoot(opened.rootId).catch(() => {});
       return;
     }
     keep(root);
@@ -94,7 +93,7 @@ async function forget(id) {
   roots.delete(id);
   order = order.filter((other) => other !== id);
   if ($sessionRoot.get()?.sessionId === id) hide();
-  await closeWorkspace(root.rootId).catch(() => {});
+  await projects.closeRoot(root.rootId).catch(() => {});
 }
 
 /**
@@ -106,7 +105,7 @@ export const root = Object.freeze({
   /** Starts following the active session; idempotent. */
   start() {
     if (unsubscribe) return;
-    onWorkspaceChanged((changes) => {
+    projects.onRootsChanged((changes) => {
       if (changes.rootId !== $sessionRoot.get()?.rootId) return;
       for (const listener of [...listeners]) listener(changes);
     }).catch((err) => app.reportError('File watching unavailable', err));

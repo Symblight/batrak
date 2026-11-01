@@ -1,5 +1,5 @@
 import { StoreController } from '../store/StoreController.js';
-import { cancelSearch, findInFiles } from '../../services/ipc/ipc.js';
+import { search } from '../../hooks/search/search.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -96,7 +96,7 @@ export class FindInFilesController {
     this.#generation++;
     this.#set({ searching: false });
     const rootId = this.#rootId.value;
-    if (rootId) cancelSearch(rootId, this.#config.slot).catch(() => {});
+    if (rootId) search.cancel(rootId, this.#config.slot).catch(() => {});
   }
 
   /** @param {Partial<Pick<FindInFilesController, 'results' | 'searching' | 'limitHit' | 'error' | 'errorSource'>>} changes */
@@ -113,12 +113,12 @@ export class FindInFilesController {
     this.#set({ results: [], limitHit: false, error: '', errorSource: null });
     if (!this.#active || rootId === null || this.#options.query === '') {
       this.#set({ searching: false });
-      if (rootId !== null) cancelSearch(rootId, this.#config.slot).catch(() => {});
+      if (rootId !== null) search.cancel(rootId, this.#config.slot).catch(() => {});
       return;
     }
     this.#set({ searching: true });
     try {
-      await findInFiles(rootId, this.#config.slot, this.#options, (event) => {
+      await search.find(rootId, this.#config.slot, this.#options, (event) => {
         if (generation === this.#generation) this.#onEvent(event);
       });
     } catch (err) {

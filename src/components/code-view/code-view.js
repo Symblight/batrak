@@ -7,7 +7,7 @@ import '@symblight/code-editor';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
-import { commentAuthor, editorLanguages, editorPlugins } from '../../models/editor-plugins/editor-plugins.js';
+import { codeEditor } from './code-editor.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
@@ -314,7 +314,7 @@ export class AcpCodeView extends LitElement {
     >
       ${item('', 'Auto Detect')}
       <md-hr></md-hr>
-      ${shown ? editorLanguages.map((name) => item(name, name)) : nothing}
+      ${shown ? codeEditor.languages.map((name) => item(name, name)) : nothing}
     </md-menu>`;
   }
 
@@ -340,7 +340,7 @@ export class AcpCodeView extends LitElement {
         class="acp-code-view__editor"
         style=${this.#editorStyle()}
         .readOnly=${!editable}
-        .plugins=${editorPlugins}
+        .plugins=${codeEditor.plugins}
         filename=${tab.path}
         .language=${this.language}
         .value=${tab.draft ?? tab.content}
@@ -357,7 +357,7 @@ export class AcpCodeView extends LitElement {
           slot="comments"
           mode="single"
           .noResolve=${true}
-          .author=${commentAuthor}
+          .author=${codeEditor.author}
           .comments=${this.#comments.threadsOf(tab.path)}
         ></cdx-comments>
         <cdx-footer slot="footer" path=${this.#footerPath(tab.path)}></cdx-footer>

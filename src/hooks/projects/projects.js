@@ -4,6 +4,7 @@ import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.j
 import { $projects, addProject, removeProject } from '../../stores/projects/projects.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
+import { files } from './files.js';
 import { absPath, basename, isAbsolute, projectPathOf, relPath, shownPath, worktreeOf } from './rules.js';
 
 /** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
@@ -130,6 +131,7 @@ function openFolder(path) {
  * Also the rules about paths: a root and a relative path, and the worktree folders of sessions.
  */
 export const projects = Object.freeze({
+  ...files,
   abs: absPath,
   rel: relPath,
   worktreeOf,
