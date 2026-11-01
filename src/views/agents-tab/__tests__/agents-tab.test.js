@@ -29,7 +29,7 @@ describe('acp-agents-tab', () => {
   beforeEach(() => {
     calls = [];
     answer = (cmd) =>
-      cmd === 'agents_view' ? VIEW : cmd === 'agents_remove' ? { token: 't' } : cmd === 'agents_add' ? 'new-id' : cmd === 'agents_config_file' ? '/p/.brama/agents.json' : null;
+      cmd === 'agents_view' ? VIEW : cmd === 'agents_remove' ? { token: 't' } : cmd === 'agents_add' ? 'new-id' : cmd === 'agents_config_file' ? '/p/.brama/agents.json' : cmd === 'agents_import_user' ? [] : null;
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);
@@ -45,6 +45,7 @@ describe('acp-agents-tab', () => {
     $agentsView.set(null);
     $agentsReveal.set(null);
     $agentsQuery.set({ query: '', filter: 'all' });
+    $agentsPending.set({ updating: [], checking: false });
     $workspace.set(null);
     clearMocks();
   });
@@ -83,6 +84,7 @@ describe('acp-agents-tab', () => {
     const { el, inner } = await render();
     /** @type {Event[]} */
     const leaked = [];
+    // The `agents_view` search comes before the updates, which search again once done, so a later search can't satisfy it.
     const cases = /** @type {[string, object | null, string, Record<string, unknown>][]} */ ([
       ['acp-agents-file-open', null, 'agents_config_file', {}],
       ['acp-agents-import', { agentIds: ['a'] }, 'agents_import_user', { agentIds: ['a'] }],
@@ -107,25 +109,36 @@ describe('acp-agents-tab', () => {
     expect(leaked).to.deep.equal([]);
   });
 
-  it('adds or updates an agent and tells the form that asked how it went', async () => {
+  it('adds or updates an agent and tells the form that asked, not the view, how it went', async () => {
     // Arrange
-    const { inner } = await render();
+    const { el, inner } = await render();
+    /** @type {Event[]} */
+    const leaked = [];
+    for (const type of ['acp-agent-add', 'acp-agent-update']) el.addEventListener(type, (e) => leaked.push(e));
     /** @type {(string | null)[]} */
-    const finished = [];
-    inner.saveFinished = (error) => finished.push(error);
-    // Act
+    const viewAnswers = [];
+    inner.saveFinished = (error) => viewAnswers.push(error);
+    /** A form inside the view: the update begins here. @type {(string | null)[]} */
+    const formAnswers = [];
+    const form = Object.assign(document.createElement('div'), { saveFinished: (/** @type {string | null} */ error) => formAnswers.push(error) });
+    /** @type {ShadowRoot} */ (inner.shadowRoot).append(form);
+    // Act: a registry row adds (the event begins at the view)
     inner.dispatchEvent(new CustomEvent('acp-agent-add', { detail: { agent: { known: 'claude' } }, bubbles: true, composed: true }));
-    await until(() => finished.length === 1);
+    await until(() => viewAnswers.length === 1);
+    // Act: the edit form updates, and the backend refuses with a string, as Tauri's IPC does
     answer = (cmd) => {
-      if (cmd === 'agents_update') throw new Error('invalid command');
+      if (cmd === 'agents_update') throw 'invalid command';
       return null;
     };
-    inner.dispatchEvent(new CustomEvent('acp-agent-update', { detail: { agentId: 'claude', agent: { command: 'x' } }, bubbles: true, composed: true }));
-    await until(() => finished.length === 2);
+    form.dispatchEvent(new CustomEvent('acp-agent-update', { detail: { agentId: 'claude', agent: { command: 'x' } }, bubbles: true, composed: true }));
+    await until(() => formAnswers.length === 1);
     // Assert
-    expect(calls.map((c) => c.cmd)).to.include.members(['agents_add', 'agents_update']);
-    expect(finished[0]).to.equal(null);
-    expect(finished[1]).to.contain('invalid command');
+    expect(calls.find((c) => c.cmd === 'agents_add')?.args).to.deep.include({ agent: { known: 'claude' } });
+    expect(calls.find((c) => c.cmd === 'agents_update')?.args).to.deep.include({ agentId: 'claude', agent: { command: 'x' } });
+    expect(viewAnswers, 'the view that asked to add').to.deep.equal([null]);
+    expect(formAnswers.length, 'the form that asked to update').to.equal(1);
+    expect(formAnswers[0]).to.contain('invalid command');
+    expect(leaked).to.deep.equal([]);
   });
 
   it('keeps an agent’s Chat or Terminal choice and clears a shown reveal', async () => {
@@ -146,6 +159,7 @@ describe('acp-agents-tab', () => {
     openAgents();
     openSettings();
     await render();
+    await new Promise((r) => setTimeout(r, 0));
     // Assert
     expect(calls.map((c) => c.cmd), 'not active').to.not.include('agents_view');
     // Act

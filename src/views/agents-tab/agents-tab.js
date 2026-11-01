@@ -12,6 +12,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 /** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
 /** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
+/** @typedef {{ agentId: string }} AgentId */
 
 /**
  * @tag acp-agents-tab
@@ -35,13 +36,15 @@ export class AcpAgentsTab extends ViewElement {
   });
 
   /**
-   * @param {(e: CustomEvent<any>) => unknown} handler
+   * A listener for an event handled here: it goes no further, and `handler` gets its detail.
+   * @template D
+   * @param {(detail: D) => unknown} handler
    * @returns {(e: Event) => void}
    */
   static #on(handler) {
     return (e) => {
       e.stopPropagation();
-      handler(/** @type {CustomEvent} */ (e));
+      handler(/** @type {CustomEvent<D>} */ (e).detail);
     };
   }
 
@@ -70,19 +73,19 @@ export class AcpAgentsTab extends ViewElement {
       .terminalAgents=${Object.keys(this.#agentViews.value)}
       .reveal=${this.#reveal.value}
       @acp-agents-file-open=${on(() => agents.openFile())}
-      @acp-agents-import=${on((e) => agents.importUserAgents(e.detail?.agentIds ?? null))}
-      @acp-agents-query=${on((e) => agents.search(e.detail))}
-      @acp-agent-version-update=${on((e) => agents.updateVersion(e.detail.agentId))}
+      @acp-agents-import=${on((/** @type {{ agentIds?: string[] } | null} */ d) => agents.importUserAgents(d?.agentIds ?? null))}
+      @acp-agents-query=${on((/** @type {AgentsQuery} */ d) => agents.search(d))}
+      @acp-agent-version-update=${on((/** @type {AgentId} */ d) => agents.updateVersion(d.agentId))}
       @acp-agents-update-all=${on(() => agents.updateAll())}
       @acp-agents-registry-check=${on(() => agents.checkRegistry())}
-      @acp-agents-revealed=${on((e) => agentsRevealed(e.detail.reveal))}
+      @acp-agents-revealed=${on((/** @type {{ reveal: AgentsReveal }} */ d) => agentsRevealed(d.reveal))}
       @acp-agent-add=${this.#onSave}
       @acp-agent-update=${this.#onSave}
-      @acp-agent-enable=${on((e) => agents.setEnabled(e.detail.agentId, e.detail.enabled))}
-      @acp-agent-session-view=${on((e) => setAgentView(e.detail.agentId, e.detail.view))}
-      @acp-agent-default=${on((e) => agents.setDefault(e.detail.agentId))}
-      @acp-agent-remove=${on((e) => agents.remove(e.detail.agentId))}
-      @acp-agent-sign-in=${on((e) => agents.signIn(e.detail.agentId, e.detail.methodId))}
+      @acp-agent-enable=${on((/** @type {{ agentId: string, enabled: boolean }} */ d) => agents.setEnabled(d.agentId, d.enabled))}
+      @acp-agent-session-view=${on((/** @type {{ agentId: string, view: SessionView }} */ d) => setAgentView(d.agentId, d.view))}
+      @acp-agent-default=${on((/** @type {AgentId} */ d) => agents.setDefault(d.agentId))}
+      @acp-agent-remove=${on((/** @type {AgentId} */ d) => agents.remove(d.agentId))}
+      @acp-agent-sign-in=${on((/** @type {{ agentId: string, methodId: string | null }} */ d) => agents.signIn(d.agentId, d.methodId))}
     ></acp-agents-view>`;
   }
 }

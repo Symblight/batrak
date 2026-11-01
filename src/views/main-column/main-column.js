@@ -57,7 +57,6 @@ import '../../components/comment-bar/comment-bar.js';
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
