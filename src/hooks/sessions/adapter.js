@@ -1,13 +1,12 @@
-import { projects } from '../projects/projects.js';
 import { app } from '../app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './commands.js';
-import { chat } from '../chat/chat.js';
-import { inputOfMessage, linesOf } from './input-parts.js';
+import { MessageBuilder } from './message-builder.js';
+import { promptOf } from './prompt.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
 import { setContextUsage } from '../../stores/context-usage/context-usage.js';
 import { $terminals, sessionTerminalOf, terminalExited } from '../../stores/terminals/terminals.js';
-import { folderOf, setSessionStatus, touchSession, upsertSession } from '../../stores/sessions/sessions.js';
+import { setSessionStatus, touchSession, upsertSession } from '../../stores/sessions/sessions.js';
 import {
   $sessionNotices,
   addPermissionRequest,
@@ -21,177 +20,16 @@ import { awaitTrust } from '../../stores/trust/trust.js';
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {NonNullable<ChxChat['adapter']>} ChxChatAdapter */
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['sendMessage']>>[0]} ChxMessage */
-/** @typedef {ChxMessage['parts'][number]} ChxMessagePart */
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['subscribe']>>[0]} SubscribeHandlers */
 /** @typedef {Parameters<SubscribeHandlers['onChunk']>[0]} ChxChunk */
 /** @typedef {Exclude<Awaited<ReturnType<NonNullable<ChxChatAdapter['sendMessage']>>>, void>} ReplyStream */
 /** @typedef {import('../../models/types/types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('../../models/types/types.js').AcpSessionUpdate} AcpSessionUpdate */
 /** @typedef {import('../../models/types/types.js').PromptInput} PromptInput */
-/** @typedef {import('../../models/types/types.js').InputPart} InputPart */
 
 /** The chat's author ids: the user (`<chx-chat>`'s `userId`) and every agent. */
 export const USER_ID = 'me';
 const AGENT_ID = 'agent';
-
-/**
- * Turns ACP session updates into `<chx-chat>` chunks for one message. Consecutive text (or thought)
- * chunks grow one part; a tool call or plan in between starts the next text part, so the reply
- * reads in the order the agent worked. Tool calls are keyed by ACP's `toolCallId`.
- *
- * ACP never says a thought is over: any other update ends it (`part-end`), and a live one carries
- * when it started and ended in `data` (`startedAt`, `endedAt`).
- */
-class MessageBuilder {
-  messageId = crypto.randomUUID();
-  /** @type {string | null} */
-  #lastKind = null;
-  /** Parts started in this message, which numbers the next part's id. */
-  #parts = 0;
-  /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
-  #thought = null;
-
-  /**
-   * @param {string} sessionId
-   * @param {string} authorId
-   * @param {{ live?: boolean }} [options] `live`: updates arrive as the agent works, so thoughts are timed.
-   */
-  constructor(sessionId, authorId, { live = false } = {}) {
-    this.sessionId = sessionId;
-    this.authorId = authorId;
-    this.live = live;
-  }
-
-  /** @param {string} kind */
-  #partId(kind) {
-    if (kind !== this.#lastKind) {
-      this.#lastKind = kind;
-      this.#parts += 1;
-    }
-    return `${this.messageId}-${kind}${this.#parts}`;
-  }
-
-  /**
-   * @param {string} partId
-   * @param {string} partType
-   * @param {Partial<ChxMessagePart>} delta
-   * @returns {ChxChunk}
-   */
-  chunk(partId, partType, delta) {
-    const { messageId, sessionId: conversationId, authorId } = this;
-    return { messageId, conversationId, authorId, partId, partType, delta };
-  }
-
-  /** @param {string} toolCallId */
-  toolPartId(toolCallId) {
-    return `${this.messageId}-tool-${toolCallId}`;
-  }
-
-  /**
-   * @param {AcpSessionUpdate} update
-   * @returns {ChxChunk[]}
-   */
-  chunks(update) {
-    if (update.sessionUpdate === 'agent_thought_chunk') return this.#thoughtChunks(update);
-    const chunks = this.#chunks(update);
-    return chunks.length ? [...this.#endThought(), ...chunks] : chunks;
-  }
-
-  /**
-   * @param {AcpSessionUpdate} update
-   * @returns {ChxChunk[]}
-   */
-  #thoughtChunks(update) {
-    const text = textOf(update);
-    if (!text) return [];
-    const partId = this.#partId('thought');
-    if (this.#thought?.partId === partId) return [this.chunk(partId, 'thought', { text })];
-    const startedAt = this.live ? Date.now() : null;
-    this.#thought = { partId, startedAt };
-    return [this.chunk(partId, 'thought', startedAt === null ? { text } : { text, data: { startedAt } })];
-  }
-
-  /** @returns {ChxChunk[]} Ends the thought being streamed, if any. */
-  #endThought() {
-    const thought = this.#thought;
-    if (!thought) return [];
-    this.#thought = null;
-    const { messageId, sessionId: conversationId } = this;
-    /** @type {ChxChunk} */
-    const end = { kind: 'part-end', messageId, conversationId, partId: thought.partId };
-    if (thought.startedAt === null) return [end];
-    return [this.chunk(thought.partId, 'thought', { data: { startedAt: thought.startedAt, endedAt: Date.now() } }), end];
-  }
-
-  /**
-   * @param {AcpSessionUpdate} update
-   * @returns {ChxChunk[]}
-   */
-  #chunks(update) {
-    switch (update.sessionUpdate) {
-      case 'agent_message_chunk':
-      case 'user_message_chunk': {
-        const text = textOf(update);
-        return text ? [this.chunk(this.#partId('text'), 'text', { text })] : [];
-      }
-      case 'tool_call':
-      case 'tool_call_update': {
-        if (!update.toolCallId) return [];
-        this.#lastKind = 'tool';
-        return [this.chunk(this.toolPartId(update.toolCallId), 'tool_call', this.#toolDelta(update))];
-      }
-      case 'plan':
-        this.#lastKind = 'plan';
-        return [this.chunk(`${this.messageId}-plan`, 'plan', { entries: update.entries ?? [] })];
-      default:
-        return [];
-    }
-  }
-
-  /**
-   * Only the fields the update carries: every field but `text` replaces the part's.
-   * @param {AcpSessionUpdate} update
-   * @returns {Partial<ChxMessagePart>}
-   */
-  #toolDelta(update) {
-    /** @type {Partial<ChxMessagePart>} */
-    const delta = { data: { toolCallId: update.toolCallId } };
-    if (update.title) delta.label = update.title;
-    if (update.kind) delta.kind = update.kind;
-    if (update.status) delta.status = update.status;
-    if (update.locations) {
-      delta.locations = update.locations.map(({ path, line }) => ({
-        path: relativeTo(folderOf(this.sessionId), path),
-        ...(line ? { line } : {}),
-      }));
-    }
-    return delta;
-  }
-
-  /**
-   * @param {boolean} cancelled The reply was stopped: its last part shows as stopped.
-   * @returns {ChxChunk[]} The thought being streamed ends with the message.
-   */
-  finish(cancelled = false) {
-    const { messageId, sessionId: conversationId } = this;
-    return [...this.#endThought(), { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
-  }
-}
-
-/** @param {AcpSessionUpdate} update */
-function textOf(update) {
-  const content = update.content;
-  return content?.type === 'text' ? (content.text ?? '') : '';
-}
-
-/**
- * A path under the project as relative, for display; others as they are.
- * @param {string | null} root
- * @param {string} path
- */
-function relativeTo(root, path) {
-  return root && path.startsWith(`${root}/`) ? path.slice(root.length + 1) : path;
-}
 
 /**
  * The open turn of a session: the reply stream `sendMessage` returned.
@@ -503,48 +341,6 @@ export function forgetSession(sessionId) {
   creating.delete(sessionId);
   clearPermissionRequests(sessionId);
   setSessionNotice(sessionId, null);
-}
-
-/**
- * A session's input as an ACP prompt: its text with refs written inline (`@path`, `@folder/`,
- * `path:12-23`), then a resource for each (a mention, or the lines it names); a file outside the
- * session's folder (an absolute path) is named in the text only.
- * @param {readonly InputPart[]} parts
- * @returns {PromptInput[]}
- */
-export function promptOfInput(parts) {
-  let text = '';
-  /** @type {PromptInput[]} */
-  const resources = [];
-  for (const part of parts) {
-    if (part.kind === 'text') {
-      text += part.text;
-    } else if (part.kind === 'paste') {
-      text += part.lang === null ? part.text : chat.fenceCode(part.text, part.lang);
-    } else if (part.kind === 'command') {
-      text += `/${part.name}`;
-    } else if (part.kind === 'selection') {
-      text += `${part.path}:${linesOf(part)}${part.body ? ` ${part.body}` : ''}`;
-      resources.push({ type: 'selection', path: part.path, fromLine: part.fromLine, toLine: part.toLine });
-    } else if (part.kind === 'ref') {
-      // A folder ends in a slash, so the agent (and a restored message) can tell it from a file.
-      text += part.folder ? `@${part.path}/` : `@${part.path}`;
-      // An absolute one is outside the session's folder (dropped from elsewhere), which a mention
-      // can't name: the agent reads it by its path.
-      if (!projects.isAbsolute(part.path)) resources.push({ type: 'mention', path: part.path });
-    }
-  }
-  // TODO: attachments (images) as ACP image blocks, once the agent's promptCapabilities are known.
-  return [...(text.trim() ? [{ type: /** @type {const} */ ('text'), text: text.trim() }] : []), ...resources];
-}
-
-/**
- * The prompt of a sent message.
- * @param {ChxMessage} message
- * @returns {PromptInput[]}
- */
-export function promptOf(message) {
-  return promptOfInput(inputOfMessage(message));
 }
 
 /**

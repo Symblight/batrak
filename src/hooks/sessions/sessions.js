@@ -1,9 +1,10 @@
-import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent, promptOf } from './adapter.js';
+import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from './adapter.js';
 import { cliInput, cliPromptOf } from './cli-input.js';
 import { saveAttachment, sessionChanges, sessionFileAtBase } from './commands.js';
 import { controller } from './controller.js';
 import { input } from './input.js';
 import { inputOfComposer } from './input-parts.js';
+import { promptOf } from './prompt.js';
 import { root } from './root.js';
 import * as rules from './rules.js';
 
