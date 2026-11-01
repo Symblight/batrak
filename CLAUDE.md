@@ -54,8 +54,9 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
   `@tauri-apps/*` (only in `hooks/ipc/ipc.js`). Nothing above it talks to these directly.
-- **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
-  `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
+- **Container components** — `<acp-app>`, the columns (`<acp-session-column>`,
+  `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) and the views under them (every element in
+  `src/views/`: `<acp-settings-view>`, `<acp-files-view>`, …) — are the only components that import
   from `stores/`. They subscribe (`StoreController`), call actions and hooks, and pass
   data down as properties, through their children to the leaves (`<acp-chat>` hands the composer's
   pickers theirs, `<acp-tab-view>` the Settings, Agents and Changes tabs theirs).

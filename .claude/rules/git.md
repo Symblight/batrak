@@ -33,9 +33,9 @@ paths:
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
   scans the working tree) is computed **only on demand**: `git.watchChanges()` starts it and
-  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-file-column>`
-  watches while Changes is the side pane, `ChangesReviewController` (in `<acp-changes-tab>`) while the Changes tab is active
-  (the column also forgets picks of files no longer changed). Stopping
+  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-git-changes>`
+  (`views/git-changes/`) watches while Changes is the side pane's shown pane (`active`), `ChangesReviewController` (in `<acp-changes-tab>`) while the Changes tab is active
+  (`<acp-git-changes>` also forgets picks of files no longer changed). Stopping
   keeps the files in the store; the spinner shows only for a root's first status. The files picked
   for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor

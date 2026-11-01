@@ -83,7 +83,17 @@ describe('acp-git-changes', () => {
     expect([...panel.selection]).to.deep.equal(['b.js']);
   });
 
-  it('computes the changes only while it is the shown pane', async () => {
+  it('computes the changes only while it is the shown pane, from its first showing', async () => {
+    // Arrange: it comes up already shown, then is hidden
+    const first = await render(true);
+    await until(() => calls.some((c) => c.cmd === 'git_status'));
+    first.el.active = false;
+    await first.el.updateComplete;
+    calls.length = 0;
+    git.refreshChanges();
+    await new Promise((r) => setTimeout(r, 50));
+    expect(calls.map((c) => c.cmd), 'hidden after being shown at once').to.not.include('git_status');
+    first.el.remove();
     // Arrange
     const { el } = await render(false);
     await new Promise((r) => setTimeout(r, 30));
@@ -110,13 +120,13 @@ describe('acp-git-changes', () => {
     expect(calls.map((c) => c.cmd), 'removed').to.not.include('git_status');
   });
 
-  it('turns the panel’s events into picks and a refresh, and none leaves the view except opening a diff', async () => {
+  it('turns the panel’s select and refresh into picks and a scan, and passes opening a diff on', async () => {
     // Arrange
     const { el, panel } = await render(true);
     await until(() => calls.some((c) => c.cmd === 'git_status'));
     /** @type {Event[]} */
     const leaked = [];
-    for (const type of ['acp-commit-select', 'acp-changes-refresh', 'acp-amend-start', 'acp-commit']) el.addEventListener(type, (e) => leaked.push(e));
+    for (const type of ['acp-commit-select', 'acp-changes-refresh']) el.addEventListener(type, (e) => leaked.push(e));
     /** @type {CustomEvent[]} */
     const diffs = [];
     el.addEventListener('acp-diff-open', (e) => diffs.push(/** @type {CustomEvent} */ (e)));
@@ -134,7 +144,10 @@ describe('acp-git-changes', () => {
 
   it('commits the picked files and says how it went; Amend starts from the last commit’s message', async () => {
     // Arrange
-    const { panel } = await render();
+    const { el, panel } = await render();
+    /** @type {Event[]} */
+    const leaked = [];
+    for (const type of ['acp-amend-start', 'acp-commit']) el.addEventListener(type, (e) => leaked.push(e));
     /** @type {boolean[]} */
     const finished = [];
     panel.commitFinished = (succeeded) => finished.push(succeeded);
@@ -144,22 +157,34 @@ describe('acp-git-changes', () => {
     answer = (cmd) => (cmd === 'git_commit' ? { sha: 'abc1234', summary: 'Fix it' } : cmd === 'git_last_commit_message' ? 'Last one' : null);
     // Act
     fire(panel, 'acp-amend-start');
-    fire(panel, 'acp-commit', { paths: ['a.js'], message: 'Fix it', amend: true });
-    await until(() => finished.length === 1);
+    fire(panel, 'acp-commit', { paths: ['a.js'], message: 'Fix it', amend: false });
+    await until(() => finished.length === 1 && filled.length === 1);
     // Assert
     expect(filled).to.deep.equal(['Last one']);
-    expect(calls.find((c) => c.cmd === 'git_commit')?.args).to.deep.equal({ rootId: 'r', paths: ['a.js'], message: 'Fix it', amend: true });
+    expect(calls.find((c) => c.cmd === 'git_commit')?.args).to.deep.equal({ rootId: 'r', paths: ['a.js'], message: 'Fix it', amend: false });
     expect(finished).to.deep.equal([true]);
-    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Amended abc1234: Fix it']]);
+    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Committed abc1234: Fix it']]);
     // Act: a hook refuses
     answer = (cmd) => {
       if (cmd === 'git_commit') throw 'pre-commit failed';
       return null;
     };
-    fire(panel, 'acp-commit', { paths: ['a.js'], message: 'Again', amend: false });
+    fire(panel, 'acp-commit', { paths: ['a.js'], message: 'Again', amend: true });
     await until(() => finished.length === 2);
     // Assert
     expect(finished).to.deep.equal([true, false]);
     expect($notices.get().at(-1)).to.deep.include({ level: 'error', message: 'Commit failed: pre-commit failed' });
+    // Act: an amend that works, and the last message can't be read
+    answer = (cmd) => {
+      if (cmd === 'git_last_commit_message') throw 'no commits';
+      return cmd === 'git_commit' ? { sha: 'def5678', summary: 'Reworded' } : null;
+    };
+    fire(panel, 'acp-amend-start');
+    fire(panel, 'acp-commit', { paths: [], message: 'Reworded', amend: true });
+    await until(() => finished.length === 3 && filled.length === 2);
+    // Assert
+    expect(filled.at(-1), 'nothing to start from').to.equal(null);
+    expect($notices.get().at(-1)?.message).to.equal('Amended def5678: Reworded');
+    expect(leaked).to.deep.equal([]);
   });
 });
