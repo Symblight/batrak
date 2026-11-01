@@ -1,0 +1,122 @@
+:host {
+  display: block;
+}
+
+.acp-session-row__row {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+  min-width: 0;
+  height: 28px;
+  box-sizing: border-box;
+  /* Indented under the project's name, past its chevron. */
+  padding-inline: 28px var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-full);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-md);
+  line-height: 20px;
+  cursor: pointer;
+  outline: none;
+
+  &:hover {
+    background: var(--acp-state-hover);
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: -2px;
+  }
+}
+
+.acp-session-row__row_selected {
+  background: var(--acp-color-secondary-container);
+  color: var(--acp-color-on-secondary-container);
+
+  &:hover {
+    background: var(--acp-color-secondary-container);
+  }
+}
+
+.acp-session-row__pin {
+  flex: none;
+  /* In the indent, so a pinned title lines up with the others. */
+  margin-inline-start: calc(-1 * (var(--acp-icon-size-sm) + var(--acp-space-1-5)));
+  font-size: var(--acp-icon-size-sm);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row__agent {
+  flex: none;
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
+}
+
+/* Fades out at its end instead of an ellipsis, so the status never meets the text. */
+.acp-session-row__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+}
+
+.acp-session-row__title_unread {
+  font-weight: var(--acp-font-weight-medium);
+}
+
+.acp-session-row__rename {
+  flex: 1;
+  min-width: 0;
+  margin-inline-start: calc(-1 * var(--acp-space-1));
+  --md-text-field-top-space: 0px;
+  --md-text-field-bottom-space: 0px;
+  --md-text-field-inline-start-space: var(--acp-space-1);
+  --md-text-field-inline-end-space: var(--acp-space-1);
+  --md-text-field-font-size: var(--acp-font-size-md);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-background-color: var(--acp-color-surface-container-lowest);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
+
+  caret-color: var(--acp-color-primary);
+}
+
+/* The library's focused outline is 3px; the spec asks for 2px. */
+.acp-session-row__rename:focus-within::part(indicator) {
+  border-width: 2px;
+}
+
+.acp-session-row__branch {
+  flex: none;
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row__age {
+  flex: none;
+  font-size: var(--acp-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row__status {
+  flex: none;
+}
+
+/* 22px icon button, inside the row: 16px icon + 2px padding + the library's 1px transparent border. */
+.acp-session-row__more {
+  flex: none;
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
+}
+
+.acp-session-row__more::part(button) {
+  padding: var(--acp-space-0-5);
+}
+
+.acp-session-row__more-icon {
+  font-size: var(--acp-icon-size-sm);
+}
+

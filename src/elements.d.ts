@@ -46,6 +46,8 @@ import type { AcpAgentsView } from './components/agents-view/agents-view.js';
 import type { AcpSnackbars } from './components/snackbars/snackbars.js';
 import type { AcpSessionBanner } from './components/session-banner/session-banner.js';
 import type { AcpSessionHeader } from './components/session-header/session-header.js';
+import type { AcpProjectRow } from './components/project-row/project-row.js';
+import type { AcpSessionRow } from './components/session-row/session-row.js';
 import type { AcpSessionList } from './components/session-list/session-list.js';
 import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
 import type { AcpSessionStatus } from './components/session-status/session-status.js';
@@ -101,6 +103,8 @@ declare global {
     'acp-selection-actions': AcpSelectionActions;
     'acp-session-banner': AcpSessionBanner;
     'acp-session-header': AcpSessionHeader;
+    'acp-project-row': AcpProjectRow;
+    'acp-session-row': AcpSessionRow;
     'acp-session-list': AcpSessionList;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;
