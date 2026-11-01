@@ -4,7 +4,9 @@ import { app } from '../../../hooks/app/app.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { $settings } from '../../../stores/settings/settings.js';
-import { $terminals } from '../../../stores/terminals/terminals.js';
+import { $pendingInput, addDrop } from '../../../stores/chat/chat.js';
+import { $sessions } from '../../../stores/sessions/sessions.js';
+import { $terminals, addSessionTerminal } from '../../../stores/terminals/terminals.js';
 import { AcpTerminal } from '../../../components/terminal/terminal.js';
 import '../terminal-view.js';
 
@@ -32,7 +34,11 @@ describe('acp-terminal-view', () => {
   const { paste } = proto;
 
   beforeEach(() => {
-    mockIPC(() => null);
+    calls = [];
+    mockIPC((cmd) => {
+      calls.push(cmd);
+      return null;
+    });
     $terminals.set({ t1: running });
     pasted = [];
     proto.paste = (text) => pasted.push(text);
@@ -43,8 +49,13 @@ describe('acp-terminal-view', () => {
     navigator.clipboard.writeText = clipboardWrite;
     fileDrop.handle({ type: 'leave' });
     $terminals.set({});
+    $pendingInput.set({});
+    $sessions.set([]);
     clearMocks();
   });
+
+  /** @type {string[]} */
+  let calls = [];
 
   /** @returns {Promise<{ el: AcpTerminalView, terminal: AcpTerminal }>} */
   async function render() {
@@ -145,5 +156,44 @@ describe('acp-terminal-view', () => {
     fileDrop.handle({ type: 'drop', paths: ['/a.png'], position });
     // Assert: typed once (by the second view), not twice
     expect(pasted).to.have.length(1);
+  });
+
+  it("shows a session's CLI: its own controls go to the session, and files dropped on it are left to the session's input", async () => {
+    // Arrange: an exited CLI with one input waiting
+    addSessionTerminal('t1', 's1', '/p', 'Claude Code');
+    $terminals.set({ t1: { ...$terminals.get().t1, status: 'exited', exit: { code: 0, signal: null } } });
+    $sessions.set([/** @type {import('../../../hooks/sessions/types.js').Session} */ ({ id: 's1', agentName: 'Claude Code', folder: '/p', status: 'stopped' })]);
+    addDrop(['/a.png'], 's1');
+    const el = /** @type {AcpTerminalView} */ (await fixture(html`<acp-terminal-view terminal-id="t1" session-id="s1"></acp-terminal-view>`));
+    const terminal = /** @type {AcpTerminal} */ (el.querySelector('acp-terminal'));
+    /** @type {unknown[]} */
+    const views = [];
+    el.addEventListener('acp-session-view', (e) => views.push(/** @type {CustomEvent} */ (e).detail));
+    /** @type {string[]} */
+    const titled = [];
+    const unsubscribe = $terminals.listen((all) => all.t1?.title && titled.push(all.t1.title));
+
+    // Assert
+    expect([terminal.chatFallback, terminal.waiting], 'offers the chat; says what waits').to.deep.equal([true, 1]);
+
+    // Act
+    fire(terminal, 'acp-terminal-title', { terminalId: 't1', title: 'vim' });
+    fire(terminal, 'acp-terminal-chat', {});
+    fire(terminal, 'acp-terminal-restart', { terminalId: 't1' });
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Assert
+    expect(views, 'back to the chat').to.deep.equal([{ sessionId: 's1', view: 'chat' }]);
+    expect(calls, 'the session restarts its CLI').to.include('session_open_cli');
+    unsubscribe();
+    expect(titled, 'a session terminal is not titled by its shell').to.deep.equal([]);
+
+    // Act: a running CLI
+    $terminals.set({ t1: running });
+    await el.updateComplete;
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(terminal) });
+
+    // Assert: the session's input pastes it, once the CLI runs
+    expect(pasted).to.deep.equal([]);
   });
 });

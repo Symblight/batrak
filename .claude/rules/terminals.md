@@ -41,7 +41,8 @@ session's CLI) are typed in as shell-escaped paths plus a space (`terminals.shel
 position to CSS px — physical on Windows, logical on macOS / Linux — and the innermost
 `DROP_TARGETS` element under it through shadow roots, `hooks/file-drop/rules.js`; `$fileDropTarget`
 while over one, `fileDrop.onDrop()` listeners get `{ target, paths }`) → the column that renders the target pastes
-(`<acp-agent-column>`; `<acp-terminal-view>`, the view of a terminal tab) and sets
-the terminal's `dropping` outline (`acp-chat` is a target too: see `sessions.md`). The tab view asks before closing a terminal whose foreground program isn't
+(`<acp-terminal-view>` for a terminal tab; a session's CLI, which the same view shows with a
+`session-id`, gets them through `SessionInputController` in `<acp-agent-column>` and `$pendingInput`)
+and sets the terminal's `dropping` outline (`acp-chat` is a target too: see `sessions.md`). The tab view asks before closing a terminal whose foreground program isn't
 its shell (`terminal_busy`). xterm draws nothing out of view: frontend tests give each test file its
 own browser window (`web-test-runner.config.mjs`) and remove their terminals after each test.

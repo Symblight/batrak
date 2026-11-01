@@ -7,12 +7,11 @@ import '@symblight/wc-material/progress-circular';
 import '../chat-view/chat-view.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/session-header/session-header.js';
-import { AcpTerminal } from '../../components/terminal/terminal.js';
+import '../terminal-view/terminal-view.js';
 import '../../components/welcome/welcome.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { SessionInputController } from '../../controllers/session-input/SessionInputController.js';
-import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $pendingInput } from '../../stores/chat/chat.js';
 import { $now } from '../../stores/clock/clock.js';
@@ -21,7 +20,6 @@ import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/se
 import { $activePermission } from '../../stores/session-runtime/session-runtime.js';
 import { $sessionTerminals, $terminals } from '../../stores/terminals/terminals.js';
 import { $activeShownView, $activeView } from '../../stores/session-views/session-views.js';
-import { $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
 import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
@@ -44,8 +42,6 @@ export class AcpAgentColumn extends ViewElement {
   #activeView = new StoreController(this, { store: $activeView });
   #shownView = new StoreController(this, { store: $activeShownView });
   #sessionTerminals = new StoreController(this, { store: $sessionTerminals });
-  #editorFont = new StoreController(this, { store: $editorFont });
-  #editorFontSize = new StoreController(this, { store: $editorFontSize });
   #fileDropTarget = new StoreController(this, { store: $fileDropTarget });
   /** The header's rename, reset title, reveal and delete. */
   #sessionActions = new SessionActionsController(this, {
@@ -77,6 +73,7 @@ export class AcpAgentColumn extends ViewElement {
   async getUpdateComplete() {
     const result = await super.getUpdateComplete();
     await this.renderRoot?.querySelector('acp-chat-view')?.updateComplete;
+    await this.renderRoot?.querySelector('acp-terminal-view')?.updateComplete;
     return result;
   }
 
@@ -85,7 +82,7 @@ export class AcpAgentColumn extends ViewElement {
     return this.#workspace.value !== null && this.#openingPath.value === null && this.#activeSessionId.value !== null && this.#shownView.value === 'terminal';
   }
 
-  /** @returns {AcpTerminal | null} The active session's CLI while it runs. */
+  /** @returns {HTMLElementTagNameMap['acp-terminal'] | null} The active session's CLI while it runs. */
   get #runningCli() {
     const terminal = this.renderRoot.querySelector('acp-terminal');
     return terminal && this.#terminals.value[terminal.terminalId]?.status === 'running' ? terminal : null;
@@ -132,34 +129,6 @@ export class AcpAgentColumn extends ViewElement {
     await sessions.continueInChat(id);
   }
 
-  /** @param {Event} e */
-  #onTerminalRestart(e) {
-    e.stopPropagation();
-    const id = $activeSessionId.get();
-    if (id !== null) sessions.restartCli(id);
-  }
-
-  /** @param {Event} e */
-  #onTerminalChat(e) {
-    e.stopPropagation();
-    const id = $activeSessionId.get();
-    if (id !== null) this.#switchView(id, 'chat');
-  }
-
-  /** @param {Event} e */
-  #onTerminalCopy(e) {
-    app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying failed');
-  }
-
-  /**
-   * @param {string | null} id
-   * @returns {number} How many inputs wait for the session.
-   */
-  #waitingCount(id) {
-    const pending = id === null ? undefined : this.#pendingInput.value[id];
-    return pending ? pending.inserts.length + pending.drops.length : 0;
-  }
-
   /** The terminal of the active session's CLI; `undefined` while it starts. */
   get #cliTerminalId() {
     const id = this.#activeSessionId.value;
@@ -170,22 +139,13 @@ export class AcpAgentColumn extends ViewElement {
   #renderTerminal() {
     const id = this.#activeSessionId.value;
     const terminalId = this.#cliTerminalId;
-    if (terminalId === undefined) return nothing;
-    return html`<acp-terminal
-      class="acp-agent-column__terminal"
-      chat-fallback
+    if (id === null || terminalId === undefined) return nothing;
+    return html`<acp-terminal-view
       terminal-id=${terminalId}
-      .connect=${terminals.connect}
-      .info=${this.#terminals.value[terminalId] ?? null}
-      .fontFamily=${this.#editorFont.value}
-      .fontSize=${this.#editorFontSize.value}
-      .waiting=${this.#waitingCount(id)}
-      ?dropping=${this.#input.isOwnTerminal(this.#fileDropTarget.value)}
-      @acp-terminal-restart=${this.#onTerminalRestart}
-      @acp-terminal-chat=${this.#onTerminalChat}
-      @acp-terminal-copy=${this.#onTerminalCopy}
+      session-id=${id}
+      @acp-session-view=${this.#onSessionView}
       @acp-link-open=${this.#onLinkOpen}
-    ></acp-terminal>`;
+    ></acp-terminal-view>`;
   }
 
   #onNewSession() {
