@@ -22,7 +22,7 @@ paths:
   (see `agent-config.md`), opened by `openAgents(reveal)` (`$agentsReveal`: the registry's agents
   to add, or an agent's row; answered by `acp-agents-revealed`); `CHANGES_TAB_ID`, every changed file expanding into its diff, which a
   click in the Changes side pane opens, expands and scrolls to; `tabs.terminalId(id)` (`stores/tab-ids/tab-ids.js`, re-exported by `hooks/tabs/tabs.js`), one per
-  terminal, see `terminals.md`; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
+  terminal: a tab of the terminal panel's group, or of the editor's once dragged there, see `terminals.md`; `BROWSER_TAB_ID`); `parseTabId()` tells them apart.
   `TabContentController` (`src/controllers/tab-content/`) picks the view for a tab's content
   (`ContentKind`: a file is `markdown` / `image` (SVG too) by extension, else `code`; a view tab by its
   kind) and renders it with the host's view for that kind; only `readsFile()` tabs are read from disk:
@@ -31,6 +31,10 @@ paths:
   column's), with a footer of resolution, type and size. Markdown and browser views are mocks
   for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
+  `$projectTerminalPanelHeights` (`brama:layout:terminal-panel:<project path>`, per window like the tabs,
+  one item per project through `setKey()`: the terminal panel's height in px, clamped when read; the
+  panel's tabs (`$projectTerminalTabs`) and whether it is open (`$projectTerminalPanels`) are in memory
+  only, since shells don't outlive the page),
   `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
   active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
