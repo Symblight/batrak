@@ -13,6 +13,7 @@ import type { AcpAgentsTab } from './views/agents-tab/agents-tab.js';
 import type { AcpFilesView } from './views/files-view/files-view.js';
 import type { AcpChangesTab } from './views/changes-tab/changes-tab.js';
 import type { AcpSessionChangesTab } from './views/session-changes-tab/session-changes-tab.js';
+import type { AcpSearchPane } from './views/search-pane/search-pane.js';
 import type { AcpSearchView } from './views/search-view/search-view.js';
 import type { AcpSettingsView } from './views/settings-view/settings-view.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
@@ -81,6 +82,7 @@ declare global {
     'acp-changes-tab': AcpChangesTab;
     'acp-files-view': AcpFilesView;
     'acp-session-changes-tab': AcpSessionChangesTab;
+    'acp-search-pane': AcpSearchPane;
     'acp-search-view': AcpSearchView;
     'acp-settings-view': AcpSettingsView;
     'acp-agent-card': AcpAgentCard;

@@ -36,8 +36,6 @@ describe('acp-file-column', () => {
   });
 
   const render = async () => /** @type {AcpFileColumn} */ (await fixture(html`<acp-file-column></acp-file-column>`));
-  /** @param {AcpFileColumn} el */
-  const panel = (el) => /** @type {HTMLElementTagNameMap['acp-search-panel']} */ (el.querySelector('acp-search-panel'));
 
   it("titles its panel by the shown pane and offers a refresh only for the project's files", async () => {
     const el = await render();
@@ -110,36 +108,16 @@ describe('acp-file-column', () => {
     expect(pane.hidden).to.equal(false);
   });
 
-  it("opens a search match under the project's path", async () => {
+  it('shows Search with a handed-over search, which it runs in the Search slot, and the pane searches only while shown', async () => {
     const el = await render();
-    /** @type {CustomEvent[]} */
-    const opened = [];
-    el.addEventListener('acp-file-open', (e) => opened.push(/** @type {CustomEvent} */ (e)));
-    panel(el).dispatchEvent(
-      new CustomEvent('acp-search-panel-open', {
-        detail: { path: 'src/a.js', line: 3, column: 7, length: 3 },
-        bubbles: true,
-        composed: true,
-      }),
-    );
-    expect(opened.map((e) => e.detail)).to.deep.equal([{ path: '/p/src/a.js', line: 3, column: 7, length: 3 }]);
-    expect(opened[0].bubbles && opened[0].composed).to.equal(true);
-  });
-
-  it('shows Search with a handed-over search, its folder and mask as filters', async () => {
-    const el = await render();
-    await el.showSearch({ query: 'needle', caseSensitive: true, wholeWord: false, regex: false, folder: 'src', mask: '*.ts, !*.test.ts' });
+    const view = /** @type {HTMLElementTagNameMap['acp-search-pane']} */ (el.querySelector('acp-search-pane'));
+    await el.showSearch({ query: 'needle', caseSensitive: true, wholeWord: false, regex: false, folder: 'src', mask: '*.ts' });
     expect(el.sideView).to.equal('search');
     await until(() => calls.some((c) => c.cmd === 'find_in_files'));
-    const search = calls.find((c) => c.cmd === 'find_in_files');
-    expect(search?.args).to.include({ rootId: 'r', slot: 'panel' });
-    expect(search?.args.options).to.deep.equal({
-      query: 'needle',
-      caseSensitive: true,
-      wholeWord: false,
-      regex: false,
-      include: 'src/**/*.ts',
-      exclude: '**/*.test.ts',
-    });
+    expect(calls.find((c) => c.cmd === 'find_in_files')?.args).to.include({ rootId: 'r', slot: 'panel' });
+    expect(view.active).to.equal(true);
+    el.showFiles();
+    await el.updateComplete;
+    expect(view.active).to.equal(false);
   });
 });

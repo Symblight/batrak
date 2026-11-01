@@ -1,10 +1,8 @@
 import { projects } from '../../hooks/projects/projects.js';
-import { search } from '../../hooks/search/search.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { git } from '../../hooks/git/git.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -15,7 +13,7 @@ import '../../components/panel/panel.js';
 import '../../components/panel-header/panel-header.js';
 import '../../components/pane/pane.js';
 import '../files-view/files-view.js';
-import '../../components/search-panel/search-panel.js';
+import '../search-pane/search-pane.js';
 import '../../components/changes-panel/changes-panel.js';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
@@ -51,7 +49,6 @@ export class AcpFileColumn extends ViewElement {
   });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #commitSelection = new StoreController(this, { store: $commitSelection });
-  #search = new FindInFilesController(this, { slot: 'panel' });
   /** @type {(() => void) | null} Stops watching the changes; set while Changes is shown and connected. */
   #unwatch = null;
 
@@ -76,8 +73,7 @@ export class AcpFileColumn extends ViewElement {
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
     if (!changed.has('sideView')) return;
-    // Hidden panes do no work: Search stops its search, Changes stops computing them.
-    this.#search.setActive(this.sideView === 'search');
+    // Hidden panes do no work: Changes stops computing them (Search stops its own search).
     this.#watchChanges(this.sideView === 'changes');
   }
 
@@ -103,12 +99,7 @@ export class AcpFileColumn extends ViewElement {
   async showSearch(state) {
     this.sideView = 'search';
     await this.updateComplete;
-    const panel = this.renderRoot.querySelector('acp-search-panel');
-    if (state) {
-      const { query, caseSensitive, wholeWord, regex, folder, mask } = state;
-      panel?.setOptions({ query, caseSensitive, wholeWord, regex, ...search.filters(folder, mask) });
-    }
-    panel?.focusInput();
+    this.renderRoot.querySelector('acp-search-pane')?.show(state);
   }
 
   /**
@@ -139,24 +130,6 @@ export class AcpFileColumn extends ViewElement {
   }
 
   /** @param {Event} e */
-  #onSearch(e) {
-    const { options, delay } = /** @type {CustomEvent<{ options: SearchOptions, delay: number }>} */ (e).detail;
-    this.#search.search(options, delay);
-  }
-
-  /** @param {Event} e */
-  #onSearchOpen(e) {
-    e.stopPropagation();
-    const { path, line, column, length } = /** @type {CustomEvent<{ path: string, line: number, column: number, length: number }>} */ (
-      e
-    ).detail;
-    const root = this.#workspace.value?.path ?? null;
-    this.dispatchEvent(
-      new CustomEvent('acp-file-open', { detail: { path: projects.abs(root, path), line, column, length }, bubbles: true, composed: true }),
-    );
-  }
-
-  /** @param {Event} e */
   async #onAmendStart(e) {
     const panel = /** @type {HTMLElementTagNameMap['acp-changes-panel']} */ (e.target);
     const rootId = this.#rootId.value;
@@ -184,7 +157,6 @@ export class AcpFileColumn extends ViewElement {
 
   render() {
     const root = this.#workspace.value?.path ?? null;
-    const search = this.#search;
     const tree = this.#treeRoot.value;
     return html`<acp-panel>
       <acp-panel-header
@@ -195,16 +167,9 @@ export class AcpFileColumn extends ViewElement {
         @acp-panel-header-action=${this.#refreshTree}
       ></acp-panel-header>
       <acp-pane ?hidden=${this.sideView !== 'files'}><acp-files-view></acp-files-view></acp-pane>
-      <acp-search-panel
-        class="acp-file-column__pane"
-        ?hidden=${this.sideView !== 'search'}
-        .results=${search.results}
-        .searching=${search.searching}
-        .limitHit=${search.limitHit}
-        .error=${search.error}
-        @acp-search=${this.#onSearch}
-        @acp-search-panel-open=${this.#onSearchOpen}
-      ></acp-search-panel>
+      <acp-pane ?hidden=${this.sideView !== 'search'}>
+        <acp-search-pane ?active=${this.sideView === 'search'}></acp-search-pane>
+      </acp-pane>
       <acp-changes-panel
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'changes'}
