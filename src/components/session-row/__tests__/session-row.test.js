@@ -51,6 +51,14 @@ function record(el, type) {
 }
 
 describe('acp-session-row', () => {
+  it('is a tree item at level 2 that is a Tab stop only while it holds the tree\'s', async () => {
+    const { el, row } = await render();
+    expect([row.getAttribute('role'), row.getAttribute('aria-level'), row.tabIndex]).to.deep.equal(['treeitem', '2', 0]);
+    el.tabStop = false;
+    await el.updateComplete;
+    expect(row.tabIndex).to.equal(-1);
+  });
+
   it('shows the title, a pin, the agent’s icon, the worktree branch and the age, with tooltips for its marks', async () => {
     const { root } = await render({
       session: session({ agentId: 'claude-code', agentName: 'Claude Code', branch: 'brama/r-1', title: 'Fix the tabs' }),

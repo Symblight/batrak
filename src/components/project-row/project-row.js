@@ -14,7 +14,6 @@ import styles from './project-row.css?inline';
  * @tag acp-project-row
  * @summary A project in the session list: its chevron, name, path, the count of its hidden sessions and a button for a new one.
  * @fires acp-project-select `{ projectId }`
- * @fires acp-project-toggle `{ projectId, expanded }` From the arrow keys.
  * @fires acp-project-new-session `{ projectId }`
  * @fires acp-project-row-menu `{ project, x, y }` Its menu is wanted, at the pointer or under the focused row.
  */
@@ -27,6 +26,7 @@ export class AcpProjectRow extends LitElement {
     loading: { type: Boolean },
     menuOpen: { type: Boolean, attribute: 'menu-open' },
     count: { type: Number },
+    tabStop: { type: Boolean },
   };
 
   static styles = styles;
@@ -47,6 +47,13 @@ export class AcpProjectRow extends LitElement {
     this.menuOpen = false;
     /** @type {number} How many sessions it has, shown while they are hidden. */
     this.count = 0;
+    /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
+    this.tabStop = true;
+  }
+
+  /** Focuses the row. */
+  focusRow() {
+    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-project-row__row'))?.focus();
   }
 
   /**
@@ -58,7 +65,7 @@ export class AcpProjectRow extends LitElement {
   }
 
   /**
-   * Enter/Space selects, arrows expand/collapse, ContextMenu or Shift+F10 asks for the menu.
+   * Enter/Space selects, ContextMenu or Shift+F10 asks for the menu.
    * @param {KeyboardEvent} e
    */
   #onKeydown(e) {
@@ -66,8 +73,6 @@ export class AcpProjectRow extends LitElement {
     if (!project || e.target !== e.currentTarget) return;
     const projectId = project.id;
     if (e.key === 'Enter' || e.key === ' ') this.#emit('acp-project-select', { projectId });
-    else if (e.key === 'ArrowRight') this.#emit('acp-project-toggle', { projectId, expanded: true });
-    else if (e.key === 'ArrowLeft') this.#emit('acp-project-toggle', { projectId, expanded: false });
     else if (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey)) {
       const rect = /** @type {HTMLElement} */ (e.currentTarget).getBoundingClientRect();
       this.#emit('acp-project-row-menu', { project, x: rect.left + 24, y: rect.bottom });
@@ -89,7 +94,8 @@ export class AcpProjectRow extends LitElement {
     return html`<div
         class="acp-project-row__row ${this.menuOpen ? 'acp-project-row__row_menu-open' : ''} ${this.loading ? 'acp-project-row__row_loading' : ''}"
         role="treeitem"
-        tabindex="0"
+        tabindex=${this.tabStop ? 0 : -1}
+        aria-level="1"
         aria-expanded=${this.expanded ? 'true' : 'false'}
         @click=${() => this.#emit('acp-project-select', { projectId: project.id })}
         @keydown=${this.#onKeydown}

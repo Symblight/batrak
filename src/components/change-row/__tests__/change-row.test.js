@@ -34,6 +34,14 @@ function listen(el, type) {
 }
 
 describe('acp-change-row', () => {
+  it('is a tree item at level 1 that is a Tab stop only while it holds the tree\'s', async () => {
+    const { el, row } = await render();
+    expect([row.getAttribute('role'), row.getAttribute('aria-level'), row.tabIndex]).to.deep.equal(['treeitem', '1', 0]);
+    el.tabStop = false;
+    await el.updateComplete;
+    expect(row.tabIndex).to.equal(-1);
+  });
+
   it('shows the type badge, name, folder, counts and a picked checkbox with the full path in a tooltip, a rename relative to the folder, and a deleted file struck out', async () => {
     const { root, row } = await render({ picked: true });
     expect(root.querySelector('.acp-change-row__badge')?.textContent).to.equal('JS');

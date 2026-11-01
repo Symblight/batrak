@@ -31,6 +31,7 @@ export class AcpChangeRow extends LitElement {
     expanded: { type: Boolean, reflect: true },
     picked: { type: Boolean },
     selectable: { type: Boolean },
+    tabStop: { type: Boolean },
   };
 
   static styles = styles;
@@ -45,6 +46,8 @@ export class AcpChangeRow extends LitElement {
     this.picked = false;
     /** @type {boolean} It can be picked (not a worktree session's read-only changes). */
     this.selectable = true;
+    /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
+    this.tabStop = true;
   }
 
   /** Focuses the row, without scrolling it; waits for its first render when it has just been added. */
@@ -85,7 +88,8 @@ export class AcpChangeRow extends LitElement {
     return html`<div
         class="acp-change-row__row ${this.expanded ? 'acp-change-row__row_header' : ''}"
         role="treeitem"
-        tabindex="0"
+        tabindex=${this.tabStop ? 0 : -1}
+        aria-level="1"
         aria-expanded=${String(this.expanded)}
         @click=${() => this.#emit('acp-change-toggle', { id: row.id })}
         @keydown=${this.#onKeydown}

@@ -12,10 +12,11 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import openFolderIcon from '@material-design-icons/svg/outlined/create_new_folder.svg?raw';
-import '../project-row/project-row.js';
+import { AcpProjectRow } from '../project-row/project-row.js';
 import '../session-menu/session-menu.js';
 import '../session-row/session-row.js';
 import '../session-sync/session-sync.js';
+import { TreeNavigationController } from '../../controllers/tree-navigation/TreeNavigationController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { app } from '../../hooks/app/app.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -23,6 +24,8 @@ import styles from './session-list.css?inline';
 
 const { SESSIONS_PAGE, orderSessions, visibleSessions } = sessions;
 
+/** @typedef {import('../session-row/session-row.js').AcpSessionRow} AcpSessionRow */
+/** @typedef {import('../../controllers/tree-navigation/TreeNavigationController.js').TreeNode} TreeNode */
 /** @typedef {import('../../hooks/projects/types.js').Project} Project */
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
@@ -76,6 +79,30 @@ export class AcpSessionList extends LitElement {
     // `<acp-session-menu>` reports picks as its own event (#onSessionMenuSelect).
     onSelect: () => {},
   });
+
+  /** Rows of the tree: every project, and the sessions of the expanded ones. */
+  #tree = new TreeNavigationController(this, {
+    nodes: () => this.#treeNodes(),
+    toggle: (node, expanded) => {
+      const project = /** @type {AcpProjectRow} */ (node.el).project;
+      if (project) this.#emit('acp-project-toggle', { projectId: project.id, expanded });
+    },
+  });
+
+  /** @returns {TreeNode[]} */
+  #treeNodes() {
+    /** @type {TreeNode[]} */
+    const nodes = [];
+    for (const el of this.renderRoot.querySelectorAll('acp-project-row, acp-session-row')) {
+      if (el instanceof AcpProjectRow) {
+        if (el.project) nodes.push({ key: `project:${el.project.id}`, el, label: el.project.name, parent: null, expanded: el.expanded });
+      } else {
+        const row = /** @type {AcpSessionRow} */ (el);
+        if (row.session) nodes.push({ key: `session:${row.session.id}`, el: row, label: row.session.title, parent: `project:${row.session.projectId}`, expanded: null });
+      }
+    }
+    return nodes;
+  }
 
   constructor() {
     super();
@@ -297,7 +324,7 @@ export class AcpSessionList extends LitElement {
         </md-icon-button>
         <md-tooltip for="acp-session-list-open-folder" show-delay="800">Open folder…</md-tooltip>
       </div>
-      <div class="acp-session-list__list" role="tree" aria-label="Sessions">
+      <div class="acp-session-list__list" role="tree" aria-label="Sessions" @keydown=${this.#tree.onKeydown} @focusin=${this.#tree.onFocusin}>
         ${repeat(
           this.projects,
           (p) => p.id,

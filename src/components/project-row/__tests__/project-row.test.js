@@ -44,20 +44,23 @@ describe('acp-project-row', () => {
     expect((await render({ count: 0, expanded: false })).root.querySelector('.acp-project-row__count'), 'none to count').to.equal(null);
   });
 
-  it('selects on a click or Enter, toggles with the arrows, starts a session with its button without selecting, and asks for its menu at the pointer or under the row', async () => {
+  it('is a tree item at level 1 that is a Tab stop only while it holds the tree\'s, and focuses itself', async () => {
+    const { el, row } = await render();
+    expect([row.getAttribute('role'), row.getAttribute('aria-level'), row.tabIndex]).to.deep.equal(['treeitem', '1', 0]);
+    el.tabStop = false;
+    await el.updateComplete;
+    expect(row.tabIndex).to.equal(-1);
+    el.focusRow();
+    expect(el.shadowRoot?.activeElement).to.equal(row);
+  });
+
+  it('selects on a click or Enter, starts a session with its button without selecting, and asks for its menu at the pointer or under the row', async () => {
     const { el, root, row } = await render();
     const selects = record(el, 'acp-project-select');
-    const toggles = record(el, 'acp-project-toggle');
     const news = record(el, 'acp-project-new-session');
     row.click();
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', cancelable: true }));
-    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', cancelable: true }));
-    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', cancelable: true }));
     expect(selects).to.have.length(2);
-    expect(toggles.map((e) => e.detail)).to.deep.equal([
-      { projectId: '/home/me/brama', expanded: false },
-      { projectId: '/home/me/brama', expanded: true },
-    ]);
     /** @type {HTMLElement} */ (root.querySelector('.acp-project-row__add')).click();
     expect(news.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
     expect(selects, 'the button does not select').to.have.length(2);

@@ -76,6 +76,27 @@ describe('acp-changes-review', () => {
     expect(root.querySelector('cdx-code-editor')).to.equal(null);
   });
 
+  it('is one tree with a single Tab stop that the arrows, Home and End move between the files', async () => {
+    const { root, rows } = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]) });
+    const active = () => /** @type {HTMLElementTagNameMap['acp-change-row'] | null} */ (root.activeElement)?.row?.id;
+    const stops = () => rows().filter((r) => r.tabStop).map((r) => r.row?.id);
+    // A row focuses itself after its render, a microtask later
+    const press = async (/** @type {number} */ i, /** @type {string} */ key) => {
+      rows()[i].shadowRoot?.querySelector('[role="treeitem"]')?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+    expect(root.querySelector('[role="tree"]')).to.not.equal(null);
+    expect(stops()).to.deep.equal(['new.txt']);
+    // Act + Assert: Down skips the diff between two rows
+    await press(0, 'ArrowDown');
+    expect(active()).to.equal(rows()[1].row?.id);
+    expect(stops()).to.deep.equal(['src/b.js']);
+    await press(1, 'End');
+    expect(active()).to.equal(rows()[2].row?.id);
+    await press(2, 'Home');
+    expect(active()).to.equal(rows()[0].row?.id);
+  });
+
   it('picks everything with the all-files checkbox unless everything is picked, then nothing', async () => {
     const { el, root } = await render();
     const selects = listen(el, 'acp-commit-select');

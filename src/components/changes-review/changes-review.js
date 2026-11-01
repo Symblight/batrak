@@ -17,6 +17,7 @@ import '../change-row/change-row.js';
 import { codeEditor } from '../code-view/code-editor.js';
 import '../diff-counts/diff-counts.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
+import { TreeNavigationController } from '../../controllers/tree-navigation/TreeNavigationController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './changes-review.css?inline';
 
@@ -66,6 +67,13 @@ export class AcpChangesReview extends LitElement {
     focus: () => this.commentFocus,
   });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => projects.abs(this.root, file) });
+  /** The files are rows of a flat tree; opening a diff is the row's own business. */
+  #tree = new TreeNavigationController(this, {
+    nodes: () =>
+      [...this.renderRoot.querySelectorAll('acp-change-row')].flatMap((el) =>
+        el.row ? [{ key: el.row.id, el, label: el.row.name, parent: null, expanded: el.expanded }] : [],
+      ),
+  });
   /** @type {ChangeRow[]} */
   #rows = [];
   /** @type {string | null} A file to scroll to once its row is rendered. */
@@ -311,7 +319,7 @@ export class AcpChangesReview extends LitElement {
         <span>${this.base === null ? 'The working tree matches HEAD.' : 'Nothing changed since the session started.'}</span>
       </div>`;
     }
-    return html`<div class="acp-changes-review__list" role="tree" aria-label="Changed files">
+    return html`<div class="acp-changes-review__list" role="tree" aria-label="Changed files" @keydown=${this.#tree.onKeydown} @focusin=${this.#tree.onFocusin}>
       ${repeat(this.#rows, (row) => row.id, (row) => this.#renderEntry(row))}
     </div>`;
   }

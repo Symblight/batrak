@@ -29,6 +29,7 @@ export class AcpSessionRow extends LitElement {
     unread: { type: Boolean },
     waiting: { type: Boolean },
     menuOpen: { type: Boolean, attribute: 'menu-open' },
+    tabStop: { type: Boolean },
     now: { attribute: false },
     renaming: { state: true },
     hovered: { state: true },
@@ -51,6 +52,8 @@ export class AcpSessionRow extends LitElement {
     this.waiting = false;
     /** @type {boolean} Its menu is open: the menu button stays. */
     this.menuOpen = false;
+    /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
+    this.tabStop = true;
     /** @type {number} The time, ms: a session active in another app shows so until its time is up. */
     this.now = Date.now();
     /** @type {boolean} Its title is being edited in the row. */
@@ -148,7 +151,8 @@ export class AcpSessionRow extends LitElement {
     return html`<div
         class="acp-session-row__row ${this.selected ? 'acp-session-row__row_selected' : ''}"
         role="treeitem"
-        tabindex="0"
+        tabindex=${this.tabStop ? 0 : -1}
+        aria-level="2"
         aria-selected=${this.selected ? 'true' : 'false'}
         @click=${() => this.#emit('acp-session-select', { sessionId: session.id })}
         @dblclick=${() => this.startRename()}

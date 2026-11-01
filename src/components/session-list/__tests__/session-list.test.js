@@ -250,5 +250,48 @@ describe('acp-session-list', () => {
     expect(titles(root)).to.have.length(12);
     expect(more(), 'all shown').to.equal(null);
   });
-});
 
+  describe('as a tree', () => {
+    /** @param {Element} rowEl @param {string} key */
+    const press = (rowEl, key) =>
+      rowEl.shadowRoot?.querySelector('[role="treeitem"]')?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+    /** @param {Element | null | undefined} el */
+    const name = (el) => (el instanceof Element ? (/** @type {any} */ (el).project?.name ?? /** @type {any} */ (el).session?.title) : String(el));
+    /** @param {ShadowRoot} root */
+    const stops = (root) => [...root.querySelectorAll('acp-project-row, acp-session-row')].filter((r) => /** @type {any} */ (r).tabStop).map(name);
+
+    it('has one Tab stop, the first row until focus moves, and walks the projects and sessions with the arrows', async () => {
+      const { root } = await render({ collapsed: ['/home/me/rich'] });
+      const [brama, rich] = projectRows(root);
+      // Assert
+      expect(stops(root)).to.deep.equal(['brama']);
+      // Act: Down enters the sessions in their order, Down past the last goes to the next project
+      brama.focusRow();
+      press(brama, 'ArrowDown');
+      expect(name(root.activeElement)).to.equal(name(row(root, 'Session b')));
+      expect(stops(root)).to.deep.equal(['Session b']);
+      press(row(root, 'Session b'), 'End');
+      expect(name(root.activeElement)).to.equal(name(rich));
+      press(rich, 'Home');
+      expect(name(root.activeElement)).to.equal(name(brama));
+    });
+
+    it('opens and closes a project with Right and Left, and leaves a session to its project with Left', async () => {
+      const { el, root } = await render({ collapsed: ['/home/me/rich'] });
+      const toggles = record(el, 'acp-project-toggle');
+      const [brama, rich] = projectRows(root);
+      // Act
+      press(rich, 'ArrowRight');
+      press(brama, 'ArrowLeft');
+      press(brama, 'ArrowRight');
+      // Assert: Right opens the closed project, Left closes the open one; Right on an open one enters its first session
+      expect(toggles.map((e) => e.detail)).to.deep.equal([
+        { projectId: '/home/me/rich', expanded: true },
+        { projectId: '/home/me/brama', expanded: false },
+      ]);
+      expect(name(root.activeElement)).to.equal(name(row(root, 'Session b')));
+      press(row(root, 'Session b'), 'ArrowLeft');
+      expect(name(root.activeElement)).to.equal(name(brama));
+    });
+  });
+});
