@@ -8,7 +8,7 @@ import { $activeSessionId, $sessions } from '../../sessions/sessions.js';
 
 /** @param {string} id */
 function session(id) {
-  return /** @type {Session} */ ({ id, projectId: '/p', title: id, agentId: 'claude', agentName: 'Claude Code', status: 'stopped', lastActivityAt: '' });
+  return /** @type {Session} */ ({ id, projectId: '/p', title: id, agentId: 'claude', agentName: 'Claude Code', status: 'stopped', config: {}, lastActivityAt: '' });
 }
 
 /** @param {AgentSummary['terminal']} terminal */

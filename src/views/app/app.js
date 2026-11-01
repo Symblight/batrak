@@ -11,13 +11,11 @@ import { $activePath } from '../../stores/editor/editor.js';
 import { $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
-import { $projectSearch, $searchDialogPrefs, addRecentSearch, saveProjectSearch, setSearchDialogPrefs } from '../../stores/search/search.js';
 import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/toolbar/toolbar.js';
@@ -27,7 +25,7 @@ import '../main-column/main-column.js';
 import '../file-column/file-column.js';
 import '../../components/nav-rail/nav-rail.js';
 import '../../components/quick-open/quick-open.js';
-import '../../components/search-dialog/search-dialog.js';
+import '../search-view/search-view.js';
 import '../../components/resize-handle/resize-handle.js';
 import '../../components/snackbars/snackbars.js';
 import { ColumnResizeController } from '../../controllers/resize/ColumnResizeController.js';
@@ -40,11 +38,6 @@ import '../../components/split/split.js';
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
 /** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
-
-/** @type {SearchDialogState} A project's search before its first one. */
-const NO_SEARCH = { query: '', caseSensitive: false, wholeWord: false, regex: false, folder: '', mask: '' };
 
 /*
  * How the panes share the row. Session and file columns shrink, down to their resize minimums, to
@@ -68,8 +61,6 @@ export class AcpApp extends ViewElement {
   static properties = {
     sideView: { state: true },
     quickOpenFiles: { state: true },
-    searchFolders: { state: true },
-    searchFoldersQuery: { state: true },
   };
 
   #resize = new ColumnResizeController(this, {
@@ -88,11 +79,6 @@ export class AcpApp extends ViewElement {
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
-  #searchPrefs = new StoreController(this, { store: $searchDialogPrefs });
-  #projectSearch = new StoreController(this, { store: $projectSearch });
-  #search = new FindInFilesController(this, { slot: 'dialog' });
-  /** Sequence of folder menu queries; only the latest answer is shown. */
-  #foldersRequest = 0;
   /** Sequence of Quick Open queries; only the latest answer is shown. */
   #quickOpenRequest = 0;
   /** @type {Promise<() => void> | null} */
@@ -123,7 +109,7 @@ export class AcpApp extends ViewElement {
       this.#showSearchDialog();
       return;
     }
-    if (this.#searchDialog?.open) return;
+    if (this.#searchView?.open) return;
     if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
       e.preventDefault();
       this.#newTerminal();
@@ -146,10 +132,6 @@ export class AcpApp extends ViewElement {
     this.sideView = 'files';
     /** @type {QuickOpenItem[]} */
     this.quickOpenFiles = [];
-    /** @type {QuickOpenItem[]} The search dialog's folder menu. */
-    this.searchFolders = [];
-    /** @type {string | null} The query `searchFolders` answers. */
-    this.searchFoldersQuery = null;
   }
 
   connectedCallback() {
@@ -265,54 +247,14 @@ export class AcpApp extends ViewElement {
     this.#main.openFile(projects.absPath(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path));
   }
 
-  /** @returns {HTMLElementTagNameMap['acp-search-dialog'] | null} */
-  get #searchDialog() {
-    return this.renderRoot?.querySelector('acp-search-dialog') ?? null;
-  }
-
-  /** The open project's last search and recent queries. */
-  get #savedSearch() {
-    const project = this.#workspace.value?.path;
-    return project ? this.#projectSearch.value[project] : undefined;
+  /** @returns {HTMLElementTagNameMap['acp-search-view'] | null} */
+  get #searchView() {
+    return this.renderRoot.querySelector('acp-search-view');
   }
 
   /** Opens the search dialog with the project's last search, or the editor's selection; open, selects the query. */
   #showSearchDialog() {
-    const { query, caseSensitive, wholeWord, regex, folder, mask } = this.#savedSearch ?? NO_SEARCH;
-    this.#searchDialog?.show({ query, caseSensitive, wholeWord, regex, folder, mask }, this.#main.selectedText());
-  }
-
-  /** @param {Event} e */
-  #onSearchQuery(e) {
-    const { options, state, delay } = /** @type {CustomEvent<{ options: SearchOptions, state: SearchDialogState, delay: number }>} */ (e).detail;
-    this.#search.setActive(true);
-    this.#search.search(options, delay);
-    const project = this.#workspace.value?.path;
-    if (project) saveProjectSearch(project, state);
-  }
-
-  #onSearchClose() {
-    this.#search.setActive(false);
-  }
-
-  /** @param {Event} e */
-  async #onSearchFolders(e) {
-    const { query } = /** @type {CustomEvent<{ query: string }>} */ (e).detail;
-    const id = ++this.#foldersRequest;
-    const rootId = this.#rootId.value;
-    if (rootId === null) {
-      this.searchFolders = [];
-      this.searchFoldersQuery = query;
-      return;
-    }
-    try {
-      const result = await search.quickOpen(rootId, query, 'dirs');
-      if (id !== this.#foldersRequest || result.cancelled) return;
-      this.searchFolders = result.items;
-      this.searchFoldersQuery = query;
-    } catch (err) {
-      app.reportError('Folder search failed', err);
-    }
+    this.#searchView?.show(this.#main.selectedText());
   }
 
   /**
@@ -320,11 +262,8 @@ export class AcpApp extends ViewElement {
    * @param {Event} e
    */
   #onSearchOpen(e) {
-    const { path, line, column, length, state } = /** @type {CustomEvent<{ path: string, line: number, column: number, length: number, state: SearchDialogState }>} */ (
-      e
-    ).detail;
-    this.#recordSearch(state.query);
-    this.#main.openFile(projects.absPath(path), { line, column, length });
+    const { path, line, column, length } = /** @type {CustomEvent<{ path: string, line: number, column: number, length: number }>} */ (e).detail;
+    this.#main.openFile(path, { line, column, length });
   }
 
   /**
@@ -333,21 +272,9 @@ export class AcpApp extends ViewElement {
    */
   #onSearchPopout(e) {
     const { state } = /** @type {CustomEvent<{ state: SearchDialogState }>} */ (e).detail;
-    this.#recordSearch(state.query);
     this.sideView = 'search';
     showColumn('side');
     this.#files.showSearch(state);
-  }
-
-  /** @param {string} query */
-  #recordSearch(query) {
-    const project = this.#workspace.value?.path;
-    if (project) addRecentSearch(project, query);
-  }
-
-  /** @param {Event} e */
-  #onSearchPrefs(e) {
-    setSearchDialogPrefs(/** @type {CustomEvent<{ patch: Partial<SearchDialogPrefs> }>} */ (e).detail.patch);
   }
 
   /** @param {Event} e */
@@ -504,25 +431,7 @@ export class AcpApp extends ViewElement {
         @acp-quick-open-pick=${this.#onPalettePick}
         @acp-go-to-line=${this.#onPaletteGoToLine}
       ></acp-quick-open>
-      <acp-search-dialog
-        .hasProject=${this.#rootId.value !== null}
-        .results=${this.#search.results}
-        .searching=${this.#search.searching}
-        .limitHit=${this.#search.limitHit}
-        .error=${this.#search.error}
-        .errorSource=${this.#search.errorSource}
-        .recent=${this.#savedSearch?.recent ?? []}
-        .folders=${this.searchFolders}
-        .foldersQuery=${this.searchFoldersQuery}
-        .previewPosition=${this.#searchPrefs.value.preview}
-        .view=${this.#searchPrefs.value.view}
-        @acp-search-dialog-query=${this.#onSearchQuery}
-        @acp-search-dialog-close=${this.#onSearchClose}
-        @acp-search-dialog-folders=${this.#onSearchFolders}
-        @acp-search-dialog-open=${this.#onSearchOpen}
-        @acp-search-dialog-popout=${this.#onSearchPopout}
-        @acp-search-dialog-prefs=${this.#onSearchPrefs}
-      ></acp-search-dialog>
+      <acp-search-view @acp-search-open=${this.#onSearchOpen} @acp-search-popout=${this.#onSearchPopout}></acp-search-view>
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-snackbars

@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $projectSearch, $searchDialogPrefs } from '../../../stores/search/search.js';
+import { $projectSearch } from '../../../stores/search/search.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../app.js';
@@ -119,39 +119,16 @@ describe('acp-app: search dialog', () => {
     expect(quickOpen(app).shadowRoot?.querySelector('dialog')?.open ?? false).to.equal(false);
   });
 
-  it("searches in the dialog's slot and saves the project's search state", async () => {
-    const app = await render();
-    const options = { query: 'x', caseSensitive: false, wholeWord: false, regex: false, include: '', exclude: '' };
-    fire(app, 'acp-search-dialog-query', { options, state: { ...STATE, query: 'x' }, delay: 0 });
-    await until(() => calls.some((c) => c.cmd === 'find_in_files'));
-    expect(calls.find((c) => c.cmd === 'find_in_files')?.args).to.include({ rootId: 'r', slot: 'dialog' });
-    expect($projectSearch.get()['/p']).to.deep.include({ query: 'x', recent: ['older'] });
-
-    fire(app, 'acp-search-dialog-close', {});
-    await until(() => calls.some((c) => c.cmd === 'cancel_search' && c.args.slot === 'dialog'));
-  });
-
-  it("answers the folder menu with the project's folders and the query they answer", async () => {
-    answer = (cmd, args) =>
-      cmd === 'quick_open' ? { items: [{ path: `src/${args.query}`, name: String(args.query), isDir: true, indices: [] }], cancelled: false } : undefined;
-    const app = await render();
-    fire(app, 'acp-search-dialog-folders', { query: 'comp' });
-    await until(() => searchDialog(app).foldersQuery === 'comp');
-    expect(calls.find((c) => c.cmd === 'quick_open')?.args).to.deep.equal({ rootId: 'r', query: 'comp', kind: 'dirs' });
-    expect(searchDialog(app).folders.map((f) => f.path)).to.deep.equal(['src/comp']);
-  });
-
-  it('opens a match in its tab, selected, and records the query', async () => {
+  it('opens a match from the dialog in its tab, selected', async () => {
     const app = await render();
     /** @type {unknown[][]} */
     const opened = [];
     mainColumn(app).openFile = (...args) => void opened.push(args);
     fire(app, 'acp-search-dialog-open', { path: 'src/a.ts', line: 3, column: 7, length: 3, state: { ...STATE, query: 'foo' } });
     expect(opened).to.deep.equal([['/p/src/a.ts', { line: 3, column: 7, length: 3 }]]);
-    expect($projectSearch.get()['/p']?.recent).to.deep.equal(['foo', 'older']);
   });
 
-  it('hands the search over to the Search pane on popout', async () => {
+  it('shows the Search pane with the dialog’s search on popout', async () => {
     const app = await render();
     /** @type {unknown[]} */
     const shown = [];
@@ -160,15 +137,5 @@ describe('acp-app: search dialog', () => {
     await app.updateComplete;
     expect(app.sideView).to.equal('search');
     expect(shown).to.deep.equal([{ ...STATE, query: 'bar' }]);
-    expect($projectSearch.get()['/p']?.recent).to.deep.equal(['bar', 'older']);
-  });
-
-  it('saves layout changes and passes the prefs down', async () => {
-    const app = await render();
-    fire(app, 'acp-search-dialog-prefs', { patch: { view: 'flat' } });
-    await app.updateComplete;
-    expect($searchDialogPrefs.get().view).to.equal('flat');
-    expect(searchDialog(app).view).to.equal('flat');
-    fire(app, 'acp-search-dialog-prefs', { patch: { view: 'grouped' } });
   });
 });

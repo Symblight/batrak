@@ -17,9 +17,10 @@ Spec: `docs/specs/search-dialog.md`.
 
 ## Two searches, two slots
 
-- The **search dialog** (`<acp-search-dialog>`, Mod+Shift+F) lives in `<acp-app>`; the **Search pane**
+- The **search dialog** (`<acp-search-dialog>`, Mod+Shift+F) lives in `<acp-app>`, wired by `<acp-search-view>` (`views/search-view/`: stores, the search slot, folder questions; it fires
+  `acp-search-open` / `-popout` for the app); the **Search pane**
   (`<acp-search-panel>`, the nav rail's Search button) in `<acp-file-column>`. Each container hosts its
-  own `FindInFilesController({ slot })`: `'dialog'` in `<acp-app>`, `'panel'` in the file column.
+  own `FindInFilesController({ slot })`: `'dialog'` in `<acp-search-view>`, `'panel'` in the file column.
 - `find_in_files` / `cancel_search` take the slot; the backend `Root` keeps a cancel flag per slot,
   so a new search cancels only its own slot's, and closing the root cancels both. A controller runs
   only while `setActive(true)`: the dialog's on its first `-query`, off on `-close`.
@@ -43,7 +44,7 @@ Spec: `docs/specs/search-dialog.md`.
   globs (commas inside `{…}` or `[…]` don't split), a leading `!` excludes, a pattern without `/`
   matches a name at any depth; includes go inside the (glob-escaped) folder, and with none the folder
   alone is the include.
-- The folder menu asks with `acp-search-filter-folders`, which the dialog re-fires as `acp-search-dialog-folders { query }`; `<acp-app>` answers with
+- The folder menu asks with `acp-search-filter-folders`, which the dialog re-fires as `acp-search-dialog-folders { query }`; `<acp-search-view>` answers with
   `quickOpen(rootId, query, 'dirs')` into `folders` **and** `foldersQuery` (the query it answers).
   Enter in the menu's field picks only from a list whose `foldersQuery` is the latest query asked, so
   a late answer never picks a folder for older typing.

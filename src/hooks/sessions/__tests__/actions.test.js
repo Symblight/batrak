@@ -10,9 +10,11 @@ import { $sessions } from '../../../stores/sessions/sessions.js';
 
 /** @param {Partial<Session>} [fields] */
 function session(fields = {}) {
-  return /** @type {Session} */ ({ id: 's1', projectId: '/p', title: 'Old', agentId: 'claude', status: 'idle', folder: '/p', lastActivityAt: '', mode: 'local', branch: null, ...fields });
+  return /** @type {Session} */ ({ id: 's1', projectId: '/p', title: 'Old', agentId: 'actions-test-agent', status: 'idle', folder: '/p', lastActivityAt: '', mode: 'local', branch: null, ...fields });
 }
 
+// The composer keeps the last picks and an agent's options in localStorage per agent id, and another test file
+// that uses the same agent can read them: these tests use an agent id of their own.
 describe('session actions', () => {
   /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
   let calls;

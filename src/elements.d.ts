@@ -9,6 +9,7 @@ import type { AcpFileIcon } from './components/file-icon/file-icon.js';
 import type { AcpAgentCard } from './components/agent-card/agent-card.js';
 import type { AcpAgentIcon } from './components/agent-icon/agent-icon.js';
 import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
+import type { AcpSearchView } from './views/search-view/search-view.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
 import type { AcpApp } from './views/app/app.js';
 import type { AcpCommitBox } from './components/commit-box/commit-box.js';
@@ -66,6 +67,7 @@ declare global {
   interface HTMLElementTagNameMap {
     'acp-about-dialog': AcpAboutDialog;
     'acp-agent-column': AcpAgentColumn;
+    'acp-search-view': AcpSearchView;
     'acp-agent-card': AcpAgentCard;
     'acp-agent-icon': AcpAgentIcon;
     'acp-panel': AcpPanel;
