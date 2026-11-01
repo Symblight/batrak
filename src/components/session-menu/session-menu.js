@@ -7,6 +7,8 @@ import archiveIcon from '@material-design-icons/svg/outlined/archive.svg?raw';
 import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
 import downloadIcon from '@material-design-icons/svg/outlined/download.svg?raw';
 import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
+import markReadIcon from '@material-design-icons/svg/outlined/mark_chat_read.svg?raw';
+import markUnreadIcon from '@material-design-icons/svg/outlined/mark_chat_unread.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import openInIcon from '@material-design-icons/svg/outlined/open_in_new.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
@@ -16,7 +18,7 @@ import styles from './session-menu.css?inline';
 /**
  * @tag acp-session-menu
  * @summary A session's menu, shared by its header and its list row: opens from `anchor`, at a point, or driven through `menu`; one menu shows at a time, app-wide; items whose backend isn't there yet are disabled.
- * @fires acp-session-menu-select `{ value }` `rename`, `reset-title`, `reveal`, `open-terminal` or `delete`.
+ * @fires acp-session-menu-select `{ value }` `mark-read`, `mark-unread`, `rename`, `reset-title`, `reveal`, `open-terminal` or `delete`.
  * @fires acp-session-menu-toggle `{ open }` As it starts opening or closing.
  * @fires acp-session-menu-closed `null` Once closed, after its animation (it may have reopened since).
  */
@@ -25,6 +27,7 @@ export class AcpSessionMenu extends LitElement {
     anchor: { attribute: false },
     sessionTitle: { attribute: 'session-title' },
     resettable: { type: Boolean },
+    mark: { type: String },
   };
 
   static styles = styles;
@@ -42,6 +45,8 @@ export class AcpSessionMenu extends LitElement {
     this.sessionTitle = '';
     /** @type {boolean} The user renamed a session the agent had named: offers its title back. */
     this.resettable = false;
+    /** @type {'read' | 'unread' | ''} Which read mark it offers, as its first item: `read` for an unread session, `unread` for a read one; none for `''`. */
+    this.mark = '';
   }
 
   connectedCallback() {
@@ -134,6 +139,14 @@ export class AcpSessionMenu extends LitElement {
       @closing=${() => this.#onToggle(false)}
       @closed=${() => this.#emit('acp-session-menu-closed', null)}
     >
+      ${this.mark === ''
+        ? nothing
+        : html`<md-item-group>
+            <md-menu-item class="acp-session-menu__item" value=${this.mark === 'read' ? 'mark-read' : 'mark-unread'}>
+              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(this.mark === 'read' ? markReadIcon : markUnreadIcon)}</md-icon>
+              ${this.mark === 'read' ? 'Mark as read' : 'Mark as unread'}
+            </md-menu-item>
+          </md-item-group>`}
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="open-in">
           <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(openInIcon)}</md-icon>

@@ -60,12 +60,15 @@ describe('acp-session-menu', () => {
   it('reports the picked action', async () => {
     const { el, menu } = await render(html`<acp-session-menu></acp-session-menu>`);
     const events = record(el, 'acp-session-menu-select');
+    el.mark = 'read';
+    await el.updateComplete;
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    for (const value of ['rename', 'reveal', 'open-terminal', 'delete']) {
+    for (const value of ['mark-read', 'rename', 'reveal', 'open-terminal', 'delete']) {
       const item = /** @type {HTMLElement} */ (root.querySelector(`md-menu-item[value="${value}"]`));
       menu.dispatchEvent(new CustomEvent('select', { detail: { value, item } }));
     }
     expect(events.map((e) => e.detail)).to.deep.equal([
+      { value: 'mark-read' },
       { value: 'rename' },
       { value: 'reveal' },
       { value: 'open-terminal' },
@@ -106,6 +109,26 @@ describe('acp-session-menu', () => {
     first.openAtPoint(0, 0);
     second.openAtPoint(10, 10);
     expect(firstMenu.open).to.equal(false);
+  });
+
+  it('leads with Mark as read or Mark as unread as asked, and with neither by default', async () => {
+    // Arrange
+    const { el } = await render(html`<acp-session-menu></acp-session-menu>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const first = () => root.querySelector('md-menu > md-item-group:first-of-type > md-menu-item');
+    expect(root.querySelector('md-menu-item[value^="mark-"]'), 'the header passes no mark').to.equal(null);
+    expect(first()?.getAttribute('value')).to.equal('open-in');
+
+    // Act + Assert: an item per mark, always first
+    el.mark = 'unread';
+    await el.updateComplete;
+    expect(first()?.getAttribute('value')).to.equal('mark-unread');
+    expect(first()?.textContent).to.contain('Mark as unread');
+    el.mark = 'read';
+    await el.updateComplete;
+    expect(first()?.getAttribute('value')).to.equal('mark-read');
+    expect(first()?.textContent).to.contain('Mark as read');
+    expect(root.querySelectorAll('md-menu-item[value^="mark-"]')).to.have.length(1);
   });
 
   it('offers Reset to agent title only when asked to', async () => {

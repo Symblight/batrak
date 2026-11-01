@@ -1,5 +1,6 @@
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
+import '@symblight/wc-material/badge';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/tooltip';
@@ -12,7 +13,7 @@ import styles from './project-row.css?inline';
 
 /**
  * @tag acp-project-row
- * @summary A project in the session list: its chevron, name, path, the count of its hidden sessions and a button for a new one.
+ * @summary A project in the session list: its chevron, name, path, the count of its hidden sessions (an unread counter instead when some are unread) and a button for a new one.
  * @fires acp-project-select `{ projectId }`
  * @fires acp-project-new-session `{ projectId }`
  * @fires acp-project-row-menu `{ project, x, y }` Its menu is wanted, at the pointer or under the focused row.
@@ -26,6 +27,7 @@ export class AcpProjectRow extends LitElement {
     loading: { type: Boolean },
     menuOpen: { type: Boolean, attribute: 'menu-open' },
     count: { type: Number },
+    unread: { type: Number },
     tabStop: { type: Boolean },
   };
 
@@ -47,6 +49,8 @@ export class AcpProjectRow extends LitElement {
     this.menuOpen = false;
     /** @type {number} How many sessions it has, shown while they are hidden. */
     this.count = 0;
+    /** @type {number} How many of its sessions are unread: while collapsed, a counter replaces `count`. */
+    this.unread = 0;
     /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
     this.tabStop = true;
   }
@@ -91,20 +95,26 @@ export class AcpProjectRow extends LitElement {
   render() {
     const project = this.project;
     if (!project) return nothing;
+    const unread = !this.expanded && this.unread > 0;
     return html`<div
         class="acp-project-row__row ${this.menuOpen ? 'acp-project-row__row_menu-open' : ''} ${this.loading ? 'acp-project-row__row_loading' : ''}"
         role="treeitem"
         tabindex=${this.tabStop ? 0 : -1}
         aria-level="1"
         aria-expanded=${this.expanded ? 'true' : 'false'}
+        aria-label=${unread ? `${project.name}, ${this.unread} unread` : nothing}
         @click=${() => this.#emit('acp-project-select', { projectId: project.id })}
         @keydown=${this.#onKeydown}
         @contextmenu=${this.#onContextMenu}
       >
         <md-icon class="acp-project-row__chevron">${unsafeSVG(this.expanded ? expandMoreIcon : chevronRightIcon)}</md-icon>
-        <span class="acp-project-row__name ${this.active ? 'acp-project-row__name_active' : ''}">${project.name}</span>
+        <span class="acp-project-row__name ${this.active ? 'acp-project-row__name_active' : ''} ${unread ? 'acp-project-row__name_unread' : ''}">${project.name}</span>
         <span id="acp-project-row-path" class="acp-project-row__path">${this.path}</span>
-        ${!this.expanded && this.count > 0 ? html`<span class="acp-project-row__count">${this.count}</span>` : nothing}
+        ${unread
+          ? html`<md-badge class="acp-project-row__counter" value=${this.unread} max="99" aria-hidden="true"></md-badge>`
+          : !this.expanded && this.count > 0
+            ? html`<span class="acp-project-row__count">${this.count}</span>`
+            : nothing}
         <md-icon-button
           id="acp-project-row-add"
           class="acp-project-row__add"

@@ -50,6 +50,15 @@ function record(el, type) {
   return events;
 }
 
+/**
+ * Whether a selector matches: a failed `equal(null)` on an element makes chai walk the whole DOM node.
+ * @param {ParentNode} root
+ * @param {string} selector
+ */
+function has(root, selector) {
+  return root.querySelector(selector) !== null;
+}
+
 describe('acp-session-row', () => {
   it('is a tree item at level 2 that is a Tab stop only while it holds the tree\'s', async () => {
     const { el, row } = await render();
@@ -63,10 +72,8 @@ describe('acp-session-row', () => {
     const { root } = await render({
       session: session({ agentId: 'claude-code', agentName: 'Claude Code', branch: 'brama/r-1', title: 'Fix the tabs' }),
       pinned: true,
-      unread: true,
     });
     expect(root.querySelector('.acp-session-row__title')?.textContent?.trim()).to.equal('Fix the tabs');
-    expect(root.querySelector('.acp-session-row__title_unread'), 'unread: bold').to.not.equal(null);
     const agent = root.querySelector('.acp-session-row__agent');
     expect(agent?.getAttribute('brand')).to.equal('claude');
     expect(tooltipOf(agent)).to.equal('Claude Code');
@@ -79,6 +86,78 @@ describe('acp-session-row', () => {
     expect(plain.root.querySelector('.acp-session-row__agent')?.hasAttribute('brand')).to.equal(false);
     expect(tooltipOf(plain.root.querySelector('.acp-session-row__agent'))).to.equal('mine');
     expect(plain.root.querySelector('.acp-session-row__pin') ?? plain.root.querySelector('.acp-session-row__branch')).to.equal(null);
+  });
+
+  it('marks an unread row with a dot in the pin\'s place, a heavier title and a primary age; a read row has none of it, also with a status or the menu button', async () => {
+    // Arrange
+    const claude = session({ agentId: 'claude-code', agentName: 'Claude Code', status: 'working' });
+    const { el, root, row } = await render({ session: claude, pinned: true, unread: true, waiting: true });
+
+    // Assert: unread and pinned, waiting for a permission
+    const dot = root.querySelector('.acp-session-row__unread-dot');
+    expect(dot?.getAttribute('aria-hidden')).to.equal('true');
+    expect(tooltipOf(dot)).to.equal('Unread · Claude Code');
+    expect(has(root, '.acp-session-row__pin'), 'the dot, not the pin').to.equal(false);
+    expect(row.classList.contains('acp-session-row__row_unread')).to.equal(true);
+    expect(has(root, '.acp-session-row__title_unread')).to.equal(true);
+    expect(has(root, '.acp-session-row__age_unread')).to.equal(true);
+    expect(root.querySelector('acp-session-status')?.indicator, 'the dot and a status at once').to.equal('permission');
+    expect(has(root, '[title]'), 'tooltips, not titles').to.equal(false);
+
+    // Act: the menu opens, its button takes the status's place
+    el.menuOpen = true;
+    await el.updateComplete;
+
+    // Assert
+    expect(has(root, '.acp-session-row__more'), 'the menu button replaces the status').to.equal(true);
+    expect(has(root, '.acp-session-row__unread-dot'), 'the dot stays').to.equal(true);
+    expect(has(root, '.acp-session-row__age_unread'), 'so does the age').to.equal(true);
+
+    // Act: read again
+    el.unread = false;
+    el.menuOpen = false;
+    await el.updateComplete;
+
+    // Assert
+    expect(has(root, '.acp-session-row__unread-dot')).to.equal(false);
+    expect(has(root, '.acp-session-row__pin'), 'a read pinned row has its pin').to.equal(true);
+    expect(row.classList.contains('acp-session-row__row_unread')).to.equal(false);
+    expect(has(root, '.acp-session-row__title_unread, .acp-session-row__age_unread')).to.equal(false);
+  });
+
+  it('names the row for assistive tech: title, agent, unread, pinned, worktree, age and status', async () => {
+    // Arrange
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    const full = session({
+      title: 'Session-input spec gaps',
+      agentId: 'claude-code',
+      agentName: 'Claude Code',
+      branch: 'brama/r-1',
+      status: 'error',
+      lastActivityAt: '2026-10-23T12:47:00.000Z',
+    });
+    // Act
+    const { row } = await render({ session: full, now, unread: true, pinned: true });
+
+    // Assert
+    expect(row.getAttribute('aria-label')).to.equal(
+      'Session-input spec gaps, Claude Code, unread, pinned, worktree on brama/r-1, 13 minutes ago, Last turn failed',
+    );
+    const plain = session({ title: 'Plain', agentId: 'mine', lastActivityAt: '2026-10-23T12:00:00.000Z' });
+    expect((await render({ session: plain, now })).row.getAttribute('aria-label')).to.equal('Plain, mine, 1 hour ago');
+  });
+
+  it('marks the row whose menu is open', async () => {
+    // Arrange
+    const { el, row } = await render();
+    expect(row.classList.contains('acp-session-row__row_menu-open')).to.equal(false);
+
+    // Act
+    el.menuOpen = true;
+    await el.updateComplete;
+
+    // Assert
+    expect(row.classList.contains('acp-session-row__row_menu-open')).to.equal(true);
   });
 
   it('passes its state to the status and marks the selected row', async () => {

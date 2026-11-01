@@ -58,6 +58,10 @@
   color: var(--acp-color-primary);
 }
 
+.acp-project-row__name_unread {
+  font-weight: 700;
+}
+
 .acp-project-row__path {
   flex: 1;
   min-width: 0;
@@ -77,6 +81,18 @@
   font-weight: var(--acp-font-weight-medium);
   font-variant-numeric: tabular-nums;
   color: var(--acp-color-on-surface-variant);
+}
+
+.acp-project-row__counter {
+  flex: none;
+  --md-badge-color: var(--acp-color-primary);
+  --md-badge-on-color: var(--acp-color-on-primary);
+  --md-badge-border-radius: 8px;
+  --md-badge-font-family: var(--acp-font-family);
+  --md-badge-font-size: var(--acp-font-size-xs);
+  --md-badge-font-weight: var(--acp-font-weight-medium);
+
+  font-variant-numeric: tabular-nums;
 }
 
 /* 24px icon button: 18px icon + 2px padding + the library's 1px transparent border. */

@@ -88,6 +88,24 @@ export function unreadIn(sessions, unread, shown = sessions.length) {
 }
 
 /**
+ * A session's age in words, for a row's accessible name ("13 minutes ago"); `<acp-datetime compact>`
+ * shows the same age as "13m". Empty for a time that doesn't parse.
+ * @param {string} at ISO time.
+ * @param {number} now ms.
+ */
+export function ageLabel(at, now) {
+  const time = Date.parse(at);
+  if (Number.isNaN(time)) return '';
+  const minutes = Math.floor((now - time) / 60_000);
+  if (!(minutes >= 1)) return 'just now';
+  /** @param {number} n @param {string} unit */
+  const ago = (n, unit) => `${n} ${unit}${n === 1 ? '' : 's'} ago`;
+  if (minutes < 60) return ago(minutes, 'minute');
+  if (minutes < 60 * 24) return ago(Math.floor(minutes / 60), 'hour');
+  return ago(Math.floor(minutes / (60 * 24)), 'day');
+}
+
+/**
  * Whether another app (a terminal) may be running a session now: it doesn't run here, and its agent
  * saw activity in it that wasn't Brama's, recently enough (`Session.activeElsewhereUntil`).
  * @param {Session} session

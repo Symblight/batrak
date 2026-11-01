@@ -26,6 +26,15 @@ function record(el, type) {
   return events;
 }
 
+/**
+ * Whether a selector matches: a failed `equal(null)` on an element makes chai walk the whole DOM node.
+ * @param {ParentNode} root
+ * @param {string} selector
+ */
+function has(root, selector) {
+  return root.querySelector(selector) !== null;
+}
+
 describe('acp-project-row', () => {
   it('shows the name, the path with its full form in a tooltip, and the count only while collapsed', async () => {
     const open = await render({ count: 3, active: true });
@@ -42,6 +51,35 @@ describe('acp-project-row', () => {
     expect(closed.row.getAttribute('aria-expanded')).to.equal('false');
     expect(closed.root.querySelector('.acp-project-row__count')?.textContent).to.equal('3');
     expect((await render({ count: 0, expanded: false })).root.querySelector('.acp-project-row__count'), 'none to count').to.equal(null);
+  });
+
+  it('replaces the count with an unread counter while collapsed, and says so in its name', async () => {
+    // Arrange + Act: collapsed with unread sessions
+    const closed = await render({ count: 5, unread: 3, expanded: false });
+
+    // Assert
+    const counter = /** @type {HTMLElementTagNameMap['md-badge']} */ (closed.root.querySelector('.acp-project-row__counter'));
+    expect([counter.value, counter.max, counter.getAttribute('aria-hidden')]).to.deep.equal(['3', 99, 'true']);
+    expect(has(closed.root, '.acp-project-row__count'), 'the counter replaces the total').to.equal(false);
+    expect(has(closed.root, '.acp-project-row__name_unread')).to.equal(true);
+    expect(closed.row.getAttribute('aria-label')).to.equal('brama, 3 unread');
+
+    // Act: more than the counter can show
+    const many = await render({ unread: 120, expanded: false });
+    const big = /** @type {HTMLElementTagNameMap['md-badge']} */ (many.root.querySelector('.acp-project-row__counter'));
+    await big.updateComplete;
+    expect(big.shadowRoot?.querySelector('.badge')?.textContent?.trim()).to.equal('99+');
+
+    // Act + Assert: expanded, or with nothing unread, it looks as before
+    const open = await render({ count: 5, unread: 3 });
+    expect(has(open.root, '.acp-project-row__counter'), 'expanded: the dots show').to.equal(false);
+    expect(has(open.root, '.acp-project-row__name_unread')).to.equal(false);
+    expect(open.row.hasAttribute('aria-label')).to.equal(false);
+
+    const read = await render({ count: 5, expanded: false });
+    expect(has(read.root, '.acp-project-row__counter')).to.equal(false);
+    expect(read.root.querySelector('.acp-project-row__count')?.textContent).to.equal('5');
+    expect(read.row.hasAttribute('aria-label')).to.equal(false);
   });
 
   it('is a tree item at level 1 that is a Tab stop only while it holds the tree\'s, and focuses itself', async () => {

@@ -1,5 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import {
+  ageLabel,
   inTurn,
   isActiveElsewhere,
   isUnread,
@@ -100,6 +101,26 @@ describe('sessions model', () => {
     expect(unreadIn(list, ['a', 'b'], 2), 'all shown unread').to.deep.equal({ count: 2, hidden: 0 });
     expect(unreadIn(list, ['d']), 'nothing hidden without a limit').to.deep.equal({ count: 1, hidden: 0 });
     expect(unreadIn([], ['a'])).to.deep.equal({ count: 0, hidden: 0 });
+  });
+
+  it('words a session\'s age for its accessible name, like the compact age of the row', () => {
+    // Arrange
+    const now = Date.parse('2026-10-20T12:00:00Z');
+    /** @type {[string, string][]} */
+    const cases = [
+      ['2026-10-20T11:59:30Z', 'just now'],
+      ['2026-10-20T11:59:00Z', '1 minute ago'],
+      ['2026-10-20T11:47:00Z', '13 minutes ago'],
+      ['2026-10-20T11:00:00Z', '1 hour ago'],
+      ['2026-10-20T07:00:00Z', '5 hours ago'],
+      ['2026-10-18T12:00:00Z', '2 days ago'],
+      ['2026-10-21T12:00:00Z', 'just now'],
+      ['not a time', ''],
+    ];
+    for (const [at, label] of cases) {
+      // Act + Assert
+      expect(ageLabel(at, now), at).to.equal(label);
+    }
   });
 
   it("picks the session's view: its own over the setting, chat without a terminal mode, a draft's terminal only when the CLI can start", () => {

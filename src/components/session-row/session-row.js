@@ -1,4 +1,5 @@
 import { LitElement, html, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
@@ -10,13 +11,14 @@ import pinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
 import '../session-status/session-status.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-row.css?inline';
 
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @tag acp-session-row
- * @summary A session in the list: its agent, title (F2 or a double-click renames it in place), worktree branch, age and status, swapped for a menu button while hovered or focused.
+ * @summary A session in the list: its agent, title (F2 or a double-click renames it in place), worktree branch, age and status, a dot in the indent while unread, swapped for a menu button while hovered or focused.
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-row-menu `{ session, x, y }` or `{ session, anchor }` Its menu is wanted: at the pointer or under the focused row (`x`, `y`), or under its menu button (`anchor`).
@@ -46,7 +48,7 @@ export class AcpSessionRow extends LitElement {
     this.selected = false;
     /** @type {boolean} */
     this.pinned = false;
-    /** @type {boolean} Output it has not shown yet. */
+    /** @type {boolean} Drawn unread: a dot in the pin's place, a heavier title and a primary age. */
     this.unread = false;
     /** @type {boolean} A permission request of it waits for the user. */
     this.waiting = false;
@@ -143,14 +145,47 @@ export class AcpSessionRow extends LitElement {
     e.preventDefault();
   }
 
+  /**
+   * The row's accessible name: title, agent, unread, pinned, worktree, age and status.
+   * @param {Session} session
+   * @param {string} agent
+   */
+  #name(session, agent) {
+    const now = this.now;
+    // The same status the row's `<acp-session-status quiet>` shows.
+    const indicator = sessions.sessionIndicator(
+      session.status,
+      this.waiting,
+      sessions.isActiveElsewhere(session, now),
+      session.inTerminal === true,
+    );
+    return [
+      session.title,
+      agent,
+      this.unread && 'unread',
+      this.pinned && 'pinned',
+      session.branch && `worktree on ${session.branch}`,
+      sessions.ageLabel(session.lastActivityAt, now),
+      indicator !== null && indicator !== 'terminal' && sessions.INDICATOR_LABELS[indicator],
+    ]
+      .filter(Boolean)
+      .join(', ');
+  }
+
   render() {
     const session = this.session;
     if (!session) return nothing;
     const name = session.agentName ?? session.agentId;
     const showMore = this.hovered || this.focused || this.menuOpen;
     return html`<div
-        class="acp-session-row__row ${this.selected ? 'acp-session-row__row_selected' : ''}"
+        class=${classMap({
+          'acp-session-row__row': true,
+          'acp-session-row__row_unread': this.unread,
+          'acp-session-row__row_selected': this.selected,
+          'acp-session-row__row_menu-open': this.menuOpen,
+        })}
         role="treeitem"
+        aria-label=${this.#name(session, name)}
         tabindex=${this.tabStop ? 0 : -1}
         aria-level="2"
         aria-selected=${this.selected ? 'true' : 'false'}
@@ -163,7 +198,9 @@ export class AcpSessionRow extends LitElement {
         @focusin=${() => (this.focused = true)}
         @focusout=${this.#onFocusOut}
       >
-        ${this.pinned
+        ${this.unread
+          ? html`<span id="acp-session-row-unread" class="acp-session-row__unread-dot" aria-hidden="true"></span>`
+          : this.pinned
           ? html`<md-icon id="acp-session-row-pin" class="acp-session-row__pin" aria-label="Pinned">${unsafeSVG(pinIcon)}</md-icon>`
           : nothing}
         <acp-agent-icon
@@ -188,7 +225,7 @@ export class AcpSessionRow extends LitElement {
         ${session.branch
           ? html`<md-icon id="acp-session-row-branch" class="acp-session-row__branch" aria-label="Worktree">${unsafeSVG(branchIcon)}</md-icon>`
           : nothing}
-        <acp-datetime class="acp-session-row__age" .value=${session.lastActivityAt} .now=${this.now} format="compact"></acp-datetime>
+        <acp-datetime class="acp-session-row__age ${this.unread ? 'acp-session-row__age_unread' : ''}" .value=${session.lastActivityAt} .now=${this.now} format="compact"></acp-datetime>
         ${showMore
           ? html`<md-icon-button
               id="acp-session-row-more"
@@ -211,7 +248,8 @@ export class AcpSessionRow extends LitElement {
               ></acp-session-status>`}
       </div>
       <md-tooltip for="acp-session-row-agent" show-delay="800">${name}</md-tooltip>
-      ${this.pinned ? html`<md-tooltip for="acp-session-row-pin" show-delay="800">Pinned</md-tooltip>` : nothing}
+      ${this.unread ? html`<md-tooltip for="acp-session-row-unread" show-delay="800">Unread · ${name}</md-tooltip>` : nothing}
+      ${this.pinned && !this.unread ? html`<md-tooltip for="acp-session-row-pin" show-delay="800">Pinned</md-tooltip>` : nothing}
       ${session.branch ? html`<md-tooltip for="acp-session-row-branch" show-delay="800">Worktree on ${session.branch}</md-tooltip>` : nothing}
       ${showMore ? html`<md-tooltip for="acp-session-row-more" show-delay="800">Session menu</md-tooltip>` : nothing}`;
   }

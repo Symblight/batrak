@@ -12,6 +12,9 @@
   /* Indented under the project's name, past its chevron. */
   padding-inline: 28px var(--acp-space-1);
   border-radius: var(--acp-shape-corner-full);
+  /* What the title and the agent icon take: read, unread, then selected over both. */
+  --_acp-session-row-text: var(--acp-color-on-surface-variant);
+
   color: var(--acp-color-on-surface);
   font-size: var(--acp-font-size-md);
   line-height: 20px;
@@ -28,7 +31,21 @@
   }
 }
 
+.acp-session-row__row_unread {
+  --_acp-session-row-text: var(--acp-color-on-surface);
+}
+
+.acp-session-row__row_menu-open {
+  background: var(--acp-state-focus);
+
+  &:hover {
+    background: var(--acp-state-focus);
+  }
+}
+
 .acp-session-row__row_selected {
+  --_acp-session-row-text: var(--acp-color-on-secondary-container);
+
   background: var(--acp-color-secondary-container);
   color: var(--acp-color-on-secondary-container);
 
@@ -45,10 +62,20 @@
   color: var(--acp-color-on-surface-variant);
 }
 
+.acp-session-row__unread-dot {
+  flex: none;
+  /* Centred in the indent where the pin sits, so titles stay aligned. */
+  width: 6px;
+  height: 6px;
+  margin-inline: calc((var(--acp-icon-size-sm) - 6px) / 2 - var(--acp-icon-size-sm) - var(--acp-space-1-5)) calc((var(--acp-icon-size-sm) - 6px) / 2);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-primary);
+}
+
 .acp-session-row__agent {
   flex: none;
   font-size: var(--acp-icon-size-xs);
-  color: var(--acp-color-on-surface-variant);
+  color: var(--_acp-session-row-text);
 }
 
 /* Fades out at its end instead of an ellipsis, so the status never meets the text. */
@@ -58,6 +85,7 @@
   overflow: hidden;
   white-space: nowrap;
   mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+  color: var(--_acp-session-row-text);
 }
 
 .acp-session-row__title_unread {
@@ -100,6 +128,11 @@
   font-size: var(--acp-font-size-xs);
   font-variant-numeric: tabular-nums;
   color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row__age_unread {
+  font-weight: var(--acp-font-weight-medium);
+  color: var(--acp-color-primary);
 }
 
 .acp-session-row__status {
