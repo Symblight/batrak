@@ -52,7 +52,11 @@ describe('acp-tab-view', () => {
 
   it('shows what its host renders for a view tab, one panel per tab and only the active one shown', async () => {
     // Arrange
-    const tabs = [{ ...fileTab(''), id: 'view:settings', kind: /** @type {const} */ ('settings') }, { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') }];
+    const tabs = [
+      { ...fileTab(''), id: 'view:settings', kind: /** @type {const} */ ('settings') },
+      { ...fileTab(''), id: 'view:agents', kind: /** @type {const} */ ('agents') },
+      { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') },
+    ];
     const asked = /** @type {string[]} */ ([]);
     const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
       await fixture(html`<acp-tab-view
@@ -66,9 +70,9 @@ describe('acp-tab-view', () => {
     );
     // Assert
     const panels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-view__panel') ?? [])];
-    expect(asked, 'asked for the settings tab only').to.deep.equal(['view:settings']);
+    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents']);
     expect(panels[0].querySelector('.from-host')?.textContent).to.equal('view:settings');
-    expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false]);
+    expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false, false]);
   });
 
   describe('terminal tabs', () => {

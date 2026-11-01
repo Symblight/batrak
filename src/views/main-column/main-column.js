@@ -4,7 +4,6 @@ import { html, nothing } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
-import { agents } from '../../hooks/agents/agents.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -15,13 +14,10 @@ import { ChangesReviewController } from '../../controllers/changes-review/Change
 import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
 import {
   $activePath,
-  $agentsReveal,
   $editorTabs,
   $fileLanguages,
-  AGENTS_TAB_ID,
   CHANGES_TAB_ID,
   activateTab,
-  agentsRevealed,
   closeAllTabs,
   closeOtherTabs,
   closeTab,
@@ -33,8 +29,6 @@ import {
   setFileLanguage,
   setTabPinned,
 } from '../../stores/editor/editor.js';
-import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents/agents.js';
-import { $agentViews, setAgentView } from '../../stores/session-views/session-views.js';
 import { addToChat } from '../../stores/chat/chat.js';
 import {
   $commentFocus,
@@ -53,6 +47,7 @@ import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.j
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
+import '../agents-tab/agents-tab.js';
 import '../settings-view/settings-view.js';
 import { AcpTerminal } from '../../components/terminal/terminal.js';
 import '../../components/comment-bar/comment-bar.js';
@@ -61,9 +56,6 @@ import '../../components/comment-bar/comment-bar.js';
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
-/** @typedef {import('../../hooks/agents/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
@@ -83,13 +75,6 @@ export class AcpMainColumn extends ViewElement {
   #rootId = new StoreController(this, { store: $rootId });
   #worktrees = new StoreController(this, { store: $worktrees });
   #settings = new StoreController(this, { store: $settings });
-  #agentList = new StoreController(this, { store: $agentList });
-  #agentsView = new StoreController(this, { store: $agentsView });
-  #agentsQuery = new StoreController(this, { store: $agentsQuery });
-  #agentsPending = new StoreController(this, { store: $agentsPending });
-  #agentsReveal = new StoreController(this, { store: $agentsReveal });
-  #signIns = new StoreController(this, { store: $signIns });
-  #agentViews = new StoreController(this, { store: $agentViews });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #gitChanges = new StoreController(this, { store: $gitChanges });
@@ -106,15 +91,8 @@ export class AcpMainColumn extends ViewElement {
     },
   });
 
-  /**
-   * The bar sits lower in the Changes tab, which has no footer. The Agents tab asks again when shown.
-   */
-  #activePath = new StoreController(this, {
-    store: $activePath,
-    onChange: (path) => {
-      if (path === AGENTS_TAB_ID) agents.search();
-    },
-  });
+  /** The bar sits lower in the Changes tab, which has no footer. */
+  #activePath = new StoreController(this, { store: $activePath });
 
   #onFileOpen = (/** @type {Event} */ e) => {
     const { path, line } = /** @type {CustomEvent<{ path: string, line?: number }>} */ (e).detail;
@@ -255,23 +233,12 @@ export class AcpMainColumn extends ViewElement {
     switch (contentKindOf(tab)) {
       case 'settings':
         return html`<acp-settings-view></acp-settings-view>`;
+      case 'agents':
+        return html`<acp-agents-tab></acp-agents-tab>`;
       default:
         return nothing;
     }
   };
-
-  /** @param {Event} e An `acp-agent-add` or `acp-agent-update`. */
-  async #onAgentSave(e) {
-    const { agentId, agent } = /** @type {CustomEvent<{ agentId?: string, agent: NewAgent }>} */ (e).detail;
-    // Retargeted to the tab view out here; the form (or the Agents tab's registry row) that asked is where the event began.
-    const form = /** @type {{ saveFinished(error: string | null): void }} */ (/** @type {unknown} */ (e.composedPath()[0]));
-    try {
-      await (agentId ? agents.update(agentId, agent) : agents.add(agent));
-      form.saveFinished(null);
-    } catch (err) {
-      form.saveFinished(err instanceof Error ? err.message : String(err));
-    }
-  }
 
   render() {
     const { active, pinned } = this.#editorTabs.value;
@@ -297,13 +264,6 @@ export class AcpMainColumn extends ViewElement {
         .comments=${this.#comments.value}
         .commentFocus=${this.#commentFocus.value}
         .renderContent=${this.#renderTabContent}
-        .agents=${this.#agentList.value}
-        .agentsView=${this.#agentsView.value}
-        .agentsQuery=${this.#agentsQuery.value}
-        .agentsPending=${this.#agentsPending.value}
-        .agentsSignIns=${signInsOf(this.#signIns.value, this.#workspace.value?.path ?? null)}
-        .agentsTerminal=${Object.keys(this.#agentViews.value)}
-        .agentsReveal=${this.#agentsReveal.value}
         .review=${{
           changes: this.#gitChanges.value,
           repo: this.#gitRepo.value,
@@ -351,24 +311,6 @@ export class AcpMainColumn extends ViewElement {
         @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
           pickForCommit(e.detail.ids, e.detail.picked)}
         @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
-        @acp-agents-file-open=${() => agents.openFile()}
-        @acp-agents-import=${(/** @type {CustomEvent<{ agentIds?: string[] } | null>} */ e) =>
-          agents.importUserAgents(e.detail?.agentIds ?? null)}
-        @acp-agents-query=${(/** @type {CustomEvent<AgentsQuery>} */ e) => agents.search(e.detail)}
-        @acp-agent-version-update=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.updateVersion(e.detail.agentId)}
-        @acp-agents-update-all=${() => agents.updateAll()}
-        @acp-agents-registry-check=${() => agents.checkRegistry()}
-        @acp-agents-revealed=${(/** @type {CustomEvent<{ reveal: AgentsReveal }>} */ e) => agentsRevealed(e.detail.reveal)}
-        @acp-agent-add=${this.#onAgentSave}
-        @acp-agent-update=${this.#onAgentSave}
-        @acp-agent-enable=${(/** @type {CustomEvent<{ agentId: string, enabled: boolean }>} */ e) =>
-          agents.setEnabled(e.detail.agentId, e.detail.enabled)}
-        @acp-agent-session-view=${(/** @type {CustomEvent<{ agentId: string, view: SessionView }>} */ e) =>
-          setAgentView(e.detail.agentId, e.detail.view)}
-        @acp-agent-default=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.setDefault(e.detail.agentId)}
-        @acp-agent-remove=${(/** @type {CustomEvent<{ agentId: string }>} */ e) => agents.remove(e.detail.agentId)}
-        @acp-agent-sign-in=${(/** @type {CustomEvent<{ agentId: string, methodId: string | null }>} */ e) =>
-          agents.signIn(e.detail.agentId, e.detail.methodId)}
       ></acp-tab-view>
       <acp-comment-bar
         placement=${this.#activePath.value === CHANGES_TAB_ID ? 'changes' : 'file'}

@@ -4,7 +4,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
-import { closeAllTabs, openSettings, openTab } from '../../../stores/editor/editor.js';
+import { closeAllTabs, openAgents, openSettings, openTab } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../main-column.js';
@@ -86,8 +86,9 @@ describe('acp-main-column', () => {
     expect(pasted).to.deep.equal([]);
   });
 
-  it('shows the Settings tab through its view', async () => {
+  it('shows the Settings and Agents tabs through their views', async () => {
     // Arrange
+    openAgents();
     openSettings();
     // Act
     const { tabView } = await render();
@@ -98,6 +99,7 @@ describe('acp-main-column', () => {
     // Assert
     const panel = /** @type {HTMLElement} */ (settings.closest('.acp-tab-view__panel'));
     expect(panel.hasAttribute('active')).to.equal(true);
+    expect(tabView.shadowRoot?.querySelector('acp-agents-tab acp-agents-view'), 'the Agents tab too').to.not.equal(null);
   });
 
   it('opens a file with a match selected, and reads the selection back', async () => {

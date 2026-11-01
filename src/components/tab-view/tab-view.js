@@ -7,7 +7,6 @@ import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmCo
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import '../tab-strip/tab-strip.js';
 import '../code-view/code-view.js';
-import '../agents-view/agents-view.js';
 import '../changes-review/changes-review.js';
 import '../image-preview/image-preview.js';
 import '../terminal/terminal.js';
@@ -58,14 +57,7 @@ export class AcpTabView extends LitElement {
     editorFontSize: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
-    agents: { attribute: false },
     renderContent: { attribute: false },
-    agentsView: { attribute: false },
-    agentsQuery: { attribute: false },
-    agentsPending: { attribute: false },
-    agentsSignIns: { attribute: false },
-    agentsTerminal: { attribute: false },
-    agentsReveal: { attribute: false },
     review: { attribute: false },
     sessionReview: { attribute: false },
     languages: { attribute: false },
@@ -98,17 +90,7 @@ export class AcpTabView extends LitElement {
           () => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path} .image=${tab.image}></acp-image-preview>`,
         ),
       settings: (tab) => this.#renderHosted(tab),
-      agents: () =>
-        html`<acp-agents-view
-          class="acp-tab-view__view"
-          .view=${this.agentsView}
-          .query=${this.agentsQuery}
-          .known=${this.agents?.known ?? []}
-          .pending=${this.agentsPending}
-          .signIns=${this.agentsSignIns}
-          .terminalAgents=${this.agentsTerminal}
-          .reveal=${this.agentsReveal}
-        ></acp-agents-view>`,
+      agents: (tab) => this.#renderHosted(tab),
       changes: () => this.#renderChanges(),
       'session-changes': (tab) => this.#renderSessionChanges(tab),
       terminal: (tab) => this.#renderTerminal(tab),
@@ -142,20 +124,6 @@ export class AcpTabView extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
-    /** @type {import('../../hooks/agents/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
-    this.agents = null;
-    /** @type {import('../../hooks/agents/types.js').AgentsView | null} For the Agents tab. */
-    this.agentsView = null;
-    /** @type {import('../../hooks/agents/types.js').AgentsQuery} For the Agents tab. */
-    this.agentsQuery = { query: '', filter: 'all' };
-    /** @type {{ updating: readonly string[], checking: boolean }} For the Agents tab: calls this window waits for. */
-    this.agentsPending = { updating: [], checking: false };
-    /** @type {Readonly<Record<string, import('../../hooks/agents/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
-    this.agentsSignIns = {};
-    /** @type {readonly string[]} For the Agents tab: the agents whose sessions open in the terminal. */
-    this.agentsTerminal = [];
-    /** @type {import('../../hooks/agents/types.js').AgentsReveal | null} For the Agents tab. */
-    this.agentsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;
     /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */
