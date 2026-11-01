@@ -5,9 +5,11 @@ import './styles/fonts/fonts.css';
 import './styles/shadow-styles.js';
 import { app } from './hooks/app/app.js';
 import { fileDrop } from './hooks/file-drop/file-drop.js';
+import { perf } from './hooks/perf/perf.js';
 import './views/app/app.js';
 
 app.init();
+perf.start();
 settings.syncTheme();
 fileDrop.start();
 
