@@ -111,13 +111,25 @@ describe('acp-file-column', () => {
   it('shows Search with a handed-over search, which it runs in the Search slot, and the pane searches only while shown', async () => {
     const el = await render();
     const view = /** @type {HTMLElementTagNameMap['acp-search-pane']} */ (el.querySelector('acp-search-pane'));
+    expect(/** @type {HTMLElement} */ (view.parentElement).hidden, 'hidden until shown').to.equal(true);
     await el.showSearch({ query: 'needle', caseSensitive: true, wholeWord: false, regex: false, folder: 'src', mask: '*.ts' });
     expect(el.sideView).to.equal('search');
     await until(() => calls.some((c) => c.cmd === 'find_in_files'));
     expect(calls.find((c) => c.cmd === 'find_in_files')?.args).to.include({ rootId: 'r', slot: 'panel' });
     expect(view.active).to.equal(true);
+    expect(/** @type {HTMLElement} */ (view.parentElement).hidden).to.equal(false);
     el.showFiles();
     await el.updateComplete;
     expect(view.active).to.equal(false);
+    expect(/** @type {HTMLElement} */ (view.parentElement).hidden).to.equal(true);
+  });
+
+  it('computes the changes only while the Changes pane is the shown one', async () => {
+    const el = await render();
+    const view = /** @type {HTMLElementTagNameMap['acp-git-changes']} */ (el.querySelector('acp-git-changes'));
+    expect([view.active, /** @type {HTMLElement} */ (view.parentElement).hidden]).to.deep.equal([false, true]);
+    el.showChanges();
+    await el.updateComplete;
+    expect([view.active, /** @type {HTMLElement} */ (view.parentElement).hidden]).to.deep.equal([true, false]);
   });
 });

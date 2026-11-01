@@ -79,6 +79,32 @@ describe('acp-search-pane', () => {
     expect(leaked, 'handled here').to.deep.equal([]);
   });
 
+  it('shows what the search finds: the files, that it is still searching, and that the limit was hit', async () => {
+    // Arrange
+    /** @type {{ send: ((event: unknown) => void) | null }} */
+    const channel = { send: null };
+    mockIPC((cmd, args) => {
+      calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
+      if (cmd === 'find_in_files') channel.send = /** @type {{ channel: { onmessage: (event: unknown) => void } }} */ (args).channel.onmessage;
+      return null;
+    });
+    const { panel } = await render();
+    // Act
+    fire(panel, 'acp-search', { options: OPTIONS, delay: 0 });
+    await until(() => channel.send !== null);
+    const matches = [{ line: 1, text: 'needle', offset: 0, ranges: [[0, 6]] }];
+    channel.send?.({ kind: 'file', path: 'a.js', matches });
+    await until(() => panel.results.length === 1);
+    // Assert
+    expect(panel.results.map((r) => r.path)).to.deep.equal(['a.js']);
+    expect(panel.searching, 'still searching').to.equal(true);
+    // Act
+    channel.send?.({ kind: 'done', limitHit: true });
+    await until(() => !panel.searching);
+    // Assert
+    expect(panel.limitHit).to.equal(true);
+  });
+
   it('opens a match under the project’s path', async () => {
     // Arrange
     const { el, panel } = await render();

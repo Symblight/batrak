@@ -19,8 +19,9 @@ Spec: `docs/specs/search-dialog.md`.
 
 - The **search dialog** (`<acp-search-dialog>`, Mod+Shift+F) lives in `<acp-app>`, wired by `<acp-search-view>` (`views/search-view/`: stores, the search slot, folder questions; it fires
   `acp-search-open` / `-popout` for the app); the **Search pane**
-  (`<acp-search-panel>`, the nav rail's Search button) in `<acp-file-column>`. Each container hosts its
-  own `FindInFilesController({ slot })`: `'dialog'` in `<acp-search-view>`, `'panel'` in the file column.
+  (`<acp-search-panel>`, the nav rail's Search button) in `<acp-file-column>`, wired by `<acp-search-pane>`
+  (`views/search-pane/`: the search slot, `acp-file-open` for a match, `show(state)`). Each view hosts its
+  own `FindInFilesController({ slot })`: `'dialog'` in `<acp-search-view>`, `'panel'` in `<acp-search-pane>`.
 - `find_in_files` / `cancel_search` take the slot; the backend `Root` keeps a cancel flag per slot,
   so a new search cancels only its own slot's, and closing the root cancels both. A controller runs
   only while `setActive(true)`: the dialog's on its first `-query`, off on `-close`.

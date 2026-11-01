@@ -1,23 +1,16 @@
-import { projects } from '../../hooks/projects/projects.js';
-import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { git } from '../../hooks/git/git.js';
-import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
-import { notify } from '../../stores/notices/notices.js';
 import { $treeRoot } from '../../stores/session-root/session-root.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import '../../components/panel-header/panel-header.js';
 import '../../components/pane/pane.js';
 import '../files-view/files-view.js';
 import '../search-pane/search-pane.js';
-import '../../components/changes-panel/changes-panel.js';
+import '../git-changes/git-changes.js';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
-/** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
 
 /** @type {Record<SideView, string>} */
@@ -35,22 +28,7 @@ export class AcpFileColumn extends ViewElement {
     refreshing: { state: true },
   };
 
-  #rootId = new StoreController(this, { store: $rootId });
-  #workspace = new StoreController(this, { store: $workspace });
   #treeRoot = new StoreController(this, { store: $treeRoot });
-  /** Picks of files no longer changed are forgotten; not while a scan is pending, when the list is empty. */
-  #gitChanges = new StoreController(this, {
-    store: $gitChanges,
-    onChange: (changes, old) => {
-      if (!changes.loaded || (changes.files === old?.files && changes.loaded === old?.loaded)) return;
-      const changed = new Set(changes.files.map((file) => file.path));
-      setCommitSelection([...$commitSelection.get()].filter((id) => changed.has(id)));
-    },
-  });
-  #gitRepo = new StoreController(this, { store: $gitRepo });
-  #commitSelection = new StoreController(this, { store: $commitSelection });
-  /** @type {(() => void) | null} Stops watching the changes; set while Changes is shown and connected. */
-  #unwatch = null;
 
   constructor() {
     super();
@@ -58,32 +36,6 @@ export class AcpFileColumn extends ViewElement {
     this.sideView = 'files';
     /** A Refresh of the tree is running. */
     this.refreshing = false;
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.#watchChanges(this.sideView === 'changes');
-  }
-
-  disconnectedCallback() {
-    this.#watchChanges(false);
-    super.disconnectedCallback();
-  }
-
-  /** @param {import('lit').PropertyValues<this>} changed */
-  willUpdate(changed) {
-    if (!changed.has('sideView')) return;
-    // Hidden panes do no work: Changes stops computing them (Search stops its own search).
-    this.#watchChanges(this.sideView === 'changes');
-  }
-
-  /** @param {boolean} watching */
-  #watchChanges(watching) {
-    if (watching && this.isConnected) this.#unwatch ??= git.watchChanges();
-    else if (!watching) {
-      this.#unwatch?.();
-      this.#unwatch = null;
-    }
   }
 
   /** Switches to Files. */
@@ -113,7 +65,7 @@ export class AcpFileColumn extends ViewElement {
     this.renderRoot.querySelector('acp-files-view')?.reveal(rel, options);
   }
 
-  /** Switches to Changes, which computes them while shown. */
+  /** Switches to Changes, which computes them while it is shown. */
   showChanges() {
     this.sideView = 'changes';
   }
@@ -129,34 +81,7 @@ export class AcpFileColumn extends ViewElement {
     }
   }
 
-  /** @param {Event} e */
-  async #onAmendStart(e) {
-    const panel = /** @type {HTMLElementTagNameMap['acp-changes-panel']} */ (e.target);
-    const rootId = this.#rootId.value;
-    const last = rootId ? await git.lastCommitMessage(rootId).catch(() => null) : null;
-    panel.fillAmendMessage(last);
-  }
-
-  /** @param {Event} e */
-  async #onCommit(e) {
-    const panel = /** @type {HTMLElementTagNameMap['acp-changes-panel']} */ (e.target);
-    const { paths, message, amend } = /** @type {CustomEvent<{ paths: string[], message: string, amend: boolean }>} */ (
-      e
-    ).detail;
-    try {
-      const { sha, summary } = await git.commit(paths, message, amend);
-      notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
-      panel.commitFinished(true);
-    } catch (err) {
-      // Not `app.reportError`: a hook's output may quote file contents, which stay out of the log.
-      app.log('warn', `${amend ? 'amend' : 'commit'} failed`);
-      notify('error', `Commit failed: ${err instanceof Error ? err.message : String(err)}`);
-      panel.commitFinished(false);
-    }
-  }
-
   render() {
-    const root = this.#workspace.value?.path ?? null;
     const tree = this.#treeRoot.value;
     return html`<acp-panel>
       <acp-panel-header
@@ -170,18 +95,9 @@ export class AcpFileColumn extends ViewElement {
       <acp-pane ?hidden=${this.sideView !== 'search'}>
         <acp-search-pane ?active=${this.sideView === 'search'}></acp-search-pane>
       </acp-pane>
-      <acp-changes-panel
-        class="acp-file-column__pane"
-        ?hidden=${this.sideView !== 'changes'}
-        .changes=${this.#gitChanges.value}
-        .repo=${this.#gitRepo.value}
-        .selection=${this.#commitSelection.value}
-        .root=${root}
-        @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
-        @acp-changes-refresh=${() => git.refreshChanges()}
-        @acp-amend-start=${this.#onAmendStart}
-        @acp-commit=${this.#onCommit}
-      ></acp-changes-panel>
+      <acp-pane ?hidden=${this.sideView !== 'changes'}>
+        <acp-git-changes ?active=${this.sideView === 'changes'}></acp-git-changes>
+      </acp-pane>
     </acp-panel>`;
   }
 }

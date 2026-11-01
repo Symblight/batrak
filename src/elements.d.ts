@@ -10,6 +10,7 @@ import type { AcpAgentCard } from './components/agent-card/agent-card.js';
 import type { AcpAgentIcon } from './components/agent-icon/agent-icon.js';
 import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
 import type { AcpAgentsTab } from './views/agents-tab/agents-tab.js';
+import type { AcpGitChanges } from './views/git-changes/git-changes.js';
 import type { AcpFilesView } from './views/files-view/files-view.js';
 import type { AcpChangesTab } from './views/changes-tab/changes-tab.js';
 import type { AcpSessionChangesTab } from './views/session-changes-tab/session-changes-tab.js';
@@ -81,6 +82,7 @@ declare global {
     'acp-agents-tab': AcpAgentsTab;
     'acp-changes-tab': AcpChangesTab;
     'acp-files-view': AcpFilesView;
+    'acp-git-changes': AcpGitChanges;
     'acp-session-changes-tab': AcpSessionChangesTab;
     'acp-search-pane': AcpSearchPane;
     'acp-search-view': AcpSearchView;
