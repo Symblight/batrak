@@ -54,6 +54,23 @@ describe('acp-tab-view', () => {
     expect(placeholder?.getAttribute('text')).to.equal('Not implemented yet.');
   });
 
+  it('puts what the host slots as actions at the end of the strip’s row', async () => {
+    // Arrange
+    const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+      await fixture(
+        html`<acp-tab-view .tabs=${[fileTab('/p/a.js')]} .active=${'/p/a.js'}><button slot="actions">+</button></acp-tab-view>`,
+      )
+    );
+
+    // Act
+    const strip = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('acp-tab-strip')).getBoundingClientRect();
+    const action = /** @type {HTMLElement} */ (el.querySelector('[slot="actions"]')).getBoundingClientRect();
+
+    // Assert
+    expect(action.width, 'shown').to.be.greaterThan(0);
+    expect(action.left, 'after the strip').to.be.at.least(strip.right - 1);
+  });
+
   it('shows what its host renders for a view tab, one panel per tab and only the active one shown', async () => {
     // Arrange
     const tabs = [

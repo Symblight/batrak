@@ -20,6 +20,7 @@ import styles from './tab-view.css?inline';
 /**
  * @tag acp-tab-view
  * @summary The main column's tabs: images, the Browser placeholder and whatever the host renders for the rest (code editors, views).
+ * @slot actions Buttons at the end of the strip's row (the terminal panel's add and hide).
  * @fires acp-tab-close `{ id, scope }` A `CloseScope` around the tab, unsaved edits and running programs already confirmed.
  * @fires acp-tab-save `{ id, force: true }` Write over the file although it changed on disk (asked first).
  * @fires acp-tab-reload `{ id }` Drop the tab's edits for the file on disk (asked first).
@@ -184,17 +185,20 @@ export class AcpTabView extends LitElement {
 
   render() {
     return html`
-      <acp-tab-strip
-        class="acp-tab-view__strip"
-        .tabs=${this.tabs}
-        .active=${this.active}
-        .pinned=${this.pinned}
-        .root=${this.root}
-        .worktrees=${this.worktrees}
-        .terminals=${this.terminals}
-        @acp-tab-activate=${() => (this.#pendingLine = null)}
-        @acp-tab-close-request=${this.#onCloseRequest}
-      ></acp-tab-strip>
+      <div class="acp-tab-view__header">
+        <acp-tab-strip
+          class="acp-tab-view__strip"
+          .tabs=${this.tabs}
+          .active=${this.active}
+          .pinned=${this.pinned}
+          .root=${this.root}
+          .worktrees=${this.worktrees}
+          .terminals=${this.terminals}
+          @acp-tab-activate=${() => (this.#pendingLine = null)}
+          @acp-tab-close-request=${this.#onCloseRequest}
+        ></acp-tab-strip>
+        <slot name="actions"></slot>
+      </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
       ${this.#confirm.render()}
     `;
