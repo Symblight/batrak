@@ -1,11 +1,13 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { sessions } from '../sessions.js';
+import { trackSeen } from '../seen.js';
 import { $agentList } from '../../../stores/agents/agents.js';
 import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
+import { $sessionReads, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
 /** @typedef {import('../types.js').Session} Session */
@@ -312,6 +314,44 @@ describe('sessions keeps the active session in its view', () => {
     expect($draftSessions.get()).to.have.property('d1');
     cliFails = null;
     expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(true);
+  });
+
+  it("forgets the read mark of a removed session and of one whose start was refused", async () => {
+    const seen = { seen: '2026-10-20T10:00:00.000Z' };
+    $sessions.set([session({ id: 's1', status: 'idle' })]);
+    $sessionReads.setKey('s1', seen);
+    await sessions.remove('s1');
+    expect($sessionReads.get().s1, 'removed').to.equal(undefined);
+
+    $draftSessions.set({ d1: '/p' });
+    $activeSessionId.set('d1');
+    setAgentView('claude', 'terminal');
+    cliFails = new Error('no npx');
+    $sessionReads.setKey('d1', seen);
+    try {
+      expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(false);
+      expect($sessionReads.get().d1, 'a draft again').to.equal(undefined);
+    } finally {
+      forgetRead('d1');
+    }
+  });
+
+  it('does not write the read mark of the shown session while it is being removed', async () => {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => 'visible' });
+    Object.defineProperty(document, 'hasFocus', { configurable: true, value: () => true });
+    $sessions.set([session({ id: 's1', status: 'idle' })]);
+    $activeSessionId.set('s1');
+    const stop = trackSeen();
+    try {
+      expect($sessionReads.get().s1, 'seen while shown').to.not.equal(undefined);
+      await sessions.remove('s1');
+      expect($sessionReads.get().s1, 'forgotten, not rewritten').to.equal(undefined);
+    } finally {
+      stop();
+      Reflect.deleteProperty(document, 'visibilityState');
+      Reflect.deleteProperty(document, 'hasFocus');
+      forgetRead('s1');
+    }
   });
 
   it("sends a draft's first message to the chat when its agent's CLI can't start a session", async () => {

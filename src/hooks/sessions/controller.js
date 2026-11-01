@@ -9,11 +9,12 @@ import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
 import { composerOf, forgetComposer, startComposer } from '../../stores/composer/composer.js';
 import { root } from './root.js';
+import { trackSeen } from './seen.js';
 import { poll, sync, syncAgentOf } from './sync.js';
 import { inTurn, isActiveElsewhere } from './rules.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
-import { recordBaselines } from '../../stores/session-read/session-read.js';
+import { forgetRead, recordBaselines } from '../../stores/session-read/session-read.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import {
@@ -63,6 +64,7 @@ const keptBusy = new Set();
 
 /** @returns {Promise<void>} */
 async function init() {
+  trackSeen();
   onSessionsSynced(({ projectPath, sessions, report }) => {
     endSync(projectPath, report);
     // Before the sessions: the baseline is what a session first seen in this list is judged against.
@@ -252,13 +254,22 @@ async function startInTerminal(id, title, prompt) {
     const session = $sessions.get().find((s) => s.id === id);
     if (session) openAll([session]);
   } catch (err) {
-    revertToDraft(id);
+    revertDraft(id);
     setSessionNotice(id, { kind: 'error', message: `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}` });
     return false;
   } finally {
     setCliStarting(id, false);
   }
   return true;
+}
+
+/**
+ * A session whose start was refused is a draft again, with no read mark.
+ * @param {string} id
+ */
+function revertDraft(id) {
+  revertToDraft(id);
+  forgetRead(id);
 }
 
 /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
@@ -366,7 +377,7 @@ function start(id, title) {
   const created = sessionCreate(request, onSessionEvent).then(
     (session) => upsertSession(session),
     (err) => {
-      revertToDraft(id);
+      revertDraft(id);
       setSessionNotice(id, { kind: 'error', message: err instanceof Error ? err.message : String(err) });
       throw err;
     },
@@ -407,6 +418,8 @@ async function remove(id) {
   if (worktree !== null) removeProjectExpandedFolders(worktree);
   opened.delete(id);
   removeSession(id);
+  // After it is unlisted: while it's shown and listed, dropping its mark would have it marked seen again.
+  forgetRead(id);
 }
 
 /**

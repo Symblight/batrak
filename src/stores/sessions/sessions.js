@@ -232,14 +232,17 @@ export function setSessionStatus(id, status) {
 }
 
 /**
- * A prompt went out or a turn ended; the backend stamps its record the same way.
+ * The backend stamped the session's activity (a prompt, output, a turn's end or failure). The later of
+ * the stamps is kept: two can arrive out of order. Times are compared as times, not strings.
  * @param {string} id Ignored unless it's a listed session.
- * @param {string} [at] ISO time, now by default.
+ * @param {string} at ISO time, the backend's stamp.
  */
-export function touchSession(id, at = new Date().toISOString()) {
+export function touchSession(id, at) {
   const sessions = $sessions.get();
-  if (sessions.some((s) => s.id === id))
-    $sessions.set(sessions.map((s) => (s.id === id ? { ...s, lastActivityAt: at } : s)));
+  const session = sessions.find((s) => s.id === id);
+  const time = Date.parse(at);
+  if (!session || Number.isNaN(time) || Date.parse(session.lastActivityAt) >= time) return;
+  $sessions.set(sessions.map((s) => (s === session ? { ...s, lastActivityAt: at } : s)));
 }
 
 /**

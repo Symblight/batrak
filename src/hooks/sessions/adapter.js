@@ -220,9 +220,12 @@ export function handleSessionEvent(event) {
       if (turn) turn.started = true;
       return;
     }
+    case 'activity':
+      touchSession(sessionId, event.payload.at);
+      return;
     case 'turn-end':
       loaded.add(sessionId);
-      touchSession(sessionId);
+      touchSession(sessionId, event.payload.at);
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
       if ($sessionNotices.get()[sessionId]?.kind === 'overlap') dismissSessionNotice(sessionId);
@@ -283,6 +286,7 @@ export function handleSessionEvent(event) {
     }
     case 'error':
       if (event.payload.turn) {
+        touchSession(sessionId, event.payload.at);
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.
         stopped.delete(sessionId);
         clearPermissionRequests(sessionId);
@@ -395,8 +399,7 @@ export const acpAdapter = {
       { once: true },
     );
     try {
-      await sessionSendPrompt(sessionId, prompt);
-      touchSession(sessionId);
+      touchSession(sessionId, await sessionSendPrompt(sessionId, prompt));
     } catch (err) {
       if (turns.get(sessionId) === turn) turns.delete(sessionId);
       throw err;

@@ -105,11 +105,18 @@ describe('sessions', () => {
     expect([session.titleSource, session.agentTitle]).to.deep.equal(['prompt', null]);
   });
 
-  it('marks a session active now', () => {
+  it("stamps a session with the backend's time, keeping the later of two that arrive out of order", () => {
     const id = newSession('/p');
     startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
     touchSession(id, '2099-01-01T00:00:00.000Z');
     expect($sessions.get()[0].lastActivityAt).to.equal('2099-01-01T00:00:00.000Z');
+    touchSession(id, '2098-12-31T23:59:59.999Z');
+    expect($sessions.get()[0].lastActivityAt, 'an earlier stamp').to.equal('2099-01-01T00:00:00.000Z');
+    // Later as a time though smaller as a string.
+    touchSession(id, '2099-01-01T03:00:00.000+02:00');
+    expect($sessions.get()[0].lastActivityAt).to.equal('2099-01-01T03:00:00.000+02:00');
+    touchSession(id, 'not a time');
+    expect($sessions.get()[0].lastActivityAt).to.equal('2099-01-01T03:00:00.000+02:00');
   });
 
   it('pins and unpins a session, and forgets the pin of a removed one', () => {

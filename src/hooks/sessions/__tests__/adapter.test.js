@@ -6,7 +6,11 @@ import { $returnedPrompts, takeReturnedPrompt } from '../../../stores/chat/chat.
 import { $sessions, newSession, startSession } from '../../../stores/sessions/sessions.js';
 import { $sessionNotices, dismissSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
 import { $awaitingTrust } from '../../../stores/trust/trust.js';
+import { $sessionReads, $unreadSessions, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $contextUsage, forgetContextUsage } from '../../../stores/context-usage/context-usage.js';
+
+/** A backend stamp. */
+const AT = '2026-10-20T10:00:00.000Z';
 
 describe('acp-adapter', () => {
   afterEach(() => $sessions.set([]));
@@ -149,7 +153,7 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 4, kind: 'status', payload: { status: 'waiting' } });
     handleSessionEvent({ sessionId: id, seq: 5, kind: 'status', payload: { status: 'working' } });
     expect($sessionNotices.get()[id]?.kind, 'through the turn').to.equal('overlap');
-    handleSessionEvent({ sessionId: id, seq: 6, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    handleSessionEvent({ sessionId: id, seq: 6, kind: 'turn-end', payload: { stopReason: 'end_turn', at: AT } });
     expect($sessionNotices.get()[id] ?? null).to.equal(null);
   });
 
@@ -162,14 +166,14 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'turn-start', payload: {} });
     handleSessionEvent({ sessionId: id, seq: 3, kind: 'overlap', payload: overlap });
     expect($sessionNotices.get()[id]?.kind).to.equal('overlap');
-    handleSessionEvent({ sessionId: id, seq: 4, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    handleSessionEvent({ sessionId: id, seq: 4, kind: 'turn-end', payload: { stopReason: 'end_turn', at: AT } });
     expect($sessionNotices.get()[id]).to.deep.equal(outdated);
 
     handleSessionEvent({ sessionId: id, seq: 5, kind: 'turn-start', payload: {} });
     handleSessionEvent({ sessionId: id, seq: 6, kind: 'overlap', payload: overlap });
     handleSessionEvent({ sessionId: id, seq: 7, kind: 'agent-outdated', payload: { message: null } });
     expect($sessionNotices.get()[id]?.kind, 'the overlap stays').to.equal('overlap');
-    handleSessionEvent({ sessionId: id, seq: 8, kind: 'turn-end', payload: { stopReason: 'end_turn' } });
+    handleSessionEvent({ sessionId: id, seq: 8, kind: 'turn-end', payload: { stopReason: 'end_turn', at: AT } });
     expect($sessionNotices.get()[id] ?? null, 'changed back meanwhile').to.equal(null);
 
     handleSessionEvent({ sessionId: id, seq: 9, kind: 'turn-start', payload: {} });
@@ -178,6 +182,53 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id]?.kind, 'the overlap stays').to.equal('overlap');
     dismissSessionNotice(id);
     expect($sessionNotices.get()[id], 'dismissed, what it covered').to.deep.equal(outdated);
+  });
+
+  it("stamps a session with the backend's times: prompt sent, output, a turn's end and a failed turn", async () => {
+    const stamp = (/** @type {number} */ s) => `2026-10-20T10:00:${String(s).padStart(2, '0')}.000Z`;
+    mockIPC((cmd) => (cmd === 'session_send_prompt' ? stamp(1) : null));
+    try {
+      const id = 's-stamps';
+      $sessions.set([/** @type {import('../types.js').Session} */ ({ id, projectId: '/p', agentId: 'a', status: 'idle', title: 'T', lastActivityAt: stamp(0) })]);
+      const stamped = () => $sessions.get()[0].lastActivityAt;
+      let seq = 0;
+      const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+        handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+      await acpAdapter.sendMessage?.(
+        /** @type {Parameters<NonNullable<typeof acpAdapter.sendMessage>>[0]} */ (
+          /** @type {unknown} */ ({ id: 'm', conversationId: id, parts: [{ type: 'text', text: 'hello' }] })
+        ),
+        { signal: new AbortController().signal },
+      );
+      expect(stamped(), 'the prompt').to.equal(stamp(1));
+      send('activity', { at: stamp(2) });
+      expect(stamped(), 'output').to.equal(stamp(2));
+      send('activity', { at: stamp(1) });
+      expect(stamped(), 'a stamp that arrives late is not newer').to.equal(stamp(2));
+      send('turn-end', { stopReason: 'end_turn', at: stamp(3) });
+      expect(stamped(), "a turn's end").to.equal(stamp(3));
+      send('error', { message: 'The agent crashed', turn: true, at: stamp(4) });
+      expect(stamped(), 'a failed turn').to.equal(stamp(4));
+      send('error', { message: 'Could not start' });
+      expect(stamped(), 'an error outside a turn has no stamp').to.equal(stamp(4));
+    } finally {
+      clearMocks();
+    }
+  });
+
+  it("does not mark a session unread at a turn's end: its stamp alone decides", () => {
+    const id = 's-turn-end';
+    const seen = '2026-10-20T10:00:00.000Z';
+    $sessions.set([/** @type {import('../types.js').Session} */ ({ id, projectId: '/p', agentId: 'a', status: 'working', title: 'T', lastActivityAt: seen })]);
+    $sessionReads.setKey(id, { seen });
+    try {
+      handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-end', payload: { stopReason: 'end_turn', at: '2026-10-20T10:00:01.000Z' } });
+      expect($unreadSessions.get(), 'inside the slack of what the user saw').to.deep.equal([]);
+      handleSessionEvent({ sessionId: id, seq: 2, kind: 'turn-end', payload: { stopReason: 'end_turn', at: '2026-10-20T10:01:00.000Z' } });
+      expect($unreadSessions.get()).to.deep.equal([id]);
+    } finally {
+      forgetRead(id);
+    }
   });
 
   it("keeps a running session's context usage, without its cost", () => {
@@ -245,7 +296,7 @@ describe('acp-adapter', () => {
         send('status', { status: 'idle' });
         send('turn-start', {});
         send('update', text('Hello'));
-        send('turn-end', { stopReason: 'end_turn' });
+        send('turn-end', { stopReason: 'end_turn', at: AT });
 
         const reader = /** @type {ReadableStream} */ (stream).getReader();
         const texts = [];
