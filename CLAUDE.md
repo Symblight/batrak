@@ -79,9 +79,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
   `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`,
-  `ContextMenuController`, `TabContentController`. `models/` stays pure (no stores, no services):
-  shared pure helpers live there (`config-options.js`), not in a
-  store module.
+  `ContextMenuController`, `TabContentController`. Shared pure helpers are rules of a hook
+  (`composer.configOf()`), not of a store module.
 
 ### Global state
 

@@ -11,7 +11,7 @@ import checklistIcon from '@material-design-icons/svg/outlined/checklist.svg?raw
 import handIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import shieldIcon from '@material-design-icons/svg/outlined/shield.svg?raw';
 import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
-import { configOf } from '../../models/config-options/config-options.js';
+import { composer } from '../../hooks/composer/composer.js';
 import styles from './mode-picker.css?inline';
 
 /** @typedef {import('../../models/types/types.js').ConfigOptionValue} ConfigOptionValue */
@@ -93,7 +93,7 @@ export class AcpModePicker extends LitElement {
   };
 
   render() {
-    const mode = configOf(this.options, 'mode');
+    const mode = composer.configOf(this.options, 'mode');
     const permissions = this.options.filter((o) => o.category === 'permissions');
     // With no mode, the first permissions option names the chip.
     const chip = mode ?? permissions[0];

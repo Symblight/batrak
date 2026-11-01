@@ -1,7 +1,7 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from '../ipc/ipc.js';
-import { fenceCode } from '../../models/chat-parts/chat-parts.js';
+import { chat } from '../../hooks/chat/chat.js';
 import { inputOfMessage, linesOf } from '../../models/session-input/session-input.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
@@ -520,7 +520,7 @@ export function promptOfInput(parts) {
     if (part.kind === 'text') {
       text += part.text;
     } else if (part.kind === 'paste') {
-      text += part.lang === null ? part.text : fenceCode(part.text, part.lang);
+      text += part.lang === null ? part.text : chat.fenceCode(part.text, part.lang);
     } else if (part.kind === 'command') {
       text += `/${part.name}`;
     } else if (part.kind === 'selection') {

@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { fenceCode, splitFencedCode } from '../chat-parts.js';
+import { fenceCode, splitFencedCode } from '../parts.js';
 
 describe('splitFencedCode', () => {
   it('splits a sent prompt back into its text and code parts', () => {

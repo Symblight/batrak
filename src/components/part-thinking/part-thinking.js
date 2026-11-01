@@ -5,7 +5,7 @@ import '@symblight/wc-material/icon';
 import thoughtIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
 import stoppedIcon from '@material-design-icons/svg/outlined/pause_circle.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import { formatElapsed, splitThought } from '../../models/thinking/thinking.js';
+import { chat } from '../../hooks/chat/chat.js';
 import styles from './part-thinking.css?inline';
 
 /** @typedef {'streaming' | 'done' | 'stopped'} ThinkingStatus */
@@ -137,9 +137,9 @@ export class AcpPartThinking extends LitElement {
   }
 
   render() {
-    const { title, body } = splitThought(this.text);
+    const { title, body } = chat.splitThought(this.text);
     const elapsed = this.#elapsed;
-    const [label, time] = this.#heading(title, elapsed === null ? '' : formatElapsed(elapsed));
+    const [label, time] = this.#heading(title, elapsed === null ? '' : chat.formatElapsed(elapsed));
     const streaming = this.status === 'streaming';
     const peeking = !this.open && this.peek && (streaming || this.#holding);
     const expandable = body.trim() !== '';

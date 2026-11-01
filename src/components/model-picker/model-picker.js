@@ -7,7 +7,7 @@ import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import arrowIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
 import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw';
-import { configOf, currentName } from '../../models/config-options/config-options.js';
+import { composer } from '../../hooks/composer/composer.js';
 import styles from './model-picker.css?inline';
 
 /** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
@@ -98,15 +98,15 @@ export class AcpModelPicker extends LitElement {
     const shown = this.#shown;
     const empty = this.#emptyState();
     if (!shown.length && !empty) return nothing;
-    const modelOption = configOf(shown, 'model');
-    const levelOption = configOf(shown, 'thought_level');
+    const modelOption = composer.configOf(shown, 'model');
+    const levelOption = composer.configOf(shown, 'thought_level');
     // An agent with neither a model nor a level: its first option's value names the button.
-    const model = currentName(modelOption ?? (levelOption ? null : shown[0] ?? null));
-    const level = currentName(levelOption);
+    const model = composer.currentName(modelOption ?? (levelOption ? null : shown[0] ?? null));
+    const level = composer.currentName(levelOption);
     const hint =
       empty?.hint ??
       shown
-        .map((o) => [o.name, currentName(o)])
+        .map((o) => [o.name, composer.currentName(o)])
         .filter(([, v]) => v)
         .map(([name, v]) => `${name}: ${v}`)
         .join(' · ');

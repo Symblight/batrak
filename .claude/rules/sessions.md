@@ -6,6 +6,7 @@ paths:
   - "src-tauri/src/commands/sessions.rs"
   - "src/services/{session-controller,session-root-controller,adapter,session-input}/**"
   - "src/models/{session-input,cli-input}/**"
+  - "src/hooks/{chat,composer}/**"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
@@ -113,7 +114,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   drops, which Rust records from the drag-drop event (`DroppedFiles`). A drop while the composer
   isn't up waits for it (`$pendingInput`, see "Session input").
   `ChatPartsController` (`src/controllers/chat-parts/`) renders every message part; file refs
-  (`models/file-refs/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
+  (`chat.parseFileRef()`, `hooks/chat/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
   and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
   `acp-file-open` (`<acp-app>` opens the tab and selects the file in the tree, expanding its folders);
   a folder's (a folder chip, or a ref the project lists as a folder, like `@.brama`) fires

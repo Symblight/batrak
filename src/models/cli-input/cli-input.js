@@ -1,4 +1,4 @@
-import { fenceCode } from '../chat-parts/chat-parts.js';
+import { chat } from '../../hooks/chat/chat.js';
 import { relPath } from '../../hooks/projects/rules.js';
 import { inputOfInserts, linesOf } from '../session-input/session-input.js';
 
@@ -16,7 +16,7 @@ export function cliPromptOf(parts, root) {
   let text = '';
   for (const part of parts) {
     if (part.kind === 'text') text += part.text;
-    else if (part.kind === 'paste') text += part.lang === null ? part.text : fenceCode(part.text, part.lang);
+    else if (part.kind === 'paste') text += part.lang === null ? part.text : chat.fenceCode(part.text, part.lang);
     else if (part.kind === 'ref') text += `@${pathOf(part.path)}${part.folder ? '/' : ''}`;
     else if (part.kind === 'selection') text += `@${pathOf(part.path)}#L${linesOf(part)}${part.body ? ` ${part.body}` : ''}`;
     else if (part.kind === 'command') text += `/${part.name}`;

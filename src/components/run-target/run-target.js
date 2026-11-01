@@ -10,7 +10,7 @@ import containerIcon from '@material-design-icons/svg/outlined/inventory_2.svg?r
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
-import { configOf } from '../../models/config-options/config-options.js';
+import { composer } from '../../hooks/composer/composer.js';
 import styles from './run-target.css?inline';
 
 /** @typedef {import('../../models/types/types.js').RunTargetKind} RunTargetKind */
@@ -125,7 +125,7 @@ export class AcpRunTarget extends LitElement {
     const kind = KINDS.find((k) => k.kind === runTarget.kind) ?? KINDS[0];
     const label = kind.kind === 'worktree' && started ? 'Worktree' : kind.label;
     const branch = runTarget.branch ?? this.currentBranch;
-    const mode = configOf(configOptions, 'mode');
+    const mode = composer.configOf(configOptions, 'mode');
     // Its risk, which the backend tagged it with (the agent's crate knows its modes).
     const fullAccess = mode?.options.find((v) => v.value === mode.currentValue)?.risk === 'full';
     const note = fullAccess

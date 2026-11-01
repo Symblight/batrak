@@ -1,5 +1,5 @@
 import { splitMessageParts } from '@symblight/chat';
-import { MESSAGE_PART_RULES } from '../chat-parts/chat-parts.js';
+import { chat } from '../../hooks/chat/chat.js';
 
 /** @typedef {import('../types/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../types/types.js').InputPart} InputPart */
@@ -64,7 +64,7 @@ export function inputOfParts(parts) {
  */
 export function inputOfMessage(message) {
   const flat = message.parts.length === 1 && typeof message.parts[0].html === 'string' ? message.parts[0] : null;
-  return inputOfParts((flat && splitMessageParts(message.id, flat.html ?? '', MESSAGE_PART_RULES)) ?? message.parts);
+  return inputOfParts((flat && splitMessageParts(message.id, flat.html ?? '', chat.MESSAGE_PART_RULES)) ?? message.parts);
 }
 
 /**
@@ -76,7 +76,7 @@ export function inputOfMessage(message) {
  * @returns {SessionInput}
  */
 export function inputOfComposer(id, html, files) {
-  const parts = splitMessageParts(id, html, MESSAGE_PART_RULES) ?? [{ type: 'text', html, text: plainText(html) }];
+  const parts = splitMessageParts(id, html, chat.MESSAGE_PART_RULES) ?? [{ type: 'text', html, text: plainText(html) }];
   return { parts: inputOfParts(/** @type {ChxMessagePart[]} */ (parts)), files: [...files] };
 }
 

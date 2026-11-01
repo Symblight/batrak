@@ -13,7 +13,7 @@ import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?r
 import { fileIcon } from '../file-icon/file-icon.js';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
-import { MESSAGE_PART_RULES } from '../../models/chat-parts/chat-parts.js';
+import { chat } from '../../hooks/chat/chat.js';
 import '../agent-picker/agent-picker.js';
 import '../context-meter/context-meter.js';
 import '../mode-picker/mode-picker.js';
@@ -54,7 +54,7 @@ import '../session-banner/session-banner.js';
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 
 // Sends arrive as one flat html part; re-split them so chips and pastes keep their own renderers.
-const splitOnSend = createSplitOnSendHandler(MESSAGE_PART_RULES);
+const splitOnSend = createSplitOnSendHandler(chat.MESSAGE_PART_RULES);
 
 /**
  * @param {string} value
