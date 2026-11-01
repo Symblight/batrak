@@ -127,28 +127,3 @@
   font-size: 10px;
   line-height: 1;
 }
-/* Show Hidden Tabs: outside the scroller, so never faded or scrolled away. */
-.acp-tab-strip__overflow {
-  flex: none;
-  margin-inline-end: var(--acp-space-1);
-  --md-icon-button-font-size: var(--acp-icon-size-md);
-}
-.acp-tab-strip__overflow-icon {
-  font-size: var(--acp-icon-size-md);
-}
-.acp-tab-strip__overflow-menu {
-  --md-menu-min-width: 12rem;
-  --md-menu-max-height: 24rem;
-  --md-menu-shape: var(--acp-shape-corner-small);
-}
-/* Dense rows, like the IDE's popups. */
-.acp-tab-strip__overflow-item {
-  --md-menu-item-min-block-size: 1.375rem;
-  --md-menu-item-padding-block: 0;
-  --md-menu-item-padding-inline: var(--acp-space-1-5);
-  --md-menu-item-label-text-size: var(--acp-font-size-sm);
-  --md-menu-item-label-text-line-height: 1.375rem;
-  --md-menu-item-leading-icon-size: var(--acp-icon-size-xs);
-
-  margin-inline: var(--acp-space-0-5);
-}

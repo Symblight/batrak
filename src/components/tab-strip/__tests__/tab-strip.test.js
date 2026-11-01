@@ -122,9 +122,10 @@ describe('acp-tab-strip', () => {
       const root = /** @type {ShadowRoot} */ (el.shadowRoot);
       const strip = /** @type {HTMLElement} */ (root.querySelector('.acp-tab-strip__scroller'));
       strip.style.scrollBehavior = 'auto';
-      const button = () => /** @type {HTMLElement | null} */ (root.querySelector('.acp-tab-strip__overflow'));
-      const menu = () => /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-tab-strip__overflow-menu'));
-      const rows = () => [...menu().querySelectorAll('.acp-tab-strip__overflow-item')];
+      const overflow = () => /** @type {ShadowRoot} */ (/** @type {HTMLElement} */ (root.querySelector('acp-tab-overflow')).shadowRoot);
+      const button = () => /** @type {HTMLElement | null} */ (overflow().querySelector('.acp-tab-overflow__button'));
+      const menu = () => /** @type {HTMLElementTagNameMap['md-menu']} */ (overflow().querySelector('.acp-tab-overflow__menu'));
+      const rows = () => [...menu().querySelectorAll('.acp-tab-overflow__item')];
       const listed = () => rows().map((r) => r.getAttribute('value'));
       const open = async () => {
         /** @type {HTMLElement} */ (button()).click();
@@ -140,7 +141,7 @@ describe('acp-tab-strip', () => {
       /** @param {string} id */
       const closeRow = (id) =>
         /** @type {HTMLElement} */ (
-          menu().querySelector(`.acp-tab-strip__overflow-item[value="${CSS.escape(id)}"] .acp-tab-strip__overflow-close`)
+          menu().querySelector(`.acp-tab-overflow__item[value="${CSS.escape(id)}"] .acp-tab-overflow__close`)
         ).click();
       return { el, root, strip, button, menu, rows, listed, open, listen, closeRow };
     }

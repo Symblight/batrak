@@ -8,7 +8,6 @@ import { ifDefined } from 'lit/directives/if-defined.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/tabs';
 import '@symblight/wc-material/icon';
-import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import '@symblight/wc-material/tooltip';
@@ -20,8 +19,8 @@ import smartToyIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw'
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
-import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import '../file-icon/file-icon.js';
+import '../tab-overflow/tab-overflow.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { SortableController } from '../../controllers/sortable/SortableController.js';
 import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflowController.js';
@@ -88,7 +87,7 @@ export class AcpTabStrip extends LitElement {
     clearTimeout(this.#returnTimer);
     this.#returnTimer = setTimeout(() => {
       const strip = this.renderRoot.querySelector('.acp-tab-strip__scroller');
-      if (strip?.matches(':hover') || this.#sortable.dragging !== null || this.#overflowMenu?.open) return;
+      if (strip?.matches(':hover') || this.#sortable.dragging !== null || this.#overflowList?.open) return;
       this.#revealActiveTab('instant');
     }, RETURN_DELAY_MS);
   };
@@ -107,65 +106,10 @@ export class AcpTabStrip extends LitElement {
     fade: '--_acp-tab-strip-fade',
     paused: () => this.#sortable.dragging !== null,
   });
-  /** @type {{ id: string, index: number } | null} A row Delete closed: once it's gone, the row now at its index takes the focus. */
-  #refocus = null;
-
-  /** @returns {HTMLElementTagNameMap['md-menu'] | null} */
-  get #overflowMenu() {
-    return this.renderRoot.querySelector('.acp-tab-strip__overflow-menu');
+  /** @returns {HTMLElementTagNameMap['acp-tab-overflow'] | null} */
+  get #overflowList() {
+    return this.renderRoot.querySelector('acp-tab-overflow');
   }
-
-  /** The button opens the list under itself, the active row (or the first) focused, and closes it when open. */
-  #onOverflowClick = async (/** @type {Event} */ e) => {
-    const menu = this.#overflowMenu;
-    const button = /** @type {HTMLElement} */ (e.currentTarget);
-    if (!menu) return;
-    if (menu.open) {
-      await menu.close();
-      return;
-    }
-    menu.anchorElement = button;
-    await menu.show();
-    menu.focusSelectedItem();
-  };
-
-  /** ArrowDown on the button opens the list, like Enter and Space. */
-  #onOverflowKeydown = (/** @type {KeyboardEvent} */ e) => {
-    if (e.key !== 'ArrowDown' || this.#overflowMenu?.open) return;
-    e.preventDefault();
-    /** @type {HTMLElement} */ (e.currentTarget).click();
-  };
-
-  #onOverflowSelect = (/** @type {Event} */ e) => {
-    if (e.target !== e.currentTarget) return; // the item's own `select`; the menu dispatches it again
-    this.#emit('acp-tab-activate', { id: /** @type {CustomEvent<{ value: string }>} */ (e).detail.value });
-  };
-
-  /** Delete or Backspace on a row closes its tab, the menu staying open. */
-  #onOverflowMenuKeydown = (/** @type {KeyboardEvent} */ e) => {
-    if (e.key !== 'Delete' && e.key !== 'Backspace') return;
-    const row = e
-      .composedPath()
-      .find(/** @returns {n is HTMLElement} */ (n) => n instanceof HTMLElement && n.classList.contains('acp-tab-strip__overflow-item'));
-    const id = row?.getAttribute('value');
-    if (!row || !id) return;
-    e.preventDefault();
-    e.stopPropagation();
-    this.#refocus = { id, index: [...(row.parentElement?.children ?? [])].indexOf(row) };
-    this.#closeOrUnpin(id);
-  };
-
-  #onOverflowOpening = () => {
-    const menu = this.#overflowMenu;
-    if (menu) ContextMenuController.showOnly(menu);
-    this.requestUpdate(); // the button's aria-expanded
-  };
-
-  #onOverflowClosed = () => {
-    this.#refocus = null;
-    this.requestUpdate();
-    this.#scheduleReturn();
-  };
 
   constructor() {
     super();
@@ -204,29 +148,9 @@ export class AcpTabStrip extends LitElement {
   /** @param {import('lit').PropertyValues<this>} changed */
   updated(changed) {
     if (changed.has('tabs') || changed.has('pinned')) this.#overflow.schedule();
-    this.#updateOverflowMenu();
     if (!this.#activeChanged) return;
     this.#activeChanged = false;
     this.#revealActiveTab();
-  }
-
-  /** Closes the list once no row is left, and moves the focus off a row Delete closed. */
-  #updateOverflowMenu() {
-    const menu = this.#overflowMenu;
-    if (!menu?.open) return;
-    const rows = /** @type {HTMLElementTagNameMap['md-menu-item'][]} */ ([
-      ...menu.querySelectorAll('.acp-tab-strip__overflow-item'),
-    ]);
-    if (!rows.length) {
-      menu.close();
-      return;
-    }
-    const refocus = this.#refocus;
-    if (refocus === null || rows.some((r) => r.getAttribute('value') === refocus.id)) return;
-    this.#refocus = null;
-    const row = rows[Math.min(refocus.index, rows.length - 1)];
-    rows.forEach((r) => r.setTabIndex(r === row ? 0 : -1));
-    row.focusInteractive();
   }
 
   /**
@@ -409,76 +333,28 @@ export class AcpTabStrip extends LitElement {
     </md-menu>`;
   }
 
-  /** Show Hidden Tabs: only while the tabs overflow the strip. */
-  #renderOverflowButton() {
-    if (!this.#overflow.overflowing) return nothing;
-    return html`<md-icon-button
-        id="overflow"
-        class="acp-tab-strip__overflow"
-        aria-label="Show Hidden Tabs"
-        aria-haspopup="menu"
-        aria-expanded=${this.#overflowMenu?.open ? 'true' : 'false'}
-        @click=${this.#onOverflowClick}
-        @keydown=${this.#onOverflowKeydown}
-        ><md-icon class="acp-tab-strip__overflow-icon">${unsafeSVG(expandMoreIcon)}</md-icon></md-icon-button
-      >
-      <md-tooltip class="acp-tab-strip__tooltip" for="overflow" placement="bottom" show-delay="800">Show Hidden Tabs</md-tooltip>`;
-  }
-
-  /** The tabs out of the strip's view, in strip order. */
-  #renderOverflowMenu() {
+  /** Show Hidden Tabs: the tabs out of the strip's view, in strip order. */
+  #renderOverflow() {
     const hidden = new Set(this.#overflow.hidden);
-    return html`<md-menu
-      class="acp-tab-strip__overflow-menu"
-      aria-label="Hidden Tabs"
-      placement="bottom-end"
-      focus-on-open="selected"
-      @opening=${this.#onOverflowOpening}
-      @closed=${this.#onOverflowClosed}
-      @select=${this.#onOverflowSelect}
-      @keydown=${this.#onOverflowMenuKeydown}
-    >
-      ${repeat(
-        this.tabs.filter((t) => hidden.has(t.id)),
-        (t) => t.id,
-        (t) => this.#renderOverflowItem(t),
-      )}
-    </md-menu>`;
-  }
-
-  /** @param {EditorTab} tab */
-  #renderOverflowItem(tab) {
-    const { title, icon, file, tooltip } = this.#describe(tab);
-    const pinned = this.#isPinned(tab.id);
-    // Tooltips sit in the trailing slot: the default slot's text is the item's typeahead label.
-    const id = `overflow-${tab.id.replace(/[^\w-]/g, (c) => `_${c.charCodeAt(0).toString(16)}_`)}`;
-    return html`<md-menu-item
-      id=${id}
-      class="acp-tab-strip__overflow-item"
-      value=${tab.id}
-      ?selected=${tab.id === this.active}
-    >
-      ${this.#renderIcon(icon, file, 'leading')}
-      <span class=${classMap({ 'acp-tab-strip__overflow-title': true, 'acp-tab-strip__label_deleted': tab.deletedOnDisk })}
-        >${title}</span
-      >${tab.draft !== null ? html`<span id="${id}-unsaved" class="acp-tab-strip__unsaved">●</span>` : nothing}
-      <span
-        id="${id}-close"
-        slot="trailing"
-        class="acp-tab-strip__close acp-tab-strip__overflow-close"
-        role="button"
-        aria-label="${pinned ? 'Unpin' : 'Close'} ${title}"
-        @click=${(/** @type {Event} */ e) => this.#onCloseClick(e, tab.id)}
-        ><md-icon class="acp-tab-strip__close-icon">${unsafeSVG(pinned ? pushPinIcon : closeIcon)}</md-icon></span
-      >
-      <md-tooltip slot="trailing" class="acp-tab-strip__tooltip" for=${id} placement="right" show-delay="800"
-        >${tooltip}</md-tooltip
-      >
-      ${tab.draft !== null
-        ? html`<md-tooltip slot="trailing" for="${id}-unsaved" placement="top" show-delay="800">Unsaved changes</md-tooltip>`
-        : nothing}
-      <md-tooltip slot="trailing" for="${id}-close" placement="top" show-delay="800">${pinned ? 'Unpin' : 'Close'}</md-tooltip>
-    </md-menu-item>`;
+    const items = this.tabs
+      .filter((t) => hidden.has(t.id))
+      .map((tab) => {
+        const { title, icon, file, tooltip } = this.#describe(tab);
+        return { id: tab.id, title, icon, file, tooltip, pinned: this.#isPinned(tab.id), unsaved: tab.draft !== null, deleted: tab.deletedOnDisk };
+      });
+    return html`<acp-tab-overflow
+      .items=${items}
+      .active=${this.active}
+      .visible=${this.#overflow.overflowing}
+      @acp-tab-overflow-close=${(/** @type {CustomEvent<{ id: string }>} */ e) => {
+        e.stopPropagation();
+        this.#closeOrUnpin(e.detail.id);
+      }}
+      @acp-tab-overflow-closed=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        this.#scheduleReturn();
+      }}
+    ></acp-tab-overflow>`;
   }
 
   render() {
@@ -498,7 +374,7 @@ export class AcpTabStrip extends LitElement {
           ${repeat(this.tabs, (t) => t.id, (t) => this.#renderTab(t))}
         </md-tabs>
       </div>
-      ${this.#renderOverflowButton()} ${this.#renderMenu()} ${this.#renderOverflowMenu()}`;
+      ${this.#renderOverflow()} ${this.#renderMenu()}`;
   }
 }
 

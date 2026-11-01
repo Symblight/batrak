@@ -21,6 +21,7 @@ import type { AcpChat } from './components/chat/chat.js';
 import type { AcpImagePreview } from './components/image-preview/image-preview.js';
 import type { AcpMarkdown } from './components/markdown/markdown.js';
 import type { AcpCodeView } from './components/code-view/code-view.js';
+import type { AcpTabOverflow } from './components/tab-overflow/tab-overflow.js';
 import type { AcpTabStrip } from './components/tab-strip/tab-strip.js';
 import type { AcpTabView } from './components/tab-view/tab-view.js';
 import type { AcpMainColumn } from './views/main-column/main-column.js';
@@ -82,6 +83,7 @@ declare global {
     'acp-context-meter': AcpContextMeter;
     'acp-image-preview': AcpImagePreview;
     'acp-markdown': AcpMarkdown;
+    'acp-tab-overflow': AcpTabOverflow;
     'acp-tab-strip': AcpTabStrip;
     'acp-tab-view': AcpTabView;
     'acp-main-column': AcpMainColumn;
