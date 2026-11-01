@@ -6,11 +6,10 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
 import { composedContains } from '../../models/file-drop/file-drop.js';
-import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
-import { terminalController } from '../../services/terminals/terminals.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
@@ -154,7 +153,7 @@ export class AcpMainColumn extends ViewElement {
   #onFileDrop = (/** @type {Event} */ e) => {
     const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
     const terminal = this.#ownTerminal(target);
-    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(shellPaths(paths, app.platform));
+    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(terminals.shellPaths(paths, app.platform));
   };
 
   connectedCallback() {
@@ -301,8 +300,8 @@ export class AcpMainColumn extends ViewElement {
         .rootId=${this.#rootId.value}
         .listDir=${listDir}
         .terminals=${this.#terminals.value}
-        .terminalConnect=${terminalController.connect}
-        .terminalBusy=${terminalController.busy}
+        .terminalConnect=${terminals.connect}
+        .terminalBusy=${terminals.busy}
         .droppingTerminal=${this.#ownTerminal(this.#fileDropTarget.value)?.terminalId ?? null}
         .worktrees=${this.#worktrees.value}
         .sessionReview=${this.#sessionReview.view}
@@ -342,7 +341,7 @@ export class AcpMainColumn extends ViewElement {
         @acp-terminal-copy=${(/** @type {CustomEvent<{ text: string }>} */ e) =>
           app.copy(e.detail.text, 'Copying failed')}
         @acp-terminal-restart=${(/** @type {CustomEvent<{ terminalId: string }>} */ e) =>
-          terminalController.restart(e.detail.terminalId)}
+          terminals.restart(e.detail.terminalId)}
         @acp-terminal-title=${(/** @type {CustomEvent<{ terminalId: string, title: string }>} */ e) =>
           setTerminalTitle(e.detail.terminalId, e.detail.title)}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>

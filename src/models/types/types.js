@@ -632,7 +632,7 @@
  */
 
 /**
- * The stream between a terminal view and its shell (`connect()` in `services/terminals.js`).
+ * The stream between a terminal view and its shell (`terminals.connect()`, `hooks/terminals/`).
  * @typedef {Object} TerminalLink
  * @property {(data: string | Uint8Array) => void} write Input for the shell: typed text, or raw bytes.
  * @property {(cols: number, rows: number) => void} resize

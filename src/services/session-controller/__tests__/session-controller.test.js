@@ -6,6 +6,7 @@ import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $terminals, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
+import { $workspace } from '../../../stores/workspace/workspace.js';
 
 /** @typedef {import('../../../models/types/types.js').Session} Session */
 
@@ -39,6 +40,7 @@ describe('sessionController views', () => {
     $draftSessions.set({});
     $sessions.set([]);
     $historyResets.set([]);
+    $workspace.set(null);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
     clearMocks();
   });
@@ -54,6 +56,29 @@ describe('sessionController views', () => {
     expect(sessionTerminalOf('s1')).to.equal('t-cli');
     expect($terminals.get()['t-cli']).to.include({ status: 'running', sessionId: 's1', cwd: '/p/sub', label: 'Claude Code' });
     expect($sessionViews.get()).to.deep.equal({ s1: 'terminal' });
+  });
+
+  it("opens a terminal in a session's folder and shows the session", async () => {
+    // Arrange
+    $workspace.set({ path: '/p', name: 'p', rootId: 'root:/p' });
+    $sessions.set([session({ id: 's1' }), session({ id: 's2', folder: '/p/other' })]);
+    // Act
+    await sessionController.openInTerminal('s2');
+    // Assert
+    expect($activeSessionId.get()).to.equal('s2');
+    expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([['/p/other', '/p', 'other']]);
+  });
+
+  it("opens no terminal for an unknown session, or when its project can't be opened", async () => {
+    // Arrange
+    $sessions.set([session({ id: 's1', projectId: '/gone' })]);
+    answer = (cmd) => (cmd === 'open_workspace' ? new Error('no such folder') : null);
+    // Act
+    await sessionController.openInTerminal('nope');
+    await sessionController.openInTerminal('s1');
+    // Assert
+    expect($terminals.get()).to.deep.equal({});
+    expect($activeSessionId.get()).to.equal(null);
   });
 
   it('starts the CLI once however many ask meanwhile', async () => {

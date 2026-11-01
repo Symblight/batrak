@@ -5,7 +5,7 @@ import { html, nothing } from 'lit';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { gitController } from '../../services/git-controller/git-controller.js';
-import { terminalController } from '../../services/terminals/terminals.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
@@ -106,11 +106,11 @@ export class AcpApp extends ViewElement {
   };
 
   #newTerminal() {
-    terminalController.newTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
+    terminals.newTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   #openProjectTerminal() {
-    terminalController.projectTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
+    terminals.projectTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   /**
@@ -155,13 +155,14 @@ export class AcpApp extends ViewElement {
 
   connectedCallback() {
     super.connectedCallback();
+    // First: the previous page load's shells must be closed before anything opens one.
+    terminals.start();
     window.addEventListener('keydown', this.#onKeydown);
     this.#menuListener = onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agents.start();
     sessionController.init().catch((err) => app.reportError('Loading sessions failed', err));
     gitController.start();
-    terminalController.start();
     sessionRootController.start();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }

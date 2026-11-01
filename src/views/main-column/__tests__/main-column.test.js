@@ -3,7 +3,7 @@ import { app } from '../../../hooks/app/app.js';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { osScale } from '../../../models/file-drop/file-drop.js';
-import { shellPaths } from '../../../models/shell-paths/shell-paths.js';
+import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../services/file-drop/file-drop.js';
 import { closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
@@ -69,7 +69,7 @@ describe('acp-main-column', () => {
     await el.updateComplete;
     await tabView.updateComplete;
     expect(terminal.dropping, 'unmarked').to.equal(false);
-    expect(pasted).to.deep.equal([shellPaths(paths, app.platformOf(navigator.userAgent))]);
+    expect(pasted).to.deep.equal([terminals.shellPaths(paths, app.platformOf(navigator.userAgent))]);
   });
 
   it('types nothing for files dropped outside the terminal', async () => {

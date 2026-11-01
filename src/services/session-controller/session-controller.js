@@ -19,11 +19,12 @@ import {
   sessionSetConfigOption,
   sessionStop,
   sessionsSync,
-  terminalClose,
   workspaceSettings,
 } from '../ipc/ipc.js';
 import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from '../adapter/adapter.js';
 import { agents } from '../../hooks/agents/agents.js';
+import { projects } from '../../hooks/projects/projects.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
 import { notify } from '../../stores/notices/notices.js';
 import {
   composerOf,
@@ -417,7 +418,7 @@ export class SessionController {
     const status = $terminals.get()[terminalId]?.status;
     if (status === 'running') await sessionCloseCli(id).catch((err) => app.reportError('Closing the terminal failed', err));
     // Exited by itself: the backend let the session go, but keeps its terminal's output.
-    else if (status === 'exited') await terminalClose([terminalId]).catch(() => {});
+    else if (status === 'exited') await terminals.close([terminalId]).catch(() => {});
     forgetTerminal(terminalId);
   }
 
@@ -540,6 +541,23 @@ export class SessionController {
    */
   select(id) {
     selectSession(id);
+  }
+
+  /**
+   * Open in → Terminal: a terminal in the session's folder, among its project's tabs, shown with the session.
+   * @param {string} id
+   */
+  async openInTerminal(id) {
+    const session = $sessions.get().find((s) => s.id === id);
+    if (!session) return;
+    try {
+      await projects.activate(session.projectId);
+    } catch (err) {
+      app.reportError('Opening project failed', err);
+      return;
+    }
+    this.select(session.id);
+    terminals.openInSession(session);
   }
 
   /**
@@ -714,7 +732,7 @@ export class SessionController {
     // The backend closed a running CLI; one that exited by itself left its terminal.
     const terminalId = sessionTerminalOf(id);
     if (terminalId !== null) {
-      if ($terminals.get()[terminalId]?.status === 'exited') await terminalClose([terminalId]).catch(() => {});
+      if ($terminals.get()[terminalId]?.status === 'exited') await terminals.close([terminalId]).catch(() => {});
       forgetTerminal(terminalId);
     }
     forgetSessionView(id);

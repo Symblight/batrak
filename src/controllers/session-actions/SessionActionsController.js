@@ -2,7 +2,6 @@ import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { removeSessionConfirm } from '../../models/sessions/sessions.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
-import { terminalController } from '../../services/terminals/terminals.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} SessionActionsHost */
@@ -62,7 +61,7 @@ export class SessionActionsController {
     else if (e.type === 'acp-session-reset-title') sessionController.resetTitle(session.id);
     else if (e.type === 'acp-session-reveal')
       projects.reveal(session.folder).catch((err) => app.reportError('Revealing folder failed', err));
-    else if (e.type === 'acp-session-open-terminal') terminalController.sessionTerminal(session.id);
+    else if (e.type === 'acp-session-open-terminal') sessionController.openInTerminal(session.id);
     else this.#delete(session);
   };
 

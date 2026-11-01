@@ -10,7 +10,7 @@ import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalE
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { osScale } from '../../../models/file-drop/file-drop.js';
-import { shellPaths } from '../../../models/shell-paths/shell-paths.js';
+import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../services/file-drop/file-drop.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import '../agent-column.js';
@@ -220,7 +220,7 @@ describe('acp-agent-column', () => {
     await el.updateComplete;
     expect(terminal.dropping, 'unmarked').to.equal(false);
     await until(() => pasted.length > 0);
-    expect(pasted).to.deep.equal([shellPaths(paths, app.platformOf(navigator.userAgent))]);
+    expect(pasted).to.deep.equal([terminals.shellPaths(paths, app.platformOf(navigator.userAgent))]);
   });
 
   it('types nothing for files dropped outside its terminal', async () => {

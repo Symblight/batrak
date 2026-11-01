@@ -15,13 +15,12 @@ import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsContr
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { cliInput } from '../../models/cli-input/cli-input.js';
 import { chatDropOf } from '../../models/file-drop/file-drop.js';
-import { shellPaths } from '../../models/shell-paths/shell-paths.js';
 import { inTurn } from '../../models/sessions/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
-import { terminalController } from '../../services/terminals/terminals.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat/chat.js';
@@ -174,7 +173,7 @@ export class AcpAgentColumn extends ViewElement {
       if (!cli) return;
       const { inserts, drops } = takePendingInput(id);
       if (inserts.length) cli.paste(cliInput(inserts, root));
-      if (drops.length) cli.paste(shellPaths(drops, app.platform));
+      if (drops.length) cli.paste(terminals.shellPaths(drops, app.platform));
       return;
     }
     const chat = this.#chat;
@@ -304,7 +303,7 @@ export class AcpAgentColumn extends ViewElement {
     const id = $activeSessionId.get();
     if (id === null) return;
     if (action === 'open-log') sessionController.openLog(id);
-    else if (action === 'open-terminal') terminalController.sessionTerminal(id);
+    else if (action === 'open-terminal') sessionController.openInTerminal(id);
     else if (action === 'show-login') {
       const terminal = this.#signInRun()?.terminal;
       if (terminal && this.#loginHere()) openLoginTerminal(terminal, $workspace.get()?.path ?? null);
@@ -449,7 +448,7 @@ export class AcpAgentColumn extends ViewElement {
       class="acp-agent-column__terminal"
       chat-fallback
       terminal-id=${terminalId}
-      .connect=${terminalController.connect}
+      .connect=${terminals.connect}
       .info=${this.#terminals.value[terminalId] ?? null}
       .fontFamily=${this.#editorFont.value}
       .fontSize=${this.#editorFontSize.value}

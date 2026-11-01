@@ -2,12 +2,11 @@
 paths:
   - "src-tauri/src/terminal/**"
   - "src-tauri/src/commands/terminal.rs"
-  - "src/services/terminals/terminals.js"
+  - "src/hooks/terminals/**"
   - "src/stores/terminals/terminals.js"
   - "src/components/terminal/**"
   - "src/services/file-drop/file-drop.js"
   - "src/models/file-drop/file-drop.js"
-  - "src/models/shell-paths/shell-paths.js"
   - "docs/specs/terminal-tab.md"
   - "web-test-runner.config.mjs"
 ---
@@ -30,15 +29,15 @@ a background job that still holds the PTY. Input goes as raw bytes (`terminal_wr
 `terminal-id` header), so xterm's binary mouse reports arrive intact. Input and output are never
 logged. Keep it portable: unix-only parts behind `cfg(unix)` with a Windows path (ConPTY,
 `ChildKiller`). Frontend: `$terminals` (`stores/terminals/terminals.js`, in
-memory; `$projectTabs`' `parse` drops terminal tabs) and `terminalController`
-(`services/terminals/terminals.js`): `connect()` (the tab view's `terminalConnect`) starts a shell when its
+memory; `$projectTabs`' `parse` drops terminal tabs) and the `terminals` hook
+(`hooks/terminals/terminals.js`, its pure rules in `rules.js`): `connect()` (the tab view's `terminalConnect`) starts a shell when its
 tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
 while its tab or project isn't shown; a terminal's shell is closed once its tab leaves its project's
 tabs (any close, its project removed); exit 0 closes the tab (`closeProjectTab()`), any other exit
-keeps it with Restart. `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
+keeps it with Restart. The previous page load's shells are closed (`close_window_terminals`) by `terminals.start()`, first thing in `<acp-app>`, and before any attach or close. "Open in → Terminal" is `sessionController.openInTerminal()` (a hook may not import a controller). `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
 breaks become spaces), kept until the shell is connected. Files dropped from the OS on a running terminal (a tab, or a
-session's CLI) are typed in as shell-escaped paths plus a space (`shellPaths()`,
-`models/shell-paths/shell-paths.js`), like a native terminal: Tauri's native drag and drop
+session's CLI) are typed in as shell-escaped paths plus a space (`terminals.shellPaths()`,
+`hooks/terminals/rules.js`), like a native terminal: Tauri's native drag and drop
 (`dragDropEnabled: true`) → `onFileDrag()` (`ipc.js`) → `fileDrop` (`services/file-drop/file-drop.js`:
 position to CSS px — physical on Windows, logical on macOS / Linux — and the innermost
 `DROP_TARGETS` element under it through shadow roots, `models/file-drop/file-drop.js`; `$fileDropTarget`
