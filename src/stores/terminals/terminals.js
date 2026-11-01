@@ -1,14 +1,35 @@
-import { atom, computed } from 'nanostores';
+import { atom, computed, map } from 'nanostores';
 import { openProjectTab, openTab } from '../editor/editor.js';
+import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $workspace } from '../workspace/workspace.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../hooks/terminals/types.js').TerminalExit} TerminalExit */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalOpened} TerminalOpened */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
 
 /** Every terminal tab's shell, by terminal id. In memory: shells don't outlive the page. */
 export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>} */ ({}));
+
+/**
+ * The terminal panel's tabs by project path: terminal tabs only, in memory (shells don't outlive the
+ * page, so neither does a tab), written through `terminalGroup`.
+ */
+export const $projectTerminalTabs = map(/** @type {Record<string, EditorTabs | undefined>} */ ({}));
+
+/** The shown project's terminal tabs; with no project, those opened with none. */
+export const $terminalTabs = computed(
+  [$projectTerminalTabs, $workspace],
+  (projects, workspace) => projects[workspace?.path ?? NO_PROJECT] ?? NO_TABS,
+);
+
+/** The editor's tab rules, applied to the terminal group (a second group, not a second tab system). */
+export const terminalGroup = tabGroup({
+  $projects: $projectTerminalTabs,
+  $tabs: $terminalTabs,
+  shownKey: () => $workspace.get()?.path ?? NO_PROJECT,
+});
 
 /**
  * @param {string} id

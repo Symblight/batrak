@@ -1,11 +1,14 @@
 import { expect } from '@esm-bundle/chai';
 import { $editorTabs, $projectTabs } from '../../editor/editor.js';
 import {
+  $projectTerminalTabs,
+  $terminalTabs,
   $terminals,
   addSessionTerminal,
   forgetTerminal,
   openLoginTerminal,
   openTerminal,
+  terminalGroup,
   terminalExited,
   terminalStarted,
   sessionTerminalOf,
@@ -17,6 +20,7 @@ import { terminalTabId } from '../../tab-ids/tab-ids.js';
 describe('terminals', () => {
   afterEach(() => {
     $terminals.set({});
+    $projectTerminalTabs.set({});
     $workspace.set(null);
     $projectTabs.setKey('/p', undefined);
     $projectTabs.setKey('', undefined);
@@ -98,5 +102,34 @@ describe('terminals', () => {
     expect(terminalsOfProject(null)).to.deep.equal([]);
     forgetTerminal('t1');
     expect(sessionTerminalOf('s1')).to.equal(null);
+  });
+
+  it('keeps terminal tabs in a group of their own, with the editor’s rules, per project', () => {
+    const [a, b, c] = ['a', 'b', 'c'].map(terminalTabId);
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+
+    // Act + Assert: open appends and activates; close picks the neighbour
+    terminalGroup.open(a);
+    terminalGroup.open(b);
+    terminalGroup.open(c);
+    expect($terminalTabs.get()).to.deep.equal({ paths: [a, b, c], active: c, pinned: [] });
+    terminalGroup.close(c);
+    expect($terminalTabs.get().active).to.equal(b);
+
+    // Act + Assert: pin moves to the front, move reorders after the pinned ones
+    terminalGroup.open(c);
+    terminalGroup.setPinned(c, true);
+    terminalGroup.move(a, 2);
+    expect($terminalTabs.get()).to.deep.equal({ paths: [c, b, a], active: c, pinned: [c] });
+
+    // Assert: the editor's tabs are untouched, and another project has its own group
+    expect($editorTabs.get().paths).to.deep.equal([]);
+    terminalGroup.openIn('/q', a);
+    terminalGroup.openIn('/q', b);
+    terminalGroup.closeIn('/q', b);
+    expect($terminalTabs.get().paths).to.deep.equal([c, b, a]);
+    expect($projectTerminalTabs.get()['/q']).to.deep.equal({ paths: [a], active: a, pinned: [] });
+    $workspace.set({ path: '/q', name: 'q', rootId: null });
+    expect($terminalTabs.get().paths).to.deep.equal([a]);
   });
 });
