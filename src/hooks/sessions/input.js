@@ -1,5 +1,5 @@
-import { cliPromptOf } from '../../models/cli-input/cli-input.js';
-import { sessionController } from '../session-controller/session-controller.js';
+import { cliPromptOf } from './cli-input.js';
+import { controller } from './controller.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { composerOf } from '../../stores/composer/composer.js';
 import { $sessionNotices, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
@@ -21,7 +21,7 @@ const refusals = new WeakSet();
  * Where what the user gives a session goes, whatever shows it: the one place that decides between
  * the chat and its agent's CLI.
  */
-export const sessionInput = {
+export const input = Object.freeze({
   /**
    * Where a draft's first send goes: `terminal-draft` starts its agent's CLI with it, `chat-draft`
    * the chat.
@@ -30,7 +30,7 @@ export const sessionInput = {
    */
   draftTarget(id) {
     if (!(id in $draftSessions.get())) return null;
-    return sessionController.startsInTerminal(id) ? 'terminal-draft' : 'chat-draft';
+    return controller.startsInTerminal(id) ? 'terminal-draft' : 'chat-draft';
   },
 
   /**
@@ -69,9 +69,9 @@ export const sessionInput = {
     const name = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'The agent';
     // In a worktree, a path of the project stays absolute: it's the user's file, not the worktree's copy.
     const root = runTarget.kind === 'local' ? ($draftSessions.get()[id] ?? null) : null;
-    if (await sessionController.startInTerminal(id, title, cliPromptOf(input.parts, root))) return { taken: true };
+    if (await controller.startInTerminal(id, title, cliPromptOf(input.parts, root))) return { taken: true };
     const reason = $sessionNotices.get()[id]?.message ?? `${name} didn't start`;
     setSessionNotice(id, { kind: 'error', message: reason });
     return { taken: false, reason };
   },
-};
+});

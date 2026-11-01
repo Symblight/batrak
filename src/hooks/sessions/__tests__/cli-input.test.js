@@ -3,7 +3,7 @@ import { cliInput, cliPromptOf } from '../cli-input.js';
 
 describe('cliPromptOf', () => {
   it('writes each ref with its whole path, as the CLI reads one', () => {
-    /** @type {import('../../types/types.js').InputPart[]} */
+    /** @type {import('../../../models/types/types.js').InputPart[]} */
     const parts = [
       { kind: 'text', text: 'Compare ' },
       { kind: 'ref', path: 'src/stores/editor.js', folder: false },
@@ -18,7 +18,7 @@ describe('cliPromptOf', () => {
   });
 
   it('writes a command with its slash, pasted code fenced and a long paste as is', () => {
-    /** @type {import('../../types/types.js').InputPart[]} */
+    /** @type {import('../../../models/types/types.js').InputPart[]} */
     const parts = [
       { kind: 'command', name: 'review' },
       { kind: 'text', text: ' this' },

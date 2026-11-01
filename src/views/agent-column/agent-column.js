@@ -14,14 +14,11 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
-import { cliInput } from '../../models/cli-input/cli-input.js';
-import { inTurn } from '../../models/sessions/sessions.js';
-import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
-import { sessionController } from '../../services/session-controller/session-controller.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat/chat.js';
 import { $now } from '../../stores/clock/clock.js';
@@ -174,7 +171,7 @@ export class AcpAgentColumn extends ViewElement {
       const cli = this.#runningCli;
       if (!cli) return;
       const { inserts, drops } = takePendingInput(id);
-      if (inserts.length) cli.paste(cliInput(inserts, root));
+      if (inserts.length) cli.paste(sessions.cliInput(inserts, root));
       if (drops.length) cli.paste(terminals.shellPaths(drops, app.platform));
       return;
     }
@@ -296,7 +293,7 @@ export class AcpAgentColumn extends ViewElement {
   #onPermissionRespond(e) {
     const { requestId, optionId } = /** @type {CustomEvent<{ requestId: string, optionId: string }>} */ (e).detail;
     const id = $activeSessionId.get();
-    if (id !== null) sessionController.respondPermission(id, requestId, optionId);
+    if (id !== null) sessions.respondPermission(id, requestId, optionId);
   }
 
   /** @param {Event} e */
@@ -304,18 +301,18 @@ export class AcpAgentColumn extends ViewElement {
     const { action } = /** @type {CustomEvent<{ action: SessionAction }>} */ (e).detail;
     const id = $activeSessionId.get();
     if (id === null) return;
-    if (action === 'open-log') sessionController.openLog(id);
-    else if (action === 'open-terminal') sessionController.openInTerminal(id);
+    if (action === 'open-log') sessions.openLog(id);
+    else if (action === 'open-terminal') sessions.openInTerminal(id);
     else if (action === 'show-login') {
       const terminal = this.#signInRun()?.terminal;
       if (terminal && this.#loginHere()) openLoginTerminal(terminal, $workspace.get()?.path ?? null);
     }
-    else if (action === 'restart') sessionController.restart(id);
+    else if (action === 'restart') sessions.restart(id);
     else if (action === 'turn-on-agent') {
       const agentId = $sessionNotices.get()[id]?.offAgent;
       if (agentId) agents.setEnabled(agentId, true);
     }
-    else sessionController.dismissNotice(id);
+    else sessions.dismissNotice(id);
   }
 
   /** @param {Event} e */
@@ -343,7 +340,7 @@ export class AcpAgentColumn extends ViewElement {
 
   /** The session a queued turn waits for, from the banner. */
   #onSessionSelect = (/** @type {Event} */ e) => {
-    sessionController.select(/** @type {CustomEvent<{ sessionId: string }>} */ (e).detail.sessionId);
+    sessions.select(/** @type {CustomEvent<{ sessionId: string }>} */ (e).detail.sessionId);
   };
 
   /** @param {Event} e */
@@ -358,7 +355,7 @@ export class AcpAgentColumn extends ViewElement {
   #onConfigOption = (/** @type {Event} */ e) => {
     const { configId, value } = /** @type {CustomEvent<{ configId: string, value: string }>} */ (e).detail;
     const id = $activeSessionId.get();
-    if (id !== null) sessionController.setConfigOption(id, configId, value);
+    if (id !== null) sessions.setConfigOption(id, configId, value);
   };
 
   /** @param {Event} e */
@@ -395,23 +392,23 @@ export class AcpAgentColumn extends ViewElement {
     const status = this.#activeSession.value?.id === id ? this.#activeSession.value.status : null;
     if (view === 'terminal') {
       const asked = { headline: 'Stop the current turn?', message: 'Stop the current turn and continue in the terminal?', confirmLabel: 'Stop and continue' };
-      if (inTurn(status, this.#permission.value !== null) && !(await dialog?.confirm(asked))) return;
-      await sessionController.continueInTerminal(id);
+      if (sessions.inTurn(status, this.#permission.value !== null) && !(await dialog?.confirm(asked))) return;
+      await sessions.continueInTerminal(id);
       return;
     }
-    if (await sessionController.cliBusy(id)) {
+    if (await sessions.cliBusy(id)) {
       const name = this.#activeSession.value?.agentName ?? 'the agent';
       const asked = { headline: `Close ${name}?`, message: `Close ${name} in the terminal? Its current reply stops.`, confirmLabel: 'Close and continue' };
       if (!(await dialog?.confirm(asked))) return;
     }
-    await sessionController.continueInChat(id);
+    await sessions.continueInChat(id);
   }
 
   /** @param {Event} e */
   #onTerminalRestart(e) {
     e.stopPropagation();
     const id = $activeSessionId.get();
-    if (id !== null) sessionController.restartCli(id);
+    if (id !== null) sessions.restartCli(id);
   }
 
   /** @param {Event} e */
@@ -465,7 +462,7 @@ export class AcpAgentColumn extends ViewElement {
 
   #onNewSession() {
     const workspace = $workspace.get();
-    if (workspace) sessionController.create(workspace.path);
+    if (workspace) sessions.create(workspace.path);
   }
 
   /** The active session's header; a draft shows as a new session. */
@@ -513,8 +510,8 @@ export class AcpAgentColumn extends ViewElement {
             ?hidden=${opening || inTerminal}
             .conversationId=${this.#session.conversationId}
             ?empty=${this.#session.empty}
-            .adapter=${acpAdapter}
-            .userId=${USER_ID}
+            .adapter=${sessions.adapter}
+            .userId=${sessions.USER_ID}
             .partElements=${this.#parts.partElements}
             .root=${this.#activeFolder.value ?? workspace.path}
             .fileOptions=${this.fileOptions}

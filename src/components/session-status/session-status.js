@@ -7,7 +7,7 @@ import errorIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import permissionIcon from '@material-design-icons/svg/outlined/front_hand.svg?raw';
 import queuedIcon from '@material-design-icons/svg/outlined/hourglass_empty.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import { INDICATOR_LABELS, isActiveElsewhere, sessionIndicator } from '../../models/sessions/sessions.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-status.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
@@ -52,11 +52,11 @@ export class AcpSessionStatus extends LitElement {
     if (!['session', 'permissionPending', 'unread', 'now', 'quiet'].some((name) => changed.has(name))) return;
     const session = this.session;
     const indicator = session
-      ? sessionIndicator(
+      ? sessions.sessionIndicator(
           session.status,
           this.permissionPending,
           this.unread,
-          isActiveElsewhere(session, this.now ?? Date.now()),
+          sessions.isActiveElsewhere(session, this.now ?? Date.now()),
           session.inTerminal === true,
         )
       : null;
@@ -84,7 +84,7 @@ export class AcpSessionStatus extends LitElement {
   render() {
     const indicator = this.indicator;
     if (indicator === null) return nothing;
-    const label = INDICATOR_LABELS[indicator];
+    const label = sessions.INDICATOR_LABELS[indicator];
     return html`<span
         id="acp-session-status-icon"
         class="acp-session-status__icon acp-session-status__icon_${indicator}"

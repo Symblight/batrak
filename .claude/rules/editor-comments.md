@@ -21,7 +21,7 @@ the visible editor of it reveals the thread. Send to agent (`sendToChat()`) clea
 (`insertCode()`, once `composerReady()`): a comment as its
 own line (file chip `path:line` or `path:from-to`, then the text), a selection as a chip at the caret.
 A session shown in the terminal gets them in its running CLI instead, as text (`cliInput()`,
-`models/cli-input/cli-input.js`: `@path#L3-5`, relative to the session folder; comments on lines of their own)
+`hooks/sessions/cli-input.js`: `@path#L3-5`, relative to the session folder; comments on lines of their own)
 through `<acp-terminal>`'s `paste()`; while its CLI starts, or after it ended, they wait in the store (for
 the CLI, or the composer once the chat shows).
 `SelectionActionsController` (`src/controllers/selection-actions/`) shows `<acp-selection-actions>`

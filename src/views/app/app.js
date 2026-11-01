@@ -2,8 +2,7 @@ import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
-import { sessionController } from '../../services/session-controller/session-controller.js';
-import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { git } from '../../hooks/git/git.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
@@ -161,9 +160,9 @@ export class AcpApp extends ViewElement {
     this.#menuListener = onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agents.start();
-    sessionController.init().catch((err) => app.reportError('Loading sessions failed', err));
+    sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
-    sessionRootController.start();
+    sessions.followRoot();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }
 
@@ -190,7 +189,7 @@ export class AcpApp extends ViewElement {
     const trusted = await dialog.confirm(agents.trustConfirm(prompt));
     if ($trustPrompt.get() !== prompt) return;
     if (!trusted) agents.dismissTrust();
-    else for (const id of await agents.trust()) sessionController.restart(id);
+    else for (const id of await agents.trust()) sessions.restart(id);
   }
 
   /** Rendered unconditionally, so present after the first render. */

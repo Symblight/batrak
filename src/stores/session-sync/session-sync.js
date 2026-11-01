@@ -3,7 +3,7 @@ import { atom } from 'nanostores';
 /** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
 /** @typedef {import('../../models/types/types.js').SyncReport} SyncReport */
 
-/** Each project's sync with its agents this launch, by project id; written by `sessionController`. */
+/** Each project's sync with its agents this launch, by project id; written by the `sessions` hook. */
 export const $sessionSync = atom(/** @type {Readonly<Record<string, SessionSync>>} */ ({}));
 
 /** @type {SessionSync} */

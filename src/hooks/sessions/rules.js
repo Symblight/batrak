@@ -1,13 +1,13 @@
-/** @typedef {import('../types/types.js').ConfirmOptions} ConfirmOptions */
-/** @typedef {import('../types/types.js').Session} Session */
-/** @typedef {import('../types/types.js').SessionIndicator} SessionIndicator */
-/** @typedef {import('../types/types.js').SessionStatus} SessionStatus */
-/** @typedef {import('../types/types.js').SessionSync} SessionSync */
-/** @typedef {import('../types/types.js').SessionView} SessionView */
-/** @typedef {import('../types/types.js').AgentTerminal} AgentTerminal */
+import { RUNNING } from '../../stores/sessions/sessions.js';
 
-/** Statuses in which a session holds (or is getting) an agent process. */
-export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
+export { RUNNING };
+export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
+
+/** @typedef {import('../../models/types/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../models/types/types.js').SessionStatus} SessionStatus */
+/** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
 
 /**
  * Whether a session is in a turn: working, queued, waiting for an answer, or asking a permission.
@@ -59,51 +59,6 @@ export function sessionIndicator(status, permissionPending, unread = false, acti
 export function isActiveElsewhere(session, now) {
   const until = session.activeElsewhereUntil;
   return !RUNNING.has(session.status) && typeof until === 'string' && Date.parse(until) > now;
-}
-
-/**
- * Whether a session can be shown in its agent's CLI.
- * @param {AgentTerminal | null | undefined} terminal Its agent's (`AgentSummary.terminal`).
- * @param {boolean} draft No message yet: the CLI must start it under an id Brama chooses.
- */
-export function canUseTerminal(terminal, draft) {
-  return terminal != null && (draft ? terminal.new : terminal.resume);
-}
-
-/**
- * How a session is shown: its own view, else its agent's; always `chat` when its agent's CLI can't
- * show it.
- * @param {SessionView | undefined} own The session's own (`$sessionViews`).
- * @param {SessionView} preferred Its agent's (`$agentViews`).
- * @param {AgentTerminal | null | undefined} terminal Its agent's.
- * @param {boolean} draft
- * @returns {SessionView}
- */
-export function viewOf(own, preferred, terminal, draft) {
-  return canUseTerminal(terminal, draft) ? (own ?? preferred) : 'chat';
-}
-
-/**
- * The session's own view to keep for a choice: none when it's its agent's, so a later change of
- * the agent's applies to it again.
- * @param {SessionView} view
- * @param {SessionView} preferred
- * @returns {SessionView | undefined}
- */
-export function ownView(view, preferred) {
-  return view === preferred ? undefined : view;
-}
-
-/**
- * Why the header's Chat / Terminal button is disabled for a session; `''` when it isn't.
- * @param {AgentTerminal | null | undefined} terminal
- * @param {boolean} draft
- * @param {string} agentName
- */
-export function viewDisabledReason(terminal, draft, agentName) {
-  if (terminal == null) return `${agentName} has no terminal mode`;
-  if (!canUseTerminal(terminal, draft)) return draft ? 'Send a first message, then continue in the terminal' : `${agentName} can't continue this session in its terminal`;
-  return '';
 }
 
 /**
@@ -165,7 +120,7 @@ export function removeSessionConfirm(session) {
   };
 }
 
-/** @type {Record<import('../types/types.js').SyncOutcome, (count: number | null, error: string | null) => string>} */
+/** @type {Record<import('../../models/types/types.js').SyncOutcome, (count: number | null, error: string | null) => string>} */
 const OUTCOMES = {
   listed: (count) => (count === 1 ? '1 session' : `${count ?? 0} sessions`),
   unsupported: () => "can't list sessions",
@@ -191,7 +146,7 @@ export function syncSummary({ running, report }, now) {
   return { label, lines: linesOf(report), warn };
 }
 
-/** @param {import('../types/types.js').SyncReport} report */
+/** @param {import('../../models/types/types.js').SyncReport} report */
 function linesOf(report) {
   return report.agents.map((a) => `${a.agentName} · ${OUTCOMES[a.outcome](a.count, a.error)}`);
 }

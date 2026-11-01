@@ -1,6 +1,7 @@
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { StoreController } from '../store/StoreController.js';
-import { readFile, sessionChanges, sessionFileAtBase } from '../../services/ipc/ipc.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
+import { readFile } from '../../services/ipc/ipc.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
 
@@ -124,7 +125,7 @@ export class SessionChangesController {
     /** @type {GitChangesView} */
     let changes;
     try {
-      changes = { files: await sessionChanges(id), loaded: true, loading: false, error: null };
+      changes = { files: await sessions.changes(id), loaded: true, loading: false, error: null };
     } catch (err) {
       changes = { files: [], loaded: true, loading: false, error: String(err) };
     }
@@ -176,7 +177,7 @@ export class SessionChangesController {
     if (!this.#diffs.has(rel)) this.#setDiff(rel, { content: '', baseline: '', error: '', loading: true });
     const [content, baseline] = await Promise.all([
       readFile(`${session.folder}/${rel}`).catch(() => null),
-      sessionFileAtBase(id, rel).catch(() => null),
+      sessions.fileAtBase(id, rel).catch(() => null),
     ]);
     if (id !== this.#sessionId || this.#loads.get(rel) !== load) return;
     this.#setDiff(

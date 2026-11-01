@@ -4,10 +4,54 @@ import { $agentList } from '../agents/agents.js';
 import { $composer, composerOf } from '../composer/composer.js';
 import { $cliStarting, $sessionTerminals } from '../terminals/terminals.js';
 import { $activeSession, $activeSessionId, $sessions } from '../sessions/sessions.js';
-import { ownView, viewDisabledReason, viewOf } from '../../models/sessions/sessions.js';
 
 /** @typedef {import('../../models/types/types.js').AgentTerminal} AgentTerminal */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+
+/**
+ * Whether a session can be shown in its agent's CLI.
+ * @param {AgentTerminal | null | undefined} terminal Its agent's (`AgentSummary.terminal`).
+ * @param {boolean} draft No message yet: the CLI must start it under an id Brama chooses.
+ */
+export function canUseTerminal(terminal, draft) {
+  return terminal != null && (draft ? terminal.new : terminal.resume);
+}
+
+/**
+ * How a session is shown: its own view, else its agent's; always `chat` when its agent's CLI can't
+ * show it.
+ * @param {SessionView | undefined} own The session's own (`$sessionViews`).
+ * @param {SessionView} preferred Its agent's (`$agentViews`).
+ * @param {AgentTerminal | null | undefined} terminal Its agent's.
+ * @param {boolean} draft
+ * @returns {SessionView}
+ */
+export function viewOf(own, preferred, terminal, draft) {
+  return canUseTerminal(terminal, draft) ? (own ?? preferred) : 'chat';
+}
+
+/**
+ * The session's own view to keep for a choice: none when it's its agent's, so a later change of
+ * the agent's applies to it again.
+ * @param {SessionView} view
+ * @param {SessionView} preferred
+ * @returns {SessionView | undefined}
+ */
+export function ownView(view, preferred) {
+  return view === preferred ? undefined : view;
+}
+
+/**
+ * Why the header's Chat / Terminal button is disabled for a session; `''` when it isn't.
+ * @param {AgentTerminal | null | undefined} terminal
+ * @param {boolean} draft
+ * @param {string} agentName
+ */
+export function viewDisabledReason(terminal, draft, agentName) {
+  if (terminal == null) return `${agentName} has no terminal mode`;
+  if (!canUseTerminal(terminal, draft)) return draft ? 'Send a first message, then continue in the terminal' : `${agentName} can't continue this session in its terminal`;
+  return '';
+}
 
 /**
  * @param {unknown} raw
@@ -89,7 +133,7 @@ export function forgetSessionView(id) {
 
 /**
  * How the active session is shown now: in the terminal while its CLI runs, has ended (Restart is
- * there) or starts, else as Chat, whatever its view asks for (`sessionController` reconciles the two).
+ * there) or starts, else as Chat, whatever its view asks for (the `sessions` hook reconciles the two).
  * @type {import('nanostores').ReadableAtom<SessionView>}
  */
 export const $activeShownView = computed([$activeSessionId, $sessionTerminals, $cliStarting], (id, terminals, starting) =>

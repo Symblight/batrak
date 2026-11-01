@@ -1,7 +1,5 @@
 import { StoreController } from '../store/StoreController.js';
-import { inputOfComposer } from '../../models/session-input/session-input.js';
-import { sessionController } from '../../services/session-controller/session-controller.js';
-import { sessionInput } from '../../services/session-input/session-input.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { $historyResets, $returnedPrompts, takeHistoryResets, takeReturnedPrompt } from '../../stores/chat/chat.js';
 import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../../stores/sessions/sessions.js';
 
@@ -133,22 +131,22 @@ export class ChatSessionController {
     const id = this.#activeId.value;
     if (id === null) return;
     const { value: text, html, attachments } = /** @type {CustomEvent<{ value: string, html: string, attachments: File[] }>} */ (e).detail;
-    if (sessionInput.refuseFiles(id, attachments)) {
+    if (sessions.refuseFiles(id, attachments)) {
       // Cancelled, so the composer keeps the message and its attachments.
       e.stopPropagation();
       e.preventDefault();
       return;
     }
     if (this.#session.value !== null) return;
-    if (sessionInput.draftTarget(id) === 'terminal-draft') {
+    if (sessions.draftTarget(id) === 'terminal-draft') {
       // The CLI starts with it as its first prompt; the chat never sends it. Cancelled, the composer
       // keeps it until the CLI took it.
       e.stopPropagation();
       e.preventDefault();
-      this.#startTerminal(id, inputOfComposer(id, html, attachments), titleOf(text));
+      this.#startTerminal(id, sessions.inputOfComposer(id, html, attachments), titleOf(text));
       return;
     }
-    if (!sessionController.start(id, titleOf(text))) {
+    if (!sessions.start(id, titleOf(text))) {
       // Kept from `<chx-chat>`, and cancelled so the composer keeps the text.
       e.stopPropagation();
       e.preventDefault();
@@ -163,7 +161,7 @@ export class ChatSessionController {
    * @param {string} title
    */
   async #startTerminal(id, input, title) {
-    const { taken } = await sessionInput.startTerminal(id, input, title);
+    const { taken } = await sessions.startTerminal(id, input, title);
     if (!taken) return;
     const chat = this.#config.chat();
     if (chat && this.#activeId.value === id) {

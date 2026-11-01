@@ -1,8 +1,8 @@
-import { projects } from '../../hooks/projects/projects.js';
-import { app } from '../../hooks/app/app.js';
-import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from '../ipc/ipc.js';
-import { chat } from '../../hooks/chat/chat.js';
-import { inputOfMessage, linesOf } from '../../models/session-input/session-input.js';
+import { projects } from '../projects/projects.js';
+import { app } from '../app/app.js';
+import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './commands.js';
+import { chat } from '../chat/chat.js';
+import { inputOfMessage, linesOf } from './input-parts.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
 import { setContextUsage } from '../../stores/context-usage/context-usage.js';

@@ -305,7 +305,7 @@ export const terminals = Object.freeze({
    */
   async restart(id) {
     const info = $terminals.get()[id];
-    // A session's CLI starts again through its session (`sessionController.restartCli()`).
+    // A session's CLI starts again through its session (`sessions.restartCli()`).
     if (!info || info.sessionId || info.status === 'running' || info.status === 'starting') return;
     const route = routes.get(id);
     terminalRestarting(id);

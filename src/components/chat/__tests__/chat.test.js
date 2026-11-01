@@ -1,6 +1,6 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../chat.js';
-import { inputOfComposer } from '../../../models/session-input/session-input.js';
+import { sessions } from '../../../hooks/sessions/sessions.js';
 
 /** @typedef {import('../chat.js').AcpChat} AcpChat */
 /**
@@ -52,7 +52,7 @@ describe('acp-chat', () => {
       { path: 'src', folder: true },
     ]);
     const { html: sent } = /** @type {import('@symblight/chat').ChxChat} */ (chat.chat).input.getValue();
-    const refs = inputOfComposer('m', sent, []).parts.filter((p) => p.kind === 'ref');
+    const refs = sessions.inputOfComposer('m', sent, []).parts.filter((p) => p.kind === 'ref');
     expect(refs).to.deep.equal([
       { kind: 'ref', path: 'src/stores/editor.js', folder: false },
       { kind: 'ref', path: 'src', folder: true },

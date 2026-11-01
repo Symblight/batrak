@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { sessionInput } from '../session-input.js';
+import { input as sessionInput } from '../input.js';
 import { $agentList } from '../../../stores/agents/agents.js';
 import { $sessionNotices, setSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
 import { $agentViews, setAgentView } from '../../../stores/session-views/session-views.js';

@@ -37,7 +37,7 @@ commands, `src/services/ipc/ipc.js`.
   Settings, Agents, Search and Changes elements are here until their views exist (see
   `docs/specs/frontend-structure.md`).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
-- `src/services/` — actions and IPC (`session-controller.js`, `ipc.js`).
+- `src/services/` — the IPC commands still to move into hooks (`ipc.js`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
@@ -114,7 +114,7 @@ the files in its `paths:`; read it directly when a task depends on a subsystem w
 files. Specs are in `docs/specs/`.
 
 - `persisted-state.md` — what's persisted and under which key, tab ids and view tabs, `TabContentController`.
-- `sessions.md` — session stores and `sessionController`, the backend runtime (sync, turn slots,
+- `sessions.md` — session stores and the `sessions` hook, the backend runtime (sync, turn slots,
   worktrees, remove), ACP host, the adapter, session folders, config options, history.
 - `agent-config.md` — `.brama/agents.json`, the Agents tab, writing the file, on/off, the ACP registry,
   updates, following the list, secrets and trust, signing in.
@@ -193,7 +193,7 @@ test that reproduces it.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
   every `src/**/*.test.js`. Every entity has a folder of its own, with its tests in a `__tests__/` folder inside it, named
   after it (`components/x/__tests__/x.test.js`, `hooks/projects/__tests__/rules.test.js`). Keep logic in plain functions
-  (`stores/`, `models/`, `services/adapter/adapter.js`) and test it directly; test a component through its
+  (`stores/`, `hooks/`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.

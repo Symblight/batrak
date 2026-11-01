@@ -8,12 +8,11 @@ import '../../components/session-list/session-list.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { getHomeDir } from '../../services/ipc/ipc.js';
-import { sessionController } from '../../services/session-controller/session-controller.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $permissionRequests, $unreadSessions } from '../../stores/session-runtime/session-runtime.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
-import { loadingProjects } from '../../models/sessions/sessions.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
 import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
 
@@ -118,7 +117,7 @@ export class AcpSessionColumn extends ViewElement {
    */
   #onNewSession(e) {
     const id = this.#projectIdOf(e);
-    sessionController.create(id);
+    sessions.create(id);
     toggleProject(id, true);
     this.#activate(id);
   }
@@ -154,12 +153,12 @@ export class AcpSessionColumn extends ViewElement {
     const session = this.#sessions.value.find((s) => s.id === sessionId);
     if (!session) return;
     this.#activate(session.projectId);
-    sessionController.select(session.id);
+    sessions.select(session.id);
   }
 
   #onResync() {
     const path = this.#workspace.value?.path;
-    if (path) sessionController.sync(path, { force: true });
+    if (path) sessions.sync(path, { force: true });
   }
 
   render() {
@@ -177,7 +176,7 @@ export class AcpSessionColumn extends ViewElement {
         .unread=${this.#unread.value}
         .waiting=${Object.keys(this.#permissions.value)}
         .failures=${this.failures}
-        .loading=${loadingProjects(
+        .loading=${sessions.loadingProjects(
           this.#projects.value.map((p) => p.id),
           this.#loaded.value,
           this.#sync.value,

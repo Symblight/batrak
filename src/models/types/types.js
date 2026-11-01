@@ -894,7 +894,7 @@
  */
 
 /**
- * What the user gave a session, whatever shows it (`models/session-input.js` builds it, a renderer per
+ * What the user gave a session, whatever shows it (`hooks/sessions/input-parts.js` builds it, a renderer per
  * view writes it: `promptOfInput()` for ACP, `cliPromptOf()` for the CLI).
  * @typedef {Object} SessionInput
  * @property {InputPart[]} parts In order.

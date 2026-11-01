@@ -26,8 +26,10 @@ import { ContextMenuController } from '../../controllers/context-menu/ContextMen
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
 import { app } from '../../hooks/app/app.js';
-import { SESSIONS_PAGE, orderSessions, visibleSessions } from '../../models/sessions/sessions.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-list.css?inline';
+
+const { SESSIONS_PAGE, orderSessions, visibleSessions } = sessions;
 
 /** @typedef {import('../../models/types/types.js').Project} Project */
 /** @typedef {import('../../models/types/types.js').Session} Session */

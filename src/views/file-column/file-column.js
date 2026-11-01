@@ -7,7 +7,7 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { git } from '../../hooks/git/git.js';
 import { listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
-import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -64,9 +64,10 @@ export class AcpFileColumn extends ViewElement {
   #onFsChange = (/** @type {WorkspaceChanges} */ { rootId, dirs }) => {
     if (rootId === $treeRoot.get().rootId) this.renderRoot.querySelector('acp-file-tree')?.reload(dirs);
   };
-  #onSessionRootFsChange = (/** @type {Event} */ e) => this.#onFsChange(/** @type {CustomEvent<WorkspaceChanges>} */ (e).detail);
   /** Stops listening to the active project's files changing on disk. */
   #stopWatching = () => {};
+  /** Stops listening to the shown worktree session's folder. */
+  #stopWatchingSessionRoot = () => {};
 
   constructor() {
     super();
@@ -79,13 +80,13 @@ export class AcpFileColumn extends ViewElement {
   connectedCallback() {
     super.connectedCallback();
     this.#stopWatching = projects.onFsChange(this.#onFsChange);
-    sessionRootController.addEventListener('fs-change', this.#onSessionRootFsChange);
+    this.#stopWatchingSessionRoot = sessions.onRootFsChange(this.#onFsChange);
     this.#watchChanges(this.sideView === 'changes');
   }
 
   disconnectedCallback() {
     this.#stopWatching();
-    sessionRootController.removeEventListener('fs-change', this.#onSessionRootFsChange);
+    this.#stopWatchingSessionRoot();
     this.#watchChanges(false);
     super.disconnectedCallback();
   }

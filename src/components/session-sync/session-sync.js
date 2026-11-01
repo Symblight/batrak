@@ -5,7 +5,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/tooltip';
 import syncIcon from '@material-design-icons/svg/outlined/sync.svg?raw';
-import { syncSummary } from '../../models/sessions/sessions.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-sync.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
@@ -34,7 +34,7 @@ export class AcpSessionSync extends LitElement {
 
   render() {
     if (this.sync === null) return nothing;
-    const { label, lines, warn } = syncSummary(this.sync, Date.now());
+    const { label, lines, warn } = sessions.syncSummary(this.sync, Date.now());
     return html`<md-icon-button
         id="acp-session-sync-button"
         class="acp-session-sync__button"

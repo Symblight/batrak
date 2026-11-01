@@ -11,9 +11,9 @@ import {
   viewDisabledReason,
   viewOf,
   visibleSessions,
-} from '../sessions.js';
+} from '../rules.js';
 
-/** @typedef {import('../../types/types.js').Session} Session */
+/** @typedef {import('../../../models/types/types.js').Session} Session */
 
 /** @type {Session} */
 const SESSION = {
@@ -123,7 +123,7 @@ describe('sessions model', () => {
 
   it('sums up a sync: not yet, running, when it ended and how each agent did, warning when one needs the user', () => {
     // Arrange
-    /** @type {import('../../types/types.js').SyncReport} */
+    /** @type {import('../../../models/types/types.js').SyncReport} */
     const report = {
       projectPath: '/p',
       startedAt: '2026-10-23T10:00:00.000Z',
@@ -174,7 +174,7 @@ describe('sessions model', () => {
 
   it('loads every project until the stored list arrives, then each project in its first sync', () => {
     const projects = ['/p', '/q', '/r'];
-    /** @type {import('../../types/types.js').SyncReport} */
+    /** @type {import('../../../models/types/types.js').SyncReport} */
     const report = { projectPath: '/q', startedAt: 'a', endedAt: 'b', agents: [] };
     const syncs = { '/p': { running: true, report: null }, '/q': { running: true, report }, '/r': { running: false, report: null } };
     expect(loadingProjects(projects, false, {})).to.deep.equal(projects);

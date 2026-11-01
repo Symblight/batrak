@@ -4,9 +4,7 @@ paths:
   - "src-tauri/crates/agent-acp/**"
   - "src-tauri/src/agents/**"
   - "src-tauri/src/commands/sessions.rs"
-  - "src/services/{session-controller,session-root-controller,adapter,session-input}/**"
-  - "src/models/{session-input,cli-input}/**"
-  - "src/hooks/{chat,composer}/**"
+  - "src/hooks/{sessions,chat,composer}/**"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
@@ -18,7 +16,7 @@ paths:
 
 **Sessions:** `stores/sessions/sessions.js` holds `$sessions` (listed), `$draftSessions` (id → project id: a
 "New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
-conversation id; `$activeSession` is `null` for a draft. `sessionController` keeps the active session in
+conversation id; `$activeSession` is `null` for a draft. The `sessions` hook keeps the active session in
 the opened project (`showProject()`: the project's last shown session (`brama:sessions:last:<project path>`, per window, so it
 survives a relaunch), its newest, or a new draft),
 `create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
@@ -88,7 +86,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   permission responders are parked until the user answers. Tests run `agent-acp`'s `fake_agent.rs` (feature `test-support`)
   in-process; `real_claude_agent_end_to_end` (ignored) runs the real agent.
 - **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
-  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`services/adapter/adapter.js`), which
+  `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`hooks/sessions/adapter.js`), which
   maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
   or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
   notices live in `stores/session-runtime/session-runtime.js`, shown by `<acp-session-banner>` (a queued
@@ -127,7 +125,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   reveal the project's same folder. While a worktree session is active, the Files tree lists its
   folder under a root row named after the worktree (`$treeRoot`, `stores/session-root/session-root.js`): the
   session root (`open_session_root`, its own scan and watcher, at most one per window) that
-  `sessionRootController` keeps open; Search, Changes and Quick Open stay on the project
+  `sessions.followRoot()` keeps open; Search, Changes and Quick Open stay on the project
   (spec: `docs/specs/worktree-default.md`). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
   A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
@@ -137,7 +135,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
   each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
   `base` shows them without commit picks, with Apply locally and Check out branch (through
-  `sessionController`).
+  the `sessions` hook).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
@@ -156,7 +154,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `permissions` like Copilot's `allow_all`) are `<acp-mode-picker>`'s; a mode value's icon and
   color come from its `risk`, which the backend tags it with (its agent crate's `mode_risk`,
   `agents::tag_modes`), never from its name. `normalizeOptions()` keeps
-  each value once (Copilot sends `auto` twice) and drops a description that repeats the name. A pick goes through `sessionController.setConfigOption()`: shown at once,
+  each value once (Copilot sends `auto` twice) and drops a description that repeats the name. A pick goes through `sessions.setConfigOption()`: shown at once,
   sent if the agent runs, else kept in `ComposerState.chosen` and sent when it starts. Each session
   keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
   every answer and update): a new start of its agent is set to them (`apply_config`, inside the
@@ -172,10 +170,10 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   ring until there is one.
 - **Session input** (spec: `docs/specs/session-input.md`): what the user gives a session reaches it
   in Chat and Terminal alike, or is refused with a reason, never dropped. A composer send is read
-  from its html (`inputOfComposer()`, `models/session-input/session-input.js`), never its plain `value` (a chip
+  from its html (`inputOfComposer()`, `hooks/sessions/input-parts.js`), never its plain `value` (a chip
   is only its label there), into `InputPart`s that `promptOfInput()` (ACP) and `cliPromptOf()`
-  (`models/cli-input/cli-input.js`, the CLI's `@path`, `@path#L3-5`) write. `sessionInput`
-  (`services/session-input/session-input.js`) decides a draft's first send (`draftTarget`: `startTerminal` or
+  (`hooks/sessions/cli-input.js`, the CLI's `@path`, `@path#L3-5`) write. `sessions`
+  (`hooks/sessions/input.js`) decides a draft's first send (`draftTarget`: `startTerminal` or
   the chat). A file attached in the composer (picked, pasted) never stays an attachment:
   `<acp-chat>` hands it to the column (`acp-chat-attach`), which saves it into the session's
   folder (`save_attachment`, `commands/attachments.rs`: `.brama/attachments/`, self-ignoring in
@@ -190,5 +188,5 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `MAX_ARG_PROMPT` bytes (`config/cli.rs`, a leading space if it starts with `-`); otherwise it's
   pasted, without Enter, once the CLI turns bracketed paste on or settles
   (`Terminals::paste_when_ready`). For a new input or view: add an `InputPart` kind that every
-  renderer writes, route through `sessionInput` / `$pendingInput`, never an `if (inTerminal)` in a
-  caller; "in a turn" is `inTurn()` (`models/sessions/sessions.js`).
+  renderer writes, route through `sessions` / `$pendingInput`, never an `if (inTerminal)` in a
+  caller; "in a turn" is `inTurn()` (`hooks/sessions/rules.js`).

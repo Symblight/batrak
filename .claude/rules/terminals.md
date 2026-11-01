@@ -33,7 +33,7 @@ memory; `$projectTabs`' `parse` drops terminal tabs) and the `terminals` hook
 tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
 while its tab or project isn't shown; a terminal's shell is closed once its tab leaves its project's
 tabs (any close, its project removed); exit 0 closes the tab (`closeProjectTab()`), any other exit
-keeps it with Restart. The previous page load's shells are closed (`close_window_terminals`) by `terminals.start()`, first thing in `<acp-app>`, and before any attach or close. "Open in → Terminal" is `sessionController.openInTerminal()` (a hook may not import a controller). `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
+keeps it with Restart. The previous page load's shells are closed (`close_window_terminals`) by `terminals.start()`, first thing in `<acp-app>`, and before any attach or close. "Open in → Terminal" is `sessions.openInTerminal()` (a hook may not import a controller). `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
 breaks become spaces), kept until the shell is connected. Files dropped from the OS on a running terminal (a tab, or a
 session's CLI) are typed in as shell-escaped paths plus a space (`terminals.shellPaths()`,
 `hooks/terminals/rules.js`), like a native terminal: Tauri's native drag and drop

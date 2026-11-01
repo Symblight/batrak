@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
-import { inputOfInserts, inputOfParts } from '../session-input.js';
+import { inputOfInserts, inputOfParts } from '../input-parts.js';
 
-/** @typedef {import('../session-input.js').ChxMessagePart} ChxMessagePart */
+/** @typedef {import('../input-parts.js').ChxMessagePart} ChxMessagePart */
 
 /** @param {unknown[]} parts */
 const chx = (parts) => /** @type {ChxMessagePart[]} */ (parts);

@@ -9,7 +9,7 @@ import { agents } from '../../hooks/agents/agents.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
-import { sessionController } from '../../services/session-controller/session-controller.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
@@ -171,12 +171,12 @@ export class AcpMainColumn extends ViewElement {
 
   #onSessionApply = () => {
     const id = this.#sessionReview.view?.sessionId;
-    if (id) sessionController.applyLocally(id);
+    if (id) sessions.applyLocally(id);
   };
 
   #onSessionCheckOut = () => {
     const id = this.#sessionReview.view?.sessionId;
-    if (id) sessionController.checkOutBranch(id);
+    if (id) sessions.checkOutBranch(id);
   };
 
   /** The review a Changes view's events come from: an active worktree session tab's, else the project's. */

@@ -1,12 +1,14 @@
 import { atom, computed } from 'nanostores';
-import { RUNNING } from '../../models/sessions/sessions.js';
 import { persistentMapStore, persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../models/types/types.js').Session} Session */
 /** @typedef {import('../../models/types/types.js').SessionStatus} SessionStatus */
 /** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
 
-/** Every agent session, as the backend lists them (stored, then synced with the agents) plus the ones started here; written by `sessionController`. */
+/** Statuses in which a session holds (or is getting) an agent process. */
+export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
+
+/** Every agent session, as the backend lists them (stored, then synced with the agents) plus the ones started here; written by the `sessions` hook. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
 
 /** Ids of the sessions pinned to the top of their project's list. Shared by every window. */

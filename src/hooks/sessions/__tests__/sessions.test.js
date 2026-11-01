@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { sessionController } from '../session-controller.js';
+import { sessions } from '../sessions.js';
 import { $agentList } from '../../../stores/agents/agents.js';
 import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
@@ -15,7 +15,7 @@ function session(fields = {}) {
   return /** @type {Session} */ ({ id: 's1', projectId: '/p', title: 'T', agentId: 'claude', agentName: 'Claude Code', status: 'stopped', folder: '/p/sub', lastActivityAt: '', ...fields });
 }
 
-describe('sessionController views', () => {
+describe('sessions views', () => {
   /** @type {{ cmd: string, args: unknown }[]} */
   let calls = [];
   /** @type {(cmd: string) => unknown} */
@@ -50,7 +50,7 @@ describe('sessionController views', () => {
 
   it("stops a running agent, then continues the session in its CLI", async () => {
     $sessions.set([session({ status: 'idle' })]);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     expect(calls.map((c) => c.cmd).filter((c) => c.startsWith('session_'))).to.deep.equal(['session_stop', 'session_open_cli']);
     expect(sent('session_open_cli')[0].args).to.deep.include({ sessionId: 's1' });
     expect(sessionTerminalOf('s1')).to.equal('t-cli');
@@ -63,7 +63,7 @@ describe('sessionController views', () => {
     $workspace.set({ path: '/p', name: 'p', rootId: 'root:/p' });
     $sessions.set([session({ id: 's1' }), session({ id: 's2', folder: '/p/other' })]);
     // Act
-    await sessionController.openInTerminal('s2');
+    await sessions.openInTerminal('s2');
     // Assert
     expect($activeSessionId.get()).to.equal('s2');
     expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([['/p/other', '/p', 'other']]);
@@ -74,8 +74,8 @@ describe('sessionController views', () => {
     $sessions.set([session({ id: 's1', projectId: '/gone' })]);
     answer = (cmd) => (cmd === 'open_workspace' ? new Error('no such folder') : null);
     // Act
-    await sessionController.openInTerminal('nope');
-    await sessionController.openInTerminal('s1');
+    await sessions.openInTerminal('nope');
+    await sessions.openInTerminal('s1');
     // Assert
     expect($terminals.get()).to.deep.equal({});
     expect($activeSessionId.get()).to.equal(null);
@@ -83,14 +83,14 @@ describe('sessionController views', () => {
 
   it('starts the CLI once however many ask meanwhile', async () => {
     $sessions.set([session()]);
-    await Promise.all([sessionController.continueInTerminal('s1'), sessionController.continueInTerminal('s1')]);
+    await Promise.all([sessions.continueInTerminal('s1'), sessions.continueInTerminal('s1')]);
     expect(sent('session_open_cli')).to.have.length(1);
   });
 
   it("shows why the CLI didn't start in its place", async () => {
     $sessions.set([session()]);
     answer = (cmd) => (cmd === 'session_open_cli' ? new Error('codex: not found') : null);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     const id = /** @type {string} */ (sessionTerminalOf('s1'));
     expect($terminals.get()[id]).to.include({ status: 'failed' });
     expect($terminals.get()[id].error).to.include('codex: not found');
@@ -98,9 +98,9 @@ describe('sessionController views', () => {
 
   it('closes the CLI and resumes the agent to continue in chat', async () => {
     $sessions.set([session()]);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     calls = [];
-    await sessionController.continueInChat('s1');
+    await sessions.continueInChat('s1');
     expect(calls.map((c) => c.cmd).filter((c) => c.startsWith('session_'))).to.deep.equal(['session_close_cli', 'session_resume']);
     expect(sessionTerminalOf('s1')).to.equal(null);
     expect($sessionViews.get()).to.deep.equal({});
@@ -108,34 +108,34 @@ describe('sessionController views', () => {
 
   it('closes the terminal of a CLI that exited when continuing in chat', async () => {
     $sessions.set([session()]);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     $terminals.set({ ...$terminals.get(), 't-cli': { ...$terminals.get()['t-cli'], status: 'exited', exit: { code: 0, signal: null } } });
     calls = [];
-    await sessionController.continueInChat('s1');
+    await sessions.continueInChat('s1');
     expect(sent('terminal_close').map((c) => c.args)).to.deep.equal([{ ids: ['t-cli'] }]);
     expect(sessionTerminalOf('s1')).to.equal(null);
   });
 
   it('closes the terminal of a removed session whose CLI exited', async () => {
     $sessions.set([session()]);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     $terminals.set({ ...$terminals.get(), 't-cli': { ...$terminals.get()['t-cli'], status: 'exited', exit: { code: 0, signal: null } } });
-    await sessionController.remove('s1');
+    await sessions.remove('s1');
     expect(sent('terminal_close').map((c) => c.args)).to.deep.equal([{ ids: ['t-cli'] }]);
   });
 
   it('starts an exited CLI again on Restart', async () => {
     $sessions.set([session()]);
-    await sessionController.continueInTerminal('s1');
+    await sessions.continueInTerminal('s1');
     $terminals.set({ ...$terminals.get(), 't-cli': { ...$terminals.get()['t-cli'], status: 'exited', exit: { code: 0, signal: null } } });
     answer = (cmd) => (cmd === 'session_open_cli' ? { terminalId: 't-cli-2' } : null);
-    await sessionController.restartCli('s1');
+    await sessions.restartCli('s1');
     expect(sessionTerminalOf('s1')).to.equal('t-cli-2');
     expect($terminals.get()['t-cli']).to.equal(undefined);
   });
 });
 
-describe('sessionController keeps the active session in its view', () => {
+describe('sessions keeps the active session in its view', () => {
   /** @type {{ cmd: string, args: unknown }[]} */
   let calls = [];
   let busy = false;
@@ -187,7 +187,7 @@ describe('sessionController keeps the active session in its view', () => {
     $sessions.set([session()]);
     setAgentView('claude', 'terminal');
     $activeSessionId.set('s1');
-    const shown = sessionController.show('s1');
+    const shown = sessions.show('s1');
     expect($activeShownView.get(), 'decided by its agent, before its list arrives').to.equal('terminal');
     synced(null);
     await shown;
@@ -200,7 +200,7 @@ describe('sessionController keeps the active session in its view', () => {
     $sessions.set([session({ status: 'working' })]);
     setAgentView('claude', 'terminal');
     $activeSessionId.set('s1');
-    const shown = sessionController.show('s1');
+    const shown = sessions.show('s1');
     expect($activeShownView.get()).to.equal('chat');
     await shown;
     expect(sent(), 'its turn left alone').not.to.include('session_stop');
@@ -211,7 +211,7 @@ describe('sessionController keeps the active session in its view', () => {
     $activeSessionId.set('s1');
     expect($activeShownView.get()).to.equal('chat');
     setAgentView('claude', 'terminal');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent()).to.deep.equal(['session_open_cli']);
     expect($activeShownView.get()).to.equal('terminal');
   });
@@ -220,12 +220,12 @@ describe('sessionController keeps the active session in its view', () => {
     $sessions.set([session({ status: 'working' })]);
     $activeSessionId.set('s1');
     setAgentView('claude', 'terminal');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent(), 'nothing stopped').to.deep.equal([]);
     expect($activeShownView.get()).to.equal('chat');
 
     $sessions.set([session({ status: 'idle' })]);
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent()).to.deep.equal(['session_stop', 'session_open_cli']);
   });
 
@@ -233,10 +233,10 @@ describe('sessionController keeps the active session in its view', () => {
     $sessions.set([session()]);
     $activeSessionId.set('s1');
     setAgentView('claude', 'terminal');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     calls = [];
     setAgentView('claude', 'chat');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent()).to.deep.equal(['session_cli_busy', 'session_close_cli', 'session_resume']);
     expect($activeShownView.get()).to.equal('chat');
     expect($historyResets.get()).to.deep.equal(['s1']);
@@ -246,11 +246,11 @@ describe('sessionController keeps the active session in its view', () => {
     $sessions.set([session()]);
     $activeSessionId.set('s1');
     setAgentView('claude', 'terminal');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     busy = true;
     calls = [];
     setAgentView('claude', 'chat');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent()).to.deep.equal(['session_cli_busy']);
     expect($activeShownView.get()).to.equal('terminal');
   });
@@ -259,17 +259,17 @@ describe('sessionController keeps the active session in its view', () => {
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
-    await sessionController.reconcile();
+    await sessions.reconcile();
     expect(sent(), 'no CLI before its first message').to.deep.equal([]);
     expect($activeShownView.get()).to.equal('chat');
-    expect(sessionController.startsInTerminal('d1')).to.equal(true);
+    expect(sessions.startsInTerminal('d1')).to.equal(true);
   });
 
   it("starts a draft's CLI with its first message and the draft's choices", async () => {
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
-    await sessionController.startInTerminal('d1', 'Fix the build', 'fix the build please');
+    await sessions.startInTerminal('d1', 'Fix the build', 'fix the build please');
     const open = calls.find((c) => c.cmd === 'session_open_cli');
     expect(open?.args).to.deep.include({ sessionId: 'd1' });
     expect(/** @type {{ draft: Record<string, unknown> }} */ (open?.args).draft).to.include({
@@ -288,10 +288,10 @@ describe('sessionController keeps the active session in its view', () => {
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     cliFails = new Error('no npx');
-    expect(await sessionController.startInTerminal('d1', 'T', 'go')).to.equal(false);
+    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(false);
     expect($draftSessions.get()).to.have.property('d1');
     cliFails = null;
-    expect(await sessionController.startInTerminal('d1', 'T', 'go')).to.equal(true);
+    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(true);
   });
 
   it("sends a draft's first message to the chat when its agent's CLI can't start a session", async () => {
@@ -302,8 +302,8 @@ describe('sessionController keeps the active session in its view', () => {
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
-    expect(sessionController.startsInTerminal('d1')).to.equal(false);
+    expect(sessions.startsInTerminal('d1')).to.equal(false);
     setAgentView('claude', 'chat');
-    expect(sessionController.startsInTerminal('d1'), 'its agent opens sessions as chat').to.equal(false);
+    expect(sessions.startsInTerminal('d1'), 'its agent opens sessions as chat').to.equal(false);
   });
 });
