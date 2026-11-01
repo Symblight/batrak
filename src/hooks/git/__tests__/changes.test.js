@@ -22,18 +22,11 @@ describe('git changes', () => {
     ]);
     expect([groups[0].added, groups[0].removed], 'summed over the files that have counts').to.deep.equal([13, 1]);
     expect([groups[1].added, groups[1].removed], 'none known stays null').to.deep.equal([null, null]);
+    expect(groups[0].children?.map((c) => [c.label, c.dir]), 'a file: its name and folder').to.deep.equal([['README.md', ''], ['b.js', 'src/a'], ['z.js', 'src']]);
     expect(groups.every((g) => g.file === null && g.dir === ''), 'a group is no file').to.equal(true);
 
     expect(git.groupChanges([]), 'nothing changed').to.deep.equal([]);
     expect(git.groupChanges([file('a.js')]).map((g) => g.id), 'no untracked group without untracked files').to.deep.equal(['group:changes']);
-  });
-
-  it('names a file by its last path segment and its folder, a top-level file with no folder', () => {
-    const [group] = git.groupChanges([file('top.js'), file('src/components/app.js')]);
-    expect(group.children?.map((c) => [c.label, c.dir])).to.deep.equal([
-      ['app.js', 'src/components'],
-      ['top.js', ''],
-    ]);
   });
 
   it('gives each kind of change its letter, name and color', () => {
@@ -83,7 +76,7 @@ describe('git changes', () => {
     for (const [from, to, expected] of cases) expect(git.relativePath(from, to), `${from} → ${to}`).to.equal(expected);
   });
 
-  it('sorts changed files into rows with their name and folder', () => {
+  it('sorts changed files into rows with their name (the last path segment) and folder, a top-level file with none', () => {
     const rows = git.changeRows([file('src/z.js'), file('a.md'), file('src/a/b.js')]);
     expect(rows.map((r) => [r.id, r.name, r.dir])).to.deep.equal([
       ['a.md', 'a.md', ''],

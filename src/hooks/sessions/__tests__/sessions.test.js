@@ -5,7 +5,7 @@ import { $agentList } from '../../../stores/agents/agents.js';
 import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
-import { $terminals, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
+import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
 /** @typedef {import('../../../models/types/types.js').Session} Session */
@@ -56,6 +56,9 @@ describe('sessions views', () => {
     expect(sessionTerminalOf('s1')).to.equal('t-cli');
     expect($terminals.get()['t-cli']).to.include({ status: 'running', sessionId: 's1', cwd: '/p/sub', label: 'Claude Code' });
     expect($sessionViews.get()).to.deep.equal({ s1: 'terminal' });
+    expect($cliStarting.get(), 'no longer starting').to.deep.equal([]);
+    await sessions.continueInTerminal('s1');
+    expect(sent('session_open_cli'), 'a CLI that runs is left alone').to.have.length(1);
   });
 
   it("opens a terminal in a session's folder and shows the session", async () => {
@@ -93,7 +96,23 @@ describe('sessions views', () => {
     await sessions.continueInTerminal('s1');
     const id = /** @type {string} */ (sessionTerminalOf('s1'));
     expect($terminals.get()[id]).to.include({ status: 'failed' });
-    expect($terminals.get()[id].error).to.include('codex: not found');
+    expect($terminals.get()[id].error).to.equal("Couldn't start Claude Code: codex: not found");
+    expect($terminals.get()[id].label).to.equal('Claude Code');
+    expect($cliStarting.get(), 'no longer starting').to.deep.equal([]);
+    answer = (cmd) => (cmd === 'session_open_cli' ? { terminalId: 't-cli' } : null);
+    await sessions.restartCli('s1');
+    expect(sessionTerminalOf('s1'), 'Restart replaces the failed one').to.equal('t-cli');
+    expect($terminals.get()[id], 'the failed entry is gone').to.equal(undefined);
+  });
+
+  it('asks the backend whether a CLI is busy only when it has one, and says not busy when it cannot tell', async () => {
+    expect(await sessions.cliBusy('s1')).to.equal(false);
+    expect(calls, 'no CLI: no question').to.deep.equal([]);
+    addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
+    answer = (cmd) => (cmd === 'session_cli_busy' ? true : null);
+    expect(await sessions.cliBusy('s1')).to.equal(true);
+    answer = (cmd) => (cmd === 'session_cli_busy' ? new Error('gone') : null);
+    expect(await sessions.cliBusy('s1')).to.equal(false);
   });
 
   it('closes the CLI and resumes the agent to continue in chat', async () => {
@@ -113,6 +132,7 @@ describe('sessions views', () => {
     calls = [];
     await sessions.continueInChat('s1');
     expect(sent('terminal_close').map((c) => c.args)).to.deep.equal([{ ids: ['t-cli'] }]);
+    expect(sent('session_close_cli'), 'nothing to stop: it exited by itself').to.have.length(0);
     expect(sessionTerminalOf('s1')).to.equal(null);
   });
 

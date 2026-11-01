@@ -34,7 +34,7 @@ function listen(el, type) {
 }
 
 describe('acp-change-row', () => {
-  it('shows the type badge, name, folder, counts and a picked checkbox, with the full path in a tooltip', async () => {
+  it('shows the type badge, name, folder, counts and a picked checkbox with the full path in a tooltip, a rename relative to the folder, and a deleted file struck out', async () => {
     const { root, row } = await render({ picked: true });
     expect(root.querySelector('.acp-change-row__badge')?.textContent).to.equal('JS');
     expect(root.querySelector('.acp-change-row__name')?.textContent).to.equal('b.js');
@@ -45,18 +45,14 @@ describe('acp-change-row', () => {
     expect(/** @type {HTMLElementTagNameMap['md-checkbox']} */ (root.querySelector('.acp-change-row__pick')).checked).to.equal(true);
     expect(row.getAttribute('aria-expanded')).to.equal('false');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
-  });
 
-  it('shows a rename relative to the folder, with where it came from in a tooltip, and a deleted file struck out with Edit disabled', async () => {
-    const renamed = await render({ row: rowOf({ path: 'src/new/b.js', origPath: 'src/old/b.js' }) });
-    renamed.el.row = { ...rowOf({ path: 'src/new/b.js', origPath: 'src/old/b.js' }), dir: 'src/new' };
-    await renamed.el.updateComplete;
+    const renamed = await render({ row: { ...rowOf({ path: 'src/new/b.js', origPath: 'src/old/b.js' }), dir: 'src/new' } });
     expect(renamed.root.querySelector('.acp-change-row__renamed')?.textContent).to.equal('(../old/b.js)');
     expect(tooltipOf(renamed.root.querySelector('.acp-change-row__renamed'))).to.equal('Renamed from src/old/b.js');
 
-    const deleted = await render({ row: rowOf({ kind: 'deleted' }), expanded: true });
+    const deleted = await render({ row: rowOf({ kind: 'deleted' }) });
     expect(deleted.root.querySelector('.acp-change-row__name_deleted')).to.not.equal(null);
-    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (deleted.root.querySelector('.acp-change-row__action')).disabled).to.equal(true);
+    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (deleted.root.querySelector('.acp-change-row__action')).disabled, 'Edit is disabled').to.equal(true);
   });
 
   it('has Edit and Revert with tooltips (shown by CSS while hovered, focused or expanded), and Edit asks to open the file without toggling', async () => {

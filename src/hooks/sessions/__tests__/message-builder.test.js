@@ -24,7 +24,7 @@ const textUpdate = (kind, text = 'x') => /** @type {AcpSessionUpdate} */ ({ sess
 const update = (fields) => /** @type {AcpSessionUpdate} */ (/** @type {unknown} */ (fields));
 
 describe('MessageBuilder', () => {
-  it('grows one part from consecutive text chunks, and starts the next after a tool call or plan', () => {
+  it('grows one part from consecutive text chunks, starts the next after a tool call or plan, and puts the plan in one part', () => {
     const b = new MessageBuilder('s1', 'agent');
     const a1 = shape(b.chunks(textUpdate('agent_message_chunk', 'Hel'))[0]);
     const a2 = shape(b.chunks(textUpdate('agent_message_chunk', 'lo'))[0]);
@@ -35,9 +35,12 @@ describe('MessageBuilder', () => {
     expect(after.partId, 'a new part after the tool call').to.not.equal(a1.partId);
     expect(tool.partId, 'tool calls are keyed by their id').to.equal(b.toolPartId('t1'));
     expect([a1.messageId, a1.conversationId, a1.authorId]).to.deep.equal([b.messageId, 's1', 'agent']);
+    const plan = shape(b.chunks(update({ sessionUpdate: 'plan', entries: [{ content: 'a' }] }))[0]);
+    expect(plan.partId, 'the plan is one part').to.equal(`${b.messageId}-plan`);
+    expect(b.chunks(textUpdate('available_commands_update')), 'an update it does not show says nothing').to.deep.equal([]);
   });
 
-  it('sends only the fields a tool update carries, and says nothing for a call without an id', () => {
+  it('sends only the fields a tool update carries, locations relative to the session’s folder when known, and nothing for a call without an id', () => {
     const b = new MessageBuilder('unknown-session', 'agent');
     const first = shape(b.chunks(update({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Edit', locations: [{ path: '/p/src/a.js', line: 4 }, { path: '/p/b.js' }] }))[0]);
     expect(Object.keys(first.delta ?? {}).sort(), 'no status or kind: not carried').to.deep.equal(['data', 'label', 'locations']);
@@ -45,14 +48,11 @@ describe('MessageBuilder', () => {
     const next = shape(b.chunks(update({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' }))[0]);
     expect(Object.keys(next.delta ?? {}).sort()).to.deep.equal(['data', 'status']);
     expect(b.chunks(update({ sessionUpdate: 'tool_call' }))).to.deep.equal([]);
-  });
 
-  it('shows a tool call’s locations relative to the session’s folder when it is known', () => {
     $sessions.set([/** @type {never} */ ({ id: 's-known', folder: '/p/sub' })]);
     try {
-      const b = new MessageBuilder('s-known', 'agent');
-      const call = shape(b.chunks(update({ sessionUpdate: 'tool_call', toolCallId: 't1', locations: [{ path: '/p/sub/src/a.js', line: 2 }, { path: '/p/other/b.js' }] }))[0]);
-      expect(call.delta?.locations, 'inside the folder: relative; outside: as it is').to.deep.equal([{ path: 'src/a.js', line: 2 }, { path: '/p/other/b.js' }]);
+      const known = shape(new MessageBuilder('s-known', 'agent').chunks(update({ sessionUpdate: 'tool_call', toolCallId: 't1', locations: [{ path: '/p/sub/src/a.js', line: 2 }, { path: '/p/other/b.js' }] }))[0]);
+      expect(known.delta?.locations, 'a known folder: inside it relative, outside as it is').to.deep.equal([{ path: 'src/a.js', line: 2 }, { path: '/p/other/b.js' }]);
     } finally {
       $sessions.set([]);
     }
@@ -68,13 +68,6 @@ describe('MessageBuilder', () => {
       if (live) expect(shape(out[0]).delta?.data?.endedAt).to.be.a('number');
     }
     expect(new MessageBuilder('s1', 'agent').chunks(textUpdate('agent_thought_chunk', '')), 'an empty thought says nothing').to.deep.equal([]);
-  });
-
-  it('puts the plan in one part and ignores updates it does not show', () => {
-    const b = new MessageBuilder('s1', 'agent');
-    const plan = shape(b.chunks(update({ sessionUpdate: 'plan', entries: [{ content: 'a' }] }))[0]);
-    expect(plan.partId).to.equal(`${b.messageId}-plan`);
-    expect(b.chunks(textUpdate('available_commands_update')), 'not shown').to.deep.equal([]);
   });
 
   it('finishes the message, ending a thought first, or aborts it when the reply was stopped', () => {

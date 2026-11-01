@@ -131,15 +131,10 @@ describe('acp-agents-view', () => {
     expect(tooltipOf(root, button(copilot, 'Add'))).to.equal("Add Copilot, pinned to the registry's version");
     expect(text(/** @type {Element} */ (row(root, 'mine').querySelector('.acp-agents-view__details')))).to.equal('mine');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
-    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer')))).to.contain('Versions are checked against the ACP registry daily');
-  });
-
-  it('shows when the registry was last checked', async () => {
-    const { root } = await render();
-    const state = /** @type {Element} */ (root.querySelector('.acp-agents-view__footer-state'));
-    expect(text(state)).to.contain('Last checked');
-    const when = /** @type {HTMLElementTagNameMap['acp-datetime']} */ (state.querySelector('acp-datetime'));
-    expect(when.value).to.equal('2026-10-21T08:00:00.000Z');
+    const footer = /** @type {Element} */ (root.querySelector('.acp-agents-view__footer'));
+    expect(text(footer)).to.contain('Versions are checked against the ACP registry daily').and.contain('Last checked');
+    const when = /** @type {HTMLElementTagNameMap['acp-datetime']} */ (footer.querySelector('acp-datetime'));
+    expect(when.value, 'when the registry was last checked').to.equal('2026-10-21T08:00:00.000Z');
     expect(when.textContent?.trim()).to.not.equal('');
   });
 
@@ -193,17 +188,16 @@ describe('acp-agents-view', () => {
     expect(['claude', 'gem', 'codex'].map((id) => card(id).revealed)).to.deep.equal([false, false, true]);
   });
 
-  it('updates all, checks the registry and shows that it does', async () => {
+  it('asks to update all, check the registry and open agents.json, and shows a check that runs', async () => {
     const { el, root } = await render({ pending: { updating: [], checking: true } });
-    const all = heard(el, 'acp-agents-update-all');
-    const checked = heard(el, 'acp-agents-registry-check');
+    const asked = { all: heard(el, 'acp-agents-update-all'), checked: heard(el, 'acp-agents-registry-check'), opened: heard(el, 'acp-agents-file-open') };
     button(root, 'Update all').click();
-    expect(all).to.have.length(1);
+    button(root, 'Edit agents.json').click();
     expect(button(root, 'Checking…').disabled).to.equal(true);
     el.pending = { updating: [], checking: false };
     await el.updateComplete;
     button(root, 'Check now').click();
-    expect(checked).to.have.length(1);
+    expect([asked.all.length, asked.opened.length, asked.checked.length]).to.deep.equal([1, 1, 1]);
   });
 
   it('adds a registry agent in one click, and the user’s own agents to the project', async () => {
@@ -238,25 +232,22 @@ describe('acp-agents-view', () => {
     expect(row(root, 'codex').querySelector('acp-agent-card')).not.to.equal(null);
   });
 
-  it('adds only from the registry: no custom agent, and says when nothing matched', async () => {
-    const { root } = await render();
-    expect(() => button(root, 'Add agent'), 'no add form').to.throw();
-    const empty = { ...VIEW, installed: [], userAgents: [], registry: [] };
-    const { root: none } = await render({ view: empty, query: { query: 'Hermes', filter: 'all' } });
-    expect(text(/** @type {Element} */ (none.querySelector('.acp-agents-view__empty')))).to.equal('No agents match “Hermes”.');
-    expect(none.querySelector('md-button.acp-agents-view__empty-add'), 'no custom agent').to.equal(null);
-  });
-
-  it('says when the registry has not answered yet', async () => {
-    const never = { ...VIEW, installed: [], userAgents: [], registry: [], registryState: { checkedAt: null, offline: false, checking: true } };
-    const { root } = await render({ view: never });
-    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__empty')))).to.equal('Getting the agents from the ACP registry…');
-    expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer-state')))).to.contain('Not checked yet');
-    const offline = { ...never, registryState: { checkedAt: null, offline: true, checking: false } };
-    const { root: away } = await render({ view: offline });
-    expect(text(/** @type {Element} */ (away.querySelector('.acp-agents-view__empty')))).to.equal(
-      'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.',
-    );
+  it('adds only from the registry (no custom agent), and says why nothing is listed: no match, no answer yet, offline', async () => {
+    const full = await render();
+    expect(() => button(full.root, 'Add agent'), 'no add form').to.throw();
+    const none = { ...VIEW, installed: [], userAgents: [], registry: [] };
+    /** @type {[Partial<typeof VIEW>, AgentsQuery, string, string | null][]} */
+    const cases = [
+      [{}, { query: 'Hermes', filter: 'all' }, 'No agents match “Hermes”.', null],
+      [{ registryState: { checkedAt: null, offline: false, checking: true } }, ALL, 'Getting the agents from the ACP registry…', 'Not checked yet'],
+      [{ registryState: { checkedAt: null, offline: true, checking: false } }, ALL, 'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.', null],
+    ];
+    for (const [state, query, message, footer] of cases) {
+      const { root } = await render({ view: { ...none, ...state }, query });
+      expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__empty'))), message).to.equal(message);
+      expect(root.querySelector('md-button.acp-agents-view__empty-add'), 'no custom agent').to.equal(null);
+      if (footer) expect(text(/** @type {Element} */ (root.querySelector('.acp-agents-view__footer-state')))).to.contain(footer);
+    }
   });
 
   it('shows the registry or an agent when asked, and says when it has', async () => {
@@ -271,12 +262,5 @@ describe('acp-agents-view', () => {
     await el.updateComplete;
     expect(/** @type {HTMLElementTagNameMap['acp-agent-card']} */ (row(root, 'codex').querySelector('acp-agent-card')).revealed).to.equal(true);
     expect(revealed).to.deep.equal([{ reveal: add }, { reveal: show }]);
-  });
-
-  it('asks to open agents.json', async () => {
-    const { el, root } = await render();
-    const opened = heard(el, 'acp-agents-file-open');
-    button(root, 'Edit agents.json').click();
-    expect(opened).to.have.length(1);
   });
 });

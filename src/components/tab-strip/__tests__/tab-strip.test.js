@@ -146,7 +146,7 @@ describe('acp-tab-strip', () => {
       return { el, root, strip, button, menu, rows, listed, open, listen, closeRow };
     }
 
-    it("shows no button while the tabs fit, and once they don't lists only the tabs out of view, in strip order", async () => {
+    it("shows no button while the tabs fit, and once they don't lists only the tabs out of view, in strip order, the active one selected", async () => {
       // Arrange
       const fits = await render({ width: 900, count: 2 });
       expect(fits.button(), 'while they fit').to.equal(null);
@@ -160,27 +160,14 @@ describe('acp-tab-strip', () => {
       expect(hidden.length).to.be.within(1, ids.length - 1);
       expect(hidden).not.to.include(ids[0]);
       expect(hidden, 'the tail of the strip').to.deep.equal(ids.slice(ids.length - hidden.length));
-    });
-
-    it('lists the active tab selected when it is scrolled out of view', async () => {
-      const { el, strip, open, rows } = await render();
-      strip.scrollLeft = strip.scrollWidth;
-      await settle(el);
-      await open();
-      const selected = rows().filter((r) => r.hasAttribute('selected'));
-      expect(selected.map((r) => r.getAttribute('value'))).to.deep.equal([ids[0]]);
-      expect(rows()[0].getAttribute('value')).to.equal(ids[0]);
-    });
-
-    it('activates a picked row and closes the menu', async () => {
-      const { el, open, rows, menu, listen } = await render();
-      await open();
-      const activations = listen('acp-tab-activate');
-      const row = rows()[0];
-      /** @type {HTMLElement} */ (row.shadowRoot?.querySelector('.md-menu-item__interactive')).click();
-      await settle(el);
-      expect(activations).to.deep.equal([{ id: row.getAttribute('value') }]);
-      expect(menu().open).to.be.false;
+      // Act: the active tab scrolls out of view
+      const scrolled = await render();
+      scrolled.strip.scrollLeft = scrolled.strip.scrollWidth;
+      await settle(scrolled.el);
+      await scrolled.open();
+      // Assert
+      expect(scrolled.rows().filter((r) => r.hasAttribute('selected')).map((r) => r.getAttribute('value')), 'listed, selected').to.deep.equal([ids[0]]);
+      expect(scrolled.listed()[0]).to.equal(ids[0]);
     });
 
     it("closes a row's tab with its ×, or unpins a pinned row's tab with its pin, keeping the menu open", async () => {
@@ -199,7 +186,7 @@ describe('acp-tab-strip', () => {
       expect(plain.menu().open).to.be.true;
 
       // Arrange
-      const { el, strip, open, menu, listen, closeRow } = await render({ pinned: [ids[0]], active: ids[5] });
+      const { el, strip, open, menu, rows, listen, closeRow } = await render({ pinned: [ids[0]], active: ids[5] });
       strip.scrollLeft = strip.scrollWidth;
       await settle(el);
       await open();
@@ -210,26 +197,14 @@ describe('acp-tab-strip', () => {
       // Assert
       expect(pins).to.deep.equal([{ id: ids[0], pinned: false }]);
       expect(menu().open).to.be.true;
-    });
-
-    it('closes a row with Delete and the menu with Escape', async () => {
-      // Arrange
-      const { el, open, rows, listen, menu } = await render();
-      await open();
-      const closes = listen('acp-tab-close-request');
-      const row = rows()[0];
-      const id = row.getAttribute('value');
-      // Act
-      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true, composed: true }));
+      // Act: a picked row
+      const activations2 = listen('acp-tab-activate');
+      const picked = rows()[0];
+      /** @type {HTMLElement} */ (picked.shadowRoot?.querySelector('.md-menu-item__interactive')).click();
       await settle(el);
       // Assert
-      expect(closes).to.deep.equal([{ id, scope: 'tab', ids: [id] }]);
-      expect(menu().open, 'Delete keeps the menu').to.be.true;
-      // Act
-      menu().dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
-      await settle(el);
-      // Assert
-      expect(menu().open).to.be.false;
+      expect(activations2, 'surfaces on the strip').to.deep.equal([{ id: picked.getAttribute('value') }]);
+      expect(menu().open, 'and closes the list').to.be.false;
     });
   });
 

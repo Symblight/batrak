@@ -51,7 +51,7 @@ async function open(view) {
 }
 
 describe('acp-tab-overflow', () => {
-  it('shows its button only while visible, and lists the tabs with the active one selected', async () => {
+  it('shows its button only while visible, lists the tabs with the active one selected, and marks the unsaved, deleted and pinned ones', async () => {
     const hidden = await render({ visible: false });
     expect(hidden.button()).to.equal(null);
     const view = await render({ items: [item('a', { file: null, icon: '<svg id="own"></svg>' }), item('b'), item('c')] });
@@ -63,21 +63,16 @@ describe('acp-tab-overflow', () => {
     expect(view.rows().map((r) => [r.getAttribute('value'), r.hasAttribute('selected')])).to.deep.equal([['a', false], ['b', true], ['c', false]]);
     expect(view.rows()[0].querySelector('#own'), 'a view tab’s own icon').to.not.equal(null);
     expect(view.rows()[1].querySelector('acp-file-icon')?.getAttribute('name'), 'a file tab’s').to.equal('b.js');
-  });
 
-  it('marks unsaved and deleted tabs and explains each mark in a tooltip, not a title', async () => {
-    const view = await render({ items: [item('a', { unsaved: true, deleted: true }), item('b', { pinned: true })] });
-    await open(view);
-    const [a, b] = view.rows();
-    expect(a.querySelector('.acp-tab-overflow__title_deleted')?.textContent).to.equal('A');
-    expect(a.querySelector('.acp-tab-overflow__unsaved')).to.not.equal(null);
-    expect(b.querySelector('.acp-tab-overflow__unsaved')).to.equal(null);
+    const marked = await render({ items: [item('a', { unsaved: true, deleted: true }), item('b', { pinned: true })] });
+    await open(marked);
+    const [a, b] = marked.rows();
+    expect(a.querySelector('.acp-tab-overflow__title_deleted')?.textContent, 'deleted on disk').to.equal('A');
+    expect([a, b].map((r) => r.querySelector('.acp-tab-overflow__unsaved') !== null), 'unsaved mark').to.deep.equal([true, false]);
     expect(tooltipOf(a.querySelector('.acp-tab-overflow__unsaved'))).to.equal('Unsaved changes');
-    expect(tooltipOf(a.querySelector('.acp-tab-overflow__close'))).to.equal('Close');
-    expect(a.querySelector('.acp-tab-overflow__close')?.getAttribute('aria-label')).to.equal('Close A');
-    expect(tooltipOf(b.querySelector('.acp-tab-overflow__close')), 'a pinned tab’s × unpins').to.equal('Unpin');
-    expect(b.querySelector('.acp-tab-overflow__close')?.getAttribute('aria-label')).to.equal('Unpin B');
-    expect(view.root.querySelector('[title]')).to.equal(null);
+    expect([a, b].map((r) => tooltipOf(r.querySelector('.acp-tab-overflow__close'))), 'a pinned tab’s × unpins').to.deep.equal(['Close', 'Unpin']);
+    expect([a, b].map((r) => r.querySelector('.acp-tab-overflow__close')?.getAttribute('aria-label'))).to.deep.equal(['Close A', 'Unpin B']);
+    expect(marked.root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
   });
 
   it('activates a picked row and closes the list, telling the strip', async () => {

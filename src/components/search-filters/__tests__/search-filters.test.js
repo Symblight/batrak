@@ -156,25 +156,22 @@ describe('acp-search-filters', () => {
     expect(leaves.length).to.equal(1);
   });
 
-  it('sets the mask from its field on Enter, trimmed; typing alone sets nothing', async () => {
-    const el = await render();
-    const changes = collect(el, 'acp-search-filter-change');
-    await openMenu(el, 'mask');
-    typeIn(el, 'mask', ' *.ts, !*.test.ts ');
-    expect(changes).to.deep.equal([]);
-    keyIn(el, 'mask', 'Enter');
-    expect(changes.map((e) => e.detail)).to.deep.equal([{ which: 'mask', value: '*.ts, !*.test.ts' }]);
-    await until(() => !menu(el, 'mask').open);
-  });
-
-  it('offers mask presets; a pick sets the mask', async () => {
+  it('sets the mask by typing it and pressing Enter (trimmed; typing alone sets nothing) or by picking a preset', async () => {
     const el = await render();
     const changes = collect(el, 'acp-search-filter-change');
     await openMenu(el, 'mask');
     const presets = [...menu(el, 'mask').querySelectorAll('md-menu-item')].map((i) => i.getAttribute('value'));
     expect(presets).to.deep.equal(['*.{js,ts}', '*.css', '*.md', '!*.test.js', '!pnpm-lock.yaml']);
+    typeIn(el, 'mask', ' *.ts, !*.test.ts ');
+    expect(changes, 'typing alone sets nothing').to.deep.equal([]);
+    keyIn(el, 'mask', 'Enter');
+    await until(() => !menu(el, 'mask').open);
+    await openMenu(el, 'mask');
     pick(el, 'mask', '*.css');
-    expect(changes.map((e) => e.detail)).to.deep.equal([{ which: 'mask', value: '*.css' }]);
+    expect(changes.map((e) => e.detail)).to.deep.equal([
+      { which: 'mask', value: '*.ts, !*.test.ts' },
+      { which: 'mask', value: '*.css' },
+    ]);
   });
 
   it("keeps typing in a menu's field instead of jumping to an item, and lets Alt+C through", async () => {
@@ -189,30 +186,25 @@ describe('acp-search-filters', () => {
     expect(heard.length, 'Alt+C goes on to the dialog').to.equal(1);
   });
 
-  it('closes only the menu on Escape, not while an IME composes; closeOpenMenu says whether one was open', async () => {
+  it('closes only the menu on Escape, not while an IME composes, handing focus back; closeOpenMenu and closeMenus close what is open', async () => {
     const el = await render();
+    const leaves = collect(el, 'acp-search-filter-leave');
     expect(el.closeOpenMenu(), 'none open').to.equal(false);
     await openMenu(el, 'mask');
     field(el, 'mask').focus();
     keyIn(el, 'mask', 'Escape', { isComposing: true });
     await menu(el, 'mask').updateComplete;
     expect(menu(el, 'mask').open, 'composing').to.equal(true);
+    keyIn(el, 'mask', 'Escape');
+    await until(() => !menu(el, 'mask').open);
+    expect(leaves.length, 'focus handed back').to.be.greaterThan(0);
+
+    await openMenu(el, 'mask');
     expect(el.closeOpenMenu()).to.equal(true);
     await until(() => !menu(el, 'mask').open);
-
     await openMenu(el, FOLDER);
     el.closeMenus();
     await until(() => !menu(el, FOLDER).open);
-  });
-
-  it('hands focus back when a menu closes with focus in it', async () => {
-    const el = await render();
-    const leaves = collect(el, 'acp-search-filter-leave');
-    await openMenu(el, 'mask');
-    field(el, 'mask').focus();
-    keyIn(el, 'mask', 'Escape');
-    await until(() => !menu(el, 'mask').open);
-    expect(leaves.length).to.be.greaterThan(0);
   });
 
   it('picks the first folder on Enter only from a list that answers the latest typing', async () => {

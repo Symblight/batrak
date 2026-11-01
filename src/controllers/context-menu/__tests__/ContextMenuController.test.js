@@ -42,3 +42,33 @@ describe('ContextMenuController.openFrom', () => {
     expect(menu.open).to.equal(false);
   });
 });
+
+describe('ContextMenuController.onKeydown', () => {
+  it('opens the menu under the focused target on ContextMenu or Shift+F10, and leaves other keys to the host', async () => {
+    // Arrange
+    const host = /** @type {MenuHost} */ (await fixture(html`<test-menu-host></test-menu-host>`));
+    const root = /** @type {ShadowRoot} */ (host.shadowRoot);
+    const button = /** @type {HTMLElement} */ (root.querySelector('button'));
+    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('md-menu'));
+    /** @type {boolean[]} */
+    const handled = [];
+    button.addEventListener('keydown', (e) => handled.push(host.controller.onKeydown('a', e)));
+    /** @type {[string, KeyboardEventInit, boolean][]} */
+    const cases = [
+      ['a', {}, false],
+      ['F10', {}, false],
+      ['ContextMenu', {}, true],
+      ['F10', { shiftKey: true }, true],
+    ];
+    for (const [key, init, opens] of cases) {
+      // Act
+      const event = new KeyboardEvent('keydown', { key, ...init, bubbles: true, cancelable: true });
+      button.dispatchEvent(event);
+      await new Promise((r) => setTimeout(r, 20));
+      // Assert
+      expect([handled.at(-1), event.defaultPrevented, menu.open], `${key} ${JSON.stringify(init)}`).to.deep.equal([opens, opens, opens]);
+      expect(host.controller.target, 'the menu is for the target').to.equal(opens ? 'a' : null);
+      await menu.close();
+    }
+  });
+});

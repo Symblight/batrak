@@ -98,15 +98,6 @@ describe('acp-session-row', () => {
     expect((await render()).row.getAttribute('aria-selected')).to.equal('false');
   });
 
-  it('selects on a click, Enter or Space', async () => {
-    const { el, row } = await render();
-    const selects = record(el, 'acp-session-select');
-    row.click();
-    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-    row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
-    expect(selects.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }, { sessionId: 'a' }, { sessionId: 'a' }]);
-  });
-
   it('swaps the status for a menu button while hovered, focused or its menu is open, and asks for the menu under it without selecting', async () => {
     const { el, root, row } = await render({ unread: true });
     const selects = record(el, 'acp-session-select');
@@ -135,63 +126,59 @@ describe('acp-session-row', () => {
     expect(selects, 'not selected').to.have.length(0);
   });
 
-  it('asks for the menu at the pointer on a right-click, and under the row on ContextMenu or Shift+F10', async () => {
+  it('selects on a click, Enter or Space, and asks for the menu at the pointer on a right-click and under the row on ContextMenu or Shift+F10', async () => {
     const { el, row } = await render();
+    const selects = record(el, 'acp-session-select');
     const menus = record(el, 'acp-session-row-menu');
+    row.click();
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: ' ' }));
+    expect(selects.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a' }, { sessionId: 'a' }, { sessionId: 'a' }]);
     const click = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 5, clientY: 7 });
     row.dispatchEvent(click);
     expect(click.defaultPrevented).to.equal(true);
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'ContextMenu', cancelable: true }));
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, cancelable: true }));
-    expect(menus.map((e) => [e.detail.x !== undefined, e.detail.anchor])).to.deep.equal([[true, undefined], [true, undefined], [true, undefined]]);
+    expect(menus.map((e) => [e.detail.anchor, typeof e.detail.x]), 'at a point, not under a button').to.deep.equal([[undefined, 'number'], [undefined, 'number'], [undefined, 'number']]);
     expect([menus[0].detail.x, menus[0].detail.y]).to.deep.equal([5, 7]);
     const rect = row.getBoundingClientRect();
     expect([menus[1].detail.x, menus[1].detail.y]).to.deep.equal([rect.left + 24, rect.bottom]);
+    expect(selects, 'the menu keys do not select').to.have.length(3);
   });
 
-  describe('rename', () => {
-    /** @param {ParentNode} root */
-    const field = async (root) => {
+  it('edits the title in place on F2, a double-click or startRename() and saves on Enter; Escape, an empty or an unchanged title keep it', async () => {
+    const { el, root, row } = await render();
+    const renames = record(el, 'acp-session-rename');
+    /** @param {ParentNode} parent */
+    const field = async (parent) => {
       await new Promise((r) => setTimeout(r, 0));
-      return /** @type {HTMLElementTagNameMap['md-text-field'] | null} */ (root.querySelector('.acp-session-row__rename'));
+      return /** @type {HTMLElementTagNameMap['md-text-field'] | null} */ (parent.querySelector('.acp-session-row__rename'));
     };
-
-    it('edits the title in place on F2, a double-click or startRename(), and saves on Enter', async () => {
-      const { el, root, row } = await render();
-      const renames = record(el, 'acp-session-rename');
+    // F2, then Enter saves
+    row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2' }));
+    const input = /** @type {HTMLElementTagNameMap['md-text-field']} */ (await field(root));
+    expect(input.value).to.equal('Session a');
+    input.value = 'Gaps';
+    input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+    await el.updateComplete;
+    expect(renames.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a', title: 'Gaps' }]);
+    expect(root.querySelector('.acp-session-row__rename')).to.equal(null);
+    expect(root.activeElement, 'focus back on the row').to.equal(row);
+    // a double-click and startRename() start it too
+    row.dispatchEvent(new MouseEvent('dblclick'));
+    expect(await field(root)).to.not.equal(null);
+    el.renaming = false;
+    await el.updateComplete;
+    el.startRename();
+    expect(await field(root)).to.not.equal(null);
+    // these keep the title
+    for (const [value, key] of [['Other', 'Escape'], ['  ', 'Enter'], ['Session a', 'Enter']]) {
+      const open = await field(root);
+      /** @type {HTMLElementTagNameMap['md-text-field']} */ (open).value = value;
+      open?.dispatchEvent(new KeyboardEvent('keydown', { key }));
+      await el.updateComplete;
       row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2' }));
-      const input = /** @type {HTMLElementTagNameMap['md-text-field']} */ (await field(root));
-      expect(input.value).to.equal('Session a');
-      input.value = 'Gaps';
-      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-      await el.updateComplete;
-      expect(renames.map((e) => e.detail)).to.deep.equal([{ sessionId: 'a', title: 'Gaps' }]);
-      expect(root.querySelector('.acp-session-row__rename')).to.equal(null);
-      expect(root.activeElement, 'focus back on the row').to.equal(row);
-
-      row.dispatchEvent(new MouseEvent('dblclick'));
-      expect(await field(root)).to.not.equal(null);
-      el.renaming = false;
-      await el.updateComplete;
-      el.startRename();
-      expect(await field(root)).to.not.equal(null);
-    });
-
-    it('keeps the title on Escape or when left empty or unchanged', async () => {
-      const { el, root, row } = await render();
-      const renames = record(el, 'acp-session-rename');
-      for (const [value, key] of [
-        ['Other', 'Escape'],
-        ['  ', 'Enter'],
-        ['Session a', 'Enter'],
-      ]) {
-        row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F2' }));
-        const input = /** @type {HTMLElementTagNameMap['md-text-field']} */ (await field(root));
-        input.value = value;
-        input.dispatchEvent(new KeyboardEvent('keydown', { key }));
-        await el.updateComplete;
-      }
-      expect(renames).to.have.length(0);
-    });
+    }
+    expect(renames, 'nothing more was saved').to.have.length(1);
   });
 });

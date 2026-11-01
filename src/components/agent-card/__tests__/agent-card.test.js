@@ -110,6 +110,9 @@ describe('acp-agent-card', () => {
     expect(tooltipOf(root, button(root, 'Update'))).to.equal('Pin 0.94.0 in agents.json');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
 
+    const marked = /** @type {HTMLElementTagNameMap['acp-marked-text']} */ ((await render({ agent: { ...CLAUDE, nameMatches: [[0, 2], [7, 9]] } })).root.querySelector('acp-marked-text'));
+    expect([marked.text, marked.ranges], 'what the search matched').to.deep.equal(['Claude Code', [[0, 2], [7, 9]]]);
+
     const unknown = await render({ agent: agent({ id: 'gem', name: 'Gemini CLI', update: { to: '0.65.0', pin: true } }) });
     expect(button(unknown.root, 'Pin latest (0.65.0)'), 'version unknown: pin it').to.be.ok;
 
@@ -118,14 +121,7 @@ describe('acp-agent-card', () => {
     expect(tooltipOf(off.root, /** @type {Element} */ (off.root.querySelector('md-switch')))).to.equal('Turn on');
   });
 
-  it('marks what the search matched in the name', async () => {
-    const { root } = await render({ agent: { ...CLAUDE, nameMatches: [[0, 2], [7, 9]] } });
-    const marked = /** @type {HTMLElementTagNameMap['acp-marked-text']} */ (root.querySelector('acp-marked-text'));
-    expect(marked.text).to.equal('Claude Code');
-    expect(marked.ranges).to.deep.equal([[0, 2], [7, 9]]);
-  });
-
-  it('lets an agent with a CLI choose Chat or Terminal for its sessions', async () => {
+  it('lets an agent with a CLI choose Chat or Terminal for its sessions, and gives one that is off no choice', async () => {
     const { el, root } = await render({ agent: CLAUDE, terminalView: true });
     const views = heard(el, 'acp-agent-session-view');
     const radios = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...root.querySelectorAll('md-radio')]);
@@ -136,6 +132,7 @@ describe('acp-agent-card', () => {
     const group = /** @type {HTMLFieldSetElement} */ (root.querySelector('fieldset'));
     expect(text(/** @type {Element} */ (group.querySelector('legend')))).to.equal('Open sessions in');
     expect(radios.every((r) => group.contains(r)), 'one group per agent').to.equal(true);
+    expect(radios.map((r) => r.name), 'named for the agent: the arrow keys move within it').to.deep.equal(['acp-agent-card-mode-claude', 'acp-agent-card-mode-claude']);
     const [chatText, terminalText] = [...group.querySelectorAll('.acp-agent-card__mode-text')].map(text);
     expect(chatText, 'its version on the Chat line, its description under it').to.equal("Chat 0.90.0 → 0.94.0 ACP wrapper for Anthropic's Claude");
     expect(terminalText).to.equal('Terminal CLI available');
@@ -160,27 +157,13 @@ describe('acp-agent-card', () => {
       ['terminal', false, true],
     ]);
     expect(text(/** @type {Element} */ (gem.root.querySelector('fieldset')))).to.contain('No CLI for this agent');
+
+    const off = await render({ agent: agent({ id: 'codex', name: 'Codex', enabled: false, status: 'off', terminal: { resume: true, new: true } }), terminalView: true });
+    expect(off.root.querySelector('fieldset'), 'an agent that is off has no choice').to.equal(null);
+    expect([off.root.querySelector('md-switch'), off.root.querySelector('.acp-agent-card__more')], 'but keeps its switch and menu').to.not.include(null);
   });
 
-  it('shows an agent that is off without the Chat / Terminal choice, keeping its switch and menu', async () => {
-    const { root } = await render({ agent: agent({ id: 'codex', name: 'Codex', enabled: false, status: 'off', terminal: { resume: true, new: true } }), terminalView: true });
-    expect(root.querySelector('fieldset'), 'no choice').to.equal(null);
-    expect(root.querySelector('md-switch'), 'its switch stays').not.to.equal(null);
-    expect(root.querySelector('.acp-agent-card__more'), 'its menu stays').not.to.equal(null);
-  });
-
-  it('moves between Chat and Terminal with the arrow keys', async () => {
-    const { el, root } = await render({ agent: agent({ id: 'copilot', name: 'Copilot', terminal: { resume: true, new: true } }) });
-    const views = heard(el, 'acp-agent-session-view');
-    const radios = /** @type {HTMLElementTagNameMap['md-radio'][]} */ ([...root.querySelectorAll('md-radio')]);
-    await Promise.all(radios.map((r) => r.updateComplete));
-    radios[0].focusInteractive();
-    radios[0].input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
-    expect(radios[1].checked).to.equal(true);
-    expect(views).to.deep.equal([{ agentId: 'copilot', view: 'terminal' }]);
-  });
-
-  it('turns the agent on and off and updates it', async () => {
+  it('turns the agent on and off and updates it, showing an update that runs', async () => {
     const { el, root } = await render({ agent: CLAUDE });
     const enabled = heard(el, 'acp-agent-enable');
     const updated = heard(el, 'acp-agent-version-update');
@@ -190,15 +173,12 @@ describe('acp-agent-card', () => {
     button(root, 'Update').click();
     expect(enabled).to.deep.equal([{ agentId: 'claude', enabled: false }]);
     expect(updated).to.deep.equal([{ agentId: 'claude' }]);
-  });
-
-  it('shows Updating… while an update runs, here or in another window', async () => {
     for (const props of [{ agent: CLAUDE, updating: true }, { agent: { ...CLAUDE, updating: true } }]) {
-      const { root } = await render(props);
-      const updating = button(root, 'Updating…');
-      expect(updating.disabled).to.equal(true);
+      const running = await render(props);
+      const updating = button(running.root, 'Updating…');
+      expect(updating.disabled, 'an update runs, here or in another window').to.equal(true);
       expect(updating.querySelector('md-progress-circular')).to.be.ok;
-      expect(() => button(root, 'Update'), 'no second Update').to.throw();
+      expect(() => button(running.root, 'Update'), 'no second Update').to.throw();
     }
   });
 
@@ -215,21 +195,14 @@ describe('acp-agent-card', () => {
     expect(heardEvents.default).to.deep.equal([]);
   });
 
-  it('opens its menu on a right click', async () => {
+  it('opens its menu on a right click, and leaves a right click or Shift+F10 inside the open menu to the menu', async () => {
     const { el, root } = await render({ agent: CLAUDE });
-    const event = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 20, clientY: 20 });
-    root.querySelector('.acp-agent-card__header')?.dispatchEvent(event);
-    expect(event.defaultPrevented).to.equal(true);
+    const rightClick = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 20, clientY: 20 });
+    root.querySelector('.acp-agent-card__header')?.dispatchEvent(rightClick);
+    expect(rightClick.defaultPrevented, 'the card took it').to.equal(true);
     const menu = await openMenu(el, '.acp-agent-card__menu');
     await new Promise((resolve) => setTimeout(resolve, 0));
     expect(menu.open).to.equal(true);
-    menu.close();
-  });
-
-  it('leaves a right click or Shift+F10 inside its open menu to the menu', async () => {
-    const { el, root } = await render({ agent: CLAUDE });
-    /** @type {HTMLElement} */ (root.querySelector('.acp-agent-card__more')).click();
-    const menu = await openMenu(el, '.acp-agent-card__menu');
     const item = /** @type {HTMLElement} */ (menu.querySelector('md-menu-item'));
     const click = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true });
     item.dispatchEvent(click);

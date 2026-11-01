@@ -57,11 +57,8 @@ describe('acp-changes-review', () => {
     expect([all.checked, all.indeterminate]).to.deep.equal([false, true]);
   });
 
-  it('shows an expanded file as a card with its diff, and the toolbar collapses all', async () => {
-    const { el, root, rows } = await render({
-      expanded: new Set(['src/b.js']),
-      diffs: new Map([['src/b.js', DIFF]]),
-    });
+  it('shows an expanded file as a card with its diff, or a loading or failed state instead of the editor, and the toolbar collapses all', async () => {
+    const { el, root, rows } = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]) });
     const card = root.querySelector('.acp-changes-review__card');
     expect(card?.querySelector('acp-change-row')?.row?.id).to.equal('src/b.js');
     expect(rows().filter((r) => r.expanded).map((r) => r.row?.id)).to.deep.equal(['src/b.js']);
@@ -69,14 +66,14 @@ describe('acp-changes-review', () => {
     const collapses = listen(el, 'acp-changes-collapse');
     /** @type {HTMLElement} */ (root.querySelector('.acp-changes-review__tool')).click();
     expect(collapses).to.have.length(1);
-  });
 
-  it('shows a diff that is loading or failed instead of the editor', async () => {
-    const loading = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', { ...DIFF, content: '', baseline: '', loading: true }]]) });
-    expect(loading.root.querySelector('.acp-changes-review__diff md-progress-circular')?.getAttribute('aria-label')).to.equal('Loading diff');
-    const failed = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', { ...DIFF, error: 'too big' }]]) });
-    expect(failed.root.querySelector('.acp-changes-review__diff-state')?.textContent).to.contain('too big');
-    expect(failed.root.querySelector('cdx-code-editor')).to.equal(null);
+    el.diffs = new Map([['src/b.js', { ...DIFF, content: '', baseline: '', loading: true }]]);
+    await el.updateComplete;
+    expect(root.querySelector('.acp-changes-review__diff md-progress-circular')?.getAttribute('aria-label')).to.equal('Loading diff');
+    el.diffs = new Map([['src/b.js', { ...DIFF, error: 'too big' }]]);
+    await el.updateComplete;
+    expect(root.querySelector('.acp-changes-review__diff-state')?.textContent).to.contain('too big');
+    expect(root.querySelector('cdx-code-editor')).to.equal(null);
   });
 
   it('picks everything with the all-files checkbox unless everything is picked, then nothing', async () => {
@@ -103,43 +100,35 @@ describe('acp-changes-review', () => {
     expect(toggles).to.deep.equal([{ id: 'src/b.js' }]);
   });
 
-  it('scrolls to and focuses a file’s row, now or once it is listed', async () => {
+  it('scrolls to and focuses a file’s row, now or once it is listed, only after every row has rendered', async () => {
     const { el, root, rows } = await render();
     /** @param {HTMLElementTagNameMap['acp-change-row']} row */
     const focused = (row) => row.shadowRoot?.activeElement?.classList.contains('acp-change-row__row');
-    el.scrollToChange('src/z.js');
-    await el.updateComplete;
-    await rows()[2].updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(focused(rows()[2])).to.equal(true);
-    el.scrollToChange('later.js');
-    await el.updateComplete;
-    el.changes = { ...CHANGES, files: [...FILES, /** @type {GitFileStatus} */ ({ path: 'later.js', kind: 'added', staged: false, unstaged: true, origPath: null, added: 1, removed: 0 })] };
-    await el.updateComplete;
-    const later = /** @type {HTMLElementTagNameMap['acp-change-row']} */ (root.querySelector('acp-change-row[data-id="later.js"]'));
-    await later.updateComplete;
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(focused(later), 'a row added by the same update takes the focus once rendered').to.equal(true);
-  });
-
-  it('scrolls only once every row is rendered, so the target is not computed against 0px rows', async () => {
-    const { el } = await render();
-    /** @type {boolean[]} */
+    /** @type {boolean[]} Whether every row was laid out (not 0px tall) when the scroll target was computed. */
     const laidOut = [];
     const original = Element.prototype.scrollIntoView;
     Element.prototype.scrollIntoView = function scrollIntoView() {
-      const rows = /** @type {HTMLElement[]} */ ([...(this.getRootNode() instanceof ShadowRoot ? /** @type {ShadowRoot} */ (this.getRootNode()).querySelectorAll('acp-change-row') : [])]);
-      laidOut.push(rows.length > 0 && rows.every((row) => row.getBoundingClientRect().height > 0));
+      const all = /** @type {HTMLElement[]} */ ([...(/** @type {ShadowRoot} */ (this.getRootNode())).querySelectorAll('acp-change-row')]);
+      laidOut.push(all.length > 0 && all.every((row) => row.getBoundingClientRect().height > 0));
     };
     try {
+      el.scrollToChange('src/z.js');
+      await el.updateComplete;
+      await rows()[2].updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(focused(rows()[2]), 'a file that is listed').to.equal(true);
       el.scrollToChange('later.js');
+      await el.updateComplete;
       el.changes = { ...CHANGES, files: [...FILES, /** @type {GitFileStatus} */ ({ path: 'later.js', kind: 'added', staged: false, unstaged: true, origPath: null, added: 1, removed: 0 })] };
       await el.updateComplete;
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      const later = /** @type {HTMLElementTagNameMap['acp-change-row']} */ (root.querySelector('acp-change-row[data-id="later.js"]'));
+      await later.updateComplete;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      expect(focused(later), 'a row added by the same update takes the focus once rendered').to.equal(true);
     } finally {
       Element.prototype.scrollIntoView = original;
     }
-    expect(laidOut, 'scrolled once, with every row laid out').to.deep.equal([true]);
+    expect(laidOut, 'each scroll came with every row laid out').to.deep.equal([true, true]);
   });
 
   it('says why there is no list: loading, an error, no repository, nothing changed', async () => {

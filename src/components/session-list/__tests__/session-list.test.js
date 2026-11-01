@@ -95,28 +95,29 @@ async function settle(el) {
 }
 
 describe('acp-session-list', () => {
-  it('groups sessions under their project, pinned first, then the most recently active', async () => {
-    const { root } = await render({ pinned: ['c'] });
+  it('groups sessions under their project, pinned first, then by activity, and hands each row and project its state', async () => {
+    // Arrange
+    const now = Date.parse('2026-10-23T13:00:00.000Z');
+    /** @type {import('../../../models/types/types.js').SessionSync} */
+    const sync = { running: true, report: null };
+    // Act
+    const { root } = await render({ pinned: ['c'], unread: ['b'], waiting: ['a'], activeSessionId: 'b', now, sync });
+    // Assert
     expect(projectRows(root).map((p) => [p.project?.name, p.path])).to.deep.equal([['brama', '~/brama'], ['rich', '~/rich']]);
     expect(titles(root)).to.deep.equal(['Session c', 'Session b', 'Session a', 'Session r']);
-    expect(['c', 'b'].map((id) => row(root, `Session ${id}`).pinned)).to.deep.equal([true, false]);
-    expect(tooltipOf(root.querySelector('.acp-session-list__open-folder'))).to.equal('Open folder…');
-    expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
-  });
-
-  it('hands each row its state: selected, pinned, unread, waiting for a permission, the time', async () => {
-    const now = Date.parse('2026-10-23T13:00:00.000Z');
-    const { root } = await render({ pinned: ['a'], unread: ['b'], waiting: ['c'], activeSessionId: 'b', now });
     const state = (/** @type {string} */ id) => {
       const r = row(root, `Session ${id}`);
       return [r.selected, r.pinned, r.unread, r.waiting, r.now];
     };
-    expect(state('a')).to.deep.equal([false, true, false, false, now]);
-    expect(state('b')).to.deep.equal([true, false, true, false, now]);
-    expect(state('c')).to.deep.equal([false, false, false, true, now]);
+    expect(state('c'), 'pinned').to.deep.equal([false, true, false, false, now]);
+    expect(state('b'), 'selected, unread').to.deep.equal([true, false, true, false, now]);
+    expect(state('a'), 'waiting for a permission').to.deep.equal([false, false, false, true, now]);
+    expect(/** @type {HTMLElementTagNameMap['acp-session-sync']} */ (root.querySelector('.acp-session-list__top acp-session-sync')).sync, 'the sync beside the heading').to.equal(sync);
+    expect(tooltipOf(root.querySelector('.acp-session-list__open-folder'))).to.equal('Open folder…');
+    expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
   });
 
-  it('hides a collapsed project’s sessions and counts them', async () => {
+  it('hides a collapsed project’s sessions and counts them, marking the open and the opening project', async () => {
     const { root } = await render({ collapsed: ['/home/me/brama'], activeProjectId: '/home/me/rich', openingProjectId: '/home/me/brama' });
     expect(titles(root)).to.deep.equal(['Session r']);
     const [brama, rich] = projectRows(root);
@@ -141,10 +142,19 @@ describe('acp-session-list', () => {
     expect(folders).to.have.length(1);
   });
 
-  it('says why a project couldn’t open, and that one has no sessions yet', async () => {
-    const { root } = await render({ sessions: [], failures: { '/home/me/rich': 'gone' } });
-    expect(root.querySelector('.acp-session-list__error')?.textContent).to.contain('gone');
-    expect(root.querySelectorAll('.acp-session-list__empty')).to.have.length(2);
+  it('says why a project couldn’t open and that one has no sessions yet, or shows skeleton rows while its sessions load', async () => {
+    const empty = await render({ sessions: [], failures: { '/home/me/rich': 'gone' } });
+    expect(empty.root.querySelector('.acp-session-list__error')?.textContent).to.contain('gone');
+    expect(empty.root.querySelectorAll('.acp-session-list__empty')).to.have.length(2);
+
+    const loading = await render({ sessions: [SESSIONS[3]], loading: ['/home/me/brama', '/home/me/rich'] });
+    const skeletons = loading.root.querySelector('.acp-session-list__loading');
+    expect(skeletons?.getAttribute('aria-label')).to.equal('Loading sessions');
+    expect(skeletons?.querySelectorAll('.acp-session-list__skeleton-row'), 'three rows').to.have.length(3);
+    expect(skeletons?.querySelectorAll('md-skeleton'), 'a title and an age each').to.have.length(6);
+    expect(loading.root.querySelector('.acp-session-list__empty'), 'not "No sessions yet"').to.equal(null);
+    expect(titles(loading.root), 'a project with sessions shows them').to.deep.equal(['Session r']);
+    expect(loading.root.querySelectorAll('.acp-session-list__loading'), 'only the project with none').to.have.length(1);
   });
 
   describe('session menu', () => {
@@ -224,16 +234,6 @@ describe('acp-session-list', () => {
     expect(removes.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
   });
 
-  it("shows the active project's sync beside the heading", async () => {
-    /** @type {import('../../../models/types/types.js').SessionSync} */
-    const sync = { running: true, report: null };
-    const { root } = await render({ sync });
-    const indicator = /** @type {import('../../session-sync/session-sync.js').AcpSessionSync | null} */ (
-      root.querySelector('.acp-session-list__top acp-session-sync')
-    );
-    expect(indicator?.sync).to.equal(sync);
-  });
-
   it("shows a project's five newest sessions, five more with each Show more", async () => {
     const sessions = Array.from({ length: 12 }, (_, i) =>
       session(`s${i}`, { lastActivityAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }),
@@ -249,17 +249,6 @@ describe('acp-session-list', () => {
     await /** @type {AcpSessionList} */ (/** @type {ShadowRoot} */ (root).host).updateComplete;
     expect(titles(root)).to.have.length(12);
     expect(more(), 'all shown').to.equal(null);
-  });
-
-  it('shows skeleton rows for a loading project with no sessions to show yet', async () => {
-    const { root } = await render({ sessions: [SESSIONS[3]], loading: ['/home/me/brama', '/home/me/rich'] });
-    const loading = root.querySelector('.acp-session-list__loading');
-    expect(loading?.getAttribute('aria-label')).to.equal('Loading sessions');
-    expect(loading?.querySelectorAll('.acp-session-list__skeleton-row md-skeleton').length).to.equal(6);
-    expect(loading?.querySelectorAll('.acp-session-list__skeleton-row').length, 'three rows').to.equal(3);
-    expect(root.querySelector('.acp-session-list__empty'), 'not "No sessions yet"').to.equal(null);
-    expect(titles(root), 'a project with sessions shows them').to.deep.equal(['Session r']);
-    expect(root.querySelectorAll('.acp-session-list__loading').length).to.equal(1);
   });
 });
 

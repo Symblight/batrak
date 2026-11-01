@@ -44,7 +44,7 @@ describe('acp-project-row', () => {
     expect((await render({ count: 0, expanded: false })).root.querySelector('.acp-project-row__count'), 'none to count').to.equal(null);
   });
 
-  it('selects on a click or Enter, toggles with the arrows and starts a session with its button, without selecting', async () => {
+  it('selects on a click or Enter, toggles with the arrows, starts a session with its button without selecting, and asks for its menu at the pointer or under the row', async () => {
     const { el, root, row } = await render();
     const selects = record(el, 'acp-project-select');
     const toggles = record(el, 'acp-project-toggle');
@@ -61,18 +61,15 @@ describe('acp-project-row', () => {
     /** @type {HTMLElement} */ (root.querySelector('.acp-project-row__add')).click();
     expect(news.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/brama' }]);
     expect(selects, 'the button does not select').to.have.length(2);
-  });
 
-  it('asks for the menu at the pointer on a right-click, and under the row on ContextMenu or Shift+F10', async () => {
-    const { el, row } = await render();
     const menus = record(el, 'acp-project-row-menu');
     const click = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 3, clientY: 4 });
     row.dispatchEvent(click);
     expect(click.defaultPrevented).to.equal(true);
     row.dispatchEvent(new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, cancelable: true }));
-    expect([menus[0].detail.x, menus[0].detail.y]).to.deep.equal([3, 4]);
+    expect([menus[0].detail.x, menus[0].detail.y], 'at the pointer').to.deep.equal([3, 4]);
     const rect = row.getBoundingClientRect();
-    expect([menus[1].detail.x, menus[1].detail.y]).to.deep.equal([rect.left + 24, rect.bottom]);
+    expect([menus[1].detail.x, menus[1].detail.y], 'under the row').to.deep.equal([rect.left + 24, rect.bottom]);
     expect(menus[1].detail.project).to.equal(PROJECT);
   });
 });

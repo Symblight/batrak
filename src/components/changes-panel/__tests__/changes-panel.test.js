@@ -34,16 +34,7 @@ function listen(el, type) {
 }
 
 describe('acp-changes-panel', () => {
-  it('names Refresh in a tooltip, not a title, and asks to refresh', async () => {
-    const { el, root } = await render();
-    const refreshes = listen(el, 'acp-changes-refresh');
-    expect(tooltipOf(root.querySelector('.acp-changes-panel__refresh'))).to.equal('Refresh');
-    expect(root.querySelector('[title]')).to.equal(null);
-    /** @type {HTMLElement} */ (root.querySelector('.acp-changes-panel__refresh')).click();
-    expect(refreshes).to.have.length(1);
-  });
-
-  it('shows loading, an error, a folder that is no repository, and a clean tree, instead of the list', async () => {
+  it('shows loading, an error, a folder that is no repository, and a clean tree, instead of the list; Refresh has a tooltip and asks to refresh', async () => {
     const loading = await render({ changes: { files: [], loaded: false, loading: true, error: null } });
     expect(loading.root.querySelector('md-progress-circular')?.getAttribute('aria-label')).to.equal('Loading changes');
     const failed = await render({ changes: { files: [], loaded: true, loading: false, error: 'git is gone' } });
@@ -54,6 +45,11 @@ describe('acp-changes-panel', () => {
     expect(clean.state()?.textContent).to.contain('No changes');
     expect(clean.summary()).to.equal('No changed files');
     expect(clean.root.querySelector('tvx-tree-view')).to.equal(null);
+    const refreshes = listen(clean.el, 'acp-changes-refresh');
+    expect(tooltipOf(clean.root.querySelector('.acp-changes-panel__refresh'))).to.equal('Refresh');
+    expect(clean.root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
+    /** @type {HTMLElement} */ (clean.root.querySelector('.acp-changes-panel__refresh')).click();
+    expect(refreshes).to.have.length(1);
   });
 
   it('lists the changed files in groups for the tree, and sums up how many are picked', async () => {

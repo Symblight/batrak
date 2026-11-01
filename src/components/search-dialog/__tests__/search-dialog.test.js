@@ -527,7 +527,7 @@ describe('acp-search-dialog', () => {
       expect([...menu(el, 'folder').querySelectorAll('md-menu-item')].map((i) => i.getAttribute('value'))).to.deep.equal(['src/components']);
     });
 
-    it('lets Alt+C from a menu’s field toggle the option, and closes only the menu on Escape', async () => {
+    it('lets Alt+C from a menu’s field toggle the option, closes only the menu on Escape, and closes an open menu with the dialog', async () => {
       const { el, queries } = await open();
       await openMenu(el, 'mask');
       const field = /** @type {HTMLElement} */ (menu(el, 'mask').querySelector('.acp-search-filters__menu-field'));
@@ -538,10 +538,7 @@ describe('acp-search-dialog', () => {
       await until(() => !menu(el, 'mask').open);
       expect(el.open, 'the dialog stays').to.equal(true);
       expect(shadow(el).activeElement, 'the keys work again').to.equal(input(el));
-    });
 
-    it('closes an open menu with the dialog', async () => {
-      const { el } = await open();
       await openMenu(el, 'folder');
       const closed = new Promise((r) => dialog(el).addEventListener('close', r, { once: true }));
       el.close();

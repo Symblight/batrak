@@ -73,7 +73,7 @@ describe('acp-search-view', () => {
     return view;
   }
 
-  it("opens the dialog with the project's last search and recent queries, or the editor's selection", async () => {
+  it("opens the dialog with the project's last search and recent queries, or the editor's selection, or empty for a project with none; with no project it says so", async () => {
     const view = await render();
     expect(view.open).to.equal(false);
     view.show();
@@ -86,14 +86,12 @@ describe('acp-search-view', () => {
     await until(() => view.open);
     expect(dialog(view).query).to.equal('selected');
     dialog(view).close();
-  });
 
-  it('opens an empty search for a project with none, and says there is no project when none is open', async () => {
     $projectSearch.setKey('/p', undefined);
-    const view = await render();
+    await until(() => !view.open);
     view.show();
     await until(() => view.open);
-    expect([dialog(view).query, dialog(view).folder, dialog(view).recent]).to.deep.equal(['', '', []]);
+    expect([dialog(view).query, dialog(view).folder, dialog(view).recent], 'no saved search').to.deep.equal(['', '', []]);
     dialog(view).close();
     $workspace.set(null);
     await view.updateComplete;
