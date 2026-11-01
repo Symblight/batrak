@@ -6,6 +6,7 @@ import type { AcpPanelHeader } from './components/panel-header/panel-header.js';
 import type { AcpAboutDialog } from './components/about-dialog/about-dialog.js';
 import type { AcpBytes } from './components/bytes/bytes.js';
 import type { AcpFileIcon } from './components/file-icon/file-icon.js';
+import type { AcpAgentCard } from './components/agent-card/agent-card.js';
 import type { AcpAgentIcon } from './components/agent-icon/agent-icon.js';
 import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
@@ -25,6 +26,7 @@ import type { AcpTabView } from './components/tab-view/tab-view.js';
 import type { AcpMainColumn } from './views/main-column/main-column.js';
 import type { AcpFileColumn } from './views/file-column/file-column.js';
 import type { AcpFileTree } from './components/file-tree/file-tree.js';
+import type { AcpMarkedText } from './components/marked-text/marked-text.js';
 import type { AcpModePicker } from './components/mode-picker/mode-picker.js';
 import type { AcpModelPicker } from './components/model-picker/model-picker.js';
 import type { AcpNavRail } from './components/nav-rail/nav-rail.js';
@@ -58,6 +60,7 @@ declare global {
   interface HTMLElementTagNameMap {
     'acp-about-dialog': AcpAboutDialog;
     'acp-agent-column': AcpAgentColumn;
+    'acp-agent-card': AcpAgentCard;
     'acp-agent-icon': AcpAgentIcon;
     'acp-panel': AcpPanel;
     'acp-pane': AcpPane;
@@ -82,6 +85,7 @@ declare global {
     'acp-main-column': AcpMainColumn;
     'acp-file-column': AcpFileColumn;
     'acp-file-tree': AcpFileTree;
+    'acp-marked-text': AcpMarkedText;
     'acp-mode-picker': AcpModePicker;
     'acp-model-picker': AcpModelPicker;
     'acp-nav-rail': AcpNavRail;

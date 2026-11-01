@@ -23,7 +23,8 @@ paths:
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
   and Manage agents…; a draft's send is refused with a notice).
-  - **The Agents tab** (`<acp-agents-view>`, presentational; spec: `docs/specs/agents-tab.md`) renders
+  - **The Agents tab** (`<acp-agents-view>`, presentational, with an `<acp-agent-card>` per installed agent: its switch,
+    Chat / Terminal choice, Update, Sign in and menu, firing the `acp-agent-*` events; spec: `docs/specs/agents-tab.md`) renders
     `agents_view { projectPath, query, filter }` (`config/view.rs`) as is: the backend matches
     (case- and accent-insensitive, NFD via `icu_normalizer`; every term in the name, id, vendor,
     description or command line), ranks (name starts with it > a word of it does > it contains it >

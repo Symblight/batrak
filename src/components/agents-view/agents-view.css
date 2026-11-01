@@ -28,6 +28,7 @@
     flex-wrap: wrap;
   }
 }
+
 .acp-agents-view__title-text {
   flex: 1;
   margin: 0;
@@ -60,11 +61,13 @@
     outline-offset: -2px;
   }
 }
+
 .acp-agents-view__search-icon {
   flex: none;
   font-size: var(--acp-icon-size-md);
   color: var(--acp-color-on-surface-variant);
 }
+
 .acp-agents-view__search-input {
   flex: 1;
   min-width: 0;
@@ -83,6 +86,7 @@
     appearance: none;
   }
 }
+
 .acp-agents-view__clear {
   flex: none;
 }
@@ -92,6 +96,7 @@
   flex-wrap: wrap;
   gap: var(--acp-space-1-5);
 }
+
 /* Compact: the library's chip is 32px with 16px sides; its padding has no property, so `::part`. */
 .acp-agents-view__chip {
   --md-chip-height: 1.5rem;
@@ -103,6 +108,7 @@
     padding-inline: var(--acp-space-2);
   }
 }
+
 .acp-agents-view__count {
   /* The chip's label is a flex row, which drops the space before it. */
   margin-inline-start: var(--acp-space-1);
@@ -116,18 +122,21 @@
   border-radius: var(--acp-shape-corner-medium);
   background: var(--acp-color-surface-container-low);
 }
+
 .acp-agents-view__group-header {
   display: flex;
   align-items: center;
   min-height: 32px;
   padding-inline: var(--acp-space-2);
 }
+
 .acp-agents-view__group-title {
   flex: 1;
   margin: 0;
   font: var(--acp-font-weight-medium) var(--acp-font-size-md)/18px var(--acp-font-family);
   color: var(--acp-color-on-surface-variant);
 }
+
 .acp-agents-view__list {
   display: flex;
   flex-direction: column;
@@ -149,85 +158,11 @@
     background: var(--acp-state-hover);
   }
 }
-.acp-agents-view__card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  margin-block: var(--acp-space-1);
-  border-radius: var(--acp-shape-corner-medium);
-  background: var(--acp-color-surface-container-high);
-}
-.acp-agents-view__card-header,
-.acp-agents-view__mode {
-  display: flex;
-  align-items: center;
-  gap: var(--acp-space-2);
-  box-sizing: border-box;
-  min-height: 44px;
-  padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-1) var(--acp-space-2);
-}
-.acp-agents-view__card-header {
-  /* The switch lines up with the options' menu buttons. */
-  padding-inline-end: var(--acp-space-2);
-}
-.acp-agents-view__mode {
-  position: relative;
 
-  /* An inset divider above each option, as in a list. */
-  &::before {
-    content: '';
-    position: absolute;
-    inset-block-start: 0;
-    inset-inline: var(--acp-space-2);
-    border-block-start: 1px solid var(--acp-color-outline-variant);
-  }
-
-  &:last-child {
-    border-end-start-radius: var(--acp-shape-corner-medium);
-    border-end-end-radius: var(--acp-shape-corner-medium);
-  }
-
-  &:hover {
-    background: var(--acp-state-hover);
-  }
-}
-.acp-agents-view__modes {
-  /* A fieldset only to group each agent's radios (md-radio groups by its fieldset). */
-  min-inline-size: 0;
-  margin: 0;
-  padding: 0;
-  border: 0;
-}
-/* Named for assistive tech; the card's header already says whose choice it is. */
-.acp-agents-view__modes-legend {
-  position: absolute;
-  overflow: hidden;
-  width: 1px;
-  height: 1px;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-.acp-agents-view__mode-radio {
-  flex: none;
-  /* Under the glyph above it. */
-  margin-inline: 2px;
-}
-.acp-agents-view__mode-text {
-  cursor: default;
-}
-.acp-agents-view__mode-name {
-  font: var(--acp-font-weight-medium) var(--acp-font-size-md)/20px var(--acp-font-family);
-}
-.acp-agents-view__mode-version {
-  color: var(--acp-color-on-surface-variant);
-  font-weight: 400;
-}
-.acp-agents-view__row_revealed {
-  background: color-mix(in srgb, var(--acp-color-primary) 10%, transparent);
-}
 .acp-agents-view__edit {
   padding: var(--acp-space-2) var(--acp-space-2) var(--acp-space-3);
 }
+
 .acp-agents-view__glyph {
   flex: none;
   display: flex;
@@ -238,43 +173,30 @@
   border-radius: var(--acp-shape-corner-extra-small);
   background: var(--acp-color-surface-container-highest);
 }
+
 .acp-agents-view__glyph-icon {
   font-size: var(--acp-icon-size-sm);
 }
-/* Off: its name and glyph fade; the switch and menu keep full contrast. */
-.acp-agents-view__glyph_off,
-.acp-agents-view__text_off {
-  opacity: 0.6;
-}
+
 .acp-agents-view__text {
   flex: 1;
   min-width: 0;
 }
+
 .acp-agents-view__title {
   display: flex;
   align-items: center;
   gap: var(--acp-space-1-5);
   min-width: 0;
 }
+
 .acp-agents-view__name {
   overflow: hidden;
   font: 400 var(--acp-font-size-lg)/20px var(--acp-font-family);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.acp-agents-view__mark {
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--acp-color-primary) 22%, transparent);
-  color: inherit;
-}
-.acp-agents-view__default {
-  flex: none;
-  padding: 0 var(--acp-space-2);
-  border-radius: var(--acp-shape-corner-small);
-  background: var(--acp-color-secondary-container);
-  color: var(--acp-color-on-secondary-container);
-  font: var(--acp-font-weight-medium) var(--acp-font-size-xs)/16px var(--acp-font-family);
-}
+
 .acp-agents-view__details {
   overflow: hidden;
   font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
@@ -282,6 +204,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
 .acp-agents-view__error {
   overflow: hidden;
   font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
@@ -289,30 +212,15 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.acp-agents-view__switch {
-  flex: none;
-  /* Compact: a handle sits half the state layer from the track's end, so the layer is the track's height. */
-  --md-switch-track-width: 2.25rem;
-  --md-switch-track-height: 1.25rem;
-  --md-switch-state-layer-size: 1.25rem;
-  --md-switch-unselected-handle-size: 0.625rem;
-  --md-switch-selected-handle-size: 0.875rem;
-}
-.acp-agents-view__more {
-  flex: none;
-  --md-icon-button-font-size: var(--acp-icon-size-lg);
-}
 
 .acp-agents-view__button {
   flex: none;
   --md-button-block-start-space: var(--acp-button-block-space-compact);
   --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
+
 .acp-agents-view__icon {
   font-size: var(--acp-icon-size-md);
-}
-.acp-agents-view__spinner {
-  --md-progress-circular-size: 16px;
 }
 
 .acp-agents-view__note {
@@ -321,6 +229,7 @@
   font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
   color: var(--acp-color-on-surface-variant);
 }
+
 .acp-agents-view__empty {
   display: flex;
   flex-direction: column;
@@ -337,20 +246,18 @@
   font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
   color: var(--acp-color-on-surface-variant);
 }
+
 .acp-agents-view__footer-text {
   margin: 0;
 }
+
 .acp-agents-view__footer-state {
   display: flex;
   align-items: center;
   gap: var(--acp-space-1-5);
 }
 
-/* Menu density comes from src/styles/shadow.css. */
-.acp-agents-view__menu {
-  --md-menu-min-width: 13.75rem;
-}
-.acp-agents-view__menu-item_danger {
-  --md-menu-item-label-text-color: var(--acp-color-error);
-  --md-menu-item-leading-icon-color: var(--acp-color-error);
+
+.acp-agents-view__item {
+  margin-block: var(--acp-space-1);
 }

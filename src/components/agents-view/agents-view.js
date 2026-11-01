@@ -1,29 +1,20 @@
 import { LitElement, html, nothing } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { live } from 'lit/directives/live.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/chips';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/menu';
-import '@symblight/wc-material/progress-circular';
-import '@symblight/wc-material/radio-button';
-import '@symblight/wc-material/switch';
 import '@symblight/wc-material/tooltip';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import cloudOffIcon from '@material-design-icons/svg/outlined/cloud_off.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
-import deleteIcon from '@material-design-icons/svg/outlined/delete.svg?raw';
-import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
-import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
-import starIcon from '@material-design-icons/svg/outlined/star.svg?raw';
-import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
-import { agents } from '../../hooks/agents/agents.js';
+import '../agent-card/agent-card.js';
 import '../agent-form/agent-form.js';
+import '../marked-text/marked-text.js';
 import styles from './agents-view.css?inline';
 
 /** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */
@@ -34,9 +25,6 @@ import styles from './agents-view.css?inline';
 /** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
 /** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
-
-/** @type {Record<AgentRow['status'], string>} */
-const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off', signIn: 'Needs sign-in' };
 
 /**
  * The anchor id of a tooltip: unique in the shadow root.
@@ -51,12 +39,6 @@ const tipId = (part, id = '') => `acp-agents-view-${part}${id ? `-${id}` : ''}`;
  */
 const tooltip = (anchor, text) => html`<md-tooltip for=${anchor} show-delay="800">${text}</md-tooltip>`;
 
-/**
- * Its version, and the registry's newer one when an update is waiting.
- * @param {AgentRow} agent
- */
-const versionOf = (agent) => (agent.update && !agent.update.pin ? `${agent.version} → ${agent.update.to}` : (agent.version ?? ''));
-
 /** @type {{ filter: AgentsFilter, label: string, count?: 'updates' | 'off' }[]} */
 const CHIPS = [
   { filter: 'all', label: 'All' },
@@ -68,9 +50,9 @@ const CHIPS = [
  * @tag acp-agents-view
  * @summary The Agents tab: the installed agents (switch, Update, menu), the user's own agents and the ACP registry's that Brama supports, searched and filtered by the backend.
  * @fires acp-agents-query `{ query, filter }`
- * @fires acp-agent-enable `{ agentId, enabled }`
- * @fires acp-agent-session-view `{ agentId, view }` Its Chat / Terminal choice: whether its sessions open in the terminal (`view: 'terminal'`) or as Chat.
- * @fires acp-agent-version-update `{ agentId }`
+ * @fires acp-agent-enable `{ agentId, enabled }` From a card.
+ * @fires acp-agent-session-view `{ agentId, view }` From a card: whether its sessions open in the terminal.
+ * @fires acp-agent-version-update `{ agentId }` From a card.
  * @fires acp-agents-update-all `null`
  * @fires acp-agents-registry-check `null`
  * @fires acp-agent-add `{ agent }` A `NewAgent` (a registry agent's `known` id from its row); the container answers with `saveFinished()`.
@@ -99,16 +81,6 @@ export class AcpAgentsView extends LitElement {
 
   static styles = styles;
 
-  /** @type {ContextMenuController<AgentRow>} */
-  #menu = new ContextMenuController(this, {
-    menu: () => this.renderRoot.querySelector('.acp-agents-view__menu'),
-    onSelect: (value, agent) => this.#onMenuSelect(value, agent),
-  });
-  /** @type {ContextMenuController<AgentRow>} An agent's ways to sign in, when it has more than one. */
-  #signInMenu = new ContextMenuController(this, {
-    menu: () => this.renderRoot.querySelector('.acp-agents-view__sign-in-menu'),
-    onSelect: (methodId, agent) => this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId }),
-  });
   /** @type {AgentsReveal | null} A reveal just rendered, to scroll to and confirm. */
   #shown = null;
 
@@ -214,15 +186,10 @@ export class AcpAgentsView extends LitElement {
     this.#ask({ query: '' });
   };
 
-  /**
-   * @param {string} value
-   * @param {AgentRow} agent
-   */
-  #onMenuSelect(value, agent) {
-    if (value === 'edit') {
-      this.editing = agent.id;
-    } else if (value === 'default') this.#emit('acp-agent-default', { agentId: agent.id });
-    else if (value === 'remove') this.#emit('acp-agent-remove', { agentId: agent.id });
+  /** @param {Event} e */
+  #onEdit(e) {
+    e.stopPropagation();
+    this.editing = /** @type {CustomEvent<{ agentId: string }>} */ (e).detail.agentId;
   }
 
   /** @param {RegistryRow} entry */
@@ -230,23 +197,6 @@ export class AcpAgentsView extends LitElement {
     this.addingFromRegistry = entry.id;
     this.registryError = null;
     this.#emit('acp-agent-add', { agent: { name: '', known: entry.id } });
-  }
-
-  /**
-   * The name with what the search matched marked.
-   * @param {string} name
-   * @param {readonly [number, number][]} matches UTF-16 ranges.
-   */
-  #renderName(name, matches) {
-    /** @type {unknown[]} */
-    const parts = [];
-    let at = 0;
-    for (const [start, end] of matches) {
-      parts.push(name.slice(at, start), html`<mark class="acp-agents-view__mark">${name.slice(start, end)}</mark>`);
-      at = end;
-    }
-    parts.push(name.slice(at));
-    return parts;
   }
 
   #renderHeader() {
@@ -297,25 +247,6 @@ export class AcpAgentsView extends LitElement {
     </div>`;
   }
 
-  /** @param {AgentRow} agent */
-  #renderUpdate(agent) {
-    if (!agent.update) return nothing;
-    if (agent.updating || this.pending.updating.includes(agent.id)) {
-      return html`<md-button class="acp-agents-view__button" variant="text" disabled>
-        <md-progress-circular slot="icon" class="acp-agents-view__spinner"></md-progress-circular>
-        Updating…
-      </md-button>`;
-    }
-    return html`<md-button
-        id=${tipId('update', agent.id)}
-        class="acp-agents-view__button"
-        variant="text"
-        @click=${() => this.#emit('acp-agent-version-update', { agentId: agent.id })}
-        >${agent.update.pin ? `Pin latest (${agent.update.to})` : 'Update'}</md-button
-      >
-      ${tooltip(tipId('update', agent.id), agent.update.pin ? 'Its version is unknown: pin the registry’s in agents.json' : `Pin ${agent.update.to} in agents.json`)}`;
-  }
-
   /**
    * A row's error: one line, the whole of it in a tooltip.
    * @param {string} id
@@ -326,45 +257,11 @@ export class AcpAgentsView extends LitElement {
       ${tooltip(id, message)}`;
   }
 
-  /** @param {AgentRow} agent */
-  #renderSignIn(agent) {
-    if (agent.status !== 'signIn' || !agent.signIn) return nothing;
-    if (agent.signIn.pending || this.signIns[agent.id]?.state === 'waiting') {
-      return html`<md-button class="acp-agents-view__button" variant="text" disabled>
-        <md-progress-circular slot="icon" class="acp-agents-view__spinner"></md-progress-circular>
-        Signing in…
-      </md-button>`;
-    }
-    const methods = agents.ownSignIns(agent.signIn.methods);
-    if (!methods.length) {
-      return html`<md-button
-          id=${tipId('sign-in', agent.id)}
-          class="acp-agents-view__button"
-          variant="text"
-          @click=${() => this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId: null })}
-          >Retry</md-button
-        >
-        ${tooltip(tipId('sign-in', agent.id), "Check whether you're signed in now")}`;
-    }
-    const [only] = methods;
-    return html`<md-button
-      class="acp-agents-view__button"
-      variant="text"
-      aria-haspopup=${methods.length > 1 ? 'menu' : nothing}
-      @click=${(/** @type {Event} */ e) =>
-        methods.length > 1
-          ? this.#signInMenu.openFrom(agent, /** @type {HTMLElement} */ (e.currentTarget))
-          : this.#emit('acp-agent-sign-in', { agentId: agent.id, methodId: only.id })}
-      >Sign in</md-button
+  /** @param {{ id: string, name: string }} agent */
+  #renderGlyph(agent) {
+    return html`<span class="acp-agents-view__glyph" aria-hidden="true"
+      ><acp-agent-icon class="acp-agents-view__glyph-icon" .agent=${agent}></acp-agent-icon></span
     >`;
-  }
-
-  /** @param {AgentRow} agent */
-  #renderDetails(agent) {
-    const parts = [agent.scope === 'project' ? 'Project' : 'Yours'];
-    if (agent.version) parts.push(versionOf(agent));
-    parts.push(STATUS[agent.status]);
-    return parts.join(' · ');
   }
 
   /** @param {AgentRow} agent */
@@ -374,145 +271,16 @@ export class AcpAgentsView extends LitElement {
         <acp-agent-form .known=${this.known} .agent=${agent} @acp-agent-form-close=${() => (this.editing = null)}></acp-agent-form>
       </li>`;
     }
-    if (agent.enabled) return this.#renderAgentWithModes(agent);
-    // Off: no choice to make, its name, switch and menu only.
-    return html`<li
-      class=${classMap({ 'acp-agents-view__card': true, 'acp-agents-view__row_revealed': this.revealed === agent.id })}
-      data-agent-id=${agent.id}
-      @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(agent, e)}
-      @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(agent, e)}
-    >
-      <div class="acp-agents-view__card-header">
-        ${this.#renderGlyph(agent, !agent.enabled)}
-        <div class="acp-agents-view__text acp-agents-view__text_off">
-          ${this.#renderTitle(agent)}
-          <div class="acp-agents-view__details">${this.#renderDetails(agent)}</div>
-        </div>
-        ${this.#renderUpdate(agent)} ${this.#renderSwitch(agent)} ${this.#renderMore(agent)}
-      </div>
+    return html`<li class="acp-agents-view__item" data-agent-id=${agent.id}>
+      <acp-agent-card
+        .agent=${agent}
+        .terminalView=${this.terminalAgents.includes(agent.id)}
+        .updating=${this.pending.updating.includes(agent.id)}
+        .signIn=${this.signIns[agent.id]}
+        .revealed=${this.revealed === agent.id}
+        @acp-agent-edit=${this.#onEdit}
+      ></acp-agent-card>
     </li>`;
-  }
-
-  /**
-   * An agent that's on: its name and switch, then where its sessions open, Chat (the ACP agent:
-   * its version, update and menu) or Terminal (its own CLI; disabled when it has none).
-   * @param {AgentRow} agent
-   */
-  #renderAgentWithModes(agent) {
-    const terminal = agent.terminal !== null && this.terminalAgents.includes(agent.id);
-    /** @param {'chat' | 'terminal'} view */
-    const pick = (view) => {
-      if (view === 'terminal' && !agent.terminal) return;
-      if ((view === 'terminal') !== terminal) this.#emit('acp-agent-session-view', { agentId: agent.id, view });
-    };
-    /**
-     * @param {'chat' | 'terminal'} view
-     * @param {string} label
-     */
-    const radio = (view, label) => html`<md-radio
-      class="acp-agents-view__mode-radio"
-      name=${`acp-agents-view-mode-${agent.id}`}
-      value=${view}
-      aria-label=${`${agent.name}: open sessions in ${label}`}
-      ?disabled=${view === 'terminal' && !agent.terminal}
-      .checked=${live(terminal === (view === 'terminal'))}
-      @change=${(/** @type {Event} */ e) => {
-        if (/** @type {HTMLElementTagNameMap['md-radio']} */ (e.currentTarget).checked) pick(view);
-      }}
-    ></md-radio>`;
-    return html`<li
-      class=${classMap({ 'acp-agents-view__card': true, 'acp-agents-view__row_revealed': this.revealed === agent.id })}
-      data-agent-id=${agent.id}
-      @contextmenu=${(/** @type {MouseEvent} */ e) => this.#menu.onContextMenu(agent, e)}
-      @keydown=${(/** @type {KeyboardEvent} */ e) => this.#menu.onKeydown(agent, e)}
-    >
-      <div class="acp-agents-view__card-header">
-        ${this.#renderGlyph(agent, !agent.enabled)}
-        <div class="acp-agents-view__text">${this.#renderTitle(agent)}</div>
-        ${this.#renderSwitch(agent)}
-      </div>
-      <fieldset class="acp-agents-view__modes">
-        <legend class="acp-agents-view__modes-legend">Open sessions in</legend>
-        <div class="acp-agents-view__mode">
-          ${radio('chat', 'Chat')}
-          <div
-            class="acp-agents-view__text acp-agents-view__mode-text"
-            @click=${() => pick('chat')}
-          >
-            <div class="acp-agents-view__mode-name">
-              Chat ${agent.version ? html`<span class="acp-agents-view__mode-version">${versionOf(agent)}</span>` : nothing}
-            </div>
-            <div class="acp-agents-view__details">${agent.description ?? this.#renderDetails(agent)}</div>
-            ${this.#renderSignInError(agent)}
-          </div>
-          ${this.#renderSignIn(agent)} ${this.#renderUpdate(agent)} ${this.#renderMore(agent)}
-        </div>
-        <div class="acp-agents-view__mode">
-          ${radio('terminal', 'Terminal')}
-          <div
-            class=${classMap({ 'acp-agents-view__text': true, 'acp-agents-view__mode-text': true, 'acp-agents-view__text_off': !agent.terminal })}
-            @click=${() => pick('terminal')}
-          >
-            <div class="acp-agents-view__mode-name">Terminal</div>
-            <div class="acp-agents-view__details">${agent.terminal ? 'CLI available' : 'No CLI for this agent'}</div>
-          </div>
-        </div>
-      </fieldset>
-    </li>`;
-  }
-
-  /**
-   * @param {{ id: string, name: string }} agent
-   * @param {boolean} [off]
-   */
-  #renderGlyph(agent, off = false) {
-    return html`<span class=${classMap({ 'acp-agents-view__glyph': true, 'acp-agents-view__glyph_off': off })} aria-hidden="true"
-      ><acp-agent-icon class="acp-agents-view__glyph-icon" .agent=${agent}></acp-agent-icon></span
-    >`;
-  }
-
-  /** @param {AgentRow} agent */
-  #renderTitle(agent) {
-    return html`<div class="acp-agents-view__title">
-        <span class="acp-agents-view__name">${this.#renderName(agent.name, agent.nameMatches)}</span>
-        ${agent.isDefault ? html`<span id=${tipId('default', agent.id)} class="acp-agents-view__default">Default</span>` : nothing}
-      </div>
-      ${agent.isDefault ? tooltip(tipId('default', agent.id), 'New sessions start with it') : nothing}`;
-  }
-
-  /** @param {AgentRow} agent */
-  #renderSignInError(agent) {
-    const failed = agent.status === 'signIn' ? this.signIns[agent.id] : undefined;
-    return failed?.state === 'failed'
-      ? this.#renderError(tipId('sign-in-error', agent.id), `Signing in failed: ${failed.message ?? 'unknown error'}`)
-      : nothing;
-  }
-
-  /** @param {AgentRow} agent */
-  #renderSwitch(agent) {
-    return html`<md-switch
-        id=${tipId('switch', agent.id)}
-        class="acp-agents-view__switch"
-        aria-label=${`${agent.name} on`}
-        .selected=${live(agent.enabled)}
-        @change=${(/** @type {Event} */ e) =>
-          this.#emit('acp-agent-enable', { agentId: agent.id, enabled: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.currentTarget).selected })}
-      ></md-switch>
-      ${tooltip(tipId('switch', agent.id), agent.enabled ? 'Turn off: no new sessions, and its sessions stop' : 'Turn on')}`;
-  }
-
-  /** @param {AgentRow} agent */
-  #renderMore(agent) {
-    return html`<md-icon-button
-        id=${tipId('more', agent.id)}
-        class="acp-agents-view__more"
-        aria-label=${`Agent menu: ${agent.name}`}
-        aria-expanded=${this.#menu.target?.id === agent.id ? 'true' : 'false'}
-        @click=${(/** @type {Event} */ e) => this.#menu.openFrom(agent, /** @type {HTMLElement} */ (e.currentTarget))}
-      >
-        <md-icon class="acp-agents-view__icon">${unsafeSVG(moreIcon)}</md-icon>
-      </md-icon-button>
-      ${tooltip(tipId('more', agent.id), 'Agent menu')}`;
   }
 
   /** @param {AgentsView} view */
@@ -553,7 +321,7 @@ export class AcpAgentsView extends LitElement {
             ${this.#renderGlyph(agent)}
             <div class="acp-agents-view__text">
               <div class="acp-agents-view__title">
-                <span class="acp-agents-view__name">${this.#renderName(agent.name, agent.nameMatches)}</span>
+                <span class="acp-agents-view__name"><acp-marked-text .text=${agent.name} .ranges=${agent.nameMatches}></acp-marked-text></span>
               </div>
               <div class="acp-agents-view__details">${[agent.command, ...agent.args].join(' ')}</div>
             </div>
@@ -575,7 +343,7 @@ export class AcpAgentsView extends LitElement {
       ${this.#renderGlyph(entry)}
       <div id=${tipId('registry', entry.id)} class="acp-agents-view__text">
         <div class="acp-agents-view__title">
-          <span class="acp-agents-view__name">${this.#renderName(entry.name, entry.nameMatches)}</span>
+          <span class="acp-agents-view__name"><acp-marked-text .text=${entry.name} .ranges=${entry.nameMatches}></acp-marked-text></span>
         </div>
         <div class="acp-agents-view__details">${details}</div>
         ${error ? this.#renderError(tipId('add-error', entry.id), error) : nothing}
@@ -647,53 +415,6 @@ export class AcpAgentsView extends LitElement {
     </footer>`;
   }
 
-  #renderMenu() {
-    const agent = this.#menu.target;
-    const canDefault = agent !== null && agent.enabled && !agent.isDefault;
-    return html`<md-menu
-      class="acp-agents-view__menu"
-      placement="bottom-end"
-      aria-label=${agent?.name ?? 'Agent'}
-      @select=${this.#menu.onSelect}
-      @closed=${this.#menu.onClosed}
-    >
-      <md-item-group>
-        <md-menu-item class="acp-agents-view__menu-item" value="edit">
-          <md-icon slot="leading" class="acp-agents-view__icon">${unsafeSVG(editIcon)}</md-icon>
-          Edit
-        </md-menu-item>
-        <md-menu-item class="acp-agents-view__menu-item" value="default" ?disabled=${!canDefault}>
-          <md-icon slot="leading" class="acp-agents-view__icon">${unsafeSVG(starIcon)}</md-icon>
-          Set as default
-        </md-menu-item>
-      </md-item-group>
-      <md-item-group>
-        <md-menu-item class="acp-agents-view__menu-item acp-agents-view__menu-item_danger" value="remove">
-          <md-icon slot="leading" class="acp-agents-view__icon">${unsafeSVG(deleteIcon)}</md-icon>
-          Remove
-        </md-menu-item>
-      </md-item-group>
-    </md-menu>`;
-  }
-
-  #renderSignInMenu() {
-    const agent = this.#signInMenu.target;
-    return html`<md-menu
-      class="acp-agents-view__sign-in-menu"
-      placement="bottom-end"
-      aria-label=${agent ? `Sign in to ${agent.name}` : 'Sign in'}
-      @select=${this.#signInMenu.onSelect}
-      @closed=${this.#signInMenu.onClosed}
-    >
-      ${agents.ownSignIns(agent?.signIn?.methods ?? []).map(
-        (method) => html`<md-menu-item class="acp-agents-view__menu-item" value=${method.id}>
-          ${method.name}
-          ${method.description ? html`<span slot="supporting-text">${method.description}</span>` : nothing}
-        </md-menu-item>`,
-      )}
-    </md-menu>`;
-  }
-
   render() {
     const view = this.view;
     return html`<div class="acp-agents-view__page">
@@ -704,7 +425,6 @@ export class AcpAgentsView extends LitElement {
         ? html`${this.#renderEmpty(view)} ${this.#renderInstalled(view)} ${this.#renderUserAgents(view)} ${this.#renderRegistry(view)}
           ${this.#renderFooter(view)}`
         : nothing}
-      ${this.#renderMenu()} ${this.#renderSignInMenu()}
     </div>`;
   }
 }
