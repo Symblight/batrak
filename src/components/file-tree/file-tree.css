@@ -1,7 +1,9 @@
 :host {
   display: flex;
+  flex: 1;
   flex-direction: column;
   box-sizing: border-box;
+  min-height: 0;
   height: 100%;
   background: var(--acp-column-background);
 }

@@ -6,23 +6,21 @@ import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import { git } from '../../hooks/git/git.js';
-import { sessions } from '../../hooks/sessions/sessions.js';
-import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
-import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
-import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $treeRoot } from '../../stores/session-root/session-root.js';
+import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import '../../components/panel-header/panel-header.js';
-import '../../components/file-tree/file-tree.js';
+import '../../components/pane/pane.js';
+import '../files-view/files-view.js';
 import '../../components/search-panel/search-panel.js';
 import '../../components/changes-panel/changes-panel.js';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
 /** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** @type {Record<SideView, string>} */
 const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };
@@ -41,10 +39,7 @@ export class AcpFileColumn extends ViewElement {
 
   #rootId = new StoreController(this, { store: $rootId });
   #workspace = new StoreController(this, { store: $workspace });
-  #openingPath = new StoreController(this, { store: $openingPath });
   #treeRoot = new StoreController(this, { store: $treeRoot });
-  #sessionRootOpening = new StoreController(this, { store: $sessionRootOpening });
-  #expandedFolders = new StoreController(this, { store: $expandedFolders });
   /** Picks of files no longer changed are forgotten; not while a scan is pending, when the list is empty. */
   #gitChanges = new StoreController(this, {
     store: $gitChanges,
@@ -60,14 +55,6 @@ export class AcpFileColumn extends ViewElement {
   /** @type {(() => void) | null} Stops watching the changes; set while Changes is shown and connected. */
   #unwatch = null;
 
-  #onFsChange = (/** @type {WorkspaceChanges} */ { rootId, dirs }) => {
-    if (rootId === $treeRoot.get().rootId) this.renderRoot.querySelector('acp-file-tree')?.reload(dirs);
-  };
-  /** Stops listening to the active project's files changing on disk. */
-  #stopWatching = () => {};
-  /** Stops listening to the shown worktree session's folder. */
-  #stopWatchingSessionRoot = () => {};
-
   constructor() {
     super();
     /** @type {SideView} */
@@ -78,14 +65,10 @@ export class AcpFileColumn extends ViewElement {
 
   connectedCallback() {
     super.connectedCallback();
-    this.#stopWatching = projects.onFsChange(this.#onFsChange);
-    this.#stopWatchingSessionRoot = sessions.onRootFsChange(this.#onFsChange);
     this.#watchChanges(this.sideView === 'changes');
   }
 
   disconnectedCallback() {
-    this.#stopWatching();
-    this.#stopWatchingSessionRoot();
     this.#watchChanges(false);
     super.disconnectedCallback();
   }
@@ -136,7 +119,7 @@ export class AcpFileColumn extends ViewElement {
   async reveal(rel, options) {
     this.sideView = 'files';
     await this.updateComplete;
-    this.renderRoot.querySelector('acp-file-tree')?.reveal(rel, options);
+    this.renderRoot.querySelector('acp-files-view')?.reveal(rel, options);
   }
 
   /** Switches to Changes, which computes them while shown. */
@@ -144,18 +127,12 @@ export class AcpFileColumn extends ViewElement {
     this.sideView = 'changes';
   }
 
-  /** Scans the tree's root again, then lists its open folders again: for changes the watcher missed. */
+  /** Scans the tree's root again: for changes the watcher missed. */
   async #refreshTree() {
-    const { rootId } = $treeRoot.get();
-    if (rootId === null || this.refreshing) return;
+    if (this.refreshing) return;
     this.refreshing = true;
     try {
-      await projects.rescan(rootId);
-      if ($treeRoot.get().rootId === rootId) {
-        this.renderRoot.querySelector('acp-file-tree')?.reload(['', ...$expandedFolders.get()]);
-      }
-    } catch (err) {
-      app.reportError('Refresh failed', err);
+      await this.renderRoot.querySelector('acp-files-view')?.refresh();
     } finally {
       this.refreshing = false;
     }
@@ -217,17 +194,7 @@ export class AcpFileColumn extends ViewElement {
         ?action-disabled=${this.refreshing}
         @acp-panel-header-action=${this.#refreshTree}
       ></acp-panel-header>
-      <acp-file-tree
-        class="acp-file-column__pane"
-        ?hidden=${this.sideView !== 'files'}
-        .rootId=${tree.rootId}
-        .root=${tree.path}
-        .rootLabel=${tree.label}
-        .listDir=${projects.listDir}
-        .expanded=${this.#expandedFolders.value}
-        .opening=${this.#openingPath.value !== null || this.#sessionRootOpening.value}
-        @acp-expanded-change=${(/** @type {CustomEvent<{ paths: string[] }>} */ e) => setExpandedFolders(e.detail.paths)}
-      ></acp-file-tree>
+      <acp-pane ?hidden=${this.sideView !== 'files'}><acp-files-view></acp-files-view></acp-pane>
       <acp-search-panel
         class="acp-file-column__pane"
         ?hidden=${this.sideView !== 'search'}
