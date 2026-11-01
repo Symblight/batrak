@@ -1,6 +1,6 @@
 import { buildChipElement } from '@symblight/chat';
 import { ChxCommandPicker } from '@symblight/chat/composer';
-import { buildBrowseItem, buildEntryItem, fileChipAttrs } from '../../components/chat/chips.js';
+import { buildBrowseItem, buildEntryItem, fileChipAttrs } from './chips.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} FileMentionsHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */

@@ -226,6 +226,19 @@ describe('acp-agent-card', () => {
     menu.close();
   });
 
+  it('leaves a right click or Shift+F10 inside its open menu to the menu', async () => {
+    const { el, root } = await render({ agent: CLAUDE });
+    /** @type {HTMLElement} */ (root.querySelector('.acp-agent-card__more')).click();
+    const menu = await openMenu(el, '.acp-agent-card__menu');
+    const item = /** @type {HTMLElement} */ (menu.querySelector('md-menu-item'));
+    const click = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true });
+    item.dispatchEvent(click);
+    const key = new KeyboardEvent('keydown', { key: 'F10', shiftKey: true, bubbles: true, composed: true, cancelable: true });
+    item.dispatchEvent(key);
+    expect([click.defaultPrevented, key.defaultPrevented], 'the card did not take them').to.deep.equal([false, false]);
+    menu.close();
+  });
+
   it('offers to sign in: one way runs it, more open a menu of them, none checks again', async () => {
     const browser = method({ id: 'browser', name: 'Log in with your browser' });
     const zed = agent({ id: 'zed', name: 'Zed', status: 'signIn', signIn: { methods: [browser], pending: false } });

@@ -102,14 +102,19 @@ export class AcpAgentCard extends LitElement {
     super.disconnectedCallback();
   }
 
+  /** The event comes from one of the card's own menus, which render inside it. @param {Event} e */
+  #fromMenu(e) {
+    return e.composedPath().some((node) => node instanceof HTMLElement && node.localName === 'md-menu');
+  }
+
   /** @param {MouseEvent} e */
   #onContextMenu = (e) => {
-    if (this.agent) this.#menu.onContextMenu(this.agent, e);
+    if (this.agent && !this.#fromMenu(e)) this.#menu.onContextMenu(this.agent, e);
   };
 
   /** @param {KeyboardEvent} e */
   #onKeydown = (e) => {
-    if (this.agent) this.#menu.onKeydown(this.agent, e);
+    if (this.agent && !this.#fromMenu(e)) this.#menu.onKeydown(this.agent, e);
   };
 
   /**

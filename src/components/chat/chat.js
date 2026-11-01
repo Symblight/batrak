@@ -10,7 +10,7 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
-import { buildMenuItem, codeChip, commentLines, fileChipAttrs } from './chips.js';
+import { buildMenuItem, codeChip, commentLines, fileChipAttrs } from '../../controllers/file-mentions/chips.js';
 import { chat } from '../../hooks/chat/chat.js';
 import '../agent-picker/agent-picker.js';
 import '../context-meter/context-meter.js';
@@ -21,8 +21,8 @@ import '../run-target/run-target.js';
 import '../session-banner/session-banner.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
-/** @typedef {import('./chips.js').ComposerTextbox} ComposerTextbox */
-/** @typedef {import('./chips.js').PmSchema} PmSchema */
+/** @typedef {import('../../controllers/file-mentions/chips.js').ComposerTextbox} ComposerTextbox */
+/** @typedef {import('../../controllers/file-mentions/chips.js').PmSchema} PmSchema */
 /** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */

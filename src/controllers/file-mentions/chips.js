@@ -1,9 +1,9 @@
 import { projects } from '../../hooks/projects/projects.js';
-import { FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
+import { FILE_CHIP_TEMPLATE } from '../chat-parts/ChatPartsController.js';
 import '@symblight/wc-material/icon';
 import descriptionIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import { fileIcon } from '../file-icon/file-icon.js';
+import { fileIcon } from '../../components/file-icon/file-icon.js';
 
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
