@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $editorTabs, $projectTabs } from '../../editor/editor.js';
+import { $editorTabs, $projectTabs, openTab } from '../../editor/editor.js';
 import {
   $projectTerminalPanelHeights,
   $projectTerminalPanels,
@@ -16,7 +16,6 @@ import {
   focusTerminal,
   forgetTerminal,
   openLoginTerminal,
-  openPanelTerminal,
   openTerminal,
   setTerminalPanelHeight,
   setTerminalPanelOpen,
@@ -42,11 +41,15 @@ describe('terminals', () => {
     $projectTabs.setKey('', undefined);
   });
 
-  it('opens a terminal’s tab at the end of the strip, in the shown project', () => {
+  it('opens a terminal’s tab at the end of the shown project’s panel, showing it and leaving the editor’s tabs alone', () => {
     $workspace.set({ path: '/p', name: 'p', rootId: null });
     $projectTabs.setKey('/p', { paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
+    expect($terminalPanel.get(), 'hidden until a terminal opens').to.deep.equal({ open: false });
+    const first = openTerminal('/p', '/p', 'p');
     const id = openTerminal('/p/src', '/p', 'src');
-    expect($editorTabs.get()).to.deep.equal({ paths: ['/p/a.js', terminalTabId(id)], active: terminalTabId(id), pinned: [] });
+    expect($terminalTabs.get()).to.deep.equal({ paths: [terminalTabId(first), terminalTabId(id)], active: terminalTabId(id), pinned: [] });
+    expect($editorTabs.get().paths).to.deep.equal(['/p/a.js']);
+    expect($terminalPanel.get()).to.deep.equal({ open: true });
     expect($terminals.get()[id]).to.deep.equal({
       cwd: '/p/src',
       fallback: '/p',
@@ -58,13 +61,12 @@ describe('terminals', () => {
       error: null,
       login: null,
     });
-    expect(terminalsOfProject('/p')).to.deep.equal([id]);
+    expect(terminalsOfProject('/p')).to.deep.equal([first, id]);
     expect(terminalsOfProject('/q')).to.deep.equal([]);
   });
 
-  it("opens a sign-in's login, which the backend started, as a running terminal's tab once", () => {
+  it("opens a sign-in's login, which the backend started, as a running terminal's tab in the panel once", () => {
     $workspace.set({ path: '/p', name: 'p', rootId: null });
-    $projectTabs.setKey('/p', { paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
     const tab = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: '/opt/copilot login' };
     openLoginTerminal(tab, '/p');
     expect($terminals.get()['sign-in-1']).to.deep.equal({
@@ -78,22 +80,24 @@ describe('terminals', () => {
       error: null,
       login: '/opt/copilot login',
     });
-    expect($editorTabs.get().active).to.equal(terminalTabId('sign-in-1'));
-    $projectTabs.setKey('/p', { paths: ['/p/a.js', terminalTabId('sign-in-1')], active: '/p/a.js', pinned: [] });
+    expect($terminalTabs.get().active).to.equal(terminalTabId('sign-in-1'));
+    expect($terminalPanel.get(), 'shown').to.deep.equal({ open: true });
+    openTerminal('/p', '/p', 'p');
     terminalExited('sign-in-1', { code: 1, signal: null });
     openLoginTerminal(tab, '/p');
-    expect($editorTabs.get()).to.deep.equal({ paths: ['/p/a.js', terminalTabId('sign-in-1')], active: terminalTabId('sign-in-1'), pinned: [] });
+    expect($terminalTabs.get().paths, 'once').to.have.length(2);
+    expect($terminalTabs.get().active).to.equal(terminalTabId('sign-in-1'));
     expect($terminals.get()['sign-in-1'].status, 'shown again, as it is').to.equal('exited');
   });
 
-  it("files a login among the tabs of the project its sign-in started in, shown or not", () => {
+  it('files a login in the panel of the project its sign-in started in, shown or not', () => {
     $workspace.set({ path: '/p', name: 'p', rootId: null });
-    $projectTabs.setKey('/p', { paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
     openLoginTerminal({ terminalId: 'sign-in-2', title: 'Login', commandLine: 'login' }, '/q');
     expect($terminals.get()['sign-in-2'].projectPath).to.equal('/q');
-    expect($editorTabs.get().paths, 'the shown project').to.deep.equal(['/p/a.js']);
-    expect($projectTabs.get()['/q']).to.deep.equal({ paths: [terminalTabId('sign-in-2')], active: terminalTabId('sign-in-2'), pinned: [] });
-    $projectTabs.setKey('/q', undefined);
+    expect($terminalTabs.get().paths, 'the shown project').to.deep.equal([]);
+    expect($terminalPanel.get(), 'its panel stays as it was').to.deep.equal({ open: false });
+    expect($projectTerminalTabs.get()['/q']).to.deep.equal({ paths: [terminalTabId('sign-in-2')], active: terminalTabId('sign-in-2'), pinned: [] });
+    expect($projectTerminalPanels.get()['/q']).to.deep.equal({ open: true });
   });
 
   it('follows a terminal from its start to its exit, then forgets it', () => {
@@ -109,12 +113,12 @@ describe('terminals', () => {
 
   it("keeps a session's CLI out of every project's tabs", () => {
     $workspace.set({ path: '/p', name: 'p', rootId: null });
-    $projectTabs.setKey('/p', { paths: [], active: null, pinned: [] });
     addSessionTerminal('t1', 's1', '/p', 'Claude Code');
     expect($terminals.get().t1).to.include({ status: 'running', sessionId: 's1' });
     expect(sessionTerminalOf('s1')).to.equal('t1');
     expect(sessionTerminalOf('s2')).to.equal(null);
     expect($editorTabs.get().paths).to.deep.equal([]);
+    expect($terminalTabs.get().paths).to.deep.equal([]);
     expect(terminalsOfProject(null)).to.deep.equal([]);
     forgetTerminal('t1');
     expect(sessionTerminalOf('s1')).to.equal(null);
@@ -150,18 +154,6 @@ describe('terminals', () => {
   });
 
   describe('the terminal panel', () => {
-    it('opens a terminal in the panel of the shown project, leaving the editor’s tabs alone', () => {
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
-      expect($terminalPanel.get(), 'hidden until a terminal opens').to.deep.equal({ open: false });
-
-      const id = openPanelTerminal('/p/src', '/p', 'src');
-
-      expect($terminalTabs.get()).to.deep.equal({ paths: [terminalTabId(id)], active: terminalTabId(id), pinned: [] });
-      expect($editorTabs.get().paths).to.deep.equal([]);
-      expect($terminalPanel.get()).to.deep.equal({ open: true });
-      expect($terminals.get()[id].projectPath).to.equal('/p');
-    });
-
     it('remembers per project whether the panel is open, and its height within limits', () => {
       // Act
       $workspace.set({ path: '/p', name: 'p', rootId: null });
@@ -179,14 +171,16 @@ describe('terminals', () => {
       expect(localStorage.getItem('brama:layout:terminal-panel:/p')).to.equal(String(TERMINAL_PANEL_MIN_HEIGHT));
     });
 
-    it('closes a terminal’s tab wherever it is', () => {
+    it('closes a terminal’s tab wherever it is: in the panel, or in the editor’s tabs it was moved to', () => {
       // Arrange
       $workspace.set({ path: '/p', name: 'p', rootId: null });
-      const inPanel = openPanelTerminal('/p', '/p', 'p');
-      const inTabs = openTerminal('/p', '/p', 'p');
+      const inPanel = openTerminal('/p', '/p', 'p');
+      const moved = openTerminal('/p', '/p', 'p');
+      terminalGroup.close(terminalTabId(moved));
+      openTab(terminalTabId(moved));
       // Act
       closeTerminalTab('/p', inPanel);
-      closeTerminalTab('/p', inTabs);
+      closeTerminalTab('/p', moved);
       // Assert
       expect($terminalTabs.get().paths).to.deep.equal([]);
       expect($editorTabs.get().paths).to.deep.equal([]);

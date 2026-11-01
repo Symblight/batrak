@@ -9,7 +9,6 @@ import {
   closeTerminalTab,
   focusTerminal,
   forgetTerminal,
-  openPanelTerminal,
   openTerminal,
   setTerminalPanelOpen,
   terminalExited,
@@ -65,12 +64,9 @@ function previousClosed() {
   return previous;
 }
 
-/**
- * @param {TerminalFolder} folder
- * @param {boolean} [panel] In the terminal panel, not among the editor's tabs.
- */
-function openIn({ cwd, fallback }, panel = false) {
-  (panel ? openPanelTerminal : openTerminal)(cwd, fallback, folderLabel(cwd, $sessions.get()));
+/** @param {TerminalFolder} folder */
+function openIn({ cwd, fallback }) {
+  openTerminal(cwd, fallback, folderLabel(cwd, $sessions.get()));
 }
 
 /** @param {string} id */
@@ -278,13 +274,6 @@ export const terminals = Object.freeze({
     return () => stops.forEach((stop) => stop());
   },
 
-  /** New Terminal: in the active session's folder, the project, or home. */
-  async newTerminal() {
-    const project = $workspace.get()?.path ?? null;
-    const home = project === null ? await ipc.homeDir() : '';
-    openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
-  },
-
   /**
    * The nav rail's Terminal button: shows the panel with its terminals, or with a first one in the
    * project's folder; with the panel shown, focuses its active terminal.
@@ -299,7 +288,7 @@ export const terminals = Object.freeze({
     } else {
       const project = $workspace.get()?.path ?? null;
       const home = project === null ? await ipc.homeDir() : '';
-      openIn(projectTerminalFolder({ project, home }), true);
+      openIn(projectTerminalFolder({ project, home }));
     }
   },
 
@@ -308,22 +297,15 @@ export const terminals = Object.freeze({
     setTerminalPanelOpen($workspace.get()?.path ?? null, false);
   },
 
-  /** New Terminal in the panel (`+`): shown if hidden, in the active session's folder, the project, or home. */
-  async newPanelTerminal() {
+  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the active session's folder, the project, or home. */
+  async newTerminal() {
     const project = $workspace.get()?.path ?? null;
     const home = project === null ? await ipc.homeDir() : '';
-    openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }), true);
-  },
-
-  /** Project Terminal: always in the project root folder, or home if no project. */
-  async projectTerminal() {
-    const project = $workspace.get()?.path ?? null;
-    const home = project === null ? await ipc.homeDir() : '';
-    openIn(projectTerminalFolder({ project, home }));
+    openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
   },
 
   /**
-   * Open in → Terminal: in the session's folder, among the shown project's tabs.
+   * Open in → Terminal: in the session's folder, in the shown project's panel.
    * @param {Session} session
    */
   openInSession(session) {

@@ -70,7 +70,7 @@ export class AcpTerminalsView extends ViewElement {
   }
 
   #newTerminal() {
-    terminals.newPanelTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
+    terminals.newTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   /** @param {EditorTab} tab */

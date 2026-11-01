@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $projectTerminalPanels, $projectTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openPanelTerminal } from '../../../stores/terminals/terminals.js';
+import { $projectTerminalPanels, $projectTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openTerminal } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import '../terminals-view.js';
@@ -40,8 +40,8 @@ describe('acp-terminals-view', () => {
 
   it('shows the shown project’s terminals, every one mounted and the active one in front, and swaps them with the project', async () => {
     // Arrange
-    const a = openPanelTerminal('/p', '/p', 'a');
-    const b = openPanelTerminal('/p', '/p', 'b');
+    const a = openTerminal('/p', '/p', 'a');
+    const b = openTerminal('/p', '/p', 'b');
     const el = await render();
 
     // Assert
@@ -51,7 +51,7 @@ describe('acp-terminals-view', () => {
 
     // Act: another project, with a terminal of its own, then back
     $workspace.set({ path: '/q', name: 'q', rootId: null });
-    const c = openPanelTerminal('/q', '/q', 'c');
+    const c = openTerminal('/q', '/q', 'c');
     await el.updateComplete;
     const other = mounted(el);
     $workspace.set({ path: '/p', name: 'p', rootId: null });
@@ -65,7 +65,7 @@ describe('acp-terminals-view', () => {
 
   it('adds a terminal with + and hides the panel with −, which keeps its terminals', async () => {
     // Arrange
-    const first = openPanelTerminal('/p', '/p', 'a');
+    const first = openTerminal('/p', '/p', 'a');
     const el = await render();
     const actions = /** @type {HTMLElement} */ (el.querySelector('acp-terminal-actions'));
 
@@ -83,7 +83,7 @@ describe('acp-terminals-view', () => {
 
   it('turns the strip’s events into the terminal group’s actions: activate, reorder, pin and close', async () => {
     // Arrange
-    const [a, b, c] = ['a', 'b', 'c'].map((label) => openPanelTerminal('/p', '/p', label));
+    const [a, b, c] = ['a', 'b', 'c'].map((label) => openTerminal('/p', '/p', label));
     const [ta, tb, tc] = [a, b, c].map(tabs.terminalId);
     const el = await render();
     const send = (/** @type {string} */ type, /** @type {object} */ detail) => tabView(el).dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -105,7 +105,7 @@ describe('acp-terminals-view', () => {
 
   it('focuses the terminal a request names, once it is mounted, and answers it', async () => {
     // Arrange
-    const id = openPanelTerminal('/p', '/p', 'a');
+    const id = openTerminal('/p', '/p', 'a');
     const el = await render();
     const view = views(el)[0];
     /** @type {string[]} */

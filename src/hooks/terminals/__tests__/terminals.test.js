@@ -1,6 +1,5 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect } from '@esm-bundle/chai';
-import { $editorTabs } from '../../../stores/editor/editor.js';
 import { noteSignIn } from '../../../stores/agents/agents.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 import {
@@ -14,7 +13,6 @@ import {
   closeTerminalTab,
   forgetTerminal,
   openLoginTerminal,
-  openPanelTerminal,
   openTerminal,
   removeProjectTerminals,
   terminalFailed,
@@ -136,13 +134,13 @@ describe('terminals', () => {
     $sessions.set([wt]);
     $activeSessionId.set('s1');
     // Act
+    await terminals.showPanel();
     await terminals.newTerminal();
-    await terminals.projectTerminal();
     terminals.openInSession(wt);
     // Assert
     expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([
-      ['/wt/s1/app', '/p', 's1'],
       ['/p', '/p', 'p'],
+      ['/wt/s1/app', '/p', 's1'],
       ['/wt/s1/app', '/p', 's1'],
     ]);
   });
@@ -286,7 +284,7 @@ describe('terminals', () => {
     cleanEvents({ kind: 'exit', code: 0, signal: null });
     failingEvents({ kind: 'exit', code: 1, signal: null });
     await until(() => $terminals.get()[failing].status === 'exited');
-    const exited = [$editorTabs.get().paths.includes(tabs.terminalId(clean)), $terminals.get()[failing].exit];
+    const exited = [$terminalTabs.get().paths.includes(tabs.terminalId(clean)), $terminals.get()[failing].exit];
     const restarted = terminals.restart(failing);
     await until(() => sent('terminal_open').length === 3);
     const restarting = $terminals.get()[failing].status;
@@ -309,7 +307,7 @@ describe('terminals', () => {
     noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'waiting', message: null, terminal });
     noteSignIn({ projectPath: '/p', agentId: 'copilot', state: 'cancelled', message: null, terminal });
     // Assert
-    expect($editorTabs.get().paths).to.not.include(tabs.terminalId('sign-in-1'));
+    expect($terminalTabs.get().paths).to.not.include(tabs.terminalId('sign-in-1'));
     expect($terminals.get()['sign-in-1']).to.equal(undefined);
     await until(() => sent('terminal_close').length > 0);
     expect(sent('terminal_close')[0].args).to.deep.equal({ ids: ['sign-in-1'] });
@@ -349,7 +347,7 @@ describe('terminals', () => {
       await terminals.showPanel();
       terminals.hidePanel();
       // Act
-      await terminals.newPanelTerminal();
+      await terminals.newTerminal();
       // Assert
       expect($terminalPanel.get().open).to.equal(true);
       expect(panelTerminals().map((id) => $terminals.get()[id].cwd)).to.deep.equal(['/p', '/wt/s1/app']);
@@ -359,8 +357,8 @@ describe('terminals', () => {
       // Arrange
       await started();
       $workspace.set({ path: '/p', name: 'p', rootId: null });
-      const a = openPanelTerminal('/p', '/p', 'p');
-      const b = openPanelTerminal('/p', '/p', 'p');
+      const a = openTerminal('/p', '/p', 'p');
+      const b = openTerminal('/p', '/p', 'p');
       // Act
       closeTerminalTab('/p', a);
       const afterFirst = $terminalPanel.get().open;
@@ -376,28 +374,12 @@ describe('terminals', () => {
       // Arrange
       await started();
       $workspace.set({ path: '/p', name: 'p', rootId: null });
-      const id = openPanelTerminal('/p', '/p', 'p');
+      const id = openTerminal('/p', '/p', 'p');
       // Act
       removeProjectTerminals('/p');
       // Assert
       await until(() => sent('terminal_close').length === 1);
       expect(sent('terminal_close')[0].args).to.deep.equal({ ids: [id] });
-    });
-
-    it('removes a panel terminal whose shell exits with 0', async () => {
-      // Arrange
-      const { terminals } = await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
-      const id = openPanelTerminal('/p', '/p', 'p');
-      terminals.connect(id, { cols: 80, rows: 24 }, view().sink);
-      await until(() => release !== null);
-      release?.();
-      await until(() => sent('terminal_attach').length === 1);
-      // Act
-      sent('terminal_attach')[0].args.events.onmessage({ kind: 'exit', code: 0, signal: null });
-      // Assert
-      expect($terminalTabs.get().paths).to.deep.equal([]);
-      expect($terminalPanel.get().open).to.equal(false);
     });
   });
 });

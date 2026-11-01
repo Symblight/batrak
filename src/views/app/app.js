@@ -139,7 +139,7 @@ export class AcpApp extends ViewElement {
   }
 
   #openProjectTerminal() {
-    terminals.projectTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
+    terminals.showPanel().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   /**

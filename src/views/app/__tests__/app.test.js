@@ -13,7 +13,7 @@ import {
   $terminalPanelHeight,
   $terminals,
   forgetTerminal,
-  openPanelTerminal,
+  openTerminal,
   setTerminalPanelHeight,
   setTerminalPanelOpen,
 } from '../../../stores/terminals/terminals.js';
@@ -267,7 +267,7 @@ describe('acp-app: terminal panel layout', () => {
   /** @param {{ file: boolean, panel: boolean }} shown */
   async function render({ file, panel }) {
     if (file) openTab('view:settings');
-    if (panel) openPanelTerminal('/p', '/p', 'p');
+    if (panel) openTerminal('/p', '/p', 'p');
     const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
     await until(() => $sessionsLoaded.get());
     await slidIn(app);

@@ -154,7 +154,7 @@ export const {
   close: closeTab,
   /** Opens a tab, active, among a project's tabs, shown or not (`null`: no project). */
   openIn: openProjectTab,
-  /** Closes a tab of any project, shown or not, e.g. a terminal whose shell exited. */
+  /** Closes a tab of any project, shown or not. */
   closeIn: closeProjectTab,
   closeOthers: closeOtherTabs,
   closeToRight: closeTabsToRight,

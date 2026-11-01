@@ -1,5 +1,5 @@
 import { atom, computed, map } from 'nanostores';
-import { closeProjectTab, openProjectTab, openTab } from '../editor/editor.js';
+import { closeProjectTab } from '../editor/editor.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $workspace } from '../workspace/workspace.js';
@@ -126,28 +126,14 @@ function patch(id, patch) {
 }
 
 /**
- * Adds a terminal and opens its tab (at the end of the strip, active) in the shown project. Its
- * shell starts when the tab is first shown.
+ * Adds a terminal and opens its tab (at the end of the strip, active) in the shown project's terminal
+ * panel, showing the panel. Its shell starts when the tab is first shown.
  * @param {string} cwd
  * @param {string | null} fallback Where it starts when `cwd` doesn't exist.
  * @param {string} label The tab's title until it starts.
  * @returns {string} The terminal's id.
  */
 export function openTerminal(cwd, fallback, label) {
-  const id = addTerminal(cwd, fallback, label);
-  openTab(terminalTabId(id));
-  return id;
-}
-
-/**
- * Adds a terminal and opens its tab in the shown project's terminal panel (at the end of the strip,
- * active), showing the panel. Its shell starts when the tab is first shown.
- * @param {string} cwd
- * @param {string | null} fallback Where it starts when `cwd` doesn't exist.
- * @param {string} label The tab's title until it starts.
- * @returns {string} The terminal's id.
- */
-export function openPanelTerminal(cwd, fallback, label) {
   const id = addTerminal(cwd, fallback, label);
   terminalGroup.open(terminalTabId(id));
   setTerminalPanelOpen($workspace.get()?.path ?? null, true);
@@ -217,8 +203,8 @@ export function sessionTerminalOf(sessionId) {
 }
 
 /**
- * Shows a sign-in's login, which the backend started, as a terminal tab among the tabs of the
- * project the sign-in started in (once: it's shown again as it is, where it is).
+ * Shows a sign-in's login, which the backend started, as a tab of the terminal panel of the project the
+ * sign-in started in, showing the panel (once: it's shown again as it is, where it is).
  * @param {import('../../hooks/agents/types.js').LoginTab} tab
  * @param {string | null} projectPath
  */
@@ -230,7 +216,9 @@ export function openLoginTerminal({ terminalId, title, commandLine }, projectPat
       [terminalId]: { cwd: '', fallback: null, label: title, title: null, projectPath, status: 'running', exit: null, error: null, login: commandLine },
     });
   }
-  openProjectTab(known ? known.projectPath : projectPath, terminalTabId(terminalId));
+  const root = known ? known.projectPath : projectPath;
+  terminalGroup.openIn(root, terminalTabId(terminalId));
+  setTerminalPanelOpen(root, true);
 }
 
 /**
