@@ -20,6 +20,7 @@ import type { AcpSearchView } from './views/search-view/search-view.js';
 import type { AcpSettingsView } from './views/settings-view/settings-view.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
 import type { AcpChatView } from './views/chat-view/chat-view.js';
+import type { AcpEditorView } from './views/editor-view/editor-view.js';
 import type { AcpApp } from './views/app/app.js';
 import type { AcpCommitBox } from './components/commit-box/commit-box.js';
 import type { AcpChangeRow } from './components/change-row/change-row.js';
@@ -82,6 +83,7 @@ declare global {
     'acp-about-dialog': AcpAboutDialog;
     'acp-agent-column': AcpAgentColumn;
     'acp-chat-view': AcpChatView;
+    'acp-editor-view': AcpEditorView;
     'acp-agents-tab': AcpAgentsTab;
     'acp-changes-tab': AcpChangesTab;
     'acp-files-view': AcpFilesView;

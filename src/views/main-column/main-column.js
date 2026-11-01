@@ -13,7 +13,6 @@ import { TabFilesController } from '../../controllers/tab-files/TabFilesControll
 import {
   $activePath,
   $editorTabs,
-  $fileLanguages,
   CHANGES_TAB_ID,
   activateTab,
   closeAllTabs,
@@ -24,13 +23,11 @@ import {
   openChanges as openChangesTab,
   openSettings as openSettingsTab,
   openTab,
-  setFileLanguage,
   setTabPinned,
 } from '../../stores/editor/editor.js';
 import { addToChat } from '../../stores/chat/chat.js';
 import {
   $commentFocus,
-  $comments,
   $tabComments,
   addComment,
   deleteComment,
@@ -38,13 +35,13 @@ import {
   focusComment,
   sendToChat,
 } from '../../stores/comments/comments.js';
-import { $settings } from '../../stores/settings/settings.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $terminals } from '../../stores/terminals/terminals.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
 import '../changes-tab/changes-tab.js';
+import '../editor-view/editor-view.js';
 import '../session-changes-tab/session-changes-tab.js';
 import '../settings-view/settings-view.js';
 import '../terminal-view/terminal-view.js';
@@ -64,12 +61,8 @@ import '../../components/comment-bar/comment-bar.js';
 export class AcpMainColumn extends ViewElement {
   #files = new TabFilesController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
-  #fileLanguages = new StoreController(this, { store: $fileLanguages });
   #workspace = new StoreController(this, { store: $workspace });
-  #rootId = new StoreController(this, { store: $rootId });
   #worktrees = new StoreController(this, { store: $worktrees });
-  #settings = new StoreController(this, { store: $settings });
-  #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #terminals = new StoreController(this, { store: $terminals });
 
@@ -185,11 +178,14 @@ export class AcpMainColumn extends ViewElement {
   }
 
   /**
-   * The content of the tabs whose view this column owns.
+   * The content of the tabs whose view this column owns: files as text get their editor.
    * @param {EditorTab} tab
    */
   #renderTabContent = (tab) => {
     switch (contentKindOf(tab)) {
+      case 'code':
+      case 'markdown':
+        return html`<acp-editor-view .tab=${tab}></acp-editor-view>`;
       case 'settings':
         return html`<acp-settings-view></acp-settings-view>`;
       case 'agents':
@@ -207,7 +203,6 @@ export class AcpMainColumn extends ViewElement {
 
   render() {
     const { active, pinned } = this.#editorTabs.value;
-    const settings = this.#settings.value;
     return html`<acp-panel>
       <acp-tab-view
         class="acp-main-column__tabs"
@@ -215,16 +210,9 @@ export class AcpMainColumn extends ViewElement {
         .active=${active}
         .pinned=${pinned}
         .root=${this.#workspace.value?.path ?? null}
-        .rootId=${this.#rootId.value}
-        .listDir=${projects.listDir}
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
         .worktrees=${this.#worktrees.value}
-        .languages=${this.#fileLanguages.value}
-        .editorFont=${settings.editorFont}
-        .editorFontSize=${settings.editorFontSize}
-        .comments=${this.#comments.value}
-        .commentFocus=${this.#commentFocus.value}
         .renderContent=${this.#renderTabContent}
         @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
         @acp-tab-close=${this.#onTabClose}
@@ -239,8 +227,6 @@ export class AcpMainColumn extends ViewElement {
         @acp-copy-path=${this.#onCopyPath}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
           app.openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
-        @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>
-          setFileLanguage(e.detail.path, e.detail.language)}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>
           addComment(e.detail.path, e.detail.draft, codeEditor.author)}
         @acp-comment-edit=${(

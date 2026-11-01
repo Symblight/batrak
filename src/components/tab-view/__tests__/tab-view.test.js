@@ -1,5 +1,6 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../tab-view.js';
+import '../../code-view/code-view.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -20,6 +21,9 @@ const fileTab = (path) => ({
   changedOnDisk: false,
   deletedOnDisk: false,
 });
+
+/** What the main column renders for a file: its editor. */
+const codeContent = (/** @type {EditorTab} */ tab) => html`<acp-code-view .tab=${tab}></acp-code-view>`;
 
 /**
  * @param {string} terminalId
@@ -129,7 +133,7 @@ describe('acp-tab-view', () => {
   it('asks before closing a tab with unsaved edits; Cancel keeps it', async () => {
     const path = '/p/a.js';
     const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-      await fixture(html`<acp-tab-view .tabs=${[{ ...fileTab(path), draft: 'x' }]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+      await fixture(html`<acp-tab-view .tabs=${[{ ...fileTab(path), draft: 'x' }]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
     );
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     /** @type {unknown[]} */
@@ -153,7 +157,7 @@ describe('acp-tab-view', () => {
     /** @param {EditorTab} tab */
     async function render(tab) {
       const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
       );
       /** @type {{ type: string, detail: unknown }[]} */
       const fired = [];
@@ -229,7 +233,7 @@ describe('acp-tab-view', () => {
     it('selects a match in a tab once it is loaded', async () => {
       const tab = { ...fileTab(path), content: '' };
       const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
       );
       el.revealLine(path, { line: 2, column: 3, length: 6 });
       await el.updateComplete;
@@ -242,7 +246,7 @@ describe('acp-tab-view', () => {
     it('still takes a plain line', async () => {
       const tab = { ...fileTab(path), loaded: true, content: 'a\nb needle c\nd' };
       const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'}></acp-tab-view>`)
+        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
       );
       el.revealLine(path, { line: 2, column: 3, length: 6 });
       await untilSelected(el, 'needle');

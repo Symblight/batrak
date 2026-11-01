@@ -3,7 +3,7 @@ paths:
   - "src/stores/{comments,chat}/**"
   - "src/controllers/{comments,selection-actions,floating}/**"
   - "src/components/{comment-bar,selection-actions,code-view}/**"
-  - "src/views/main-column/**"
+  - "src/views/{main-column,editor-view}/**"
   - "src/hooks/comments/**"
 ---
 
@@ -13,7 +13,8 @@ paths:
 by absolute path, in memory). Every editor's `<cdx-comments>` is controlled through
 `EditorCommentsController` (`src/controllers/comments/`): `.comments=${this.#comments.threadsOf(path)}`,
 and its submit / edit / delete become `acp-comment-*` events that `<acp-main-column>` turns into store
-actions, so one file shown twice (a tab and the
+actions (a file tab's editor is `<acp-editor-view>`, which passes it the comments and the focus; the
+events go on up to the column, since the Changes tab's editors fire them too), so one file shown twice (a tab and the
 Changes tab) stays in sync. `<acp-comment-bar>` (over `<acp-main-column>`) steps through
 `$tabComments` (the active tab's file, or every changed file in Changes) by setting `$commentFocus`: the main column shows the file,
 the visible editor of it reveals the thread. Send to agent (`sendToChat()`) clears the comments from the code and hands them to the chat

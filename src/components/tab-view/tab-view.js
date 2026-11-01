@@ -5,7 +5,6 @@ import '@symblight/wc-material/tabs';
 import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmController.js';
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import '../tab-strip/tab-strip.js';
-import '../code-view/code-view.js';
 import '../image-preview/image-preview.js';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import '../view-placeholder/view-placeholder.js';
@@ -13,17 +12,14 @@ import styles from './tab-view.css?inline';
 
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
-/** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 /** @typedef {import('../tab-strip/tab-strip.js').CloseScope} CloseScope */
 
 /**
  * @tag acp-tab-view
- * @summary The main column's tabs: files in the view their kind needs, and views.
+ * @summary The main column's tabs: images, the Browser placeholder and whatever the host renders for the rest (code editors, views).
  * @fires acp-tab-close `{ id, scope }` A `CloseScope` around the tab, unsaved edits and running programs already confirmed.
  * @fires acp-tab-save `{ id, force: true }` Write over the file although it changed on disk (asked first).
  * @fires acp-tab-reload `{ id }` Drop the tab's edits for the file on disk (asked first).
@@ -35,14 +31,7 @@ export class AcpTabView extends LitElement {
     pinned: { attribute: false },
     root: { attribute: false },
     worktrees: { attribute: false },
-    editorFont: { attribute: false },
-    editorFontSize: { attribute: false },
-    comments: { attribute: false },
-    commentFocus: { attribute: false },
     renderContent: { attribute: false },
-    languages: { attribute: false },
-    rootId: { attribute: false },
-    listDir: { attribute: false },
     terminals: { attribute: false },
     terminalBusy: { attribute: false },
   };
@@ -59,9 +48,9 @@ export class AcpTabView extends LitElement {
   /** @type {TabContentController<EditorTab>} */
   #content = new TabContentController({
     views: {
-      code: (tab) => this.#renderFile(tab, () => this.#renderCode(tab)),
+      code: (tab) => this.#renderFile(tab, () => this.#renderHosted(tab)),
       // The editor until the rendered preview exists: it keeps the diff gutter, comments and selection actions.
-      markdown: (tab) => this.#renderFile(tab, () => this.#renderCode(tab)),
+      markdown: (tab) => this.#renderFile(tab, () => this.#renderHosted(tab)),
       image: (tab) =>
         this.#renderFile(
           tab,
@@ -94,20 +83,6 @@ export class AcpTabView extends LitElement {
     this.root = null;
     /** @type {readonly WorktreeFolder[]} Worktree sessions' folders, whose files are marked. */
     this.worktrees = [];
-    /** @type {string | null} The code editor's font family; `null` for its default. */
-    this.editorFont = null;
-    /** @type {number} px */
-    this.editorFontSize = 13;
-    /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
-    this.comments = {};
-    /** @type {CommentFocus | null} */
-    this.commentFocus = null;
-    /** @type {Readonly<Record<string, string>>} Languages picked for files, by absolute path. */
-    this.languages = {};
-    /** @type {string | null} The project's snapshot id, for `listDir`; `null` while none is open. */
-    this.rootId = null;
-    /** @type {ListDir} Lists a project folder for a footer crumb. */
-    this.listDir = async () => [];
     /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
     this.terminals = {};
     /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
@@ -181,33 +156,18 @@ export class AcpTabView extends LitElement {
     return tab.error ? html`<pre class="acp-tab-view__error">${tab.error}</pre>` : view();
   }
 
-  /** @param {EditorTab} tab */
-  #renderCode(tab) {
-    return html`<acp-code-view
-      class="acp-tab-view__code"
-      .tab=${tab}
-      .language=${this.languages[tab.path] ?? ''}
-      .root=${this.root}
-      .rootId=${this.rootId}
-      .worktrees=${this.worktrees}
-      .listDir=${this.listDir}
-      .editorFont=${this.editorFont}
-      .editorFontSize=${this.editorFontSize}
-      .comments=${this.comments}
-      .commentFocus=${this.commentFocus}
-      @acp-tab-conflict=${(/** @type {CustomEvent<{ id: string }>} */ e) => {
-        e.stopPropagation();
-        this.confirmOverwrite(e.detail.id);
-      }}
-    ></acp-code-view>`;
-  }
+  /** A save over a file changed on disk, from its editor: asks whether to overwrite it. */
+  #onConflict = (/** @type {Event} */ e) => {
+    e.stopPropagation();
+    this.confirmOverwrite(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
+  };
 
   /**
    * A tab whose view the host renders. The view takes no box, so its component is the grid's one item.
    * @param {EditorTab} tab
    */
   #renderHosted(tab) {
-    return html`<div class="acp-tab-view__hosted">${this.renderContent?.(tab) ?? nothing}</div>`;
+    return html`<div class="acp-tab-view__hosted" @acp-tab-conflict=${this.#onConflict}>${this.renderContent?.(tab) ?? nothing}</div>`;
   }
 
   /** @param {EditorTab} tab */

@@ -85,7 +85,7 @@ describe('acp-main-column', () => {
     expect(scrolled).to.deep.equal(['a.js']);
   });
 
-  it('opens a file with a match selected, and reads the selection back', async () => {
+  it('shows a file in its editor view, with a match selected, and reads the selection back', async () => {
     mockIPC((cmd) => (cmd === 'read_file' ? 'first\nsecond needle\n' : null));
     // Files are read only once the project's root is open.
     $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
@@ -96,5 +96,6 @@ describe('acp-main-column', () => {
       expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
       await new Promise((r) => setTimeout(r, 10));
     }
+    expect(el.querySelector('acp-tab-view')?.shadowRoot?.querySelector('acp-editor-view acp-code-view'), 'through the editor view').to.not.equal(null);
   });
 });
