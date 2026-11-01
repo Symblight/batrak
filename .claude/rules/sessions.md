@@ -131,7 +131,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
   `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no
   longer offers it, so nothing in the UI opens it now): `SessionChangesController`
-  (main column) lists `session_changes` (commits and uncommitted work since `baseCommit`,
+  (`<acp-session-changes-tab>`, one per tab, following its own session) lists `session_changes` (commits and uncommitted work since `baseCommit`,
   `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
   each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
   `base` shows them without commit picks, with Apply locally and Check out branch (through

@@ -1,7 +1,8 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $comments } from '../../../stores/comments/comments.js';
-import { CHANGES_TAB_ID, closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
+import { git } from '../../../hooks/git/git.js';
+import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
+import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
 import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
@@ -53,6 +54,7 @@ describe('acp-changes-tab', () => {
     closeAllTabs();
     $commitSelection.set(new Set());
     $comments.set({});
+    $commentFocus.set(null);
     $workspace.set(null);
     clearMocks();
   });
@@ -78,6 +80,8 @@ describe('acp-changes-tab', () => {
     // Act
     $commitSelection.set(new Set(['a.js']));
     $comments.set({ '/p/a.js': [] });
+    const focus = /** @type {never} */ ({ path: '/p/a.js', threadId: 't1' });
+    $commentFocus.set(focus);
     await el.updateComplete;
     // Assert
     expect(review.changes).to.equal(CHANGES);
@@ -85,6 +89,7 @@ describe('acp-changes-tab', () => {
     expect([...review.selection]).to.deep.equal(['a.js']);
     expect(review.root).to.equal('/p');
     expect(review.comments).to.equal($comments.get());
+    expect(review.commentFocus === focus).to.equal(true);
   });
 
   it('turns the review’s events into expanding, collapsing and picking files, and none leaves the view', async () => {
@@ -144,7 +149,7 @@ describe('acp-changes-tab', () => {
 
   it('watches the working tree only while the Changes tab is the active one', async () => {
     // Arrange
-    await render();
+    const { el } = await render();
     await new Promise((r) => setTimeout(r, 0));
     // Assert
     expect(calls.map((c) => c.cmd), 'another tab is active').to.not.include('git_status');
@@ -154,6 +159,25 @@ describe('acp-changes-tab', () => {
     // Assert
     expect(calls.find((c) => c.cmd === 'git_status')?.args).to.deep.include({ rootId: 'r1' });
     expect($gitChanges.get().files, 'the listed files stay').to.equal(FILES);
-    expect(CHANGES_TAB_ID).to.equal('view:changes');
+    // Act: while it watches, a refresh scans again; another tab active, or the view gone, it does not
+    calls.length = 0;
+    git.refreshChanges();
+    await until(() => calls.some((c) => c.cmd === 'git_status'));
+    openSettings();
+    await new Promise((r) => setTimeout(r, 0));
+    calls.length = 0;
+    git.refreshChanges();
+    await new Promise((r) => setTimeout(r, 50));
+    // Assert
+    expect(calls.map((c) => c.cmd), 'stopped when another tab became the active one').to.not.include('git_status');
+    // Act
+    openChanges();
+    await until(() => calls.some((c) => c.cmd === 'git_status'));
+    el.remove();
+    calls.length = 0;
+    git.refreshChanges();
+    await new Promise((r) => setTimeout(r, 50));
+    // Assert
+    expect(calls.map((c) => c.cmd), 'stopped when the view went').to.not.include('git_status');
   });
 });

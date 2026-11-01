@@ -73,6 +73,7 @@ describe('acp-file-column', () => {
     expect(header.hasAttribute('action-disabled'), 'while it runs').to.equal(true);
     // Act: asked again meanwhile
     header.dispatchEvent(new CustomEvent('acp-panel-header-action', { bubbles: true, composed: true }));
+    await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     // Assert
     expect(header.hasAttribute('action-disabled'), 'a second ask does not end the first').to.equal(true);

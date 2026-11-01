@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $comments } from '../../../stores/comments/comments.js';
+import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { activateTab, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 import { sessionChangesTabId } from '../../../stores/tab-ids/tab-ids.js';
@@ -46,6 +46,7 @@ describe('acp-session-changes-tab', () => {
     closeAllTabs();
     $sessions.set([]);
     $comments.set({});
+    $commentFocus.set(null);
     clearMocks();
   });
 
@@ -80,6 +81,11 @@ describe('acp-session-changes-tab', () => {
     const review = /** @type {HTMLElementTagNameMap['acp-changes-review']} */ (el.querySelector('acp-changes-review'));
     // Assert
     expect(review.changes.files).to.deep.equal(FILES);
+    const focus = /** @type {never} */ ({ path: '/wt/s1/a.js', threadId: 't1' });
+    $comments.set({ '/wt/s1/a.js': [] });
+    $commentFocus.set(focus);
+    await el.updateComplete;
+    expect([review.comments === $comments.get(), review.commentFocus === focus], 'comments and the one to reveal').to.deep.equal([true, true]);
     expect([review.root, review.base, review.branch]).to.deep.equal(['/wt/s1', 'base-s1', 'brama/s1']);
     expect(calls.filter((c) => c.cmd === 'session_changes').map((c) => c.args.sessionId)).to.deep.equal(['s1']);
     // Act: the other tab becomes the active one
@@ -95,6 +101,32 @@ describe('acp-session-changes-tab', () => {
     await until(() => late.el.querySelector('acp-changes-review') !== null);
     // Assert
     expect(late.el.querySelector('acp-changes-review')?.base).to.equal('base-s1');
+  });
+
+  it('lists again when its session’s turn ends, not for another session’s, and no more once the tab is gone', async () => {
+    // Arrange
+    const { el } = await render('s1');
+    await until(() => el.querySelector('acp-changes-review')?.changes.loaded === true);
+    const listed = () => calls.filter((c) => c.cmd === 'session_changes').length;
+    const turn = (/** @type {string} */ id, /** @type {'working' | 'idle'} */ status) =>
+      $sessions.set($sessions.get().map((s) => (s.id === id ? /** @type {never} */ ({ ...s, status }) : s)));
+    // Act: another session's turn
+    turn('s2', 'working');
+    turn('s2', 'idle');
+    await new Promise((r) => setTimeout(r, 50));
+    // Assert
+    expect(listed(), 'another session’s turn').to.equal(1);
+    // Act: its own
+    turn('s1', 'working');
+    turn('s1', 'idle');
+    await until(() => listed() === 2);
+    // Act: the tab goes
+    el.remove();
+    turn('s1', 'working');
+    turn('s1', 'idle');
+    await new Promise((r) => setTimeout(r, 50));
+    // Assert
+    expect(listed(), 'a removed tab lists nothing').to.equal(2);
   });
 
   it('turns the review’s events into expanding files and the session’s Apply and Check out, and none leaves the view', async () => {
