@@ -430,4 +430,143 @@ describe('acp-tab-strip', () => {
       expect(moves).to.deep.equal([{ id: ids[0], index: 4 }]);
     });
   });
+
+  describe('dragging a tab to another strip', () => {
+    const editorIds = ['/p/a.js', '/p/b.js', '/p/c.js'];
+    const accepts = (/** @type {string} */ id) => id.startsWith('view:terminal:');
+
+    /** @param {string[]} [pinned] */
+    async function render(pinned = []) {
+      const wrap = await fixture(html`<div>
+        <acp-tab-strip id="editor" style="width: 600px" .tabs=${editorIds.map(fileTab)} .active=${editorIds[0]} .pinned=${pinned} .root=${'/p'} .dropName=${'editor'} .acceptsDrop=${accepts}></acp-tab-strip>
+        <acp-tab-strip id="panel" style="width: 600px; margin-top: 120px" .tabs=${[terminalTab('t1'), terminalTab('t2')]} .active=${'view:terminal:t1'} .terminals=${{ t1: terminalInfo, t2: terminalInfo }} .dropTo=${'editor'}></acp-tab-strip>
+      </div>`);
+      const editor = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (wrap.querySelector('#editor'));
+      const panel = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (wrap.querySelector('#panel'));
+      await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
+      await Promise.all([editor.updateComplete, panel.updateComplete]);
+      const tab = (/** @type {HTMLElementTagNameMap['acp-tab-strip']} */ strip, /** @type {string} */ id) =>
+        /** @type {HTMLElement} */ (strip.shadowRoot?.querySelector(`.acp-tab-strip__tab[value="${CSS.escape(id)}"]`));
+      const left = (/** @type {string} */ id) => tab(editor, id).getBoundingClientRect().left;
+      /** @type {HTMLElement} */
+      const pressed = /** @type {HTMLElement} */ (tab(panel, 'view:terminal:t1').querySelector('.acp-tab-strip__label'));
+      const send = (/** @type {string} */ type, /** @type {number} */ x, /** @type {number} */ y) =>
+        pressed.dispatchEvent(
+          new PointerEvent(type, { bubbles: true, composed: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }),
+        );
+      const from = (() => {
+        const r = tab(panel, 'view:terminal:t1').getBoundingClientRect();
+        return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+      })();
+      /** Over the editor strip, between its first and second tab. */
+      const between = () => {
+        const a = tab(editor, editorIds[0]).getBoundingClientRect();
+        return { x: a.right + 4, y: a.top + a.height / 2 };
+      };
+      const press = () => send('pointerdown', from.x, from.y);
+      const moveTo = async (/** @type {{ x: number, y: number }} */ at) => {
+        send('pointermove', from.x + 10, from.y);
+        send('pointermove', at.x, at.y);
+        await Promise.all([editor.updateComplete, panel.updateComplete]);
+      };
+      const release = async (/** @type {{ x: number, y: number }} */ at) => {
+        send('pointerup', at.x, at.y);
+        await Promise.all([editor.updateComplete, panel.updateComplete]);
+      };
+      /** @param {HTMLElement} el @param {string} type */
+      const listen = (el, type) => {
+        /** @type {unknown[]} */
+        const details = [];
+        el.addEventListener(type, (e) => details.push(/** @type {CustomEvent} */ (e).detail));
+        return details;
+      };
+      return { editor, panel, tab, left, press, moveTo, release, listen, between, from };
+    }
+
+    it('opens a slot in the strip it is over, shows the tab under the pointer, and hands it over on release', async () => {
+      // Arrange
+      const h = await render();
+      const received = h.listen(h.editor, 'acp-tab-receive');
+      const moved = h.listen(h.panel, 'acp-tab-move');
+      const restingB = h.left(editorIds[1]);
+      const restingA = h.left(editorIds[0]);
+
+      // Act: over the editor's strip, between its first and second tab
+      h.press();
+      await h.moveTo(h.between());
+
+      // Assert: while it hovers
+      expect(h.left(editorIds[1]), 'the tabs after the slot slide aside').to.be.greaterThan(restingB + 20);
+      expect(h.left(editorIds[0]), 'those before it stay').to.equal(restingA);
+      const ghost = h.panel.shadowRoot?.querySelector('.acp-tab-strip__ghost');
+      expect(ghost?.textContent?.trim(), 'it follows the pointer outside its strip').to.contain('zsh');
+
+      // Act
+      await h.release(h.between());
+
+      // Assert
+      expect(received).to.deep.equal([{ id: 'view:terminal:t1', index: 1 }]);
+      expect(moved, 'not a reorder of its own strip').to.deep.equal([]);
+      expect(h.left(editorIds[1]), 'the slot closes: the host decides what the strip shows').to.equal(restingB);
+      expect(h.panel.shadowRoot?.querySelector('.acp-tab-strip__ghost')).to.equal(null);
+    });
+
+    it('opens its slot after the pinned tabs of the strip it is over', async () => {
+      // Arrange
+      const h = await render([editorIds[0]]);
+      const received = h.listen(h.editor, 'acp-tab-receive');
+      const first = h.tab(h.editor, editorIds[0]).getBoundingClientRect();
+      const before = { x: first.left + 2, y: first.top + first.height / 2 };
+
+      // Act: over the left half of the pinned first tab
+      h.press();
+      await h.moveTo(before);
+      await h.release(before);
+
+      // Assert
+      expect(received).to.deep.equal([{ id: 'view:terminal:t1', index: 1 }]);
+    });
+
+    it('puts the tab back on Escape, on a release elsewhere, and for a tab the other strip does not accept', async () => {
+      // Arrange
+      const h = await render();
+      const received = h.listen(h.editor, 'acp-tab-receive');
+      const restingB = h.left(editorIds[1]);
+      const away = { x: h.from.x, y: h.from.y + 200 };
+
+      // Act: Escape while over the target
+      h.press();
+      await h.moveTo(h.between());
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await h.release(h.between());
+      const afterEscape = h.left(editorIds[1]);
+      // Act: released away from both
+      h.press();
+      await h.moveTo(away);
+      await h.release(away);
+      const afterAway = [h.left(editorIds[1]), h.panel.shadowRoot?.querySelector('.acp-tab-strip__ghost')];
+      // Act: over the target, then back over its own strip
+      h.press();
+      await h.moveTo(h.between());
+      const hovering = h.left(editorIds[1]);
+      await h.moveTo(h.from);
+      const backHome = h.left(editorIds[1]);
+      await h.release(h.from);
+
+      // Assert
+      expect(received).to.deep.equal([]);
+      expect(afterEscape, 'the slot closed at once').to.equal(restingB);
+      expect(afterAway, 'nothing left open or drawn').to.deep.equal([restingB, null]);
+      expect(hovering, 'the slot was open').to.be.greaterThan(restingB);
+      expect(backHome, 'back in its own strip, the slot closes').to.equal(restingB);
+
+      // Act: a tab the target does not accept
+      h.editor.acceptsDrop = () => false;
+      h.press();
+      await h.moveTo(h.between());
+      await h.release(h.between());
+      expect(received).to.deep.equal([]);
+      expect(h.left(editorIds[1]), 'no slot for it').to.equal(restingB);
+    });
+  });
 });

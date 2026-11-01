@@ -31,6 +31,15 @@ export const tabs = Object.freeze({
    */
   terminalId: terminalTabId,
 
+  /** The editor's tab strip as the target of tabs dragged out of the terminal panel's (`dropTo` / `dropName`). */
+  editorDrop: 'editor-tabs',
+
+  /**
+   * @param {string} id A tab id.
+   * @returns {boolean} It is a terminal's tab.
+   */
+  isTerminal: (id) => terminalOfTab(id) !== null,
+
   /**
    * @param {string} id A tab id.
    * @returns {string | null} The terminal it shows; `null` for any other tab.

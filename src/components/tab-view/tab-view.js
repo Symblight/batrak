@@ -23,6 +23,7 @@ import styles from './tab-view.css?inline';
  * @summary The main column's tabs: images, the Browser placeholder and whatever the host renders for the rest (code editors, views).
  * @slot add A button right after the last tab, like a browser's new tab; the strip then takes only the room its tabs need (the terminal panel's add).
  * @slot actions Buttons at the end of the strip's row (the terminal panel's hide).
+ * @fires acp-tab-receive `{ id, index }` A tab dragged from another strip (its `dropTo` is this `dropName`) was dropped at that index.
  * @fires acp-tab-close `{ id, scope }` A `CloseScope` around the tab, unsaved edits and running programs already confirmed.
  * @fires acp-tab-save `{ id, force: true }` Write over the file although it changed on disk (asked first).
  * @fires acp-tab-reload `{ id }` Drop the tab's edits for the file on disk (asked first).
@@ -37,6 +38,9 @@ export class AcpTabView extends LitElement {
     renderContent: { attribute: false },
     terminals: { attribute: false },
     terminalBusy: { attribute: false },
+    dropTo: { attribute: false },
+    dropName: { attribute: false },
+    acceptsDrop: { attribute: false },
     addSlotted: { state: true },
   };
 
@@ -91,6 +95,12 @@ export class AcpTabView extends LitElement {
     this.terminals = {};
     /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
     this.terminalBusy = async () => [];
+    /** @type {string | null} The name of the strip its tabs may be dragged to. */
+    this.dropTo = null;
+    /** @type {string | null} Takes tabs dragged from a strip whose `dropTo` is this name. */
+    this.dropName = null;
+    /** @type {((id: string) => boolean) | null} Which tabs of another strip it takes. */
+    this.acceptsDrop = null;
     /** @type {boolean} Something is slotted as `add`: the strip hugs its tabs. */
     this.addSlotted = false;
     /** @type {((tab: EditorTab) => unknown) | null} The content of the tabs whose view the host owns, as its views render it. */
@@ -203,6 +213,9 @@ export class AcpTabView extends LitElement {
           .root=${this.root}
           .worktrees=${this.worktrees}
           .terminals=${this.terminals}
+          .dropTo=${this.dropTo}
+          .dropName=${this.dropName}
+          .acceptsDrop=${this.acceptsDrop}
           @acp-tab-activate=${() => (this.#pendingLine = null)}
           @acp-tab-close-request=${this.#onCloseRequest}
         ></acp-tab-strip>

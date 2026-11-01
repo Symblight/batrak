@@ -15,6 +15,7 @@ import {
   closeTerminalTab,
   focusTerminal,
   forgetTerminal,
+  moveTerminalToEditor,
   openLoginTerminal,
   openTerminal,
   setTerminalPanelHeight,
@@ -184,6 +185,40 @@ describe('terminals', () => {
       // Assert
       expect($terminalTabs.get().paths).to.deep.equal([]);
       expect($editorTabs.get().paths).to.deep.equal([]);
+    });
+
+    it('moves a terminal’s tab to the editor’s tabs at an index, active and unpinned, its shell untouched', () => {
+      // Arrange
+      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $projectTabs.setKey('/p', { paths: ['/p/a.js', '/p/b.js'], active: '/p/a.js', pinned: [] });
+      const first = openTerminal('/p', '/p', 'p');
+      const second = openTerminal('/p', '/p', 'p');
+      terminalGroup.setPinned(terminalTabId(second), true);
+
+      // Act
+      moveTerminalToEditor(second, 1);
+      moveTerminalToEditor('not-open', 0);
+
+      // Assert
+      expect($editorTabs.get()).to.deep.equal({ paths: ['/p/a.js', terminalTabId(second), '/p/b.js'], active: terminalTabId(second), pinned: [] });
+      expect($terminalTabs.get().paths, 'it left the panel').to.deep.equal([terminalTabId(first)]);
+      expect($terminals.get()[second], 'it is the same terminal').to.include({ status: 'starting', projectPath: '/p' });
+    });
+
+    it('shows a login that was moved to the editor’s tabs where it is, not again in the panel', () => {
+      // Arrange
+      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      const tab = { terminalId: 'sign-in-1', title: 'Login', commandLine: 'login' };
+      openLoginTerminal(tab, '/p');
+      moveTerminalToEditor('sign-in-1', 0);
+      openTab('/p/a.js');
+
+      // Act
+      openLoginTerminal(tab, '/p');
+
+      // Assert
+      expect($editorTabs.get().active).to.equal(terminalTabId('sign-in-1'));
+      expect($terminalTabs.get().paths).to.deep.equal([]);
     });
 
     it('asks to focus a terminal until the view has', () => {

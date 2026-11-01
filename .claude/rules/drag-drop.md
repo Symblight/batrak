@@ -1,6 +1,7 @@
 ---
 paths:
   - "src/controllers/sortable/**"
+  - "src/controllers/drop-target/**"
   - "src/components/tab-strip/**"
 ---
 
@@ -40,3 +41,15 @@ app leaves off — it would not work).
   so a `scroll-behavior: smooth` container doesn't animate each step.
 - Tabs use it (`moveTab()`; `group` keeps pinned tabs among pinned). Tests drive it with synthetic
   `PointerEvent`s in `acp-tab-strip`'s tests.
+- **To another list:** `dropTo: () => name` in the config lets items be dragged out of the host's
+  container to a `DropTargetController` (`src/controllers/drop-target/`) of that name: a module-level
+  registry; a target is `{ name, area, accepts(id), over(id, point, step), leave(), drop(id, point) }`, found
+  by the pointer being over `area` (not hidden) and `accepts`. While the pointer is outside the host's
+  container the sortable calls the target's `over` on every move (`step`: the item's width and gap, the
+  room to make), `leave` when it moves off, is cancelled (Escape, `pointercancel`, blur) or the host
+  goes, and `drop` instead of `onReorder` on release; `ghost` is the pointer while the item is out of
+  its container with a `dropTo`, for the host to draw it (the container clips). `<acp-tab-strip>` is both
+  ends: `dropTo` on the source, `dropName` + `acceptsDrop` on the target, which slides the tabs after the
+  slot aside, emits `acp-tab-receive { id, index }` on a drop (the host acts, here `moveTerminalToEditor()`
+  from `<acp-main-column>`) and draws the ghost as a top-layer `popover="manual"`. No auto-scroll in the
+  target's strip.

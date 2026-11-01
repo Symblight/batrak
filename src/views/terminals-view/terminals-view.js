@@ -90,6 +90,7 @@ export class AcpTerminalsView extends ViewElement {
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
         .renderContent=${this.#renderTerminal}
+        .dropTo=${tabs.editorDrop}
         @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => terminalGroup.activate(e.detail.id)}
         @acp-tab-close=${this.#onTabClose}
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) => terminalGroup.setPinned(e.detail.id, e.detail.pinned)}

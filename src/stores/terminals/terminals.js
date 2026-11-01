@@ -1,5 +1,5 @@
 import { atom, computed, map } from 'nanostores';
-import { closeProjectTab } from '../editor/editor.js';
+import { $projectTabs, closeProjectTab, moveTab, openProjectTab, openTab } from '../editor/editor.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $workspace } from '../workspace/workspace.js';
@@ -217,8 +217,27 @@ export function openLoginTerminal({ terminalId, title, commandLine }, projectPat
     });
   }
   const root = known ? known.projectPath : projectPath;
+  // Moved to the editor's tabs: shown there.
+  if ($projectTabs.get()[root ?? NO_PROJECT]?.paths.includes(terminalTabId(terminalId))) {
+    openProjectTab(root, terminalTabId(terminalId));
+    return;
+  }
   terminalGroup.openIn(root, terminalTabId(terminalId));
   setTerminalPanelOpen(root, true);
+}
+
+/**
+ * Moves a terminal of the shown project from the panel to the editor's tabs, at an index, active and
+ * unpinned. Its shell is never without a tab: it lands in the editor's before it leaves the panel's.
+ * @param {string} terminalId
+ * @param {number} index In the editor's tabs without it.
+ */
+export function moveTerminalToEditor(terminalId, index) {
+  const tab = terminalTabId(terminalId);
+  if (!$terminalTabs.get().paths.includes(tab)) return;
+  openTab(tab);
+  moveTab(tab, index);
+  terminalGroup.close(tab);
 }
 
 /**

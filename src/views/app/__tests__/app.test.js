@@ -3,14 +3,17 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
+import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
 import { $sessions, $sessionsLoaded } from '../../../stores/sessions/sessions.js';
-import { closeAllTabs, openTab } from '../../../stores/editor/editor.js';
+import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import {
   $projectTerminalPanelHeights,
   $projectTerminalPanels,
   $projectTerminalTabs,
+  $terminalPanel,
   $terminalPanelHeight,
+  $terminalTabs,
   $terminals,
   forgetTerminal,
   openTerminal,
@@ -236,8 +239,15 @@ describe('acp-app: terminal panel layout', () => {
 
   after(() => tokens.remove());
 
+  /** @type {string[]} */
+  let commands;
+
   beforeEach(() => {
-    mockIPC((cmd, args) => (cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}))));
+    commands = [];
+    mockIPC((cmd, args) => {
+      commands.push(cmd);
+      return cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}));
+    });
     $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
     $hiddenColumns.set([]);
   });
@@ -356,5 +366,40 @@ describe('acp-app: terminal panel layout', () => {
     expect(afterPanel, 'the panel’s own height, no column width').to.deep.equal([310, {}]);
     expect($terminalPanelHeight.get(), 'the agent column’s handle leaves it').to.equal(310);
     expect(Object.keys($columnWidths.get())).to.deep.equal(['agent']);
+  });
+
+  it('moves a terminal tab dragged from the panel onto the editor’s tabs, its shell kept and the empty panel hidden', async () => {
+    // Arrange
+    const app = await render({ file: true, panel: true });
+    const [terminalTab] = $terminalTabs.get().paths;
+    const terminalId = tabs.terminalOf(terminalTab) ?? '';
+    /** The md-tab of `id` in the strip inside `host`'s tab view. */
+    const tabIn = (/** @type {string} */ host, /** @type {string} */ id) => {
+      const strip = app.querySelector(host)?.querySelector('acp-tab-view')?.shadowRoot?.querySelector('acp-tab-strip');
+      return /** @type {HTMLElement} */ (strip?.shadowRoot?.querySelector(`.acp-tab-strip__tab[value="${CSS.escape(id)}"]`));
+    };
+    const pressed = /** @type {HTMLElement} */ (tabIn('acp-terminals-view', terminalTab).querySelector('.acp-tab-strip__label'));
+    const rect = tabIn('acp-terminals-view', terminalTab).getBoundingClientRect();
+    const target = tabIn('acp-main-column', 'view:settings').getBoundingClientRect();
+    const send = (/** @type {string} */ type, /** @type {number} */ x, /** @type {number} */ y) =>
+      pressed.dispatchEvent(
+        new PointerEvent(type, { bubbles: true, composed: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }),
+      );
+    const start = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const drop = { x: target.right + 4, y: target.top + target.height / 2 };
+
+    // Act
+    send('pointerdown', start.x, start.y);
+    send('pointermove', start.x + 10, start.y);
+    send('pointermove', drop.x, drop.y);
+    send('pointerup', drop.x, drop.y);
+    await until(() => !$terminalPanel.get().open);
+
+    // Assert
+    expect($editorTabs.get().paths).to.deep.equal(['view:settings', terminalTab]);
+    expect($editorTabs.get().active).to.equal(terminalTab);
+    expect($terminalTabs.get().paths).to.deep.equal([]);
+    expect(commands, 'the shell lives on').to.not.include('terminal_close');
+    expect($terminals.get()[terminalId], 'its terminal is still known').to.not.equal(undefined);
   });
 });
