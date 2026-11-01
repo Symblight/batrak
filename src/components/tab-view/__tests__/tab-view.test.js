@@ -50,6 +50,27 @@ describe('acp-tab-view', () => {
     expect(placeholder?.getAttribute('text')).to.equal('Not implemented yet.');
   });
 
+  it('shows what its host renders for a view tab, one panel per tab and only the active one shown', async () => {
+    // Arrange
+    const tabs = [{ ...fileTab(''), id: 'view:settings', kind: /** @type {const} */ ('settings') }, { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') }];
+    const asked = /** @type {string[]} */ ([]);
+    const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+      await fixture(html`<acp-tab-view
+        .tabs=${tabs}
+        .active=${'view:settings'}
+        .renderContent=${(/** @type {EditorTab} */ tab) => {
+          asked.push(tab.id);
+          return html`<p class="from-host">${tab.id}</p>`;
+        }}
+      ></acp-tab-view>`)
+    );
+    // Assert
+    const panels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-view__panel') ?? [])];
+    expect(asked, 'asked for the settings tab only').to.deep.equal(['view:settings']);
+    expect(panels[0].querySelector('.from-host')?.textContent).to.equal('view:settings');
+    expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false]);
+  });
+
   describe('terminal tabs', () => {
     /** @param {import('../../../hooks/terminals/types.js').TerminalBusy[]} busy */
     async function render(busy) {

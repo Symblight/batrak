@@ -25,8 +25,18 @@
   flex: 1;
   min-height: 0;
 }
-/* A view tab's content (Settings), sized like the editor. */
+/* A view tab's own component (Agents, Changes, terminal, placeholder), sized like the editor. */
 .acp-tab-view__view {
+  flex: 1;
+  min-height: 0;
+  box-sizing: border-box;
+  padding: var(--acp-space-2);
+}
+/* A view tab whose view the host renders: its component is the grid's one item and fills the panel. */
+.acp-tab-view__hosted {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
   box-sizing: border-box;

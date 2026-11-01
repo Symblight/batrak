@@ -4,7 +4,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
-import { closeAllTabs, openTab } from '../../../stores/editor/editor.js';
+import { closeAllTabs, openSettings, openTab } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../main-column.js';
@@ -84,6 +84,20 @@ describe('acp-main-column', () => {
     await el.updateComplete;
     fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(terminal) });
     expect(pasted).to.deep.equal([]);
+  });
+
+  it('shows the Settings tab through its view', async () => {
+    // Arrange
+    openSettings();
+    // Act
+    const { tabView } = await render();
+    const view = /** @type {HTMLElementTagNameMap['acp-settings-view']} */ (tabView.shadowRoot?.querySelector('acp-settings-view'));
+    await view.updateComplete;
+    const settings = /** @type {HTMLElementTagNameMap['acp-settings']} */ (view.querySelector('acp-settings'));
+    await settings.updateComplete;
+    // Assert
+    const panel = /** @type {HTMLElement} */ (settings.closest('.acp-tab-view__panel'));
+    expect(panel.hasAttribute('active')).to.equal(true);
   });
 
   it('opens a file with a match selected, and reads the selection back', async () => {

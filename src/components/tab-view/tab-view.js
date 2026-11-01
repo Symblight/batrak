@@ -7,7 +7,6 @@ import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmCo
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import '../tab-strip/tab-strip.js';
 import '../code-view/code-view.js';
-import '../settings/settings.js';
 import '../agents-view/agents-view.js';
 import '../changes-review/changes-review.js';
 import '../image-preview/image-preview.js';
@@ -20,8 +19,6 @@ import styles from './tab-view.css?inline';
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
-/** @typedef {import('../../hooks/settings/types.js').FontFamily} FontFamily */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
@@ -61,10 +58,8 @@ export class AcpTabView extends LitElement {
     editorFontSize: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
-    settings: { attribute: false },
-    fonts: { attribute: false },
     agents: { attribute: false },
-    settingsReveal: { attribute: false },
+    renderContent: { attribute: false },
     agentsView: { attribute: false },
     agentsQuery: { attribute: false },
     agentsPending: { attribute: false },
@@ -102,13 +97,7 @@ export class AcpTabView extends LitElement {
           tab,
           () => html`<acp-image-preview class="acp-tab-view__view" path=${tab.path} .image=${tab.image}></acp-image-preview>`,
         ),
-      settings: () =>
-        html`<acp-settings
-          class="acp-tab-view__view"
-          .settings=${this.settings}
-          .fonts=${this.fonts}
-          .reveal=${this.settingsReveal}
-        ></acp-settings>`,
+      settings: (tab) => this.#renderHosted(tab),
       agents: () =>
         html`<acp-agents-view
           class="acp-tab-view__view"
@@ -153,14 +142,8 @@ export class AcpTabView extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
-    /** @type {Settings | null} For the Settings tab. */
-    this.settings = null;
-    /** @type {FontFamily[] | null} For the Settings tab. */
-    this.fonts = null;
     /** @type {import('../../hooks/agents/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
     this.agents = null;
-    /** @type {import('../../hooks/settings/types.js').SettingsReveal | null} For the Settings tab. */
-    this.settingsReveal = null;
     /** @type {import('../../hooks/agents/types.js').AgentsView | null} For the Agents tab. */
     this.agentsView = null;
     /** @type {import('../../hooks/agents/types.js').AgentsQuery} For the Agents tab. */
@@ -191,6 +174,8 @@ export class AcpTabView extends LitElement {
     this.terminalBusy = async () => [];
     /** @type {string | null} The terminal files dragged from the OS are over. */
     this.droppingTerminal = null;
+    /** @type {((tab: EditorTab) => unknown) | null} The content of the tabs whose view the host owns, as its views render it. */
+    this.renderContent = null;
   }
 
   /**
@@ -336,6 +321,14 @@ export class AcpTabView extends LitElement {
       .fontSize=${this.editorFontSize}
       ?dropping=${id === this.droppingTerminal}
     ></acp-terminal>`;
+  }
+
+  /**
+   * A tab whose view the host renders. The view takes no box, so its component is the grid's one item.
+   * @param {EditorTab} tab
+   */
+  #renderHosted(tab) {
+    return html`<div class="acp-tab-view__hosted">${this.renderContent?.(tab) ?? nothing}</div>`;
   }
 
   /** @param {EditorTab} tab */

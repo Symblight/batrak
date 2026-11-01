@@ -1,7 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
-import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { app } from '../../hooks/app/app.js';
-import { html } from 'lit';
+import { html, nothing } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
@@ -10,6 +9,7 @@ import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
 import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
@@ -18,10 +18,8 @@ import {
   $agentsReveal,
   $editorTabs,
   $fileLanguages,
-  $settingsReveal,
   AGENTS_TAB_ID,
   CHANGES_TAB_ID,
-  SETTINGS_TAB_ID,
   activateTab,
   agentsRevealed,
   closeAllTabs,
@@ -34,7 +32,6 @@ import {
   openTab,
   setFileLanguage,
   setTabPinned,
-  settingsRevealed,
 } from '../../stores/editor/editor.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents/agents.js';
 import { $agentViews, setAgentView } from '../../stores/session-views/session-views.js';
@@ -49,35 +46,26 @@ import {
   focusComment,
   sendToChat,
 } from '../../stores/comments/comments.js';
-import { $systemFonts } from '../../stores/fonts/fonts.js';
 import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
-import {
-  $settings,
-  resetSection,
-  setAccent,
-  setAppearance,
-  setEditorFont,
-  setEditorFontSize,
-} from '../../stores/settings/settings.js';
+import { $settings } from '../../stores/settings/settings.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
+import '../settings-view/settings-view.js';
 import { AcpTerminal } from '../../components/terminal/terminal.js';
 import '../../components/comment-bar/comment-bar.js';
 
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
 /** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../hooks/agents/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../hooks/settings/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
 /** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
-/** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
 
@@ -95,9 +83,7 @@ export class AcpMainColumn extends ViewElement {
   #rootId = new StoreController(this, { store: $rootId });
   #worktrees = new StoreController(this, { store: $worktrees });
   #settings = new StoreController(this, { store: $settings });
-  #systemFonts = new StoreController(this, { store: $systemFonts });
   #agentList = new StoreController(this, { store: $agentList });
-  #settingsReveal = new StoreController(this, { store: $settingsReveal });
   #agentsView = new StoreController(this, { store: $agentsView });
   #agentsQuery = new StoreController(this, { store: $agentsQuery });
   #agentsPending = new StoreController(this, { store: $agentsPending });
@@ -121,16 +107,12 @@ export class AcpMainColumn extends ViewElement {
   });
 
   /**
-   * The bar sits lower in the Changes tab, which has no footer. Settings lists the fonts, and the
-   * agents with the versions they reported since; the Agents tab asks again too.
+   * The bar sits lower in the Changes tab, which has no footer. The Agents tab asks again when shown.
    */
   #activePath = new StoreController(this, {
     store: $activePath,
     onChange: (path) => {
       if (path === AGENTS_TAB_ID) agents.search();
-      if (path !== SETTINGS_TAB_ID) return;
-      settingsHook.loadSystemFonts();
-      agents.refresh();
     },
   });
 
@@ -265,14 +247,18 @@ export class AcpMainColumn extends ViewElement {
     app.copy(path, 'Copying the path failed');
   }
 
-  /** @param {Event} e */
-  #onSettingsChange(e) {
-    const { patch } = /** @type {CustomEvent<{ patch: Partial<Settings> }>} */ (e).detail;
-    if (patch.appearance !== undefined) setAppearance(patch.appearance);
-    if (patch.accent !== undefined) setAccent(patch.accent);
-    if (patch.editorFont !== undefined) setEditorFont(patch.editorFont);
-    if (patch.editorFontSize !== undefined) setEditorFontSize(patch.editorFontSize);
-  }
+  /**
+   * The content of the tabs whose view this column owns.
+   * @param {EditorTab} tab
+   */
+  #renderTabContent = (tab) => {
+    switch (contentKindOf(tab)) {
+      case 'settings':
+        return html`<acp-settings-view></acp-settings-view>`;
+      default:
+        return nothing;
+    }
+  };
 
   /** @param {Event} e An `acp-agent-add` or `acp-agent-update`. */
   async #onAgentSave(e) {
@@ -310,10 +296,8 @@ export class AcpMainColumn extends ViewElement {
         .editorFontSize=${settings.editorFontSize}
         .comments=${this.#comments.value}
         .commentFocus=${this.#commentFocus.value}
-        .settings=${settings}
-        .fonts=${this.#systemFonts.value}
+        .renderContent=${this.#renderTabContent}
         .agents=${this.#agentList.value}
-        .settingsReveal=${this.#settingsReveal.value}
         .agentsView=${this.#agentsView.value}
         .agentsQuery=${this.#agentsQuery.value}
         .agentsPending=${this.#agentsPending.value}
@@ -367,11 +351,6 @@ export class AcpMainColumn extends ViewElement {
         @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
           pickForCommit(e.detail.ids, e.detail.picked)}
         @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
-        @acp-settings-change=${this.#onSettingsChange}
-        @acp-settings-reset=${(/** @type {CustomEvent<{ section: SettingsSection }>} */ e) =>
-          resetSection(e.detail.section)}
-        @acp-settings-revealed=${(/** @type {CustomEvent<{ reveal: SettingsReveal }>} */ e) =>
-          settingsRevealed(e.detail.reveal)}
         @acp-agents-file-open=${() => agents.openFile()}
         @acp-agents-import=${(/** @type {CustomEvent<{ agentIds?: string[] } | null>} */ e) =>
           agents.importUserAgents(e.detail?.agentIds ?? null)}
