@@ -40,11 +40,12 @@ describe('acp-session-sync', () => {
     expect(root.querySelector('md-icon-button')).to.equal(null);
   });
 
-  it('spins while a sync runs', async () => {
+  it('shows a spinner in place of the icon while a sync runs', async () => {
     const { root } = await render({ running: true, report: null });
     expect(tooltip(root)).to.deep.equal({ lines: ['Syncing sessions…'], anchored: true });
     expect(root.querySelector('md-icon-button')?.hasAttribute('title'), 'no native tooltip').to.equal(false);
-    expect(root.querySelector('.acp-session-sync__icon_running')).to.not.equal(null);
+    expect(root.querySelector('md-progress-circular')).to.not.equal(null);
+    expect(root.querySelector('md-icon'), 'no rotating icon').to.equal(null);
   });
 
   it("says how each agent did in its md-tooltip, with a warning dot when one needs the user", async () => {
@@ -52,6 +53,8 @@ describe('acp-session-sync', () => {
     expect(tooltip(root).lines).to.deep.equal(['Synced just now', 'Claude Code · 3 sessions', 'Codex · needs sign-in']);
     expect(root.querySelector('md-icon-button')?.getAttribute('aria-label')).to.equal('Resync sessions');
     expect(root.querySelector('.acp-session-sync__warning')).to.not.equal(null);
+    expect(root.querySelector('md-progress-circular'), 'no spinner when idle').to.equal(null);
+    expect(root.querySelector('md-icon')).to.not.equal(null);
   });
 
   it('asks for a resync on click', async () => {

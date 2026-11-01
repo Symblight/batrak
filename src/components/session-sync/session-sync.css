@@ -7,13 +7,8 @@
   font-size: var(--acp-icon-size-lg);
 }
 
-.acp-session-sync__icon_running {
-  animation: acp-session-sync-spin 1s linear infinite;
-
-  @media (prefers-reduced-motion: reduce) {
-    animation: none;
-    opacity: 0.6;
-  }
+.acp-session-sync__spinner {
+  font-size: var(--acp-icon-size-md);
 }
 
 .acp-session-sync__warning {
@@ -25,10 +20,4 @@
   border-radius: var(--acp-shape-corner-full);
   background: var(--acp-color-error);
   pointer-events: none;
-}
-
-@keyframes acp-session-sync-spin {
-  to {
-    transform: rotate(-360deg);
-  }
 }

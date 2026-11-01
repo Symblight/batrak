@@ -1,8 +1,8 @@
 import { LitElement, html, nothing } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
+import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import syncIcon from '@material-design-icons/svg/outlined/sync.svg?raw';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -12,7 +12,7 @@ import styles from './session-sync.css?inline';
 
 /**
  * @tag acp-session-sync
- * @summary The project's sync of its sessions with its agents: Resync, spinning while it runs, its tooltip saying when it last synced and how each agent did, a dot when an agent needs the user.
+ * @summary The project's sync of its sessions with its agents: Resync, a spinner in place of its icon while it runs, its tooltip saying when it last synced and how each agent did, a dot when an agent needs the user.
  * @fires acp-session-resync `null`
  */
 export class AcpSessionSync extends LitElement {
@@ -41,9 +41,9 @@ export class AcpSessionSync extends LitElement {
         aria-label="Resync sessions"
         @click=${this.#onClick}
       >
-        <md-icon class=${classMap({ 'acp-session-sync__icon': true, 'acp-session-sync__icon_running': this.sync.running })}
-          >${unsafeSVG(syncIcon)}</md-icon
-        >
+        ${this.sync.running
+          ? html`<md-progress-circular class="acp-session-sync__spinner"></md-progress-circular>`
+          : html`<md-icon class="acp-session-sync__icon">${unsafeSVG(syncIcon)}</md-icon>`}
       </md-icon-button>
       <md-tooltip for="acp-session-sync-button" show-delay="500" placement="bottom">
         ${[label, ...lines].map((line) => html`<div class="acp-session-sync__line">${line}</div>`)}
