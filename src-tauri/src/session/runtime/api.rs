@@ -9,7 +9,8 @@ pub struct Envelope {
     pub session_id: String,
     pub seq: u64,
     /// `update` (payload: ACP `SessionUpdate`), `status`, `permission-request`, `turn-start`,
-    /// `turn-end` (`{ stopReason }`), `error`, `config-options` (`{ configOptions }`: the
+    /// `turn-end` (`{ stopReason, at }`), `error` (`{ message, turn?, at? }`: `at` on a failed turn's),
+    /// `activity` (`{ at }`: the agent's output, stamped at most once per `output_stamp`), `config-options` (`{ configOptions }`: the
     /// agent's model, thought level and mode options as they are now), or `session` (the `Session`
     /// after the agent named it), `sign-in` (`{ agentId, agentName, methods }`: the agent asks
     /// for a sign-in; `null` once a start works or Stop), `held` (`{ prompt }`: the turn's prompt
@@ -67,12 +68,17 @@ pub struct SessionsOptions {
     /// How long after its end a turn's changes still count for an overlap: the watcher reports a
     /// write a debounce later, so the batch with a turn's last edits may come after it ended.
     pub overlap_grace: Duration,
+    /// The least time between two stamps of one session's output (`activity`).
+    pub output_stamp: Duration,
     /// How long one agent may take to list its sessions in a sync.
     pub sync_timeout: Duration,
 }
 
 /// Several watcher debounces (150 ms), FSEvents' latency included.
 pub(super) const OVERLAP_GRACE: Duration = Duration::from_secs(1);
+
+/// `OUTPUT_STAMP_MS` of the session read-state spec.
+pub(super) const OUTPUT_STAMP: Duration = Duration::from_millis(1000);
 
 impl SessionsOptions {
     pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
@@ -85,6 +91,7 @@ impl SessionsOptions {
             launcher: Arc::new(ProcessLauncher),
             initialize_timeout: acp::INITIALIZE_TIMEOUT,
             overlap_grace: OVERLAP_GRACE,
+            output_stamp: OUTPUT_STAMP,
             sync_timeout: sync::SYNC_TIMEOUT,
         }
     }

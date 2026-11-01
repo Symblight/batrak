@@ -22,6 +22,7 @@ impl ClientHost for ProbeHost {
 /// The app's side of one session's ACP connection.
 pub(super) struct SessionHost {
     pub(super) state: Weak<SessionState>,
+    pub(super) inner: Weak<Inner>,
 }
 
 impl SessionHost {
@@ -117,7 +118,14 @@ impl ClientHost for SessionHost {
         if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
             self.note_touched(&state, &update);
         }
+        let output = matches!(
+            update["sessionUpdate"].as_str(),
+            Some("agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update")
+        );
         state.emit("update", update);
+        if let Some(inner) = output.then(|| self.inner.upgrade()).flatten() {
+            inner.stamp_output(&state);
+        }
         if let Some(options) = options {
             // Saved with the next status change.
             remember_config(&state, &options);
@@ -127,6 +135,9 @@ impl ClientHost for SessionHost {
 
     fn on_permission_request(&self, request: PermissionRequest) {
         let Some(state) = self.state.upgrade() else { return };
+        if let Some(inner) = self.inner.upgrade() {
+            inner.stamp_output(&state);
+        }
         state.emit(
             "permission-request",
             json!({ "requestId": request.request_id, "toolCall": request.tool_call, "options": request.options }),

@@ -294,7 +294,7 @@ impl Inner {
             tracing::info!(session = %state.id, agent = %agent.id, pid, "agent process started");
         }
 
-        let host = Arc::new(SessionHost { state: Arc::downgrade(&state) });
+        let host = Arc::new(SessionHost { state: Arc::downgrade(&state), inner: Arc::downgrade(&self) });
         let opts = StartOptions {
             cwd: env.agent_cwd().to_path_buf(),
             mcp_servers: merged.mcp_servers.clone(),

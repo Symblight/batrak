@@ -43,6 +43,8 @@ pub(super) struct SessionState {
     /// When Brama last saw activity in it (a prompt, a turn's end), in ms: later activity the agent
     /// reports was another app's.
     pub(super) active_here: Mutex<Option<i64>>,
+    /// When its output was last stamped (`activity`), to stamp it at most once per `output_stamp`.
+    pub(super) output_stamped: Mutex<Option<Instant>>,
     /// The last activity its agent listed (`updatedAt`), in ms.
     pub(super) listed_activity: Mutex<Option<i64>>,
     /// agents.json no longer has the session's agent (reported, status `error`); `Some(true)`: it
@@ -115,6 +117,7 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         in_turn: AtomicBool::new(false),
         active_here: Mutex::new(None),
         listed_activity: Mutex::new(None),
+        output_stamped: Mutex::new(None),
         unconfigured: Mutex::new(None),
         running: Mutex::new(None),
         outdated: AtomicBool::new(false),

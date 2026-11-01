@@ -85,10 +85,11 @@ function channelOf(onEvent) {
 
 /**
  * Starts a turn; resolves once it's accepted (the agent starts first if it isn't running). Its
- * updates and `turn-end` arrive as session events.
+ * updates and `turn-end` arrive as session events. Resolves to the stamp the prompt gave the
+ * session's `lastActivityAt`.
  * @param {string} sessionId
  * @param {PromptInput[]} prompt
- * @returns {Promise<void>}
+ * @returns {Promise<string>}
  */
 export function sessionSendPrompt(sessionId, prompt) {
   return ipc.invoke('session_send_prompt', { sessionId, prompt });

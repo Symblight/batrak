@@ -382,12 +382,38 @@ impl Inner {
         }
     }
 
-    /// Marks the session active now (a prompt, a turn's end), which orders the list.
-    fn touch(&self, state: &SessionState) {
+    /// Marks the session active now (a prompt, output, a turn's end), which orders the list;
+    /// returns the stamp it wrote.
+    fn touch(&self, state: &SessionState) -> String {
+        let now = Self::stamp(state);
+        self.persist();
+        now
+    }
+
+    /// `touch()` without the disk write, for the connection's dispatch loop, which must not wait
+    /// on it; the turn's end persists the stamp.
+    fn stamp(state: &SessionState) -> String {
         let now = iso_now();
         *lock(&state.active_here) = parse_iso_millis(&now);
-        lock(&state.record).last_activity_at = Some(now);
-        self.persist();
+        lock(&state.record).last_activity_at = Some(now.clone());
+        now
+    }
+
+    /// The agent's output in a turn (not a history replayed at a start): stamps the session and
+    /// tells the page (`activity`), unless it did so within `output_stamp`.
+    fn stamp_output(&self, state: &SessionState) {
+        if !state.in_turn.load(Ordering::SeqCst) {
+            return;
+        }
+        {
+            let mut stamped = lock(&state.output_stamped);
+            if stamped.is_some_and(|at| at.elapsed() < self.opts.output_stamp) {
+                return;
+            }
+            *stamped = Some(Instant::now());
+        }
+        let at = Self::stamp(state);
+        state.emit("activity", json!({ "at": at }));
     }
 
     /// Every listed session's record.

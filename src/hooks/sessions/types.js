@@ -90,6 +90,7 @@
 /**
  * A session event from the backend's channel; `seq` is monotonic per session. `turn-end` carries
  * ACP's `stopReason` (`end_turn`, `cancelled`, …); an `error` with `turn` ended the running turn.
+ * `at` is the stamp the backend's `touch()` wrote (`lastActivityAt`); `activity`: the agent's output, at most one per second.
  * `held`: the turn's prompt waits for a sign-in; `prompt-returned`: such a prompt was dropped unsent.
  * `cli-exited`: the session's CLI (its Terminal view) ended.
  * @typedef {{ sessionId: string, seq: number } & (
@@ -100,8 +101,9 @@
  *   | { kind: 'turn-start', payload: Record<string, never> }
  *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
  *   | { kind: 'overlap', payload: { path: string, other: { id: string, title: string } } }
- *   | { kind: 'turn-end', payload: { stopReason: string } }
- *   | { kind: 'error', payload: { message: string, turn?: boolean } }
+ *   | { kind: 'activity', payload: { at: string } }
+ *   | { kind: 'turn-end', payload: { stopReason: string, at?: string } }
+ *   | { kind: 'error', payload: { message: string, turn?: boolean, at?: string } }
  *   | { kind: 'config-options', payload: { configOptions: AcpConfigOption[] } }
  *   | { kind: 'untrusted', payload: { launch: LaunchConfig, message: string } }
  *   | { kind: 'unconfigured', payload: { agentId: string, message: string, ran: string | null, reason?: 'removed' | 'off' } }

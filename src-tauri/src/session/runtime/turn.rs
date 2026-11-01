@@ -4,8 +4,9 @@ use super::*;
 
 impl Sessions {
     /// Starts a turn and returns once it's accepted; it runs in the background, its updates and
-    /// `turn-end` arrive as events. Starts the agent first if needed.
-    pub fn send_prompt(&self, id: &str, prompt: Vec<PromptInput>) -> Result<(), String> {
+    /// `turn-end` arrive as events. Starts the agent first if needed. Returns the stamp the
+    /// prompt gave the session's activity.
+    pub fn send_prompt(&self, id: &str, prompt: Vec<PromptInput>) -> Result<String, String> {
         let state = self.get(id)?;
         if prompt.is_empty() {
             return Err("empty prompt".to_owned());
@@ -17,7 +18,7 @@ impl Sessions {
             return Err("The agent is still working on the previous message".to_owned());
         }
         state.cancel_requested.store(false, Ordering::SeqCst);
-        self.inner.touch(&state);
+        let stamp = self.inner.touch(&state);
         let inner = Arc::clone(&self.inner);
         let attempts = state.start_attempts.load(Ordering::SeqCst);
         tokio::spawn(async move {
@@ -26,21 +27,21 @@ impl Sessions {
             if state.in_turn.swap(false, Ordering::SeqCst) {
                 *lock(&state.turn_ended) = Some(Instant::now());
             }
-            inner.touch(&state);
+            let at = inner.touch(&state);
             match result {
                 Ok(stop_reason) => {
-                    state.emit("turn-end", json!({ "stopReason": stop_reason }));
+                    state.emit("turn-end", json!({ "stopReason": stop_reason, "at": at }));
                     if state.conn().is_some() {
                         inner.set_status(&state, SessionStatus::Idle, None);
                     }
                 }
                 // A turn cut short by Stop ends as cancelled, not as a failure.
                 Err(_) if state.stopping.load(Ordering::SeqCst) => {
-                    state.emit("turn-end", json!({ "stopReason": "cancelled" }));
+                    state.emit("turn-end", json!({ "stopReason": "cancelled", "at": at }));
                 }
                 Err(e) => {
                     tracing::info!(session = %state.id, "turn failed: {e}");
-                    state.emit("error", json!({ "message": e, "turn": true }));
+                    state.emit("error", json!({ "message": e, "turn": true, "at": at }));
                     if state.conn().is_some() {
                         inner.set_status(&state, SessionStatus::Idle, None);
                     }
@@ -49,7 +50,7 @@ impl Sessions {
             // agents.json may have lost the agent during the turn.
             inner.check_agent(&state).await;
         });
-        Ok(())
+        Ok(stamp)
     }
 
     /// Files that changed in a project (root-relative, a watcher batch): each one the tool calls of

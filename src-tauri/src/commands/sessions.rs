@@ -95,7 +95,7 @@ pub async fn session_send_prompt(
     sessions: State<'_, Sessions>,
     session_id: String,
     prompt: Vec<PromptInput>,
-) -> Result<(), String> {
+) -> Result<String, String> {
     sessions.send_prompt(&session_id, prompt)
 }
 
