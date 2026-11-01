@@ -2,9 +2,8 @@ import { tabs } from '../../../hooks/tabs/tabs.js';
 import { app } from '../../../hooks/app/app.js';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { osScale } from '../../../models/file-drop/file-drop.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
-import { fileDrop } from '../../../services/file-drop/file-drop.js';
+import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
 import { closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
@@ -20,7 +19,7 @@ import '../main-column.js';
  */
 function osPointOf(el) {
   const r = el.getBoundingClientRect();
-  const scale = osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
+  const scale = fileDrop.osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
   return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
 }
 

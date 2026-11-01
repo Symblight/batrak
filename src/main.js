@@ -4,7 +4,7 @@ import './styles/fonts/fonts.css';
 // Before any component: every shadow root gets the shared styles.
 import './styles/shadow-styles.js';
 import { app } from './hooks/app/app.js';
-import { fileDrop } from './services/file-drop/file-drop.js';
+import { fileDrop } from './hooks/file-drop/file-drop.js';
 import './views/app/app.js';
 
 app.init();

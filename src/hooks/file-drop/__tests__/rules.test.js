@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { chatDropOf, composedContains, deepElementFromPoint, dropTargetAt, toCssPoint } from '../file-drop.js';
+import { chatDropOf, composedContains, deepElementFromPoint, dropTargetAt, toCssPoint } from '../rules.js';
 
 /**
  * A host with an open shadow root holding `html`.

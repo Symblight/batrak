@@ -5,10 +5,9 @@ import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { commentAuthor } from '../../models/editor-plugins/editor-plugins.js';
-import { composedContains } from '../../models/file-drop/file-drop.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { listDir, openUrl } from '../../services/ipc/ipc.js';
-import { fileDrop } from '../../services/file-drop/file-drop.js';
+import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -146,12 +145,14 @@ export class AcpMainColumn extends ViewElement {
    * @returns {AcpTerminal | null} A terminal tab's, when `target` is one.
    */
   #ownTerminal(target) {
-    return target instanceof AcpTerminal && composedContains(this, target) ? target : null;
+    return target instanceof AcpTerminal && fileDrop.composedContains(this, target) ? target : null;
   }
 
+  /** Stops listening to files dropped from the OS. */
+  #stopFileDrop = () => {};
+
   /** Files dropped from the OS on a running terminal tab: their paths are typed in, as a native terminal does. */
-  #onFileDrop = (/** @type {Event} */ e) => {
-    const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
+  #onFileDrop = (/** @type {FileDrop} */ { target, paths }) => {
     const terminal = this.#ownTerminal(target);
     if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(terminals.shellPaths(paths, app.platform));
   };
@@ -159,12 +160,12 @@ export class AcpMainColumn extends ViewElement {
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('acp-file-open', this.#onFileOpen);
-    fileDrop.addEventListener('drop', this.#onFileDrop);
+    this.#stopFileDrop = fileDrop.onDrop(this.#onFileDrop);
   }
 
   disconnectedCallback() {
     this.removeEventListener('acp-file-open', this.#onFileOpen);
-    fileDrop.removeEventListener('drop', this.#onFileDrop);
+    this.#stopFileDrop();
     super.disconnectedCallback();
   }
 

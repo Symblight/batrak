@@ -5,8 +5,7 @@ paths:
   - "src/hooks/terminals/**"
   - "src/stores/terminals/terminals.js"
   - "src/components/terminal/**"
-  - "src/services/file-drop/file-drop.js"
-  - "src/models/file-drop/file-drop.js"
+  - "src/hooks/file-drop/**"
   - "docs/specs/terminal-tab.md"
   - "web-test-runner.config.mjs"
 ---
@@ -38,10 +37,10 @@ keeps it with Restart. The previous page load's shells are closed (`close_window
 breaks become spaces), kept until the shell is connected. Files dropped from the OS on a running terminal (a tab, or a
 session's CLI) are typed in as shell-escaped paths plus a space (`terminals.shellPaths()`,
 `hooks/terminals/rules.js`), like a native terminal: Tauri's native drag and drop
-(`dragDropEnabled: true`) → `onFileDrag()` (`ipc.js`) → `fileDrop` (`services/file-drop/file-drop.js`:
+(`dragDropEnabled: true`) → `ipc.onDragDrop()` → `fileDrop` (`hooks/file-drop/file-drop.js`:
 position to CSS px — physical on Windows, logical on macOS / Linux — and the innermost
-`DROP_TARGETS` element under it through shadow roots, `models/file-drop/file-drop.js`; `$fileDropTarget`
-while over one, a `drop { target, paths }` event) → the column that renders the target pastes
+`DROP_TARGETS` element under it through shadow roots, `hooks/file-drop/rules.js`; `$fileDropTarget`
+while over one, `fileDrop.onDrop()` listeners get `{ target, paths }`) → the column that renders the target pastes
 (`<acp-agent-column>`; `<acp-main-column>`, which gives the tab view `droppingTerminal`) and sets
 the terminal's `dropping` outline (`acp-chat` is a target too: see `sessions.md`). The tab view asks before closing a terminal whose foreground program isn't
 its shell (`terminal_busy`). xterm draws nothing out of view: frontend tests give each test file its

@@ -104,8 +104,8 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
   Files dropped from the OS on the shown chat (Tauri's native drop, see `terminals.md`; the page
   gets no HTML5 drop, so `<chx-chat>`'s own drop is dead) are handled by `<acp-agent-column>`,
-  which sets `<acp-chat dropping>` while they're over it: `dropped_kinds` says what each is, and
-  `chatDropOf()` (`models/file-drop/file-drop.js`) makes each file or folder, an image too (the agent reads
+  which sets `<acp-chat dropping>` while they're over it: `fileDrop.kinds()` (`dropped_kinds`) says what each is, and
+  `fileDrop.chatDropOf()` (`hooks/file-drop/rules.js`) makes each file or folder, an image too (the agent reads
   it by its path), a chip at the caret (`AcpChat.insertFiles()`, built like an `@` pick), relative
   to the session's folder inside it, else absolute. `promptOf()` sends a relative chip as a
   `mention`, an absolute one only as `@path` in the text (the backend confines mentions to the

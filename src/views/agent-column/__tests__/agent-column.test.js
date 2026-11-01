@@ -9,9 +9,8 @@ import { $sessionNotices, setSessionNotice } from '../../../stores/session-runti
 import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalExited } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
-import { osScale } from '../../../models/file-drop/file-drop.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
-import { fileDrop } from '../../../services/file-drop/file-drop.js';
+import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import '../agent-column.js';
 
@@ -59,7 +58,7 @@ async function render() {
  */
 function osPointOf(el) {
   const r = el.getBoundingClientRect();
-  const scale = osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
+  const scale = fileDrop.osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
   return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
 }
 
@@ -403,12 +402,17 @@ describe('acp-agent-column', () => {
     $sessionViews.setKey('s1', 'terminal');
     addSessionTerminal('t-cli', 's1', '/p', 'Claude Code');
     $activeSessionId.set('s1');
-    const { root } = await render();
+    const { el, root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
     /** @type {import('../../../models/types/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
-    fileDrop.dispatchEvent(new CustomEvent('drop', { detail: { target: chat, paths: ['/p/a.js'] } }));
+    chat.hidden = false; // a hidden element is no drop target: show it as if the column didn't hide it
+    const position = osPointOf(chat);
+    fileDrop.handle({ type: 'enter', paths: ['/p/a.js'], position });
+    await el.updateComplete;
+    expect(chat.dropping, 'not marked').to.equal(false);
+    fileDrop.handle({ type: 'drop', paths: ['/p/a.js'], position });
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(inserted).to.deep.equal([]);
     expect(calls).not.to.include('dropped_kinds');

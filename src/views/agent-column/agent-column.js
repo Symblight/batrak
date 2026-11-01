@@ -15,12 +15,11 @@ import { ChatSessionController } from '../../controllers/chat-session/ChatSessio
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { cliInput } from '../../models/cli-input/cli-input.js';
-import { chatDropOf } from '../../models/file-drop/file-drop.js';
 import { inTurn } from '../../models/sessions/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agents } from '../../hooks/agents/agents.js';
-import { droppedKinds, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
-import { fileDrop } from '../../services/file-drop/file-drop.js';
+import { openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
+import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
@@ -151,12 +150,14 @@ export class AcpAgentColumn extends ViewElement {
     return target !== null && target === this.#chat && !this.#inTerminal && this.#openingPath.value === null;
   }
 
+  /** Stops listening to files dropped from the OS. */
+  #stopFileDrop = () => {};
+
   /**
    * Files dropped from the OS on the session's CLI (its paths typed in, as a native terminal does,
    * once it runs) or its chat (into the composer); kept until then.
    */
-  #onFileDrop = (/** @type {Event} */ e) => {
-    const { target, paths } = /** @type {CustomEvent<FileDrop>} */ (e).detail;
+  #onFileDrop = (/** @type {FileDrop} */ { target, paths }) => {
     if (this.#isOwnTerminal(target) || this.#isShownChat(target)) addDrop(paths);
   };
 
@@ -196,10 +197,10 @@ export class AcpAgentColumn extends ViewElement {
     const chat = this.#chat;
     const keep = () => addDrop(paths, sessionId);
     try {
-      const kinds = await droppedKinds(paths);
+      const kinds = await fileDrop.kinds(paths);
       if ($activeSessionId.get() !== sessionId) return keep();
       const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
-      const files = chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
+      const files = fileDrop.chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
       if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return keep();
       chat.insertFiles(files);
     } catch (err) {
@@ -245,11 +246,11 @@ export class AcpAgentColumn extends ViewElement {
 
   connectedCallback() {
     super.connectedCallback();
-    fileDrop.addEventListener('drop', this.#onFileDrop);
+    this.#stopFileDrop = fileDrop.onDrop(this.#onFileDrop);
   }
 
   disconnectedCallback() {
-    fileDrop.removeEventListener('drop', this.#onFileDrop);
+    this.#stopFileDrop();
     super.disconnectedCallback();
   }
 

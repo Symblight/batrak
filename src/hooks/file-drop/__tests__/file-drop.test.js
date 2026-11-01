@@ -1,6 +1,5 @@
-import { app } from '../../../hooks/app/app.js';
+import { app } from '../../app/app.js';
 import { expect } from '@esm-bundle/chai';
-import { osScale } from '../../../models/file-drop/file-drop.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { fileDrop } from '../file-drop.js';
 
@@ -12,7 +11,7 @@ import { fileDrop } from '../file-drop.js';
  */
 function osPointOf(el) {
   const r = el.getBoundingClientRect();
-  const scale = osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
+  const scale = fileDrop.osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
   return { x: (r.left + r.width / 2) * scale, y: (r.top + r.height / 2) * scale };
 }
 
@@ -25,8 +24,7 @@ describe('fileDrop', () => {
   let other;
   /** @type {FileDrop[]} */
   let drops;
-  /** @param {Event} e */
-  const onDrop = (e) => drops.push(/** @type {CustomEvent<FileDrop>} */ (e).detail);
+  let stopListening = () => {};
 
   beforeEach(() => {
     page = document.createElement('div');
@@ -39,12 +37,12 @@ describe('fileDrop', () => {
     page.append(terminal, other);
     document.body.append(page);
     drops = [];
-    fileDrop.addEventListener('drop', onDrop);
+    stopListening = fileDrop.onDrop((drop) => drops.push(drop));
   });
 
   afterEach(() => {
     fileDrop.handle({ type: 'leave' });
-    fileDrop.removeEventListener('drop', onDrop);
+    stopListening();
     page.remove();
   });
 

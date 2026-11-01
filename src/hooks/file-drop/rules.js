@@ -1,8 +1,8 @@
-import { relPath } from '../../hooks/projects/rules.js';
+import { relPath } from '../projects/rules.js';
 
-/** @typedef {import('../types/types.js').Platform} Platform */
-/** @typedef {import('../types/types.js').DroppedEntry} DroppedEntry */
-/** @typedef {import('../types/types.js').ChatFile} ChatFile */
+/** @typedef {import('../../models/types/types.js').Platform} Platform */
+/** @typedef {import('../../models/types/types.js').DroppedEntry} DroppedEntry */
+/** @typedef {import('../../models/types/types.js').ChatFile} ChatFile */
 
 /**
  * The innermost element under a point, looking inside open shadow roots.

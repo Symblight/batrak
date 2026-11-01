@@ -20,8 +20,6 @@ import { ipc } from '../../hooks/ipc/ipc.js';
 /** @typedef {import('../../models/types/types.js').SessionsSynced} SessionsSynced */
 /** @typedef {import('../../models/types/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../../models/types/types.js').WorkspaceSettings} WorkspaceSettings */
-/** @typedef {import('../../models/types/types.js').FileDrag} FileDrag */
-/** @typedef {import('../../models/types/types.js').DroppedEntry} DroppedEntry */
 
 /** The Rust command names, until each feature's hook takes its own. The bridge is `hooks/ipc`. */
 
@@ -464,25 +462,6 @@ export function getHomeDir() {
  */
 export function pickFolder() {
   return ipc.pickFolder();
-}
-
-/**
- * Files dragged from the OS over this window, and dropped (Tauri's native drag and drop, so the page
- * gets no HTML5 `drop` for them).
- * @param {(drag: FileDrag) => void} callback
- * @returns {Promise<() => void>} Stops listening.
- */
-export function onFileDrag(callback) {
-  return ipc.onDragDrop(callback);
-}
-
-/**
- * What paths of this window's recent file drops are on disk; fails for a path it didn't drop.
- * @param {readonly string[]} paths Absolute, as the drop named them.
- * @returns {Promise<DroppedEntry['kind'][]>} In the same order.
- */
-export function droppedKinds(paths) {
-  return ipc.invoke('dropped_kinds', { paths });
 }
 
 /**
