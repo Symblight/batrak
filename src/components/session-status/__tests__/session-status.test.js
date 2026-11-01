@@ -32,7 +32,6 @@ describe('acp-session-status', () => {
       [{ session: session({ activeElsewhereUntil: SOON }) }, 'elsewhere', 'Active in another app', 'md-progress-circular'],
       [{ session: session({ inTerminal: true }) }, 'terminal', 'In terminal', 'md-icon'],
       [{ session: session({ inTerminal: true, activeElsewhereUntil: SOON }) }, 'terminal-working', 'Working in terminal', 'md-progress-circular'],
-      [{ session: session({}), unread: true }, 'unread', 'New output', '.acp-session-status__dot'],
     ];
     for (const [props, indicator, label, part] of cases) {
       const el = await render(props);

@@ -90,7 +90,7 @@ describe('acp-session-row', () => {
       ['running', { session: session({ status: 'working' }) }, 'running'],
       ['error', { session: session({ status: 'error' }) }, 'error'],
       ['permission', { waiting: true }, 'permission'],
-      ['unread', { unread: true }, 'unread'],
+      ['unread alone shows none', { unread: true }, null],
       ['elsewhere', { session: session({ status: 'stopped', activeElsewhereUntil: soon }) }, 'elsewhere'],
       ['its time is up', { session: session({ status: 'stopped', activeElsewhereUntil: past }) }, null],
       ['terminal working', { session: session({ status: 'stopped', inTerminal: true, activeElsewhereUntil: soon }) }, 'terminal-working'],

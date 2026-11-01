@@ -6,6 +6,7 @@ export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../store
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
 /** @typedef {import('./types.js').Session} Session */
 /** @typedef {import('./types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('./types.js').SessionRead} SessionRead */
 /** @typedef {import('./types.js').SessionStatus} SessionStatus */
 /** @typedef {import('./types.js').SessionSync} SessionSync */
 
@@ -28,26 +29,62 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
   elsewhere: 'Active in another app',
   terminal: 'In terminal',
   'terminal-working': 'Working in terminal',
-  unread: 'New output',
 });
 
 /**
  * The one status a session shows, the most urgent first; `null` when there's nothing to say.
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
- * @param {boolean} [unread] It has output not seen yet.
  * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
  * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal: activity elsewhere is that CLI's.
  * @returns {SessionIndicator | null}
  */
-export function sessionIndicator(status, permissionPending, unread = false, activeElsewhere = false, inTerminal = false) {
+export function sessionIndicator(status, permissionPending, activeElsewhere = false, inTerminal = false) {
   if (permissionPending || status === 'waiting') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
   if (status === 'queued') return 'queued';
   if (inTerminal) return activeElsewhere ? 'terminal-working' : 'terminal';
   if (activeElsewhere) return 'elsewhere';
-  return unread ? 'unread' : null;
+  return null;
+}
+
+/** Activity this close after a session was seen still reads as seen: agents write their own files a little after Brama's stamp. The backend's `OWN_ACTIVITY_SLACK_MS`. */
+export const READ_SLACK_MS = 5000;
+
+/** The backend stamps a session's output at most this often (`activity` events). */
+export const OUTPUT_STAMP_MS = 1000;
+
+/** Statuses of a session whose agent has sent no output yet: its `lastActivityAt` is the user's prompt. */
+const BEFORE_OUTPUT = new Set(['preparing', 'starting', 'queued']);
+
+/**
+ * Whether a session has activity the user hasn't seen. Marked unread by hand (`seen: null`), or
+ * activity more than `READ_SLACK_MS` after `seen`; with no mark, after the project's `baseline` for
+ * its agent (no baseline: read). A session still preparing, starting or queued has sent no output, so
+ * its stamp (the user's prompt) never counts through the baseline, only against a mark.
+ * @param {Session} session
+ * @param {SessionRead | undefined} read Its read mark, if any.
+ * @param {string | undefined} baseline When its agent first listed its project's sessions (ISO).
+ */
+export function isUnread(session, read, baseline) {
+  const activity = Date.parse(session.lastActivityAt);
+  if (read !== undefined) return read.seen === null || activity - Date.parse(read.seen) > READ_SLACK_MS;
+  if (baseline === undefined || BEFORE_OUTPUT.has(session.status)) return false;
+  return activity - Date.parse(baseline) > READ_SLACK_MS;
+}
+
+/**
+ * A project's unread sessions, and how many of them are past the first `shown` (Show more's hidden ones).
+ * @param {readonly Session[]} sessions The project's, in list order.
+ * @param {readonly string[]} unread Unread session ids (`$unreadSessions`).
+ * @param {number} [shown] How many lead the list; default: all.
+ * @returns {{ count: number, hidden: number }}
+ */
+export function unreadIn(sessions, unread, shown = sessions.length) {
+  const ids = new Set(unread);
+  const flags = sessions.map((s) => ids.has(s.id));
+  return { count: flags.filter(Boolean).length, hidden: flags.slice(shown).filter(Boolean).length };
 }
 
 /**

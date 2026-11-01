@@ -25,7 +25,14 @@
 /**
  * The status icon a session shows in its header and list row (`sessionIndicator()`). `terminal`: its
  * agent's CLI runs it in Brama's terminal; `terminal-working`: and that CLI is busy.
- * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'terminal' | 'terminal-working' | 'unread'} SessionIndicator
+ * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'terminal' | 'terminal-working'} SessionIndicator
+ */
+
+/**
+ * When the user last saw a session (`$sessionReads`, `session-read.js`), or `null` for one marked
+ * unread by hand.
+ * @typedef {Object} SessionRead
+ * @property {string | null} seen ISO time.
  */
 
 /**

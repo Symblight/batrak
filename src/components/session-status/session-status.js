@@ -17,13 +17,12 @@ const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon
 
 /**
  * @tag acp-session-status
- * @summary A session's status icon, the same in its header and its list row, worked out from the session: permission, error, a spinner while the agent works (here, in its terminal or in another app), an hourglass while its turn waits for the project, a terminal while its CLI runs it, a dot for new output. Nothing shows when there's nothing to say.
+ * @summary A session's status icon, the same in its header and its list row, worked out from the session: permission, error, a spinner while the agent works (here, in its terminal or in another app), an hourglass while its turn waits for the project, a terminal while its CLI runs it. Nothing shows when there's nothing to say.
  */
 export class AcpSessionStatus extends LitElement {
   static properties = {
     session: { attribute: false },
     permissionPending: { type: Boolean, attribute: 'permission-pending' },
-    unread: { type: Boolean },
     now: { attribute: false },
     quiet: { type: Boolean },
     indicator: { reflect: true },
@@ -37,8 +36,6 @@ export class AcpSessionStatus extends LitElement {
     this.session = null;
     /** @type {boolean} A permission request of the session waits for the user. */
     this.permissionPending = false;
-    /** @type {boolean} The session has output not seen yet. */
-    this.unread = false;
     /** @type {number | null} ms; what "active in another app" is judged against, the current time while `null`. */
     this.now = null;
     /** @type {boolean} Leave an idle terminal session unmarked (a list row; its header still says it). */
@@ -49,13 +46,12 @@ export class AcpSessionStatus extends LitElement {
 
   /** @param {Map<PropertyKey, unknown>} changed */
   willUpdate(changed) {
-    if (!['session', 'permissionPending', 'unread', 'now', 'quiet'].some((name) => changed.has(name))) return;
+    if (!['session', 'permissionPending', 'now', 'quiet'].some((name) => changed.has(name))) return;
     const session = this.session;
     const indicator = session
       ? sessions.sessionIndicator(
           session.status,
           this.permissionPending,
-          this.unread,
           sessions.isActiveElsewhere(session, this.now ?? Date.now()),
           session.inTerminal === true,
         )
@@ -69,8 +65,6 @@ export class AcpSessionStatus extends LitElement {
       case 'elsewhere':
       case 'terminal-working':
         return html`<md-progress-circular class="acp-session-status__spinner"></md-progress-circular>`;
-      case 'unread':
-        return html`<span class="acp-session-status__dot"></span>`;
       case 'permission':
       case 'error':
       case 'queued':

@@ -35,15 +35,17 @@ export function persistentStore(key, initial, { parse, serialize = (value) => va
 /**
  * Map kept in `localStorage` as one JSON item per key, `prefix` + key. Only `setKey()` writes, and it
  * writes just that key, so windows sharing the prefix never overwrite each other's other entries.
- * Per window: other windows' writes are picked up on the next mount only.
+ * Per window unless `listen`: other windows' writes are then picked up on the next mount only.
  * @template T
  * @param {string} prefix Prefixed `brama:`, ending in `:`.
  * @param {(raw: unknown) => T | null} parse Validates one entry; `null` drops it.
+ * @param {{ listen?: boolean }} [options] `listen`: follow other windows' writes (`storage` events; an entry
+ *   they remove becomes `undefined`). Default `false`.
  * @returns {import('nanostores').MapStore<Record<string, T | undefined>>}
  */
-export function persistentMapStore(prefix, parse) {
+export function persistentMapStore(prefix, parse, { listen = false } = {}) {
   return persistentMap(prefix, /** @type {Record<string, T | undefined>} */ ({}), {
-    listen: false,
+    listen,
     encode: (/** @type {T | undefined} */ value) => JSON.stringify(value),
     // An entry decoded to `undefined` reads as missing.
     decode: (/** @type {string} */ raw) => {
@@ -54,6 +56,20 @@ export function persistentMapStore(prefix, parse) {
       }
     },
   });
+}
+
+/**
+ * What `localStorage` holds under `key` right now (a map store's entry is `prefix` + key), whatever a
+ * store has heard of other windows; `null` when nothing or when storage is unavailable.
+ * @param {string} key
+ * @returns {string | null}
+ */
+export function storedItem(key) {
+  try {
+    return localStorage.getItem(key);
+  } catch {
+    return null;
+  }
 }
 
 /**

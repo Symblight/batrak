@@ -13,6 +13,7 @@ import { poll, sync, syncAgentOf } from './sync.js';
 import { inTurn, isActiveElsewhere } from './rules.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
+import { recordBaselines } from '../../stores/session-read/session-read.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import {
@@ -64,6 +65,12 @@ const keptBusy = new Set();
 async function init() {
   onSessionsSynced(({ projectPath, sessions, report }) => {
     endSync(projectPath, report);
+    // Before the sessions: the baseline is what a session first seen in this list is judged against.
+    try {
+      recordBaselines(report);
+    } catch (err) {
+      app.reportError('Recording session baselines failed', err);
+    }
     setProjectSessions(projectPath, sessions);
     openAll(sessions);
   }).catch((err) => app.reportError('Listening for session syncs failed', err));

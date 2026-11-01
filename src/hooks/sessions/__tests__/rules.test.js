@@ -2,12 +2,14 @@ import { expect } from '@esm-bundle/chai';
 import {
   inTurn,
   isActiveElsewhere,
+  isUnread,
   loadingProjects,
   orderSessions,
   ownView,
   removeSessionConfirm,
   sessionIndicator,
   syncSummary,
+  unreadIn,
   viewDisabledReason,
   viewOf,
   visibleSessions,
@@ -35,36 +37,69 @@ const SESSION = {
 };
 
 describe('sessions model', () => {
-  it('shows one indicator per session: a permission request above all, then failure, elsewhere, running, queued and new output', () => {
+  it('shows one indicator per session: a permission request above all, then failure, running, queued, elsewhere and the terminal', () => {
     /** @type {any[][]} */
     const cases = [
-      // [status, permission, unread, elsewhere, terminal, indicator, why]
-      ['idle', false, false, false, false, null, 'idle shows nothing'],
-      ['stopped', false, false, false, false, null, 'stopped shows nothing'],
-      ['preparing', false, false, false, false, 'running', 'starting up works'],
-      ['starting', false, false, false, false, 'running', 'starting works'],
-      ['working', false, false, false, false, 'running', 'a turn works'],
-      ['queued', false, false, false, false, 'queued', 'queued is not working'],
-      ['queued', false, true, false, false, 'queued', 'queued above new output'],
-      ['error', false, false, false, false, 'error', 'a failure'],
-      ['idle', false, true, false, false, 'unread', 'new output, below the rest'],
-      ['stopped', false, true, false, false, 'unread', 'new output of a stopped one'],
-      ['working', false, true, false, false, 'running', 'working above new output'],
-      ['error', false, true, false, false, 'error', 'a failure above new output'],
-      ['stopped', false, false, true, false, 'elsewhere', 'another app runs it'],
-      ['stopped', false, true, true, false, 'elsewhere', 'elsewhere above new output'],
-      ['error', false, false, true, false, 'error', 'a failure above elsewhere'],
-      ['waiting', false, false, false, false, 'permission', 'waiting for an answer'],
-      ['working', true, false, false, false, 'permission', 'a permission above working'],
-      ['error', true, false, false, false, 'permission', 'a permission above a failure'],
-      ['stopped', false, false, false, true, 'terminal', 'the CLI runs it'],
-      ['stopped', false, true, true, true, 'terminal-working', 'the CLI works'],
-      ['error', false, false, true, true, 'error', 'a failure above the CLI'],
+      // [status, permission, elsewhere, terminal, indicator, why]
+      ['idle', false, false, false, null, 'idle shows nothing'],
+      ['stopped', false, false, false, null, 'stopped shows nothing'],
+      ['preparing', false, false, false, 'running', 'starting up works'],
+      ['starting', false, false, false, 'running', 'starting works'],
+      ['working', false, false, false, 'running', 'a turn works'],
+      ['queued', false, false, false, 'queued', 'queued is not working'],
+      ['error', false, false, false, 'error', 'a failure'],
+      ['stopped', false, true, false, 'elsewhere', 'another app runs it'],
+      ['error', false, true, false, 'error', 'a failure above elsewhere'],
+      ['waiting', false, false, false, 'permission', 'waiting for an answer'],
+      ['working', true, false, false, 'permission', 'a permission above working'],
+      ['error', true, false, false, 'permission', 'a permission above a failure'],
+      ['stopped', false, false, true, 'terminal', 'the CLI runs it'],
+      ['stopped', false, true, true, 'terminal-working', 'the CLI works'],
+      ['error', false, true, true, 'error', 'a failure above the CLI'],
     ];
-    for (const [status, permission, unread, elsewhere, terminal, indicator, why] of cases) {
+    for (const [status, permission, elsewhere, terminal, indicator, why] of cases) {
       // Act + Assert
-      expect(sessionIndicator(/** @type {any} */ (status), /** @type {boolean} */ (permission), /** @type {boolean} */ (unread), /** @type {boolean} */ (elsewhere), /** @type {boolean} */ (terminal)), why).to.equal(indicator);
+      expect(sessionIndicator(/** @type {any} */ (status), /** @type {boolean} */ (permission), /** @type {boolean} */ (elsewhere), /** @type {boolean} */ (terminal)), why).to.equal(indicator);
     }
+  });
+
+  it('is unread when marked so, or when its activity came more than the slack after it was seen, or after its baseline when never seen', () => {
+    /** @param {string} at @param {Partial<Session>} [rest] */
+    const at = (at, rest = {}) => ({ ...SESSION, lastActivityAt: at, ...rest });
+    const SEEN = '2026-10-20T10:00:00.000Z';
+    /** @type {[Session, import('../types.js').SessionRead | undefined, string | undefined, boolean, string][]} */
+    const cases = [
+      [at('2026-10-20T10:00:06.000Z'), { seen: SEEN }, undefined, true, 'activity after it was seen'],
+      [at('2026-10-20T10:00:05.000Z'), { seen: SEEN }, undefined, false, 'exactly the slack after: the agent\'s trailing write'],
+      [at('2026-10-20T09:59:00.000Z'), { seen: SEEN }, undefined, false, 'activity before it was seen'],
+      [at('2026-10-20T09:00:00.000Z'), { seen: null }, undefined, true, 'marked unread by hand, whatever the activity'],
+      [at('2026-10-20T10:00:06Z'), { seen: SEEN }, undefined, true, 'times compared as dates: no milliseconds'],
+      [at('2026-10-20T10:00:04Z'), { seen: '2026-10-20T10:00:00Z' }, undefined, false, 'mixed formats within the slack'],
+      [at('2026-10-20T10:00:06.5+00:00'), { seen: SEEN }, undefined, true, 'an offset instead of Z'],
+      [at('2026-10-20T10:00:10.000Z'), undefined, SEEN, true, 'never seen, active after its baseline'],
+      [at('2026-10-20T10:00:03.000Z'), undefined, SEEN, false, 'never seen, within the slack of its baseline'],
+      [at('2026-10-20T09:00:00.000Z'), undefined, SEEN, false, 'never seen, older than its baseline'],
+      [at('2026-10-20T11:00:00.000Z'), undefined, undefined, false, 'no mark and no baseline (the agent can\'t list)'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'working' }), { seen: SEEN }, undefined, true, 'running, with new output'],
+      [at('2026-10-20T10:00:01.000Z', { status: 'working' }), { seen: SEEN }, undefined, false, 'running, without new output'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'working' }), undefined, SEEN, true, 'running, never seen, with output'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'preparing' }), undefined, SEEN, false, 'preparing: its stamp is the prompt, not output'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'starting' }), undefined, SEEN, false, 'starting: the same'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'queued' }), undefined, SEEN, false, 'queued: the same'],
+      [at('2026-10-20T10:00:10.000Z', { status: 'queued' }), { seen: null }, SEEN, true, 'queued, but already marked unread'],
+    ];
+    for (const [session, read, baseline, expected, why] of cases) {
+      // Act + Assert
+      expect(isUnread(session, read, baseline), why).to.equal(expected);
+    }
+  });
+
+  it('counts a project\'s unread sessions, and those past the ones its list shows', () => {
+    const list = ['a', 'b', 'c', 'd'].map((id) => ({ ...SESSION, id }));
+    expect(unreadIn(list, ['b', 'd', 'other'], 2)).to.deep.equal({ count: 2, hidden: 1 });
+    expect(unreadIn(list, ['a', 'b'], 2), 'all shown unread').to.deep.equal({ count: 2, hidden: 0 });
+    expect(unreadIn(list, ['d']), 'nothing hidden without a limit').to.deep.equal({ count: 1, hidden: 0 });
+    expect(unreadIn([], ['a'])).to.deep.equal({ count: 0, hidden: 0 });
   });
 
   it("picks the session's view: its own over the setting, chat without a terminal mode, a draft's terminal only when the CLI can start", () => {

@@ -29,10 +29,3 @@
 .acp-session-status__spinner {
   font-size: var(--acp-icon-size-sm);
 }
-
-.acp-session-status__dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--acp-shape-corner-full);
-  background: var(--acp-color-primary);
-}

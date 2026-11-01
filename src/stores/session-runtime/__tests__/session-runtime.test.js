@@ -3,9 +3,7 @@ import {
   $activeNotice,
   $permissionRequests,
   $sessionNotices,
-  $unreadSessions,
   addPermissionRequest,
-  markUnread,
   setSessionNotice,
 } from '../session-runtime.js';
 import { $activeSessionId } from '../../sessions/sessions.js';
@@ -13,7 +11,6 @@ import { $activeSessionId } from '../../sessions/sessions.js';
 describe('session-runtime', () => {
   afterEach(() => {
     $activeSessionId.set(null);
-    $unreadSessions.set([]);
     $sessionNotices.set({});
     $permissionRequests.set({});
   });
@@ -25,20 +22,5 @@ describe('session-runtime', () => {
     expect($activeNotice.get()?.message).to.equal('Waiting for "Fix the tree" to finish');
     addPermissionRequest('a', { requestId: 'r', toolCallId: null, title: 'Edit a.txt', options: [] });
     expect($activeNotice.get()).to.deep.equal({ kind: 'queued', message: '"Fix the tree" is waiting for your answer', holder });
-  });
-
-  it('marks a hidden session unread until it is shown', () => {
-    $activeSessionId.set('shown');
-    markUnread('hidden');
-    markUnread('hidden');
-    expect($unreadSessions.get()).to.deep.equal(['hidden']);
-    $activeSessionId.set('hidden');
-    expect($unreadSessions.get()).to.deep.equal([]);
-  });
-
-  it('never marks the session being shown', () => {
-    $activeSessionId.set('shown');
-    markUnread('shown');
-    expect($unreadSessions.get()).to.deep.equal([]);
   });
 });

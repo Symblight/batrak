@@ -12,7 +12,6 @@ import {
   addPermissionRequest,
   clearPermissionRequests,
   dismissSessionNotice,
-  markUnread,
   setSessionNotice,
 } from '../../stores/session-runtime/session-runtime.js';
 import { awaitTrust } from '../../stores/trust/trust.js';
@@ -224,7 +223,6 @@ export function handleSessionEvent(event) {
     case 'turn-end':
       loaded.add(sessionId);
       touchSession(sessionId);
-      markUnread(sessionId);
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
       if ($sessionNotices.get()[sessionId]?.kind === 'overlap') dismissSessionNotice(sessionId);

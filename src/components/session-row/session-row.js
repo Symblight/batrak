@@ -206,7 +206,6 @@ export class AcpSessionRow extends LitElement {
                 class="acp-session-row__status"
                 .session=${session}
                 .permissionPending=${this.waiting}
-                .unread=${this.unread}
                 .now=${this.now}
                 quiet
               ></acp-session-status>`}
