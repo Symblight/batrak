@@ -1,4 +1,3 @@
-import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
@@ -8,11 +7,10 @@ import { ChxCommandPicker } from '@symblight/chat/composer';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
-import descriptionIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import { fileIcon } from '../file-icon/file-icon.js';
 import styles from './chat.css?inline';
-import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
+import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
+import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
+import { buildMenuItem, codeChip, commentLines, fileChipAttrs } from './chips.js';
 import { chat } from '../../hooks/chat/chat.js';
 import '../agent-picker/agent-picker.js';
 import '../context-meter/context-meter.js';
@@ -23,7 +21,8 @@ import '../run-target/run-target.js';
 import '../session-banner/session-banner.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
-/** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
+/** @typedef {import('./chips.js').ComposerTextbox} ComposerTextbox */
+/** @typedef {import('./chips.js').PmSchema} PmSchema */
 /** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
@@ -35,157 +34,10 @@ import '../session-banner/session-banner.js';
 /** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 
-/**
- * The composer's ProseMirror document, as far as code goes in: `line+`, each line text and chips.
- * `chx-textbox` and its editor aren't exported by `@symblight/chat`, so typed here.
- * @typedef {{ content: { size: number }, childCount: number, child: (index: number) => PmNode }} PmNode
- * @typedef {Object} PmSchema
- * @property {{ line: PmNodeType, chip: PmNodeType }} nodes
- * @property {(text: string) => PmNode} text
- * @typedef {{ create: (attrs: object | null, content?: PmNode[]) => PmNode }} PmNodeType
- * @typedef {{ doc: PmNode, insert: (pos: number, nodes: PmNode[]) => PmTransaction,
- *   replaceWith: (from: number, to: number, nodes: PmNode[]) => PmTransaction }} PmTransaction
- * @typedef {{ state: { schema: PmSchema, selection: { from: number, to: number }, tr: PmTransaction },
- *   dispatch: (tr: PmTransaction) => void }} PmView
- * @typedef {HTMLElement & { updateComplete: Promise<boolean>, focus: () => void, focusEnd: () => void,
- *   editor?: { view: PmView } }} ComposerTextbox
- */
-
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 
 // Sends arrive as one flat html part; re-split them so chips and pastes keep their own renderers.
 const splitOnSend = createSplitOnSendHandler(chat.MESSAGE_PART_RULES);
-
-/**
- * @param {string} value
- * @param {string} headline
- * @param {string} [supportingText]
- */
-function buildMenuItem(value, headline, supportingText) {
-  const item = createMenuItem();
-  item.setAttribute('value', value);
-  item.append(headline);
-  if (supportingText) {
-    const supporting = document.createElement('span');
-    supporting.slot = 'supporting-text';
-    supporting.textContent = supportingText;
-    item.append(supporting);
-  }
-  return item;
-}
-
-/**
- * A file chip naming lines of code: `src/app.js:12`, or `src/app.js:12-23` for several. The label is
- * what the agent reads.
- * @param {PmSchema} schema
- * @param {ChatInsert} insert
- * @param {string | null} root The project's path; the chip names a file inside it relative to it.
- */
-function codeChip(schema, { path, fromLine, toLine }, root) {
-  const rel = projects.rel(root, path) ?? path;
-  const name = rel.slice(rel.lastIndexOf('/') + 1);
-  const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
-  return schema.nodes.chip.create({
-    templateId: FILE_CHIP_TEMPLATE,
-    label: `${rel}:${lines}`,
-    icon: fileIcon.svgFor(name),
-    data: { path: rel, lines },
-  });
-}
-
-/**
- * A file or folder chip as an `@` pick makes it: its name and icon, the path in `data-path`.
- * @param {string} path Relative to the session's folder, or absolute outside it.
- * @param {boolean} folder
- */
-function fileChipAttrs(path, folder) {
-  const name = projects.basename(path);
-  /** @type {Record<string, string>} */
-  const data = folder ? { path, kind: 'folder' } : { path };
-  return {
-    templateId: FILE_CHIP_TEMPLATE,
-    label: name,
-    icon: fileIcon.svgFor(name, folder),
-    data,
-  };
-}
-
-/**
- * A comment's composer lines: its chip, then the comment; the comment's further lines follow as plain lines.
- * @param {PmSchema} schema
- * @param {ChatInsert} insert
- * @param {string | null} root
- */
-function commentLines(schema, insert, root) {
-  const [first, ...rest] = insert.body.split('\n');
-  return [
-    schema.nodes.line.create(null, [codeChip(schema, insert, root), schema.text(` ${first}`)]),
-    ...rest.map((text) => schema.nodes.line.create(null, text ? [schema.text(text)] : [])),
-  ];
-}
-
-/**
- * Text with matched characters in `<b>`.
- * @param {string} text
- * @param {Set<number>} hits Code point indices to highlight.
- * @param {number} offset Index of `text`'s first code point within the full path.
- */
-function highlight(text, hits, offset) {
-  const fragment = document.createDocumentFragment();
-  Array.from(text).forEach((ch, i) => {
-    fragment.append(hits.has(offset + i) ? Object.assign(document.createElement('b'), { textContent: ch }) : ch);
-  });
-  return fragment;
-}
-
-/** A picker's option; its density comes from src/styles/shadow.css, like every menu's. */
-function createMenuItem() {
-  return document.createElement('md-menu-item');
-}
-
-/**
- * @param {string} svg
- * @param {string} slot
- */
-function buildIcon(svg, slot) {
-  const icon = document.createElement('md-icon');
-  icon.slot = slot;
-  icon.innerHTML = svg;
-  return icon;
-}
-
-/** The `@` menu's first step: picking it opens the file and folder search. */
-function buildBrowseItem() {
-  const item = createMenuItem();
-  item.setAttribute('value', '');
-  item.dataset.browse = '';
-  item.append(buildIcon(descriptionIcon, 'leading'), 'Files and Folders', buildIcon(chevronIcon, 'trailing'));
-  return item;
-}
-
-/**
- * `@` option for a file or folder on one line: its icon, the name, and the folder it's in, matches
- * highlighted (as in Quick Open).
- * @param {QuickOpenItem} entry
- */
-function buildEntryItem(entry) {
-  const hits = new Set(entry.indices);
-  const nameStart = Array.from(entry.path).length - Array.from(entry.name).length;
-  const dir = nameStart > 0 ? entry.path.slice(0, entry.path.length - entry.name.length - 1) : '';
-  const item = createMenuItem();
-  item.setAttribute('value', entry.path);
-  item.title = entry.path;
-  if (entry.isDir) item.dataset.kind = 'folder';
-  const icon = fileIcon.svgFor(entry.name, entry.isDir);
-  item.append(buildIcon(icon, 'leading'), highlight(entry.name, hits, nameStart));
-  if (dir) {
-    const trailing = document.createElement('span');
-    trailing.slot = 'trailing';
-    trailing.append(highlight(dir, hits, 0));
-    item.append(trailing);
-  }
-  return item;
-}
 
 /**
  * @tag acp-chat
@@ -224,6 +76,13 @@ export class AcpChat extends LitElement {
   };
 
   static styles = styles;
+
+  #mentions = new FileMentionsController(this, {
+    picker: () => /** @type {ChxCommandPicker | null} */ (this.renderRoot.querySelector('#acp-chat-files')),
+    composer: () => this.renderRoot.querySelector('chx-message-composer'),
+    options: () => this.fileOptions,
+    onQuery: (query) => this.#emit('acp-chat-file-query', { query }),
+  });
 
   constructor() {
     super();
@@ -361,52 +220,6 @@ export class AcpChat extends LitElement {
     splitOnSend(/** @type {Parameters<typeof splitOnSend>[0]} */ (e));
   }
 
-  /** The `@` query being typed, `null` when none is. */
-  #fileQuery = /** @type {string | null} */ (null);
-  /** Whether "Files and Folders" was picked for this `@`: then the query searches. */
-  #browsing = false;
-  /** Whether the option being resolved is a folder; `chx-command-picked` only carries its value. */
-  #pickingFolder = false;
-
-  /** `@` menu: "Files and Folders" until it's picked or a name is typed, then files and folders by name. */
-  #onFileQuery = (/** @type {Event} */ e) => {
-    const picker = /** @type {ChxCommandPicker} */ (e.target);
-    this.#fileQuery = /** @type {CustomEvent<{ value: string | null }>} */ (e).detail.value;
-    if (this.#fileQuery === null) this.#browsing = false;
-    this.#showFileOptions(picker);
-  };
-
-  /** Whether the `@` menu shows search results, rather than nothing or "Files and Folders". */
-  get #searching() {
-    return this.#fileQuery !== null && (this.#browsing || this.#fileQuery !== '');
-  }
-
-  /** @param {ChxCommandPicker} picker */
-  #showFileOptions(picker) {
-    const query = this.#fileQuery;
-    if (!this.#searching) {
-      this.#emit('acp-chat-file-query', { query: null });
-      picker.clearOptions();
-      if (query === null) return;
-      const options = document.createDocumentFragment();
-      options.append(buildBrowseItem());
-      picker.addOptions(options);
-      return;
-    }
-    this.#emit('acp-chat-file-query', { query });
-  }
-
-  /** @param {Map<string, unknown>} changed */
-  updated(changed) {
-    if (!changed.has('fileOptions') || !this.#searching) return;
-    const picker = /** @type {ChxCommandPicker | null} */ (this.renderRoot.querySelector('#acp-chat-files'));
-    if (!picker) return;
-    picker.clearOptions();
-    const options = document.createDocumentFragment();
-    for (const item of this.fileOptions.slice(0, 50)) options.append(buildEntryItem(item));
-    picker.addOptions(options);
-  }
-
   /**
    * @param {string} type
    * @param {object} detail
@@ -414,31 +227,6 @@ export class AcpChat extends LitElement {
   #emit(type, detail) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-
-  /**
-   * Replaces the `@` picker's `resolve`: "Files and Folders" opens the search instead of
-   * inserting a chip.
-   * @param {MenuItemElement} option
-   */
-  #resolveFile = (option) => {
-    const picker = /** @type {ChxCommandPicker} */ (this.renderRoot.querySelector('#acp-chat-files'));
-    if (option.dataset.browse === undefined) {
-      this.#pickingFolder = option.dataset.kind === 'folder';
-      ChxCommandPicker.prototype.resolve.call(picker, option);
-      return;
-    }
-    this.#browsing = true;
-    this.#showFileOptions(picker);
-    // A click on the option moved focus into the menu; keep typing in the composer.
-    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('chx-message-composer'))?.focus();
-  };
-
-  /** Turns a picked file or folder into a chip with its name and icon, the path in `data-path`. */
-  #onFilePicked = (/** @type {Event} */ e) => {
-    const { value, setChip } = /** @type {CustomEvent<{ value: string, setChip: (chip: HTMLElement) => void }>} */ (e)
-      .detail;
-    setChip(buildChipElement(fileChipAttrs(value, this.#pickingFolder)));
-  };
 
   /** @param {Event} e */
   #onCommandPicked(e) {
@@ -526,9 +314,9 @@ export class AcpChat extends LitElement {
             slot="command-field"
             commandCharacter="@"
             maxQuerySpaces="2"
-            .resolve=${this.#resolveFile}
-            @chx-command-query=${this.#onFileQuery}
-            @chx-command-picked=${this.#onFilePicked}
+            .resolve=${this.#mentions.resolve}
+            @chx-command-query=${this.#mentions.onQuery}
+            @chx-command-picked=${this.#mentions.onPicked}
           ></chx-command-picker>
           <chx-command-picker
             id="acp-chat-commands"
