@@ -57,6 +57,7 @@ describe('acp-tab-view', () => {
       { ...fileTab(''), id: 'view:agents', kind: /** @type {const} */ ('agents') },
       { ...fileTab(''), id: 'view:changes', kind: /** @type {const} */ ('changes') },
       { ...fileTab(''), id: 'view:session-changes:s1', kind: /** @type {const} */ ('session-changes') },
+      terminalTab('t1'),
       { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') },
     ];
     const asked = /** @type {string[]} */ ([]);
@@ -72,9 +73,9 @@ describe('acp-tab-view', () => {
     );
     // Assert
     const panels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-view__panel') ?? [])];
-    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:session-changes:s1']);
+    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:session-changes:s1', 'view:terminal:t1']);
     expect(panels[0].querySelector('.from-host')?.textContent).to.equal('view:settings');
-    expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false, false, false, false]);
+    expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false, false, false, false, false]);
   });
 
   describe('terminal tabs', () => {
@@ -88,7 +89,6 @@ describe('acp-tab-view', () => {
           .active=${'view:terminal:t1'}
           .root=${'/p'}
           .terminals=${{ t1: terminalInfo }}
-          .terminalConnect=${() => ({ write() {}, resize() {}, dispose() {} })}
           .terminalBusy=${async (/** @type {string[]} */ ids) => {
             asked.push(ids);
             return busy;
@@ -106,20 +106,6 @@ describe('acp-tab-view', () => {
     }
 
     const settle = () => new Promise((r) => setTimeout(r, 20));
-
-    it('shows its terminal', async () => {
-      const { root } = await render([]);
-      expect(root.querySelector('acp-terminal')?.terminalId).to.equal('t1');
-    });
-
-    it('marks the terminal files are dragged over as dropping', async () => {
-      const { el, root } = await render([]);
-      const terminal = /** @type {HTMLElement} */ (root.querySelector('acp-terminal'));
-      expect(terminal.hasAttribute('dropping')).to.equal(false);
-      el.droppingTerminal = 't1';
-      await el.updateComplete;
-      expect(terminal.hasAttribute('dropping')).to.equal(true);
-    });
 
     it('closes an idle terminal at once', async () => {
       const { asked, closes, close } = await render([]);

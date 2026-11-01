@@ -6,6 +6,7 @@
   background: var(--acp-column-background);
   color: var(--acp-color-on-surface);
   container: acp-settings / inline-size;
+  padding: var(--acp-tab-view-padding, 0);
 }
 
 /* Sections at the start, the card scrolling beside them. */

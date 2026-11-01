@@ -6,7 +6,6 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
-import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
@@ -41,21 +40,19 @@ import {
 } from '../../stores/comments/comments.js';
 import { $settings } from '../../stores/settings/settings.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
-import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
-import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
+import { $terminals } from '../../stores/terminals/terminals.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
 import '../changes-tab/changes-tab.js';
 import '../session-changes-tab/session-changes-tab.js';
 import '../settings-view/settings-view.js';
-import { AcpTerminal } from '../../components/terminal/terminal.js';
+import '../terminal-view/terminal-view.js';
 import '../../components/comment-bar/comment-bar.js';
 
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
@@ -75,7 +72,6 @@ export class AcpMainColumn extends ViewElement {
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
   #terminals = new StoreController(this, { store: $terminals });
-  #fileDropTarget = new StoreController(this, { store: $fileDropTarget });
 
   /** A comment to reveal: show its file; the editor that shows it then reveals it. */
   #commentFocus = new StoreController(this, {
@@ -96,32 +92,13 @@ export class AcpMainColumn extends ViewElement {
     this.openFile(path, line);
   };
 
-  /**
-   * @param {Element | null} target
-   * @returns {AcpTerminal | null} A terminal tab's, when `target` is one.
-   */
-  #ownTerminal(target) {
-    return target instanceof AcpTerminal && fileDrop.composedContains(this, target) ? target : null;
-  }
-
-  /** Stops listening to files dropped from the OS. */
-  #stopFileDrop = () => {};
-
-  /** Files dropped from the OS on a running terminal tab: their paths are typed in, as a native terminal does. */
-  #onFileDrop = (/** @type {FileDrop} */ { target, paths }) => {
-    const terminal = this.#ownTerminal(target);
-    if (terminal && $terminals.get()[terminal.terminalId]?.status === 'running') terminal.paste(terminals.shellPaths(paths, app.platform));
-  };
-
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('acp-file-open', this.#onFileOpen);
-    this.#stopFileDrop = fileDrop.onDrop(this.#onFileDrop);
   }
 
   disconnectedCallback() {
     this.removeEventListener('acp-file-open', this.#onFileOpen);
-    this.#stopFileDrop();
     super.disconnectedCallback();
   }
 
@@ -217,6 +194,8 @@ export class AcpMainColumn extends ViewElement {
         return html`<acp-settings-view></acp-settings-view>`;
       case 'agents':
         return html`<acp-agents-tab></acp-agents-tab>`;
+      case 'terminal':
+        return html`<acp-terminal-view terminal-id=${tabs.terminalOf(tab.id) ?? ''}></acp-terminal-view>`;
       case 'changes':
         return html`<acp-changes-tab ${ref(this.#changesTab)}></acp-changes-tab>`;
       case 'session-changes':
@@ -239,9 +218,7 @@ export class AcpMainColumn extends ViewElement {
         .rootId=${this.#rootId.value}
         .listDir=${projects.listDir}
         .terminals=${this.#terminals.value}
-        .terminalConnect=${terminals.connect}
         .terminalBusy=${terminals.busy}
-        .droppingTerminal=${this.#ownTerminal(this.#fileDropTarget.value)?.terminalId ?? null}
         .worktrees=${this.#worktrees.value}
         .languages=${this.#fileLanguages.value}
         .editorFont=${settings.editorFont}
@@ -260,12 +237,6 @@ export class AcpMainColumn extends ViewElement {
         @acp-tab-save=${this.#onTabSave}
         @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
-        @acp-terminal-copy=${(/** @type {CustomEvent<{ text: string }>} */ e) =>
-          app.copy(e.detail.text, 'Copying failed')}
-        @acp-terminal-restart=${(/** @type {CustomEvent<{ terminalId: string }>} */ e) =>
-          terminals.restart(e.detail.terminalId)}
-        @acp-terminal-title=${(/** @type {CustomEvent<{ terminalId: string, title: string }>} */ e) =>
-          setTerminalTitle(e.detail.terminalId, e.detail.title)}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
           app.openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
         @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) =>

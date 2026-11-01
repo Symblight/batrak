@@ -7,7 +7,6 @@ import { TabContentController } from '../../controllers/tab-content/TabContentCo
 import '../tab-strip/tab-strip.js';
 import '../code-view/code-view.js';
 import '../image-preview/image-preview.js';
-import '../terminal/terminal.js';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import '../view-placeholder/view-placeholder.js';
 import styles from './tab-view.css?inline';
@@ -18,7 +17,6 @@ import styles from './tab-view.css?inline';
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../hooks/terminals/types.js').TerminalConnect} TerminalConnect */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 /** @typedef {import('../tab-strip/tab-strip.js').CloseScope} CloseScope */
@@ -46,9 +44,7 @@ export class AcpTabView extends LitElement {
     rootId: { attribute: false },
     listDir: { attribute: false },
     terminals: { attribute: false },
-    terminalConnect: { attribute: false },
     terminalBusy: { attribute: false },
-    droppingTerminal: { attribute: false },
   };
 
   static styles = styles;
@@ -75,7 +71,7 @@ export class AcpTabView extends LitElement {
       agents: (tab) => this.#renderHosted(tab),
       changes: (tab) => this.#renderHosted(tab),
       'session-changes': (tab) => this.#renderHosted(tab),
-      terminal: (tab) => this.#renderTerminal(tab),
+      terminal: (tab) => this.#renderHosted(tab),
       browser: () =>
         html`<acp-view-placeholder
           class="acp-tab-view__view"
@@ -114,12 +110,8 @@ export class AcpTabView extends LitElement {
     this.listDir = async () => [];
     /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
     this.terminals = {};
-    /** @type {TerminalConnect | null} Streams a terminal tab's shell. */
-    this.terminalConnect = null;
     /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
     this.terminalBusy = async () => [];
-    /** @type {string | null} The terminal files dragged from the OS are over. */
-    this.droppingTerminal = null;
     /** @type {((tab: EditorTab) => unknown) | null} The content of the tabs whose view the host owns, as its views render it. */
     this.renderContent = null;
   }
@@ -208,22 +200,6 @@ export class AcpTabView extends LitElement {
         this.confirmOverwrite(e.detail.id);
       }}
     ></acp-code-view>`;
-  }
-
-  /** @param {EditorTab} tab */
-  #renderTerminal(tab) {
-    const id = tabs.terminalOf(tab.id);
-    const info = id === null ? undefined : this.terminals[id];
-    if (!info) return nothing;
-    return html`<acp-terminal
-      class="acp-tab-view__view"
-      terminal-id=${id}
-      .connect=${this.terminalConnect}
-      .info=${info}
-      .fontFamily=${this.editorFont}
-      .fontSize=${this.editorFontSize}
-      ?dropping=${id === this.droppingTerminal}
-    ></acp-terminal>`;
   }
 
   /**

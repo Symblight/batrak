@@ -32,15 +32,17 @@
   box-sizing: border-box;
   padding: var(--acp-space-2);
 }
-/* A view tab whose view the host renders: its component is the grid's one item and fills the panel. */
+/* A view tab whose view the host renders: its component is the grid's one item and fills the panel.
+   It pads itself by --acp-tab-view-padding, so its own background reaches the edges, as the
+   .acp-tab-view__view padding did. */
 .acp-tab-view__hosted {
+  --acp-tab-view-padding: var(--acp-space-2);
+
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   flex: 1;
   min-height: 0;
-  box-sizing: border-box;
-  padding: var(--acp-space-2);
 }
 .acp-tab-view__error {
   margin: 0;

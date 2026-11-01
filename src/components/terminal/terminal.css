@@ -5,6 +5,7 @@
   box-sizing: border-box;
   min-height: 0;
   background: var(--acp-color-surface);
+  padding: var(--acp-tab-view-padding, 0);
 }
 .acp-terminal__screen {
   /* Keeps xterm's layers (z-index up to 11) under the drop highlight. */

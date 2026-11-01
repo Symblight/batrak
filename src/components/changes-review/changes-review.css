@@ -5,6 +5,7 @@
   min-height: 0;
   background: var(--acp-column-background);
   color: var(--acp-color-on-surface);
+  padding: var(--acp-tab-view-padding, 0);
 }
 
 /* Toolbar: collapse all, all-files checkbox, summary, totals; view, navigation, revert, review */
