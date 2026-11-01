@@ -1,5 +1,3 @@
-import { StoreController } from '../store/StoreController.js';
-
 /** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeEventDetail} ResizeEventDetail */
 /** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeMeasure} ResizeMeasure */
 /** @typedef {import('../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
@@ -18,9 +16,12 @@ import { StoreController } from '../store/StoreController.js';
 
 /**
  * @typedef {Object} ColumnResizeConfig
- * @property {Record<string, ResizableColumn>} columns Keyed by the `name` of their `acp-resize-handle`.
- * @property {import('nanostores').WritableAtom<ColumnWidths>} store Widths outside a drag, usually the
- *   persisted `$columnWidths`; shared by all hosts, so column names are unique app-wide.
+ * @property {() => Record<string, ResizableColumn>} columns Keyed by the `name` of their `acp-resize-handle`.
+ *   The same object until the columns change.
+ * @property {() => ColumnWidths} widths Widths outside a drag, as their owner keeps them (the persisted
+ *   `$columnWidths`); read on every update, so a change elsewhere (another window) is applied.
+ * @property {(widths: ColumnWidths) => void} onCommit Where a drag's end, a key step or a reset ends up:
+ *   all the widths, a reset column dropped.
  */
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} ResizeHost */
@@ -52,8 +53,8 @@ function rootLengthPx(property) {
 /**
  * Column widths of one host, driven by the `acp-resize-*` events of the `acp-resize-handle`s in its
  * shadow root. Re-renders the host on every change, so columns bind `columnStyle()` and handles
- * `column()` for their ARIA values. A drag stays local until it ends, then lands in the store; every
- * store change (another window included) is applied back.
+ * `column()` for their ARIA values. A drag stays local until it ends, then goes out through
+ * `onCommit`; the widths the host is given (another window's included) are applied on every update.
  * @implements {ReactiveController}
  */
 export class ColumnResizeController {
@@ -67,6 +68,10 @@ export class ColumnResizeController {
   #defaults = {};
   /** @type {{ name: string, measure: ResizeMeasure | undefined, startWidth: number } | null} */
   #drag = null;
+  /** @type {ColumnWidths | null} The widths last applied, to see a change in what the host is given. */
+  #seenWidths = null;
+  /** @type {Record<string, ResizableColumn> | null} */
+  #seenColumns = null;
 
   /**
    * @param {ResizeHost} host
@@ -76,14 +81,29 @@ export class ColumnResizeController {
     this.#host = host;
     this.#config = config;
     host.addController(this);
-    // Added after this controller, so it connects after `#readDefaults()` has run.
-    new StoreController(host, { store: config.store, onChange: this.#applyStored });
   }
 
   hostConnected() {
     for (const type of EVENTS) this.#host.addEventListener(type, this.#onEvent);
     window.addEventListener('resize', this.#onWindowResize);
-    this.#readDefaults();
+    this.#sync(true);
+  }
+
+  /** Before each render: new columns are measured, new widths applied. */
+  hostUpdate() {
+    this.#sync(false);
+  }
+
+  /** @param {boolean} force */
+  #sync(force) {
+    const columns = this.#config.columns();
+    const widths = this.#config.widths();
+    const columnsChanged = force || columns !== this.#seenColumns;
+    if (!columnsChanged && widths === this.#seenWidths) return;
+    this.#seenColumns = columns;
+    this.#seenWidths = widths;
+    if (columnsChanged) this.#readDefaults();
+    this.#applyStored(widths);
   }
 
   hostDisconnected() {
@@ -116,13 +136,13 @@ export class ColumnResizeController {
    * @returns {{ value: number, min: number, max: number }}
    */
   column(name) {
-    const { min, max } = this.#config.columns[name];
+    const { min, max } = this.#config.columns()[name];
     return { value: this.width(name), min, max };
   }
 
   /** Read at `:root`, where the host's inline overrides don't reach. */
   #readDefaults() {
-    for (const [name, { property, min }] of Object.entries(this.#config.columns)) {
+    for (const [name, { property, min }] of Object.entries(this.#config.columns())) {
       const px = rootLengthPx(property);
       this.#defaults[name] = Number.isFinite(px) ? px : min;
     }
@@ -131,14 +151,14 @@ export class ColumnResizeController {
   /** Defaults are shares of the window, so columns still at their default follow its size. */
   #onWindowResize = () => {
     this.#readDefaults();
-    this.#applyStored(this.#config.store.get());
+    this.#applyStored(this.#config.widths());
   };
 
   /** @param {ColumnWidths} stored Skips the columns being dragged; the drag's end stores them anyway. */
   #applyStored = (stored) => {
     const drag = this.#drag;
-    const dragged = drag ? [drag.name, this.#config.columns[drag.name].partner] : [];
-    for (const name of Object.keys(this.#config.columns)) {
+    const dragged = drag ? [drag.name, this.#config.columns()[drag.name].partner] : [];
+    for (const name of Object.keys(this.#config.columns())) {
       if (!dragged.includes(name)) this.#apply(name, stored[name] ?? this.#defaults[name]);
     }
   };
@@ -146,7 +166,7 @@ export class ColumnResizeController {
   /** @param {Event} e */
   #onEvent = (e) => {
     const { name, delta = 0, measure } = /** @type {CustomEvent<ResizeEventDetail>} */ (e).detail;
-    if (!(name in this.#config.columns)) return; // another host's column: let it bubble on
+    if (!(name in this.#config.columns())) return; // another host's column: let it bubble on
     e.stopPropagation();
     switch (e.type) {
       case 'acp-resize-start':
@@ -178,11 +198,11 @@ export class ColumnResizeController {
    * @param {number} delta px, positive widens the column.
    */
   #resize(name, startWidth, measure, delta) {
-    const { min, max, partner } = this.#config.columns[name];
+    const { min, max, partner } = this.#config.columns()[name];
     let lo = min - startWidth;
     let hi = max - startWidth;
     if (measure) {
-      const partnerColumn = partner ? this.#config.columns[partner] : undefined;
+      const partnerColumn = partner ? this.#config.columns()[partner] : undefined;
       hi = Math.min(hi, measure.neighborWidth - Math.max(measure.neighborMin, partnerColumn?.min ?? 0));
       if (partnerColumn) lo = Math.max(lo, measure.neighborWidth - partnerColumn.max);
     }
@@ -193,7 +213,7 @@ export class ColumnResizeController {
 
   /** @param {string} name Stores the column and its partner. */
   #commitPair(name) {
-    const { partner } = this.#config.columns[name];
+    const { partner } = this.#config.columns()[name];
     this.#commit(partner ? { [name]: this.width(name), [partner]: this.width(partner) } : { [name]: this.width(name) });
   }
 
@@ -202,7 +222,7 @@ export class ColumnResizeController {
    * @param {number} width px, clamped to the column's range.
    */
   #apply(name, width) {
-    const { min, max } = this.#config.columns[name];
+    const { min, max } = this.#config.columns()[name];
     const clamped = Math.round(Math.min(max, Math.max(min, width)));
     if (this.#widths[name] === clamped) return;
     this.#widths[name] = clamped;
@@ -210,16 +230,18 @@ export class ColumnResizeController {
   }
 
   /**
-   * Stores column widths; `undefined` drops one, back to its CSS default. Applied via `#applyStored`.
+   * Hands the column widths on; `undefined` drops one, back to its CSS default. Applied at once too:
+   * the owner's echo (`widths`) comes with the next update.
    * @param {Record<string, number | undefined>} widths
    */
   #commit(widths) {
     /** @type {ColumnWidths} */
-    const next = { ...this.#config.store.get() };
+    const next = { ...this.#config.widths() };
     for (const [name, width] of Object.entries(widths)) {
       if (width === undefined) delete next[name];
       else next[name] = width;
     }
-    this.#config.store.set(next);
+    this.#config.onCommit(next);
+    this.#applyStored(next);
   }
 }

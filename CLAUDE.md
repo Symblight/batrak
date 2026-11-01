@@ -31,7 +31,7 @@ and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`); each feature's
 - `src/views/` — the container elements: `<acp-app>` and the four columns. A view has no CSS: it extends
   `ViewElement` (light DOM: it renders into itself, `display: contents`, so `renderRoot` is the element and
   its tests use `el.querySelector`, not `el.shadowRoot`) and composes components, with layout from `<acp-panel>`,
-  `<acp-pane>` and `<acp-split>`; inline `style` only for values JS knows (resized widths).
+  `<acp-pane>` and `<acp-split>` (the app's row of columns is `<acp-column-split>`); inline `style` only for values JS knows (resized widths).
 - `src/components/` — every other custom element, one flat folder each (see "File structure" below). The
   Settings, Agents, Search and Changes elements are here until their views exist (see
   `docs/specs/frontend-structure.md`).

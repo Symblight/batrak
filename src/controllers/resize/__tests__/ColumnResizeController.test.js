@@ -1,20 +1,30 @@
 import { expect } from '@esm-bundle/chai';
 import { LitElement, html } from 'lit';
-import { atom } from 'nanostores';
 import { ColumnResizeController } from '../ColumnResizeController.js';
 
 /** @typedef {import('../../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
 
-const store = atom(/** @type {ColumnWidths} */ ({}));
+const COLUMNS = {
+  left: { property: '--test-left-width', min: 100, max: 500, partner: 'right' },
+  right: { property: '--test-right-width', min: 100, max: 900 },
+};
 
 class TestColumns extends LitElement {
+  static properties = { widths: { attribute: false } };
+
+  /** @type {ColumnWidths[]} What the controller handed on. */
+  commits = [];
   resize = new ColumnResizeController(this, {
-    store,
-    columns: {
-      left: { property: '--test-left-width', min: 100, max: 500, partner: 'right' },
-      right: { property: '--test-right-width', min: 100, max: 900 },
-    },
+    columns: () => COLUMNS,
+    widths: () => this.widths,
+    onCommit: (widths) => this.commits.push(widths),
   });
+
+  constructor() {
+    super();
+    /** @type {ColumnWidths} */
+    this.widths = {};
+  }
 
   render() {
     return html`
@@ -34,7 +44,6 @@ describe('ColumnResizeController', () => {
   let host;
 
   beforeEach(async () => {
-    store.set({});
     document.documentElement.style.setProperty('--test-left-width', '200px');
     document.documentElement.style.setProperty('--test-right-width', '600px');
     host = /** @type {TestColumns} */ (document.createElement('test-columns'));
@@ -64,14 +73,14 @@ describe('ColumnResizeController', () => {
     expect(column(host, 'right').style.width).to.equal('550px');
     expect(host.style.getPropertyValue('--test-left-width')).to.equal('');
     expect(host.style.getPropertyValue('--test-right-width')).to.equal('');
-    expect(store.get()).to.deep.equal({});
+    expect(host.commits, 'nothing before the end').to.deep.equal([]);
 
     host.dispatchEvent(new CustomEvent('acp-resize-end', { detail: { name: 'left' } }));
-    expect(store.get()).to.deep.equal({ left: 250, right: 550 });
+    expect(host.commits).to.deep.equal([{ left: 250, right: 550 }]);
   });
 
   it('applies stored widths inline', async () => {
-    store.set({ left: 320 });
+    host.widths = { left: 320 };
     await host.updateComplete;
     expect(column(host, 'left').style.width).to.equal('320px');
   });
