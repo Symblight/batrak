@@ -36,12 +36,14 @@ Spec: `docs/specs/search-dialog.md`.
 
 ## Folder and mask filters
 
-- The dialog keeps a root-relative `folder` and a `mask`; `search.filters(folder, mask)`
+- The dialog keeps a root-relative `folder` and a `mask`, shown by `<acp-search-filters>` (the two chips and
+  their menus: it fires `acp-search-filter-change { which, value }`, `-folders { query }` and `-leave`, and the
+  dialog searches, answers the folder asks and returns focus to the query); `search.filters(folder, mask)`
   (`hooks/search/`, `filters.js`) turns them into the backend's `include` / `exclude`: comma-separated
   globs (commas inside `{…}` or `[…]` don't split), a leading `!` excludes, a pattern without `/`
   matches a name at any depth; includes go inside the (glob-escaped) folder, and with none the folder
   alone is the include.
-- The folder menu asks with `acp-search-dialog-folders { query }`; `<acp-app>` answers with
+- The folder menu asks with `acp-search-filter-folders`, which the dialog re-fires as `acp-search-dialog-folders { query }`; `<acp-app>` answers with
   `quickOpen(rootId, query, 'dirs')` into `folders` **and** `foldersQuery` (the query it answers).
   Enter in the menu's field picks only from a list whose `foldersQuery` is the latest query asked, so
   a late answer never picks a folder for older typing.

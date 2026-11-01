@@ -3,12 +3,9 @@ import { LitElement, html, nothing } from 'lit';
 import { live } from 'lit/directives/live.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
-import '@symblight/wc-material/chips';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/menu';
 import '@symblight/wc-material/progress-linear';
-import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
 import clearIcon from '@material-design-icons/svg/outlined/close.svg?raw';
@@ -20,8 +17,7 @@ import flatIcon from '@material-design-icons/svg/outlined/view_list.svg?raw';
 import historyIcon from '@material-design-icons/svg/outlined/history.svg?raw';
 import noResultsIcon from '@material-design-icons/svg/outlined/search_off.svg?raw';
 import errorIcon from '@material-design-icons/svg/outlined/error.svg?raw';
-import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import maskIcon from '@material-design-icons/svg/outlined/filter_alt.svg?raw';
+import '../search-filters/search-filters.js';
 import '../search-options/search-options.js';
 import '../search-results/search-results.js';
 import styles from './search-dialog.css?inline';
@@ -34,7 +30,6 @@ import styles from './search-dialog.css?inline';
 /** @typedef {import('../../models/types/types.js').SearchErrorSource} SearchErrorSource */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
-/** @typedef {'folder' | 'mask'} Filter */
 
 /** Typing pause before a search starts. */
 const DEBOUNCE_MS = 150;
@@ -52,9 +47,6 @@ const VIEWS = [
   { value: 'grouped', icon: groupedIcon, label: 'Group by file' },
   { value: 'flat', icon: flatIcon, label: 'Flat list' },
 ];
-
-/** File masks offered in the mask menu. */
-const MASK_PRESETS = ['*.{js,ts}', '*.css', '*.md', '!*.test.js', '!pnpm-lock.yaml'];
 
 /** The focused element, looking into shadow roots. */
 function deepActiveElement() {
@@ -102,8 +94,6 @@ export class AcpSearchDialog extends LitElement {
   #returnFocus = null;
   /** Whether the last press began on the scrim. */
   #pressedScrim = false;
-  /** @type {string | null} The last `acp-search-dialog-folders` query: `folders` is current when `foldersQuery` matches it. */
-  #foldersAsked = null;
 
   constructor() {
     super();
@@ -159,6 +149,11 @@ export class AcpSearchDialog extends LitElement {
   /** @returns {HTMLInputElement | null} */
   get #input() {
     return this.renderRoot?.querySelector('.acp-search-dialog__input') ?? null;
+  }
+
+  /** @returns {HTMLElementTagNameMap['acp-search-filters'] | null} */
+  get #filters() {
+    return this.renderRoot?.querySelector('acp-search-filters') ?? null;
   }
 
   /** @returns {HTMLElementTagNameMap['acp-search-results'] | null} */
@@ -229,7 +224,7 @@ export class AcpSearchDialog extends LitElement {
   }
 
   #onClose() {
-    for (const which of /** @type {Filter[]} */ (['folder', 'mask'])) this.#menu(which)?.close();
+    this.#filters?.closeMenus();
     this.#emit('acp-search-dialog-close');
     const target = this.#returnFocus;
     this.#returnFocus = null;
@@ -258,11 +253,8 @@ export class AcpSearchDialog extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       // A menu handles its own Esc; this one comes from outside it (focus still on its chip).
-      const menu = /** @type {Filter[]} */ (['folder', 'mask']).map((which) => this.#menu(which)).find((m) => m?.open);
-      if (menu) {
-        menu.close();
-        this.#input?.focus();
-      } else this.close();
+      if (this.#filters?.closeOpenMenu()) this.#input?.focus();
+      else this.close();
       return;
     }
     const option = search.optionForKey(e);
@@ -351,116 +343,23 @@ export class AcpSearchDialog extends LitElement {
     this.#search(0);
   }
 
-  /** @param {Filter} which */
-  #menu(which) {
-    return /** @type {HTMLElementTagNameMap['md-menu'] | null} */ (
-      this.renderRoot?.querySelector(`.acp-search-dialog__menu[data-filter="${which}"]`) ?? null
-    );
-  }
-
-  /** @param {Filter} which */
-  #menuField(which) {
-    return /** @type {HTMLElementTagNameMap['md-text-field'] | null} */ (this.#menu(which)?.querySelector('.acp-search-dialog__menu-field') ?? null);
-  }
-
-  /**
-   * @param {Filter} which
-   * @param {string} value
-   */
-  #setFilter(which, value) {
+  /** @param {Event} e */
+  #onFilterChange(e) {
+    e.stopPropagation();
+    const { which, value } = /** @type {CustomEvent<{ which: 'folder' | 'mask', value: string }>} */ (e).detail;
     this[which] = value;
     this.#search(0);
   }
 
-  /**
-   * The remove button goes with its chip: focus moves to the query instead of the page.
-   * @param {Filter} which
-   */
-  #removeFilter(which) {
-    this.#menu(which)?.close();
-    this.#setFilter(which, '');
-    this.#input?.focus();
-  }
-
-  /** @param {Filter} which */
-  async #toggleMenu(which) {
-    // The chip flipped its own `selected`; the render sets it back.
-    this.requestUpdate();
-    const menu = this.#menu(which);
-    const chip = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector(`.acp-search-dialog__chip[data-filter="${which}"]`));
-    if (!menu || !chip) return;
-    if (menu.open) {
-      menu.close();
-      return;
-    }
-    const field = this.#menuField(which);
-    if (field) field.value = which === 'mask' ? this.mask : '';
-    if (which === 'folder') this.#askFolders('');
-    menu.anchorElement = chip;
-    await menu.show();
-  }
-
-  /** @param {Filter} which */
-  #onMenuOpened(which) {
-    this.#menuField(which)?.focus();
-  }
-
-  /**
-   * The menu would give focus back to its `for` anchor, which it doesn't have: without this, focus
-   * drops to the page and the dialog's keys stop working.
-   * @param {Filter} which
-   */
-  #onMenuClosing(which) {
-    if (this.#menu(which)?.matches(':focus-within')) this.#input?.focus();
-  }
-
-  /**
-   * @param {Filter} which
-   * @param {Event} e
-   */
-  #onMenuSelect(which, e) {
-    // `select` bubbles, composed: it's the menu's, not this element's. The menu re-fires its
-    // item's `select` from itself; act on that one only.
+  /** @param {Event} e */
+  #onFilterFolders(e) {
     e.stopPropagation();
-    if (e.target !== e.currentTarget) return;
-    this.#setFilter(which, /** @type {CustomEvent<{ value: string }>} */ (e).detail.value);
-    this.#input?.focus();
-  }
-
-  /** @param {string} query */
-  #askFolders(query) {
-    this.#foldersAsked = query;
-    this.#emit('acp-search-dialog-folders', { query });
+    this.#emit('acp-search-dialog-folders', { query: /** @type {CustomEvent<{ query: string }>} */ (e).detail.query });
   }
 
   /** @param {Event} e */
-  #onFolderFieldInput(e) {
-    this.#askFolders(/** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value);
-  }
-
-  /**
-   * Keeps typing in the field: the menu would take printable keys, Home and End for typeahead.
-   * Enter sets the mask, or picks the first folder.
-   * @param {Filter} which
-   * @param {KeyboardEvent} e
-   */
-  #onMenuFieldKeydown(which, e) {
-    if (e.isComposing) {
-      e.stopPropagation();
-      return;
-    }
-    // Esc and the arrows go on to the menu; Alt+C / W / R to the dialog.
-    if (e.key === 'Escape' || e.key === 'ArrowDown' || e.key === 'ArrowUp' || search.optionForKey(e)) return;
+  #onFilterLeave(e) {
     e.stopPropagation();
-    if (e.key !== 'Enter') return;
-    e.preventDefault();
-    const text = this.#menuField(which)?.value.trim() ?? '';
-    // A folder only from a list that answers what the field says now.
-    const current = this.foldersQuery !== null && this.foldersQuery === this.#foldersAsked;
-    const value = which === 'mask' ? text : text && current ? this.folders[0]?.path : undefined;
-    if (value === undefined) return;
-    this.#setFilter(which, value);
-    this.#menu(which)?.close();
     this.#input?.focus();
   }
 
@@ -573,8 +472,15 @@ export class AcpSearchDialog extends LitElement {
       ? search.summary({ results: [...this.results], searching: this.searching, error: this.error || null, query: this.query })
       : '';
     return html`<div class="acp-search-dialog__filters">
-      ${this.#renderChip('folder', folderIcon, 'Folder', this.folder)} ${this.#renderChip('mask', maskIcon, 'File mask', this.mask)}
-      ${this.#renderFolderMenu()} ${this.#renderMaskMenu()}
+      <acp-search-filters
+        .folder=${this.folder}
+        .mask=${this.mask}
+        .folders=${this.folders}
+        .foldersQuery=${this.foldersQuery}
+        @acp-search-filter-change=${this.#onFilterChange}
+        @acp-search-filter-folders=${this.#onFilterFolders}
+        @acp-search-filter-leave=${this.#onFilterLeave}
+      ></acp-search-filters>
       <span class="acp-search-dialog__summary ${this.error ? 'acp-search-dialog__summary_error' : ''}">${summary}</span>
       <div class="acp-search-dialog__view" role="radiogroup" aria-label="View">
         ${VIEWS.map(({ value, icon, label }) => {
@@ -595,90 +501,6 @@ export class AcpSearchDialog extends LitElement {
         })}
       </div>
     </div>`;
-  }
-
-  /**
-   * A filter's chip: unset, a filter chip naming it; set, an input chip with its value and a remove button.
-   * @param {Filter} which
-   * @param {string} icon
-   * @param {string} label
-   * @param {string} value
-   */
-  #renderChip(which, icon, label, value) {
-    const leading = html`<md-icon slot="leading-icon" class="acp-search-dialog__chip-icon">${unsafeSVG(icon)}</md-icon>`;
-    if (!value) {
-      return html`<md-filter-chip
-        class="acp-search-dialog__chip"
-        data-filter=${which}
-        aria-haspopup="menu"
-        .selected=${live(false)}
-        @click=${() => this.#toggleMenu(which)}
-        >${leading}${label}</md-filter-chip
-      >`;
-    }
-    return html`<md-input-chip
-      class="acp-search-dialog__chip acp-search-dialog__chip_set"
-      data-filter=${which}
-      aria-haspopup="menu"
-      removable
-      .selected=${live(false)}
-      @click=${() => this.#toggleMenu(which)}
-      @remove=${() => this.#removeFilter(which)}
-      >${leading}<span class="acp-search-dialog__chip-value">${value}</span></md-input-chip
-    >`;
-  }
-
-  #renderFolderMenu() {
-    return html`<md-menu
-      class="acp-search-dialog__menu"
-      data-filter="folder"
-      placement="bottom-start"
-      @opened=${() => this.#onMenuOpened('folder')}
-      @closing=${() => this.#onMenuClosing('folder')}
-      @select=${(/** @type {Event} */ e) => this.#onMenuSelect('folder', e)}
-    >
-      <md-text-field
-        class="acp-search-dialog__menu-field"
-        variant="outlined"
-        placeholder="Filter folders"
-        aria-label="Filter folders"
-        spellcheck="false"
-        @input=${this.#onFolderFieldInput}
-        @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onMenuFieldKeydown('folder', e)}
-      ></md-text-field>
-      ${this.folders.length === 0
-        ? html`<div class="acp-search-dialog__menu-empty">No matching folders</div>`
-        : this.folders.map(
-            (folder) => html`<md-menu-item value=${folder.path} ?selected=${folder.path === this.folder}
-              ><span class="acp-search-dialog__menu-path">${folder.path}</span></md-menu-item
-            >`,
-          )}
-    </md-menu>`;
-  }
-
-  #renderMaskMenu() {
-    return html`<md-menu
-      class="acp-search-dialog__menu"
-      data-filter="mask"
-      placement="bottom-start"
-      @opened=${() => this.#onMenuOpened('mask')}
-      @closing=${() => this.#onMenuClosing('mask')}
-      @select=${(/** @type {Event} */ e) => this.#onMenuSelect('mask', e)}
-    >
-      <md-text-field
-        class="acp-search-dialog__menu-field"
-        variant="outlined"
-        placeholder="*.ts, !*.test.ts"
-        aria-label="File mask"
-        spellcheck="false"
-        @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onMenuFieldKeydown('mask', e)}
-      ></md-text-field>
-      ${MASK_PRESETS.map(
-        (preset) => html`<md-menu-item value=${preset} ?selected=${preset === this.mask}
-          ><span class="acp-search-dialog__menu-path">${preset}</span></md-menu-item
-        >`,
-      )}
-    </md-menu>`;
   }
 
   /**
