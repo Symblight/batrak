@@ -1,43 +1,17 @@
 import { app } from '../app/app.js';
-import {
-  listSessions,
-  sessionApplyLocally,
-  sessionCheckOutBranch,
-  sessionCliBusy,
-  sessionCloseCli,
-  onSessionsSynced,
-  sessionCreate,
-  sessionOpen,
-  sessionOpenCli,
-  sessionOpenLog,
-  sessionRemove,
-  sessionRename,
-  sessionResetTitle,
-  sessionRespondPermission,
-  sessionRestart,
-  sessionResume,
-  sessionSetConfigOption,
-  sessionStop,
-  sessionsSync,
-  workspaceSettings,
-} from './commands.js';
+import { listSessions, sessionCliBusy, sessionCloseCli, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume, sessionStop, workspaceSettings } from './commands.js';
+import { actions } from './actions.js';
 import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from './adapter.js';
 import { agents } from '../agents/agents.js';
 import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
-import { notify } from '../../stores/notices/notices.js';
-import {
-  composerOf,
-  forgetComposer,
-  revertConfigOption,
-  setConfigOption,
-  startComposer,
-} from '../../stores/composer/composer.js';
+import { composerOf, forgetComposer, startComposer } from '../../stores/composer/composer.js';
 import { root } from './root.js';
+import { poll, sync, syncAgentOf } from './sync.js';
 import { RUNNING, inTurn, isActiveElsewhere } from './rules.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
-import { endSync, startSync, syncOf } from '../../stores/session-sync/session-sync.js';
+import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import {
   $activeSessionId,
@@ -53,7 +27,7 @@ import {
   startSession,
   upsertSession,
 } from '../../stores/sessions/sessions.js';
-import { $activePermission, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
+import { $activePermission, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
 import { forgetPendingInput, resetHistory } from '../../stores/chat/chat.js';
 import {
@@ -70,10 +44,6 @@ import { $workspacePath, setWorkspaceSettings } from '../../stores/workspace/wor
 
 /** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
 const IDLE_STOP_MS = 10 * 60_000;
-/** A project shown again is synced with its agents when its last sync is older than this. */
-const SYNC_STALE_MS = 5 * 60_000;
-/** Clicking a session syncs its agent's sessions, at most this often per agent and project. */
-const SELECT_SYNC_MS = 30_000;
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
 /** A CLI starts at this size; its view sends the real one once attached. */
@@ -92,12 +62,6 @@ function onSessionEvent(event) {
 
 /** @type {Set<string>} Sessions whose event channel this window opened. */
 const opened = new Set();
-/** @type {Map<string, number>} When each project's last sync started, ms. */
-const syncedAt = new Map();
-/** @type {Map<string, number>} When a click last synced an agent of a project (`project\0agent`), ms. */
-const selectSyncedAt = new Map();
-/** @type {Map<string, Promise<void>>} Each project's syncs running now; settles once all have. */
-const syncing = new Map();
 /** Sequence of workspace.json reads; only the latest answer is kept. */
 let settingsLoad = 0;
 /** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
@@ -163,21 +127,6 @@ async function init() {
     });
   }
   setInterval(() => poll(), POLL_MS);
-}
-
-/**
- * Asks the shown project's agents that list for its sessions again, quietly (no spinner), while
- * the window is visible.
- */
-function poll() {
-  const path = $workspacePath.get();
-  if (path === null || document.visibilityState !== 'visible') return;
-  const { report, running } = syncOf(path);
-  if (report === null || running || syncing.has(path)) return;
-  const listing = report.agents
-    .filter((a) => a.outcome === 'listed' || a.outcome === 'failed')
-    .map((a) => a.agentId);
-  if (listing.length > 0) sync(path, { agentIds: listing, quiet: true });
 }
 
 /**
@@ -426,59 +375,6 @@ function openAll(sessions) {
 }
 
 /**
- * Asks a project's agents for its sessions; they arrive through `sessions://synced`. Skipped while
- * the last sync is younger than `SYNC_STALE_MS`, unless `force` or `agentIds` are given. A `quiet`
- * one (a poll) shows no spinner and reports no failure.
- * @param {string} projectId
- * @param {{ force?: boolean, agentIds?: string[] | null, quiet?: boolean }} [options]
- * @returns {Promise<void>}
- */
-async function sync(projectId, { force = false, agentIds = null, quiet = false } = {}) {
-  const last = syncedAt.get(projectId);
-  if (!force && agentIds === null && last !== undefined && Date.now() - last < SYNC_STALE_MS) return;
-  if (agentIds === null) syncedAt.set(projectId, Date.now());
-  if (!quiet) startSync(projectId);
-  const run = sessionsSync(projectId, agentIds).then(
-    (report) => endSync(projectId, report),
-    (err) => {
-      if (quiet) {
-        app.log('warn', `polling sessions failed: ${err}`);
-        return;
-      }
-      endSync(projectId, null);
-      app.reportError('Syncing sessions failed', err);
-    },
-  );
-  // Another sync of the project may still run (a click's during the full one): wait for both.
-  const before = syncing.get(projectId);
-  const all = before === undefined ? run : Promise.all([before, run]).then(() => {});
-  syncing.set(projectId, all);
-  all.then(() => {
-    if (syncing.get(projectId) === all) syncing.delete(projectId);
-  });
-  await run;
-}
-
-/**
- * A click on a session syncs its agent's sessions of the project (at most every `SELECT_SYNC_MS`);
- * resolves once that sync, or the project's sync running now, answered.
- * @param {string} id
- * @returns {Promise<void>}
- */
-async function syncAgentOf(id) {
-  const session = $sessions.get().find((s) => s.id === id);
-  if (!session) return;
-  const key = `${session.projectId}\0${session.agentId}`;
-  const last = selectSyncedAt.get(key);
-  if (last !== undefined && Date.now() - last < SELECT_SYNC_MS) {
-    await syncing.get(session.projectId);
-    return;
-  }
-  selectSyncedAt.set(key, Date.now());
-  await sync(session.projectId, { agentIds: [session.agentId] });
-}
-
-/**
  * Reads the project's workspace.json: the run target its new sessions start with.
  * @param {string | null} path
  */
@@ -521,7 +417,7 @@ function stopWhenIdle(id) {
     idleStops.delete(id);
     if ($activeSessionId.get() === id) return;
     const status = $sessions.get().find((s) => s.id === id)?.status;
-    if (status === 'idle') stop(id);
+    if (status === 'idle') actions.stop(id);
     else if (status !== undefined && status !== 'stopped' && status !== 'error') stopWhenIdle(id);
   }, IDLE_STOP_MS);
   idleStops.set(id, timer);
@@ -597,111 +493,6 @@ function start(id, title) {
 }
 
 /**
- * Sets the agent's model, thought level or mode for a session. Shown at once; a running agent gets
- * it now (and its answer replaces the options), otherwise it gets it when it starts.
- * @param {string} id A session's or a draft's.
- * @param {string} configId
- * @param {string} value
- */
-function setConfigOptionFor(id, configId, value) {
-  const previous = composerOf(id).configOptions.find((o) => o.id === configId)?.currentValue;
-  setConfigOption(id, configId, value);
-  const status = $sessions.get().find((s) => s.id === id)?.status;
-  if (status !== 'idle' && status !== 'working' && status !== 'waiting') return;
-  sessionSetConfigOption(id, configId, value).catch((err) => {
-    if (previous !== undefined) revertConfigOption(id, configId, previous);
-    app.reportError('The agent refused the change', err);
-  });
-}
-
-/**
- * Answers the agent's permission request.
- * @param {string} id
- * @param {string} requestId
- * @param {string | null} optionId `null` cancels it.
- */
-function respondPermission(id, requestId, optionId) {
-  removePermissionRequest(id, requestId);
-  sessionRespondPermission(id, requestId, optionId).catch((err) => app.reportError('Answering the agent failed', err));
-}
-
-/**
- * Stops the agent and its whole process tree; the next message starts it again.
- * @param {string} id
- */
-function stop(id) {
-  sessionStop(id).catch((err) => app.reportError('Stopping the agent failed', err));
-}
-
-/**
- * Brings a worktree session's work (commits and uncommitted changes since it started) into the
- * project's checkout as unstaged changes; says what happened.
- * @param {string} id
- */
-async function applyLocally(id) {
-  const title = $sessions.get().find((s) => s.id === id)?.title ?? 'the session';
-  try {
-    const result = await sessionApplyLocally(id);
-    if (result.outcome === 'conflicts') notify('warn', `Applied "${title}" with conflicts in ${result.conflicts.join(', ')}`);
-    else if (result.outcome === 'empty') notify('info', `"${title}" has no changes to apply`);
-    else notify('info', `Applied "${title}" to the project, unstaged`);
-  } catch (err) {
-    app.reportError('Applying the session failed', err);
-  }
-}
-
-/**
- * Stops a worktree session's agent and checks its branch out in the project.
- * @param {string} id
- */
-async function checkOutBranch(id) {
-  const branch = $sessions.get().find((s) => s.id === id)?.branch ?? 'the branch';
-  try {
-    await sessionCheckOutBranch(id);
-    notify('info', `Checked out ${branch}`);
-  } catch (err) {
-    app.reportError(`Checking out ${branch} failed`, err);
-  }
-}
-
-/**
- * Starts the agent again (after an error, or to resume a stopped session with its history).
- * @param {string} id
- */
-function restart(id) {
-  setSessionNotice(id, { kind: 'progress', message: 'Starting agent…' });
-  sessionRestart(id).catch((err) => app.reportError('Restarting the agent failed', err));
-}
-
-/**
- * Gives a session a new title; a blank or unchanged one is ignored.
- * @param {string} id
- * @param {string} title
- */
-async function rename(id, title) {
-  const session = $sessions.get().find((s) => s.id === id);
-  const trimmed = title.trim();
-  if (!session || trimmed === '' || trimmed === session.title) return;
-  try {
-    upsertSession(await sessionRename(id, trimmed));
-  } catch (err) {
-    app.reportError('Renaming the session failed', err);
-  }
-}
-
-/**
- * Gives a renamed session back its agent's title, which the agent then keeps up to date.
- * @param {string} id
- */
-async function resetTitle(id) {
-  try {
-    upsertSession(await sessionResetTitle(id));
-  } catch (err) {
-    app.reportError('Resetting the title failed', err);
-  }
-}
-
-/**
  * Removes a session for good: its agent stops, it's deleted in its agent (or hidden where the agent
  * can't delete), its log is deleted, and the chat shows another session of the project. The
  * project's files stay as they are.
@@ -736,16 +527,6 @@ async function remove(id) {
   removeSession(id);
 }
 
-/** @param {string} id */
-function openLog(id) {
-  sessionOpenLog(id).catch((err) => app.reportError('Opening the agent log failed', err));
-}
-
-/** @param {string} id */
-function dismissNotice(id) {
-  dismissSessionNotice(id);
-}
-
 /**
  * Loads the stored sessions from the backend into `$sessions` / `$activeSessionId` and opens each
  * one's event channel, syncs a project's sessions with its agents (launch, a project shown, a
@@ -769,15 +550,6 @@ export const controller = Object.freeze({
   openInTerminal,
   create,
   start,
-  setConfigOption: setConfigOptionFor,
-  respondPermission,
-  stop,
-  applyLocally,
-  checkOutBranch,
-  restart,
-  rename,
-  resetTitle,
+  ...actions,
   remove,
-  openLog,
-  dismissNotice,
 });
