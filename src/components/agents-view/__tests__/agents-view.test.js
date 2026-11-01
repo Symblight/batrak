@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../agents-view.js';
 
 /** @typedef {import('../../../hooks/agents/types.js').AgentsView} AgentsView */
@@ -172,6 +173,7 @@ describe('acp-agents-view', () => {
     const { root } = await render();
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }));
     expect(root.activeElement).to.equal(root.querySelector('.acp-agents-view__search-input'));
+    expect(root.activeElement?.getAttribute('aria-keyshortcuts')).to.equal(shortcuts.aria('find'));
   });
 
   it('hands each card its state: the terminal choice, an update running here, a sign-in, a reveal', async () => {

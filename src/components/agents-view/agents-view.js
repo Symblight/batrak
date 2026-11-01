@@ -10,6 +10,7 @@ import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
 import cloudOffIcon from '@material-design-icons/svg/outlined/cloud_off.svg?raw';
 import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?raw';
 import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import '../agent-icon/agent-icon.js';
 import '../datetime/datetime.js';
 import '../agent-card/agent-card.js';
@@ -218,6 +219,7 @@ export class AcpAgentsView extends LitElement {
         type="search"
         placeholder="Search agents"
         aria-label="Search agents"
+        aria-keyshortcuts=${shortcuts.aria('find')}
         spellcheck="false"
         autocomplete="off"
         .value=${live(query)}

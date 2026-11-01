@@ -4,6 +4,7 @@ import '@symblight/wc-material/progress-linear';
 import '../search-bar/search-bar.js';
 import '../search-empty/search-empty.js';
 import '../search-filters/search-filters.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import '../search-header/search-header.js';
 import '../search-recent/search-recent.js';
 import '../search-results/search-results.js';
@@ -489,7 +490,7 @@ export class AcpSearchDialog extends LitElement {
         <div class="acp-search-dialog__hints">
           <span><kbd class="acp-search-dialog__key">↑↓</kbd> Navigate</span>
           <span><kbd class="acp-search-dialog__key">Enter</kbd> Open</span>
-          <span><kbd class="acp-search-dialog__key">Alt+C/W/R</kbd> Options</span>
+          <span><kbd class="acp-search-dialog__key">${shortcuts.group(['matchCase', 'wholeWord', 'regex'])}</kbd> Options</span>
           <span><kbd class="acp-search-dialog__key">Esc</kbd> Close</span>
         </div>
         <div class="acp-search-dialog__status" aria-live="polite">${this.status}</div>

@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../session-header.js';
 
 /** @typedef {import('../session-header.js').AcpSessionHeader} AcpSessionHeader */
@@ -180,6 +181,7 @@ describe('acp-session-header', () => {
     const button = /** @type {HTMLElementTagNameMap['md-icon-button']} */ (root.querySelector('.acp-session-header__view'));
     expect(button.getAttribute('aria-label')).to.equal('Continue in terminal');
     expect(button.getAttribute('aria-pressed')).to.equal('false');
+    expect(button.getAttribute('aria-keyshortcuts')).to.equal(shortcuts.aria('toggleSessionView'));
     button.click();
     expect(events.map((e) => e.detail)).to.deep.equal([{ sessionId: 's1', view: 'terminal' }]);
 

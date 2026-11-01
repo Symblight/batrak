@@ -6,15 +6,16 @@ import '@symblight/wc-material/tooltip';
 import caseIcon from '@material-design-icons/svg/outlined/text_fields.svg?raw';
 import wordIcon from '@material-design-icons/svg/outlined/abc.svg?raw';
 import regexIcon from '@material-design-icons/svg/outlined/emergency.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './search-options.css?inline';
 
 /** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
 
-/** @type {{ option: SearchOptionKey, icon: string, label: string }[]} */
+/** @type {{ option: SearchOptionKey, icon: string, label: string, shortcut: import('../../hooks/shortcuts/shortcuts.js').ShortcutId }[]} */
 const OPTIONS = [
-  { option: 'caseSensitive', icon: caseIcon, label: 'Match case (Alt+C)' },
-  { option: 'wholeWord', icon: wordIcon, label: 'Match whole word (Alt+W)' },
-  { option: 'regex', icon: regexIcon, label: 'Use regular expression (Alt+R)' },
+  { option: 'caseSensitive', icon: caseIcon, label: 'Match case', shortcut: 'matchCase' },
+  { option: 'wholeWord', icon: wordIcon, label: 'Match whole word', shortcut: 'wholeWord' },
+  { option: 'regex', icon: regexIcon, label: 'Use regular expression', shortcut: 'regex' },
 ];
 
 /**
@@ -47,13 +48,15 @@ export class AcpSearchOptions extends LitElement {
   }
 
   render() {
-    return OPTIONS.map(({ option, icon, label }) => {
+    return OPTIONS.map(({ option, icon, label: name, shortcut }) => {
       const id = `acp-search-options-${option}`;
+      const label = shortcuts.labelled(name, shortcut);
       return html`<md-icon-button
           id=${id}
           class="acp-search-options__option"
           ?selected=${this[option]}
           aria-label=${label}
+          aria-keyshortcuts=${shortcuts.aria(shortcut)}
           aria-pressed=${this[option] ? 'true' : 'false'}
           @click=${() => this.#toggle(option)}
         >

@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../search-options.js';
 
 /** @typedef {import('../search-options.js').AcpSearchOptions} AcpSearchOptions */
@@ -17,10 +18,13 @@ describe('acp-search-options', () => {
     // Assert
     expect(buttons(el).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false', 'true']);
     expect(buttons(el).map(tooltipOf)).to.deep.equal([
-      'Match case (Alt+C)',
-      'Match whole word (Alt+W)',
-      'Use regular expression (Alt+R)',
+      shortcuts.labelled('Match case', 'matchCase'),
+      shortcuts.labelled('Match whole word', 'wholeWord'),
+      shortcuts.labelled('Use regular expression', 'regex'),
     ]);
+    expect(buttons(el).map((b) => b.getAttribute('aria-keyshortcuts'))).to.deep.equal(
+      ['matchCase', 'wholeWord', 'regex'].map((id) => shortcuts.aria(/** @type {any} */ (id))),
+    );
     expect(el.shadowRoot?.querySelector('[title]')).to.equal(null);
     for (const button of buttons(el)) {
       const slot = button.shadowRoot?.querySelector('slot');

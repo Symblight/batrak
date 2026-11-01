@@ -10,6 +10,7 @@ import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?
 import newSessionIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import chatIcon from '@material-design-icons/svg/outlined/chat.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import '../session-menu/session-menu.js';
 import '../session-status/session-status.js';
 import styles from './session-header.css?inline';
@@ -197,6 +198,7 @@ export class AcpSessionHeader extends LitElement {
         class="acp-session-header__view"
         aria-pressed=${terminal ? 'true' : 'false'}
         aria-label=${label}
+        aria-keyshortcuts=${shortcuts.aria('toggleSessionView')}
       ?disabled=${disabled}
       @click=${() => {
         if (!disabled) this.#emit('acp-session-view', { sessionId: this.sessionId, view: terminal ? 'chat' : 'terminal' });

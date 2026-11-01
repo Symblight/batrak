@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../nav-rail.js';
 
 /** @typedef {import('../nav-rail.js').AcpNavRail} AcpNavRail */
@@ -29,12 +30,12 @@ describe('acp-nav-rail', () => {
   it('fires its event, bubbling and composed, when each button is clicked, and names each in a tooltip', async () => {
     const buttons = [
       ['files', 'acp-show-files', 'Files'],
-      ['search', 'acp-find-in-files', 'Search'],
+      ['search', 'acp-find-in-files', 'Search', 'searchInFiles'],
       ['changes', 'acp-show-changes', 'Changes'],
-      ['terminal', 'acp-open-terminal', 'Terminal'],
+      ['terminal', 'acp-open-terminal', 'Terminal', 'newTerminal'],
       ['settings', 'acp-show-settings', 'Settings'],
     ];
-    for (const [name, type, label] of buttons) {
+    for (const [name, type, label, shortcut] of buttons) {
       // Arrange
       const el = await render(html`<acp-nav-rail></acp-nav-rail>`);
       const root = /** @type {ShadowRoot} */ (el.shadowRoot);
@@ -47,6 +48,8 @@ describe('acp-nav-rail', () => {
       expect([events[0].bubbles, events[0].composed], name).to.deep.equal([true, true]);
       expect(button.getAttribute('aria-label'), name).to.equal(label);
       expect(tooltipOf(button), name).to.contain(label);
+      expect(button.getAttribute('aria-keyshortcuts'), name).to.equal(shortcut ? shortcuts.aria(/** @type {any} */ (shortcut)) : null);
+      if (shortcut) expect(tooltipOf(button), name).to.contain(shortcuts.hint(/** @type {any} */ (shortcut)));
       expect(root.querySelector('[title]')).to.equal(null);
     }
   });

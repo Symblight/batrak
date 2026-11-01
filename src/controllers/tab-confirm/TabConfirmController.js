@@ -1,4 +1,5 @@
 import { projects } from '../../hooks/projects/projects.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { html } from 'lit';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -55,7 +56,7 @@ export class TabConfirmController {
     return this.#dialog.confirm({
       headline: 'Discard unsaved changes?',
       message: dirty.map((t) => projects.basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
-      detail: 'Press ⌘S / Ctrl+S in the editor to save.',
+      detail: `Press ${shortcuts.hint('save')} in the editor to save.`,
       confirmLabel: 'Discard',
       destructive: true,
     });

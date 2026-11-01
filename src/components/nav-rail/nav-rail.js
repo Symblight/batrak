@@ -14,6 +14,7 @@ import notificationsIcon from '@material-design-icons/svg/outlined/notifications
 import notificationsFilledIcon from '@material-design-icons/svg/filled/notifications.svg?raw';
 import settingsIcon from '@material-design-icons/svg/outlined/settings.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './nav-rail.css?inline';
 
 /**
@@ -23,7 +24,7 @@ import styles from './nav-rail.css?inline';
  * @property {string} label
  * @property {string} icon Outlined SVG.
  * @property {string} [selectedIcon] Filled SVG, shown while pressed.
- * @property {string} [shortcut]
+ * @property {import('../../hooks/shortcuts/shortcuts.js').ShortcutId} [shortcut]
  * @property {string} [event] Dispatched (bubbling, composed) on click.
  */
 
@@ -35,7 +36,7 @@ const TOP_ITEMS = [
     label: 'Search',
     icon: searchIcon,
     selectedIcon: searchFilledIcon,
-    shortcut: '⌘⇧F',
+    shortcut: 'searchInFiles',
     event: 'acp-find-in-files',
   },
   {
@@ -50,7 +51,7 @@ const TOP_ITEMS = [
 /** @type {NavRailItem[]} */
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
-  { name: 'terminal', label: 'Terminal', icon: terminalIcon, event: 'acp-open-terminal' },
+  { name: 'terminal', label: 'Terminal', icon: terminalIcon, shortcut: 'newTerminal', event: 'acp-open-terminal' },
   { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
 ];
 
@@ -89,13 +90,14 @@ export class AcpNavRail extends LitElement {
     const id = `acp-nav-rail-${item.name}`;
     const selected = this.selected === item.name;
     const badge = item.name === 'notifications' && this.unread;
-    const tooltip = item.shortcut ? `${item.label} ${item.shortcut}` : item.label;
+    const tooltip = item.shortcut ? shortcuts.labelled(item.label, item.shortcut) : item.label;
     return html`
       <div class="acp-nav-rail__item">
         <md-icon-button
           id=${id}
           class="acp-nav-rail__button"
           aria-label=${badge ? `${item.label}, unread` : item.label}
+          aria-keyshortcuts=${item.shortcut ? shortcuts.aria(item.shortcut) : nothing}
           ?toggle=${!!item.selectedIcon}
           ?selected=${selected}
           @click=${item.event ? () => this.#dispatch(/** @type {string} */ (item.event)) : nothing}
