@@ -29,8 +29,6 @@ jobs:
           fi
 
       - uses: ./.github/actions/setup
-        with:
-          deps-token: ${{ secrets.DEPS_TOKEN }}
 
       - uses: dtolnay/rust-toolchain@stable
         with:

@@ -14,7 +14,7 @@ Stack: Tauri 2 (Rust) + Lit 3 + Rsbuild, plain JavaScript with JSDoc types (`jsc
 ## Run
 
 ```sh
-pnpm install   # needs SSH access to github.com:Symblight/rich-components (tree-view is built on install)
+pnpm install   # clones the public Symblight/rich-components over SSH, so needs a GitHub SSH key (tree-view is built on install)
 pnpm tauri icon <path-to-1024px.png>   # generates src-tauri/icons (once)
 pnpm tauri dev
 ```

@@ -20,8 +20,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/setup
-        with:
-          deps-token: ${{ secrets.DEPS_TOKEN }}
 
       - run: pnpm typecheck
 
@@ -40,8 +38,6 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: ./.github/actions/setup
-        with:
-          deps-token: ${{ secrets.DEPS_TOKEN }}
 
       # tauri::generate_context! embeds dist/ at compile time, tests included.
       - run: pnpm build
