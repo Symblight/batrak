@@ -1,17 +1,16 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { html, nothing } from 'lit';
+import { createRef, ref } from 'lit/directives/ref.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
 import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
-import { sessions } from '../../hooks/sessions/sessions.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
 import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
-import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
-import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
 import {
   $activePath,
   $editorTabs,
@@ -40,7 +39,6 @@ import {
   focusComment,
   sendToChat,
 } from '../../stores/comments/comments.js';
-import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
 import { $settings } from '../../stores/settings/settings.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
@@ -48,6 +46,8 @@ import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
+import '../changes-tab/changes-tab.js';
+import '../session-changes-tab/session-changes-tab.js';
 import '../settings-view/settings-view.js';
 import { AcpTerminal } from '../../components/terminal/terminal.js';
 import '../../components/comment-bar/comment-bar.js';
@@ -66,8 +66,6 @@ import '../../components/comment-bar/comment-bar.js';
  */
 export class AcpMainColumn extends ViewElement {
   #files = new TabFilesController(this);
-  #review = new ChangesReviewController(this);
-  #sessionReview = new SessionChangesController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
   #fileLanguages = new StoreController(this, { store: $fileLanguages });
   #workspace = new StoreController(this, { store: $workspace });
@@ -76,9 +74,6 @@ export class AcpMainColumn extends ViewElement {
   #settings = new StoreController(this, { store: $settings });
   #comments = new StoreController(this, { store: $comments });
   #tabComments = new StoreController(this, { store: $tabComments });
-  #gitChanges = new StoreController(this, { store: $gitChanges });
-  #gitRepo = new StoreController(this, { store: $gitRepo });
-  #commitSelection = new StoreController(this, { store: $commitSelection });
   #terminals = new StoreController(this, { store: $terminals });
   #fileDropTarget = new StoreController(this, { store: $fileDropTarget });
 
@@ -89,6 +84,9 @@ export class AcpMainColumn extends ViewElement {
       if (focus) this.#showFile(focus.path);
     },
   });
+
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-changes-tab']>} The project's Changes tab, once open. */
+  #changesTab = createRef();
 
   /** The bar sits lower in the Changes tab, which has no footer. */
   #activePath = new StoreController(this, { store: $activePath });
@@ -127,21 +125,6 @@ export class AcpMainColumn extends ViewElement {
     super.disconnectedCallback();
   }
 
-  #onSessionApply = () => {
-    const id = this.#sessionReview.view?.sessionId;
-    if (id) sessions.applyLocally(id);
-  };
-
-  #onSessionCheckOut = () => {
-    const id = this.#sessionReview.view?.sessionId;
-    if (id) sessions.checkOutBranch(id);
-  };
-
-  /** The review a Changes view's events come from: an active worktree session tab's, else the project's. */
-  get #reviewShown() {
-    return this.#sessionReview.view ? this.#sessionReview : this.#review;
-  }
-
   /**
    * Rendered unconditionally, so present after the first render.
    * @returns {import('../../components/tab-view/tab-view.js').AcpTabView}
@@ -169,9 +152,9 @@ export class AcpMainColumn extends ViewElement {
     openChangesTab();
     const rel = projects.relPath(path);
     if (rel === null) return;
-    this.#review.expand(rel);
     await this.updateComplete;
-    await this.#tabView.revealChange(path);
+    await this.#tabView.updateComplete;
+    await this.#changesTab.value?.reveal(rel);
   }
 
   /**
@@ -234,6 +217,10 @@ export class AcpMainColumn extends ViewElement {
         return html`<acp-settings-view></acp-settings-view>`;
       case 'agents':
         return html`<acp-agents-tab></acp-agents-tab>`;
+      case 'changes':
+        return html`<acp-changes-tab ${ref(this.#changesTab)}></acp-changes-tab>`;
+      case 'session-changes':
+        return html`<acp-session-changes-tab .sessionId=${tabs.sessionOf(tab.id)}></acp-session-changes-tab>`;
       default:
         return nothing;
     }
@@ -256,20 +243,12 @@ export class AcpMainColumn extends ViewElement {
         .terminalBusy=${terminals.busy}
         .droppingTerminal=${this.#ownTerminal(this.#fileDropTarget.value)?.terminalId ?? null}
         .worktrees=${this.#worktrees.value}
-        .sessionReview=${this.#sessionReview.view}
         .languages=${this.#fileLanguages.value}
         .editorFont=${settings.editorFont}
         .editorFontSize=${settings.editorFontSize}
         .comments=${this.#comments.value}
         .commentFocus=${this.#commentFocus.value}
         .renderContent=${this.#renderTabContent}
-        .review=${{
-          changes: this.#gitChanges.value,
-          repo: this.#gitRepo.value,
-          selection: this.#commitSelection.value,
-          expanded: this.#review.expanded,
-          diffs: this.#review.diffs,
-        }}
         @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
         @acp-tab-close=${this.#onTabClose}
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) =>
@@ -302,14 +281,6 @@ export class AcpMainColumn extends ViewElement {
           if ($commentFocus.get() === e.detail.focus) focusComment(null);
         }}
         @acp-chat-add=${(/** @type {CustomEvent<{ inserts: ChatInsert[] }>} */ e) => addToChat(e.detail.inserts)}
-        @acp-change-toggle=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.toggle(e.detail.id)}
-        @acp-change-expand=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#reviewShown.expand(e.detail.id)}
-        @acp-changes-collapse=${() => this.#reviewShown.collapseAll()}
-        @acp-session-apply=${this.#onSessionApply}
-        @acp-session-check-out=${this.#onSessionCheckOut}
-        @acp-commit-pick=${(/** @type {CustomEvent<{ ids: string[], picked: boolean }>} */ e) =>
-          pickForCommit(e.detail.ids, e.detail.picked)}
-        @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
       ></acp-tab-view>
       <acp-comment-bar
         placement=${this.#activePath.value === CHANGES_TAB_ID ? 'changes' : 'file'}

@@ -4,8 +4,11 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
-import { closeAllTabs, openAgents, openSettings, openTab } from '../../../stores/editor/editor.js';
+import { closeAllTabs, openAgents, openChanges, openSettings, openTab } from '../../../stores/editor/editor.js';
+import { $gitChanges } from '../../../stores/git/git.js';
+import { $activePath } from '../../../stores/editor/editor.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
+import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../main-column.js';
 
@@ -33,7 +36,11 @@ describe('acp-main-column', () => {
   const { paste } = proto;
 
   beforeEach(() => {
-    mockIPC(() => null);
+    mockIPC((cmd) => {
+      if (cmd === 'agents_list') return { agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] };
+      if (cmd === 'agents_view') return { installed: [], userAgents: [], registry: [], counts: { all: 0, updates: 0, off: 0 }, defaultAgent: null, errors: [], registryState: { checkedAt: null, offline: false, checking: false } };
+      return null;
+    });
     $workspace.set({ path: '/p', name: 'p', rootId: null });
     $terminals.set({ t1: running });
     openTab(tabs.terminalId('t1'));
@@ -45,6 +52,7 @@ describe('acp-main-column', () => {
     proto.paste = paste;
     closeAllTabs();
     $terminals.set({});
+    $gitChanges.set({ files: [], loaded: false, loading: false, error: null });
     $workspace.set(null);
     clearMocks();
   });
@@ -86,8 +94,10 @@ describe('acp-main-column', () => {
     expect(pasted).to.deep.equal([]);
   });
 
-  it('shows the Settings and Agents tabs through their views', async () => {
+  it('shows the Settings, Agents and Changes tabs through their views', async () => {
     // Arrange
+    openTab(tabs.sessionChangesId('s1'));
+    openChanges();
     openAgents();
     openSettings();
     // Act
@@ -100,6 +110,31 @@ describe('acp-main-column', () => {
     const panel = /** @type {HTMLElement} */ (settings.closest('.acp-tab-view__panel'));
     expect(panel.hasAttribute('active')).to.equal(true);
     expect(tabView.shadowRoot?.querySelector('acp-agents-tab acp-agents-view'), 'the Agents tab too').to.not.equal(null);
+    expect(tabView.shadowRoot?.querySelector('acp-changes-tab acp-changes-review'), 'and the Changes tab').to.not.equal(null);
+    expect(tabView.shadowRoot?.querySelector('acp-session-changes-tab')?.sessionId, 'and a session’s Changes tab').to.equal('s1');
+  });
+
+  it('opens the Changes tab with a changed file’s diff expanded and scrolled into view', async () => {
+    // Arrange
+    $gitChanges.set({ files: [{ path: 'a.js', kind: 'modified', staged: false, unstaged: true, origPath: null, added: 1, removed: 0 }], loaded: true, loading: false, error: null });
+    const { el, tabView } = await render();
+    /** @type {string[]} */
+    const scrolled = [];
+    const original = AcpChangesReview.prototype.scrollToChange;
+    AcpChangesReview.prototype.scrollToChange = async function scrollToChange(id) {
+      scrolled.push(id);
+    };
+    try {
+      // Act
+      await el.showChange('/p/a.js');
+    } finally {
+      AcpChangesReview.prototype.scrollToChange = original;
+    }
+    // Assert
+    const review = /** @type {HTMLElementTagNameMap['acp-changes-review']} */ (tabView.shadowRoot?.querySelector('acp-changes-tab acp-changes-review'));
+    expect($activePath.get()).to.equal('view:changes');
+    expect([...review.expanded]).to.deep.equal(['a.js']);
+    expect(scrolled).to.deep.equal(['a.js']);
   });
 
   it('opens a file with a match selected, and reads the selection back', async () => {

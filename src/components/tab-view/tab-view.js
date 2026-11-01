@@ -7,7 +7,6 @@ import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmCo
 import { TabContentController } from '../../controllers/tab-content/TabContentController.js';
 import '../tab-strip/tab-strip.js';
 import '../code-view/code-view.js';
-import '../changes-review/changes-review.js';
 import '../image-preview/image-preview.js';
 import '../terminal/terminal.js';
 import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
@@ -18,26 +17,12 @@ import styles from './tab-view.css?inline';
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalConnect} TerminalConnect */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 /** @typedef {import('../tab-strip/tab-strip.js').CloseScope} CloseScope */
-/** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
-
-/**
- * What the Changes tab shows.
- * @typedef {Object} ChangesReviewData
- * @property {GitChangesView} changes
- * @property {GitRepoView} repo
- * @property {ReadonlySet<string>} selection Files picked for the next commit.
- * @property {ReadonlySet<string>} expanded
- * @property {ReadonlyMap<string, FileDiff>} diffs
- */
 
 /**
  * @tag acp-tab-view
@@ -58,8 +43,6 @@ export class AcpTabView extends LitElement {
     comments: { attribute: false },
     commentFocus: { attribute: false },
     renderContent: { attribute: false },
-    review: { attribute: false },
-    sessionReview: { attribute: false },
     languages: { attribute: false },
     rootId: { attribute: false },
     listDir: { attribute: false },
@@ -91,8 +74,8 @@ export class AcpTabView extends LitElement {
         ),
       settings: (tab) => this.#renderHosted(tab),
       agents: (tab) => this.#renderHosted(tab),
-      changes: () => this.#renderChanges(),
-      'session-changes': (tab) => this.#renderSessionChanges(tab),
+      changes: (tab) => this.#renderHosted(tab),
+      'session-changes': (tab) => this.#renderHosted(tab),
       terminal: (tab) => this.#renderTerminal(tab),
       browser: () =>
         html`<acp-view-placeholder
@@ -124,10 +107,6 @@ export class AcpTabView extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
-    /** @type {ChangesReviewData | null} For the Changes tab. */
-    this.review = null;
-    /** @type {SessionChangesView | null} For the active worktree session's Changes tab. */
-    this.sessionReview = null;
     /** @type {Readonly<Record<string, string>>} Languages picked for files, by absolute path. */
     this.languages = {};
     /** @type {string | null} The project's snapshot id, for `listDir`; `null` while none is open. */
@@ -171,16 +150,6 @@ export class AcpTabView extends LitElement {
 
   #activeCodeView() {
     return this.renderRoot.querySelector('.acp-tab-view__panel[active]')?.querySelector('acp-code-view') ?? null;
-  }
-
-  /**
-   * Scrolls the Changes tab to a changed file; the tab must be open.
-   * @param {string} path Absolute.
-   */
-  async revealChange(path) {
-    await this.updateComplete;
-    const rel = projects.rel(this.root, path);
-    if (rel !== null) this.renderRoot.querySelector('acp-changes-review')?.scrollToChange(rel);
   }
 
   /**
@@ -240,39 +209,6 @@ export class AcpTabView extends LitElement {
         this.confirmOverwrite(e.detail.id);
       }}
     ></acp-code-view>`;
-  }
-
-  #renderChanges() {
-    const review = this.review;
-    if (!review) return nothing;
-    return html`<acp-changes-review
-      class="acp-tab-view__view"
-      .changes=${review.changes}
-      .repo=${review.repo}
-      .selection=${review.selection}
-      .expanded=${review.expanded}
-      .diffs=${review.diffs}
-      .root=${this.root}
-      .comments=${this.comments}
-      .commentFocus=${this.commentFocus}
-    ></acp-changes-review>`;
-  }
-
-  /** @param {EditorTab} tab */
-  #renderSessionChanges(tab) {
-    const review = this.sessionReview;
-    if (!review || review.sessionId !== tabs.sessionOf(tab.id)) return nothing;
-    return html`<acp-changes-review
-      class="acp-tab-view__view"
-      .changes=${review.changes}
-      .expanded=${review.expanded}
-      .diffs=${review.diffs}
-      .root=${review.folder}
-      .base=${review.base}
-      .branch=${review.branch}
-      .comments=${this.comments}
-      .commentFocus=${this.commentFocus}
-    ></acp-changes-review>`;
   }
 
   /** @param {EditorTab} tab */

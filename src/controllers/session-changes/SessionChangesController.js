@@ -37,15 +37,22 @@ function isBusy(session) {
 }
 
 /**
+ * @typedef {Object} SessionChangesConfig
+ * @property {() => string | null} sessionId The session whose tab the host shows.
+ */
+
+/**
  * A worktree session's Changes tab while it's active: the files the session changed since it
  * started, which of them are expanded, and their diffs against its base. Listed when the tab is
  * shown and again after each of the session's turns (nothing watches a worktree); dropped when
- * another tab is shown.
+ * another tab is shown. One per tab: it follows its host's session only.
  * @implements {ReactiveController}
  */
 export class SessionChangesController {
   /** @type {ReactiveControllerHost} */
   #host;
+  /** @type {SessionChangesConfig} */
+  #config;
   /** @type {string | null} The session whose tab is active. */
   #sessionId = null;
   /** @type {GitChangesView} */
@@ -63,12 +70,16 @@ export class SessionChangesController {
   /** The shown session was mid-turn at its last status. */
   #busy = false;
 
-  /** @param {ReactiveControllerHost & HTMLElement} host */
-  constructor(host) {
+  /**
+   * @param {ReactiveControllerHost & HTMLElement} host
+   * @param {SessionChangesConfig} config
+   */
+  constructor(host, config) {
     this.#host = host;
+    this.#config = config;
     new StoreController(host, {
       store: $activePath,
-      onChange: (active) => this.#show(active === null ? null : tabs.sessionOf(active)),
+      onChange: () => this.sync(),
     });
     new StoreController(host, {
       store: $sessions,
@@ -80,6 +91,13 @@ export class SessionChangesController {
       },
     });
     host.addController(this);
+  }
+
+  /** Shows the host's session if its tab is the active one, else nothing; call it when the host's session changes. */
+  sync() {
+    const active = $activePath.get();
+    const id = active === null ? null : tabs.sessionOf(active);
+    this.#show(id !== null && id === this.#config.sessionId() ? id : null);
   }
 
   // Shown again on connect, when the active tab is first reported.
