@@ -227,6 +227,11 @@ export class AcpTerminal extends LitElement {
     }, 16);
   }
 
+  /** Puts the keyboard in the terminal. */
+  focus() {
+    this.#term?.focus();
+  }
+
   /**
    * Pastes text into the shell, as if pasted by the user, and focuses the terminal; kept until the
    * shell is connected.

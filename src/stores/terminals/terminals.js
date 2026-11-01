@@ -76,6 +76,12 @@ export function setTerminalPanelHeight(px) {
   $projectTerminalPanelHeights.setKey($workspace.get()?.path ?? NO_PROJECT, clampHeight(px));
 }
 
+/** The shown project's panel goes back to the default height. */
+export function clearTerminalPanelHeight() {
+  const key = $workspace.get()?.path ?? NO_PROJECT;
+  if (key in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(key, undefined);
+}
+
 /** A request to focus a terminal's screen, until its view has. */
 export const $terminalFocus = atom(/** @type {{ terminalId: string } | null} */ (null));
 

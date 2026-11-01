@@ -21,7 +21,7 @@ import { $workspace } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from './rules.js';
+import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
 
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('./types.js').TerminalBusy} TerminalBusy */
@@ -383,4 +383,6 @@ export const terminals = Object.freeze({
   close,
 
   shellPaths,
+
+  terminalTab,
 });
