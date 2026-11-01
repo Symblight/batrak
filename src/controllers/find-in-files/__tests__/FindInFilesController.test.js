@@ -13,7 +13,7 @@ class DialogSearchHost extends LitElement {
 }
 customElements.define('test-find-in-files-host', DialogSearchHost);
 
-/** @type {import('../../../models/types/types.js').SearchOptions} */
+/** @type {import('../../../hooks/search/types.js').SearchOptions} */
 const OPTIONS = { query: 'needle', caseSensitive: false, wholeWord: false, regex: false, include: '', exclude: '' };
 
 /**

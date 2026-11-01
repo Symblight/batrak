@@ -10,13 +10,13 @@ import '../search-results/search-results.js';
 import '../search-view-picker/search-view-picker.js';
 import styles from './search-dialog.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types/types.js').SearchErrorSource} SearchErrorSource */
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/search/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../hooks/search/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../hooks/search/types.js').SearchErrorSource} SearchErrorSource */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
 
 /** Typing pause before a search starts. */

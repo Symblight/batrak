@@ -5,8 +5,8 @@ import { composerOf } from '../../stores/composer/composer.js';
 import { $sessionNotices, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import { $draftSessions, $sessions } from '../../stores/sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').SessionInput} SessionInput */
-/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../chat/types.js').SessionInput} SessionInput */
+/** @typedef {import('./types.js').SessionNotice} SessionNotice */
 
 /**
  * Whether a session took what was sent; when not, why (also shown as its notice). The sender keeps

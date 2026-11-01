@@ -2,7 +2,7 @@ import { expect } from '@esm-bundle/chai';
 import { $sessionRoot, $treeRoot, keepRecent, sessionRootAction, setSessionRoot } from '../session-root.js';
 import { $workspace } from '../../workspace/workspace.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @param {Partial<Session>} fields

@@ -1,9 +1,9 @@
 import { atom, computed } from 'nanostores';
 import { $workspace } from '../workspace/workspace.js';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').SessionRoot} SessionRoot */
-/** @typedef {import('../../models/types/types.js').TreeRoot} TreeRoot */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').SessionRoot} SessionRoot */
+/** @typedef {import('../../hooks/sessions/types.js').TreeRoot} TreeRoot */
 
 /** The active worktree session's folder, open as a backend root for the Files tree. Per window. */
 export const $sessionRoot = atom(/** @type {SessionRoot | null} */ (null));

@@ -5,9 +5,9 @@ import '../search-options/search-options.js';
 import '../search-results/search-results.js';
 import styles from './search-panel.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types/types.js').SearchFileResult} FileResult */
-/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../hooks/search/types.js').SearchFileResult} FileResult */
+/** @typedef {import('../../hooks/search/types.js').SearchMatchRow} SearchMatchRow */
 /** @typedef {import('../../hooks/search/search.js').SearchOptionKey} SearchOptionKey */
 
 /** Typing pause before a search starts. */

@@ -26,8 +26,8 @@ describe('sessions', () => {
   /**
    * @param {string} id
    * @param {string} projectId
-   * @param {Partial<import('../../../models/types/types.js').Session>} [fields]
-   * @returns {import('../../../models/types/types.js').Session}
+   * @param {Partial<import('../../../hooks/sessions/types.js').Session>} [fields]
+   * @returns {import('../../../hooks/sessions/types.js').Session}
    */
   const listed = (id, projectId, fields = {}) => ({
     id,
@@ -78,7 +78,7 @@ describe('sessions', () => {
   });
 
   it("counts the other local sessions running in the active session's project", () => {
-    /** @param {string} project @param {'local' | 'worktree'} mode @param {import('../../../models/types/types.js').SessionStatus} status */
+    /** @param {string} project @param {'local' | 'worktree'} mode @param {import('../../../hooks/sessions/types.js').SessionStatus} status */
     const add = (project, mode, status) => {
       const id = newSession(project);
       startSession(id, { title: 'T', agentId: 'a', config: {}, mode });

@@ -15,8 +15,8 @@ import { $notices } from '../../../stores/notices/notices.js';
 import '../agent-column.js';
 
 /** @typedef {import('../agent-column.js').AcpAgentColumn} AcpAgentColumn */
-/** @typedef {import('../../../models/types/types.js').Session} Session */
-/** @typedef {import('../../../models/types/types.js').AgentSummary} AgentSummary */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../../hooks/agents/types.js').AgentSummary} AgentSummary */
 
 /** @param {Partial<Session>} [fields] */
 function session(fields = {}) {
@@ -243,7 +243,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { el, root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     const paths = ['/p/src/app.js', '/p/src', '/Users/me/notes.md', '/Users/me/docs'];
@@ -267,7 +267,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     fileDrop.handle({ type: 'drop', paths: ['/Users/me/Screen Shot.png'], position: osPointOf(chat) });
@@ -292,7 +292,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     const files = [new File(['x'], 'Screen Shot é.png'), new File(['y'], 'log.txt')];
@@ -323,7 +323,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     const files = [new File(['x'], 'a.txt'), new File(['y'], 'bad.txt')];
@@ -359,7 +359,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { el, root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     fileDrop.handle({ type: 'drop', paths: ['/p/a.js'], position: osPointOf(chat) });
@@ -388,7 +388,7 @@ describe('acp-agent-column', () => {
     expect(terminal.waiting).to.equal(1);
 
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     terminal.dispatchEvent(new CustomEvent('acp-terminal-chat', { bubbles: true, composed: true }));
@@ -404,7 +404,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { el, root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatFile[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatFile[]} */
     const inserted = [];
     chat.insertFiles = (files) => inserted.push(...files);
     chat.hidden = false; // a hidden element is no drop target: show it as if the column didn't hide it
@@ -454,7 +454,7 @@ describe('acp-agent-column', () => {
     $activeSessionId.set('s1');
     const { el, root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
-    /** @type {import('../../../models/types/types.js').ChatInsert[]} */
+    /** @type {import('../../../hooks/chat/types.js').ChatInsert[]} */
     const inserted = [];
     chat.insertCode = (inserts) => inserted.push(...inserts);
     addToChat([{ path: '/p/a.js', fromLine: 1, toLine: 1, body: '' }]);

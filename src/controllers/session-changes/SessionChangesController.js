@@ -7,9 +7,9 @@ import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * What a worktree session's Changes tab shows.

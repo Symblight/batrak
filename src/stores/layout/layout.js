@@ -1,7 +1,7 @@
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
-/** @typedef {import('../../models/types/types.js').ColumnWidths} ColumnWidths */
-/** @typedef {import('../../models/types/types.js').HiddenColumns} HiddenColumns */
+/** @typedef {import('../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
+/** @typedef {import('../../hooks/settings/types.js').HiddenColumns} HiddenColumns */
 
 /** Shared by every window, so a resize shows up in all of them. */
 export const $columnWidths = persistentStore('brama:layout:column-widths', /** @type {ColumnWidths} */ ({}), {

@@ -1,8 +1,8 @@
 import { atom } from 'nanostores';
 import { $activeSessionId } from '../sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types/types.js').PendingInput} PendingInput */
+/** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../hooks/chat/types.js').PendingInput} PendingInput */
 
 /**
  * What waits to go into a session (the one shown when it came): code from the editors (selections,

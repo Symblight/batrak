@@ -10,7 +10,7 @@ import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
 import maskIcon from '@material-design-icons/svg/outlined/filter_alt.svg?raw';
 import styles from './search-filters.css?inline';
 
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {'folder' | 'mask'} Filter */
 
 /** File masks offered in the mask menu. */

@@ -5,8 +5,8 @@ import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { trustKey } from './rules.js';
 
-/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
-/** @typedef {import('../../models/types/types.js').UntrustedAgent} UntrustedAgent */
+/** @typedef {import('./types.js').TrustPrompt} TrustPrompt */
+/** @typedef {import('./types.js').UntrustedAgent} UntrustedAgent */
 
 /** Sequence of checks; only the latest answer is kept. */
 let check = 0;

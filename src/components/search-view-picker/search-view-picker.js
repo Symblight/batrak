@@ -7,7 +7,7 @@ import groupedIcon from '@material-design-icons/svg/outlined/account_tree.svg?ra
 import flatIcon from '@material-design-icons/svg/outlined/view_list.svg?raw';
 import styles from './search-view-picker.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogPrefs} SearchDialogPrefs */
 
 /** @type {{ value: SearchDialogPrefs['view'], icon: string, label: string }[]} */
 const VIEWS = [

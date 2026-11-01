@@ -18,7 +18,7 @@ import { setWorkspaceSettings } from '../../workspace/workspace.js';
 /**
  * @param {string} id
  * @param {string} name
- * @returns {import('../../../models/types/types.js').AgentSummary}
+ * @returns {import('../../../hooks/agents/types.js').AgentSummary}
  */
 const agent = (id, name) => ({ id, name, scope: 'user', version: null, registryId: null, update: null, enabled: true, signIn: false, command: id, args: [] });
 

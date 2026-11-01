@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../../sessions/types.js').Session} Session */
 
 /**
  * @param {Partial<Session>} fields

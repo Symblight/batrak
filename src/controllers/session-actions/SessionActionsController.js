@@ -5,7 +5,7 @@ import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} SessionActionsHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @typedef {Object} SessionActionsConfig

@@ -1,8 +1,8 @@
 import { atom, computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
-/** @typedef {import('../../models/types/types.js').Workspace} Workspace */
-/** @typedef {import('../../models/types/types.js').WorkspaceSettings} WorkspaceSettings */
+/** @typedef {import('../../hooks/projects/types.js').Workspace} Workspace */
+/** @typedef {import('../../hooks/projects/types.js').WorkspaceSettings} WorkspaceSettings */
 
 /**
  * The opened folder, reopened on launch by `projects.restore()`. Per window: `rootId` is

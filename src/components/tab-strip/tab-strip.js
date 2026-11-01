@@ -26,9 +26,9 @@ import { SortableController } from '../../controllers/sortable/SortableControlle
 import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflowController.js';
 import styles from './tab-strip.css?inline';
 
-/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
 /** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
 

@@ -3,9 +3,9 @@ import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { chatDropOf, composedContains, deepElementFromPoint, dropTargetAt, osScale, toCssPoint } from './rules.js';
 
-/** @typedef {import('../../models/types/types.js').FileDrag} FileDrag */
-/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
-/** @typedef {import('../../models/types/types.js').DroppedEntry} DroppedEntry */
+/** @typedef {import('./types.js').FileDrag} FileDrag */
+/** @typedef {import('./types.js').FileDrop} FileDrop */
+/** @typedef {import('./types.js').DroppedEntry} DroppedEntry */
 
 /** What takes files dropped from the OS; the column rendering one handles the drop. */
 const DROP_TARGETS = 'acp-terminal, acp-chat';

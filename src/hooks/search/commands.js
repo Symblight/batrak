@@ -1,9 +1,9 @@
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('../../models/types/types.js').QuickOpenResult} QuickOpenResult */
-/** @typedef {import('../../models/types/types.js').QuickOpenKind} QuickOpenKind */
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types/types.js').SearchEvent} SearchEvent */
+/** @typedef {import('./types.js').QuickOpenResult} QuickOpenResult */
+/** @typedef {import('./types.js').QuickOpenKind} QuickOpenKind */
+/** @typedef {import('./types.js').SearchOptions} SearchOptions */
+/** @typedef {import('./types.js').SearchEvent} SearchEvent */
 
 /** The Rust commands of Quick Open and the search in files. */
 

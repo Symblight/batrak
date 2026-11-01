@@ -3,11 +3,11 @@ import { closeProjectTab } from '../editor/editor.js';
 import { $terminals } from '../terminals/terminals.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
 
-/** @typedef {import('../../models/types/types.js').AgentList} AgentList */
-/** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */
-/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
-/** @typedef {import('../../models/types/types.js').SignInEvent} SignInEvent */
+/** @typedef {import('../../hooks/agents/types.js').AgentList} AgentList */
+/** @typedef {import('../../hooks/agents/types.js').AgentsView} AgentsView */
+/** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../hooks/agents/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../hooks/agents/types.js').SignInEvent} SignInEvent */
 
 /**
  * The agents of the open project (its `.brama/agents.json`; the user's file with none), kept

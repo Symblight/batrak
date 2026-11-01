@@ -1,4 +1,4 @@
-/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('./types.js').ConfigOption} ConfigOption */
 
 /**
  * The first option of a category, in the agent's order.

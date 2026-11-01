@@ -8,7 +8,7 @@ import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import styles from './project-row.css?inline';
 
-/** @typedef {import('../../models/types/types.js').Project} Project */
+/** @typedef {import('../../hooks/projects/types.js').Project} Project */
 
 /**
  * @tag acp-project-row

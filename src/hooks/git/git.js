@@ -5,12 +5,12 @@ import { projects } from '../projects/projects.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types/types.js').GitCommitted} GitCommitted */
-/** @typedef {import('../../models/types/types.js').GitRepoState} GitRepoState */
-/** @typedef {import('../../models/types/types.js').GitStatusReply} GitStatusReply */
+/** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').GitChangesView} GitChangesView */
+/** @typedef {import('./types.js').GitRepoView} GitRepoView */
+/** @typedef {import('./types.js').GitCommitted} GitCommitted */
+/** @typedef {import('./types.js').GitRepoState} GitRepoState */
+/** @typedef {import('./types.js').GitStatusReply} GitStatusReply */
 
 /**
  * Git state of an open root that isn't active, shown again (and checked) when it is.

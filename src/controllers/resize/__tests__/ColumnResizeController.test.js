@@ -3,7 +3,7 @@ import { LitElement, html } from 'lit';
 import { atom } from 'nanostores';
 import { ColumnResizeController } from '../ColumnResizeController.js';
 
-/** @typedef {import('../../../models/types/types.js').ColumnWidths} ColumnWidths */
+/** @typedef {import('../../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
 
 const store = atom(/** @type {ColumnWidths} */ ({}));
 

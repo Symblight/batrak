@@ -6,7 +6,7 @@ import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
-/** @typedef {import('../../models/types/types.js').SessionInput} SessionInput */
+/** @typedef {import('../../hooks/chat/types.js').SessionInput} SessionInput */
 
 /**
  * @typedef {Object} ChatSessionConfig
@@ -46,7 +46,7 @@ export class ChatSessionController {
   #drafts = new Map();
   /** @type {StoreController<string | null>} */
   #activeId;
-  /** @type {StoreController<import('../../models/types/types.js').Session | null>} */
+  /** @type {StoreController<import('../../hooks/sessions/types.js').Session | null>} */
   #session;
 
   /**

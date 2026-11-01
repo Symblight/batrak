@@ -35,9 +35,9 @@ import '../../components/pane/pane.js';
 import '../../components/split/split.js';
 
 /** @typedef {import('../file-column/file-column.js').SideView} SideView */
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
-/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/agents/types.js').TrustPrompt} TrustPrompt */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
 
 /*
  * How the panes share the row. Session and file columns shrink, down to their resize minimums, to

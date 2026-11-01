@@ -3,7 +3,7 @@ import { ChxCommandPicker } from '@symblight/chat/composer';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { FileMentionsController } from '../FileMentionsController.js';
 
-/** @typedef {import('../../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 
 /** A fake `@` picker that records what the controller does to it. */
 function fakePicker() {

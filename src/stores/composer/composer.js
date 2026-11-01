@@ -4,15 +4,15 @@ import { $agentList } from '../agents/agents.js';
 import { $workspaceSettings } from '../workspace/workspace.js';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
-/** @typedef {import('../../models/types/types.js').ModeRisk} ModeRisk */
-/** @typedef {import('../../models/types/types.js').AgentInfo} AgentInfo */
-/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
-/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/composer/types.js').ModeRisk} ModeRisk */
+/** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../hooks/composer/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
-/** @typedef {import('../../models/types/types.js').CatalogAgent} CatalogAgent */
-/** @typedef {import('../../models/types/types.js').AcpConfigOption} AcpConfigOption */
+/** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../hooks/composer/types.js').AcpConfigOption} AcpConfigOption */
 
 /**
  * Each agent's config options by agent id, so a new session shows the agent's real models and
@@ -408,7 +408,7 @@ export function cacheAgentOptions(agentId, agentOptions) {
   if (Object.keys(filled).length) $composers.set({ ...composers, ...filled });
 }
 
-/** @typedef {import('../../models/types/types.js').AgentOptionsStatus} AgentOptionsStatus */
+/** @typedef {import('../../hooks/agents/types.js').AgentOptionsStatus} AgentOptionsStatus */
 
 /** Agents whose options are being asked for, or whose last ask failed, by agent id. In memory. */
 const $agentOptionsStatus = atom(/** @type {Readonly<Record<string, AgentOptionsStatus>>} */ ({}));

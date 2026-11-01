@@ -9,10 +9,10 @@ import { FindInFilesController } from '../../controllers/find-in-files/FindInFil
 import '../../components/search-dialog/search-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
 
 /** @type {SearchDialogState} A project's search before its first one. */
 const NO_SEARCH = { query: '', caseSensitive: false, wholeWord: false, regex: false, folder: '', mask: '' };

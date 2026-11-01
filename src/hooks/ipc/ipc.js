@@ -4,7 +4,7 @@ import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
 import { open } from '@tauri-apps/plugin-dialog';
 
-/** @typedef {import('../../models/types/types.js').FileDrag} FileDrag */
+/** @typedef {import('../file-drop/types.js').FileDrag} FileDrag */
 
 /**
  * The Tauri bridge, and the only module that imports `@tauri-apps/*`. A feature's commands (names

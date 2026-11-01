@@ -16,19 +16,19 @@ import languageIcon from '@material-design-icons/svg/outlined/language.svg?raw';
 import '../view-placeholder/view-placeholder.js';
 import styles from './tab-view.css?inline';
 
-/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
-/** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../models/types/types.js').TerminalConnect} TerminalConnect */
-/** @typedef {import('../../models/types/types.js').TerminalBusyQuery} TerminalBusyQuery */
+/** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
+/** @typedef {import('../../hooks/settings/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 /** @typedef {import('../tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {import('../../controllers/session-changes/SessionChangesController.js').SessionChangesView} SessionChangesView */
@@ -157,21 +157,21 @@ export class AcpTabView extends LitElement {
     this.settings = null;
     /** @type {FontFamily[] | null} For the Settings tab. */
     this.fonts = null;
-    /** @type {import('../../models/types/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
+    /** @type {import('../../hooks/agents/types.js').AgentList | null} For the Agents tab: the registry agents its add form offers. */
     this.agents = null;
-    /** @type {import('../../models/types/types.js').SettingsReveal | null} For the Settings tab. */
+    /** @type {import('../../hooks/settings/types.js').SettingsReveal | null} For the Settings tab. */
     this.settingsReveal = null;
-    /** @type {import('../../models/types/types.js').AgentsView | null} For the Agents tab. */
+    /** @type {import('../../hooks/agents/types.js').AgentsView | null} For the Agents tab. */
     this.agentsView = null;
-    /** @type {import('../../models/types/types.js').AgentsQuery} For the Agents tab. */
+    /** @type {import('../../hooks/agents/types.js').AgentsQuery} For the Agents tab. */
     this.agentsQuery = { query: '', filter: 'all' };
     /** @type {{ updating: readonly string[], checking: boolean }} For the Agents tab: calls this window waits for. */
     this.agentsPending = { updating: [], checking: false };
-    /** @type {Readonly<Record<string, import('../../models/types/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
+    /** @type {Readonly<Record<string, import('../../hooks/agents/types.js').SignInRun>>} For the Agents tab: sign-ins running or failed, by agent. */
     this.agentsSignIns = {};
     /** @type {readonly string[]} For the Agents tab: the agents whose sessions open in the terminal. */
     this.agentsTerminal = [];
-    /** @type {import('../../models/types/types.js').AgentsReveal | null} For the Agents tab. */
+    /** @type {import('../../hooks/agents/types.js').AgentsReveal | null} For the Agents tab. */
     this.agentsReveal = null;
     /** @type {ChangesReviewData | null} For the Changes tab. */
     this.review = null;

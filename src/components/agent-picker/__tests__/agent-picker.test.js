@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../agent-picker.js';
 
-/** @typedef {import('../../../models/types/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../../hooks/composer/types.js').ComposerState} ComposerState */
 
 /** @type {ComposerState} */
 const NO_AGENT = {

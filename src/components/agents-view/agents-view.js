@@ -17,14 +17,14 @@ import '../agent-form/agent-form.js';
 import '../marked-text/marked-text.js';
 import styles from './agents-view.css?inline';
 
-/** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */
-/** @typedef {import('../../models/types/types.js').AgentRow} AgentRow */
-/** @typedef {import('../../models/types/types.js').RegistryRow} RegistryRow */
-/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types/types.js').AgentsFilter} AgentsFilter */
-/** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
-/** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
-/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../hooks/agents/types.js').AgentsView} AgentsView */
+/** @typedef {import('../../hooks/agents/types.js').AgentRow} AgentRow */
+/** @typedef {import('../../hooks/agents/types.js').RegistryRow} RegistryRow */
+/** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../hooks/agents/types.js').AgentsFilter} AgentsFilter */
+/** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
+/** @typedef {import('../../hooks/agents/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../hooks/agents/types.js').SignInRun} SignInRun */
 
 /**
  * The anchor id of a tooltip: unique in the shadow root.

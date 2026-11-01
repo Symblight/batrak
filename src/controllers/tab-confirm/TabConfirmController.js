@@ -4,9 +4,9 @@ import { html } from 'lit';
 import '../../components/confirm-dialog/confirm-dialog.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
-/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types/types.js').TerminalBusyQuery} TerminalBusyQuery */
-/** @typedef {import('../../models/types/types.js').ConfirmChoice} ConfirmChoice */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
+/** @typedef {import('../../hooks/app/types.js').ConfirmChoice} ConfirmChoice */
 
 /**
  * @typedef {Object} TabConfirmConfig

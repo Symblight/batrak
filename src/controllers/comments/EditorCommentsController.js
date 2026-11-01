@@ -2,8 +2,8 @@ import { comments } from '../../hooks/comments/comments.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 
 /**
  * @typedef {Object} EditorCommentsConfig

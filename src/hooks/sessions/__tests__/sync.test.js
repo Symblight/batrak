@@ -6,7 +6,7 @@ import { $sessionSync, endSync, syncOf } from '../../../stores/session-sync/sess
 import { $sessions } from '../../../stores/sessions/sessions.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
-/** @type {import('../../../models/types/types.js').SyncReport} */
+/** @type {import('../types.js').SyncReport} */
 const REPORT = { projectPath: '/p', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:00:01Z', agents: [{ agentId: 'claude', agentName: 'Claude', outcome: 'listed', count: 2, error: null }] };
 
 let counter = 0;

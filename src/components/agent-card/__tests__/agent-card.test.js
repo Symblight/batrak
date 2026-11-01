@@ -1,9 +1,9 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../agent-card.js';
 
-/** @typedef {import('../../../models/types/types.js').AgentRow} AgentRow */
-/** @typedef {import('../../../models/types/types.js').SignInMethod} SignInMethod */
-/** @typedef {import('../../../models/types/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../../hooks/agents/types.js').AgentRow} AgentRow */
+/** @typedef {import('../../../hooks/agents/types.js').SignInMethod} SignInMethod */
+/** @typedef {import('../../../hooks/agents/types.js').SignInRun} SignInRun */
 /** @typedef {import('../agent-card.js').AcpAgentCard} AcpAgentCard */
 
 /**

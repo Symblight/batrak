@@ -8,7 +8,7 @@ import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/ses
 import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../types.js').Session} Session */
 
 /** @param {Partial<Session>} [fields] */
 function session(fields = {}) {
@@ -176,7 +176,7 @@ describe('sessions keeps the active session in its view', () => {
     $agentList.set({
       ...$agentList.get(),
       defaultAgent: 'claude',
-      agents: [/** @type {import('../../../models/types/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
+      agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
     });
   });
 
@@ -317,7 +317,7 @@ describe('sessions keeps the active session in its view', () => {
   it("sends a draft's first message to the chat when its agent's CLI can't start a session", async () => {
     $agentList.set({
       ...$agentList.get(),
-      agents: [/** @type {import('../../../models/types/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: false } })],
+      agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: false } })],
     });
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');

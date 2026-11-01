@@ -7,7 +7,7 @@ import { $agentViews, setAgentView } from '../../../stores/session-views/session
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 
-/** @typedef {import('../../../models/types/types.js').SessionInput} SessionInput */
+/** @typedef {import('../../chat/types.js').SessionInput} SessionInput */
 
 describe('sessionInput', () => {
   /** @type {{ cmd: string, args: unknown }[]} */
@@ -26,7 +26,7 @@ describe('sessionInput', () => {
     $agentList.set({
       ...$agentList.get(),
       defaultAgent: 'claude',
-      agents: [/** @type {import('../../../models/types/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
+      agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
     });
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');
@@ -70,7 +70,7 @@ describe('sessionInput', () => {
   });
 
   it("refuses attachments, which neither view can send yet, naming them", () => {
-    $sessions.set([/** @type {import('../../../models/types/types.js').Session} */ ({ id: 's1', agentId: 'claude', agentName: 'Claude Code' })]);
+    $sessions.set([/** @type {import('../types.js').Session} */ ({ id: 's1', agentId: 'claude', agentName: 'Claude Code' })]);
     expect(sessionInput.refuseFiles('s1', [])).to.equal(null);
     const reason = sessionInput.refuseFiles('s1', [new File(['x'], 'shot.png'), new File(['y'], 'log.txt')]);
     expect(reason).to.contain('shot.png, log.txt');

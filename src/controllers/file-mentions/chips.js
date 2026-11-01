@@ -5,8 +5,8 @@ import descriptionIcon from '@material-design-icons/svg/outlined/description.svg
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
 
 /**
  * The composer's ProseMirror document, as far as code goes in: `line+`, each line text and chips.

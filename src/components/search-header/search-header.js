@@ -8,7 +8,7 @@ import previewRightIcon from '@material-design-icons/svg/outlined/vertical_split
 import popoutIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import styles from './search-header.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogPrefs} SearchDialogPrefs */
 
 /** @type {{ value: SearchDialogPrefs['preview'], icon: string, label: string }[]} */
 const PREVIEW_POSITIONS = [

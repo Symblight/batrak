@@ -1,9 +1,9 @@
 import { atom, computed } from 'nanostores';
 import { persistentMapStore, persistentStore } from '../persistent/persistent.js';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').SessionStatus} SessionStatus */
-/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').SessionStatus} SessionStatus */
+/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 
 /** Statuses in which a session holds (or is getting) an agent process. */
 export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);

@@ -10,9 +10,9 @@ import thinkingIcon from '@material-design-icons/svg/outlined/psychology.svg?raw
 import { composer } from '../../hooks/composer/composer.js';
 import styles from './model-picker.css?inline';
 
-/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
-/** @typedef {import('../../models/types/types.js').ConfigOptionValue} ConfigOptionValue */
-/** @typedef {import('../../models/types/types.js').AgentOptionsStatus} AgentOptionsStatus */
+/** @typedef {import('../../hooks/composer/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../hooks/composer/types.js').ConfigOptionValue} ConfigOptionValue */
+/** @typedef {import('../../hooks/agents/types.js').AgentOptionsStatus} AgentOptionsStatus */
 
 /** Categories with a chip of their own (`<acp-mode-picker>`). */
 const ELSEWHERE = new Set(['mode', 'permissions']);

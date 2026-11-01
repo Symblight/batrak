@@ -41,7 +41,7 @@ and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`); each feature's
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
-- `src/models/types/types.js` — shared JSDoc typedefs.
+- `src/hooks/<feature>/types.js` — the feature's JSDoc typedefs (what its hook, stores and components share).
 - `src/styles/tokens.css` — global app tokens, imported once from `src/main.js`.
 
 Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor` (`cdx-*`),
@@ -225,8 +225,8 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 - Every function/method with parameters gets `@param` types; add a one-line description when the
   name doesn't say it all. Lifecycle methods (`constructor`, `connectedCallback`, `render`,
   `willUpdate`…) need no comment beyond types.
-- Shared shapes are `@typedef`s in `src/models/types/types.js`, imported with
-  `/** @typedef {import('../../models/types/types.js').X} X */`.
+- Shared shapes are `@typedef`s in the owning feature's `src/hooks/<feature>/types.js`, imported with
+  `/** @typedef {import('../../hooks/<feature>/types.js').X} X */`.
 - No `any`. `src/elements.d.ts` maps every `acp-*` tag in `HTMLElementTagNameMap` (the `@symblight`
   libraries ship their own), so `querySelector('acp-x')` is typed — register each new element there.
   Cast an event once at the top of a handler: `/** @type {CustomEvent<{ path: string }>} */ (e).detail`.

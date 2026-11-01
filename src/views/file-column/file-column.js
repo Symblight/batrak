@@ -20,9 +20,9 @@ import '../../components/search-panel/search-panel.js';
 import '../../components/changes-panel/changes-panel.js';
 
 /** @typedef {'files' | 'search' | 'changes'} SideView */
-/** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
-/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/search/types.js').SearchOptions} SearchOptions */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** @type {Record<SideView, string>} */
 const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };

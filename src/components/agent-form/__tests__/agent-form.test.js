@@ -1,7 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../agent-form.js';
 
-/** @typedef {import('../../../models/types/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../../hooks/agents/types.js').KnownAgent} KnownAgent */
 /** @typedef {import('../agent-form.js').AcpAgentForm} AcpAgentForm */
 /** @typedef {import('../agent-form.js').EditedAgent} EditedAgent */
 

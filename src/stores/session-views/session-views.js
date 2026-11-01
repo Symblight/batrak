@@ -5,8 +5,8 @@ import { $composer, composerOf } from '../composer/composer.js';
 import { $cliStarting, $sessionTerminals } from '../terminals/terminals.js';
 import { $activeSession, $activeSessionId, $sessions } from '../sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').AgentTerminal} AgentTerminal */
-/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+/** @typedef {import('../../hooks/agents/types.js').AgentTerminal} AgentTerminal */
+/** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 
 /**
  * Whether a session can be shown in its agent's CLI.

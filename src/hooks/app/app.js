@@ -2,10 +2,10 @@ import { $about } from '../../stores/about/about.js';
 import { notify } from '../../stores/notices/notices.js';
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
-/** @typedef {import('../../models/types/types.js').LogLevel} LogLevel */
-/** @typedef {import('../../models/types/types.js').NoticeLevel} NoticeLevel */
-/** @typedef {import('../../models/types/types.js').Platform} Platform */
+/** @typedef {import('../settings/types.js').AboutInfo} AboutInfo */
+/** @typedef {import('./types.js').LogLevel} LogLevel */
+/** @typedef {import('./types.js').NoticeLevel} NoticeLevel */
+/** @typedef {import('./types.js').Platform} Platform */
 
 /** @typedef {'about' | 'settings' | 'new-terminal'} MenuAction */
 

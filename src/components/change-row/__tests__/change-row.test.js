@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../change-row.js';
 
 /** @typedef {import('../change-row.js').AcpChangeRow} AcpChangeRow */
-/** @typedef {import('../../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 
 /**
  * @param {Partial<GitFileStatus>} [fields]

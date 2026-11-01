@@ -13,8 +13,8 @@ import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import '../commit-box/commit-box.js';
 import styles from './changes-panel.css?inline';
 
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/changes.js').ChangeNode} ChangeNode */
 
 /**

@@ -2,8 +2,8 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../session-list.js';
 
 /** @typedef {import('../session-list.js').AcpSessionList} AcpSessionList */
-/** @typedef {import('../../../models/types/types.js').Session} Session */
-/** @typedef {import('../../../models/types/types.js').Project} Project */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../../hooks/projects/types.js').Project} Project */
 
 /** @type {Project[]} */
 const PROJECTS = [
@@ -98,7 +98,7 @@ describe('acp-session-list', () => {
   it('groups sessions under their project, pinned first, then by activity, and hands each row and project its state', async () => {
     // Arrange
     const now = Date.parse('2026-10-23T13:00:00.000Z');
-    /** @type {import('../../../models/types/types.js').SessionSync} */
+    /** @type {import('../../../hooks/sessions/types.js').SessionSync} */
     const sync = { running: true, report: null };
     // Act
     const { root } = await render({ pinned: ['c'], unread: ['b'], waiting: ['a'], activeSessionId: 'b', now, sync });

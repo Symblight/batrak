@@ -3,9 +3,9 @@ import { openProjectTab, openTab } from '../editor/editor.js';
 import { $workspace } from '../workspace/workspace.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
 
-/** @typedef {import('../../models/types/types.js').TerminalExit} TerminalExit */
-/** @typedef {import('../../models/types/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../models/types/types.js').TerminalOpened} TerminalOpened */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalExit} TerminalExit */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalOpened} TerminalOpened */
 
 /** Every terminal tab's shell, by terminal id. In memory: shells don't outlive the page. */
 export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>} */ ({}));
@@ -88,7 +88,7 @@ export function sessionTerminalOf(sessionId) {
 /**
  * Shows a sign-in's login, which the backend started, as a terminal tab among the tabs of the
  * project the sign-in started in (once: it's shown again as it is, where it is).
- * @param {import('../../models/types/types.js').LoginTab} tab
+ * @param {import('../../hooks/agents/types.js').LoginTab} tab
  * @param {string | null} projectPath
  */
 export function openLoginTerminal({ terminalId, title, commandLine }, projectPath) {

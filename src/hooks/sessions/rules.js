@@ -3,11 +3,11 @@ import { RUNNING } from '../../stores/sessions/sessions.js';
 export { RUNNING };
 export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
 
-/** @typedef {import('../../models/types/types.js').ConfirmOptions} ConfirmOptions */
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
-/** @typedef {import('../../models/types/types.js').SessionStatus} SessionStatus */
-/** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
+/** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('./types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('./types.js').SessionStatus} SessionStatus */
+/** @typedef {import('./types.js').SessionSync} SessionSync */
 
 /**
  * Whether a session is in a turn: working, queued, waiting for an answer, or asking a permission.
@@ -120,7 +120,7 @@ export function removeSessionConfirm(session) {
   };
 }
 
-/** @type {Record<import('../../models/types/types.js').SyncOutcome, (count: number | null, error: string | null) => string>} */
+/** @type {Record<import('./types.js').SyncOutcome, (count: number | null, error: string | null) => string>} */
 const OUTCOMES = {
   listed: (count) => (count === 1 ? '1 session' : `${count ?? 0} sessions`),
   unsupported: () => "can't list sessions",
@@ -146,7 +146,7 @@ export function syncSummary({ running, report }, now) {
   return { label, lines: linesOf(report), warn };
 }
 
-/** @param {import('../../models/types/types.js').SyncReport} report */
+/** @param {import('./types.js').SyncReport} report */
 function linesOf(report) {
   return report.agents.map((a) => `${a.agentName} · ${OUTCOMES[a.outcome](a.count, a.error)}`);
 }

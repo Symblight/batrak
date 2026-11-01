@@ -5,7 +5,7 @@ import { $about } from '../../../stores/about/about.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { app } from '../app.js';
 
-/** @typedef {import('../../../models/types/types.js').AboutInfo} AboutInfo */
+/** @typedef {import('../../settings/types.js').AboutInfo} AboutInfo */
 
 /** @type {AboutInfo} */
 const ABOUT = { version: '1.2.3', os: 'macOS', arch: 'aarch64', logDir: '/logs' };

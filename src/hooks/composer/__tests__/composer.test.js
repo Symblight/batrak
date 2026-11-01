@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { composer } from '../composer.js';
 
-/** @type {import('../../../models/types/types.js').ConfigOption} */
+/** @type {import('../types.js').ConfigOption} */
 const model = {
   id: 'model',
   name: 'Model',

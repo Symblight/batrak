@@ -19,8 +19,8 @@ import '../agent-icon/agent-icon.js';
 import '../marked-text/marked-text.js';
 import styles from './agent-card.css?inline';
 
-/** @typedef {import('../../models/types/types.js').AgentRow} AgentRow */
-/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../hooks/agents/types.js').AgentRow} AgentRow */
+/** @typedef {import('../../hooks/agents/types.js').SignInRun} SignInRun */
 
 /** @type {Record<AgentRow['status'], string>} */
 const STATUS = { ready: 'Ready', notStarted: 'Not started yet', off: 'Off', signIn: 'Needs sign-in' };

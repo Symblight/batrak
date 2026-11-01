@@ -4,7 +4,7 @@ import { expect } from '@esm-bundle/chai';
 import { $sessionRoot } from '../../../stores/session-root/session-root.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../types.js').Session} Session */
 
 let counter = 0;
 

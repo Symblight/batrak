@@ -3,8 +3,8 @@ import { $agentList } from '../../agents/agents.js';
 import { $activeView, $agentViews, $sessionViews, forgetSessionView, setAgentView, setSessionView, viewOfSession } from '../session-views.js';
 import { $activeSessionId, $sessions } from '../../sessions/sessions.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
-/** @typedef {import('../../../models/types/types.js').AgentSummary} AgentSummary */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../../hooks/agents/types.js').AgentSummary} AgentSummary */
 
 /** @param {string} id */
 function session(id) {

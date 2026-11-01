@@ -72,7 +72,7 @@ describe('acp-session-header', () => {
 
   it('shows the session’s status', async () => {
     const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
-    el.session = /** @type {import('../../../models/types/types.js').Session} */ ({ id: 's1', status: 'working', inTerminal: false });
+    el.session = /** @type {import('../../../hooks/sessions/types.js').Session} */ ({ id: 's1', status: 'working', inTerminal: false });
     el.permissionPending = true;
     await el.updateComplete;
     const status = /** @type {HTMLElementTagNameMap['acp-session-status']} */ (root.querySelector('acp-session-status'));

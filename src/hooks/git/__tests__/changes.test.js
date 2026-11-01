@@ -3,8 +3,8 @@ import { git } from '../git.js';
 
 /**
  * @param {string} path
- * @param {Partial<import('../../../models/types/types.js').GitFileStatus>} [fields]
- * @returns {import('../../../models/types/types.js').GitFileStatus}
+ * @param {Partial<import('../types.js').GitFileStatus>} [fields]
+ * @returns {import('../types.js').GitFileStatus}
  */
 const file = (path, fields = {}) => ({ path, origPath: null, kind: 'modified', staged: false, unstaged: true, added: null, removed: null, ...fields });
 
@@ -30,7 +30,7 @@ describe('git changes', () => {
   });
 
   it('gives each kind of change its letter, name and color', () => {
-    /** @type {[import('../../../models/types/types.js').GitFileKind, string, string][]} */
+    /** @type {[import('../types.js').GitFileKind, string, string][]} */
     const cases = [
       ['modified', 'M', 'Modified'],
       ['typeChanged', 'M', 'Type changed'],

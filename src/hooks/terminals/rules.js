@@ -1,5 +1,5 @@
-/** @typedef {import('../../models/types/types.js').Platform} Platform */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../app/types.js').Platform} Platform */
+/** @typedef {import('../sessions/types.js').Session} Session */
 
 /**
  * @typedef {Object} TerminalFolder

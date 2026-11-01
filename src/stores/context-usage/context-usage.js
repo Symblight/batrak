@@ -2,7 +2,7 @@ import { computed } from 'nanostores';
 import { isRecord, persistentMapStore } from '../persistent/persistent.js';
 import { $activeSessionId } from '../sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
+/** @typedef {import('../../hooks/sessions/types.js').ContextUsage} ContextUsage */
 
 /**
  * A stored usage, tokens only (a cost the agent reported is dropped); `null` when it can't be read.

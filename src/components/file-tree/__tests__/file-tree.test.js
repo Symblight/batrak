@@ -1,7 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../file-tree.js';
 
-/** @typedef {import('../../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../../hooks/projects/types.js').WorkspaceEntry} WorkspaceEntry */
 /** @typedef {HTMLElementTagNameMap['acp-file-tree']} AcpFileTree */
 
 /**

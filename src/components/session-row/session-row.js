@@ -12,7 +12,7 @@ import '../datetime/datetime.js';
 import '../session-status/session-status.js';
 import styles from './session-row.css?inline';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @tag acp-session-row

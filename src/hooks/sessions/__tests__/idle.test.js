@@ -3,7 +3,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { cancelIdleStop, stopWhenIdle } from '../idle.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../types.js').Session} Session */
 
 /** The clock the module sees: timers are kept here, fired by the test. */
 function fakeClock() {

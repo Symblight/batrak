@@ -8,7 +8,7 @@ import syncIcon from '@material-design-icons/svg/outlined/sync.svg?raw';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-sync.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SessionSync} SessionSync */
+/** @typedef {import('../../hooks/sessions/types.js').SessionSync} SessionSync */
 
 /**
  * @tag acp-session-sync

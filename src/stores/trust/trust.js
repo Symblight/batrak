@@ -1,7 +1,7 @@
 import { atom } from 'nanostores';
 import { projectOf } from '../sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
+/** @typedef {import('../../hooks/agents/types.js').TrustPrompt} TrustPrompt */
 
 /** What the trust dialog asks now; `null`: nothing waits for trust. Written by the `agents` hook. */
 export const $trustPrompt = atom(/** @type {TrustPrompt | null} */ (null));

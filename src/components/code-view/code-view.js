@@ -15,12 +15,12 @@ import '../file-icon/file-icon.js';
 import { agents } from '../../hooks/agents/agents.js';
 import styles from './code-view.css?inline';
 
-/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/projects/types.js').WorkspaceEntry} WorkspaceEntry */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 
 /**

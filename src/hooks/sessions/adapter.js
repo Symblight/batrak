@@ -23,9 +23,9 @@ import { awaitTrust } from '../../stores/trust/trust.js';
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['subscribe']>>[0]} SubscribeHandlers */
 /** @typedef {Parameters<SubscribeHandlers['onChunk']>[0]} ChxChunk */
 /** @typedef {Exclude<Awaited<ReturnType<NonNullable<ChxChatAdapter['sendMessage']>>>, void>} ReplyStream */
-/** @typedef {import('../../models/types/types.js').SessionEnvelope} SessionEnvelope */
-/** @typedef {import('../../models/types/types.js').AcpSessionUpdate} AcpSessionUpdate */
-/** @typedef {import('../../models/types/types.js').PromptInput} PromptInput */
+/** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
+/** @typedef {import('./types.js').AcpSessionUpdate} AcpSessionUpdate */
+/** @typedef {import('./types.js').PromptInput} PromptInput */
 
 /** The chat's author ids: the user (`<chx-chat>`'s `userId`) and every agent. */
 export const USER_ID = 'me';
@@ -301,9 +301,9 @@ export function handleSessionEvent(event) {
  * backend's message (e.g. "Agent history not restored"). An info notice outlives later statuses
  * until it's dismissed.
  * @param {string} sessionId
- * @param {import('../../models/types/types.js').SessionStatus} status
+ * @param {import('./types.js').SessionStatus} status
  * @param {string | null} message
- * @returns {import('../../models/types/types.js').SessionNotice | null}
+ * @returns {import('./types.js').SessionNotice | null}
  */
 function noticeOf(sessionId, status, message) {
   if (status === 'preparing' || status === 'starting') return { kind: 'progress', message: message ?? 'Starting agent…' };

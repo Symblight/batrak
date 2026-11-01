@@ -12,9 +12,9 @@ import tuneIcon from '@material-design-icons/svg/outlined/tune.svg?raw';
 import '../agent-icon/agent-icon.js';
 import styles from './agent-picker.css?inline';
 
-/** @typedef {import('../../models/types/types.js').AgentInfo} AgentInfo */
-/** @typedef {import('../../models/types/types.js').CatalogAgent} CatalogAgent */
-/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
 
 /**
  * @tag acp-agent-picker

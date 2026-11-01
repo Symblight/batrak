@@ -2,7 +2,7 @@ import { expect } from '@esm-bundle/chai';
 import { MessageBuilder } from '../message-builder.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 
-/** @typedef {import('../../../models/types/types.js').AcpSessionUpdate} AcpSessionUpdate */
+/** @typedef {import('../types.js').AcpSessionUpdate} AcpSessionUpdate */
 /**
  * A chunk as the tests read it.
  * @typedef {Object} Shape

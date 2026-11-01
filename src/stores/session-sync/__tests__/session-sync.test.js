@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { $sessionSync, endSync, startSync, syncOf } from '../session-sync.js';
 
-/** @type {import('../../../models/types/types.js').SyncReport} */
+/** @type {import('../../../hooks/sessions/types.js').SyncReport} */
 const REPORT = { projectPath: '/p', startedAt: 'a', endedAt: 'b', agents: [] };
 
 describe('session-sync', () => {
@@ -25,8 +25,8 @@ describe('session-sync', () => {
 
   /**
    * @param {string} agentId
-   * @param {import('../../../models/types/types.js').SyncOutcome} outcome
-   * @returns {import('../../../models/types/types.js').AgentSync}
+   * @param {import('../../../hooks/sessions/types.js').SyncOutcome} outcome
+   * @returns {import('../../../hooks/sessions/types.js').AgentSync}
    */
   const agent = (agentId, outcome) => ({ agentId, agentName: agentId, outcome, count: null, error: null });
 

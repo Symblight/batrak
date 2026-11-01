@@ -7,8 +7,8 @@ import { ipc } from '../ipc/ipc.js';
 import { files } from './files.js';
 import { absPath, basename, isAbsolute, projectPathOf, relPath, shownPath, worktreeOf } from './rules.js';
 
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types/types.js').OpenedRoot} OpenedRoot */
+/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').OpenedRoot} OpenedRoot */
 
 /**
  * Projects whose backend root (snapshot + watcher) stays open, the active one included. Switching to

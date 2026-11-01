@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../search-results.js';
 
 /** @typedef {import('../search-results.js').AcpSearchResults} AcpSearchResults */
-/** @typedef {import('../../../models/types/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../../hooks/search/types.js').SearchFileResult} SearchFileResult */
 
 /** @type {SearchFileResult[]} */
 const RESULTS = [

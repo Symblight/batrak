@@ -1,7 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../code-view.js';
 
-/** @typedef {import('../../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
 /**
  * @param {string} path

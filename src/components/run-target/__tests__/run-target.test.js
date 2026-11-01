@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../run-target.js';
 
-/** @typedef {import('../../../models/types/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../../hooks/composer/types.js').ComposerState} ComposerState */
 
 /** @type {ComposerState} */
 const DRAFT = {
@@ -36,7 +36,7 @@ describe('acp-run-target', () => {
   });
 
   it("notes network and files outside the workspace for a full-access mode, by its risk, not its name", async () => {
-    /** @param {import('../../../models/types/types.js').ConfigOptionValue[]} options @param {string} current */
+    /** @param {import('../../../hooks/composer/types.js').ConfigOptionValue[]} options @param {string} current */
     const withMode = (options, current) => ({
       ...DRAFT,
       configOptions: [{ id: 'mode', name: 'Mode', category: 'mode', type: /** @type {const} */ ('select'), currentValue: current, options }],

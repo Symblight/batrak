@@ -13,10 +13,10 @@ import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
 import { composer } from '../../hooks/composer/composer.js';
 import styles from './run-target.css?inline';
 
-/** @typedef {import('../../models/types/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
-/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../models/types/types.js').LocalTurns} LocalTurns */
+/** @typedef {import('../../hooks/composer/types.js').RunTargetKind} RunTargetKind */
+/** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/projects/types.js').LocalTurns} LocalTurns */
 
 /** @type {readonly { kind: RunTargetKind, label: string, description: string, icon: string, disabled?: boolean }[]} */
 const KINDS = [

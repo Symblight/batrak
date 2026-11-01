@@ -67,16 +67,16 @@ import '../../components/tab-view/tab-view.js';
 import { AcpTerminal } from '../../components/terminal/terminal.js';
 import '../../components/comment-bar/comment-bar.js';
 
-/** @typedef {import('../../models/types/types.js').RevealAt} RevealAt */
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
-/** @typedef {import('../../models/types/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
-/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
-/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+/** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
+/** @typedef {import('../../hooks/agents/types.js').NewAgent} NewAgent */
+/** @typedef {import('../../hooks/settings/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../hooks/agents/types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
+/** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 /** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
 /** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
 /** @typedef {Parameters<typeof addComment>[1]} CommentDraft */

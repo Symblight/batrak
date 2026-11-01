@@ -5,7 +5,7 @@ import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } 
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
 
-/** @typedef {import('../../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../types.js').GitFileStatus} GitFileStatus */
 
 /** @type {{ cmd: string, args: Record<string, any> }[]} */
 let calls;

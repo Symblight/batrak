@@ -4,7 +4,7 @@ import { expect } from '@esm-bundle/chai';
 import { $projects } from '../../../stores/projects/projects.js';
 import { $openingPath, $workspace } from '../../../stores/workspace/workspace.js';
 
-/** @typedef {import('../../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
 let calls;

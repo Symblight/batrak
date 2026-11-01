@@ -8,7 +8,7 @@ import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
 import '../file-icon/file-icon.js';
 import styles from './file-tree.css?inline';
 
-/** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../hooks/projects/types.js').WorkspaceEntry} WorkspaceEntry */
 /** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean, path?: string }} TreeItem `path`: the root row's folder. */
 /** @typedef {(rootId: string, rel: string) => Promise<WorkspaceEntry[]>} ListDir A folder's entries; `''` is the root. */
 

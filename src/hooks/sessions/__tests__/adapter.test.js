@@ -19,7 +19,7 @@ describe('acp-adapter', () => {
       const id = 'replayed';
       let seq = 0;
       const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
-        handleSessionEvent(/** @type {import('../../../models/types/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+        handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
       const load = () => {
         send('status', { status: 'starting' });
         send('update', { sessionUpdate: 'user_message_chunk', content: { type: 'text', text: 'From a terminal' } });
@@ -46,7 +46,7 @@ describe('acp-adapter', () => {
       const id = 'forgotten';
       let seq = 0;
       const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
-        handleSessionEvent(/** @type {import('../../../models/types/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+        handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
       const load = () => {
         send('status', { status: 'starting' });
         send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'Hello' } });
@@ -71,7 +71,7 @@ describe('acp-adapter', () => {
   it('takes the session the agent named as the backend reports it', () => {
     const id = newSession('/p');
     startSession(id, { title: 'Analyze the tree', agentId: 'a', config: {}, mode: 'local' });
-    /** @type {import('../../../models/types/types.js').Session} */
+    /** @type {import('../types.js').Session} */
     const named = { ...$sessions.get()[0], title: 'Tree view gaps', titleSource: 'agent', agentTitle: 'Tree view gaps' };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'session', payload: named });
     expect($sessions.get()[0]).to.include({ title: 'Tree view gaps', titleSource: 'agent', agentTitle: 'Tree view gaps' });
@@ -190,7 +190,7 @@ describe('acp-adapter', () => {
   });
 
   describe('signing in', () => {
-    /** @type {import('../../../models/types/types.js').SignInMethod[]} */
+    /** @type {import('../../agents/types.js').SignInMethod[]} */
     const methods = [{ id: 'browser', name: 'Log in', description: null, kind: 'agent', label: null, apiKey: null }];
 
     it('shows the agent asking to sign in until a start works', () => {
@@ -236,7 +236,7 @@ describe('acp-adapter', () => {
         const text = (/** @type {string} */ t) => ({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: t } });
         let seq = 0;
         const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
-          handleSessionEvent(/** @type {import('../../../models/types/types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+          handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
         send('turn-start', {});
         send('held', { prompt: [{ type: 'text', text: 'hello' }] });
         send('status', { status: 'starting' });

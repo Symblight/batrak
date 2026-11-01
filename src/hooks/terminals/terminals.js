@@ -15,12 +15,12 @@ import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
 import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from './rules.js';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').TerminalBusy} TerminalBusy */
-/** @typedef {import('../../models/types/types.js').TerminalConnect} TerminalConnect */
-/** @typedef {import('../../models/types/types.js').TerminalExit} TerminalExit */
-/** @typedef {import('../../models/types/types.js').TerminalOpened} TerminalOpened */
-/** @typedef {import('../../models/types/types.js').TerminalSink} TerminalSink */
+/** @typedef {import('../sessions/types.js').Session} Session */
+/** @typedef {import('./types.js').TerminalBusy} TerminalBusy */
+/** @typedef {import('./types.js').TerminalConnect} TerminalConnect */
+/** @typedef {import('./types.js').TerminalExit} TerminalExit */
+/** @typedef {import('./types.js').TerminalOpened} TerminalOpened */
+/** @typedef {import('./types.js').TerminalSink} TerminalSink */
 /** @typedef {import('./rules.js').TerminalFolder} TerminalFolder */
 
 /**

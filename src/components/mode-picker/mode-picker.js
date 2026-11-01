@@ -14,10 +14,10 @@ import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import { composer } from '../../hooks/composer/composer.js';
 import styles from './mode-picker.css?inline';
 
-/** @typedef {import('../../models/types/types.js').ConfigOptionValue} ConfigOptionValue */
-/** @typedef {import('../../models/types/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../hooks/composer/types.js').ConfigOptionValue} ConfigOptionValue */
+/** @typedef {import('../../hooks/composer/types.js').ConfigOption} ConfigOption */
 
-/** @typedef {import('../../models/types/types.js').ModeRisk} ModeRisk */
+/** @typedef {import('../../hooks/composer/types.js').ModeRisk} ModeRisk */
 
 /** Each risk's icon; a value its agent's crate didn't tag gets the shield. */
 const RISK_ICONS = { plan: checklistIcon, neutral: handIcon, agent: boltIcon, full: warningIcon };

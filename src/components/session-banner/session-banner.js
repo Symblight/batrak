@@ -5,10 +5,10 @@ import '@symblight/wc-material/tooltip';
 import { agents } from '../../hooks/agents/agents.js';
 import styles from './session-banner.css?inline';
 
-/** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
-/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
-/** @typedef {import('../../models/types/types.js').SessionSignIn} SessionSignIn */
-/** @typedef {import('../../models/types/types.js').SignInRun} SignInRun */
+/** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../hooks/agents/types.js').SessionSignIn} SessionSignIn */
+/** @typedef {import('../../hooks/agents/types.js').SignInRun} SignInRun */
 /** @typedef {'open-log' | 'restart' | 'turn-on-agent' | 'dismiss-notice' | 'open-terminal' | 'show-login'} SessionAction */
 
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */

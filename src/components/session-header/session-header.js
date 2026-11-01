@@ -14,8 +14,8 @@ import '../session-menu/session-menu.js';
 import '../session-status/session-status.js';
 import styles from './session-header.css?inline';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 
 /**
  * @tag acp-session-header

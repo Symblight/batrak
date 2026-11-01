@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../tab-strip.js';
 
-/** @typedef {import('../../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
 /**
  * @param {string} path
@@ -27,7 +27,7 @@ const fileTab = (path) => ({
  */
 const terminalTab = (terminalId) => ({ ...fileTab(''), id: `view:terminal:${terminalId}`, kind: 'terminal' });
 
-/** @type {import('../../../models/types/types.js').TerminalInfo} */
+/** @type {import('../../../hooks/terminals/types.js').TerminalInfo} */
 const terminalInfo = {
   cwd: '/p',
   fallback: '/p',

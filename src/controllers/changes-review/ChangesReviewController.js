@@ -7,10 +7,10 @@ import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /**
  * Whether two status entries of one file describe the same change.

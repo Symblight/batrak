@@ -48,9 +48,9 @@ describe('acp-session-banner', () => {
   });
 
   describe('sign-in', () => {
-    /** @param {Partial<import('../../../models/types/types.js').SignInMethod> & { id: string, name: string }} method */
+    /** @param {Partial<import('../../../hooks/agents/types.js').SignInMethod> & { id: string, name: string }} method */
     const method = (method) => ({ description: null, kind: /** @type {const} */ ('agent'), label: null, apiKey: null, ...method });
-    /** @param {import('../../../models/types/types.js').SignInMethod[]} methods */
+    /** @param {import('../../../hooks/agents/types.js').SignInMethod[]} methods */
     const notice = (methods) => ({
       kind: /** @type {const} */ ('sign-in'),
       message: 'Sign in to Codex to continue.',

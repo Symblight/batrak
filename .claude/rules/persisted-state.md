@@ -45,4 +45,4 @@ paths:
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
-  `src/models/types/types.js`.
+  `src/hooks/settings/types.js`.

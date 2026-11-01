@@ -7,8 +7,8 @@ import { $terminals, addSessionTerminal, forgetTerminal, openLoginTerminal, open
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { tabs } from '../../tabs/tabs.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
-/** @typedef {import('../../../models/types/types.js').TerminalSink} TerminalSink */
+/** @typedef {import('../../sessions/types.js').Session} Session */
+/** @typedef {import('../types.js').TerminalSink} TerminalSink */
 
 /** @type {{ cmd: string, args: any, headers?: Record<string, string> }[]} */
 let calls;

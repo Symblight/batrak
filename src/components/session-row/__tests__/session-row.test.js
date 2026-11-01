@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../session-row.js';
 
 /** @typedef {import('../session-row.js').AcpSessionRow} AcpSessionRow */
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @param {Partial<Session>} [fields]

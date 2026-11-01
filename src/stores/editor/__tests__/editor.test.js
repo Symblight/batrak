@@ -38,7 +38,7 @@ describe('editor', () => {
 
     agentsRevealed({ add: true });
     expect($agentsReveal.get(), 'an equal but newer request stays').to.equal(reveal);
-    agentsRevealed(/** @type {import('../../../models/types/types.js').AgentsReveal} */ (reveal));
+    agentsRevealed(/** @type {import('../../../hooks/agents/types.js').AgentsReveal} */ (reveal));
     expect($agentsReveal.get()).to.equal(null);
 
     openAgents();
@@ -54,7 +54,7 @@ describe('editor', () => {
 
     settingsRevealed({ section: 'editor' });
     expect($settingsReveal.get(), 'an equal but newer request stays').to.equal(reveal);
-    settingsRevealed(/** @type {import('../../../models/types/types.js').SettingsReveal} */ (reveal));
+    settingsRevealed(/** @type {import('../../../hooks/settings/types.js').SettingsReveal} */ (reveal));
     expect($settingsReveal.get()).to.equal(null);
   });
 

@@ -20,12 +20,12 @@ import { EditorCommentsController } from '../../controllers/comments/EditorComme
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './changes-review.css?inline';
 
-/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 
 /** @typedef {import('../../hooks/git/changes.js').ChangeRow} ChangeRow */
 

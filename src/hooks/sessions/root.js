@@ -4,9 +4,9 @@ import { openSessionRoot } from './commands.js';
 import { $activeSession, $sessions } from '../../stores/sessions/sessions.js';
 import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSessionRoot } from '../../stores/session-root/session-root.js';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').SessionRoot} SessionRoot */
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('./types.js').SessionRoot} SessionRoot */
+/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /**
  * Worktree sessions whose folder stays open (scan + watcher), the shown one included, like

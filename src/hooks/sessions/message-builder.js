@@ -6,7 +6,7 @@ import { folderOf } from '../../stores/sessions/sessions.js';
 /** @typedef {ChxMessage['parts'][number]} ChxMessagePart */
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['subscribe']>>[0]} SubscribeHandlers */
 /** @typedef {Parameters<SubscribeHandlers['onChunk']>[0]} ChxChunk */
-/** @typedef {import('../../models/types/types.js').AcpSessionUpdate} AcpSessionUpdate */
+/** @typedef {import('./types.js').AcpSessionUpdate} AcpSessionUpdate */
 
 /**
  * Turns ACP session updates into `<chx-chat>` chunks for one message. Consecutive text (or thought)

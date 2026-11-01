@@ -9,8 +9,8 @@ import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import { agents } from '../../hooks/agents/agents.js';
 import styles from './agent-form.css?inline';
 
-/** @typedef {import('../../models/types/types.js').KnownAgent} KnownAgent */
-/** @typedef {import('../../models/types/types.js').NewAgent} NewAgent */
+/** @typedef {import('../../hooks/agents/types.js').KnownAgent} KnownAgent */
+/** @typedef {import('../../hooks/agents/types.js').NewAgent} NewAgent */
 
 /**
  * An agent the form edits: what it's called and runs.

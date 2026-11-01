@@ -1,8 +1,8 @@
 import { atom, computed } from 'nanostores';
 import { $activeSessionId } from '../sessions/sessions.js';
 
-/** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
-/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 
 /** Permission requests waiting for the user, by session id, oldest first. Written by the ACP adapter. */
 export const $permissionRequests = atom(/** @type {Readonly<Record<string, readonly PermissionRequest[]>>} */ ({}));

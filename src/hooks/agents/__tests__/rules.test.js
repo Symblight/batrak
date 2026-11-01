@@ -1,8 +1,8 @@
 import { expect } from '@esm-bundle/chai';
 import { agentBrandOf, commandLine, isAgentsFile, isUserAgentsFile, ownSignIns, parseCommandLine, signInAfterAdd, trustConfirm } from '../rules.js';
 
-/** @typedef {import('../../../models/types/types.js').SignInMethod} SignInMethod */
-/** @typedef {import('../../../models/types/types.js').UntrustedAgent} UntrustedAgent */
+/** @typedef {import('../types.js').SignInMethod} SignInMethod */
+/** @typedef {import('../types.js').UntrustedAgent} UntrustedAgent */
 
 /**
  * @param {string} id

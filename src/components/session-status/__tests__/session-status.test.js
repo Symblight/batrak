@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../session-status.js';
 
 /** @typedef {import('../session-status.js').AcpSessionStatus} AcpSessionStatus */
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
 
 const NOW = Date.parse('2026-10-23T13:00:00.000Z');
 const SOON = '2026-10-23T13:01:00.000Z';

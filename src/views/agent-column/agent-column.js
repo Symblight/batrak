@@ -34,9 +34,9 @@ import { $activeShownView, $activeView } from '../../stores/session-views/sessio
 import { $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace/workspace.js';
 
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
-/** @typedef {import('../../models/types/types.js').SessionView} SessionView */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
+/** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 /** @typedef {import('../../components/session-banner/session-banner.js').SessionAction} SessionAction */
 
 /**

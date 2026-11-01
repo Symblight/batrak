@@ -2,9 +2,9 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../session-sync.js';
 
 /** @typedef {import('../session-sync.js').AcpSessionSync} AcpSessionSync */
-/** @typedef {import('../../../models/types/types.js').SessionSync} SessionSync */
+/** @typedef {import('../../../hooks/sessions/types.js').SessionSync} SessionSync */
 
-/** @type {import('../../../models/types/types.js').SyncReport} */
+/** @type {import('../../../hooks/sessions/types.js').SyncReport} */
 const REPORT = {
   projectPath: '/p',
   startedAt: new Date().toISOString(),

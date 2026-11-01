@@ -21,12 +21,12 @@ import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
 import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
 import styles from './settings.css?inline';
 
-/** @typedef {import('../../models/types/types.js').Appearance} Appearance */
-/** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
+/** @typedef {import('../../hooks/settings/types.js').FontFamily} FontFamily */
+/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
 /** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
-/** @typedef {import('../../models/types/types.js').SettingsAnchor} SettingsAnchor */
-/** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../hooks/settings/types.js').SettingsAnchor} SettingsAnchor */
+/** @typedef {import('../../hooks/settings/types.js').SettingsReveal} SettingsReveal */
 
 /** @type {{ id: SettingsAnchor, label: string, icon: string }[]} The sections, top to bottom. */
 const SECTIONS = [

@@ -2,8 +2,8 @@ import { chat } from '../chat/chat.js';
 import { relPath } from '../projects/rules.js';
 import { inputOfInserts, linesOf } from './input-parts.js';
 
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types/types.js').InputPart} InputPart */
+/** @typedef {import('../chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../chat/types.js').InputPart} InputPart */
 
 /**
  * A session's input as text for its agent's CLI, which shows no chips: refs as `@path` (a folder

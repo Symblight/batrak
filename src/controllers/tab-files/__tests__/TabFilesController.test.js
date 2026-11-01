@@ -6,7 +6,7 @@ import { TabFilesController } from '../TabFilesController.js';
 import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
-/** @typedef {import('../../../models/types/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
 class FilesHost extends LitElement {
   files = new TabFilesController(this);

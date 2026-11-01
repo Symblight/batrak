@@ -1,7 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../snackbars.js';
 
-/** @typedef {import('../../../models/types/types.js').Notice} Notice */
+/** @typedef {import('../../../hooks/app/types.js').Notice} Notice */
 
 describe('acp-snackbars', () => {
   it('offers a notice’s action and reports the click', async () => {

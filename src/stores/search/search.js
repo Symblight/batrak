@@ -1,8 +1,8 @@
 import { isRecord, persistentMapStore, persistentStore } from '../persistent/persistent.js';
 
-/** @typedef {import('../../models/types/types.js').SearchDialogPrefs} SearchDialogPrefs */
-/** @typedef {import('../../models/types/types.js').SearchDialogState} SearchDialogState */
-/** @typedef {import('../../models/types/types.js').ProjectSearchState} ProjectSearchState */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogPrefs} SearchDialogPrefs */
+/** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../hooks/search/types.js').ProjectSearchState} ProjectSearchState */
 
 const MAX_RECENT = 10;
 const MIN_SPLIT = 20;

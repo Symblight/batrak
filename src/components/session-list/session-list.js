@@ -23,8 +23,8 @@ import styles from './session-list.css?inline';
 
 const { SESSIONS_PAGE, orderSessions, visibleSessions } = sessions;
 
-/** @typedef {import('../../models/types/types.js').Project} Project */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/projects/types.js').Project} Project */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @tag acp-session-list
@@ -99,7 +99,7 @@ export class AcpSessionList extends LitElement {
     this.waiting = [];
     /** @type {Readonly<Record<string, string>>} Why a project's folder couldn't be opened, by project id. */
     this.failures = {};
-    /** @type {import('../../models/types/types.js').SessionSync | null} The active project's sync with its agents. */
+    /** @type {import('../../hooks/sessions/types.js').SessionSync | null} The active project's sync with its agents. */
     this.sync = null;
     /** @type {readonly string[]} Projects whose sessions are loading; one with none to show yet shows skeleton rows. */
     this.loading = [];

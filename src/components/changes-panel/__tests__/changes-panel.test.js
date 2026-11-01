@@ -2,7 +2,7 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../changes-panel.js';
 
 /** @typedef {import('../changes-panel.js').AcpChangesPanel} AcpChangesPanel */
-/** @typedef {import('../../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 
 /**
  * @param {string} path

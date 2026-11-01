@@ -7,7 +7,7 @@ import { $awaitingTrust, $trustPrompt } from '../../../stores/trust/trust.js';
 import { $draftSessions } from '../../../stores/sessions/sessions.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 
-/** @typedef {import('../../../models/types/types.js').UntrustedAgent} UntrustedAgent */
+/** @typedef {import('../types.js').UntrustedAgent} UntrustedAgent */
 
 /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
 let calls;

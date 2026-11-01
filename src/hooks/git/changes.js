@@ -1,5 +1,5 @@
-/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types/types.js').GitFileKind} GitFileKind */
+/** @typedef {import('./types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('./types.js').GitFileKind} GitFileKind */
 /** @typedef {'changes' | 'untracked'} ChangeGroup */
 
 /**

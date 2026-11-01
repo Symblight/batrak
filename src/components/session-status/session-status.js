@@ -10,8 +10,8 @@ import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import styles from './session-status.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SessionIndicator} SessionIndicator */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').SessionIndicator} SessionIndicator */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 const ICONS = { permission: permissionIcon, error: errorIcon, queued: queuedIcon, terminal: terminalIcon };
 

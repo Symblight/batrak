@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../toolbar.js';
 
-/** @typedef {import('../../../models/types/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../../hooks/git/types.js').GitRepoView} GitRepoView */
 
 /** @type {GitRepoView} */
 const GIT = {

@@ -1,8 +1,8 @@
 import { atom } from 'nanostores';
 
-/** @typedef {import('../../models/types/types.js').Notice} Notice */
-/** @typedef {import('../../models/types/types.js').NoticeLevel} NoticeLevel */
-/** @typedef {import('../../models/types/types.js').NoticeAction} NoticeAction */
+/** @typedef {import('../../hooks/app/types.js').Notice} Notice */
+/** @typedef {import('../../hooks/app/types.js').NoticeLevel} NoticeLevel */
+/** @typedef {import('../../hooks/app/types.js').NoticeAction} NoticeAction */
 
 /** Shown at once; a newer notice pushes out the oldest. */
 const MAX_NOTICES = 4;

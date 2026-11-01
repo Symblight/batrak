@@ -23,15 +23,15 @@ import '../session-banner/session-banner.js';
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('../../controllers/file-mentions/chips.js').ComposerTextbox} ComposerTextbox */
 /** @typedef {import('../../controllers/file-mentions/chips.js').PmSchema} PmSchema */
-/** @typedef {import('../../models/types/types.js').ContextUsage} ContextUsage */
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types/types.js').ChatFile} ChatFile */
-/** @typedef {import('../../models/types/types.js').CatalogAgent} CatalogAgent */
-/** @typedef {import('../../models/types/types.js').AgentInfo} AgentInfo */
-/** @typedef {import('../../models/types/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../models/types/types.js').PermissionRequest} PermissionRequest */
-/** @typedef {import('../../models/types/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../hooks/sessions/types.js').ContextUsage} ContextUsage */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../hooks/chat/types.js').ChatFile} ChatFile */
+/** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
+/** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
+/** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
+/** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
@@ -108,7 +108,7 @@ export class AcpChat extends LitElement {
     this.agents = [];
     /** @type {AgentInfo | null} */
     this.agent = null;
-    /** @type {import('../../models/types/types.js').AgentOptionsStatus | null} */
+    /** @type {import('../../hooks/agents/types.js').AgentOptionsStatus | null} */
     this.optionsStatus = null;
     /** @type {readonly string[]} */
     this.branches = [];
@@ -116,13 +116,13 @@ export class AcpChat extends LitElement {
     this.currentBranch = null;
     /** @type {number} Other local sessions of the project with a running agent, for the run target. */
     this.localShared = 0;
-    /** @type {import('../../models/types/types.js').LocalTurns} */
+    /** @type {import('../../hooks/projects/types.js').LocalTurns} */
     this.localTurns = 'queue';
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
     this.notice = null;
-    /** @type {import('../../models/types/types.js').SignInRun | null} The sign-in of the notice's agent. */
+    /** @type {import('../../hooks/agents/types.js').SignInRun | null} The sign-in of the notice's agent. */
     this.signInRun = null;
     /** @type {boolean} */
     this.dropping = false;

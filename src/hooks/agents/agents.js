@@ -18,13 +18,13 @@ import {
 } from './rules.js';
 import { dismissTrust, startTrust, trust, trustOnChanged } from './trust.js';
 
-/** @typedef {import('../../models/types/types.js').NewAgent} NewAgent */
-/** @typedef {import('../../models/types/types.js').AgentList} AgentList */
-/** @typedef {import('../../models/types/types.js').AgentsQuery} AgentsQuery */
-/** @typedef {import('../../models/types/types.js').AgentsView} AgentsView */
-/** @typedef {import('../../models/types/types.js').ProbedOptions} ProbedOptions */
-/** @typedef {import('../../models/types/types.js').LoginTab} LoginTab */
-/** @typedef {import('../../models/types/types.js').SignInEvent} SignInEvent */
+/** @typedef {import('./types.js').NewAgent} NewAgent */
+/** @typedef {import('./types.js').AgentList} AgentList */
+/** @typedef {import('./types.js').AgentsQuery} AgentsQuery */
+/** @typedef {import('./types.js').AgentsView} AgentsView */
+/** @typedef {import('./types.js').ProbedOptions} ProbedOptions */
+/** @typedef {import('./types.js').LoginTab} LoginTab */
+/** @typedef {import('./types.js').SignInEvent} SignInEvent */
 /** @typedef {import('./rules.js').AgentBrand} AgentBrand */
 
 /** How long a removed agent's Undo stays offered, in ms. */

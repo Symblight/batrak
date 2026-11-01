@@ -1,5 +1,5 @@
-/** @typedef {import('../../models/types/types.js').Appearance} Appearance */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
+/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
 
 /** Bounds of the code editor's font size, in px. */
 export const FONT_SIZE_MIN = 10;

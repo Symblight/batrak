@@ -38,11 +38,11 @@ import { $workspacePath, setWorkspaceSettings } from '../../stores/workspace/wor
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('./types.js').Session} Session */
 
 /**
  * A session's event; one asking to sign in (or done waiting) changes what the picker says of its agent.
- * @param {import('../../models/types/types.js').SessionEnvelope} event
+ * @param {import('./types.js').SessionEnvelope} event
  */
 function onSessionEvent(event) {
   handleSessionEvent(event);

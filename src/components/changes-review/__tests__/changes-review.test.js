@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../changes-review.js';
 
-/** @typedef {import('../../../models/types/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 
 /** @type {GitFileStatus} */
 const RENAMED = { path: 'src/b.js', kind: 'renamed', staged: false, unstaged: true, origPath: 'src/a.js', added: 1, removed: 0 };
@@ -13,9 +13,9 @@ const FILES = [
   { path: 'new.txt', kind: 'untracked', staged: false, unstaged: true, origPath: null, added: null, removed: null },
 ];
 const CHANGES = { files: FILES, loaded: true, loading: false, error: null };
-/** @type {import('../../../models/types/types.js').GitRepoView} */
+/** @type {import('../../../hooks/git/types.js').GitRepoView} */
 const REPO = { repo: { branch: 'main', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0 }, error: null };
-/** @type {import('../../../models/types/types.js').FileDiff} */
+/** @type {import('../../../hooks/tabs/types.js').FileDiff} */
 const DIFF = { content: 'new', baseline: 'old', loading: false, error: '' };
 
 /** @param {Partial<HTMLElementTagNameMap['acp-changes-review']>} [props] */

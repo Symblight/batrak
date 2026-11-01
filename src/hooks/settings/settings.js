@@ -5,8 +5,8 @@ import { DEFAULT_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS, norm
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('./types.js').FontFamily} FontFamily */
+/** @typedef {import('./types.js').Settings} Settings */
 /** @typedef {import('../../stores/settings/rules.js').SettingsSection} SettingsSection */
 
 /** The editor's font when none is picked: first in `--acp-font-family-mono`, bundled in `styles/fonts/`. */

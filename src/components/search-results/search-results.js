@@ -9,8 +9,8 @@ import collapsedIcon from '@material-design-icons/svg/outlined/chevron_right.svg
 import '../file-icon/file-icon.js';
 import styles from './search-results.css?inline';
 
-/** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../models/types/types.js').SearchMatchRow} SearchMatchRow */
+/** @typedef {import('../../hooks/search/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../hooks/search/types.js').SearchMatchRow} SearchMatchRow */
 /** @typedef {{ kind: 'file', key: string, path: string, count: number } | { kind: 'row', key: string, row: SearchMatchRow }} Item */
 
 /** @param {string} path */

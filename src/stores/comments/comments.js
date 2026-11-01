@@ -6,9 +6,9 @@ import { addToChat } from '../chat/chat.js';
 
 /** @typedef {import('@symblight/code-editor').CdxCommentAuthor} CdxCommentAuthor */
 /** @typedef {NonNullable<import('@symblight/code-editor').CdxThread['range']>} CdxCommentRange */
-/** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
-/** @typedef {import('../../models/types/types.js').QueuedComment} QueuedComment */
-/** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
+/** @typedef {import('../../hooks/comments/types.js').QueuedComment} QueuedComment */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 
 /** @type {readonly AgentThread[]} One array for every file without comments, so editors see no change. */
 const NONE = Object.freeze([]);

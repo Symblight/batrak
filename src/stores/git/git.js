@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 
-/** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };

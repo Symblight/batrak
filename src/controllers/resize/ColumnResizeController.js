@@ -2,7 +2,7 @@ import { StoreController } from '../store/StoreController.js';
 
 /** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeEventDetail} ResizeEventDetail */
 /** @typedef {import('../../components/resize-handle/resize-handle.js').ResizeMeasure} ResizeMeasure */
-/** @typedef {import('../../models/types/types.js').ColumnWidths} ColumnWidths */
+/** @typedef {import('../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
 
 /**
  * One resizable column.

@@ -5,11 +5,11 @@ import { $workspace } from '../workspace/workspace.js';
 import { isUserAgentsFile } from '../agents/rules.js';
 import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
 
-/** @typedef {import('../../models/types/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../models/types/types.js').SettingsReveal} SettingsReveal */
-/** @typedef {import('../../models/types/types.js').AgentsReveal} AgentsReveal */
-/** @typedef {import('../../models/types/types.js').TabKind} TabKind */
-/** @typedef {import('../../models/types/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../../hooks/settings/types.js').SettingsReveal} SettingsReveal */
+/** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
+/** @typedef {import('../../hooks/tabs/types.js').TabKind} TabKind */
+/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 
 /** Id of the Settings tab. */
 export const SETTINGS_TAB_ID = 'view:settings';

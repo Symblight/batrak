@@ -1,7 +1,7 @@
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('../../models/types/types.js').WorkspaceEntry} WorkspaceEntry */
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /** The Rust commands about files and folders of open roots. */
 

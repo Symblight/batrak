@@ -2,8 +2,8 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../search-dialog.js';
 
 /** @typedef {import('../search-dialog.js').AcpSearchDialog} AcpSearchDialog */
-/** @typedef {import('../../../models/types/types.js').SearchFileResult} SearchFileResult */
-/** @typedef {import('../../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../../hooks/search/types.js').SearchFileResult} SearchFileResult */
+/** @typedef {import('../../../hooks/search/types.js').SearchDialogState} SearchDialogState */
 
 /** @type {SearchDialogState} */
 const STATE = { query: 'last', caseSensitive: false, wholeWord: true, regex: false, folder: 'src', mask: '*.ts' };

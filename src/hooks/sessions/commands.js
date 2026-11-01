@@ -1,15 +1,15 @@
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('../../models/types/types.js').Session} Session */
-/** @typedef {import('../../models/types/types.js').OpenedRoot} OpenedRoot */
-/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types/types.js').ApplyResult} ApplyResult */
-/** @typedef {import('../../models/types/types.js').SessionEnvelope} SessionEnvelope */
-/** @typedef {import('../../models/types/types.js').PromptInput} PromptInput */
-/** @typedef {import('../../models/types/types.js').SyncReport} SyncReport */
-/** @typedef {import('../../models/types/types.js').SessionsSynced} SessionsSynced */
-/** @typedef {import('../../models/types/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../../models/types/types.js').WorkspaceSettings} WorkspaceSettings */
+/** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('../projects/types.js').OpenedRoot} OpenedRoot */
+/** @typedef {import('../git/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('./types.js').ApplyResult} ApplyResult */
+/** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
+/** @typedef {import('./types.js').PromptInput} PromptInput */
+/** @typedef {import('./types.js').SyncReport} SyncReport */
+/** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
+/** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
+/** @typedef {import('../projects/types.js').WorkspaceSettings} WorkspaceSettings */
 
 /** The Rust commands of sessions, their folders and the project's workspace settings. */
 
@@ -165,7 +165,7 @@ export function sessionRestart(sessionId) {
  * @typedef {Object} CliDraft
  * @property {string} projectPath
  * @property {string} agentId
- * @property {import('../../models/types/types.js').RunTargetKind} mode
+ * @property {import('../composer/types.js').RunTargetKind} mode
  * @property {string} title
  * @property {Record<string, string>} [config]
  * @property {string | null} [baseBranch]

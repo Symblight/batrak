@@ -10,7 +10,7 @@ import { AcpTerminal } from '../../components/terminal/terminal.js';
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} SessionInputHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('../../components/chat/chat.js').AcpChat} AcpChat */
-/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
+/** @typedef {import('../../hooks/file-drop/types.js').FileDrop} FileDrop */
 
 /**
  * @typedef {Object} SessionInputConfig

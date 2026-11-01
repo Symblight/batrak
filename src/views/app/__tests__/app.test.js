@@ -6,7 +6,7 @@ import { $workspace } from '../../../stores/workspace/workspace.js';
 import '../app.js';
 
 /** @typedef {import('../app.js').AcpApp} AcpApp */
-/** @typedef {import('../../../models/types/types.js').SearchDialogState} SearchDialogState */
+/** @typedef {import('../../../hooks/search/types.js').SearchDialogState} SearchDialogState */
 
 /** @type {SearchDialogState} */
 const STATE = { query: 'needle', caseSensitive: true, wholeWord: false, regex: false, folder: 'src', mask: '*.ts' };

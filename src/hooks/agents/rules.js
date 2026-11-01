@@ -1,7 +1,7 @@
 export { isAgentsFile, isUserAgentsFile } from '../../stores/agents/rules.js';
 
-/** @typedef {import('../../models/types/types.js').ConfirmOptions} ConfirmOptions */
-/** @typedef {import('../../models/types/types.js').TrustPrompt} TrustPrompt */
+/** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
+/** @typedef {import('./types.js').TrustPrompt} TrustPrompt */
 /** @typedef {'claude' | 'codex' | 'copilot' | 'antigravity'} AgentBrand */
 
 /** @type {readonly [RegExp, AgentBrand][]} */
@@ -84,7 +84,7 @@ export function parseCommandLine(line) {
 /**
  * The ways to sign in from the app: the agent's own (`authenticate`) and logins run in a terminal.
  * An API key is set in the agent's environment instead.
- * @param {readonly import('../../models/types/types.js').SignInMethod[]} methods
+ * @param {readonly import('./types.js').SignInMethod[]} methods
  */
 export function ownSignIns(methods) {
   return methods.filter((m) => m.apiKey === null);
@@ -93,7 +93,7 @@ export function ownSignIns(methods) {
 /**
  * How to sign in to an agent just added, from its probe: `null` when it needs no sign-in; else its
  * only method, or `methodId: null` when its row has to offer the choice (or only Retry).
- * @param {import('../../models/types/types.js').ProbedOptions} probed
+ * @param {import('./types.js').ProbedOptions} probed
  * @returns {{ methodId: string | null } | null}
  */
 export function signInAfterAdd(probed) {

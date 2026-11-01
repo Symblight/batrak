@@ -5,7 +5,7 @@ import { buildBrowseItem, buildEntryItem, fileChipAttrs } from './chips.js';
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} FileMentionsHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {Parameters<ChxCommandPicker['resolve']>[0]} MenuItemElement */
-/** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
+/** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 
 /**
  * @typedef {Object} FileMentionsConfig

@@ -3,8 +3,8 @@ import { projects } from '../projects/projects.js';
 import { inputOfMessage, linesOf } from './input-parts.js';
 
 /** @typedef {import('./message-builder.js').ChxMessage} ChxMessage */
-/** @typedef {import('../../models/types/types.js').PromptInput} PromptInput */
-/** @typedef {import('../../models/types/types.js').InputPart} InputPart */
+/** @typedef {import('./types.js').PromptInput} PromptInput */
+/** @typedef {import('../chat/types.js').InputPart} InputPart */
 
 /**
  * A session's input as an ACP prompt: its text with refs written inline (`@path`, `@folder/`,

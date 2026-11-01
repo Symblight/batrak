@@ -3,7 +3,7 @@ import { expect } from '@esm-bundle/chai';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { fileDrop } from '../file-drop.js';
 
-/** @typedef {import('../../../models/types/types.js').FileDrop} FileDrop */
+/** @typedef {import('../types.js').FileDrop} FileDrop */
 
 /**
  * The center of `el`, in the units the webview's drag events use on this platform.

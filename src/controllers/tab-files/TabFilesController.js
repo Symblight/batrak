@@ -12,10 +12,10 @@ import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types/types.js').Session} Session */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /** @param {string} path */
 function basename(path) {

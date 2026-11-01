@@ -1,9 +1,9 @@
 import { splitMessageParts } from '@symblight/chat';
 import { chat } from '../chat/chat.js';
 
-/** @typedef {import('../../models/types/types.js').ChatInsert} ChatInsert */
-/** @typedef {import('../../models/types/types.js').InputPart} InputPart */
-/** @typedef {import('../../models/types/types.js').SessionInput} SessionInput */
+/** @typedef {import('../chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../chat/types.js').InputPart} InputPart */
+/** @typedef {import('../chat/types.js').SessionInput} SessionInput */
 /** @typedef {NonNullable<import('@symblight/chat').ChxChat['adapter']>} ChxChatAdapter */
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['sendMessage']>>[0]} ChxMessage */
 /** @typedef {ChxMessage['parts'][number]} ChxMessagePart */

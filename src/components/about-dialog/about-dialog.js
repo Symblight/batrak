@@ -7,7 +7,7 @@ import '@symblight/wc-material/icon';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import styles from './about-dialog.css?inline';
 
-/** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
+/** @typedef {import('../../hooks/settings/types.js').AboutInfo} AboutInfo */
 
 /**
  * @tag acp-about-dialog

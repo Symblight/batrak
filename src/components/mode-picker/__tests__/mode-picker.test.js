@@ -1,7 +1,7 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../mode-picker.js';
 
-/** @typedef {import('../../../models/types/types.js').ConfigOption} ConfigOption */
+/** @typedef {import('../../../hooks/composer/types.js').ConfigOption} ConfigOption */
 
 /** @type {ConfigOption[]} */
 const OPTIONS = [

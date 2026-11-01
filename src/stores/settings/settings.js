@@ -2,8 +2,8 @@ import { computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from './rules.js';
 
-/** @typedef {import('../../models/types/types.js').Appearance} Appearance */
-/** @typedef {import('../../models/types/types.js').Settings} Settings */
+/** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
+/** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
 
 /** @type {Appearance[]} */
 const APPEARANCES = ['light', 'dark', 'system'];

@@ -3,7 +3,7 @@ import '../context-meter.js';
 
 /** @typedef {import('../context-meter.js').AcpContextMeter} AcpContextMeter */
 
-/** @param {import('../../../models/types/types.js').ContextUsage | null} usage */
+/** @param {import('../../../hooks/sessions/types.js').ContextUsage | null} usage */
 async function render(usage) {
   const el = /** @type {AcpContextMeter} */ (await fixture(html`<acp-context-meter .usage=${usage}></acp-context-meter>`));
   const root = /** @type {ShadowRoot} */ (el.shadowRoot);
@@ -31,7 +31,7 @@ describe('acp-context-meter', () => {
   });
 
   it('never shows the session cost', async () => {
-    const usage = /** @type {import('../../../models/types/types.js').ContextUsage} */ ({ used: 1000, size: 200000, cost: { amount: 0.04, currency: 'USD' } });
+    const usage = /** @type {import('../../../hooks/sessions/types.js').ContextUsage} */ ({ used: 1000, size: 200000, cost: { amount: 0.04, currency: 'USD' } });
     const { root } = await render(usage);
     expect(root.querySelector('.acp-context-meter__popover')?.textContent).to.not.match(/cost|\$0\.04|US\$/i);
   });

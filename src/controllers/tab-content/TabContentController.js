@@ -1,5 +1,5 @@
-/** @typedef {import('../../models/types/types.js').TabKind} TabKind */
-/** @typedef {import('../../models/types/types.js').ContentKind} ContentKind */
+/** @typedef {import('../../hooks/tabs/types.js').TabKind} TabKind */
+/** @typedef {import('../../hooks/tabs/types.js').ContentKind} ContentKind */
 
 /**
  * What a tab points at, as `parseTabId()` returns it.

@@ -11,7 +11,7 @@ import '../main-column.js';
 
 /** @typedef {import('../main-column.js').AcpMainColumn} AcpMainColumn */
 /** @typedef {import('../../../components/terminal/terminal.js').AcpTerminal} AcpTerminal */
-/** @typedef {import('../../../models/types/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
 /**
  * The center of `el`, in the units the webview's drag events use on this platform.

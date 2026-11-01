@@ -2,8 +2,8 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../terminal.js';
 
 /** @typedef {import('../terminal.js').AcpTerminal} AcpTerminal */
-/** @typedef {import('../../../models/types/types.js').TerminalInfo} TerminalInfo */
-/** @typedef {import('../../../models/types/types.js').TerminalSink} TerminalSink */
+/** @typedef {import('../../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
+/** @typedef {import('../../../hooks/terminals/types.js').TerminalSink} TerminalSink */
 
 /** @param {() => boolean} done */
 async function until(done) {
@@ -32,7 +32,7 @@ function fakeConnect() {
     /** @type {[number, number][]} */ resizes: [],
     /** @type {TerminalSink | null} */ sink: null,
   };
-  /** @type {import('../../../models/types/types.js').TerminalConnect} */
+  /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
   const connect = (_id, size, sink) => {
     calls.connects.push(size);
     calls.sink = sink;
@@ -219,7 +219,7 @@ describe('acp-terminal', () => {
   it('follows a new terminal id: drops the old link and screen, and connects the new terminal', async () => {
     /** @type {{ id: string, sink: TerminalSink, writes: (string | Uint8Array)[], disposed: boolean }[]} */
     const links = [];
-    /** @type {import('../../../models/types/types.js').TerminalConnect} */
+    /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
     const connect = (id, _size, sink) => {
       const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]), disposed: false };
       links.push(link);
@@ -254,7 +254,7 @@ describe('acp-terminal', () => {
   it("never draws the old terminal's output on the new one, nor sends the new one's paste to the old", async () => {
     /** @type {{ id: string, sink: TerminalSink, writes: (string | Uint8Array)[] }[]} */
     const links = [];
-    /** @type {import('../../../models/types/types.js').TerminalConnect} */
+    /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
     const connect = (id, _size, sink) => {
       const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]) };
       links.push(link);

@@ -6,7 +6,7 @@ import { applyAgentOptions, composerOf } from '../../../stores/composer/composer
 import { $sessionNotices, $permissionRequests } from '../../../stores/session-runtime/session-runtime.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 
-/** @typedef {import('../../../models/types/types.js').Session} Session */
+/** @typedef {import('../types.js').Session} Session */
 
 /** @param {Partial<Session>} [fields] */
 function session(fields = {}) {

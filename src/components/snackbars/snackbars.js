@@ -9,8 +9,8 @@ import warningIcon from '@material-design-icons/svg/outlined/warning.svg?raw';
 import infoIcon from '@material-design-icons/svg/outlined/info.svg?raw';
 import styles from './snackbars.css?inline';
 
-/** @typedef {import('../../models/types/types.js').Notice} Notice */
-/** @typedef {import('../../models/types/types.js').NoticeLevel} NoticeLevel */
+/** @typedef {import('../../hooks/app/types.js').Notice} Notice */
+/** @typedef {import('../../hooks/app/types.js').NoticeLevel} NoticeLevel */
 
 /** @type {Record<NoticeLevel, string>} */
 const ICONS = { error: errorIcon, warn: warningIcon, info: infoIcon };
