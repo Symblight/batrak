@@ -1,7 +1,5 @@
 import { atom } from 'nanostores';
-import { closeProjectTab } from '../editor/editor.js';
-import { $terminals } from '../terminals/terminals.js';
-import { terminalTabId } from '../tab-ids/tab-ids.js';
+import { $terminals, closeTerminalTab } from '../terminals/terminals.js';
 
 /** @typedef {import('../../hooks/agents/types.js').AgentList} AgentList */
 /** @typedef {import('../../hooks/agents/types.js').AgentsView} AgentsView */
@@ -65,7 +63,7 @@ function signInKey(projectPath, agentId) {
  */
 export function noteSignIn({ projectPath, agentId, state, message, terminal }) {
   const login = terminal && $terminals.get()[terminal.terminalId];
-  if (state === 'cancelled' && terminal && login) closeProjectTab(login.projectPath, terminalTabId(terminal.terminalId));
+  if (state === 'cancelled' && terminal && login) closeTerminalTab(login.projectPath, terminal.terminalId);
   const { [signInKey(projectPath, agentId)]: _, ...rest } = $signIns.get();
   const kept = state === 'waiting' || state === 'failed';
   $signIns.set(kept ? { ...rest, [signInKey(projectPath, agentId)]: { state, message, terminal } } : rest);

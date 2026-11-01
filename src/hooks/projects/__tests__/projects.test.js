@@ -2,6 +2,13 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $projects } from '../../../stores/projects/projects.js';
+import {
+  $projectTerminalPanelHeights,
+  $projectTerminalPanels,
+  $projectTerminalTabs,
+  setTerminalPanelHeight,
+  setTerminalPanelOpen,
+} from '../../../stores/terminals/terminals.js';
 import { $openingPath, $workspace } from '../../../stores/workspace/workspace.js';
 
 /** @typedef {import('../../git/types.js').WorkspaceChanges} WorkspaceChanges */
@@ -192,6 +199,24 @@ describe('projects', () => {
       expect($projects.get().map((p) => p.id)).to.deep.equal(['/work/b']);
       expect(names('close_workspace')).to.deep.equal([{ rootId: 'root:/work/a' }]);
       expect($workspace.get()?.path).to.equal('/work/b');
+    });
+
+    it('forgets the terminal panel of a project, shown or not', async () => {
+      const projects = await fresh();
+      await projects.activate('/work/a');
+      await projects.activate('/work/b');
+      for (const root of ['/work/a', '/work/b']) {
+        $projectTerminalTabs.setKey(root, { paths: ['view:terminal:t'], active: 'view:terminal:t', pinned: [] });
+        setTerminalPanelOpen(root, true);
+      }
+      setTerminalPanelHeight(300);
+
+      projects.remove('/work/a');
+      projects.remove('/work/b');
+
+      expect($projectTerminalTabs.get()).to.deep.equal({});
+      expect($projectTerminalPanels.get()).to.deep.equal({});
+      expect($projectTerminalPanelHeights.get()).to.deep.equal({});
     });
 
     it('moves on to the next project when the shown one goes, or closes the workspace with none left', async () => {

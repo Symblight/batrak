@@ -1,5 +1,6 @@
 import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { removeProjectTabs } from '../../stores/editor/editor.js';
+import { removeProjectTerminals } from '../../stores/terminals/terminals.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $projects, addProject, removeProject } from '../../stores/projects/projects.js';
 import { app } from '../app/app.js';
@@ -259,6 +260,7 @@ export const projects = Object.freeze({
     if (!active) {
       closeRoot(id);
       removeProjectTabs(id);
+      removeProjectTerminals(id);
       removeProjectExpandedFolders(id);
       return;
     }
@@ -266,6 +268,7 @@ export const projects = Object.freeze({
     // the next one is scanned.
     close();
     removeProjectTabs(id);
+    removeProjectTerminals(id);
     removeProjectExpandedFolders(id);
     if (next) projects.activate(next.path).catch((err) => app.reportError('Opening project failed', err));
   },

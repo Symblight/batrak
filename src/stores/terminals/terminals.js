@@ -1,5 +1,6 @@
 import { atom, computed, map } from 'nanostores';
-import { openProjectTab, openTab } from '../editor/editor.js';
+import { closeProjectTab, openProjectTab, openTab } from '../editor/editor.js';
+import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $workspace } from '../workspace/workspace.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
@@ -32,6 +33,83 @@ export const terminalGroup = tabGroup({
 });
 
 /**
+ * Whether each project's terminal panel is shown, by project path (`NO_PROJECT` for none). In memory,
+ * like the shells; only a panel with terminals is ever open (the hook hides it with its last one).
+ */
+export const $projectTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
+
+/** The shown project's panel. */
+export const $terminalPanel = computed([$projectTerminalPanels, $workspace], (panels, workspace) => panels[workspace?.path ?? NO_PROJECT] ?? { open: false });
+
+/**
+ * @param {string | null} root The project's path; `null`: no project.
+ * @param {boolean} open
+ */
+export function setTerminalPanelOpen(root, open) {
+  const key = root ?? NO_PROJECT;
+  if (($projectTerminalPanels.get()[key]?.open ?? false) !== open) $projectTerminalPanels.setKey(key, { open });
+}
+
+/** Limits of the panel's height, in px. */
+export const TERMINAL_PANEL_MIN_HEIGHT = 120;
+export const TERMINAL_PANEL_MAX_HEIGHT = 800;
+
+/** The panel's height by project path, one storage item per project; per window, like the tabs. Written only through `setKey()`. */
+export const $projectTerminalPanelHeights = persistentMapStore('brama:layout:terminal-panel:', (raw) =>
+  typeof raw === 'number' && Number.isFinite(raw) ? clampHeight(raw) : null,
+);
+
+/** The shown project's panel height; `null` until it was resized (the token's default applies). */
+export const $terminalPanelHeight = computed(
+  [$projectTerminalPanelHeights, $workspace],
+  (heights, workspace) => heights[workspace?.path ?? NO_PROJECT] ?? null,
+);
+
+/** @param {number} px */
+function clampHeight(px) {
+  return Math.min(TERMINAL_PANEL_MAX_HEIGHT, Math.max(TERMINAL_PANEL_MIN_HEIGHT, Math.round(px)));
+}
+
+/** @param {number} px The shown project's panel height; kept within the limits. */
+export function setTerminalPanelHeight(px) {
+  if (!Number.isFinite(px)) return;
+  $projectTerminalPanelHeights.setKey($workspace.get()?.path ?? NO_PROJECT, clampHeight(px));
+}
+
+/** A request to focus a terminal's screen, until its view has. */
+export const $terminalFocus = atom(/** @type {{ terminalId: string } | null} */ (null));
+
+/** @param {string} terminalId */
+export function focusTerminal(terminalId) {
+  $terminalFocus.set({ terminalId });
+}
+
+/** @param {{ terminalId: string }} request The one the view answered; a newer request stays. */
+export function terminalFocused(request) {
+  if ($terminalFocus.get() === request) $terminalFocus.set(null);
+}
+
+/**
+ * Forgets a project's terminal tabs, panel and height, e.g. when it is removed from the app.
+ * @param {string} root Project path.
+ */
+export function removeProjectTerminals(root) {
+  terminalGroup.forget(root);
+  if (root in $projectTerminalPanels.get()) $projectTerminalPanels.setKey(root, undefined);
+  if (root in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(root, undefined);
+}
+
+/**
+ * Closes a terminal's tab, among the editor's tabs or the panel's, of any project.
+ * @param {string | null} projectPath
+ * @param {string} id The terminal's.
+ */
+export function closeTerminalTab(projectPath, id) {
+  closeProjectTab(projectPath, terminalTabId(id));
+  terminalGroup.closeIn(projectPath, terminalTabId(id));
+}
+
+/**
  * @param {string} id
  * @param {Partial<TerminalInfo>} patch
  */
@@ -50,13 +128,39 @@ function patch(id, patch) {
  * @returns {string} The terminal's id.
  */
 export function openTerminal(cwd, fallback, label) {
+  const id = addTerminal(cwd, fallback, label);
+  openTab(terminalTabId(id));
+  return id;
+}
+
+/**
+ * Adds a terminal and opens its tab in the shown project's terminal panel (at the end of the strip,
+ * active), showing the panel. Its shell starts when the tab is first shown.
+ * @param {string} cwd
+ * @param {string | null} fallback Where it starts when `cwd` doesn't exist.
+ * @param {string} label The tab's title until it starts.
+ * @returns {string} The terminal's id.
+ */
+export function openPanelTerminal(cwd, fallback, label) {
+  const id = addTerminal(cwd, fallback, label);
+  terminalGroup.open(terminalTabId(id));
+  setTerminalPanelOpen($workspace.get()?.path ?? null, true);
+  return id;
+}
+
+/**
+ * @param {string} cwd
+ * @param {string | null} fallback
+ * @param {string} label
+ * @returns {string} The id of the terminal added to the shown project's.
+ */
+function addTerminal(cwd, fallback, label) {
   const id = crypto.randomUUID();
   const projectPath = $workspace.get()?.path ?? null;
   $terminals.set({
     ...$terminals.get(),
     [id]: { cwd, fallback, label, title: null, projectPath, status: 'starting', exit: null, error: null, login: null },
   });
-  openTab(terminalTabId(id));
   return id;
 }
 
