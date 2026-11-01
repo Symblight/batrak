@@ -4,9 +4,10 @@ paths:
   - "src-tauri/crates/agent-acp/src/auth.rs"
   - "src-tauri/crates/agent-*/**"
   - "src-tauri/src/commands/agents.rs"
-  - "src/services/{agent-config,trust-controller}.js"
-  - "src/stores/{agents,trust}.js"
-  - "src/components/acp-{agents-view,agent-form,agent-picker}/**"
+  - "src/hooks/agents/**"
+  - "src/stores/{agents,trust}/**"
+  - "src/components/agents-view/**"
+  - "src/components/{agent-form,agent-picker}/**"
   - "docs/specs/{agents-tab,agent-sign-in}.md"
 ---
 
@@ -22,12 +23,13 @@ paths:
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
   and Manage agents…; a draft's send is refused with a notice).
-  - **The Agents tab** (`<acp-agents-view>`, presentational; spec: `docs/specs/agents-tab.md`) renders
+  - **The Agents tab** (`<acp-agents-view>`, presentational, with an `<acp-agent-card>` per installed agent: its switch,
+    Chat / Terminal choice, Update, Sign in and menu, firing the `acp-agent-*` events; spec: `docs/specs/agents-tab.md`) renders
     `agents_view { projectPath, query, filter }` (`config/view.rs`) as is: the backend matches
     (case- and accent-insensitive, NFD via `icu_normalizer`; every term in the name, id, vendor,
     description or command line), ranks (name starts with it > a word of it does > it contains it >
     another field; with no query the default first, then by name), filters (`all` / `updates` /
-    `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). `agentConfig`
+    `off`; counts ignore the query) and marks the name's matches (UTF-16 ranges). The `agents` hook (`hooks/agents/agents.js`)
     keeps `$agentsView` for `$agentsQuery` (in memory; the latest answer only), asked again on
     `agents://changed`, a project switch and when the tab shows. It lists only agents that run
     Claude, Codex, Copilot or Antigravity (`registryId` set; others in an agents.json still run, unlisted).
@@ -109,9 +111,9 @@ paths:
     / `args` / `env` it sets, or any start while it lists `mcpServers`, needs the user's trust in that
     exact `LaunchConfig` for that project (`agents_trust`, kept in `<app data>/trusted-agents.json`; a
     changed launch needs trust again). Untrusted, a start fails with an `untrusted` event and a probe is
-    refused. `trustController` (`services/trust-controller.js`) asks in a confirm dialog at the top of
+    refused. The `agents` hook (`hooks/agents/trust.js`) asks in a confirm dialog at the top of
     `<acp-app>` when a project opens, its agents.json changes or a start is refused (`agents_untrusted`
-    lists every launch waiting; `$trustPrompt`, `stores/trust.js`): Trust project trusts them all
+    lists every launch waiting; `$trustPrompt`, `stores/trust/trust.js`): Trust project trusts them all
     (`agents_trust`) and restarts the sessions it held back; Not now holds until what they run changes
     or a start is refused again (the session keeps its error notice, whose Restart asks again). A
     launch's `${keychain:…}` items are part of what is trusted, and the dialog names them. Agents can't

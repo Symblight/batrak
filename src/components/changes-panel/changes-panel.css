@@ -1,0 +1,97 @@
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+  background: var(--acp-column-background);
+  color: var(--acp-color-on-surface);
+}
+
+/* Tools row: all-files checkbox, summary, refresh */
+.acp-changes-panel__tools {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 36px;
+  padding: 0 var(--acp-space-1) 0 7px;
+  border-bottom: 1px solid var(--acp-color-outline-variant);
+}
+.acp-changes-panel__all {
+  flex: none;
+}
+.acp-changes-panel__summary {
+  overflow: hidden;
+  font-size: var(--acp-font-size-sm);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 16px;
+  letter-spacing: 0.3px;
+  font-variant-numeric: tabular-nums;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-changes-panel__spacer {
+  flex: 1;
+}
+.acp-changes-panel__refresh {
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+.acp-changes-panel__refresh::part(button) {
+  padding: 5px;
+}
+.acp-changes-panel__refresh-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+
+/* Tree */
+.acp-changes-panel__tree {
+  flex: 1;
+  min-height: 0;
+  padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-2);
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
+}
+
+/* Loading, empty, not a repository, error */
+.acp-changes-panel__state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--acp-space-1);
+  padding: 24px;
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-changes-panel__state-icon {
+  margin-bottom: var(--acp-space-1);
+  font-size: 28px;
+  color: var(--acp-vcs-add);
+}
+.acp-changes-panel__state-title {
+  font-size: var(--acp-font-size-lg);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 20px;
+  color: var(--acp-color-on-surface);
+}
+.acp-changes-panel__spinner {
+  font-size: 32px;
+}
+
+/* Footer: the commit form */
+.acp-changes-panel__footer {
+  flex: none;
+  padding: var(--acp-space-3);
+  border-top: 1px solid var(--acp-color-outline-variant);
+}

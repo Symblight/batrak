@@ -1,12 +1,13 @@
+import { projects } from '../../hooks/projects/projects.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
+import { tabs } from '../../hooks/tabs/tabs.js';
 import { html } from 'lit';
-import '../../components/acp-confirm-dialog/acp-confirm-dialog.js';
-import { basename } from '../../models/paths.js';
-import { terminalOfTab } from '../../models/tab-ids.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').TerminalBusyQuery} TerminalBusyQuery */
-/** @typedef {import('../../models/types.js').ConfirmChoice} ConfirmChoice */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
+/** @typedef {import('../../hooks/app/types.js').ConfirmChoice} ConfirmChoice */
 
 /**
  * @typedef {Object} TabConfirmConfig
@@ -54,8 +55,8 @@ export class TabConfirmController {
     if (!dirty.length) return true;
     return this.#dialog.confirm({
       headline: 'Discard unsaved changes?',
-      message: dirty.map((t) => basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
-      detail: 'Press ⌘S / Ctrl+S in the editor to save.',
+      message: dirty.map((t) => projects.basename(t.path)).join(', ') + (dirty.length > 1 ? ' have' : ' has') + ' unsaved changes.',
+      detail: `Press ${shortcuts.hint('save')} in the editor to save.`,
       confirmLabel: 'Discard',
       destructive: true,
     });
@@ -63,7 +64,7 @@ export class TabConfirmController {
 
   /** @param {readonly string[]} ids */
   async #confirmTerminate(ids) {
-    const terminals = ids.map(terminalOfTab).filter(/** @returns {t is string} */ (t) => t !== null);
+    const terminals = ids.map(tabs.terminalOf).filter(/** @returns {t is string} */ (t) => t !== null);
     if (!terminals.length) return true;
     const busy = await this.#config.terminalBusy()(terminals);
     if (!busy.length) return true;
@@ -86,7 +87,7 @@ export class TabConfirmController {
    */
   overwrite(tab) {
     return this.#dialog.choose({
-      headline: `${basename(tab.path)} changed on disk`,
+      headline: `${projects.basename(tab.path)} changed on disk`,
       message: 'It was changed since you started editing it, by an agent or another program.',
       detail: 'Overwrite replaces that change with your edits; Reload drops your edits.',
       confirmLabel: 'Overwrite',

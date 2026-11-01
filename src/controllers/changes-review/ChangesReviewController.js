@@ -1,17 +1,16 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../store/StoreController.js';
-import { gitController } from '../../services/git-controller.js';
-import { gitFileAtHead, readFile } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor.js';
-import { $gitChanges, $gitHead } from '../../stores/git.js';
-import { $rootId } from '../../stores/workspace.js';
+import { git } from '../../hooks/git/git.js';
+import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
+import { $gitChanges, $gitHead } from '../../stores/git/git.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').FileDiff} FileDiff */
-/** @typedef {import('../../models/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../models/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
+/** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
+/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
 
 /**
  * Whether two status entries of one file describe the same change.
@@ -113,18 +112,20 @@ export class ChangesReviewController {
 
   hostConnected() {
     this.#connected = true;
-    projectController.addEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching = projects.onFsChange(this.#onFsChange);
     this.#setWatching($editorTabs.get().active === CHANGES_TAB_ID);
   }
 
   hostDisconnected() {
     this.#connected = false;
-    projectController.removeEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching();
     this.#setWatching(false);
   }
 
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { added, modified, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+  /** Stops listening to the files changing on disk. */
+  #stopWatching = () => {};
+
+  #onFsChange = (/** @type {WorkspaceChanges} */ { added, modified, removed }) => {
     for (const id of [...added, ...modified, ...removed]) {
       if (this.#expanded.has(id)) this.#staleDiffs.add(id);
     }
@@ -132,7 +133,7 @@ export class ChangesReviewController {
 
   /** @param {boolean} watching */
   #setWatching(watching) {
-    if (watching && this.#connected) this.#unwatch ??= gitController.watchChanges();
+    if (watching && this.#connected) this.#unwatch ??= git.watchChanges();
     else if (!watching) {
       this.#unwatch?.();
       this.#unwatch = null;
@@ -188,9 +189,9 @@ export class ChangesReviewController {
     const previous = this.#shownRoot;
     if (previous === rootId) return;
     this.#shownRoot = rootId;
-    if (previous !== null && projectController.isOpen(previous)) this.#expandedByRoot.set(previous, this.#expanded);
+    if (previous !== null && projects.isOpen(previous)) this.#expandedByRoot.set(previous, this.#expanded);
     for (const id of this.#expandedByRoot.keys()) {
-      if (!projectController.isOpen(id)) this.#expandedByRoot.delete(id);
+      if (!projects.isOpen(id)) this.#expandedByRoot.delete(id);
     }
     const saved = rootId === null ? undefined : this.#expandedByRoot.get(rootId);
     if (rootId !== null) this.#expandedByRoot.delete(rootId);
@@ -254,11 +255,11 @@ export class ChangesReviewController {
     const load = ++this.#loadCount;
     this.#loads.set(id, load);
     if (!this.#diffs.has(id)) this.#setDiff(id, { content: '', baseline: '', error: '', loading: true });
-    const rootId = projectController.rootId;
-    const path = projectController.absPath(id);
+    const rootId = projects.rootId();
+    const path = projects.absPath(id);
     const [content, baseline] = await Promise.all([
-      readFile(path).catch(() => null),
-      rootId ? gitFileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
+      projects.readFile(path).catch(() => null),
+      rootId ? git.fileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
     ]);
     if (this.#loads.get(id) !== load) return;
     this.#setDiff(

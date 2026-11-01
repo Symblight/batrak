@@ -1,0 +1,54 @@
+:host {
+  /* Floats over its panel; also the containing block of md-shadow */
+  position: absolute;
+  z-index: var(--acp-z-raised);
+  /* Above a file tab's footer */
+  inset-block-end: 44px;
+  inset-inline-end: var(--acp-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  padding: var(--acp-space-1);
+  border: 1px solid var(--acp-color-outline-variant);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-surface-container-high);
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+  font-size: var(--acp-font-size-md);
+}
+:host([placement='changes']) {
+  inset-block-end: var(--acp-space-4);
+  inset-inline: 0;
+  margin-inline: auto;
+  width: fit-content;
+}
+:host([hidden]) {
+  display: none;
+}
+
+.acp-comment-bar__nav {
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+.acp-comment-bar__nav::part(button) {
+  padding: 5px;
+}
+.acp-comment-bar__nav-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+
+.acp-comment-bar__position {
+  min-width: 80px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Sized like the Changes panel's Commit button; colours are the theme's filled button. */
+.acp-comment-bar__send {
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+  --md-button-inline-start-space: 16px;
+  --md-button-inline-end-space: 16px;
+}

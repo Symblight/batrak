@@ -1,0 +1,19 @@
+:host([hidden]) {
+  display: none;
+}
+
+:host {
+  flex: none;
+  display: inline-flex;
+  gap: var(--acp-space-1-5);
+  font: 500 11.5px/16px var(--acp-font-family-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.acp-diff-counts__added {
+  color: var(--acp-diff-add-fg);
+}
+
+.acp-diff-counts__removed {
+  color: var(--acp-diff-del-fg);
+}

@@ -1,0 +1,68 @@
+:host {
+  display: contents;
+}
+
+/* A path on one line: md-tooltip caps its own width (`max-inline-size` on its host), which wraps it. */
+.acp-tab-overflow__tooltip {
+  width: max-content;
+  max-inline-size: none;
+}
+/* Deleted on disk, still open. */
+.acp-tab-overflow__title_deleted {
+  text-decoration: line-through;
+}
+.acp-tab-overflow__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-inline-end: -8px;
+  border-radius: 50%;
+  color: var(--acp-color-on-surface-variant);
+  cursor: pointer;
+
+  &:hover,
+  &:focus-visible {
+    background: var(--acp-state-pressed);
+    outline: none;
+  }
+}
+.acp-tab-overflow__file-icon {
+  font-size: var(--acp-icon-size-xs);
+}
+.acp-tab-overflow__close-icon {
+  font-size: var(--acp-icon-size-sm);
+}
+/* Unsaved edits: a dot after the name, in the accent color. */
+.acp-tab-overflow__unsaved {
+  margin-inline-start: var(--acp-space-0-5);
+  color: var(--acp-color-primary);
+  font-size: 10px;
+  line-height: 1;
+}
+/* Show Hidden Tabs: outside the scroller, so never faded or scrolled away. */
+.acp-tab-overflow__button {
+  flex: none;
+  margin-inline-end: var(--acp-space-1);
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+}
+.acp-tab-overflow__icon {
+  font-size: var(--acp-icon-size-md);
+}
+.acp-tab-overflow__menu {
+  --md-menu-min-width: 12rem;
+  --md-menu-max-height: 24rem;
+  --md-menu-shape: var(--acp-shape-corner-small);
+}
+/* Dense rows, like the IDE's popups. */
+.acp-tab-overflow__item {
+  --md-menu-item-min-block-size: 1.375rem;
+  --md-menu-item-padding-block: 0;
+  --md-menu-item-padding-inline: var(--acp-space-1-5);
+  --md-menu-item-label-text-size: var(--acp-font-size-sm);
+  --md-menu-item-label-text-line-height: 1.375rem;
+  --md-menu-item-leading-icon-size: var(--acp-icon-size-xs);
+
+  margin-inline: var(--acp-space-0-5);
+}

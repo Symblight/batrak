@@ -1,0 +1,252 @@
+import { projects } from '../../hooks/projects/projects.js';
+import { app } from '../../hooks/app/app.js';
+import { tabs } from '../../hooks/tabs/tabs.js';
+import { html, nothing } from 'lit';
+import { createRef, ref } from 'lit/directives/ref.js';
+import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/panel/panel.js';
+import { codeEditor } from '../../components/code-view/code-editor.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
+import { StoreController } from '../../controllers/store/StoreController.js';
+import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
+import { TabFilesController } from '../../controllers/tab-files/TabFilesController.js';
+import {
+  $activePath,
+  $editorTabs,
+  CHANGES_TAB_ID,
+  activateTab,
+  closeAllTabs,
+  closeOtherTabs,
+  closeTab,
+  closeTabsToRight,
+  moveTab,
+  openChanges as openChangesTab,
+  openSettings as openSettingsTab,
+  openTab,
+  setTabPinned,
+} from '../../stores/editor/editor.js';
+import { addToChat } from '../../stores/chat/chat.js';
+import {
+  $commentFocus,
+  $tabComments,
+  addComment,
+  deleteComment,
+  editComment,
+  focusComment,
+  sendToChat,
+} from '../../stores/comments/comments.js';
+import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $terminals } from '../../stores/terminals/terminals.js';
+import { $workspace } from '../../stores/workspace/workspace.js';
+import '../../components/tab-view/tab-view.js';
+import '../agents-tab/agents-tab.js';
+import '../changes-tab/changes-tab.js';
+import '../editor-view/editor-view.js';
+import '../session-changes-tab/session-changes-tab.js';
+import '../settings-view/settings-view.js';
+import '../terminal-view/terminal-view.js';
+import '../../components/comment-bar/comment-bar.js';
+
+/** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
+/** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
+/** @typedef {import('../../components/tab-strip/tab-strip.js').CloseScope} CloseScope */
+/** @typedef {Parameters<typeof addComment>[1]} CommentDraft */
+
+/**
+ * @tag acp-main-column
+ * @summary The main column: everything opens in its tabs (files, Changes, Settings, terminals).
+ */
+export class AcpMainColumn extends ViewElement {
+  #files = new TabFilesController(this);
+  #editorTabs = new StoreController(this, { store: $editorTabs });
+  #workspace = new StoreController(this, { store: $workspace });
+  #worktrees = new StoreController(this, { store: $worktrees });
+  #tabComments = new StoreController(this, { store: $tabComments });
+  #terminals = new StoreController(this, { store: $terminals });
+
+  /** A comment to reveal: show its file; the editor that shows it then reveals it. */
+  #commentFocus = new StoreController(this, {
+    store: $commentFocus,
+    onChange: (focus) => {
+      if (focus) this.#showFile(focus.path);
+    },
+  });
+
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-changes-tab']>} The project's Changes tab, once open. */
+  #changesTab = createRef();
+
+  /** The bar sits lower in the Changes tab, which has no footer. */
+  #activePath = new StoreController(this, { store: $activePath });
+
+  #onFileOpen = (/** @type {Event} */ e) => {
+    const { path, line } = /** @type {CustomEvent<{ path: string, line?: number }>} */ (e).detail;
+    this.openFile(path, line);
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.addEventListener('acp-file-open', this.#onFileOpen);
+  }
+
+  disconnectedCallback() {
+    this.removeEventListener('acp-file-open', this.#onFileOpen);
+    super.disconnectedCallback();
+  }
+
+  /**
+   * Rendered unconditionally, so present after the first render.
+   * @returns {import('../../components/tab-view/tab-view.js').AcpTabView}
+   */
+  get #tabView() {
+    return /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (this.renderRoot.querySelector('acp-tab-view'));
+  }
+
+  /**
+   * Opens a file in a tab, or switches to its tab.
+   * @param {string} path Absolute.
+   * @param {RevealAt | null} [at] Where to put the caret: a 1-based line, or a match to select.
+   */
+  openFile(path, at = null) {
+    if (at !== null) this.#tabView.revealLine(path, at);
+    openTab(path);
+    projects.noteOpened(path);
+  }
+
+  /**
+   * Opens the Changes tab with a file's diff expanded and scrolled into view.
+   * @param {string} path Absolute.
+   */
+  async showChange(path) {
+    openChangesTab();
+    const rel = projects.relPath(path);
+    if (rel === null) return;
+    await this.updateComplete;
+    await this.#tabView.updateComplete;
+    await this.#changesTab.value?.reveal(rel);
+  }
+
+  /**
+   * Shows a file where its comment is: its diff in the Changes tab (the bar there lists only changed
+   * files), else its tab.
+   * @param {string} path Absolute.
+   */
+  #showFile(path) {
+    if ($activePath.get() === CHANGES_TAB_ID) this.showChange(path);
+    else this.openFile(path);
+  }
+
+  /** Opens the Settings tab, or switches to it. */
+  openSettings() {
+    openSettingsTab();
+  }
+
+  /** The active code tab's selected text, `''` when none. */
+  selectedText() {
+    return this.#tabView.selectedText();
+  }
+
+  /**
+   * Moves the caret in the open file. No-op without one.
+   * @param {number} line 1-based.
+   */
+  goToLine(line) {
+    const path = $activePath.get();
+    if (path !== null) this.#tabView.revealLine(path, line);
+  }
+
+  /** @param {Event} e */
+  #onTabClose(e) {
+    const { id, scope } = /** @type {CustomEvent<{ id: string, scope: CloseScope }>} */ (e).detail;
+    if (scope === 'tab') closeTab(id);
+    else if (scope === 'others') closeOtherTabs(id);
+    else if (scope === 'right') closeTabsToRight(id);
+    else closeAllTabs();
+  }
+
+  /** A save refused because the file changed on disk asks the tab view whether to overwrite it. */
+  #onTabSave = async (/** @type {Event} */ e) => {
+    const { id, force } = /** @type {CustomEvent<{ id: string, force?: boolean }>} */ (e).detail;
+    if (!(await this.#files.save(id, { force }))) this.#tabView.confirmOverwrite(id);
+  };
+
+  /** @param {Event} e */
+  #onCopyPath(e) {
+    const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
+    app.copy(path, 'Copying the path failed');
+  }
+
+  /**
+   * The content of the tabs whose view this column owns: files as text get their editor.
+   * @param {EditorTab} tab
+   */
+  #renderTabContent = (tab) => {
+    switch (contentKindOf(tab)) {
+      case 'code':
+      case 'markdown':
+        return html`<acp-editor-view .tab=${tab}></acp-editor-view>`;
+      case 'settings':
+        return html`<acp-settings-view></acp-settings-view>`;
+      case 'agents':
+        return html`<acp-agents-tab></acp-agents-tab>`;
+      case 'terminal':
+        return html`<acp-terminal-view terminal-id=${tabs.terminalOf(tab.id) ?? ''}></acp-terminal-view>`;
+      case 'changes':
+        return html`<acp-changes-tab ${ref(this.#changesTab)}></acp-changes-tab>`;
+      case 'session-changes':
+        return html`<acp-session-changes-tab .sessionId=${tabs.sessionOf(tab.id)}></acp-session-changes-tab>`;
+      default:
+        return nothing;
+    }
+  };
+
+  render() {
+    const { active, pinned } = this.#editorTabs.value;
+    return html`<acp-panel>
+      <acp-tab-view
+        class="acp-main-column__tabs"
+        .tabs=${this.#files.tabs}
+        .active=${active}
+        .pinned=${pinned}
+        .root=${this.#workspace.value?.path ?? null}
+        .terminals=${this.#terminals.value}
+        .terminalBusy=${terminals.busy}
+        .worktrees=${this.#worktrees.value}
+        .renderContent=${this.#renderTabContent}
+        @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
+        @acp-tab-close=${this.#onTabClose}
+        @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) =>
+          setTabPinned(e.detail.id, e.detail.pinned)}
+        @acp-tab-move=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) =>
+          moveTab(e.detail.id, e.detail.index)}
+        @acp-tab-edit=${(/** @type {CustomEvent<{ id: string, value: string }>} */ e) =>
+          this.#files.edit(e.detail.id, e.detail.value)}
+        @acp-tab-save=${this.#onTabSave}
+        @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
+        @acp-copy-path=${this.#onCopyPath}
+        @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
+          app.openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
+        @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>
+          addComment(e.detail.path, e.detail.draft, codeEditor.author)}
+        @acp-comment-edit=${(
+          /** @type {CustomEvent<{ path: string, threadId: string, commentId: string, body: string }>} */ e,
+        ) => editComment(e.detail.path, e.detail.threadId, e.detail.commentId, e.detail.body)}
+        @acp-comment-delete=${(/** @type {CustomEvent<{ path: string, threadId: string, commentId: string }>} */ e) =>
+          deleteComment(e.detail.path, e.detail.threadId, e.detail.commentId)}
+        @acp-comment-revealed=${(/** @type {CustomEvent<{ focus: CommentFocus }>} */ e) => {
+          if ($commentFocus.get() === e.detail.focus) focusComment(null);
+        }}
+        @acp-chat-add=${(/** @type {CustomEvent<{ inserts: ChatInsert[] }>} */ e) => addToChat(e.detail.inserts)}
+      ></acp-tab-view>
+      <acp-comment-bar
+        placement=${this.#activePath.value === CHANGES_TAB_ID ? 'changes' : 'file'}
+        .comments=${this.#tabComments.value}
+        @acp-comment-focus=${(/** @type {CustomEvent<CommentFocus>} */ e) => focusComment(e.detail)}
+        @acp-comments-send=${() => sendToChat($tabComments.get())}
+      ></acp-comment-bar>
+    </acp-panel>`;
+  }
+}
+
+customElements.define('acp-main-column', AcpMainColumn);

@@ -3,13 +3,26 @@ import { expect } from '@esm-bundle/chai';
 
 export { expect, html };
 
+/** @type {Set<HTMLElement>} Hosts of the fixtures of the running test. */
+const hosts = new Set();
+
+// Registered by the first test file that imports this: removes what a test rendered once it ends, so
+// a host's store subscriptions and IPC listeners never reach the next test. Runs after the file's
+// own `afterEach` hooks, which can still read the elements.
+afterEach(() => {
+  for (const host of hosts) host.remove();
+  hosts.clear();
+});
+
 /**
- * Renders a template into the page and resolves with its first element once it has updated.
+ * Renders a template into the page and resolves with its first element once it has updated. The
+ * page is cleared after each test.
  * @param {import('lit').TemplateResult} template
  * @returns {Promise<any>}
  */
 export async function fixture(template) {
   const host = document.createElement('div');
+  hosts.add(host);
   document.body.append(host);
   render(template, host);
   const el = /** @type {any} */ (host.firstElementChild);

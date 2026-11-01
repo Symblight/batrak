@@ -2,10 +2,10 @@
 paths:
   - "src-tauri/src/git/**"
   - "src-tauri/src/commands/git.rs"
-  - "src/services/git-controller.js"
-  - "src/stores/git.js"
+  - "src/hooks/git/**"
+  - "src/stores/git/git.js"
   - "src/controllers/{changes-review,session-changes}/**"
-  - "src/components/acp-changes-*/**"
+  - "src/components/changes-*/**"
   - "docs/specs/agent-git.md"
 ---
 
@@ -29,13 +29,13 @@ paths:
   slot while they run (`SlotGuard`), so no prompt starts under them. A worktree whose
   branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
   dirty worktree is removed only after its work was committed (`remove_saved`).
-- Frontend: `gitController` (`services/git-controller.js`) writes `stores/git.js` for the active root.
+- Frontend: the `git` hook (`hooks/git/git.js`) writes `stores/git/git.js` for the active root.
   `$gitRepo` (branch, upstream; `git_head`, no file scan) is kept current while a project is open:
   root change, `fs-change` with `git: true`, window focus. `$gitChanges` (changed files; `git_status`
-  scans the working tree) is computed **only on demand**: `gitController.watchChanges()` starts it and
-  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-file-column>`
-  watches while Changes is the side pane, `ChangesReviewController` while the Changes tab is active
-  (the column also forgets picks of files no longer changed). Stopping
+  scans the working tree) is computed **only on demand**: `git.watchChanges()` starts it and
+  keeps it fresh on every `fs-change` until the returned stop function runs — `<acp-git-changes>`
+  (`views/git-changes/`) watches while Changes is the side pane's shown pane (`active`), `ChangesReviewController` (in `<acp-changes-tab>`) while the Changes tab is active
+  (`<acp-git-changes>` also forgets picks of files no longer changed). Stopping
   keeps the files in the store; the spinner shows only for a root's first status. The files picked
   for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor

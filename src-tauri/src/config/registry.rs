@@ -737,10 +737,10 @@ pub(crate) mod tests {
     async fn a_registry_that_never_answered_is_tried_again_soon() {
         let script = Script::new(vec![Err("dns error".into()), body(FIXTURE, "\"a\""), Err("dns error".into())]);
         let registry = Registry::new(None, script);
-        let now = now_millis();
-        assert!(registry.due_at(now), "first launch");
+        assert!(registry.due_at(now_millis()), "first launch");
         assert!(!registry.check().await);
         assert!(registry.state().offline);
+        let now = now_millis();
         assert!(!registry.due_at(now), "not at once");
         assert!(registry.due_at(now + RETRY_EVERY.as_millis() as i64 + 1), "but well before a day");
 

@@ -1,14 +1,10 @@
+import { projects } from '../../hooks/projects/projects.js';
 import { buildChipElement } from '@symblight/chat';
-import fileIcon from '@material-design-icons/svg/outlined/description.svg?raw';
-import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import { fileIconFor } from '../../models/file-icons.js';
-import { absoluteRefPath, linesOf, parseFileRef, splitFileRefs } from '../../models/file-refs.js';
-import { listDir } from '../../services/ipc.js';
-import { projectController } from '../../services/project-controller.js';
-import { projectPathOf } from '../../models/paths.js';
-import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions.js';
-import { AcpMarkdown } from '../../components/acp-markdown/acp-markdown.js';
-import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thinking.js';
+import { fileIcon } from '../../components/file-icon/file-icon.js';
+import { chat } from '../../hooks/chat/chat.js';
+import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
+import { AcpMarkdown } from '../../components/markdown/markdown.js';
+import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */
@@ -18,7 +14,7 @@ import { AcpPartThinking } from '../../components/acp-part-thinking/acp-part-thi
 /** @typedef {import('@symblight/chat/agent').ChxPlan} ChxPlan */
 /** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
-/** @typedef {import('../../models/file-refs.js').FileRef} FileRef */
+/** @typedef {import('../../hooks/chat/chat.js').FileRef} FileRef */
 
 /**
  * @typedef {Object} ChatPartsConfig
@@ -52,11 +48,11 @@ function ensureChipTemplates() {
  */
 function refChip(ref) {
   const name = ref.path.slice(ref.path.lastIndexOf('/') + 1);
-  const lines = linesOf(ref);
+  const lines = chat.linesOf(ref);
   const chip = buildChipElement({
     templateId: FILE_CHIP_TEMPLATE,
     label: lines ? `${name}:${lines}` : name,
-    icon: ref.folder ? folderIcon : (fileIconFor(name) ?? fileIcon),
+    icon: fileIcon.svgFor(name, ref.folder),
     data: ref.folder ? { path: ref.path, kind: 'folder' } : lines ? { path: ref.path, lines } : { path: ref.path },
   });
   chip.title = lines ? `${ref.path}:${lines}` : ref.path;
@@ -76,7 +72,7 @@ export function locationChip({ path, line }) {
   if (line !== undefined) chip.dataset.line = String(line);
   const icon = document.createElement('md-icon');
   icon.slot = 'icon';
-  icon.innerHTML = fileIconFor(name) ?? fileIcon;
+  icon.innerHTML = fileIcon.svgFor(name);
   chip.append(icon, name);
   return chip;
 }
@@ -101,7 +97,7 @@ function refLink(ref, text) {
 function markLink(element, ref) {
   element.dataset.path = ref.path;
   if (ref.folder) element.dataset.kind = 'folder';
-  const lines = linesOf(ref);
+  const lines = chat.linesOf(ref);
   if (lines) element.dataset.lines = lines;
 }
 
@@ -126,11 +122,11 @@ function decodedHref(link) {
  */
 export function formatFileRefs(root, { links }) {
   for (const link of root.querySelectorAll('a')) {
-    const ref = parseFileRef(decodedHref(link));
+    const ref = chat.parseFileRef(decodedHref(link));
     if (ref) markLink(link, ref);
   }
   for (const code of root.querySelectorAll('code')) {
-    const ref = code.closest('a') ? null : parseFileRef(code.textContent ?? '');
+    const ref = code.closest('a') ? null : chat.parseFileRef(code.textContent ?? '');
     if (ref) code.replaceWith(refChip(ref));
   }
   // A chip's label is a text node too (`app.js:12`), which would read as a ref of its own.
@@ -142,7 +138,7 @@ export function formatFileRefs(root, { links }) {
   const texts = [];
   while (walker.nextNode()) texts.push(/** @type {Text} */ (walker.currentNode));
   for (const node of texts) {
-    const segments = splitFileRefs(node.data);
+    const segments = chat.splitFileRefs(node.data);
     if (!segments.some((s) => s.ref)) continue;
     node.replaceWith(
       ...segments.map(({ text, ref }) => {
@@ -158,12 +154,12 @@ export function formatFileRefs(root, { links }) {
  * @param {string} absolute
  */
 async function isFolder(absolute) {
-  const rel = projectController.relPath(absolute);
-  const rootId = projectController.rootId;
+  const rel = projects.relPath(absolute);
+  const rootId = projects.rootId();
   if (rel === null || rootId === null) return false;
   const slash = rel.lastIndexOf('/');
   try {
-    const entries = await listDir(rootId, slash === -1 ? '' : rel.slice(0, slash));
+    const entries = await projects.listDir(rootId, slash === -1 ? '' : rel.slice(0, slash));
     return entries.some((entry) => entry.path === rel && entry.isDir);
   } catch {
     return false;
@@ -315,10 +311,10 @@ export class ChatPartsController {
    * @param {boolean} folder Known to be a folder (a folder chip, `@path/`).
    */
   async #open(path, line, folder) {
-    const root = folderOf($activeSessionId.get() ?? '') ?? projectController.path;
-    const absolute = absoluteRefPath(path, root);
+    const root = folderOf($activeSessionId.get() ?? '') ?? projects.path();
+    const absolute = chat.absoluteRefPath(path, root);
     if (!absolute) return;
-    const inProject = projectPathOf($worktrees.get(), absolute);
+    const inProject = projects.projectPathOf($worktrees.get(), absolute);
     const isDir = folder || (await isFolder(inProject));
     const detail = isDir ? { path: inProject } : { path: absolute, line };
     this.#host.dispatchEvent(

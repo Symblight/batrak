@@ -26,15 +26,22 @@ the app.
 
 Frontend is **JavaScript with JSDoc types** — no `.ts` sources (only `src/env.d.ts`). Type-checking via
 `jsconfig.json` (`checkJs`, `strict`). UI is Lit web components; the Rust backend lives in `src-tauri/`
-and is reached through `src/services/ipc.js`.
+and is reached through the `ipc` bridge (`src/hooks/ipc/ipc.js`); each feature's Rust commands live in its hook.
 
-- `src/components/` — one folder per custom element (see "File structure" below).
+- `src/views/` — the container elements: `<acp-app>` and the four columns. A view has no CSS: it extends
+  `ViewElement` (light DOM: it renders into itself, `display: contents`, so `renderRoot` is the element and
+  its tests use `el.querySelector`, not `el.shadowRoot`) and composes components, with layout from `<acp-panel>`,
+  `<acp-pane>` and `<acp-split>` (the app's row of columns is `<acp-column-split>`); inline `style` only for values JS knows (resized widths).
+- `src/components/` — every other custom element, one flat folder each (see "File structure" below). The
+  Settings, Agents, Search and Changes elements are here until their views exist (see
+  `docs/specs/frontend-structure.md`).
 - `src/stores/` — global state as nanostores atoms, one file per domain (see "Global state" below).
-- `src/services/` — actions and IPC (`project-controller.js`, `session-controller.js`, `ipc.js`, `theme.js`).
+- `src/hooks/<feature>/` — one frozen object per feature (`projects`, `sessions`, `git`, …) holding its rules,
+  its backend calls and the actions that call them, with private part files (spec: `docs/specs/frontend-structure.md`).
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
-- `src/models/types.js` — shared JSDoc typedefs.
+- `src/hooks/<feature>/types.js` — the feature's JSDoc typedefs (what its hook, stores and components share).
 - `src/styles/tokens.css` — global app tokens, imported once from `src/main.js`.
 
 Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor` (`cdx-*`),
@@ -43,38 +50,40 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 ### Layers
 
 - **Data layer** (infrastructure): `src/stores/` (nanostores atoms and their actions) and
-  `src/services/` (backend calls, controllers that write stores), plus every browser API that holds or
+  `src/hooks/` (backend calls, actions that write stores), plus every browser API that holds or
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
-  `@tauri-apps/*` (only in `services/ipc.js`). Nothing above it talks to these directly.
-- **Container components** — `<acp-app>` and the columns (`<acp-session-column>`,
-  `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) — are the only components that import
-  from `stores/` or `services/`. They subscribe (`StoreController`), call actions and services, and pass
+  `@tauri-apps/*` (only in `hooks/ipc/ipc.js`). Nothing above it talks to these directly.
+- **Container components** — `<acp-app>`, the columns (`<acp-session-column>`,
+  `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) and the views under them (every element in
+  `src/views/`: `<acp-settings-view>`, `<acp-files-view>`, …) — are the only components that import
+  from `stores/`. They subscribe (`StoreController`), call actions and hooks, and pass
   data down as properties, through their children to the leaves (`<acp-chat>` hands the composer's
   pickers theirs, `<acp-tab-view>` the Settings, Agents and Changes tabs theirs).
 - **Every other component is presentational:** data in through properties, intents out as `acp-*`
   events that the column handles (they bubble, composed, through the components in between). No
-  imports from `stores/` or `services/`, no `StoreController`, no storage, network or clipboard APIs.
+  imports from `stores/`, no `StoreController`, no storage, network or clipboard APIs; a hook's pure
+  rules may be called, its actions never (they go out as events).
   A child that needs data gets a property; one that must change data fires an event. Where an answer
   belongs to one request, the container calls the child back (`<acp-changes-panel>`'s
   `commitFinished()`, `fillAmendMessage()`; `saveFinished()` of `<acp-agent-form>` and `<acp-agents-view>`); a lazy loader is a property (`<acp-file-tree>`'s
   `listDir`); a query is an event answered by a property (`acp-quick-open-query` → `files`,
   `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`, `acp-agents-query` → `view`).
 - A controller counts as part of its host. The data controllers (they read stores or call services)
-  are hosted only by a container: `ChatSessionController`, `ChatPartsController` (agent column),
+  are hosted only by a container: `ChatSessionController`, `ChatPartsController` (`<acp-chat-view>`),
   `TabFilesController` (open tabs' files: reads, baselines, drafts, kept in memory while another
   project is shown, saves; a save over a file
   changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
   Overwrite / Reload dialog answers; a text file deleted on disk stays shown, `deletedOnDisk`, and
   a save creates it again, like VS Code) and `ChangesReviewController`
-  (the Changes tab's expanded files and diffs; main column), `FindInFilesController` (file column, for the
-  Search pane, and `<acp-app>`, for the search dialog; one backend slot each).
+  (the Changes tab's expanded files and diffs; `<acp-changes-tab>`), `SessionChangesController` (a
+  worktree session's Changes tab; `<acp-session-changes-tab>`), `FindInFilesController` (`<acp-search-pane>`, for the
+  Search pane, and `<acp-search-view>`, for the search dialog; one backend slot each).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
-  `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`,
-  `ContextMenuController`, `TabContentController`. `models/` stays pure (no stores, no services):
-  shared pure helpers live there (`paths.js`, `settings.js`, `config-options.js`, `about.js`), not in a
-  store module.
+  `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`, `TreeNavigationController` (the roving Tab stop and WAI-ARIA keys of a tree whose rows are elements: session list, Changes review),
+  `ContextMenuController`, `TabContentController`. Shared pure helpers are rules of a hook
+  (`composer.configOf()`), not of a store module.
 
 ### Global state
 
@@ -82,10 +91,10 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 
 - **State → store, streams → events.** Anything a component renders or another component needs lives in a
   store. One-off happenings stay events: DOM `acp-*` events for UI intents (`acp-file-open`), and
-  `projectController`'s `fs-change` for watcher batches. Don't mirror a store into a reactive property or
+  `projects.onFsChange()` for watcher batches. Don't mirror a store into a reactive property or
   re-announce it with an event.
-- **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor.js`) or, when they
-  call the backend, in a service that writes the store (`projectController.open()` / `restore()` →
+- **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor/editor.js`) or, when they
+  call the backend, in a service that writes the store (`projects.open()` / `restore()` (`hooks/projects/`) →
   `$workspace`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
 - **Narrow with `computed`.** `$rootId` (from `$workspace`) and `$activePath` (from `$editorTabs`) notify
   only when their slice changes, so subscribe to the narrowest store you need.
@@ -93,7 +102,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `#workspace = new StoreController(this, { store: $workspace })`, read `this.#workspace.value` in
   `render()`. It re-renders the host on change; `onChange(value, oldValue)` runs a side effect (also once
   on connect). Outside a component, or for a one-off read in a handler, use `$store.get()`.
-- **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent.js`)
+- **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent/persistent.js`)
   keeps an atom as JSON in `localStorage` under a `brama:` key. `parse` validates what was stored (`null`
   → `initial`), `serialize` drops runtime-only fields (`Workspace.rootId`). `listen: false` for per-window
   state (folder, tabs); leave it on for shared preferences (column widths, settings) so all windows
@@ -108,7 +117,7 @@ the files in its `paths:`; read it directly when a task depends on a subsystem w
 files. Specs are in `docs/specs/`.
 
 - `persisted-state.md` — what's persisted and under which key, tab ids and view tabs, `TabContentController`.
-- `sessions.md` — session stores and `sessionController`, the backend runtime (sync, turn slots,
+- `sessions.md` — session stores and the `sessions` hook, the backend runtime (sync, turn slots,
   worktrees, remove), ACP host, the adapter, session folders, config options, history.
 - `agent-config.md` — `.brama/agents.json`, the Agents tab, writing the file, on/off, the ACP registry,
   updates, following the list, secrets and trust, signing in.
@@ -124,14 +133,14 @@ Commands are `async` and push disk/process work to `spawn_blocking`; nothing blo
 Work that can be superseded must be cancellable, not just have its result dropped: Quick Open and
 Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops when a newer
 `open_workspace` from the same window starts (it then fails with `workspace::SUPERSEDED`, which
-`projectController` ignores) or when its root closes. The editor reads only the active tab; other
+`projects` ignores) or when its root closes. The editor reads only the active tab; other
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
-**Open projects:** `projectController` keeps the backend roots (snapshot + watcher) of the last
+**Open projects:** the `projects` hook keeps the backend roots (snapshot + watcher) of the last
 `KEEP_OPEN` (3) active projects; activating one of them only switches `$workspace`, no scan. Older
 ones are closed and scanned again when activated. Only the active root's changes reach the frontend
 (`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
-root (`gitController`'s stores and commit picks, the Changes tab's expanded files, the file tree's
+root (the `git` hook's stores and commit picks, the Changes tab's expanded files, the file tree's
 expanded folders) save their state on switch and restore it, re-checking what may have changed. A
 root belongs to the window that opened it: `Workspaces::close_group` closes a window's roots when it
 is destroyed, and `close_window_workspaces` when its page loads again (before any open).
@@ -144,17 +153,17 @@ is destroyed, and `close_window_workspaces` when its page loads again (before an
 `brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the agent crates that log,
 `agent_acp`: `OWN_TARGETS` in `logging.rs`, where a new logging crate goes too); `BRAMA_LOG` overrides it (an `EnvFilter`
 directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
-`services/logger.js` (`log(level, message)`, `write_log` command, target `frontend`); `main.js`
-calls `logUncaughtErrors()` for uncaught errors and unhandled rejections. Log at `info` for
+`app.log(level, message)` (`hooks/app/app.js`, `write_log` command, target `frontend`); `main.js`
+calls `app.init()` for uncaught errors, unhandled rejections and the backend's own notices. Log at `info` for
 what a user did or what took noticeable time (a scan), `warn` for failures, and `debug` for every
 git call; never log file contents.
 
-**Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices.js`:
+**Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices/notices.js`:
 `notify(level, message)`, the same message counts up instead of stacking, at most 4, info 5s / warn
 8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
 sends every warn/error of ours (`brama_lib`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
 says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
-with no inline error goes through `reportError(what, err)` (`services/notices.js`: logs + snackbar);
+with no inline error goes through `app.reportError(what, err)` (`hooks/app/app.js`: logs + snackbar);
 uncaught errors and rejections show one too.
 
 ### Git
@@ -185,10 +194,9 @@ test that reproduces it.
   its scripts rather than mocking `Connection`), files against temp folders, git against
   `git/test_repo.rs`. Test what a caller sees (events, statuses, files on disk), not internals.
 - **Frontend:** `@web/test-runner` (`web-test-runner.config.mjs`, real Chrome, mocha + chai) runs
-  every `src/**/*.test.js`. A component's tests go in a `tests/` folder inside its own folder, named
-  after it (`components/acp-x/tests/acp-x.test.js`); a plain module's sit beside it
-  (`models/paths.test.js`). Keep logic in plain functions
-  (`stores/`, `models/`, `services/acp-adapter.js`) and test it directly; test a component through its
+  every `src/**/*.test.js`. Every entity has a folder of its own, with its tests in a `__tests__/` folder inside it, named
+  after it (`components/x/__tests__/x.test.js`, `hooks/projects/__tests__/rules.test.js`). Keep logic in plain functions
+  (`stores/`, `hooks/`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
@@ -219,8 +227,8 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 - Every function/method with parameters gets `@param` types; add a one-line description when the
   name doesn't say it all. Lifecycle methods (`constructor`, `connectedCallback`, `render`,
   `willUpdate`…) need no comment beyond types.
-- Shared shapes are `@typedef`s in `src/models/types.js`, imported with
-  `/** @typedef {import('../../models/types.js').X} X */`.
+- Shared shapes are `@typedef`s in the owning feature's `src/hooks/<feature>/types.js`, imported with
+  `/** @typedef {import('../../hooks/<feature>/types.js').X} X */`.
 - No `any`. `src/elements.d.ts` maps every `acp-*` tag in `HTMLElementTagNameMap` (the `@symblight`
   libraries ship their own), so `querySelector('acp-x')` is typed — register each new element there.
   Cast an event once at the top of a handler: `/** @type {CustomEvent<{ path: string }>} */ (e).detail`.
@@ -230,7 +238,7 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
 ## Styling conventions
 
 - **CSS lives in a `.css` file next to its component**, imported with `?inline` and assigned directly:
-  `import styles from './acp-toolbar.css?inline';` → `static styles = styles;`. `scripts/lit-css-loader.cjs`
+  `import styles from './toolbar.css?inline';` → `static styles = styles;`. `scripts/lit-css-loader.cjs`
   (wired in `rsbuild.config.js`) turns the import into a Lit `CSSResult`; `src/env.d.ts` types `*.css?inline` as
   `CSSResultGroup` (it deliberately doesn't reference `@rsbuild/core/types`, whose `*?inline` → `string`
   declaration would win). Never write `css\`…\`` blocks inside component JS.
@@ -250,19 +258,19 @@ Every JS file is fully typed in JSDoc and checked by `pnpm typecheck` (`checkJs`
   (`md-menu` / `md-menu-item` row height and padding; type sizes stay the library's). It's the one
   place tag selectors are allowed, because it must reach menus inside third-party shadow roots. A
   component sets only what differs (e.g. a menu's `--md-menu-min-width`), never menu density.
-- Colors come from the app tokens in `src/styles/tokens.css` (`--md-surface`, `--md-on-surface-variant`,
-  `--md-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--space-*`. No raw hex.
-- **Scales live in `tokens.css`; no literals for them in components:** type (`--font-size-xs/sm/md/lg`,
-  `--font-weight-medium`), icons (`--icon-size-xs…lg`, set as `font-size` on the icon's class), spacing
-  (`--space-0-5…4`), corners (`--shape-corner-extra-small/small/medium/full`), state layers
-  (`--state-hover/focus/pressed/disabled`), elevation (`--elevation-*`), stacking (`--z-*`), column limits
-  and `md-button` vertical padding (`--button-block-space-compact/regular`). A one-off optical value stays
+- Colors come from the app tokens in `src/styles/tokens.css` (`--acp-color-surface`, `--acp-color-on-surface-variant`,
+  `--acp-color-primary`, …, mapped from wc-material's `--md-sys-color-*`) and spacing from `--acp-space-*`. No raw hex.
+- **Scales live in `tokens.css`; no literals for them in components:** type (`--acp-font-size-xs/sm/md/lg`,
+  `--acp-font-weight-medium`), icons (`--acp-icon-size-xs…lg`, set as `font-size` on the icon's class), spacing
+  (`--acp-space-0-5…4`), corners (`--acp-shape-corner-extra-small/small/medium/full`), state layers
+  (`--acp-state-hover/focus/pressed/disabled`), elevation (`--acp-elevation-*`), stacking (`--acp-z-*`), column limits
+  and `md-button` vertical padding (`--acp-button-block-space-compact/regular`). A one-off optical value stays
   a literal; add a token once a second place needs it. Prefer logical properties (`margin-inline-start`,
   `inset-block-end`, `text-align: start`).
 - **Dark-only CSS keys on `:root[data-theme='dark']`**, never on `prefers-color-scheme`: Appearance
-  (`$settings`, applied by `services/theme.js`) can override the OS.
+  (`$settings`, applied by `settings.syncTheme()`, `hooks/settings/settings.js`) can override the OS.
 - **Derived colors use `color-mix()`** over those tokens (hover/pressed tints, translucent fills,
-  borders: `color-mix(in srgb, var(--md-primary) 12%, transparent)`), not a new token or an `rgba()`
+  borders: `color-mix(in srgb, var(--acp-color-primary) 12%, transparent)`), not a new token or an `rgba()`
   copy of one, so they follow the theme and accent.
 - **Layout that depends on available space uses container queries** (`container-type: inline-size` on
   the host or a wrapper, `@container (width < …)`), not `@media` on the viewport: columns are resized
@@ -294,28 +302,34 @@ full rules — load them when writing or reviewing component CSS or structure.
 - **Native CSS nesting** only via `&`, for one node's own states: `&:hover`, `&::placeholder`,
   `&[active]`, `@container (…) { … }`. Write BEM names in full (`&__x` does not concatenate). Bare nesting (`.a { .b {} }`)
   creates a descendant combinator — don't. The `safari >= 18.2` build target (Tauri's WebKit on current macOS; no older fallbacks) keeps nesting, `@scope` and `scrollbar-color` native.
+- App tokens in `tokens.css` are `--acp-<name>` (`--acp-space-2`, `--acp-color-primary`), so a component's public property must not reuse a token's name.
 - Component custom properties are namespaced `--acp-<component>-*` (public) / `--_acp-<component>-*`
   (internal). Theme third-party elements through their own documented properties
   (`--tvx-tree-view-*`, `--cdx-status-bar-*`, `--md-tab-*`).
 
 ### File structure
 
-Flex scheme: `src/components/` is a flat list of block folders, each holding the element's JS and CSS
-under the tag name, and its tests in `tests/`:
+Only `src/views/`, `src/components/`, `src/controllers/`, `src/stores/` (and the models and services still being
+moved out) hold folders. Each folder directly under them is one entity (an element, a controller, a module)
+and holds its JS and CSS under the tag name without the `acp-` prefix (`<acp-tab-view>` is
+`components/tab-view/tab-view.js`) and its tests in `__tests__/`, and no other folder:
 
 ```
 src/components/
-├── acp-tab-view/
-│   ├── acp-tab-view.js
-│   ├── acp-tab-view.css
-│   └── tests/
-│       └── acp-tab-view.test.js
-└── acp-toolbar/
-    ├── acp-toolbar.js
-    ├── acp-toolbar.css
-    └── tests/
-        └── acp-toolbar.test.js
+├── tab-view/
+│   ├── tab-view.js
+│   ├── tab-view.css
+│   └── __tests__/
+│       └── tab-view.test.js
+└── toolbar/
+    ├── toolbar.js
+    ├── toolbar.css
+    └── __tests__/
+        └── toolbar.test.js
 ```
 
-The element's tests live in a `tests/` folder inside its block folder, not in a global tree. No category grouping. Components import each other as `'../acp-x/acp-x.js'` and services as
-`'../../services/x.js'`.
+A view (`src/views/agent-column/agent-column.js`) is laid out the same way. The element's tests live in a
+`__tests__/` folder inside its own folder, not in a global tree. No category grouping and no sub-components inside an
+element's folder: a part with a tag of its own is a component in `src/components/`. Elements import each other as
+`'../x/x.js'` (a view imports `'../../components/x/x.js'`); hooks and stores are one folder per
+module as well (`'../../hooks/x/x.js'`, tests in `hooks/x/__tests__/`).

@@ -1,10 +1,5 @@
 name: Setup
-description: pnpm, Node and the frontend dependencies (the @symblight packages come from a private repo)
-
-inputs:
-  deps-token:
-    description: A token with read access to Symblight/rich-components
-    required: true
+description: pnpm, Node and the frontend dependencies (some @symblight packages are git dependencies on Symblight/rich-components)
 
 runs:
   using: composite
@@ -18,19 +13,13 @@ runs:
         node-version: lts/*
         cache: pnpm
 
-    # pnpm clones the git dependencies over every URL form the lockfile may use.
-    - name: Authenticate git dependencies
+    # The lockfile pins rich-components over SSH, which needs a key even for a public repo:
+    # clone it over anonymous HTTPS instead.
+    - name: Fetch git dependencies over HTTPS
       shell: bash
-      env:
-        TOKEN: ${{ inputs.deps-token }}
       run: |
-        if [ -z "$TOKEN" ]; then
-          echo "::error::The DEPS_TOKEN secret is not set (needed to fetch Symblight/rich-components)"
-          exit 1
-        fi
-        base="https://x-access-token:${TOKEN}@github.com/"
-        git config --global url."$base".insteadOf "https://github.com/"
-        git config --global --add url."$base".insteadOf "https://git@github.com/"
+        base="https://github.com/"
+        git config --global url."$base".insteadOf "https://git@github.com/"
         git config --global --add url."$base".insteadOf "ssh://git@github.com/"
         git config --global --add url."$base".insteadOf "git@github.com:"
 

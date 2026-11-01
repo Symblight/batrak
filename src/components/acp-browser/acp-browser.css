@@ -1,9 +1,0 @@
-:host {
-  display: flex;
-  box-sizing: border-box;
-  min-height: 0;
-  background: var(--column-background);
-}
-.acp-browser__placeholder {
-  flex: 1;
-}

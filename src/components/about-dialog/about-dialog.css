@@ -1,0 +1,71 @@
+:host {
+  display: contents;
+}
+
+.acp-about-dialog__dialog {
+  --md-dialog-container-color: var(--acp-color-surface-container-high);
+  --md-dialog-container-radius: 16px;
+
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+}
+.acp-about-dialog__dialog::part(dialog) {
+  width: min(440px, calc(100vw - 32px));
+}
+
+.acp-about-dialog__headline {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--acp-space-3);
+  align-items: center;
+}
+.acp-about-dialog__logo {
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
+}
+.acp-about-dialog__title {
+  font: 500 20px/28px var(--acp-font-family);
+  color: var(--acp-color-on-surface);
+}
+.acp-about-dialog__subtitle {
+  font: 400 13px/18px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+
+/* Label / value rows; values wrap anywhere (long paths). */
+.acp-about-dialog__rows {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--acp-space-1-5) var(--acp-space-4);
+  margin: 0;
+  font: 400 13px/18px var(--acp-font-family);
+}
+.acp-about-dialog__label {
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-about-dialog__value {
+  margin: 0;
+  color: var(--acp-color-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.acp-about-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-2);
+  width: 100%;
+}
+.acp-about-dialog__action {
+  --md-button-font-size: var(--acp-font-size-md);
+}
+/* Show log files stays at the start; Close goes to the end. */
+.acp-about-dialog__action_close {
+  margin-inline-start: auto;
+}
+.acp-about-dialog__icon {
+  font-size: var(--acp-icon-size-md);
+}

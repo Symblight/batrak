@@ -1,0 +1,136 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  box-sizing: border-box;
+  height: 48px;
+  padding-inline: var(--acp-space-3) var(--acp-space-2);
+  background: var(--acp-column-background);
+}
+
+.acp-session-header__status {
+  flex: none;
+}
+
+.acp-session-header__title-button {
+  min-width: 0;
+  --md-button-font-size: var(--acp-font-size-title);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+  --md-button-inline-start-space: var(--acp-space-2);
+  --md-button-inline-end-space: var(--acp-space-1-5);
+  --md-button-foreground-color: var(--acp-color-on-surface);
+}
+
+/* md-button sizes to its content; let its box and label shrink with the host. */
+.acp-session-header__title-button::part(button),
+.acp-session-header__title-button::part(label) {
+  min-width: 0;
+}
+
+.acp-session-header__title-button_open::part(button) {
+  background: var(--acp-state-hover);
+}
+
+.acp-session-header__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  min-width: 0;
+}
+
+.acp-session-header__title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--acp-font-size-title);
+  font-weight: var(--acp-font-weight-medium);
+}
+
+/* The first prompt's words, until the agent names the session. */
+.acp-session-header__title_provisional {
+  font-style: italic;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-header__title_fade-in {
+  animation: acp-session-header-fade-in 200ms var(--acp-motion-easing-standard);
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes acp-session-header-fade-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Not in a button: lines up with where the button's label starts. */
+.acp-session-header__title_draft {
+  padding-inline-start: var(--acp-space-2);
+}
+
+.acp-session-header__chevron {
+  flex: none;
+  font-size: var(--acp-icon-size-lg);
+  color: var(--acp-color-on-surface-variant);
+  transition: transform 200ms var(--acp-motion-easing-standard);
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
+}
+
+.acp-session-header__chevron_flipped {
+  transform: rotate(180deg);
+}
+
+.acp-session-header__rename {
+  flex: 1;
+  min-width: 0;
+  --md-text-field-top-space: var(--acp-space-1-5);
+  --md-text-field-bottom-space: var(--acp-space-1-5);
+  --md-text-field-inline-start-space: var(--acp-space-3);
+  --md-text-field-inline-end-space: var(--acp-space-3);
+  --md-text-field-font-size: var(--acp-font-size-title);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-background-color: var(--acp-color-surface-container-lowest);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
+
+  caret-color: var(--acp-color-primary);
+}
+
+/* The library's focused outline is 3px; the spec asks for 2px. */
+.acp-session-header__rename:focus-within::part(indicator) {
+  border-width: 2px;
+}
+
+.acp-session-header__hint {
+  flex: none;
+  margin-inline: var(--acp-space-2) var(--acp-space-1);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-xs);
+  white-space: nowrap;
+}
+
+.acp-session-header__spacer {
+  flex: 1;
+  min-width: var(--acp-space-2);
+}
+
+.acp-session-header__new,
+.acp-session-header__view {
+  flex: none;
+}
+
+.acp-session-header__new-icon,
+.acp-session-header__view-icon {
+  font-size: var(--acp-icon-size-lg);
+}

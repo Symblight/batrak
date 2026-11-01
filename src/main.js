@@ -1,16 +1,16 @@
+import { settings } from './hooks/settings/settings.js';
 import './styles/tokens.css';
 import './styles/fonts/fonts.css';
 // Before any component: every shadow root gets the shared styles.
 import './styles/shadow-styles.js';
-import { logUncaughtErrors } from './services/logger.js';
-import { showBackendNotices } from './services/notices.js';
-import { fileDrop } from './services/file-drop.js';
-import { syncTheme } from './services/theme.js';
-import './components/acp-app/acp-app.js';
+import { app } from './hooks/app/app.js';
+import { fileDrop } from './hooks/file-drop/file-drop.js';
+import { perf } from './hooks/perf/perf.js';
+import './views/app/app.js';
 
-logUncaughtErrors();
-showBackendNotices();
-syncTheme();
+app.init();
+perf.start();
+settings.syncTheme();
 fileDrop.start();
 
 // No native context menu outside `pnpm dev` / `pnpm tauri dev` (Inspect Element stays there);

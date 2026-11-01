@@ -1,21 +1,21 @@
+import { projects } from '../../hooks/projects/projects.js';
+import { app } from '../../hooks/app/app.js';
 import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
-import { isUserAgentsFile } from '../../models/agents-file.js';
-import { imageTypeOf } from '../../models/image-types.js';
-import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor.js';
-import { $gitHead } from '../../stores/git.js';
-import { $sessions } from '../../stores/sessions.js';
-import { $rootId } from '../../stores/workspace.js';
+import { agents } from '../../hooks/agents/agents.js';
+import { imageType } from '../../components/image-preview/image-type.js';
+import { git } from '../../hooks/git/git.js';
+import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
+import { $gitHead } from '../../stores/git/git.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
-/** @typedef {import('../../models/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../models/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../models/types.js').WorkspaceChanges} WorkspaceChanges */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
+/** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
+/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /** @param {string} path */
 function basename(path) {
@@ -120,18 +120,20 @@ export class TabFilesController {
     return this.#editorTabs.value.active;
   }
 
+  /** Stops listening to the files changing on disk. */
+  #stopWatching = () => {};
+
   hostConnected() {
-    projectController.addEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching = projects.onFsChange(this.#onFsChange);
   }
 
   hostDisconnected() {
-    projectController.removeEventListener('fs-change', this.#onFsChange);
+    this.#stopWatching();
   }
 
-  #onFsChange = (/** @type {Event} */ e) => {
-    const { modified, added, removed } = /** @type {CustomEvent<WorkspaceChanges>} */ (e).detail;
+  #onFsChange = (/** @type {WorkspaceChanges} */ { modified, added, removed }) => {
     for (const tab of this.#tabs) {
-      const rel = projectController.relPath(tab.path);
+      const rel = projects.relPath(tab.path);
       if (rel === null) continue;
       if (removed.includes(rel)) {
         // A shown text stays, like the edits on it; anything else has nothing left to show.
@@ -182,12 +184,12 @@ export class TabFilesController {
     }
     const content = tab.draft ?? tab.content;
     try {
-      await writeFile(tab.path, content);
+      await projects.writeFile(tab.path, content);
       // Edits typed while saving stay a draft.
       const now = this.#find(id);
       if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false, deletedOnDisk: false });
     } catch (err) {
-      reportError(`Saving ${basename(tab.path)} failed`, err);
+      app.reportError(`Saving ${basename(tab.path)} failed`, err);
     }
     return true;
   }
@@ -222,7 +224,7 @@ export class TabFilesController {
    */
   async #diskDiffers(tab) {
     try {
-      return (await readFile(tab.path)) !== tab.content;
+      return (await projects.readFile(tab.path)) !== tab.content;
     } catch {
       return true;
     }
@@ -273,7 +275,7 @@ export class TabFilesController {
     if (id === null || this.#reading.has(id)) return;
     const tab = this.#find(id);
     // The user's agents.json lies outside every root: it reads with no project open.
-    if (this.#rootId.value === null && !(tab && isUserAgentsFile(tab.path))) return;
+    if (this.#rootId.value === null && !(tab && agents.isUserAgentsFile(tab.path))) return;
     if (tab && !tab.loaded) this.#load(id);
   }
 
@@ -308,8 +310,8 @@ export class TabFilesController {
     let changes;
     try {
       changes = image
-        ? { image: new Blob([await readFileBytes(path)], { type: imageTypeOf(path).mime }), error: '', deletedOnDisk: false }
-        : { content: await readFile(path), error: '', deletedOnDisk: false };
+        ? { image: new Blob([await projects.readFileBytes(path)], { type: imageType.of(path).mime }), error: '', deletedOnDisk: false }
+        : { content: await projects.readFile(path), error: '', deletedOnDisk: false };
     } catch (err) {
       changes = { content: '', image: null, error: String(err) };
     }
@@ -332,9 +334,9 @@ export class TabFilesController {
    */
   async #readBaseline(path) {
     const rootId = this.#rootId.value;
-    const rel = projectController.relPath(path);
+    const rel = projects.relPath(path);
     if (rootId === null || rel === null) return null;
-    return gitFileAtHead(rootId, rel).catch(() => null);
+    return git.fileAtHead(rootId, rel).catch(() => null);
   }
 
   /**

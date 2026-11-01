@@ -1,13 +1,11 @@
-import { removeSessionConfirm } from '../../models/sessions.js';
-import { reportError } from '../../services/notices.js';
-import { projectController } from '../../services/project-controller.js';
-import { sessionController } from '../../services/session-controller.js';
-import { terminalController } from '../../services/terminals.js';
-import { $sessions } from '../../stores/sessions.js';
+import { projects } from '../../hooks/projects/projects.js';
+import { app } from '../../hooks/app/app.js';
+import { sessions } from '../../hooks/sessions/sessions.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} SessionActionsHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
-/** @typedef {import('../../models/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /**
  * @typedef {Object} SessionActionsConfig
@@ -58,11 +56,11 @@ export class SessionActionsController {
     e.stopPropagation();
     const session = $sessions.get().find((s) => s.id === detail.sessionId);
     if (!session) return;
-    if (e.type === 'acp-session-rename') sessionController.rename(session.id, detail.title ?? '');
-    else if (e.type === 'acp-session-reset-title') sessionController.resetTitle(session.id);
+    if (e.type === 'acp-session-rename') sessions.rename(session.id, detail.title ?? '');
+    else if (e.type === 'acp-session-reset-title') sessions.resetTitle(session.id);
     else if (e.type === 'acp-session-reveal')
-      projectController.reveal(session.folder).catch((err) => reportError('Revealing folder failed', err));
-    else if (e.type === 'acp-session-open-terminal') terminalController.sessionTerminal(session.id);
+      projects.reveal(session.folder).catch((err) => app.reportError('Revealing folder failed', err));
+    else if (e.type === 'acp-session-open-terminal') sessions.openInTerminal(session.id);
     else this.#delete(session);
   };
 
@@ -72,6 +70,6 @@ export class SessionActionsController {
    */
   async #delete(session) {
     const dialog = this.#config.confirm();
-    if (dialog && (await dialog.confirm(removeSessionConfirm(session)))) await sessionController.remove(session.id);
+    if (dialog && (await dialog.confirm(sessions.removeSessionConfirm(session)))) await sessions.remove(session.id);
   }
 }
