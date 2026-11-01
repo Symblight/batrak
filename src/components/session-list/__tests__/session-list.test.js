@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../session-list.js';
 
 /** @typedef {import('../session-list.js').AcpSessionList} AcpSessionList */
@@ -249,6 +250,108 @@ describe('acp-session-list', () => {
     await /** @type {AcpSessionList} */ (/** @type {ShadowRoot} */ (root).host).updateComplete;
     expect(titles(root)).to.have.length(12);
     expect(more(), 'all shown').to.equal(null);
+  });
+
+  it('counts a project’s unread sessions for its row, and ends Show more with those behind it', async () => {
+    // Arrange
+    const sessions = Array.from({ length: 12 }, (_, i) =>
+      session(`s${i}`, { lastActivityAt: `2026-01-${String(i + 1).padStart(2, '0')}T00:00:00.000Z` }),
+    );
+    const hidden = () => /** @type {HTMLElement | null} */ (root.querySelector('.acp-session-list__show-more-new'));
+    const more = () => /** @type {HTMLElement} */ (root.querySelector('.acp-session-list__show-more'));
+    // Act
+    const { el, root } = await render({ sessions: [...sessions, SESSIONS[3]], unread: ['s11', 's1', 's0', 'r'] });
+    // Assert
+    expect(titles(root)).to.deep.equal(['Session s11', 'Session s10', 'Session s9', 'Session s8', 'Session s7', 'Session r']);
+    expect(projectRows(root).map((p) => p.unread), 'each project’s own').to.deep.equal([3, 1]);
+    expect(more().getAttribute('aria-label')).to.equal('Show more sessions of brama, 2 unread');
+    expect(hidden()?.textContent?.replace(/\s+/g, ' ').trim(), 'the count behind it').to.equal('2 new');
+    expect(hidden()?.getAttribute('aria-hidden')).to.equal('true');
+
+    // Act: the hidden ones are read
+    el.unread = ['s11'];
+    await el.updateComplete;
+    // Assert
+    expect(hidden() === null, 'nothing added').to.equal(true);
+    expect(more().getAttribute('aria-label')).to.equal('Show more sessions of brama');
+  });
+
+  describe('read marks', () => {
+    it('offers Mark as read on an unread row and Mark as unread on a read one, but only Mark as read on the shown session, and passes the pick on', async () => {
+      // Arrange
+      const { el, root } = await render({ unread: ['a', 'b'], activeSessionId: 'b' });
+      const menuEl = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (root.querySelector('acp-session-menu'));
+      const marks = record(el, 'acp-session-mark-read');
+      const cases = [
+        // [title, mark, why]
+        ['Session a', 'read', 'unread'],
+        ['Session c', 'unread', 'read'],
+        ['Session b', 'read', 'shown and unread (not seen)'],
+      ];
+      for (const [title, mark, why] of cases) {
+        // Act
+        row(root, title).shadowRoot?.querySelector('.acp-session-row__row')?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 5, clientY: 5 }),
+        );
+        await settle(el);
+        // Assert
+        expect(menuEl.mark, why).to.equal(mark);
+      }
+
+      // Arrange: the shown session is read
+      el.unread = ['a'];
+      await el.updateComplete;
+      row(root, 'Session b').shadowRoot?.querySelector('.acp-session-row__row')?.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 5, clientY: 5 }),
+      );
+      await settle(el);
+      // Assert
+      expect(menuEl.mark, 'shown and read').to.equal('');
+
+      // Act
+      for (const value of ['mark-read', 'mark-unread']) {
+        menuEl.dispatchEvent(new CustomEvent('acp-session-menu-select', { detail: { value }, bubbles: true, composed: true }));
+      }
+      // Assert
+      expect(marks.map((e) => e.detail)).to.deep.equal([
+        { sessionId: 'b', read: true },
+        { sessionId: 'b', read: false },
+      ]);
+    });
+
+    it('puts Mark all as read first in a project’s menu, disabled while none of its sessions is unread, with the shortcut on the active project’s', async () => {
+      // Arrange
+      const { el, root } = await render({ unread: ['r'], activeProjectId: '/home/me/rich' });
+      const marks = record(el, 'acp-project-mark-read');
+      const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-session-list__project-menu'));
+      const open = async (/** @type {number} */ index) => {
+        projectRows(root)[index].shadowRoot?.querySelector('.acp-project-row__row')?.dispatchEvent(
+          new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 1, clientY: 1 }),
+        );
+        await settle(el);
+        const first = /** @type {HTMLElement} */ (menu.querySelector('md-menu-item'));
+        return { first, hint: first.querySelector('[slot="trailing"]')?.textContent ?? null };
+      };
+
+      // Act: brama has none unread, and isn't the active project
+      const none = await open(0);
+      // Assert
+      expect([none.first.getAttribute('value'), none.first.textContent?.trim(), none.first.hasAttribute('disabled'), none.hint]).to.deep.equal(['mark-read', 'Mark all as read', true, null]);
+
+      // Act: rich has one, and is active
+      const some = await open(1);
+      // Assert
+      expect([some.first.hasAttribute('disabled'), some.hint]).to.deep.equal([false, shortcuts.hint('markProjectRead')]);
+      expect([...menu.querySelectorAll('md-menu-item')].map((i) => i.textContent?.trim().split(/\s+/).slice(0, 2).join(' '))[1]).to.equal('New session');
+
+      // Act
+      menu.dispatchEvent(new CustomEvent('select', { detail: { value: 'mark-read', item: some.first } }));
+      menu.dispatchEvent(new CustomEvent('closed'));
+      await settle(el);
+      // Assert
+      expect(marks.map((e) => e.detail)).to.deep.equal([{ projectId: '/home/me/rich' }]);
+      expect(projectRows(root)[1].shadowRoot?.activeElement?.classList.contains('acp-project-row__row'), 'focus back on the project row').to.equal(true);
+    });
   });
 
   describe('as a tree', () => {

@@ -10,6 +10,7 @@ import '@symblight/wc-material/skeleton';
 import '@symblight/wc-material/tooltip';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
+import doneAllIcon from '@material-design-icons/svg/outlined/done_all.svg?raw';
 import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import openFolderIcon from '@material-design-icons/svg/outlined/create_new_folder.svg?raw';
 import { AcpProjectRow } from '../project-row/project-row.js';
@@ -20,9 +21,10 @@ import { TreeNavigationController } from '../../controllers/tree-navigation/Tree
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { app } from '../../hooks/app/app.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './session-list.css?inline';
 
-const { SESSIONS_PAGE, orderSessions, visibleSessions } = sessions;
+const { SESSIONS_PAGE, orderSessions, unreadIn, visibleSessions } = sessions;
 
 /** @typedef {import('../session-row/session-row.js').AcpSessionRow} AcpSessionRow */
 /** @typedef {import('../../controllers/tree-navigation/TreeNavigationController.js').TreeNode} TreeNode */
@@ -31,15 +33,17 @@ const { SESSIONS_PAGE, orderSessions, visibleSessions } = sessions;
 
 /**
  * @tag acp-session-list
- * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity; five, and five more with each Show more; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary The active project's sync with its agents beside the heading; projects, each expanding into its sessions (pinned first, then by last activity; five, and five more with each Show more; skeleton rows while they load) with their status, branch and age (unread ones marked, counted on a collapsed project and behind Show more); a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-project-open-folder `null`
  * @fires acp-project-select `{ projectId }`
  * @fires acp-project-toggle `{ projectId, expanded }`
  * @fires acp-project-new-session `{ projectId }`
  * @fires acp-project-reveal `{ projectId }`
  * @fires acp-project-remove `{ projectId }`
+ * @fires acp-project-mark-read `{ projectId }` Mark all as read.
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
+ * @fires acp-session-mark-read `{ sessionId, read }` Mark as read (`read: true`) or as unread.
  * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
@@ -163,7 +167,23 @@ export class AcpSessionList extends LitElement {
     if (value === 'new-session') this.#emit('acp-project-new-session', { projectId });
     else if (value === 'reveal') this.#emit('acp-project-reveal', { projectId });
     else if (value === 'remove') this.#emit('acp-project-remove', { projectId });
+    else if (value === 'mark-read') {
+      this.#emit('acp-project-mark-read', { projectId });
+      this.#focusAfterClose = projectId;
+    }
   }
+
+  /** @type {string | null} A project whose row takes focus once its menu has closed. */
+  #focusAfterClose = null;
+
+  #onProjectMenuClosed = () => {
+    this.#projectMenu.onClosed();
+    const projectId = this.#focusAfterClose;
+    this.#focusAfterClose = null;
+    if (projectId === null) return;
+    const row = [...this.renderRoot.querySelectorAll('acp-project-row')].find((r) => r.project?.id === projectId);
+    row?.focusRow();
+  };
 
   /** @param {Event} e A row wants its menu: at a point, or under its button. */
   #onProjectRowMenu(e) {
@@ -187,7 +207,9 @@ export class AcpSessionList extends LitElement {
     if (!session) return;
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const sessionId = session.id;
-    if (value === 'rename') {
+    if (value === 'mark-read' || value === 'mark-unread') {
+      this.#emit('acp-session-mark-read', { sessionId, read: value === 'mark-read' });
+    } else if (value === 'rename') {
       /** @type {HTMLElementTagNameMap['acp-session-row'] | null} */ (
         this.renderRoot.querySelector(`acp-session-row[data-session-id="${CSS.escape(sessionId)}"]`)
       )?.startRename();
@@ -217,6 +239,7 @@ export class AcpSessionList extends LitElement {
         .loading=${this.openingProjectId === project.id}
         .menuOpen=${this.#projectMenu.target?.id === project.id}
         .count=${sessions.length}
+        .unread=${unreadIn(sessions, this.unread).count}
         @acp-project-row-menu=${this.#onProjectRowMenu}
       ></acp-project-row>
       ${failure !== undefined
@@ -256,16 +279,22 @@ export class AcpSessionList extends LitElement {
   #renderSessions(project, sessions) {
     const limit = this.limits[project.id] ?? SESSIONS_PAGE;
     const { shown, hidden } = visibleSessions(sessions, limit, this.activeSessionId);
+    const unreadBehind = unreadIn(sessions, this.unread, shown.length).hidden;
     return html`<div class="acp-session-list__sessions" role="group">
       ${repeat(shown, (s) => s.id, (s) => this.#renderSession(s))}
       ${hidden > 0
-        ? html`<md-button
+        ? html`<div class="acp-session-list__more"><md-button
             class="acp-session-list__show-more"
             variant="text"
-            aria-label=${`Show more sessions of ${project.name}`}
+            aria-label=${`Show more sessions of ${project.name}${unreadBehind > 0 ? `, ${unreadBehind} unread` : ''}`}
             @click=${() => (this.limits = { ...this.limits, [project.id]: shown.length + SESSIONS_PAGE })}
             >Show more…</md-button
-          >`
+          >
+          ${unreadBehind > 0
+            ? html`<span class="acp-session-list__show-more-new" aria-hidden="true">
+                <span class="acp-session-list__show-more-dot"></span>${unreadBehind} new
+              </span>`
+            : nothing}</div>`
         : nothing}
     </div>`;
   }
@@ -286,15 +315,24 @@ export class AcpSessionList extends LitElement {
   }
 
   #renderProjectMenu() {
+    const target = this.#projectMenu.target;
+    const anyUnread = target !== null && unreadIn(this.sessions.filter((s) => s.projectId === target.id), this.unread).count > 0;
     return html`<md-menu
       class="acp-session-list__project-menu"
-      aria-label=${this.#projectMenu.target?.name ?? 'Project'}
+      aria-label=${target?.name ?? 'Project'}
       @select=${this.#projectMenu.onSelect}
-      @closed=${this.#projectMenu.onClosed}
+      @closed=${this.#onProjectMenuClosed}
     >
+      <md-menu-item class="acp-session-list__menu-item" value="mark-read" ?disabled=${!anyUnread}>
+        <md-icon slot="leading" class="acp-session-list__menu-icon">${unsafeSVG(doneAllIcon)}</md-icon>
+        Mark all as read
+        ${target !== null && target.id === this.activeProjectId
+          ? html`<span slot="trailing">${shortcuts.hint('markProjectRead')}</span>`
+          : nothing}
+      </md-menu-item>
       <md-menu-item class="acp-session-list__menu-item" value="new-session">
         <md-icon slot="leading" class="acp-session-list__menu-icon">${unsafeSVG(addIcon)}</md-icon>
-        New Session
+        New session
       </md-menu-item>
       <md-menu-item class="acp-session-list__menu-item" value="reveal">
         <md-icon slot="leading" class="acp-session-list__menu-icon">${unsafeSVG(folderOpenIcon)}</md-icon>
@@ -306,6 +344,16 @@ export class AcpSessionList extends LitElement {
         Remove project
       </md-menu-item>
     </md-menu>`;
+  }
+
+  /**
+   * @param {Session | null} target The session the menu is open for.
+   * @returns {'read' | 'unread' | ''} The shown session is read while it is seen, so it never offers Mark as unread.
+   */
+  #markOf(target) {
+    if (target === null) return '';
+    if (this.unread.includes(target.id)) return 'read';
+    return target.id === this.activeSessionId ? '' : 'unread';
   }
 
   render() {
@@ -341,6 +389,7 @@ export class AcpSessionList extends LitElement {
       ${this.#renderProjectMenu()}
       <acp-session-menu
         session-title=${target?.title ?? ''}
+        .mark=${this.#markOf(target)}
         ?resettable=${target !== null && target.titleSource === 'user' && target.agentTitle !== null}
         @acp-session-menu-select=${this.#onSessionMenuSelect}
         @acp-session-menu-toggle=${(/** @type {Event} */ e) => e.stopPropagation()}

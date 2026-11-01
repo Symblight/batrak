@@ -10,7 +10,7 @@ import { SessionActionsController } from '../../controllers/session-actions/Sess
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
-import { $unreadSessions } from '../../stores/session-read/session-read.js';
+import { $unreadSessions, markProjectRead, markRead, markUnread } from '../../stores/session-read/session-read.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
@@ -18,7 +18,7 @@ import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
 
 /**
  * @tag acp-session-column
- * @summary The session list's container: projects and their sessions from the stores, the active project's sync, and what the list asks for (open, select, start, rename, reveal, remove, resync).
+ * @summary The session list's container: projects and their sessions from the stores, the active project's sync, and what the list asks for (open, select, start, rename, reveal, remove, mark read or unread, resync).
  */
 export class AcpSessionColumn extends ViewElement {
   static properties = {
@@ -156,6 +156,18 @@ export class AcpSessionColumn extends ViewElement {
     sessions.select(session.id);
   }
 
+  /** @param {Event} e */
+  #onSessionMarkRead(e) {
+    const { sessionId, read } = /** @type {CustomEvent<{ sessionId: string, read: boolean }>} */ (e).detail;
+    if (read) markRead(sessionId);
+    else markUnread(sessionId);
+  }
+
+  /** @param {Event} e */
+  #onProjectMarkRead(e) {
+    markProjectRead(this.#projectIdOf(e));
+  }
+
   #onResync() {
     const path = this.#workspace.value?.path;
     if (path) sessions.sync(path, { force: true });
@@ -190,7 +202,9 @@ export class AcpSessionColumn extends ViewElement {
         @acp-project-new-session=${this.#onNewSession}
         @acp-project-reveal=${this.#onProjectReveal}
         @acp-project-remove=${this.#onProjectRemove}
+        @acp-project-mark-read=${this.#onProjectMarkRead}
         @acp-session-select=${this.#onSessionSelect}
+        @acp-session-mark-read=${this.#onSessionMarkRead}
         @acp-session-resync=${this.#onResync}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>

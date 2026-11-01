@@ -40,11 +40,33 @@
   padding-block: var(--acp-space-0-5) var(--acp-space-1-5);
 }
 
+.acp-session-list__more {
+  display: flex;
+  align-items: center;
+  padding-inline-end: var(--acp-space-3);
+}
+
 .acp-session-list__show-more {
-  align-self: flex-start;
   margin-inline-start: 22px;
   --md-button-block-start-space: var(--acp-button-block-space-compact);
   --md-button-block-end-space: var(--acp-button-block-space-compact);
+}
+
+.acp-session-list__show-more-new {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  margin-inline-start: auto;
+  font-size: var(--acp-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--acp-color-primary);
+}
+
+.acp-session-list__show-more-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-primary);
 }
 
 .acp-session-list__loading {

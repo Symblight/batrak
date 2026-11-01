@@ -18,6 +18,7 @@ const TABLE = Object.freeze({
   quickOpen: { mod: true, key: 'P' },
   searchInFiles: { mod: true, shift: true, key: 'F' },
   toggleSessionView: { mod: true, shift: true, key: 'T' },
+  markProjectRead: { mod: true, shift: true, key: 'R' },
   newTerminal: { ctrl: true, key: '`' },
   save: { mod: true, key: 'S' },
   find: { mod: true, key: 'F' },

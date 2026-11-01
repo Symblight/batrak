@@ -14,6 +14,7 @@ import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../sto
 import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
+import { markProjectRead } from '../../stores/session-read/session-read.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -114,7 +115,8 @@ export class AcpApp extends ViewElement {
 
   /**
    * Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: the search dialog. Cmd/Ctrl+Shift+T: the session in chat /
-   * terminal. Ctrl+`: New Terminal. While the search dialog is open, only Cmd/Ctrl+Shift+F.
+   * terminal. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
+   * key. Ctrl+`: New Terminal. While the search dialog is open, only Cmd/Ctrl+Shift+F.
    */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
     const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
@@ -137,8 +139,27 @@ export class AcpApp extends ViewElement {
     } else if (key === 't' && e.shiftKey) {
       e.preventDefault();
       this.renderRoot.querySelector('acp-agent-column')?.toggleView();
+    } else if (key === 'r' && e.shiftKey && !AcpApp.#takesKeys(e)) {
+      e.preventDefault();
+      const projectId = this.#workspace.value?.path;
+      if (projectId) markProjectRead(projectId);
     }
   };
+
+  /**
+   * @param {KeyboardEvent} e
+   * @returns {boolean} The key was pressed in a dialog or a text field, which keep it.
+   */
+  static #takesKeys(e) {
+    const path = e.composedPath();
+    const origin = path[0];
+    const editable =
+      origin instanceof HTMLInputElement ||
+      origin instanceof HTMLTextAreaElement ||
+      origin instanceof HTMLSelectElement ||
+      (origin instanceof HTMLElement && origin.isContentEditable);
+    return editable || path.some((n) => n instanceof HTMLElement && (n.localName === 'dialog' || n.localName === 'md-dialog'));
+  }
 
   constructor() {
     super();

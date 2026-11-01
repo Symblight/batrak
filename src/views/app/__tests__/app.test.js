@@ -3,6 +3,8 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
+import { $sessions, $sessionsLoaded } from '../../../stores/sessions/sessions.js';
 import '../app.js';
 
 /** @typedef {import('../app.js').AcpApp} AcpApp */
@@ -137,5 +139,73 @@ describe('acp-app: search dialog', () => {
     await app.updateComplete;
     expect(app.sideView).to.equal('search');
     expect(shown).to.deep.equal([{ ...STATE, query: 'bar' }]);
+  });
+});
+
+describe('acp-app: mark all as read', () => {
+  /** @param {string} id @param {string} projectId @returns {import('../../../hooks/sessions/types.js').Session} */
+  const session = (id, projectId) => ({
+    id,
+    projectId,
+    title: id,
+    status: 'idle',
+    agentId: 'a',
+    config: {},
+    mode: 'local',
+    folder: projectId,
+    worktreePath: null,
+    branch: null,
+    baseCommit: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    lastActivityAt: '2026-01-02T00:00:00.000Z',
+    titleSource: 'prompt',
+    agentTitle: null,
+  });
+
+  beforeEach(() => {
+    mockIPC((cmd, args) => startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {})));
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $hiddenColumns.set([]);
+  });
+
+  afterEach(() => {
+    $sessions.set([]);
+    for (const id of ['mine', 'other']) $sessionReads.setKey(id, undefined);
+    $workspace.set(null);
+    clearMocks();
+  });
+
+  /** Two unread sessions, one in the active project and one in another. */
+  async function render() {
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get());
+    $sessions.set([session('mine', '/p'), session('other', '/q')]);
+    for (const id of ['mine', 'other']) $sessionReads.setKey(id, { seen: '2026-01-01T00:00:00.000Z' });
+    return app;
+  }
+
+  it('marks the active project’s sessions read on Mod+Shift+R, unless a dialog or a text field has the key', async () => {
+    // Arrange
+    const app = await render();
+    expect($unreadSessions.get(), 'both unread').to.have.members(['mine', 'other']);
+    const input = document.createElement('input');
+    const dialog = document.createElement('dialog');
+    const inDialog = document.createElement('button');
+    dialog.append(inDialog);
+    app.append(input, dialog);
+    /** @param {Element} from */
+    const pressIn = (from) =>
+      from.dispatchEvent(new KeyboardEvent('keydown', { key: 'R', metaKey: true, shiftKey: true, bubbles: true, composed: true, cancelable: true }));
+
+    // Act + Assert: ignored where the key belongs to something else
+    for (const [from, why] of /** @type {const} */ ([[input, 'a text field'], [inDialog, 'a dialog']])) {
+      pressIn(from);
+      expect($unreadSessions.get(), why).to.have.members(['mine', 'other']);
+    }
+
+    // Act
+    shortcut('R', { shiftKey: true });
+    // Assert
+    expect($unreadSessions.get(), 'only the active project’s').to.deep.equal(['other']);
   });
 });
