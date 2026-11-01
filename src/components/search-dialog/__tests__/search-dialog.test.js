@@ -23,9 +23,13 @@ const RESULTS = [
 /** @param {Element} el */
 const shadow = (el) => /** @type {ShadowRoot} */ (el.shadowRoot);
 /** @param {AcpSearchDialog} el */
-const input = (el) => /** @type {HTMLInputElement} */ (shadow(el).querySelector('.acp-search-dialog__input'));
+const bar = (el) => /** @type {HTMLElementTagNameMap['acp-search-bar']} */ (shadow(el).querySelector('acp-search-bar'));
+/** @param {AcpSearchDialog} el */
+const input = (el) => /** @type {HTMLInputElement} */ (bar(el).shadowRoot?.querySelector('input'));
 /** @param {AcpSearchDialog} el */
 const results = (el) => /** @type {HTMLElementTagNameMap['acp-search-results']} */ (shadow(el).querySelector('acp-search-results'));
+/** @param {AcpSearchDialog} el */
+const header = (el) => /** @type {HTMLElementTagNameMap['acp-search-header']} */ (shadow(el).querySelector('acp-search-header'));
 /** @param {AcpSearchDialog} el */
 const dialog = (el) => /** @type {HTMLDialogElement} */ (shadow(el).querySelector('dialog'));
 /**
@@ -33,6 +37,16 @@ const dialog = (el) => /** @type {HTMLDialogElement} */ (shadow(el).querySelecto
  * @param {string} selector
  */
 const text = (el, selector) => (shadow(el).querySelector(selector)?.textContent ?? '').replace(/\s+/g, ' ').trim();
+
+/** Whether the query field has the focus (a boolean: chai would print a DOM node). @param {AcpSearchDialog} el */
+const queryFocused = (el) => bar(el).shadowRoot?.activeElement === input(el);
+
+/**
+ * A child of the dialog by tag, and its shadow root's text.
+ * @param {AcpSearchDialog} el
+ * @param {string} tag
+ */
+const inner = (el, tag) => (shadow(el).querySelector(tag)?.shadowRoot?.textContent ?? '').replace(/\s+/g, ' ').trim();
 
 /**
  * Collects the element's events of `type`.
@@ -93,7 +107,7 @@ describe('acp-search-dialog', () => {
       const { el, queries } = await open();
       expect(el.open).to.equal(true);
       expect(input(el).value).to.equal('last');
-      expect(shadow(el).activeElement).to.equal(input(el));
+      expect(queryFocused(el)).to.equal(true);
       expect([input(el).selectionStart, input(el).selectionEnd]).to.deep.equal([0, 4]);
       expect(queries.map((e) => e.detail)).to.deep.equal([
         {
@@ -155,7 +169,7 @@ describe('acp-search-dialog', () => {
         el.addEventListener(`acp-search-dialog-${action}`, () => queueMicrotask(() => target.focus()));
         const closed = new Promise((r) => dialog(el).addEventListener('close', r, { once: true }));
         if (action === 'open') press(el, 'Enter');
-        else /** @type {HTMLElement} */ (shadow(el).querySelectorAll('.acp-search-dialog__layout-button')[2]).click();
+        else /** @type {HTMLElement} */ (shadow(header(el)).querySelector('#acp-search-header-popout')).click();
         await closed;
         expect(document.activeElement, action).to.equal(target);
         before.remove();
@@ -165,9 +179,9 @@ describe('acp-search-dialog', () => {
 
     it('closes on a click on the scrim, not inside and not when a selection drag from the input ends there', async () => {
       const { el } = await open();
-      const header = /** @type {HTMLElement} */ (shadow(el).querySelector('.acp-search-dialog__header'));
-      header.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
-      header.click();
+      const title = header(el);
+      title.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
+      title.click();
       expect(el.open, 'a click inside').to.equal(true);
 
       input(el).dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, composed: true }));
@@ -190,7 +204,7 @@ describe('acp-search-dialog', () => {
 
     it('toggles options by click and Alt+C / W / R, searching at once', async () => {
       const { el, queries } = await open();
-      const options = /** @type {HTMLElementTagNameMap['acp-search-options']} */ (shadow(el).querySelector('acp-search-options'));
+      const options = /** @type {HTMLElementTagNameMap['acp-search-options']} */ (shadow(bar(el)).querySelector('acp-search-options'));
       /** @type {HTMLElement} */ (shadow(options).querySelector('.acp-search-options__option')).click();
       expect(queries.at(-1)?.detail).to.deep.include({ delay: 0 });
       expect(queries.at(-1)?.detail.options.caseSensitive).to.equal(true);
@@ -206,14 +220,12 @@ describe('acp-search-dialog', () => {
 
     it('clears the query and searches at once', async () => {
       const { el, queries } = await open();
-      const clear = /** @type {HTMLElement} */ (shadow(el).querySelector('.acp-search-dialog__clear'));
-      expect(tooltipOf(clear)).to.equal('Clear');
-      clear.click();
+      /** @type {HTMLElement} */ (shadow(bar(el)).querySelector('.acp-search-bar__clear')).click();
       await el.updateComplete;
       expect(input(el).value).to.equal('');
       expect(queries.at(-1)?.detail).to.deep.include({ delay: 0 });
       expect(queries.at(-1)?.detail.options.query).to.equal('');
-      expect(shadow(el).querySelector('.acp-search-dialog__clear')).to.equal(null);
+      expect(shadow(bar(el)).querySelector('.acp-search-bar__clear')).to.equal(null);
     });
 
     it('searches a query of spaces and shows its results', async () => {
@@ -223,7 +235,7 @@ describe('acp-search-dialog', () => {
       el.results = RESULTS;
       await el.updateComplete;
       expect(results(el)).to.not.equal(null);
-      expect(shadow(el).querySelector('.acp-search-dialog__recent')).to.equal(null);
+      expect(shadow(el).querySelector('acp-search-recent')).to.equal(null);
       expect(text(el, '.acp-search-dialog__summary')).to.equal('4 results in 2 files');
       expect(input(el).getAttribute('aria-expanded')).to.equal('true');
     });
@@ -261,7 +273,12 @@ describe('acp-search-dialog', () => {
         expect(event.defaultPrevented, key).to.equal(true);
         expect(keys(), `${key} ${JSON.stringify(init)}`).to.equal(expected);
       }
-      expect(shadow(el).activeElement).to.equal(input(el));
+      expect(queryFocused(el)).to.equal(true);
+      // A key on the clear button is not the query's: the arrows leave the selection alone.
+      const before = keys();
+      /** @type {HTMLElement} */ (shadow(bar(el)).querySelector('.acp-search-bar__clear')).dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true, cancelable: true }));
+      await el.updateComplete;
+      expect(keys(), 'the clear button’s arrows').to.equal(before);
     });
 
     it('opens the selected match on Enter, or a double-clicked one, and closes', async () => {
@@ -301,6 +318,11 @@ describe('acp-search-dialog', () => {
   });
 
   describe('states', () => {
+    /** @param {AcpSearchDialog} el */
+    const recentItems = (el) => /** @type {HTMLElement[]} */ ([...(shadow(el).querySelector('acp-search-recent')?.shadowRoot?.querySelectorAll('.acp-search-recent__item') ?? [])]);
+    /** @param {AcpSearchDialog} el */
+    const emptyAction = (el) => /** @type {HTMLElement | null} */ (shadow(el).querySelector('acp-search-empty')?.shadowRoot?.querySelector('.acp-search-empty__action') ?? null);
+
     it('lists recent searches for an empty query; arrows and Enter, or a click, search one', async () => {
       const cases = /** @type {[string, (el: AcpSearchDialog) => Promise<void>, string][]} */ ([
         [
@@ -308,20 +330,17 @@ describe('acp-search-dialog', () => {
           async (el) => {
             press(el, 'ArrowDown');
             await el.updateComplete;
-            expect(shadow(el).querySelectorAll('.acp-search-dialog__recent-item')[1].getAttribute('aria-selected')).to.equal('true');
+            expect(recentItems(el)[1].getAttribute('aria-selected')).to.equal('true');
             press(el, 'Enter');
           },
           'beta',
         ],
-        ['click', async (el) => /** @type {HTMLElement} */ (shadow(el).querySelectorAll('.acp-search-dialog__recent-item')[0]).click(), 'alpha'],
+        ['click', async (el) => recentItems(el)[0].click(), 'alpha'],
       ]);
       for (const [name, act, expected] of cases) {
         // Arrange
         const { el, queries } = await open({ recent: ['alpha', 'beta'] }, { ...STATE, query: '' });
-        const items = [...shadow(el).querySelectorAll('.acp-search-dialog__recent-item')];
-        expect(text(el, '.acp-search-dialog__heading')).to.equal('Recent searches');
-        expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['alpha', 'beta']);
-        expect(items[0].getAttribute('aria-selected')).to.equal('true');
+        expect(recentItems(el).map((i) => i.textContent?.trim())).to.deep.equal(['alpha', 'beta']);
         // Act
         await act(el);
         await el.updateComplete;
@@ -338,14 +357,14 @@ describe('acp-search-dialog', () => {
       const cases = /** @type {{ name: string, props: Partial<AcpSearchDialog>, state: SearchDialogState, selector: string, contains: string[], searches: boolean }[]} */ ([
         { name: 'no project', props: { hasProject: false }, state: STATE, selector: '.acp-search-dialog__body', contains: ['Open a project first'], searches: false },
         { name: 'nothing typed', props: {}, state: { ...STATE, query: '' }, selector: '.acp-search-dialog__body', contains: ['Type to search in files'], searches: true },
-        { name: 'nothing found', props: { results: [] }, state: STATE, selector: '.acp-search-dialog__empty', contains: ['No results for last', 'in src, *.ts'], searches: true },
+        { name: 'nothing found', props: { results: [] }, state: STATE, selector: 'acp-search-empty', contains: ['No results for last', 'in src, *.ts'], searches: true },
       ]);
       for (const { name, props, state, selector, contains, searches } of cases) {
         // Arrange + Act
         const { el, queries } = await open(props, state);
         if (!searches) type(el, 'x');
         // Assert
-        for (const part of contains) expect(text(el, selector), name).to.contain(part);
+        for (const part of contains) expect(selector === 'acp-search-empty' ? inner(el, selector) : text(el, selector), name).to.contain(part);
         if (!searches) expect(queries, `${name}: searches nothing`).to.deep.equal([]);
         el.close();
       }
@@ -358,21 +377,21 @@ describe('acp-search-dialog', () => {
       expect(opened).to.deep.equal([]);
       expect(el.open).to.equal(true);
 
-      /** @type {HTMLElement} */ (shadow(el).querySelector('.acp-search-dialog__empty-action')).click();
+      /** @type {HTMLElement} */ (emptyAction(el)).click();
       expect(queries.at(-1)?.detail.state).to.deep.include({ folder: '', mask: '' });
       expect(queries.at(-1)?.detail.options).to.deep.include({ include: '', exclude: '' });
       await el.updateComplete;
-      expect(shadow(el).querySelector('.acp-search-dialog__empty-action'), 'no filters left to clear').to.equal(null);
+      expect(emptyAction(el), 'no filters left to clear').to.equal(null);
     });
 
     it('shows progress while searching, and nothing-found only once the search is done', async () => {
       const { el } = await open({ results: [], searching: true });
       expect(shadow(el).querySelector('md-progress-linear.acp-search-dialog__progress')).to.not.equal(null);
-      expect(shadow(el).querySelector('.acp-search-dialog__empty')).to.equal(null);
+      expect(shadow(el).querySelector('acp-search-empty')).to.equal(null);
       el.searching = false;
       await el.updateComplete;
       expect(shadow(el).querySelector('md-progress-linear')).to.equal(null);
-      expect(shadow(el).querySelector('.acp-search-dialog__empty')).to.not.equal(null);
+      expect(shadow(el).querySelector('acp-search-empty')).to.not.equal(null);
     });
 
     it('marks a bad regex and offers to search as plain text; a bad filter only shows its message', async () => {
@@ -385,10 +404,10 @@ describe('acp-search-dialog', () => {
         const { el, queries } = await open({ error: message, errorSource: source }, { ...STATE, regex: true });
         // Assert
         expect(input(el).getAttribute('aria-invalid'), source).to.equal(String(invalid));
-        expect(text(el, '.acp-search-dialog__empty'), source).to.contain(message);
-        expect(text(el, '.acp-search-dialog__empty'), source).to.satisfy((/** @type {string} */ t) => t.includes('Invalid regular expression') === invalid);
+        expect(inner(el, 'acp-search-empty'), source).to.contain(message);
+        expect(inner(el, 'acp-search-empty').includes('Invalid regular expression'), source).to.equal(invalid);
         expect(text(el, '.acp-search-dialog__summary'), source).to.contain(message);
-        const action = /** @type {HTMLElement | null} */ (shadow(el).querySelector('.acp-search-dialog__empty-action'));
+        const action = emptyAction(el);
         expect(action !== null, `${source}: plain-text offer`).to.equal(invalid);
         if (action) {
           // Act
@@ -403,53 +422,31 @@ describe('acp-search-dialog', () => {
   });
 
   describe('header and layout', () => {
-    /** @param {AcpSearchDialog} el */
-    const buttons = (el) => /** @type {HTMLElement[]} */ ([...shadow(el).querySelectorAll('.acp-search-dialog__layout-button')]);
-    /** @param {AcpSearchDialog} el */
-    const viewButtons = (el) => /** @type {HTMLElement[]} */ ([...shadow(el).querySelectorAll('.acp-search-dialog__view-button')]);
-
-    it('names its buttons in tooltips, not titles, and shows an icon on each, pressed or not', async () => {
+    it('turns the header’s preview and popout and the view picker’s choice into prefs and a hand-over', async () => {
+      // Arrange
       const { el } = await open({ results: RESULTS, previewPosition: 'bottom', view: 'grouped' });
-      expect(text(el, '.acp-search-dialog__title')).to.equal('Search in files');
-      expect(buttons(el).map(tooltipOf)).to.deep.equal(['Preview below', 'Preview on the right', 'Open in panel']);
-      expect(viewButtons(el).map(tooltipOf)).to.deep.equal(['Group by file', 'Flat list']);
-      expect(shadow(el).querySelector('[title]')).to.equal(null);
-      for (const button of [...buttons(el), ...viewButtons(el)]) {
-        await /** @type {HTMLElement & { updateComplete: Promise<unknown> }} */ (button).updateComplete;
-        const slot = button.shadowRoot?.querySelector('slot');
-        expect(slot?.assignedElements().map((i) => i.localName), button.getAttribute('aria-label') ?? '').to.deep.equal(['md-icon']);
-      }
-    });
-
-    it('asks for a preview position; pressing the current one hides the preview', async () => {
-      const { el } = await open({ previewPosition: 'bottom' });
+      const prefs = collect(el, 'acp-search-dialog-prefs');
+      const popouts = collect(el, 'acp-search-dialog-popout');
+      const leaked = collect(el, 'acp-search-header-preview');
+      const press = (/** @type {string} */ selector, /** @type {Element} */ host) => /** @type {HTMLElement} */ (shadow(host).querySelector(selector)).click();
+      // Act
+      press('#acp-search-header-preview-right', header(el));
+      press('#acp-search-header-preview-bottom', header(el));
+      press('#acp-search-view-picker-flat', /** @type {Element} */ (shadow(el).querySelector('acp-search-view-picker')));
+      type(el, 'moved');
+      press('#acp-search-header-popout', header(el));
+      // Assert
+      expect(prefs.map((e) => e.detail)).to.deep.equal([{ patch: { preview: 'right' } }, { patch: { preview: 'none' } }, { patch: { view: 'flat' } }]);
+      expect(popouts.map((e) => e.detail)).to.deep.equal([{ state: { ...STATE, query: 'moved' } }]);
+      expect(leaked, 'the header’s own events stay inside').to.deep.equal([]);
+      expect(el.open).to.equal(false);
       expect(el.getAttribute('preview-position')).to.equal('bottom');
-      const prefs = collect(el, 'acp-search-dialog-prefs');
-      buttons(el)[1].click();
-      buttons(el)[0].click();
-      expect(prefs.map((e) => e.detail)).to.deep.equal([{ patch: { preview: 'right' } }, { patch: { preview: 'none' } }]);
-      expect(buttons(el).slice(0, 2).map((b) => b.getAttribute('aria-pressed'))).to.deep.equal(['true', 'false']);
-    });
-
-    it('asks for a view', async () => {
-      const { el } = await open({ results: RESULTS, view: 'grouped' });
-      const prefs = collect(el, 'acp-search-dialog-prefs');
-      viewButtons(el)[1].click();
-      expect(prefs.map((e) => e.detail)).to.deep.equal([{ patch: { view: 'flat' } }]);
       el.view = 'flat';
       await el.updateComplete;
       expect(el.getAttribute('view')).to.equal('flat');
+      expect(/** @type {HTMLElementTagNameMap['acp-search-view-picker']} */ (shadow(el).querySelector('acp-search-view-picker')).view).to.equal('flat');
       expect(results(el).view).to.equal('flat');
-      expect(viewButtons(el).map((b) => b.getAttribute('aria-checked'))).to.deep.equal(['false', 'true']);
-    });
-
-    it('hands the search over to the panel and closes', async () => {
-      const { el } = await open();
-      const popouts = collect(el, 'acp-search-dialog-popout');
-      type(el, 'moved');
-      buttons(el)[2].click();
-      expect(popouts.map((e) => e.detail)).to.deep.equal([{ state: { ...STATE, query: 'moved' } }]);
-      expect(el.open).to.equal(false);
+      expect(header(el).previewPosition).to.equal('bottom');
     });
   });
 
@@ -504,7 +501,7 @@ describe('acp-search-dialog', () => {
       expect(queries.at(-1)?.detail).to.deep.include({ delay: 0 });
       expect(queries.at(-1)?.detail.state.folder).to.equal('src/components');
       expect(queries.at(-1)?.detail.options.include).to.equal('src/components/**/*.ts');
-      expect(shadow(el).activeElement, 'focus back in the query').to.equal(input(el));
+      expect(queryFocused(el), 'focus back in the query').to.equal(true);
       // Act: remove the mask with its chip
       chip(el, 'mask').dispatchEvent(new Event('remove', { bubbles: true, composed: true }));
       await el.updateComplete;
@@ -537,7 +534,7 @@ describe('acp-search-dialog', () => {
       field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true, cancelable: true }));
       await until(() => !menu(el, 'mask').open);
       expect(el.open, 'the dialog stays').to.equal(true);
-      expect(shadow(el).activeElement, 'the keys work again').to.equal(input(el));
+      expect(queryFocused(el), 'the keys work again').to.equal(true);
 
       await openMenu(el, 'folder');
       const closed = new Promise((r) => dialog(el).addEventListener('close', r, { once: true }));

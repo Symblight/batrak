@@ -32,6 +32,11 @@ Spec: `docs/specs/search-dialog.md`.
 - `<acp-search-options>` (match case / whole word / regex, Alt+C / W / R) and `<acp-search-results>`
   (grouped or flat rows, selection by key, `move()` / `moveTo()`) are presentational and used by both.
   Results carry root-relative paths; the container makes them absolute (`projects.absPath`).
+- The dialog's own parts are presentational too: `<acp-search-header>` (title, preview placement, Open in panel:
+  `acp-search-header-preview { position }` / `-popout`), `<acp-search-bar>` (query field, clear, the options;
+  `acp-search-bar-input { value }` / `-clear`, `focusInput()`), `<acp-search-view-picker>` (`acp-search-view-pick { view }`),
+  `<acp-search-recent>` (`acp-search-recent-pick { query }`) and `<acp-search-empty>` (an error or nothing found,
+  `acp-search-empty-action { action }`); the dialog turns their events into searches and prefs.
 - A match opens selected: `<acp-main-column>.openFile(abs, { line, column, length })`; the 1-based
   column is `offset + start + 1` (`LineMatch.offset` counts UTF-16 units cut from a long line's start).
 

@@ -1,25 +1,13 @@
 import { search } from '../../hooks/search/search.js';
 import { LitElement, html, nothing } from 'lit';
-import { live } from 'lit/directives/live.js';
-import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import '@symblight/wc-material/button';
-import '@symblight/wc-material/icon';
-import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-linear';
-import '@symblight/wc-material/tooltip';
-import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
-import clearIcon from '@material-design-icons/svg/outlined/close.svg?raw';
-import previewBelowIcon from '@material-design-icons/svg/outlined/horizontal_split.svg?raw';
-import previewRightIcon from '@material-design-icons/svg/outlined/vertical_split.svg?raw';
-import popoutIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
-import groupedIcon from '@material-design-icons/svg/outlined/account_tree.svg?raw';
-import flatIcon from '@material-design-icons/svg/outlined/view_list.svg?raw';
-import historyIcon from '@material-design-icons/svg/outlined/history.svg?raw';
-import noResultsIcon from '@material-design-icons/svg/outlined/search_off.svg?raw';
-import errorIcon from '@material-design-icons/svg/outlined/error.svg?raw';
+import '../search-bar/search-bar.js';
+import '../search-empty/search-empty.js';
 import '../search-filters/search-filters.js';
-import '../search-options/search-options.js';
+import '../search-header/search-header.js';
+import '../search-recent/search-recent.js';
 import '../search-results/search-results.js';
+import '../search-view-picker/search-view-picker.js';
 import styles from './search-dialog.css?inline';
 
 /** @typedef {import('../../models/types/types.js').SearchFileResult} SearchFileResult */
@@ -35,18 +23,6 @@ import styles from './search-dialog.css?inline';
 const DEBOUNCE_MS = 150;
 /** Rows PgUp / PgDn move. */
 const PAGE = 10;
-
-/** @type {{ value: SearchDialogPrefs['preview'], icon: string, label: string }[]} */
-const PREVIEW_POSITIONS = [
-  { value: 'bottom', icon: previewBelowIcon, label: 'Preview below' },
-  { value: 'right', icon: previewRightIcon, label: 'Preview on the right' },
-];
-
-/** @type {{ value: SearchDialogPrefs['view'], icon: string, label: string }[]} */
-const VIEWS = [
-  { value: 'grouped', icon: groupedIcon, label: 'Group by file' },
-  { value: 'flat', icon: flatIcon, label: 'Flat list' },
-];
 
 /** The focused element, looking into shadow roots. */
 function deepActiveElement() {
@@ -146,9 +122,9 @@ export class AcpSearchDialog extends LitElement {
     return this.renderRoot?.querySelector('dialog') ?? null;
   }
 
-  /** @returns {HTMLInputElement | null} */
-  get #input() {
-    return this.renderRoot?.querySelector('.acp-search-dialog__input') ?? null;
+  /** @returns {HTMLElementTagNameMap['acp-search-bar'] | null} */
+  get #bar() {
+    return this.renderRoot?.querySelector('acp-search-bar') ?? null;
   }
 
   /** @returns {HTMLElementTagNameMap['acp-search-filters'] | null} */
@@ -197,8 +173,7 @@ export class AcpSearchDialog extends LitElement {
       await this.updateComplete;
       this.#search(0);
     }
-    this.#input?.focus();
-    this.#input?.select();
+    this.#bar?.focusInput({ select: true });
   }
 
   close() {
@@ -253,7 +228,7 @@ export class AcpSearchDialog extends LitElement {
     if (e.key === 'Escape') {
       e.preventDefault();
       // A menu handles its own Esc; this one comes from outside it (focus still on its chip).
-      if (this.#filters?.closeOpenMenu()) this.#input?.focus();
+      if (this.#filters?.closeOpenMenu()) this.#bar?.focusInput();
       else this.close();
       return;
     }
@@ -266,7 +241,7 @@ export class AcpSearchDialog extends LitElement {
 
   /** The selection keys and Enter, while focus is in the query. @param {KeyboardEvent} e */
   #onInputKeydown(e) {
-    if (e.isComposing) return;
+    if (e.isComposing || !(e.composedPath()[0] instanceof HTMLInputElement)) return;
     const mod = e.metaKey || e.ctrlKey;
     const recent = this.#showsRecent;
     const results = this.#results;
@@ -301,7 +276,8 @@ export class AcpSearchDialog extends LitElement {
 
   /** @param {Event} e */
   #onInput(e) {
-    this.query = /** @type {HTMLInputElement} */ (e.target).value;
+    e.stopPropagation();
+    this.query = /** @type {CustomEvent<{ value: string }>} */ (e).detail.value;
     this.recentIndex = 0;
     this.#search(DEBOUNCE_MS);
   }
@@ -318,28 +294,36 @@ export class AcpSearchDialog extends LitElement {
     this.#toggle(/** @type {CustomEvent<{ option: SearchOptionKey }>} */ (e).detail.option);
   }
 
-  #clear() {
+  /** @param {Event} e */
+  #clear(e) {
+    e.stopPropagation();
     this.query = '';
     this.recentIndex = 0;
     this.#search(0);
-    this.#input?.focus();
+    this.#bar?.focusInput();
   }
 
   /** @param {string} query */
   #pickRecent(query) {
     this.query = query;
     this.#search(0);
-    this.#input?.focus();
+    this.#bar?.focusInput();
   }
 
-  #searchWholeProject() {
-    this.folder = '';
-    this.mask = '';
-    this.#search(0);
+  /** @param {Event} e */
+  #onRecentPick(e) {
+    e.stopPropagation();
+    this.#pickRecent(/** @type {CustomEvent<{ query: string }>} */ (e).detail.query);
   }
 
-  #searchPlainText() {
-    this.regex = false;
+  /** @param {Event} e */
+  #onEmptyAction(e) {
+    e.stopPropagation();
+    if (/** @type {CustomEvent<{ action: 'plain-text' | 'whole-project' }>} */ (e).detail.action === 'plain-text') this.regex = false;
+    else {
+      this.folder = '';
+      this.mask = '';
+    }
     this.#search(0);
   }
 
@@ -360,7 +344,7 @@ export class AcpSearchDialog extends LitElement {
   /** @param {Event} e */
   #onFilterLeave(e) {
     e.stopPropagation();
-    this.#input?.focus();
+    this.#bar?.focusInput();
   }
 
   /** @param {SearchMatchRow} row */
@@ -380,14 +364,23 @@ export class AcpSearchDialog extends LitElement {
     this.close();
   }
 
-  /** @param {SearchDialogPrefs['preview']} position */
-  #setPreview(position) {
+  /** @param {Event} e */
+  #onHeaderPreview(e) {
+    e.stopPropagation();
+    const { position } = /** @type {CustomEvent<{ position: SearchDialogPrefs['preview'] }>} */ (e).detail;
     this.#emit('acp-search-dialog-prefs', { patch: { preview: this.previewPosition === position ? 'none' : position } });
   }
 
-  /** @param {SearchDialogPrefs['view']} view */
-  #setView(view) {
-    if (view !== this.view) this.#emit('acp-search-dialog-prefs', { patch: { view } });
+  /** @param {Event} e */
+  #onHeaderPopout(e) {
+    e.stopPropagation();
+    this.#popout();
+  }
+
+  /** @param {Event} e */
+  #onViewPick(e) {
+    e.stopPropagation();
+    this.#emit('acp-search-dialog-prefs', { patch: { view: /** @type {CustomEvent<{ view: SearchDialogPrefs['view'] }>} */ (e).detail.view } });
   }
 
   /** @param {Event} e */
@@ -401,70 +394,6 @@ export class AcpSearchDialog extends LitElement {
     e.stopPropagation();
     const row = /** @type {CustomEvent<{ row: SearchMatchRow | null }>} */ (e).detail.row;
     this.status = row ? `${row.path.slice(row.path.lastIndexOf('/') + 1)}:${row.line} — ${row.text.trim()}` : '';
-  }
-
-  #renderHeader() {
-    return html`<div class="acp-search-dialog__header">
-      <h2 class="acp-search-dialog__title">Search in files</h2>
-      ${PREVIEW_POSITIONS.map(({ value, icon, label }) => {
-        const id = `acp-search-dialog-preview-${value}`;
-        const pressed = this.previewPosition === value;
-        return html`<md-icon-button
-            id=${id}
-            class="acp-search-dialog__layout-button"
-            ?selected=${pressed}
-            aria-label=${label}
-            aria-pressed=${pressed ? 'true' : 'false'}
-            @click=${() => this.#setPreview(value)}
-          >
-            <md-icon class="acp-search-dialog__layout-icon">${unsafeSVG(icon)}</md-icon>
-          </md-icon-button>
-          <md-tooltip for=${id} show-delay="800">${label}</md-tooltip>`;
-      })}
-      <md-icon-button
-        id="acp-search-dialog-popout"
-        class="acp-search-dialog__layout-button"
-        aria-label="Open in panel"
-        @click=${this.#popout}
-      >
-        <md-icon class="acp-search-dialog__layout-icon">${unsafeSVG(popoutIcon)}</md-icon>
-      </md-icon-button>
-      <md-tooltip for="acp-search-dialog-popout" show-delay="800">Open in panel</md-tooltip>
-    </div>`;
-  }
-
-  #renderBar() {
-    const invalid = Boolean(this.error) && this.errorSource === 'query';
-    return html`<div class="acp-search-dialog__bar ${invalid ? 'acp-search-dialog__bar_error' : ''}">
-      <md-icon class="acp-search-dialog__search-icon">${unsafeSVG(invalid ? errorIcon : searchIcon)}</md-icon>
-      <input
-        class="acp-search-dialog__input"
-        role="combobox"
-        aria-expanded=${this.hasProject && this.query !== '' ? 'true' : 'false'}
-        aria-label="Search"
-        aria-invalid=${invalid ? 'true' : 'false'}
-        placeholder="Search"
-        spellcheck="false"
-        autocomplete="off"
-        .value=${live(this.query)}
-        @input=${this.#onInput}
-        @keydown=${this.#onInputKeydown}
-      />
-      ${this.query
-        ? html`<md-icon-button id="acp-search-dialog-clear" class="acp-search-dialog__clear" aria-label="Clear" @click=${this.#clear}>
-              <md-icon class="acp-search-dialog__clear-icon">${unsafeSVG(clearIcon)}</md-icon>
-            </md-icon-button>
-            <md-tooltip for="acp-search-dialog-clear" show-delay="800">Clear</md-tooltip>`
-        : nothing}
-      <span class="acp-search-dialog__divider"></span>
-      <acp-search-options
-        class="acp-search-dialog__options"
-        .caseSensitive=${this.caseSensitive}
-        .wholeWord=${this.wholeWord}
-        .regex=${this.regex}
-        @acp-search-option-toggle=${this.#onOptionToggle}
-      ></acp-search-options>
-    </div>`;
   }
 
   #renderFilters() {
@@ -482,82 +411,38 @@ export class AcpSearchDialog extends LitElement {
         @acp-search-filter-leave=${this.#onFilterLeave}
       ></acp-search-filters>
       <span class="acp-search-dialog__summary ${this.error ? 'acp-search-dialog__summary_error' : ''}">${summary}</span>
-      <div class="acp-search-dialog__view" role="radiogroup" aria-label="View">
-        ${VIEWS.map(({ value, icon, label }) => {
-          const id = `acp-search-dialog-view-${value}`;
-          const checked = this.view === value;
-          return html`<md-icon-button
-              id=${id}
-              class="acp-search-dialog__view-button"
-              ?selected=${checked}
-              role="radio"
-              aria-label=${label}
-              aria-checked=${checked ? 'true' : 'false'}
-              @click=${() => this.#setView(value)}
-            >
-              <md-icon class="acp-search-dialog__view-icon">${unsafeSVG(icon)}</md-icon>
-            </md-icon-button>
-            <md-tooltip for=${id} show-delay="800">${label}</md-tooltip>`;
-        })}
-      </div>
+      <acp-search-view-picker
+        class="acp-search-dialog__view"
+        .view=${this.view}
+        @acp-search-view-pick=${this.#onViewPick}
+      ></acp-search-view-picker>
     </div>`;
-  }
-
-  /**
-   * A message instead of the list.
-   * @param {string} icon
-   * @param {unknown} content
-   * @param {{ label: string, run: () => void } | null} [action]
-   */
-  #renderEmpty(icon, content, action = null) {
-    return html`<div class="acp-search-dialog__empty">
-      <md-icon class="acp-search-dialog__empty-icon">${unsafeSVG(icon)}</md-icon>
-      ${content}
-      ${action
-        ? html`<md-button class="acp-search-dialog__empty-action" variant="text" @click=${action.run}>${action.label}</md-button>`
-        : nothing}
-    </div>`;
-  }
-
-  #renderRecent() {
-    return html`<div class="acp-search-dialog__heading">Recent searches</div>
-      <div class="acp-search-dialog__recent" role="listbox" aria-label="Recent searches">
-        ${this.recent.map(
-          (query, i) => html`<div
-            class="acp-search-dialog__recent-item ${i === this.recentIndex ? 'acp-search-dialog__recent-item_selected' : ''}"
-            role="option"
-            aria-selected=${i === this.recentIndex ? 'true' : 'false'}
-            @click=${() => this.#pickRecent(query)}
-          >
-            <md-icon class="acp-search-dialog__recent-icon">${unsafeSVG(historyIcon)}</md-icon>
-            <span class="acp-search-dialog__recent-text">${query}</span>
-          </div>`,
-        )}
-      </div>`;
   }
 
   #renderBody() {
     if (!this.hasProject) return html`<p class="acp-search-dialog__message">Open a project first</p>`;
     if (this.error) {
       const invalid = this.errorSource === 'query';
-      return this.#renderEmpty(
-        errorIcon,
-        html`${invalid ? html`<p class="acp-search-dialog__empty-title">Invalid regular expression</p>` : nothing}
-          <p class="acp-search-dialog__empty-text">${this.error}</p>`,
-        invalid && this.regex ? { label: 'Search as plain text', run: () => this.#searchPlainText() } : null,
-      );
+      return html`<acp-search-empty
+        class="acp-search-dialog__empty"
+        .error=${this.error}
+        ?invalid-query=${invalid}
+        ?offer-plain-text=${this.regex}
+        @acp-search-empty-action=${this.#onEmptyAction}
+      ></acp-search-empty>`;
     }
     if (this.query === '') {
-      return this.recent.length > 0 ? this.#renderRecent() : html`<p class="acp-search-dialog__message">Type to search in files</p>`;
+      return this.recent.length > 0
+        ? html`<acp-search-recent .queries=${this.recent} .index=${this.recentIndex} @acp-search-recent-pick=${this.#onRecentPick}></acp-search-recent>`
+        : html`<p class="acp-search-dialog__message">Type to search in files</p>`;
     }
     if (!this.searching && this.results.length === 0) {
-      const where = search.filterLabel(this.folder, this.mask);
-      return this.#renderEmpty(
-        noResultsIcon,
-        html`<p class="acp-search-dialog__empty-title">No results for <code class="acp-search-dialog__code">${this.query}</code></p>
-          ${where ? html`<p class="acp-search-dialog__empty-text">${where}</p>` : nothing}`,
-        where ? { label: 'Search the whole project', run: () => this.#searchWholeProject() } : null,
-      );
+      return html`<acp-search-empty
+        class="acp-search-dialog__empty"
+        .query=${this.query}
+        .where=${search.filterLabel(this.folder, this.mask)}
+        @acp-search-empty-action=${this.#onEmptyAction}
+      ></acp-search-empty>`;
     }
     return html`<acp-search-results
       class="acp-search-dialog__results"
@@ -580,7 +465,24 @@ export class AcpSearchDialog extends LitElement {
       @keydown=${this.#onDialogKeydown}
     >
       <div class="acp-search-dialog__content">
-        ${this.#renderHeader()} ${this.#renderBar()}
+        <acp-search-header
+          .previewPosition=${this.previewPosition}
+          @acp-search-header-preview=${this.#onHeaderPreview}
+          @acp-search-header-popout=${this.#onHeaderPopout}
+        ></acp-search-header>
+        <acp-search-bar
+          class="acp-search-dialog__bar"
+          .query=${this.query}
+          ?invalid=${Boolean(this.error) && this.errorSource === 'query'}
+          ?expanded=${this.hasProject && this.query !== ''}
+          .caseSensitive=${this.caseSensitive}
+          .wholeWord=${this.wholeWord}
+          .regex=${this.regex}
+          @acp-search-bar-input=${this.#onInput}
+          @acp-search-bar-clear=${this.#clear}
+          @acp-search-option-toggle=${this.#onOptionToggle}
+          @keydown=${this.#onInputKeydown}
+        ></acp-search-bar>
         ${this.searching ? html`<md-progress-linear class="acp-search-dialog__progress"></md-progress-linear>` : nothing}
         ${this.#renderFilters()}
         <div class="acp-search-dialog__body">${this.#renderBody()}</div>
