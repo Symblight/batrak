@@ -211,6 +211,12 @@ export class AcpQuickOpen extends LitElement {
       <dialog class="acp-quick-open__dialog" @close=${this.#onClose}>
         <input
           class="acp-quick-open__input"
+          role="combobox"
+          aria-label="Search files"
+          aria-autocomplete="list"
+          aria-expanded=${items.length > 0 ? 'true' : 'false'}
+          aria-controls=${items.length > 0 ? 'acp-quick-open-list' : nothing}
+          aria-activedescendant=${items.length > 0 ? `acp-quick-open-option-${this.selected}` : nothing}
           placeholder="Search files by name (: line, @ symbol, # workspace symbol, > command)"
           spellcheck="false"
           autocomplete="off"
@@ -219,9 +225,10 @@ export class AcpQuickOpen extends LitElement {
         />
         ${items.length === 0
           ? html`<div class="acp-quick-open__message">${this.#message()}</div>`
-          : html`<ul class="acp-quick-open__list" role="listbox">
+          : html`<ul id="acp-quick-open-list" class="acp-quick-open__list" role="listbox" aria-label="Files">
               ${items.map(
                 (item, i) => html`<li
+                  id="acp-quick-open-option-${i}"
                   class="acp-quick-open__item ${i === this.selected ? 'acp-quick-open__item_selected' : ''}"
                   role="option"
                   aria-selected=${i === this.selected}
