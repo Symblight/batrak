@@ -131,10 +131,15 @@ export class AcpTabView extends LitElement {
     else if (choice === 'extra') this.#emit('acp-tab-reload', { id });
   }
 
-  updated() {
+  async updated() {
     const pending = this.#pendingLine;
     if (pending === null || pending.id !== this.active || !this.tabs.find((t) => t.id === pending.id)?.loaded) return;
     this.#pendingLine = null;
+    // The host's view hands the editor the loaded tab one update after this one.
+    const hosted = /** @type {{ updateComplete?: Promise<unknown> } | null | undefined} */ (
+      this.renderRoot.querySelector('.acp-tab-view__panel[active] .acp-tab-view__hosted')?.firstElementChild
+    );
+    await hosted?.updateComplete;
     this.#activeCodeView()?.revealLine(pending.at);
   }
 

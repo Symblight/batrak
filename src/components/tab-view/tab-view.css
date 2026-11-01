@@ -20,7 +20,6 @@
     flex-direction: column;
   }
 }
-/* A file's editor fills the panel; its own padding keeps the code off the edges. */
 /* A view tab's own component (Agents, Changes, terminal, placeholder), sized like the editor. */
 .acp-tab-view__view {
   flex: 1;
