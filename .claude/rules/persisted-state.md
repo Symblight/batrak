@@ -36,6 +36,10 @@ paths:
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
   stored folders as their parents load),
   `$contextUsage` (`brama:sessions:context-usage:<session id>`, see `sessions.md`),
+  `$sessionReads` (`brama:sessions:read:<session id>`, shared: `{ seen: ISO | null }`, `null` marked
+  unread by hand; dropped only by `forgetRead()` on remove / revert to draft) and `$readBaselines`
+  (`brama:sessions:baseline:<agent id>\n<project path>`, shared: an ISO time, written once when a sync
+  lists that agent for the project), see `sessions.md`,
   `$searchDialogPrefs` (`brama:search:dialog`, shared: the search dialog's preview placement, view
   and splits), `$projectSearch` (`brama:search:project:<project path>`, per window, one item per
   project through `setKey()`: the dialog's last query, options, folder and mask, and the project's

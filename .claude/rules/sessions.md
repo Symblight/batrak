@@ -5,12 +5,12 @@ paths:
   - "src-tauri/src/agents/**"
   - "src-tauri/src/commands/sessions.rs"
   - "src/hooks/{sessions,chat,composer}/**"
-  - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
+  - "src/stores/{sessions,session-sync,session-runtime,session-read,session-root,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
   - "src/views/chat-view/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
-  - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input}.md"
+  - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input,session-read-state}.md"
 ---
 
 # Sessions over ACP
@@ -169,6 +169,22 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   so a session shows its last report after a reload or restart (no agent reports on
   `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
   ring until there is one.
+- **Read / unread** (spec: `docs/specs/session-read-state.md`): the backend stamps activity, so every
+  window shares the times: `activity { at }` for a turn's output (at most one per `OUTPUT_STAMP`, 1 s,
+  skipping the disk write; the turn's end persists it), `at` on `turn-end` and a failed `error`, and
+  `session_send_prompt` returns its stamp. The adapter passes each to `touchSession(id, at)`, which
+  keeps the later. `stores/session-read/session-read.js` holds `$sessionReads` and `$readBaselines`
+  (see `persisted-state.md`) and `$unreadSessions`, computed through `isUnread()`
+  (`hooks/sessions/rules.js`): unread when marked by hand, or when `lastActivityAt` is more than
+  `READ_SLACK_MS` (5 s) after `seen`; with no mark, after the project's baseline (none: read).
+  Actions: `markSeen` (replaces any mark), `markRead`, `markUnread`, `markProjectRead`, `forgetRead`,
+  all skipping writes that change nothing; `remove()` calls `forgetRead()` after unlisting the
+  session. `trackSeen()` (`hooks/sessions/seen.js`) marks the shown session seen while the page is
+  visible, the window focused and the agent column shown, and once more when that stops.
+  `recordBaselines()` runs on each sync report. UI: a dot in the row's indent (in the pin's place),
+  a heavier title, a primary age; a collapsed project's counter; `● N new` beside Show more; Mark as
+  read / unread in the row menu, Mark all as read in the project menu and Mod+Shift+R
+  (`markProjectRead` in the shortcut table, handled by `<acp-app>`).
 - **Session input** (spec: `docs/specs/session-input.md`): what the user gives a session reaches it
   in Chat and Terminal alike, or is refused with a reason, never dropped. A composer send is read
   from its html (`inputOfComposer()`, `hooks/sessions/input-parts.js`), never its plain `value` (a chip
