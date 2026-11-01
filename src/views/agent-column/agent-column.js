@@ -14,13 +14,13 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
+import { SessionInputController } from '../../controllers/session-input/SessionInputController.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { search } from '../../hooks/search/search.js';
-import { fileDrop } from '../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
-import { $pendingInput, addDrop, hasPendingInput, takePendingInput } from '../../stores/chat/chat.js';
+import { $pendingInput } from '../../stores/chat/chat.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
@@ -34,10 +34,6 @@ import { $activeShownView, $activeView } from '../../stores/session-views/sessio
 import { $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
 import { $openingPath, $rootId, $workspace, $workspaceSettings } from '../../stores/workspace/workspace.js';
 
-/** Larger attachments aren't sent to be saved (the backend's cap). */
-const MAX_ATTACHMENT_BYTES = 64 * 1024 * 1024;
-
-/** @typedef {import('../../models/types/types.js').FileDrop} FileDrop */
 /** @typedef {import('../../models/types/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../models/types/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../models/types/types.js').SessionView} SessionView */
@@ -91,6 +87,16 @@ export class AcpAgentColumn extends ViewElement {
   /** @type {ChatPartsController} */
   #parts = new ChatPartsController(this, { attachments: () => /** @type {AcpChat} */ (this.#chat).attachments });
 
+  /** Code and files given to the shown session besides typing: dropped, attached, sent from the editors. */
+  #input = new SessionInputController(this, {
+    chat: () => this.#chat,
+    cli: () => this.#runningCli,
+    inTerminal: () => this.#inTerminal,
+    opening: () => this.#openingPath.value !== null,
+    root: () => this.#activeFolder.value ?? this.#workspace.value?.path ?? null,
+    draft: () => this.#activeSession.value === null,
+  });
+
   /**
    * Code sent from the editors (selections, `<acp-comment-bar>`'s comments) and files dropped from the
    * OS go into the composer, or into the CLI of a session shown in the terminal.
@@ -129,134 +135,6 @@ export class AcpAgentColumn extends ViewElement {
   get #runningCli() {
     const terminal = this.renderRoot.querySelector('acp-terminal');
     return terminal && this.#terminals.value[terminal.terminalId]?.status === 'running' ? terminal : null;
-  }
-
-  /**
-   * @param {Element | null} target
-   * @returns {target is AcpTerminal} Whether it is the session's CLI shown here.
-   */
-  #isOwnTerminal(target) {
-    return target instanceof AcpTerminal && this.contains(target);
-  }
-
-  /**
-   * @param {Element | null} target
-   * @returns {boolean} Whether it is the chat, shown here (not the session's CLI in its place).
-   */
-  #isShownChat(target) {
-    return target !== null && target === this.#chat && !this.#inTerminal && this.#openingPath.value === null;
-  }
-
-  /** Stops listening to files dropped from the OS. */
-  #stopFileDrop = () => {};
-
-  /**
-   * Files dropped from the OS on the session's CLI (its paths typed in, as a native terminal does,
-   * once it runs) or its chat (into the composer); kept until then.
-   */
-  #onFileDrop = (/** @type {FileDrop} */ { target, paths }) => {
-    if (this.#isOwnTerminal(target) || this.#isShownChat(target)) addDrop(paths);
-  };
-
-  /**
-   * What waits for the shown session goes into its running CLI or its composer once up; otherwise
-   * it keeps waiting (a CLI starting or ended, a composer not up yet).
-   */
-  async #applyPending() {
-    const id = $activeSessionId.get();
-    if (id === null || !hasPendingInput(id)) return;
-    await this.updateComplete;
-    const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
-    if (this.#inTerminal) {
-      const cli = this.#runningCli;
-      if (!cli) return;
-      const { inserts, drops } = takePendingInput(id);
-      if (inserts.length) cli.paste(sessions.cliInput(inserts, root));
-      if (drops.length) cli.paste(terminals.shellPaths(drops, app.platform));
-      return;
-    }
-    const chat = this.#chat;
-    if (!chat || this.#openingPath.value !== null || !(await chat.composerReady())) return;
-    // Shown elsewhere meanwhile (another session, or this one's CLI): it waits.
-    if ($activeSessionId.get() !== id || this.#inTerminal) return;
-    const { inserts, drops } = takePendingInput(id);
-    if (inserts.length) chat.insertCode(inserts);
-    if (drops.length) this.#dropOnChat(id, drops);
-  }
-
-  /**
-   * Dropped files and folders become chips, like `@` picks (an image too: the agent reads it by its
-   * path). Kept for the session when another one shows meanwhile.
-   * @param {string} sessionId
-   * @param {readonly string[]} paths
-   */
-  async #dropOnChat(sessionId, paths) {
-    const chat = this.#chat;
-    const keep = () => addDrop(paths, sessionId);
-    try {
-      const kinds = await fileDrop.kinds(paths);
-      if ($activeSessionId.get() !== sessionId) return keep();
-      const root = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
-      const files = fileDrop.chatDropOf(paths.map((path, i) => ({ path, kind: kinds[i] })), root);
-      if (!chat || !(await chat.composerReady()) || $activeSessionId.get() !== sessionId) return keep();
-      chat.insertFiles(files);
-    } catch (err) {
-      app.reportError('Adding dropped files failed', err);
-    }
-  }
-
-  /**
-   * Files attached in the composer: each saved into the session's folder, the saved ones' path chips
-   * put in, the others named in an error. A draft's chips are absolute: its folder may yet be a
-   * worktree's, where the project's attachments aren't.
-   * @param {Event} e
-   */
-  async #onAttach(e) {
-    const { files } = /** @type {CustomEvent<{ files: File[] }>} */ (e).detail;
-    const sessionId = $activeSessionId.get();
-    const folder = this.#activeFolder.value ?? this.#workspace.value?.path ?? null;
-    if (sessionId === null || folder === null) {
-      app.reportError('Attaching the files failed', new Error('No session to attach them to'));
-      return;
-    }
-    const draft = this.#activeSession.value === null;
-    /** @type {string[]} */
-    const paths = [];
-    /** @type {string[]} */
-    const failed = [];
-    for (const file of files) {
-      if (file.size > MAX_ATTACHMENT_BYTES) {
-        failed.push(`${file.name}: too large to attach (over ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB)`);
-        continue;
-      }
-      try {
-        paths.push(await sessions.saveAttachment(folder, file));
-      } catch (err) {
-        failed.push(err instanceof Error ? err.message : String(err));
-      }
-    }
-    if (failed.length) app.reportError('Attaching the files failed', new Error(failed.join('; ')));
-    const chat = this.#chat;
-    if ($activeSessionId.get() !== sessionId || !chat) return addDrop(paths, sessionId);
-    chat.insertFiles(paths.map((path) => ({ path: draft ? path : (projects.rel(folder, path) ?? path), folder: false })));
-  }
-
-  connectedCallback() {
-    super.connectedCallback();
-    this.#stopFileDrop = fileDrop.onDrop(this.#onFileDrop);
-  }
-
-  disconnectedCallback() {
-    this.#stopFileDrop();
-    super.disconnectedCallback();
-  }
-
-  /**
-   * What waited goes in once it can: the session's CLI showed (it was starting) or restarted, or the
-   * chat did (its CLI had ended).
-   */
-  updated() {
-    this.#applyPending();
   }
 
   /** @param {Event} e */
@@ -452,7 +330,7 @@ export class AcpAgentColumn extends ViewElement {
       .fontFamily=${this.#editorFont.value}
       .fontSize=${this.#editorFontSize.value}
       .waiting=${this.#waitingCount(id)}
-      ?dropping=${this.#isOwnTerminal(this.#fileDropTarget.value)}
+      ?dropping=${this.#input.isOwnTerminal(this.#fileDropTarget.value)}
       @acp-terminal-restart=${this.#onTerminalRestart}
       @acp-terminal-chat=${this.#onTerminalChat}
       @acp-terminal-copy=${this.#onTerminalCopy}
@@ -528,9 +406,9 @@ export class AcpAgentColumn extends ViewElement {
             .notice=${hasSession ? this.#notice.value : null}
             .signInRun=${hasSession ? this.#signInRun() : null}
             .loginHere=${hasSession && this.#loginHere()}
-            ?dropping=${this.#isShownChat(this.#fileDropTarget.value)}
+            ?dropping=${this.#input.isShownChat(this.#fileDropTarget.value)}
             @acp-chat-file-query=${this.#onFileQuery}
-            @acp-chat-attach=${this.#onAttach}
+            @acp-chat-attach=${this.#input.onAttach}
             @acp-permission-respond=${this.#onPermissionRespond}
             @acp-session-action=${this.#onSessionAction}
             @acp-session-select=${this.#onSessionSelect}
