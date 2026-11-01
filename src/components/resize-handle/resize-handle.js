@@ -3,22 +3,23 @@ import styles from './resize-handle.css?inline';
 
 /**
  * Which edge of the resized column the handle sits on: `end` grows the column when dragged
- * right (column before the handle), `start` when dragged left (column after it).
+ * right (column before the handle), `start` when dragged left (column after it). On the vertical
+ * axis: dragged down (row before it) and up (row after it).
  * @typedef {'start' | 'end'} ResizeEdge
  */
 
 /**
- * Rendered widths on both sides of the handle, measured when a drag starts or a key steps:
- * flex can make a column narrower than its set width.
+ * Rendered sizes on both sides of the handle along its axis (widths, heights on the vertical axis),
+ * measured when a drag starts or a key steps: flex can make a column narrower than its set width.
  * @typedef {Object} ResizeMeasure
  * @property {number} width The resized column.
  * @property {number} neighborWidth The column on the handle's other side, which gives up the width.
- * @property {number} neighborMin Its CSS `min-width`, px.
+ * @property {number} neighborMin Its CSS `min-width` (`min-height`), px.
  */
 
 /**
  * Detail of every `acp-resize-*` event. `delta` is in px, oriented so that a positive value
- * widens the column: since drag start for `acp-resize`, from the current width for
+ * widens the column (heightens the row): since drag start for `acp-resize`, from the current width for
  * `acp-resize-step`; absent for `-start`, `-end` and `-reset`. `measure` comes with `-start` and
  * `-step`.
  * @typedef {{ name: string, delta?: number, measure?: ResizeMeasure }} ResizeEventDetail
@@ -43,7 +44,7 @@ function rendered(from, direction) {
 
 /**
  * @tag acp-resize-handle
- * @summary Column divider: drag (pointer capture), arrow keys, or double-click to reset.
+ * @summary Column divider (`axis="y"`: a row divider, dragged up and down): drag (pointer capture), arrow keys, or double-click to reset.
  * @fires acp-resize-start `{ name, measure }`
  * @fires acp-resize `{ name, delta }` while dragging, delta since start
  * @fires acp-resize-end `{ name }`
@@ -55,6 +56,8 @@ export class AcpResizeHandle extends LitElement {
     /** Id of the column it resizes, as configured in the host's `ColumnResizeController`. */
     name: { type: String },
     edge: { type: String, reflect: true },
+    /** `x`: a vertical line between columns, dragged sideways; `y`: a horizontal line between rows, dragged up and down. */
+    axis: { type: String, reflect: true },
     /** Accessible name, e.g. "Resize sessions column". */
     label: { type: String },
     /** Current, minimum and maximum width in px, for `aria-value*`. */
@@ -66,7 +69,7 @@ export class AcpResizeHandle extends LitElement {
 
   static styles = styles;
 
-  /** @type {{ pointerId: number, startX: number } | null} The pressed pointer, until it's released. */
+  /** @type {{ pointerId: number, start: number } | null} The pressed pointer, until it's released. */
   #press = null;
 
   constructor() {
@@ -75,6 +78,8 @@ export class AcpResizeHandle extends LitElement {
     this.name = '';
     /** @type {ResizeEdge} */
     this.edge = 'end';
+    /** @type {'x' | 'y'} */
+    this.axis = 'x';
     /** @type {string} */
     this.label = '';
     /** @type {number} */
@@ -90,7 +95,6 @@ export class AcpResizeHandle extends LitElement {
   connectedCallback() {
     super.connectedCallback();
     this.setAttribute('role', 'separator');
-    this.setAttribute('aria-orientation', 'vertical');
     if (!this.hasAttribute('tabindex')) this.tabIndex = 0;
     this.addEventListener('keydown', this.#onKeydown);
     this.addEventListener('dblclick', this.#onDblclick);
@@ -115,6 +119,7 @@ export class AcpResizeHandle extends LitElement {
 
   /** @param {import('lit').PropertyValues} changed */
   updated(changed) {
+    if (changed.has('axis')) this.setAttribute('aria-orientation', this.axis === 'y' ? 'horizontal' : 'vertical');
     if (changed.has('label')) this.setAttribute('aria-label', this.label);
     if (changed.has('value')) this.setAttribute('aria-valuenow', String(Math.round(this.value)));
     if (changed.has('min')) this.setAttribute('aria-valuemin', String(this.min));
@@ -122,11 +127,16 @@ export class AcpResizeHandle extends LitElement {
   }
 
   /**
-   * Turns a horizontal pointer/key movement into a column-width change.
-   * @param {number} dx px, positive to the right.
+   * Turns a pointer/key movement along the axis into a size change.
+   * @param {number} d px, positive to the right (down on the vertical axis).
    */
-  #orient(dx) {
-    return this.edge === 'start' ? -dx : dx;
+  #orient(d) {
+    return this.edge === 'start' ? -d : d;
+  }
+
+  /** @param {PointerEvent} e The pointer along the axis. */
+  #along(e) {
+    return this.axis === 'y' ? e.clientY : e.clientX;
   }
 
   /**
@@ -148,13 +158,13 @@ export class AcpResizeHandle extends LitElement {
     // Keeps text from being selected, and the pointer's events coming here, until release.
     e.preventDefault();
     this.setPointerCapture(e.pointerId);
-    this.#press = { pointerId: e.pointerId, startX: e.clientX };
+    this.#press = { pointerId: e.pointerId, start: this.#along(e) };
   };
 
   /** @param {PointerEvent} e */
   #onPointermove = (e) => {
     if (e.pointerId !== this.#press?.pointerId) return;
-    const dx = e.clientX - this.#press.startX;
+    const dx = this.#along(e) - this.#press.start;
     if (!this.dragging) {
       if (Math.abs(dx) < DRAG_THRESHOLD) return;
       /** @type {boolean} */
@@ -167,7 +177,7 @@ export class AcpResizeHandle extends LitElement {
   /** @param {PointerEvent} e */
   #onPointerup = (e) => {
     if (e.pointerId !== this.#press?.pointerId) return;
-    if (this.dragging) this.#emit('acp-resize', this.#orient(e.clientX - this.#press.startX));
+    if (this.dragging) this.#emit('acp-resize', this.#orient(this.#along(e) - this.#press.start));
     this.releasePointerCapture(e.pointerId);
   };
 
@@ -190,19 +200,21 @@ export class AcpResizeHandle extends LitElement {
     const after = rendered(this, 'nextElementSibling');
     const [column, neighbor] = this.edge === 'start' ? [after, before] : [before, after];
     if (!column || !neighbor) return undefined;
+    const vertical = this.axis === 'y';
     return {
-      width: column.getBoundingClientRect().width,
-      neighborWidth: neighbor.getBoundingClientRect().width,
-      neighborMin: parseFloat(getComputedStyle(neighbor).minWidth) || 0,
+      width: vertical ? column.getBoundingClientRect().height : column.getBoundingClientRect().width,
+      neighborWidth: vertical ? neighbor.getBoundingClientRect().height : neighbor.getBoundingClientRect().width,
+      neighborMin: parseFloat(vertical ? getComputedStyle(neighbor).minHeight : getComputedStyle(neighbor).minWidth) || 0,
     };
   }
 
   /** @param {KeyboardEvent} e */
   #onKeydown = (e) => {
-    if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+    const [less, more] = this.axis === 'y' ? ['ArrowUp', 'ArrowDown'] : ['ArrowLeft', 'ArrowRight'];
+    if (e.key !== less && e.key !== more) return;
     e.preventDefault();
     const step = e.shiftKey ? LARGE_STEP : STEP;
-    this.#emit('acp-resize-step', this.#orient(e.key === 'ArrowRight' ? step : -step), this.#measure());
+    this.#emit('acp-resize-step', this.#orient(e.key === more ? step : -step), this.#measure());
   };
 
   #onDblclick = () => {

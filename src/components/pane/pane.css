@@ -5,6 +5,9 @@
   width: var(--acp-pane-width, auto);
   min-width: var(--acp-pane-min-width, 0);
   max-width: var(--acp-pane-max-width, none);
+  height: var(--acp-pane-height, auto);
+  min-height: var(--acp-pane-min-height, 0);
+  max-height: var(--acp-pane-max-height, none);
 }
 
 :host([hidden]) {

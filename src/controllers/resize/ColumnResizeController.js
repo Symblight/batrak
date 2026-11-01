@@ -22,6 +22,8 @@
  *   `$columnWidths`); read on every update, so a change elsewhere (another window) is applied.
  * @property {(widths: ColumnWidths) => void} onCommit Where a drag's end, a key step or a reset ends up:
  *   all the widths, a reset column dropped.
+ * @property {() => 'x' | 'y'} [axis] `y` sizes rows by their height instead (their "widths" are heights
+ *   and `property` is the default height). Default `x`.
  */
 
 /** @typedef {import('lit').ReactiveControllerHost & HTMLElement} ResizeHost */
@@ -127,7 +129,7 @@ export class ColumnResizeController {
    */
   columnStyle(name) {
     const px = `${this.width(name)}px`;
-    return `flex-basis: ${px}; width: ${px}`;
+    return `flex-basis: ${px}; ${this.#config.axis?.() === 'y' ? 'height' : 'width'}: ${px}`;
   }
 
   /**

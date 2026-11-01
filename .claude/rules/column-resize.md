@@ -42,3 +42,10 @@ and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads 
   (pointer events), but HTML5 drag-and-drop in the page does: with the native handler on, wry
   swallows `draggingUpdated` on macOS (no `dragover` while the button is held) and Windows disables
   HTML5 drag and drop in the webview — so in-page dragging must use pointer events.
+- **Vertical axis:** `<acp-resize-handle axis="y">` is a horizontal divider between stacked rows, dragged
+  with the pointer or ArrowUp / ArrowDown; `delta > 0` means taller, and `ResizeMeasure`'s `width` fields
+  are heights (the `min-height` of the neighbor). `ColumnResizeController` takes `axis: () => 'y'` and then
+  writes `flex-basis` / `height`; `<acp-column-split direction="column">` (and `<acp-split direction="column">`)
+  lays its panes out as rows, with `size`, `minSize` and `maxSize` as heights (`--acp-pane-height`, `-min-height`,
+  `-max-height`); `flush` drops a split's window-edge padding when it sits inside a pane. A pane's
+  collapse animation (`edge` + `hidden`) is for rows of columns only.

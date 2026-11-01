@@ -16,6 +16,11 @@
   user-select: none;
   outline: none;
 }
+:host([axis='y']) {
+  width: auto;
+  height: var(--acp-resize-handle-hit-width);
+  cursor: row-resize;
+}
 .acp-resize-handle__line {
   position: absolute;
   inset-block: 0;
@@ -25,10 +30,18 @@
   background: var(--_acp-resize-handle-color);
   transition:
     width 0.15s,
+    height 0.15s,
     background-color 0.15s;
 
   @media (prefers-reduced-motion: reduce) {
     transition: none;
+  }
+
+  :host([axis='y']) & {
+    inset: 50% 0 auto;
+    width: auto;
+    height: var(--_acp-resize-handle-line-width);
+    transform: translateY(-50%);
   }
 }
 :host(:hover),
