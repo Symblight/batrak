@@ -12,7 +12,7 @@ import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
 import type { AcpAgentsTab } from './views/agents-tab/agents-tab.js';
 import type { AcpTerminalView } from './views/terminal-view/terminal-view.js';
 import type { AcpTerminalsView } from './views/terminals-view/terminals-view.js';
-import type { AcpTerminalActions } from './components/terminal-actions/terminal-actions.js';
+import type { AcpTerminalAction } from './components/terminal-action/terminal-action.js';
 import type { AcpGitChanges } from './views/git-changes/git-changes.js';
 import type { AcpFilesView } from './views/files-view/files-view.js';
 import type { AcpChangesTab } from './views/changes-tab/changes-tab.js';
@@ -94,7 +94,7 @@ declare global {
     'acp-git-changes': AcpGitChanges;
     'acp-terminal-view': AcpTerminalView;
     'acp-terminals-view': AcpTerminalsView;
-    'acp-terminal-actions': AcpTerminalActions;
+    'acp-terminal-action': AcpTerminalAction;
     'acp-session-changes-tab': AcpSessionChangesTab;
     'acp-search-pane': AcpSearchPane;
     'acp-search-view': AcpSearchView;

@@ -67,12 +67,12 @@ describe('acp-terminals-view', () => {
     // Arrange
     const first = openTerminal('/p', '/p', 'a');
     const el = await render();
-    const actions = /** @type {HTMLElement} */ (el.querySelector('acp-terminal-actions'));
+    const [add, hide] = /** @type {HTMLElement[]} */ ([...el.querySelectorAll('acp-terminal-action')]);
 
     // Act
-    actions.dispatchEvent(new CustomEvent('acp-terminal-new', { bubbles: true, composed: true }));
+    add.dispatchEvent(new CustomEvent('acp-terminal-new', { bubbles: true, composed: true }));
     await until(() => $terminalTabs.get().paths.length === 2);
-    actions.dispatchEvent(new CustomEvent('acp-terminal-hide', { bubbles: true, composed: true }));
+    hide.dispatchEvent(new CustomEvent('acp-terminal-hide', { bubbles: true, composed: true }));
     await el.updateComplete;
 
     // Assert

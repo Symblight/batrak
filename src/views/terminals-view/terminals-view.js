@@ -8,7 +8,7 @@ import { $workspace } from '../../stores/workspace/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/panel/panel.js';
 import '../../components/tab-view/tab-view.js';
-import '../../components/terminal-actions/terminal-actions.js';
+import '../../components/terminal-action/terminal-action.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../terminal-view/terminal-view.js';
 
@@ -95,11 +95,8 @@ export class AcpTerminalsView extends ViewElement {
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) => terminalGroup.setPinned(e.detail.id, e.detail.pinned)}
         @acp-tab-move=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) => terminalGroup.move(e.detail.id, e.detail.index)}
       >
-        <acp-terminal-actions
-          slot="actions"
-          @acp-terminal-new=${() => this.#newTerminal()}
-          @acp-terminal-hide=${() => terminals.hidePanel()}
-        ></acp-terminal-actions>
+        <acp-terminal-action slot="add" action="new" @acp-terminal-new=${() => this.#newTerminal()}></acp-terminal-action>
+        <acp-terminal-action slot="actions" action="hide" @acp-terminal-hide=${() => terminals.hidePanel()}></acp-terminal-action>
       </acp-tab-view>
     </acp-panel>`;
   }

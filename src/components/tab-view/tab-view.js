@@ -1,5 +1,6 @@
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
+import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import '@symblight/wc-material/tabs';
 import { TabConfirmController } from '../../controllers/tab-confirm/TabConfirmController.js';
@@ -20,7 +21,8 @@ import styles from './tab-view.css?inline';
 /**
  * @tag acp-tab-view
  * @summary The main column's tabs: images, the Browser placeholder and whatever the host renders for the rest (code editors, views).
- * @slot actions Buttons at the end of the strip's row (the terminal panel's add and hide).
+ * @slot add A button right after the last tab, like a browser's new tab; the strip then takes only the room its tabs need (the terminal panel's add).
+ * @slot actions Buttons at the end of the strip's row (the terminal panel's hide).
  * @fires acp-tab-close `{ id, scope }` A `CloseScope` around the tab, unsaved edits and running programs already confirmed.
  * @fires acp-tab-save `{ id, force: true }` Write over the file although it changed on disk (asked first).
  * @fires acp-tab-reload `{ id }` Drop the tab's edits for the file on disk (asked first).
@@ -35,6 +37,7 @@ export class AcpTabView extends LitElement {
     renderContent: { attribute: false },
     terminals: { attribute: false },
     terminalBusy: { attribute: false },
+    addSlotted: { state: true },
   };
 
   static styles = styles;
@@ -88,6 +91,8 @@ export class AcpTabView extends LitElement {
     this.terminals = {};
     /** @type {TerminalBusyQuery} Which terminals run a program other than their shell. */
     this.terminalBusy = async () => [];
+    /** @type {boolean} Something is slotted as `add`: the strip hugs its tabs. */
+    this.addSlotted = false;
     /** @type {((tab: EditorTab) => unknown) | null} The content of the tabs whose view the host owns, as its views render it. */
     this.renderContent = null;
   }
@@ -144,6 +149,10 @@ export class AcpTabView extends LitElement {
     this.#activeCodeView()?.revealLine(pending.at);
   }
 
+  #onAddSlotChange = (/** @type {Event} */ e) => {
+    this.addSlotted = /** @type {HTMLSlotElement} */ (e.target).assignedElements().length > 0;
+  };
+
   /** The strip asks to close tabs: confirm what they'd lose first. */
   #onCloseRequest = async (/** @type {Event} */ e) => {
     e.stopPropagation();
@@ -187,7 +196,7 @@ export class AcpTabView extends LitElement {
     return html`
       <div class="acp-tab-view__header">
         <acp-tab-strip
-          class="acp-tab-view__strip"
+          class=${classMap({ 'acp-tab-view__strip': true, 'acp-tab-view__strip_hugging': this.addSlotted })}
           .tabs=${this.tabs}
           .active=${this.active}
           .pinned=${this.pinned}
@@ -197,7 +206,8 @@ export class AcpTabView extends LitElement {
           @acp-tab-activate=${() => (this.#pendingLine = null)}
           @acp-tab-close-request=${this.#onCloseRequest}
         ></acp-tab-strip>
-        <slot name="actions"></slot>
+        <slot name="add" @slotchange=${this.#onAddSlotChange}></slot>
+        <div class="acp-tab-view__actions"><slot name="actions"></slot></div>
       </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
       ${this.#confirm.render()}
