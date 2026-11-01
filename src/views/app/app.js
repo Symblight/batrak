@@ -4,7 +4,7 @@ import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
 import { sessionController } from '../../services/session-controller/session-controller.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
-import { gitController } from '../../services/git-controller/git-controller.js';
+import { git } from '../../hooks/git/git.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { onMenuAction, quickOpen, revealPath } from '../../services/ipc/ipc.js';
 import { $about } from '../../stores/about/about.js';
@@ -162,7 +162,7 @@ export class AcpApp extends ViewElement {
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agents.start();
     sessionController.init().catch((err) => app.reportError('Loading sessions failed', err));
-    gitController.start();
+    git.start();
     sessionRootController.start();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }

@@ -9,10 +9,10 @@ export const NO_REPO = { repo: null, error: null };
 /** @type {GitChangesView} */
 export const NO_CHANGES = { files: [], loaded: false, loading: false, error: null };
 
-/** Branch of the active root; written by `gitController`. */
+/** Branch of the active root; written by the `git` hook. */
 export const $gitRepo = atom(NO_REPO);
 
-/** Changed files of the active root, while the Changes panel is open; written by `gitController`. */
+/** Changed files of the active root, while the Changes panel is open; written by the `git` hook. */
 export const $gitChanges = atom(NO_CHANGES);
 
 /**

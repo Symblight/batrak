@@ -4,7 +4,8 @@ import { StoreController } from '../store/StoreController.js';
 import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentController.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { imageTypeOf } from '../../models/image-types/image-types.js';
-import { gitFileAtHead, readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
+import { readFile, readFileBytes, writeFile } from '../../services/ipc/ipc.js';
+import { git } from '../../hooks/git/git.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
@@ -336,7 +337,7 @@ export class TabFilesController {
     const rootId = this.#rootId.value;
     const rel = projects.relPath(path);
     if (rootId === null || rel === null) return null;
-    return gitFileAtHead(rootId, rel).catch(() => null);
+    return git.fileAtHead(rootId, rel).catch(() => null);
   }
 
   /**

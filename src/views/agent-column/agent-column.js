@@ -1,3 +1,4 @@
+import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { html, nothing } from 'lit';
@@ -18,7 +19,7 @@ import { chatDropOf } from '../../models/file-drop/file-drop.js';
 import { inTurn } from '../../models/sessions/sessions.js';
 import { USER_ID, acpAdapter } from '../../services/adapter/adapter.js';
 import { agents } from '../../hooks/agents/agents.js';
-import { droppedKinds, gitBranches, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
+import { droppedKinds, openUrl, quickOpen, saveAttachment } from '../../services/ipc/ipc.js';
 import { fileDrop } from '../../services/file-drop/file-drop.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { sessionController } from '../../services/session-controller/session-controller.js';
@@ -283,7 +284,7 @@ export class AcpAgentColumn extends ViewElement {
     const rootId = $rootId.get();
     if (rootId === null) return;
     try {
-      const names = await gitBranches(rootId);
+      const names = await git.branches(rootId);
       if (rootId === $rootId.get()) this.branches = { rootId, names };
     } catch (err) {
       app.reportError('Listing branches failed', err);

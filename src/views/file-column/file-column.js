@@ -5,8 +5,8 @@ import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
-import { gitController } from '../../services/git-controller/git-controller.js';
-import { gitLastCommitMessage, listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
+import { git } from '../../hooks/git/git.js';
+import { listDir, rescanWorkspace } from '../../services/ipc/ipc.js';
 import { sessionRootController } from '../../services/session-root-controller/session-root-controller.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
@@ -100,7 +100,7 @@ export class AcpFileColumn extends ViewElement {
 
   /** @param {boolean} watching */
   #watchChanges(watching) {
-    if (watching && this.isConnected) this.#unwatch ??= gitController.watchChanges();
+    if (watching && this.isConnected) this.#unwatch ??= git.watchChanges();
     else if (!watching) {
       this.#unwatch?.();
       this.#unwatch = null;
@@ -183,7 +183,7 @@ export class AcpFileColumn extends ViewElement {
   async #onAmendStart(e) {
     const panel = /** @type {HTMLElementTagNameMap['acp-changes-panel']} */ (e.target);
     const rootId = this.#rootId.value;
-    const last = rootId ? await gitLastCommitMessage(rootId).catch(() => null) : null;
+    const last = rootId ? await git.lastCommitMessage(rootId).catch(() => null) : null;
     panel.fillAmendMessage(last);
   }
 
@@ -194,7 +194,7 @@ export class AcpFileColumn extends ViewElement {
       e
     ).detail;
     try {
-      const { sha, summary } = await gitController.commit(paths, message, amend);
+      const { sha, summary } = await git.commit(paths, message, amend);
       notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
       panel.commitFinished(true);
     } catch (err) {
@@ -246,7 +246,7 @@ export class AcpFileColumn extends ViewElement {
         .selection=${this.#commitSelection.value}
         .root=${root}
         @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => setCommitSelection(e.detail.ids)}
-        @acp-changes-refresh=${() => gitController.refreshChanges()}
+        @acp-changes-refresh=${() => git.refreshChanges()}
         @acp-amend-start=${this.#onAmendStart}
         @acp-commit=${this.#onCommit}
       ></acp-changes-panel>

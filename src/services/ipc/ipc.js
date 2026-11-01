@@ -8,11 +8,8 @@ import { ipc } from '../../hooks/ipc/ipc.js';
 /** @typedef {import('../../models/types/types.js').QuickOpenKind} QuickOpenKind */
 /** @typedef {import('../../models/types/types.js').SearchOptions} SearchOptions */
 /** @typedef {import('../../models/types/types.js').SearchEvent} SearchEvent */
-/** @typedef {import('../../models/types/types.js').GitStatusReply} GitStatusReply */
-/** @typedef {import('../../models/types/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../../models/types/types.js').ApplyResult} ApplyResult */
-/** @typedef {import('../../models/types/types.js').GitCommitted} GitCommitted */
 /** @typedef {import('../../models/types/types.js').FontFamily} FontFamily */
 /** @typedef {import('../../models/types/types.js').LogLevel} LogLevel */
 /** @typedef {import('../../models/types/types.js').AboutInfo} AboutInfo */
@@ -400,27 +397,6 @@ export function cancelSearch(rootId, slot) {
 }
 
 /**
- * Branch and upstream of the root's repository; cheap, no file scan.
- * @param {string} rootId
- * @returns {Promise<GitRepoState | null>} `null` when the root isn't in a repository.
- */
-export function gitHead(rootId) {
-  return ipc.invoke('git_head', { rootId });
-}
-
-/**
- * Branch and changed files of the root's repository; the working tree is scanned again only when
- * something changed since the backend's last scan.
- * @param {string} rootId
- * @param {number | null} since Version of the status the caller has; an unchanged one isn't sent again.
- * @param {boolean} [force] Scan even when nothing seems changed (the Refresh button).
- * @returns {Promise<GitStatusReply>}
- */
-export function gitStatus(rootId, since, force = false) {
-  return ipc.invoke('git_status', { rootId, since, force });
-}
-
-/**
  * A worktree session's changed files since it started (its commits and uncommitted work).
  * @param {string} sessionId
  * @returns {Promise<GitFileStatus[]>} Paths relative to the session's folder.
@@ -457,47 +433,6 @@ export function sessionCheckOutBranch(sessionId) {
  */
 export function sessionFileAtBase(sessionId, path) {
   return ipc.invoke('session_file_at_base', { sessionId, path });
-}
-
-/**
- * Local branches a worktree session can start from, most recently committed first (the sessions'
- * own `brama/…` left out).
- * @param {string} rootId
- * @returns {Promise<string[]>}
- */
-export function gitBranches(rootId) {
-  return ipc.invoke('git_branches', { rootId });
-}
-
-/**
- * Message of the last commit, which Amend starts from.
- * @param {string} rootId
- * @returns {Promise<string | null>} `null` before the first commit.
- */
-export function gitLastCommitMessage(rootId) {
-  return ipc.invoke('git_last_commit_message', { rootId });
-}
-
-/**
- * Commits files as they are in the working tree, whatever is staged; the user's hooks run.
- * @param {string} rootId
- * @param {string[]} paths Relative; both sides of a rename. Empty with `amend` rewords the last commit.
- * @param {string} message
- * @param {boolean} amend Replace the last commit.
- * @returns {Promise<GitCommitted>}
- */
-export function gitCommit(rootId, paths, message, amend) {
-  return ipc.invoke('git_commit', { rootId, paths, message, amend });
-}
-
-/**
- * A file's text at HEAD, the editor's diff baseline.
- * @param {string} rootId
- * @param {string} path Relative.
- * @returns {Promise<string | null>} `null` when not committed, binary, too large or not in a repository.
- */
-export function gitFileAtHead(rootId, path) {
-  return ipc.invoke('git_file_at_head', { rootId, path });
 }
 
 /**

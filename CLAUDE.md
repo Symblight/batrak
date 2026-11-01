@@ -138,7 +138,7 @@ tabs are read, or re-read after a change on disk or a HEAD move, when they becom
 `KEEP_OPEN` (3) active projects; activating one of them only switches `$workspace`, no scan. Older
 ones are closed and scanned again when activated. Only the active root's changes reach the frontend
 (`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
-root (`gitController`'s stores and commit picks, the Changes tab's expanded files, the file tree's
+root (the `git` hook's stores and commit picks, the Changes tab's expanded files, the file tree's
 expanded folders) save their state on switch and restore it, re-checking what may have changed. A
 root belongs to the window that opened it: `Workspaces::close_group` closes a window's roots when it
 is destroyed, and `close_window_workspaces` when its page loads again (before any open).

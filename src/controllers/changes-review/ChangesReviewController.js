@@ -1,7 +1,7 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../store/StoreController.js';
-import { gitController } from '../../services/git-controller/git-controller.js';
-import { gitFileAtHead, readFile } from '../../services/ipc/ipc.js';
+import { git } from '../../hooks/git/git.js';
+import { readFile } from '../../services/ipc/ipc.js';
 import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
 import { $gitChanges, $gitHead } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
@@ -134,7 +134,7 @@ export class ChangesReviewController {
 
   /** @param {boolean} watching */
   #setWatching(watching) {
-    if (watching && this.#connected) this.#unwatch ??= gitController.watchChanges();
+    if (watching && this.#connected) this.#unwatch ??= git.watchChanges();
     else if (!watching) {
       this.#unwatch?.();
       this.#unwatch = null;
@@ -260,7 +260,7 @@ export class ChangesReviewController {
     const path = projects.absPath(id);
     const [content, baseline] = await Promise.all([
       readFile(path).catch(() => null),
-      rootId ? gitFileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
+      rootId ? git.fileAtHead(rootId, id).catch(() => null) : Promise.resolve(null),
     ]);
     if (this.#loads.get(id) !== load) return;
     this.#setDiff(
