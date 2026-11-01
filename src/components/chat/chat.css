@@ -5,6 +5,7 @@
   --_acp-chat-messages-max-width: var(--acp-chat-messages-max-width, none);
   position: relative;
   display: flex;
+  flex: 1;
   flex-direction: column;
   min-height: 0;
 }
@@ -155,4 +156,8 @@
     background: var(--acp-color-outline-variant);
     border-radius: 3px;
   }
+}
+
+:host([hidden]) {
+  display: none;
 }

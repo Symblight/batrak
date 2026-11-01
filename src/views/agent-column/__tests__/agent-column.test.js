@@ -484,4 +484,27 @@ describe('acp-agent-column', () => {
     expect(calls).to.not.include('session_stop');
     expect($sessionViews.get()).to.deep.equal({});
   });
+
+  it("keeps a session's unsent composer text while its project is closed, and puts it back when it shows again", async () => {
+    // Arrange
+    $draftSessions.set({ d1: '/p' });
+    $activeSessionId.set('d1');
+    const { el, root } = await render();
+    const chat = () => /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
+    await chat().updateComplete;
+    chat().chat?.input.setText('half a thought');
+
+    // Act: the project closes (the welcome screen shows), then opens again with the session
+    $activeSessionId.set(null);
+    $workspace.set(null);
+    await el.updateComplete;
+    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $activeSessionId.set('d1');
+    await el.updateComplete;
+    await chat().updateComplete;
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Assert
+    expect(chat().chat?.input.getValue().value).to.equal('half a thought');
+  });
 });

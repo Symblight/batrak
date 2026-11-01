@@ -7,6 +7,7 @@ paths:
   - "src/hooks/{sessions,chat,composer}/**"
   - "src/stores/{sessions,session-sync,session-runtime,session-root,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
+  - "src/views/chat-view/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input}.md"
@@ -23,7 +24,7 @@ survives a relaunch), its newest, or a new draft),
 agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
 (messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
-(`src/controllers/chat-session/`, on `<acp-agent-column>`, reaching the chat through `<acp-chat>`'s
+(`src/controllers/chat-session/`, on `<acp-chat-view>`, reaching the chat through `<acp-chat>`'s
 `chat`): `activeConversationId`, the draft's first send (put back into
 the composer when the backend refuses the session), and each session's unsent composer text and files.
 Statuses come from the backend's session events. A draft shows only the composer, centered; the message
@@ -103,7 +104,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   It also fills the list's `streaming` slot (no reply yet), untimed, instead of `<chx-streaming-indicator>`.
   Files dropped from the OS on the shown chat (Tauri's native drop, see `terminals.md`; the page
   gets no HTML5 drop, so `<chx-chat>`'s own drop is dead) are handled by `<acp-agent-column>`,
-  which sets `<acp-chat dropping>` while they're over it: `fileDrop.kinds()` (`dropped_kinds`) says what each is, and
+  which sets `<acp-chat-view dropping>` (on its `<acp-chat>`) while they're over it: `fileDrop.kinds()` (`dropped_kinds`) says what each is, and
   `fileDrop.chatDropOf()` (`hooks/file-drop/rules.js`) makes each file or folder, an image too (the agent reads
   it by its path), a chip at the caret (`AcpChat.insertFiles()`, built like an `@` pick), relative
   to the session's folder inside it, else absolute. `promptOf()` sends a relative chip as a

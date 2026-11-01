@@ -70,7 +70,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `listDir`); a query is an event answered by a property (`acp-quick-open-query` → `files`,
   `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`, `acp-agents-query` → `view`).
 - A controller counts as part of its host. The data controllers (they read stores or call services)
-  are hosted only by a container: `ChatSessionController`, `ChatPartsController` (agent column),
+  are hosted only by a container: `ChatSessionController`, `ChatPartsController` (`<acp-chat-view>`),
   `TabFilesController` (open tabs' files: reads, baselines, drafts, kept in memory while another
   project is shown, saves; a save over a file
   changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
