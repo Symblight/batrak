@@ -198,6 +198,14 @@ test that reproduces it.
   after it (`components/x/__tests__/x.test.js`, `hooks/projects/__tests__/rules.test.js`). Keep logic in plain functions
   (`stores/`, `hooks/`) and test it directly; test a component through its
   properties, events and rendered shadow DOM with `fixture()` from `test/fixture.js`.
+- **Writing, extending or slimming a frontend test suite: use the `lit-test-suite` skill**
+  (`/lit-test-suite`): a feature map first, one test per user-visible behavior (table-driven for
+  variants, not one per property or key), Arrange-Act-Assert with comments, black-box only, one test
+  written and run at a time, and a falsifiability check (break the guarded line, see it fail). This
+  file wins where they differ: the runner is mocha + chai with `fixture()` from `test/fixture.js`
+  (not `@open-wc/testing`), tests sit in `__tests__/` folders, a test is added only for behavior no
+  existing test covers, and the Styles rule above applies. Name the skill in the brief of any
+  subagent that writes tests.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
 
