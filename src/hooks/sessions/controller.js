@@ -1,14 +1,16 @@
 import { app } from '../app/app.js';
-import { listSessions, sessionCliBusy, sessionCloseCli, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume, sessionStop, workspaceSettings } from './commands.js';
+import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume, workspaceSettings } from './commands.js';
 import { actions } from './actions.js';
-import { forgetHistory, forgetSession, handleSessionEvent, trackCreate } from './adapter.js';
+import { CLI_SIZE, openCli, restartCli, cliBusy, toChat } from './cli.js';
+import { cancelIdleStop, stopWhenIdle } from './idle.js';
+import { forgetSession, handleSessionEvent, trackCreate } from './adapter.js';
 import { agents } from '../agents/agents.js';
 import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
 import { composerOf, forgetComposer, startComposer } from '../../stores/composer/composer.js';
 import { root } from './root.js';
 import { poll, sync, syncAgentOf } from './sync.js';
-import { RUNNING, inTurn, isActiveElsewhere } from './rules.js';
+import { inTurn, isActiveElsewhere } from './rules.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
@@ -29,25 +31,12 @@ import {
 } from '../../stores/sessions/sessions.js';
 import { $activePermission, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
-import { forgetPendingInput, resetHistory } from '../../stores/chat/chat.js';
-import {
-  $cliStarting,
-  $sessionTerminals,
-  $terminals,
-  addSessionTerminal,
-  forgetTerminal,
-  sessionTerminalOf,
-  setCliStarting,
-  terminalFailed,
-} from '../../stores/terminals/terminals.js';
+import { forgetPendingInput } from '../../stores/chat/chat.js';
+import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
 import { $workspacePath, setWorkspaceSettings } from '../../stores/workspace/workspace.js';
 
-/** How long a hidden session's agent may sit idle before it's stopped (showing it resumes it). */
-const IDLE_STOP_MS = 10 * 60_000;
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
-/** A CLI starts at this size; its view sends the real one once attached. */
-const CLI_SIZE = { cols: 80, rows: 24 };
 
 /** @typedef {import('../../models/types/types.js').Session} Session */
 
@@ -64,10 +53,6 @@ function onSessionEvent(event) {
 const opened = new Set();
 /** Sequence of workspace.json reads; only the latest answer is kept. */
 let settingsLoad = 0;
-/** @type {Map<string, ReturnType<typeof setTimeout>>} Hidden sessions whose agent stops once idle. */
-const idleStops = new Map();
-/** @type {Map<string, Promise<void>>} Sessions whose CLI is starting, so a second ask doesn't start another. */
-const cliOpening = new Map();
 /** @type {string | null} The shown session once its agent's list is current: its view is acted on from then. */
 let ready = null;
 /** @type {Promise<boolean>} The last reconcile; the next waits for it. */
@@ -96,8 +81,7 @@ async function init() {
     shown = id;
     ready = null;
     if (id === null) return;
-    clearTimeout(idleStops.get(id));
-    idleStops.delete(id);
+    cancelIdleStop(id);
     show(id);
   });
   $workspacePath.subscribe((path) => {
@@ -226,21 +210,6 @@ async function continueInChat(id) {
 }
 
 /**
- * Closes the session's CLI and resumes its agent, whose replay rebuilds the chat with the turns the
- * CLI ran.
- * @param {string} id
- */
-async function toChat(id) {
-  await cliOpening.get(id);
-  await closeCli(id);
-  resetHistory(id);
-  forgetHistory(id);
-  // Not `#resume`: the activity another app showed was this CLI's.
-  if ($sessions.get().find((s) => s.id === id)?.status === 'stopped')
-    await sessionResume(id).catch((err) => app.reportError('Starting the agent failed', err));
-}
-
-/**
  * Whether a draft's first message starts its agent's CLI rather than the chat: its agent's
  * sessions open in the terminal, and its CLI can start one.
  * @param {string} id
@@ -283,83 +252,6 @@ async function startInTerminal(id, title, prompt) {
     setCliStarting(id, false);
   }
   return true;
-}
-
-/**
- * Starts the CLI again after it exited or failed to start.
- * @param {string} id
- */
-async function restartCli(id) {
-  await closeCli(id);
-  await openCli(id);
-}
-
-/**
- * @param {string} id
- * @returns {Promise<boolean>} Closing its CLI would stop its work.
- */
-function cliBusy(id) {
-  return sessionTerminalOf(id) === null ? Promise.resolve(false) : sessionCliBusy(id).catch(() => false);
-}
-
-/**
- * Starts the session's CLI unless it runs; once however many ask meanwhile.
- * @param {string} id
- * @returns {Promise<void>}
- */
-function openCli(id) {
-  let opening = cliOpening.get(id);
-  if (!opening) {
-    opening = startCli(id).finally(() => cliOpening.delete(id));
-    cliOpening.set(id, opening);
-  }
-  return opening;
-}
-
-/** @param {string} id */
-async function startCli(id) {
-  const session = $sessions.get().find((s) => s.id === id);
-  const running = sessionTerminalOf(id);
-  if (!session || (running !== null && $terminals.get()[running]?.status === 'running')) return;
-  if (running !== null) forgetTerminal(running);
-  clearTimeout(idleStops.get(id));
-  idleStops.delete(id);
-  const label = session.agentName ?? 'Agent';
-  // From now on, so the chat doesn't show while its agent stops.
-  setCliStarting(id, true);
-  try {
-    if (RUNNING.has(session.status)) {
-      try {
-        await sessionStop(id);
-      } catch (err) {
-        app.reportError('Stopping the agent failed', err);
-        return;
-      }
-    }
-    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows);
-    addSessionTerminal(terminalId, id, session.folder, label);
-  } catch (err) {
-    // Shown in its place, with Restart and Continue in chat; never attached (the backend has no such terminal).
-    const failed = `cli:${id}`;
-    addSessionTerminal(failed, id, session.folder, label);
-    terminalFailed(failed, `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}`);
-  } finally {
-    setCliStarting(id, false);
-  }
-}
-
-/**
- * Closes the session's CLI, if it has one; resolves once it's gone.
- * @param {string} id
- */
-async function closeCli(id) {
-  const terminalId = sessionTerminalOf(id);
-  if (terminalId === null) return;
-  const status = $terminals.get()[terminalId]?.status;
-  if (status === 'running') await sessionCloseCli(id).catch((err) => app.reportError('Closing the terminal failed', err));
-  // Exited by itself: the backend let the session go, but keeps its terminal's output.
-  else if (status === 'exited') await terminals.close([terminalId]).catch(() => {});
-  forgetTerminal(terminalId);
 }
 
 /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
@@ -405,22 +297,6 @@ function resume(id) {
     return;
   }
   sessionResume(id).catch((err) => app.reportError('Starting the agent failed', err));
-}
-
-/**
- * Stops a hidden session's agent after `IDLE_STOP_MS`, or later if it's busy then.
- * @param {string} id
- */
-function stopWhenIdle(id) {
-  clearTimeout(idleStops.get(id));
-  const timer = setTimeout(() => {
-    idleStops.delete(id);
-    if ($activeSessionId.get() === id) return;
-    const status = $sessions.get().find((s) => s.id === id)?.status;
-    if (status === 'idle') actions.stop(id);
-    else if (status !== undefined && status !== 'stopped' && status !== 'error') stopWhenIdle(id);
-  }, IDLE_STOP_MS);
-  idleStops.set(id, timer);
 }
 
 /**
@@ -509,8 +385,7 @@ async function remove(id) {
     app.reportError('Removing the session failed', err);
     return;
   }
-  clearTimeout(idleStops.get(id));
-  idleStops.delete(id);
+  cancelIdleStop(id);
   // The backend closed a running CLI; one that exited by itself left its terminal.
   const terminalId = sessionTerminalOf(id);
   if (terminalId !== null) {
