@@ -27,6 +27,7 @@ const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, pr
 describe('acp-terminal-view', () => {
   /** @type {string[]} */
   let pasted;
+  const clipboardWrite = navigator.clipboard.writeText;
   const proto = /** @type {AcpTerminal} */ (customElements.get('acp-terminal')?.prototype);
   const { paste } = proto;
 
@@ -39,13 +40,15 @@ describe('acp-terminal-view', () => {
 
   afterEach(() => {
     proto.paste = paste;
+    navigator.clipboard.writeText = clipboardWrite;
+    fileDrop.handle({ type: 'leave' });
     $terminals.set({});
     clearMocks();
   });
 
   /** @returns {Promise<{ el: AcpTerminalView, terminal: AcpTerminal }>} */
   async function render() {
-    const el = /** @type {AcpTerminalView} */ (await fixture(html`<acp-terminal-view style="display: flex; width: 600px; height: 300px" terminal-id="t1"></acp-terminal-view>`));
+    const el = /** @type {AcpTerminalView} */ (await fixture(html`<acp-terminal-view terminal-id="t1"></acp-terminal-view>`));
     return { el, terminal: /** @type {AcpTerminal} */ (el.querySelector('acp-terminal')) };
   }
 
@@ -79,22 +82,25 @@ describe('acp-terminal-view', () => {
     /** @type {Event[]} */
     const leaked = [];
     for (const type of ['acp-terminal-copy', 'acp-terminal-restart', 'acp-terminal-title']) el.addEventListener(type, (e) => leaked.push(e));
+    /** @type {unknown[]} */
+    const links = [];
+    el.addEventListener('acp-link-open', (e) => links.push(/** @type {CustomEvent} */ (e).detail));
     /** @type {string[]} */
     const copied = [];
-    const original = navigator.clipboard.writeText;
     navigator.clipboard.writeText = async (text) => void copied.push(text);
-    try {
-      // Act
-      fire(terminal, 'acp-terminal-copy', { text: 'ls -la' });
-      fire(terminal, 'acp-terminal-restart', { terminalId: 't1' });
-      fire(terminal, 'acp-terminal-title', { terminalId: 't1', title: 'vim' });
-    } finally {
-      navigator.clipboard.writeText = original;
-    }
+    // Act
+    fire(terminal, 'acp-terminal-copy', { text: 'ls -la' });
+    fire(terminal, 'acp-terminal-restart', { terminalId: 't1' });
+    fire(terminal, 'acp-terminal-title', { terminalId: 't1', title: 'vim' });
+    await Promise.resolve();
     // Assert
     expect(copied).to.deep.equal(['ls -la']);
     expect($terminals.get().t1.title).to.equal('vim');
     expect($terminals.get().t1.status, 'starting again').to.equal('starting');
+    // Act: a link is for the column
+    fire(terminal, 'acp-link-open', { url: 'https://example.com' });
+    // Assert
+    expect(links, 'links still reach the column').to.deep.equal([{ url: 'https://example.com' }]);
     expect(leaked).to.deep.equal([]);
   });
 
@@ -110,26 +116,34 @@ describe('acp-terminal-view', () => {
     expect(pasted).to.deep.equal([terminals.shellPaths(paths, app.platformOf(navigator.userAgent))]);
   });
 
-  it('types nothing for files dropped elsewhere or on a terminal whose shell has exited', async () => {
+  it('types nothing for files dropped on a terminal whose shell has exited', async () => {
     const { el, terminal } = await render();
-    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: { x: -5000, y: -5000 } });
     $terminals.set({ t1: { ...running, status: 'exited', exit: { code: 1, signal: null } } });
     await el.updateComplete;
     fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: osPointOf(terminal) });
     expect(pasted).to.deep.equal([]);
   });
 
-  it('types nothing for a drop on another terminal view’s terminal', async () => {
-    await render();
+  it('marks and types into only the terminal the files are over, not another view’s', async () => {
+    // Arrange: the first terminal fills the top of the page, the second view sits below it
+    const { terminal: first } = await render();
     $terminals.set({ t1: running, t2: running });
-    const other = /** @type {AcpTerminalView} */ (await fixture(html`<acp-terminal-view style="display: flex; width: 600px; height: 300px" terminal-id="t2"></acp-terminal-view>`));
+    const other = /** @type {AcpTerminalView} */ (await fixture(html`<acp-terminal-view terminal-id="t2"></acp-terminal-view>`));
     const second = /** @type {AcpTerminal} */ (other.querySelector('acp-terminal'));
     await second.updateComplete;
-    // Act: dropped on the second terminal
     const scale = fileDrop.osScale(app.platformOf(navigator.userAgent), devicePixelRatio);
-    const top = second.getBoundingClientRect();
-    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position: { x: (top.left + 40) * scale, y: (top.top + 20) * scale } });
-    // Assert: pasted once (by the second view), not twice
+    const box = second.getBoundingClientRect();
+    // The second terminal starts below the first, so a point near its top is inside the viewport.
+    const position = { x: (box.left + 40) * scale, y: (box.top + 20) * scale };
+    // Act
+    fileDrop.handle({ type: 'enter', paths: ['/a.png'], position });
+    await second.updateComplete;
+    await first.updateComplete;
+    // Assert
+    expect([second.dropping, first.dropping], 'only the one under the files').to.deep.equal([true, false]);
+    // Act
+    fileDrop.handle({ type: 'drop', paths: ['/a.png'], position });
+    // Assert: typed once (by the second view), not twice
     expect(pasted).to.have.length(1);
   });
 });
