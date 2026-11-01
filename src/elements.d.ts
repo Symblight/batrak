@@ -11,6 +11,7 @@ import type { AcpAgentIcon } from './components/agent-icon/agent-icon.js';
 import type { AcpAgentPicker } from './components/agent-picker/agent-picker.js';
 import type { AcpAgentColumn } from './views/agent-column/agent-column.js';
 import type { AcpApp } from './views/app/app.js';
+import type { AcpCommitBox } from './components/commit-box/commit-box.js';
 import type { AcpChangesPanel } from './components/changes-panel/changes-panel.js';
 import type { AcpChangesReview } from './components/changes-review/changes-review.js';
 import type { AcpContextMeter } from './components/context-meter/context-meter.js';
@@ -74,6 +75,7 @@ declare global {
     'acp-bytes': AcpBytes;
     'acp-file-icon': AcpFileIcon;
     'acp-changes-panel': AcpChangesPanel;
+    'acp-commit-box': AcpCommitBox;
     'acp-changes-review': AcpChangesReview;
     'acp-code-view': AcpCodeView;
     'acp-chat': AcpChat;

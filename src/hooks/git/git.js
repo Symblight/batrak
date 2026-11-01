@@ -2,6 +2,7 @@ import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommit
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
+import { groupChanges, statusOf } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('../../models/types/types.js').WorkspaceChanges} WorkspaceChanges */
@@ -129,6 +130,9 @@ async function readChanges() {
  * current, which costs no scan when nothing changed.
  */
 export const git = Object.freeze({
+  groupChanges,
+  statusOf,
+
   /**
    * Starts following the active root; once however often it is called.
    * @returns {() => void} Stops following.

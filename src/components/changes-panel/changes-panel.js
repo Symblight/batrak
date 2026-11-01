@@ -1,98 +1,21 @@
+import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
-import '@symblight/wc-material/button';
 import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
-import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
-import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
+import '../commit-box/commit-box.js';
 import styles from './changes-panel.css?inline';
 
-/** @typedef {import('../../models/types/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../models/types/types.js').GitFileKind} GitFileKind */
 /** @typedef {import('../../models/types/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../models/types/types.js').GitRepoView} GitRepoView */
-/** @typedef {'changes' | 'untracked'} ChangeGroup */
-
-/**
- * A row of the changes list: a group (as in `git status`: tracked changes, untracked files) or a
- * changed file in it. Files are what a commit takes.
- * @typedef {Object} ChangeNode
- * @property {string} id A file's root-relative path; `group:<name>` for a group.
- * @property {string} label File name, or the group's title.
- * @property {string} dir Folder of a file, relative to the root (`''` at the top); `''` for a group.
- * @property {GitFileStatus | null} file `null` for a group.
- * @property {number | null} added Summed over a group; `null` when no count is known.
- * @property {number | null} removed
- * @property {ChangeNode[]} [children] Groups only.
- */
-
-/** @type {Record<GitFileKind, { letter: string, label: string, color: string }>} */
-const STATUS = {
-  modified: { letter: 'M', label: 'Modified', color: 'var(--acp-color-primary)' },
-  typeChanged: { letter: 'M', label: 'Type changed', color: 'var(--acp-color-primary)' },
-  renamed: { letter: 'R', label: 'Renamed', color: 'var(--acp-color-primary)' },
-  added: { letter: 'A', label: 'Added', color: 'var(--acp-vcs-add)' },
-  untracked: { letter: 'U', label: 'Untracked', color: 'var(--acp-vcs-add)' },
-  deleted: { letter: 'D', label: 'Deleted', color: 'var(--acp-color-error)' },
-  conflicted: { letter: '!', label: 'Conflicted', color: 'var(--acp-color-error)' },
-};
-
-/** @type {Record<ChangeGroup, string>} */
-const GROUP_TITLES = { changes: 'Changes', untracked: 'Untracked files' };
-
-/**
- * @param {number | null} a
- * @param {number | null} b
- */
-function sum(a, b) {
-  return a === null ? b : b === null ? a : a + b;
-}
-
-/**
- * Groups changed files like `git status`: tracked changes, then untracked files; each sorted by
- * path, with line counts summed per group. Empty groups are left out.
- * @param {GitFileStatus[]} files
- * @returns {ChangeNode[]}
- */
-function buildGroups(files) {
-  /** @type {Record<ChangeGroup, ChangeNode[]>} */
-  const byGroup = { changes: [], untracked: [] };
-  for (const file of files) {
-    const id = file.path;
-    const slash = id.lastIndexOf('/');
-    byGroup[file.kind === 'untracked' ? 'untracked' : 'changes'].push({
-      id,
-      label: slash === -1 ? id : id.slice(slash + 1),
-      dir: slash === -1 ? '' : id.slice(0, slash),
-      file,
-      added: file.added,
-      removed: file.removed,
-    });
-  }
-  /** @type {ChangeGroup[]} */
-  const order = ['changes', 'untracked'];
-  return order
-    .filter((group) => byGroup[group].length > 0)
-    .map((group) => {
-      const children = byGroup[group].sort((a, b) => a.id.localeCompare(b.id));
-      /** @type {number | null} */
-      let added = null;
-      /** @type {number | null} */
-      let removed = null;
-      for (const child of children) {
-        added = sum(added, child.added);
-        removed = sum(removed, child.removed);
-      }
-      return { id: `group:${group}`, label: GROUP_TITLES[group], dir: '', file: null, added, removed, children };
-    });
-}
+/** @typedef {import('../../hooks/git/changes.js').ChangeNode} ChangeNode */
 
 /**
  * @tag acp-changes-panel
@@ -109,9 +32,6 @@ export class AcpChangesPanel extends LitElement {
     repo: { attribute: false },
     selection: { attribute: false },
     root: { attribute: false },
-    message: { state: true },
-    amend: { state: true },
-    committing: { state: true },
   };
 
   static styles = styles;
@@ -131,8 +51,6 @@ export class AcpChangesPanel extends LitElement {
    * state (e.g. new items with nothing checked yet) and must not overwrite the selection.
    */
   #syncing = false;
-  /** The message typed before Amend replaced it, restored when Amend is turned off. */
-  #draft = '';
 
   constructor() {
     super();
@@ -144,12 +62,6 @@ export class AcpChangesPanel extends LitElement {
     this.selection = new Set();
     /** @type {string | null} The project's path. */
     this.root = null;
-    /** @type {string} */
-    this.message = '';
-    /** @type {boolean} */
-    this.amend = false;
-    /** @type {boolean} A commit is running: the form is locked. */
-    this.committing = false;
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
@@ -161,12 +73,17 @@ export class AcpChangesPanel extends LitElement {
     if (changed.has('selection')) this.#syncTree = true;
   }
 
+  /** @returns {HTMLElementTagNameMap['acp-commit-box'] | null} */
+  get #box() {
+    return this.renderRoot.querySelector('acp-commit-box');
+  }
+
   /**
    * The last commit's message, for Amend; ignored once Amend is off again.
    * @param {string | null} message `null` when there is none.
    */
   fillAmendMessage(message) {
-    if (this.amend && message !== null) this.message = message;
+    this.#box?.fillAmendMessage(message);
   }
 
   /**
@@ -174,11 +91,7 @@ export class AcpChangesPanel extends LitElement {
    * @param {boolean} succeeded
    */
   commitFinished(succeeded) {
-    this.committing = false;
-    if (!succeeded) return;
-    this.message = '';
-    this.#draft = '';
-    this.amend = false;
+    this.#box?.finished(succeeded);
   }
 
   /**
@@ -212,7 +125,7 @@ export class AcpChangesPanel extends LitElement {
 
   /** Rebuilds the list from `changes`, keeping checks and collapsed groups that still exist. */
   #rebuild() {
-    this.#nodes = buildGroups(this.changes.files);
+    this.#nodes = git.groupChanges(this.changes.files);
     this.#leaves = new Map();
     this.#groupIds = new Set();
     for (const group of this.#nodes) {
@@ -258,31 +171,19 @@ export class AcpChangesPanel extends LitElement {
     this.#select(this.#included.length === this.#leaves.size ? [] : this.#leaves.keys());
   }
 
-  /** @param {Event} e */
-  #onAmendChange(e) {
-    const amend = /** @type {HTMLInputElement} */ (e.target).checked;
-    this.amend = amend;
-    if (!amend) {
-      this.message = this.#draft;
-      return;
-    }
-    this.#draft = this.message;
-    this.#emit('acp-amend-start', null);
-  }
-
-  /** @param {Event} e */
-  #onMessageInput(e) {
-    this.message = /** @type {HTMLInputElement} */ (e.target).value;
-  }
-
   /** @param {ChangeNode} node */
   #open(node) {
     if (!node.file) return;
     this.#emit('acp-diff-open', { path: projects.abs(this.root, node.id) });
   }
 
-  #commit() {
-    if (this.committing) return;
+  /**
+   * The box's Commit: with the picked files' paths (both sides of a rename).
+   * @param {Event} e
+   */
+  #onSubmit(e) {
+    e.stopPropagation();
+    const { message, amend } = /** @type {CustomEvent<{ message: string, amend: boolean }>} */ (e).detail;
     /** @type {string[]} */
     const paths = [];
     for (const id of this.#included) {
@@ -291,8 +192,7 @@ export class AcpChangesPanel extends LitElement {
       paths.push(file.path);
       if (file.origPath) paths.push(file.origPath);
     }
-    this.committing = true;
-    this.#emit('acp-commit', { paths, message: this.message.trim(), amend: this.amend });
+    this.#emit('acp-commit', { paths, message, amend });
   }
 
   /**
@@ -301,7 +201,7 @@ export class AcpChangesPanel extends LitElement {
    */
   #renderLeading = (node) => {
     if (!node.file) return nothing;
-    const { letter, label, color } = STATUS[node.file.kind];
+    const { letter, label, color } = git.statusOf(node.file.kind);
     const id = `acp-changes-panel-status:${node.id}`;
     return html`<span
         id=${id}
@@ -409,14 +309,6 @@ export class AcpChangesPanel extends LitElement {
     const total = this.#leaves.size;
     const included = this.#included.length;
     const summary = total === 0 ? 'No changed files' : `${total} ${total === 1 ? 'file' : 'files'} · ${included} selected`;
-    const label = this.committing
-      ? 'Committing…'
-      : this.amend
-        ? 'Amend commit'
-        : included > 0
-          ? `Commit ${included} ${included === 1 ? 'file' : 'files'}`
-          : 'Commit';
-    const canCommit = !this.committing && this.message.trim() !== '' && (included > 0 || this.amend);
     return html`
       <div class="acp-changes-panel__tools">
         <md-checkbox
@@ -441,30 +333,7 @@ export class AcpChangesPanel extends LitElement {
       </div>
       ${this.#renderBody()}
       <footer class="acp-changes-panel__footer">
-        <md-text-field
-          class="acp-changes-panel__message"
-          variant="outlined"
-          multiline
-          label="Commit message"
-          ?disabled=${this.committing}
-          .value=${this.message}
-          @input=${this.#onMessageInput}
-        ></md-text-field>
-        <div class="acp-changes-panel__actions">
-          <label class="acp-changes-panel__amend">
-            <md-checkbox
-              .checked=${this.amend}
-              ?disabled=${this.committing}
-              @change=${this.#onAmendChange}
-            ></md-checkbox>
-            Amend
-          </label>
-          <span class="acp-changes-panel__actions-spacer"></span>
-          <md-button class="acp-changes-panel__commit" variant="filled" ?disabled=${!canCommit} @click=${this.#commit}>
-            <md-icon slot="icon" class="acp-changes-panel__commit-icon">${unsafeSVG(checkIcon)}</md-icon>
-            ${label}
-          </md-button>
-        </div>
+        <acp-commit-box .included=${included} @acp-commit-submit=${this.#onSubmit}></acp-commit-box>
       </footer>
     `;
   }
