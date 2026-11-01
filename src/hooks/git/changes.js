@@ -83,3 +83,71 @@ export function groupChanges(files) {
       return { id: `group:${group}`, label: GROUP_TITLES[group], dir: '', file: null, added, removed, children };
     });
 }
+
+/**
+ * A changed file as a row of the Changes tab.
+ * @typedef {Object} ChangeRow
+ * @property {string} id The file's root-relative path.
+ * @property {string} name File name.
+ * @property {string} dir Its folder, relative to the root; `''` at the top.
+ * @property {GitFileStatus} file
+ */
+
+/** Monospace badge of a file's type; no language colours, the badge only names the type. */
+const TYPE_BADGES = /** @type {Record<string, string>} */ ({
+  js: 'JS',
+  mjs: 'JS',
+  cjs: 'JS',
+  jsx: 'JSX',
+  ts: 'TS',
+  tsx: 'TSX',
+  rs: 'RS',
+  css: '{}',
+  scss: '{}',
+  json: '{}',
+  html: '<>',
+  md: 'MD',
+  toml: 'TOML',
+  yaml: 'YML',
+  yml: 'YML',
+});
+
+/**
+ * The badge naming a file's type: known extensions by their usual short form, others by their
+ * first three letters, `·` for a name without one.
+ * @param {string} name
+ */
+export function typeBadge(name) {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return '·';
+  const ext = name.slice(dot + 1).toLowerCase();
+  return TYPE_BADGES[ext] ?? ext.slice(0, 3).toUpperCase();
+}
+
+/**
+ * Path of `to` relative to the folder `from`, both root-relative: `../old/name.css`.
+ * @param {string} from
+ * @param {string} to
+ */
+export function relativePath(from, to) {
+  const a = from ? from.split('/') : [];
+  const b = to.split('/');
+  let common = 0;
+  while (common < a.length && common < b.length - 1 && a[common] === b[common]) common++;
+  return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
+}
+
+/**
+ * Changed files as the Changes tab's rows, sorted by path.
+ * @param {readonly GitFileStatus[]} files
+ * @returns {ChangeRow[]}
+ */
+export function changeRows(files) {
+  return files
+    .map((file) => {
+      const id = file.path;
+      const slash = id.lastIndexOf('/');
+      return { id, name: slash === -1 ? id : id.slice(slash + 1), dir: slash === -1 ? '' : id.slice(0, slash), file };
+    })
+    .sort((a, b) => a.id.localeCompare(b.id));
+}

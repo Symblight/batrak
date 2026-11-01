@@ -18,70 +18,40 @@
   box-sizing: border-box;
   padding: 10px var(--acp-space-3) var(--acp-space-1-5) var(--acp-space-2);
 }
+
 .acp-changes-review__tool {
   --md-icon-button-font-size: var(--acp-icon-size-lg);
   --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
+
 .acp-changes-review__tool::part(button) {
   padding: 5px;
 }
+
 .acp-changes-review__tool-icon {
   font-size: var(--acp-icon-size-lg);
 }
+
 .acp-changes-review__session-action {
   flex: none;
   --md-button-font-size: var(--acp-font-size-md);
   --md-button-block-start-space: var(--acp-button-block-space-compact);
   --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
+
 .acp-changes-review__all {
   flex: none;
 }
+
 .acp-changes-review__summary {
   font-size: var(--acp-font-size-md);
   font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
   font-variant-numeric: tabular-nums;
 }
+
 .acp-changes-review__spacer {
   flex: 1;
-}
-.acp-changes-review__tools {
-  display: flex;
-  align-items: center;
-  gap: var(--acp-space-0-5);
-}
-.acp-changes-review__view-mode {
-  --md-button-font-size: var(--acp-font-size-md);
-  --md-button-foreground-color: var(--acp-color-on-surface-variant);
-  --md-button-block-start-space: var(--acp-button-block-space-regular);
-  --md-button-block-end-space: var(--acp-button-block-space-regular);
-}
-/* Split button: two tonal halves, full outer corners, 4px inner ones, 2px apart. */
-.acp-changes-review__review {
-  display: inline-flex;
-  gap: var(--acp-space-0-5);
-  margin-inline-start: var(--acp-space-2);
-}
-.acp-changes-review__review-main {
-  --md-button-font-size: var(--acp-font-size-md);
-  --md-button-block-start-space: var(--acp-button-block-space-regular);
-  --md-button-block-end-space: var(--acp-button-block-space-regular);
-  --md-button-border-start-end-radius: var(--acp-shape-corner-extra-small);
-  --md-button-border-end-end-radius: var(--acp-shape-corner-extra-small);
-}
-.acp-changes-review__review-menu {
-  --md-icon-button-font-size: var(--acp-icon-size-md);
-  --md-icon-button-background-color: var(--acp-color-secondary-container);
-  --md-icon-button-foreground-color: var(--acp-color-on-secondary-container);
-  --md-icon-button-border-start-start-radius: var(--acp-shape-corner-extra-small);
-  --md-icon-button-border-end-start-radius: var(--acp-shape-corner-extra-small);
-}
-.acp-changes-review__review-menu::part(button) {
-  padding: var(--acp-space-1-5);
-}
-.acp-changes-review__review-icon {
-  font-size: var(--acp-icon-size-md);
 }
 
 /* Files */
@@ -95,114 +65,6 @@
   /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
   padding: 0 var(--acp-space-2) 72px;
 }
-.acp-changes-review__row {
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: var(--acp-space-2);
-  min-width: 0;
-  height: 40px;
-  box-sizing: border-box;
-  padding: 0 var(--acp-space-1) 0 var(--acp-space-2);
-  border-radius: var(--acp-shape-corner-full);
-  cursor: pointer;
-  outline: none;
-  scroll-margin-top: 6px;
-
-  &:hover {
-    background: var(--acp-state-hover);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--acp-color-primary);
-    outline-offset: -2px;
-  }
-}
-/* The expanded file's header: sits in the card on its surface, square below. */
-.acp-changes-review__row_header {
-  border-radius: 11px 11px 0 0;
-  background: transparent;
-
-  &:hover {
-    background: transparent;
-  }
-}
-.acp-changes-review__chevron {
-  flex: none;
-  font-size: var(--acp-icon-size-lg);
-  color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-review__pick {
-  flex: none;
-}
-.acp-changes-review__badge {
-  flex: none;
-  min-width: 18px;
-  height: 16px;
-  box-sizing: border-box;
-  padding: 0 3px;
-  border-radius: 3px;
-  background: var(--acp-color-surface-container-highest);
-  font: 500 9px/16px var(--acp-font-family-mono);
-  letter-spacing: 0.2px;
-  text-align: center;
-  color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-review__name {
-  flex: none;
-  font-size: var(--acp-font-size-md);
-  font-weight: var(--acp-font-weight-medium);
-  line-height: 20px;
-  white-space: nowrap;
-  color: var(--acp-color-on-surface);
-}
-.acp-changes-review__name_deleted {
-  text-decoration: line-through;
-  color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-review__dir,
-.acp-changes-review__renamed {
-  flex: 0 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  font-size: var(--acp-font-size-sm);
-  line-height: 16px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.acp-changes-review__dir {
-  color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-review__renamed {
-  text-decoration: line-through;
-  color: color-mix(in srgb, var(--acp-color-on-surface-variant) 70%, transparent);
-}
-.acp-changes-review__counts {
-  flex: none;
-  display: inline-flex;
-  gap: var(--acp-space-1-5);
-  font: 500 11.5px/16px var(--acp-font-family-mono);
-  font-variant-numeric: tabular-nums;
-}
-.acp-changes-review__added {
-  color: var(--acp-diff-add-fg);
-}
-.acp-changes-review__removed {
-  color: var(--acp-diff-del-fg);
-}
-.acp-changes-review__actions {
-  flex: none;
-  display: flex;
-}
-.acp-changes-review__action {
-  --md-icon-button-font-size: var(--acp-icon-size-lg);
-  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-review__action::part(button) {
-  padding: 5px;
-}
-.acp-changes-review__action-icon {
-  font-size: var(--acp-icon-size-lg);
-}
 
 /* Expanded file: header row and diff in an outlined card, on the column's surface */
 .acp-changes-review__card {
@@ -212,11 +74,13 @@
   border-radius: 12px;
   background: var(--acp-column-background);
 }
+
 .acp-changes-review__diff {
   border-top: 1px solid var(--acp-color-outline-variant);
   border-radius: 0 0 11px 11px;
   overflow: hidden;
 }
+
 .acp-changes-review__editor {
   --cdx-content-border-radius: 0;
   --cdx-content-min-height: 0;
@@ -224,10 +88,12 @@
   /* Room for the diff sign (+ / −), drawn 2px into this padding, plus a gap before the code */
   --cdx-line-padding-inline: 0.875rem;
 }
+
 .acp-changes-review__editor::part(chunk-action-accept),
 .acp-changes-review__editor::part(chunk-action-reject) {
   display: none;
 }
+
 .acp-changes-review__diff-state {
   display: flex;
   align-items: center;
@@ -253,17 +119,21 @@
   overflow-wrap: anywhere;
   color: var(--acp-color-on-surface-variant);
 }
+
 .acp-changes-review__state-icon {
   margin-bottom: var(--acp-space-1);
   font-size: 28px;
   color: var(--acp-vcs-add);
 }
+
 .acp-changes-review__state-title {
   font-size: var(--acp-font-size-lg);
   font-weight: var(--acp-font-weight-medium);
   line-height: 20px;
   color: var(--acp-color-on-surface);
 }
+
 .acp-changes-review__spinner {
   font-size: 32px;
 }
+

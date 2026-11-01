@@ -53,4 +53,42 @@ describe('git changes', () => {
       expect(status.color, kind).to.match(/^var\(--acp-/);
     }
   });
+
+  it('badges a file by its type: known short forms, the first three letters of others, a dot for none', () => {
+    /** @type {[string, string][]} */
+    const cases = [
+      ['app.js', 'JS'],
+      ['app.MJS', 'JS'],
+      ['view.tsx', 'TSX'],
+      ['style.css', '{}'],
+      ['package.json', '{}'],
+      ['Cargo.toml', 'TOML'],
+      ['ci.yml', 'YML'],
+      ['notes.markdown', 'MAR'],
+      ['Makefile', '·'],
+      ['.gitignore', '·'],
+    ];
+    for (const [name, badge] of cases) expect(git.typeBadge(name), name).to.equal(badge);
+  });
+
+  it('writes a renamed file’s old path relative to its folder', () => {
+    /** @type {[string, string, string][]} */
+    const cases = [
+      ['src', 'src/a.js', 'a.js'],
+      ['src/new', 'src/old/name.css', '../old/name.css'],
+      ['', 'old.js', 'old.js'],
+      ['a/b', 'c.js', '../../c.js'],
+      ['src', 'src/deep/x.js', 'deep/x.js'],
+    ];
+    for (const [from, to, expected] of cases) expect(git.relativePath(from, to), `${from} → ${to}`).to.equal(expected);
+  });
+
+  it('sorts changed files into rows with their name and folder', () => {
+    const rows = git.changeRows([file('src/z.js'), file('a.md'), file('src/a/b.js')]);
+    expect(rows.map((r) => [r.id, r.name, r.dir])).to.deep.equal([
+      ['a.md', 'a.md', ''],
+      ['src/a/b.js', 'b.js', 'src/a'],
+      ['src/z.js', 'z.js', 'src'],
+    ]);
+  });
 });

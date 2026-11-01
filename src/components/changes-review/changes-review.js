@@ -1,6 +1,6 @@
+import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
-import { classMap } from 'lit/directives/class-map.js';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/code-editor';
@@ -11,18 +11,11 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import '../confirm-dialog/confirm-dialog.js';
-import arrowDownwardIcon from '@material-design-icons/svg/outlined/arrow_downward.svg?raw';
-import arrowDropDownIcon from '@material-design-icons/svg/outlined/arrow_drop_down.svg?raw';
-import arrowUpwardIcon from '@material-design-icons/svg/outlined/arrow_upward.svg?raw';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
-import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
-import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import keyboardArrowDownIcon from '@material-design-icons/svg/outlined/keyboard_arrow_down.svg?raw';
-import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
+import '../change-row/change-row.js';
 import { codeEditor } from '../code-view/code-editor.js';
+import '../diff-counts/diff-counts.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import styles from './changes-review.css?inline';
@@ -34,71 +27,10 @@ import styles from './changes-review.css?inline';
 /** @typedef {import('../../models/types/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../models/types/types.js').CommentFocus} CommentFocus */
 
-/**
- * A changed file as a row.
- * @typedef {Object} ChangeRow
- * @property {string} id The file's root-relative path.
- * @property {string} name File name.
- * @property {string} dir Its folder, relative to the root; `''` at the top.
- * @property {GitFileStatus} file
- */
-
-/** Disabled controls of features that don't exist yet say so on hover. */
-const NOT_YET = 'Not available yet';
+/** @typedef {import('../../hooks/git/changes.js').ChangeRow} ChangeRow */
 
 /** Unchanged stretches of a diff fold into an "N unchanged lines" bar; one object, so the editor never sees a change. */
 const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
-
-/** Monospace badge of a file's type; no language colours, the badge only names the type. */
-const TYPE_BADGES = /** @type {Record<string, string>} */ ({
-  js: 'JS',
-  mjs: 'JS',
-  cjs: 'JS',
-  jsx: 'JSX',
-  ts: 'TS',
-  tsx: 'TSX',
-  rs: 'RS',
-  css: '{}',
-  scss: '{}',
-  json: '{}',
-  html: '<>',
-  md: 'MD',
-  toml: 'TOML',
-  yaml: 'YML',
-  yml: 'YML',
-});
-
-/** @param {string} name */
-function typeBadge(name) {
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0) return '·';
-  const ext = name.slice(dot + 1).toLowerCase();
-  return TYPE_BADGES[ext] ?? ext.slice(0, 3).toUpperCase();
-}
-
-/**
- * Path of `to` relative to the folder `from`, both root-relative: `../old/name.css`.
- * @param {string} from
- * @param {string} to
- */
-function relativePath(from, to) {
-  const a = from ? from.split('/') : [];
-  const b = to.split('/');
-  let common = 0;
-  while (common < a.length && common < b.length - 1 && a[common] === b[common]) common++;
-  return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
-}
-
-/** @param {GitFileStatus[]} files */
-function toRows(files) {
-  return files
-    .map((file) => {
-      const id = file.path;
-      const slash = id.lastIndexOf('/');
-      return { id, name: slash === -1 ? id : id.slice(slash + 1), dir: slash === -1 ? '' : id.slice(0, slash), file };
-    })
-    .sort((a, b) => a.id.localeCompare(b.id));
-}
 
 /**
  * @tag acp-changes-review
@@ -124,7 +56,6 @@ export class AcpChangesReview extends LitElement {
     branch: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
-    hovered: { state: true },
   };
 
   static styles = styles;
@@ -162,32 +93,39 @@ export class AcpChangesReview extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
-    /** @type {string | null} Row under the pointer or holding focus: it shows its actions. */
-    this.hovered = null;
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
     const old = changed.get('changes');
     if (changed.has('changes') && this.changes.files !== old?.files) {
-      this.#rows = toRows(this.changes.files);
+      this.#rows = git.changeRows(this.changes.files);
       // A new listing without the file to scroll to: it has no row to scroll to.
       const pending = this.#pendingScroll;
       if (this.changes.loaded && pending !== null && !this.#rows.some((row) => row.id === pending)) this.#pendingScroll = null;
     }
-    if (changed.has('root') && changed.get('root') !== undefined) {
-      this.#pendingScroll = null;
-      this.hovered = null;
-    }
+    if (changed.has('root') && changed.get('root') !== undefined) this.#pendingScroll = null;
   }
 
   updated() {
     if (this.#pendingScroll === null) return;
-    const row = this.renderRoot.querySelector(`[data-id="${CSS.escape(this.#pendingScroll)}"]`);
+    const row = /** @type {HTMLElementTagNameMap['acp-change-row'] | null} */ (
+      this.renderRoot.querySelector(`acp-change-row[data-id="${CSS.escape(this.#pendingScroll)}"]`)
+    );
     if (!row) return; // not listed yet: try again once the changes arrive
     this.#pendingScroll = null;
+    this.#reveal(row);
+  }
+
+  /**
+   * Scrolls to a row and focuses it. Rows added by this update have not rendered yet and are 0px
+   * tall, which would put the scroll target too high: wait for all of them first.
+   * @param {HTMLElementTagNameMap['acp-change-row']} row
+   */
+  async #reveal(row) {
+    await Promise.all([...this.renderRoot.querySelectorAll('acp-change-row')].map((r) => r.updateComplete));
     row.scrollIntoView({ block: 'start', behavior: 'smooth' });
-    /** @type {HTMLElement} */ (row).focus({ preventScroll: true });
+    row.focusRow();
   }
 
   /**
@@ -207,16 +145,6 @@ export class AcpChangesReview extends LitElement {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  /** @param {string} id */
-  #toggle(id) {
-    this.#emit('acp-change-toggle', { id });
-  }
-
-  /** @param {string} id */
-  #expand(id) {
-    if (!this.expanded.has(id)) this.#emit('acp-change-expand', { id });
-  }
-
   /** @param {Event} e */
   #onToggleAll(e) {
     e.stopPropagation();
@@ -224,31 +152,11 @@ export class AcpChangesReview extends LitElement {
     this.#emit('acp-commit-select', { ids: ids.every((id) => this.selection.has(id)) ? [] : ids });
   }
 
-  /**
-   * @param {Event} e
-   * @param {ChangeRow} row
-   */
-  #onPick(e, row) {
-    this.#emit('acp-commit-pick', { ids: [row.id], picked: /** @type {HTMLInputElement} */ (e.target).checked });
-  }
-
-  /**
-   * Enter/Space toggle a row, arrows expand/collapse it.
-   * @param {KeyboardEvent} e
-   * @param {ChangeRow} row
-   */
-  #onRowKeydown(e, row) {
-    if (e.target !== e.currentTarget) return;
-    if (e.key === 'Enter' || e.key === ' ') this.#toggle(row.id);
-    else if (e.key === 'ArrowRight') this.#expand(row.id);
-    else if (e.key === 'ArrowLeft' && this.expanded.has(row.id)) this.#toggle(row.id);
-    else return;
-    e.preventDefault();
-  }
-
-  /** @param {ChangeRow} row */
-  #edit(row) {
-    this.#emit('acp-file-open', { path: projects.abs(this.root, row.id) });
+  /** @param {Event} e A row's Edit. */
+  #onEdit(e) {
+    e.stopPropagation();
+    const { id } = /** @type {CustomEvent<{ id: string }>} */ (e).detail;
+    this.#emit('acp-file-open', { path: projects.abs(this.root, id) });
   }
 
   /** The project switches branch and the session's agent stops: asked first. */
@@ -265,98 +173,19 @@ export class AcpChangesReview extends LitElement {
     if (confirmed) this.#emit('acp-session-check-out', null);
   }
 
-  /** @param {string | null} id */
-  #hover(id) {
-    if (this.hovered !== id) this.hovered = id;
-  }
-
-  /**
-   * @param {number | null} added
-   * @param {number | null} removed
-   */
-  #renderCounts(added, removed) {
-    if (!added && !removed) return nothing;
-    return html`<span class="acp-changes-review__counts">
-      ${added ? html`<span class="acp-changes-review__added">+${added}</span>` : nothing}
-      ${removed ? html`<span class="acp-changes-review__removed">−${removed}</span>` : nothing}
-    </span>`;
-  }
-
   /**
    * @param {ChangeRow} row
    * @param {boolean} expanded Rendered as the expanded card's header, which always shows its actions.
    */
   #renderRow(row, expanded) {
-    const { file } = row;
-    const picked = this.selection.has(row.id);
-    const deleted = file.kind === 'deleted';
-    const actions = expanded || this.hovered === row.id;
-    const id = `acp-changes-review-${row.id}`;
-    return html`<div
-      class=${classMap({
-        'acp-changes-review__row': true,
-        'acp-changes-review__row_header': expanded,
-      })}
-      role="treeitem"
-      tabindex="0"
+    return html`<acp-change-row
       data-id=${row.id}
-      aria-expanded=${String(expanded)}
-      @click=${() => this.#toggle(row.id)}
-      @keydown=${(/** @type {KeyboardEvent} */ e) => this.#onRowKeydown(e, row)}
-      @pointerenter=${() => this.#hover(row.id)}
-      @pointerleave=${() => this.#hover(null)}
-      @focusin=${() => this.#hover(row.id)}
-      @focusout=${() => this.#hover(null)}
-    >
-      <md-icon class="acp-changes-review__chevron">${unsafeSVG(expanded ? expandMoreIcon : chevronRightIcon)}</md-icon>
-      ${this.base === null
-        ? html`<md-checkbox
-            class="acp-changes-review__pick"
-            aria-label=${`Select ${row.name} for the commit`}
-            .checked=${picked}
-            @click=${(/** @type {Event} */ e) => e.stopPropagation()}
-            @change=${(/** @type {Event} */ e) => this.#onPick(e, row)}
-          ></md-checkbox>`
-        : nothing}
-      <span class="acp-changes-review__badge" aria-hidden="true">${typeBadge(row.name)}</span>
-      <span id="${id}-name" class=${classMap({ 'acp-changes-review__name': true, 'acp-changes-review__name_deleted': deleted })}
-        >${row.name}</span
-      >
-      <span class="acp-changes-review__dir">${row.dir}</span>
-      ${file.origPath
-        ? html`<span id="${id}-renamed" class="acp-changes-review__renamed"
-            >(${relativePath(row.dir, file.origPath)})</span
-          >`
-        : nothing}
-      ${this.#renderCounts(file.added, file.removed)}
-      <span class="acp-changes-review__spacer"></span>
-      ${actions
-        ? html`<span class="acp-changes-review__actions" @click=${(/** @type {Event} */ e) => e.stopPropagation()}>
-            <md-icon-button
-              class="acp-changes-review__action"
-              id="${id}-edit"
-              aria-label=${`Edit ${row.name}`}
-              ?disabled=${deleted}
-              @click=${() => this.#edit(row)}
-            >
-              <md-icon class="acp-changes-review__action-icon">${unsafeSVG(editIcon)}</md-icon>
-            </md-icon-button>
-            <md-icon-button id="${id}-revert" class="acp-changes-review__action" aria-label=${`Revert ${row.name}`} disabled>
-              <md-icon class="acp-changes-review__action-icon">${unsafeSVG(undoIcon)}</md-icon>
-            </md-icon-button>
-          </span>`
-        : nothing}
-    </div>
-    <md-tooltip for="${id}-name" show-delay="800" style="width: max-content; max-inline-size: none">${file.path}</md-tooltip>
-    ${file.origPath
-      ? html`<md-tooltip for="${id}-renamed" show-delay="800" style="width: max-content; max-inline-size: none"
-          >Renamed from ${file.origPath}</md-tooltip
-        >`
-      : nothing}
-    ${actions
-      ? html`<md-tooltip for="${id}-edit" show-delay="800">Edit</md-tooltip>
-          <md-tooltip for="${id}-revert" show-delay="800">${NOT_YET}</md-tooltip>`
-      : nothing}`;
+      .row=${row}
+      .expanded=${expanded}
+      .picked=${this.selection.has(row.id)}
+      .selectable=${this.base === null}
+      @acp-change-edit=${this.#onEdit}
+    ></acp-change-row>`;
   }
 
   /** @param {ChangeRow} row */
@@ -434,7 +263,7 @@ export class AcpChangesReview extends LitElement {
         : html`<span class="acp-changes-review__summary"
             >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
           >`}
-      ${this.#renderCounts(added, removed)}
+      <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
       <span class="acp-changes-review__spacer"></span>
       ${this.base !== null
         ? html`<md-button

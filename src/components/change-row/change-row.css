@@ -1,0 +1,121 @@
+:host {
+  display: block;
+  scroll-margin-top: 6px;
+}
+
+.acp-change-row__row {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  min-width: 0;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 0 var(--acp-space-1) 0 var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-full);
+  cursor: pointer;
+  outline: none;
+
+  &:hover {
+    background: var(--acp-state-hover);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-primary);
+    outline-offset: -2px;
+  }
+}
+
+/* The expanded file's header: sits in the card on its surface, square below. */
+.acp-change-row__row_header {
+  border-radius: 11px 11px 0 0;
+  background: transparent;
+
+  &:hover {
+    background: transparent;
+  }
+}
+
+.acp-change-row__chevron {
+  flex: none;
+  font-size: var(--acp-icon-size-lg);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__pick {
+  flex: none;
+}
+
+.acp-change-row__badge {
+  flex: none;
+  min-width: 18px;
+  height: 16px;
+  box-sizing: border-box;
+  padding: 0 3px;
+  border-radius: 3px;
+  background: var(--acp-color-surface-container-highest);
+  font: 500 9px/16px var(--acp-font-family-mono);
+  letter-spacing: 0.2px;
+  text-align: center;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__name {
+  flex: none;
+  font-size: var(--acp-font-size-md);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 20px;
+  white-space: nowrap;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-change-row__name_deleted {
+  text-decoration: line-through;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__dir,
+.acp-change-row__renamed {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acp-change-row__dir {
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__renamed {
+  text-decoration: line-through;
+  color: color-mix(in srgb, var(--acp-color-on-surface-variant) 70%, transparent);
+}
+
+.acp-change-row__actions {
+  flex: none;
+  display: none;
+}
+/* Edit and Revert show for the row under the pointer, the row with focus in it, and an expanded header. */
+:host(:hover) .acp-change-row__actions,
+:host(:focus-within) .acp-change-row__actions,
+:host([expanded]) .acp-change-row__actions {
+  display: flex;
+}
+
+.acp-change-row__action {
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__action::part(button) {
+  padding: 5px;
+}
+
+.acp-change-row__action-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+
+.acp-change-row__spacer {
+  flex: 1;
+}
