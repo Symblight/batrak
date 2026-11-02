@@ -161,7 +161,7 @@ export class AcpApp extends ViewElement {
 
   /**
    * Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: the search dialog. Cmd/Ctrl+Shift+T: the session in chat /
-   * terminal. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
+   * terminal. Cmd/Ctrl+O: add a project, unless a dialog has the key. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
    * key. Ctrl+`: New Terminal. While the search dialog is open, only Cmd/Ctrl+Shift+F.
    */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
@@ -182,6 +182,9 @@ export class AcpApp extends ViewElement {
     if (key === 'p' && !e.shiftKey) {
       e.preventDefault();
       this.#showQuickOpen();
+    } else if (key === 'o' && !e.shiftKey && !AcpApp.#inDialog(e)) {
+      e.preventDefault();
+      this.#onProjectOpenFolder();
     } else if (key === 't' && e.shiftKey) {
       e.preventDefault();
       this.renderRoot.querySelector('acp-agent-column')?.toggleView();
@@ -197,14 +200,21 @@ export class AcpApp extends ViewElement {
    * @returns {boolean} The key was pressed in a dialog or a text field, which keep it.
    */
   static #takesKeys(e) {
-    const path = e.composedPath();
-    const origin = path[0];
+    const origin = e.composedPath()[0];
     const editable =
       origin instanceof HTMLInputElement ||
       origin instanceof HTMLTextAreaElement ||
       origin instanceof HTMLSelectElement ||
       (origin instanceof HTMLElement && origin.isContentEditable);
-    return editable || path.some((n) => n instanceof HTMLElement && (n.localName === 'dialog' || n.localName === 'md-dialog'));
+    return editable || AcpApp.#inDialog(e);
+  }
+
+  /**
+   * @param {KeyboardEvent} e
+   * @returns {boolean} The key was pressed inside a dialog.
+   */
+  static #inDialog(e) {
+    return e.composedPath().some((n) => n instanceof HTMLElement && (n.localName === 'dialog' || n.localName === 'md-dialog'));
   }
 
   constructor() {

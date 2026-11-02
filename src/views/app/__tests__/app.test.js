@@ -391,6 +391,42 @@ describe('acp-app: project menu', () => {
   });
 });
 
+describe('acp-app: add project shortcut', () => {
+  /** @type {string[]} */
+  let commands;
+
+  beforeEach(() => {
+    commands = [];
+    mockIPC((cmd, args) => {
+      commands.push(cmd);
+      if (cmd === 'plugin:dialog|open') return null;
+      return startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}));
+    });
+  });
+
+  afterEach(() => clearMocks());
+
+  it('opens the folder picker on Mod+O, unless a dialog has the key', async () => {
+    // Arrange
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get());
+    const dialog = document.createElement('dialog');
+    const inDialog = document.createElement('button');
+    dialog.append(inDialog);
+    app.append(dialog);
+
+    // Act + Assert: a dialog keeps the key
+    inDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true, composed: true, cancelable: true }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(commands).to.not.include('plugin:dialog|open');
+
+    // Act
+    shortcut('o');
+    // Assert
+    await until(() => commands.includes('plugin:dialog|open'));
+  });
+});
+
 describe('acp-app: terminal panel layout', () => {
   /** @type {HTMLStyleElement} */
   let tokens;

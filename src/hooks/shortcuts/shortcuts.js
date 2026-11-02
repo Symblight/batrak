@@ -17,6 +17,7 @@ import { app } from '../app/app.js';
 /** Every shortcut the app owns; the handlers read the keys themselves. */
 const TABLE = Object.freeze({
   quickOpen: { mod: true, key: 'P' },
+  openFolder: { mod: true, key: 'O' },
   searchInFiles: { mod: true, shift: true, key: 'F' },
   toggleSessionView: { mod: true, shift: true, key: 'T' },
   markProjectRead: { mod: true, shift: true, key: 'R' },

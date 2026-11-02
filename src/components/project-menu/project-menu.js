@@ -15,6 +15,7 @@ import removeIcon from '@material-design-icons/svg/outlined/remove_circle_outlin
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './project-menu.css?inline';
 
 /** @typedef {import('../../hooks/projects/types.js').Project} Project */
@@ -97,11 +98,11 @@ export class AcpProjectMenu extends LitElement {
     </md-menu-item>`;
   }
 
-  /** @param {string} value @param {string} icon @param {string} label */
-  #renderAction(value, icon, label) {
+  /** @param {string} value @param {string} icon @param {string} label @param {string} [hint] */
+  #renderAction(value, icon, label, hint) {
     return html`<md-menu-item class="acp-project-menu__item" value=${value}>
       <md-icon slot="leading" class="acp-project-menu__icon">${unsafeSVG(icon)}</md-icon>
-      ${label}
+      ${label} ${hint ? html`<span slot="trailing">${hint}</span>` : nothing}
     </md-menu-item>`;
   }
 
@@ -145,7 +146,7 @@ export class AcpProjectMenu extends LitElement {
               </md-menu-group>
               <md-hr></md-hr>`
           : nothing}
-        ${this.#renderAction('open-folder', addIcon, 'Add project…')}
+        ${this.#renderAction('open-folder', addIcon, 'Add project…', shortcuts.hint('openFolder'))}
         ${current
           ? html`<md-hr></md-hr>
               ${this.#renderAction('reveal', folderOpenIcon, app.revealLabel)}

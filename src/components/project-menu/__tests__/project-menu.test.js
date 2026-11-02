@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../project-menu.js';
 
 /** @typedef {import('../project-menu.js').AcpProjectMenu} AcpProjectMenu */
@@ -102,6 +103,8 @@ describe('acp-project-menu', () => {
     const { el, root } = await render({ currentId: PROJECTS[0].id });
     const actions = () => [...root.querySelectorAll('md-menu-item:not([data-project])')].map((i) => i.getAttribute('value'));
     expect(actions()).to.deep.equal(['open-folder', 'reveal', 'open-terminal', 'remove']);
+    const hint = root.querySelector('md-menu-item[value="open-folder"] [slot="trailing"]');
+    expect(hint?.textContent?.trim(), 'Add project shows its shortcut').to.equal(shortcuts.hint('openFolder'));
 
     // Act
     el.currentId = null;
