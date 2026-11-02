@@ -81,13 +81,15 @@ describe('acp-settings-view', () => {
     const leaked = [];
     for (const type of ['acp-settings-change', 'acp-settings-reset']) el.addEventListener(type, (e) => leaked.push(e));
     // Act
-    fire(settings, 'acp-settings-change', { patch: { appearance: 'dark', accent: '#336699', editorFont: 'Mono', editorFontSize: 999 } });
+    fire(settings, 'acp-settings-change', { patch: { appearance: 'dark', accent: '#336699', editorFont: 'Mono', editorFontSize: 999, markdownDefaultView: 'preview', markdownScrollSync: false } });
     const changed = $settings.get();
     fire(settings, 'acp-settings-reset', { section: 'editor' });
     // Assert
     expect([changed.appearance, changed.accent, changed.editorFont]).to.deep.equal(['dark', '#336699', 'Mono']);
     expect(changed.editorFontSize).to.equal(settingsHook.fontSizeMax);
+    expect([changed.markdownDefaultView, changed.markdownScrollSync], 'markdown').to.deep.equal(['preview', false]);
     expect($settings.get().editorFont, 'the editor section is reset').to.equal(settingsHook.defaults.editorFont);
+    expect([$settings.get().markdownDefaultView, $settings.get().markdownScrollSync], 'markdown too').to.deep.equal(['raw', true]);
     expect($settings.get().appearance, 'other sections are kept').to.equal('dark');
     expect(leaked).to.deep.equal([]);
   });

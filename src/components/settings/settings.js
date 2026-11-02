@@ -1,6 +1,7 @@
 import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { live } from 'lit/directives/live.js';
 import { styleMap } from 'lit/directives/style-map.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
@@ -8,6 +9,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/segmented-button';
 import '@symblight/wc-material/select';
+import '@symblight/wc-material/switch';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
 import lightModeIcon from '@material-design-icons/svg/outlined/light_mode.svg?raw';
@@ -160,6 +162,15 @@ export class AcpSettings extends LitElement {
 
   #onFontChange = (/** @type {Event} */ e) => {
     this.#change({ editorFont: /** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value || null });
+  };
+
+  #onMarkdownViewChange = (/** @type {Event} */ e) => {
+    const view = /** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value;
+    if (view === 'raw' || view === 'split' || view === 'preview') this.#change({ markdownDefaultView: view });
+  };
+
+  #onMarkdownSyncChange = (/** @type {Event} */ e) => {
+    this.#change({ markdownScrollSync: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.target).selected });
   };
 
   #onFontSizeInput = (/** @type {Event} */ e) => {
@@ -345,6 +356,28 @@ export class AcpSettings extends LitElement {
           >${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Line height follows: ${editorFontSize} / ${lineHeight}.</span
         >
       </div>
+      <div class="acp-settings__field">
+        <md-select
+          class="acp-settings__input acp-settings__input_markdown-view"
+          variant="outlined"
+          label="Open markdown files in"
+          .value=${settings.markdownDefaultView}
+          @change=${this.#onMarkdownViewChange}
+        >
+          <md-option class="acp-settings__option" value="raw">Editor</md-option>
+          <md-option class="acp-settings__option" value="split">Split</md-option>
+          <md-option class="acp-settings__option" value="preview">Preview</md-option>
+        </md-select>
+        <span class="acp-settings__hint">Each file remembers the view you leave it in.</span>
+      </div>
+      <label class="acp-settings__toggle">
+        <md-switch
+          class="acp-settings__switch acp-settings__switch_markdown-sync"
+          .selected=${live(settings.markdownScrollSync)}
+          @change=${this.#onMarkdownSyncChange}
+        ></md-switch>
+        <span>Scroll a markdown file's editor and preview together</span>
+      </label>
       <div
         class="acp-settings__preview"
         aria-label="Preview"

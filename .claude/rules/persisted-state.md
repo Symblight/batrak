@@ -8,6 +8,10 @@ paths:
   - "src/components/image-preview/**"
   - "src/components/settings/**"
   - "src/hooks/settings/**"
+  - "src/stores/markdown-view/**"
+  - "src/hooks/markdown/**"
+  - "src/hooks/markdown-view/**"
+  - "src/components/markdown*/**"
 ---
 
 # Persisted state and tabs
@@ -28,8 +32,8 @@ paths:
   kind) and renders it with the host's view for that kind; only `readsFile()` tabs are read from disk:
   text, or an image's bytes (`read_file_bytes`, at most 64 MB) as `EditorTab.image`, a `Blob` that
   `<acp-image-preview>` shows centered (never scaled up) over a checkerboard (`background="auto"`: the
-  column's), with a footer of resolution, type and size. Markdown and browser views are mocks
-  for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
+  column's), with a footer of resolution, type and size. A markdown file is shown in `<acp-markdown-view>`
+  (see "Markdown view" below); the Browser view is a mock for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$projectTerminalPanelHeights` (`brama:layout:terminal-panel:<project path>`, per window like the tabs,
   one item per project through `setKey()`: the terminal panel's height in px, clamped when read; the
@@ -49,8 +53,44 @@ paths:
   project through `setKey()`: the dialog's last query, options, folder and mask, and the project's
   10 recent searches; two windows on one project: last write wins),
   `$projects` (`brama:projects`, shared; every opened folder is added, `projects.remove()` drops it
-  from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$settings` (`brama:settings`,
+  from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$markdownModes` (`brama:markdown:mode:<project path>`, per window, one item per project through
+  `setKey()`: `{ [root-relative path]: 'raw' | 'split' | 'preview' }`, only modes other than the default,
+  an invalid one dropped on read), `$markdownSplit` (`brama:layout:markdown-split`, shared: the editor's
+  share of Split in percent, 20–80), `$settings` (`brama:settings`,
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
-  `<html>`, and the code editor's font; key dark-only CSS on `:root[data-theme='dark']`, never on
+  `<html>`, the code editor's font, `markdownDefaultView` (`raw` / `split` / `preview`: how a markdown file never set
+  opens) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/hooks/settings/types.js`.
+
+## Markdown view
+
+Spec: `docs/specs/markdown-view-modes.md`. A `.md` / `.mdx` tab (content kind `markdown`) is shown by
+`<acp-editor-view>` in `<acp-markdown-view>` (`src/components/markdown-view/`): the code editor
+(`<acp-code-view>`, hidden in Preview, never removed, so the caret, undo and an unsaved draft survive),
+a live preview of `tab.draft ?? tab.content`, and `<acp-markdown-switcher>` floating over them (Raw /
+Split / Preview, and in Split the scroll sync toggle). There is no status-bar mode item: `cdx-footer`
+has no slot for one.
+
+- **View per file:** `markdownView` (`src/hooks/markdown-view/`) reads and writes `$markdownModes` by the
+  file's place in its project (a worktree session's copy is the project's file), falling back to
+  `$settings.markdownDefaultView`; setting the default deletes the entry. `pruneModes()`
+  (`stores/markdown-view/`) drops entries of files that are gone; nothing calls it yet.
+- **Rendering:** `markdown.render(text, { policy, baseDir, root, decorate })` (`src/hooks/markdown/`) is the
+  only place markdown becomes DOM: `markdown-it` parses (task lists added as a core rule), DOMPurify
+  sanitizes against an explicit allowlist (`policy.js`, its own instance per policy, links judged on the
+  parsed `URL`) into a fragment of an inert document, then link, image, heading id and class rules run on
+  its nodes. `reply` (chat, `<acp-markdown>`'s default) turns an image into a link; `document` (the preview)
+  keeps local images, which `<acp-markdown>` loads through its `loadImage` property (`read_file_bytes`,
+  object URLs freed with the image; at most 200 a render), resolves relative links inside the project
+  (`acp-file-open`, `acp-file-reveal`; `<acp-editor-view>` says "Not found" for one that is not there)
+  and anchors to `acp-md-<slug>` heading ids. Remote images are never fetched. The preview re-renders 150 ms
+  after typing stops (500 ms and "Rendering…" over 1 MB) and keeps the DOM of unchanged leading blocks.
+- **Scroll sync:** `MarkdownScrollSyncController` (`src/controllers/markdown-scroll-sync/`) maps the editor's
+  top line to the preview's block (`blocks` of the render: start line and node) and back; a scroll it made
+  itself is ignored when its event arrives. Without a block map it scrolls in proportion. The block the
+  editor is at gets a bar in the preview's margin; the source line gets none.
+- **Keys** (`<acp-main-column>`, capture phase on the tab view, only for a markdown tab): Mod+K then V toggles
+  Split (the chord waits 1.2 s), Mod+Shift+V Preview, Esc leaves Preview unless text is selected. Hints come
+  from `shortcuts` (`markdownSplit`, `markdownPreview`). The preview has no find of its own: Mod+F searches
+  the editor, so it does nothing in Preview.

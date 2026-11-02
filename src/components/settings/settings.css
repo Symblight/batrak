@@ -285,3 +285,15 @@
   text-underline-offset: 3px;
   cursor: default;
 }
+
+/* A switch beside the sentence it turns on. */
+.acp-settings__toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  color: var(--acp-color-on-surface);
+  font: 400 13px/18px var(--acp-font-family);
+}
+.acp-settings__switch {
+  flex: none;
+}

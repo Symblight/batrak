@@ -92,4 +92,69 @@ describe('acp-settings', () => {
     expect(root.querySelector('[data-section="agents"]') !== null, 'no Agents section').to.equal(false);
     expect([...root.querySelectorAll('md-button')].some((b) => b.textContent?.includes('Edit agents.json'))).to.equal(false);
   });
+
+  describe('markdown', () => {
+    /** @param {ShadowRoot} root */
+    const select = (root) => /** @type {HTMLElementTagNameMap['md-select']} */ (root.querySelector('.acp-settings__input_markdown-view'));
+    /** @param {ShadowRoot} root */
+    const toggle = (root) => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_markdown-sync'));
+
+    /** @param {AcpSettings} el */
+    function changes(el) {
+      /** @type {unknown[]} */
+      const patches = [];
+      el.addEventListener('acp-settings-change', (e) => patches.push(/** @type {CustomEvent} */ (e).detail.patch));
+      return patches;
+    }
+
+    it('offers the three views for a markdown file never set, the default one picked', async () => {
+      const { el, root } = await render();
+      el.settings = { ...settingsHook.defaults, markdownDefaultView: 'split' };
+      await el.updateComplete;
+
+      expect([...select(root).querySelectorAll('md-option')].map((o) => [o.getAttribute('value'), o.textContent?.trim()])).to.deep.equal([
+        ['raw', 'Editor'],
+        ['split', 'Split'],
+        ['preview', 'Preview'],
+      ]);
+      expect(select(root).value).to.equal('split');
+    });
+
+    it('asks for the view that is picked', async () => {
+      const { el, root } = await render();
+      const patches = changes(el);
+
+      select(root).value = 'preview';
+      select(root).dispatchEvent(new Event('change', { bubbles: true }));
+
+      expect(patches).to.deep.equal([{ markdownDefaultView: 'preview' }]);
+    });
+
+    it('shows whether the editor and preview scroll together, and asks to flip it', async () => {
+      const { el, root } = await render();
+      const patches = changes(el);
+      expect(toggle(root).selected).to.equal(true);
+
+      toggle(root).selected = false;
+      toggle(root).dispatchEvent(new Event('change', { bubbles: true }));
+      el.settings = { ...settingsHook.defaults, markdownScrollSync: false };
+      await el.updateComplete;
+
+      expect(patches).to.deep.equal([{ markdownScrollSync: false }]);
+      expect(toggle(root).selected).to.equal(false);
+    });
+
+    it('is reset with the rest of the Editor section', async () => {
+      const { el, root } = await render();
+      el.settings = { ...settingsHook.defaults, markdownDefaultView: 'split' };
+      await el.updateComplete;
+      /** @type {unknown[]} */
+      const resets = [];
+      el.addEventListener('acp-settings-reset', (e) => resets.push(/** @type {CustomEvent} */ (e).detail));
+
+      /** @type {HTMLElement} */ (root.querySelector('[data-section="editor"] .acp-settings__header-button')).click();
+
+      expect(resets).to.deep.equal([{ section: 'editor' }]);
+    });
+  });
 });
