@@ -30,4 +30,32 @@ describe('acp-toolbar', () => {
     expect(tooltipOf(root.querySelector('.acp-toolbar__git-error'))).to.equal('git not found');
     expect(root.querySelector('[title]')).to.equal(null);
   });
+
+  it('offers to expand the editor over the agent column only while a tab is open, and says which way it goes', async () => {
+    for (const [expandable, hiddenColumns, label] of /** @type {const} */ ([
+      [false, [], null],
+      [true, [], 'Expand editor'],
+      [true, ['agent'], 'Collapse editor'],
+    ])) {
+      // Arrange
+      const el = await fixture(html`<acp-toolbar .expandable=${expandable} .hiddenColumns=${[...hiddenColumns]}></acp-toolbar>`);
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const button = /** @type {HTMLElement | null} */ (root.querySelector('#acp-toolbar-toggle-agent'));
+      if (label === null) {
+        expect(button, 'no tab, nothing to expand').to.equal(null);
+        continue;
+      }
+      /** @type {unknown[]} */
+      const toggled = [];
+      el.addEventListener('acp-column-toggle', (/** @type {Event} */ e) => toggled.push(/** @type {CustomEvent} */ (e).detail));
+
+      // Act
+      /** @type {HTMLElement} */ (button).click();
+
+      // Assert
+      expect(tooltipOf(button), label).to.equal(label);
+      expect(/** @type {HTMLElement} */ (button).getAttribute('aria-label')).to.equal(label);
+      expect(toggled).to.deep.equal([{ column: 'agent' }]);
+    }
+  });
 });

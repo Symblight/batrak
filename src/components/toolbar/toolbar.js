@@ -4,6 +4,8 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
+import expandIcon from '@material-design-icons/svg/outlined/open_in_full.svg?raw';
+import collapseIcon from '@material-design-icons/svg/outlined/close_fullscreen.svg?raw';
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
@@ -12,7 +14,7 @@ import styles from './toolbar.css?inline';
 /**
  * @tag acp-toolbar
  * @summary Narrow app-wide bar above the columns: the opened folder's name and git branch, and the
- *   buttons hiding the sessions and file columns.
+ *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  */
 export class AcpToolbar extends LitElement {
@@ -20,6 +22,7 @@ export class AcpToolbar extends LitElement {
     workspace: { attribute: false },
     git: { attribute: false },
     hiddenColumns: { attribute: false },
+    expandable: { type: Boolean },
   };
 
   static styles = styles;
@@ -32,6 +35,25 @@ export class AcpToolbar extends LitElement {
     this.git = { repo: null, error: null };
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
+    /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
+    this.expandable = false;
+  }
+
+  /** Button hiding the agent column, so the editor's tabs take the whole middle. */
+  #renderExpand() {
+    const id = 'acp-toolbar-toggle-agent';
+    const expanded = this.hiddenColumns.includes('agent');
+    const tooltip = expanded ? 'Collapse editor' : 'Expand editor';
+    return html`<md-icon-button
+        id=${id}
+        class="acp-toolbar__toggle"
+        aria-label=${tooltip}
+        ?selected=${expanded}
+        @click=${() => this.#toggle('agent')}
+      >
+        <md-icon class="acp-toolbar__toggle-icon">${unsafeSVG(expanded ? collapseIcon : expandIcon)}</md-icon>
+      </md-icon-button>
+      <md-tooltip for=${id} show-delay="800" placement="bottom">${tooltip}</md-tooltip>`;
   }
 
   /**
@@ -97,7 +119,7 @@ export class AcpToolbar extends LitElement {
         : nothing}
       ${workspace ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
-      ${this.#renderColumnToggle('side', 'file column', 'end')}`;
+      ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;
   }
 }
 

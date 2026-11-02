@@ -70,6 +70,9 @@ const COLUMNS = [
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} The same, while no file is open: the center is the agent column alone. */
 const COLUMNS_AGENT_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { ...column, minSize: '--acp-agent-column-min-width' } : column));
 
+/** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} The same, while the agent column is hidden: the center is the editor alone. */
+const COLUMNS_MAIN_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { ...column, minSize: '--acp-main-column-min-width' } : column));
+
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */
 const MIDDLE_COLUMNS = [
   {
@@ -98,6 +101,8 @@ const NO_COLUMNS = Object.freeze([]);
 const AGENT_FILLS = Object.freeze(['agent']);
 /** @type {readonly string[]} */
 const NO_MAIN = Object.freeze(['main']);
+/** @type {readonly string[]} */
+const NO_AGENT = Object.freeze(['agent']);
 /** @type {readonly string[]} */
 const NO_PANEL = Object.freeze(['terminals']);
 
@@ -439,6 +444,8 @@ export class AcpApp extends ViewElement {
   render() {
     const hasCode = this.#activePath.value !== null;
     const hidden = this.#hiddenColumns.value;
+    // Expanded, the editor takes the agent column's room; with no tab open the agent column is shown anyway.
+    const expanded = hasCode && hidden.includes('agent');
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
     return html`<acp-panel variant="window">
       <acp-toolbar
@@ -446,11 +453,12 @@ export class AcpApp extends ViewElement {
         .workspace=${this.#workspace.value}
         .git=${this.#gitRepo.value}
         .hiddenColumns=${hidden}
+        ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split
-        .columns=${hasCode ? COLUMNS : COLUMNS_AGENT_ONLY}
+        .columns=${expanded ? COLUMNS_MAIN_ONLY : hasCode ? COLUMNS : COLUMNS_AGENT_ONLY}
         .widths=${this.#columnWidths.value}
         .hiddenColumns=${hidden}
         @acp-columns-resize=${this.#onColumnsResize}
@@ -470,7 +478,7 @@ export class AcpApp extends ViewElement {
             flush
             .columns=${MIDDLE_COLUMNS}
             .widths=${this.#columnWidths.value}
-            .hiddenColumns=${hasCode ? NO_COLUMNS : NO_MAIN}
+            .hiddenColumns=${expanded ? NO_AGENT : hasCode ? NO_COLUMNS : NO_MAIN}
             .fillColumns=${hasCode ? NO_COLUMNS : AGENT_FILLS}
             @acp-columns-resize=${this.#onColumnsResize}
           >

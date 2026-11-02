@@ -343,6 +343,20 @@ describe('acp-app: terminal panel layout', () => {
     });
   }
 
+  it('gives the editor the whole middle while the agent column is hidden', async () => {
+    // Arrange
+    $hiddenColumns.set(['agent']);
+
+    // Act
+    const app = await render({ file: true, panel: false });
+    const session = boxOf(app, 'acp-session-column');
+    const main = boxOf(app, 'acp-main-column');
+
+    // Assert
+    expect(boxOf(app, 'acp-agent-column').width, 'agent hidden').to.equal(0);
+    expect(main.left, 'editor right after the sessions').to.be.closeTo(session.right + gapPx(), 0.5);
+  });
+
   it('is as tall as its project’s stored height; its handle changes that height and the agent column’s only the column widths', async () => {
     // Arrange
     setTerminalPanelHeight(300);
