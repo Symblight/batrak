@@ -1,3 +1,5 @@
+/** @typedef {'raw' | 'split' | 'preview'} MarkdownMode How a markdown file is shown: the editor, both side by side, or rendered only. */
+
 /** @typedef {'reply' | 'document'} PolicyName Who the markdown is for: an agent's reply, or the user's own file. */
 
 /**

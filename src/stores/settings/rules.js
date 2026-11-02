@@ -6,12 +6,12 @@ export const FONT_SIZE_MIN = 10;
 export const FONT_SIZE_MAX = 24;
 
 /** @type {Settings} */
-export const DEFAULT_SETTINGS = { appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13 };
+export const DEFAULT_SETTINGS = { appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13, markdownDefaultView: 'raw', markdownScrollSync: true };
 
 /** @typedef {'theme' | 'editor'} SettingsSection */
 
 /** @type {Record<SettingsSection, (keyof Settings)[]>} */
-export const SETTINGS_SECTIONS = { theme: ['appearance', 'accent'], editor: ['editorFont', 'editorFontSize'] };
+export const SETTINGS_SECTIONS = { theme: ['appearance', 'accent'], editor: ['editorFont', 'editorFontSize', 'markdownDefaultView', 'markdownScrollSync'] };
 
 /**
  * @param {string} value `#RGB` or `#RRGGBB`, any case, surrounding space ignored.

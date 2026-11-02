@@ -33,3 +33,28 @@ export function showColumn(name) {
   const hidden = $hiddenColumns.get();
   if (hidden.includes(name)) $hiddenColumns.set(hidden.filter((n) => n !== name));
 }
+
+/** Limits of the markdown split's editor share, in percent. */
+export const MARKDOWN_SPLIT_MIN = 20;
+export const MARKDOWN_SPLIT_MAX = 80;
+export const MARKDOWN_SPLIT_DEFAULT = 50;
+
+/** @param {number} percent */
+const clampSplit = (percent) => Math.min(MARKDOWN_SPLIT_MAX, Math.max(MARKDOWN_SPLIT_MIN, percent));
+
+/**
+ * @param {unknown} raw
+ * @returns {number | null} The editor's share clamped; `null` for anything but a finite number.
+ */
+export function parseMarkdownSplit(raw) {
+  return typeof raw === 'number' && Number.isFinite(raw) ? clampSplit(raw) : null;
+}
+
+/** The editor's share of a markdown tab in Split, in percent: one value for the window's markdown tabs, shared like the widths. */
+export const $markdownSplit = persistentStore('brama:layout:markdown-split', MARKDOWN_SPLIT_DEFAULT, { parse: parseMarkdownSplit });
+
+/** @param {number} percent The editor's share; kept within the limits. */
+export function setMarkdownSplit(percent) {
+  const clamped = parseMarkdownSplit(percent);
+  if (clamped !== null && clamped !== $markdownSplit.get()) $markdownSplit.set(clamped);
+}

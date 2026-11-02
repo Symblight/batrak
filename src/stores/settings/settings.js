@@ -1,5 +1,6 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
+import { isMarkdownMode } from '../markdown-view/markdown-view.js';
 import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from './rules.js';
 
 /** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
@@ -13,24 +14,32 @@ function isFontSize(size) {
   return Number.isInteger(size) && /** @type {number} */ (size) >= FONT_SIZE_MIN && /** @type {number} */ (size) <= FONT_SIZE_MAX;
 }
 
+/**
+ * @param {unknown} raw
+ * @returns {Settings | null}
+ */
+export function parseSettings(raw) {
+  if (!isRecord(raw)) return null;
+  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync } = raw;
+  return {
+    appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
+    accent: (typeof accent === 'string' && normalizeHex(accent)) || DEFAULTS.accent,
+    editorFont: typeof editorFont === 'string' && editorFont !== '' ? editorFont : DEFAULTS.editorFont,
+    editorFontSize: isFontSize(editorFontSize) ? /** @type {number} */ (editorFontSize) : DEFAULTS.editorFontSize,
+    markdownDefaultView: isMarkdownMode(markdownDefaultView) ? markdownDefaultView : DEFAULTS.markdownDefaultView,
+    markdownScrollSync: typeof markdownScrollSync === 'boolean' ? markdownScrollSync : DEFAULTS.markdownScrollSync,
+  };
+}
+
 /** Shared by every window. Each field falls back to its default on its own, so one bad value keeps the rest. */
-export const $settings = persistentStore('brama:settings', DEFAULTS, {
-  parse: (raw) => {
-    if (!isRecord(raw)) return null;
-    const { appearance, accent, editorFont, editorFontSize } = raw;
-    return {
-      appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
-      accent: (typeof accent === 'string' && normalizeHex(accent)) || DEFAULTS.accent,
-      editorFont: typeof editorFont === 'string' && editorFont !== '' ? editorFont : DEFAULTS.editorFont,
-      editorFontSize: isFontSize(editorFontSize) ? /** @type {number} */ (editorFontSize) : DEFAULTS.editorFontSize,
-    };
-  },
-});
+export const $settings = persistentStore('brama:settings', DEFAULTS, { parse: parseSettings });
 
 export const $appearance = computed($settings, (settings) => settings.appearance);
 export const $accent = computed($settings, (settings) => settings.accent);
 export const $editorFont = computed($settings, (settings) => settings.editorFont);
 export const $editorFontSize = computed($settings, (settings) => settings.editorFontSize);
+export const $markdownDefaultView = computed($settings, (settings) => settings.markdownDefaultView);
+export const $markdownScrollSync = computed($settings, (settings) => settings.markdownScrollSync);
 
 /**
  * @template {keyof Settings} K
@@ -61,6 +70,16 @@ export function setEditorFont(family) {
 /** @param {number} size Clamped to `FONT_SIZE_MIN`–`FONT_SIZE_MAX`. */
 export function setEditorFontSize(size) {
   update('editorFontSize', Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
+}
+
+/** @param {Settings['markdownDefaultView']} view */
+export function setMarkdownDefaultView(view) {
+  update('markdownDefaultView', view);
+}
+
+/** @param {boolean} on */
+export function setMarkdownScrollSync(on) {
+  update('markdownScrollSync', on);
 }
 
 /** @param {import('./rules.js').SettingsSection} section */

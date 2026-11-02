@@ -10,7 +10,14 @@ describe('settings', () => {
 
   describe('rules', () => {
     it('starts from the system scheme, a blue accent and a 13px editor font', () => {
-      expect(settings.defaults).to.deep.equal({ appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13 });
+      expect(settings.defaults).to.deep.equal({
+        appearance: 'system',
+        accent: '#4355B9',
+        editorFont: null,
+        editorFontSize: 13,
+        markdownDefaultView: 'raw',
+        markdownScrollSync: true,
+      });
       expect([settings.fontSizeMin, settings.fontSizeMax]).to.deep.equal([10, 24]);
     });
 

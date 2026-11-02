@@ -41,6 +41,8 @@
  * @property {string} accent Seed colour of the MD3 palette, `#RRGGBB`.
  * @property {string | null} editorFont Code editor font family; `null` keeps the editor's own stack.
  * @property {number} editorFontSize Code editor font size in px; the line height follows it.
+ * @property {import('../markdown/types.js').MarkdownMode} markdownDefaultView How a markdown file never set is shown.
+ * @property {boolean} markdownScrollSync In Split, the editor and the preview scroll together.
  */
 
 export {};
