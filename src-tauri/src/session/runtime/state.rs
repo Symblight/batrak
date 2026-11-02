@@ -18,6 +18,9 @@ pub(super) struct SessionState {
     pub(super) sinks: Mutex<HashMap<String, Arc<dyn EventSink>>>,
     /// Guarded by `sinks`, so the order of `seq` is the order of sending.
     pub(super) seq: AtomicU64,
+    /// The running agent's conversation (`replay`), written under `sinks` in `seq` order; `None`
+    /// while no agent runs.
+    pub(super) replay: Mutex<Option<replay::ReplayLog>>,
     /// Held while starting, so one start runs at a time.
     pub(super) live: tokio::sync::Mutex<Option<Live>>,
     /// For cancel and permission answers, which must not wait for a start in progress.
@@ -102,13 +105,50 @@ impl SessionState {
 
     pub(super) fn emit(&self, kind: &'static str, payload: Value) {
         let mut sinks = lock(&self.sinks);
-        let envelope = Envelope {
-            session_id: self.id.clone(),
-            seq: self.seq.fetch_add(1, Ordering::SeqCst) + 1,
-            kind,
-            payload,
-        };
+        if kind == "update" {
+            if let Some(log) = lock(&self.replay).as_mut() {
+                log.push(&payload);
+            }
+        }
+        let envelope = self.envelope(kind, payload);
         sinks.retain(|_, sink| sink.send(&envelope));
+    }
+
+    /// Takes `sink` as `key`'s; while an agent runs, it first gets the conversation so far
+    /// (`snapshot`), in `seq` order with the events around it.
+    pub(super) fn add_sink(&self, key: &str, sink: Arc<dyn EventSink>) {
+        let mut sinks = lock(&self.sinks);
+        let updates = lock(&self.replay).as_ref().map(|log| log.updates().to_vec());
+        if let Some(updates) = updates {
+            let snapshot = serde_json::json!({ "updates": updates, "inTurn": self.in_turn.load(Ordering::SeqCst) });
+            if !sink.send(&self.envelope("snapshot", snapshot)) {
+                return;
+            }
+        }
+        sinks.insert(key.to_owned(), sink);
+    }
+
+    /// A new agent's conversation starts: its `session/load` replay comes first.
+    pub(super) fn start_replay(&self) {
+        *lock(&self.replay) = Some(replay::ReplayLog::default());
+    }
+
+    /// The turn's prompt, as the agent gets it.
+    pub(super) fn replay_prompt(&self, blocks: &[PromptBlock]) {
+        let _sinks = lock(&self.sinks);
+        if let Some(log) = lock(&self.replay).as_mut() {
+            log.push_prompt(blocks);
+        }
+    }
+
+    /// The agent is gone: its conversation is its next start's replay.
+    pub(super) fn end_replay(&self) {
+        lock(&self.replay).take();
+    }
+
+    /// Call with `sinks` held.
+    fn envelope(&self, kind: &'static str, payload: Value) -> Envelope {
+        Envelope { session_id: self.id.clone(), seq: self.seq.fetch_add(1, Ordering::SeqCst) + 1, kind, payload }
     }
 }
 
@@ -133,6 +173,7 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         record: Mutex::new(record),
         sinks: Mutex::default(),
         seq: AtomicU64::new(0),
+        replay: Mutex::new(None),
         live: tokio::sync::Mutex::new(None),
         conn: Mutex::new(None),
         env: Mutex::new(None),

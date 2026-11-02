@@ -65,6 +65,9 @@ impl Inner {
             return Err(failed.unwrap_or_else(|| StartError::Failed("the agent stopped".to_owned())));
         }
         let result = self.attempt_start(state).await;
+        if result.is_err() {
+            state.end_replay();
+        }
         *lock(&state.start_error) = result.as_ref().err().cloned();
         state.start_attempts.fetch_add(1, Ordering::SeqCst);
         let (started, env) = result?;
@@ -248,6 +251,7 @@ impl Inner {
         state: Arc<SessionState>,
     ) -> Result<(StartedAgent, Arc<dyn SessionEnv>), StartFailure> {
         let record = state.record();
+        state.start_replay();
         self.set_status(&state, SessionStatus::Preparing, None);
         let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(&record)?);
         let preparing = Arc::clone(&env);

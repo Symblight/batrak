@@ -163,6 +163,7 @@ impl Inner {
         lock(&state.tool_kinds).clear();
         *lock(&state.turn_ended) = None;
         state.in_turn.store(true, Ordering::SeqCst);
+        state.replay_prompt(&blocks);
         state.emit("turn-start", json!({}));
         self.set_status(state, SessionStatus::Working, None);
         // HOOK(git): checkpoint before the turn. `turn_running` is set, so the git layer can
@@ -185,6 +186,7 @@ impl Inner {
         let taken = state.live.lock().await.take();
         lock(&state.conn).take();
         lock(&state.env).take();
+        state.end_replay();
         if let Some(process) = taken.and_then(|live| live.process).as_mut() {
             process.stop().await;
         }
