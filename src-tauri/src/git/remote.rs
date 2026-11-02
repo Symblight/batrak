@@ -100,9 +100,15 @@ pub fn read(git: &Path, root: &Path, info: &RepoInfo, branch: Option<&str>) -> R
 pub enum RemoteOp {
     Fetch,
     Pull,
+    PullRebase,
+    PullMerge,
     Push,
     /// First push of a branch: `push -u`.
     Publish,
+    /// Replaces the remote branch, but only if it is still where `expected` says.
+    ForcePush,
+    /// Gives up a pull that stopped on a conflict: `rebase --abort` or `merge --abort`.
+    Abort,
 }
 
 /// Why a remote operation failed, from git's message; the frontend offers what fits each.
@@ -137,35 +143,76 @@ impl RemoteError {
     }
 }
 
-/// Runs `op` for the branch `state` describes. Pull and publish change local state, so they hold
-/// the repository's mutation lock; fetch and push can take minutes and must not hold up a commit.
-pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState) -> Result<(), RemoteError> {
+/// Runs `op` for the branch `state` describes. Whatever changes local state (a pull, publish, abort)
+/// holds the repository's mutation lock; fetch and push can take minutes and must not hold up a commit.
+/// `expected` is the upstream commit a force push was asked on (`RepoState::upstream_sha` as the user saw it).
+pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState, expected: Option<&str>) -> Result<(), RemoteError> {
+    // Before the branch check: HEAD is detached while a rebase is stopped.
+    if op == RemoteOp::Abort {
+        return abort(git, root);
+    }
     let Some(branch) = state.branch.as_deref() else { return Err(RemoteError::other("HEAD is detached: there is no branch to sync")) };
     let Some(remote) = state.remote.as_ref().map(|r| r.name.as_str()) else {
         return Err(RemoteError::other("This repository has no remote"));
     };
-    if matches!(op, RemoteOp::Pull | RemoteOp::Push) && state.upstream.is_none() {
+    if !matches!(op, RemoteOp::Fetch | RemoteOp::Publish) && state.upstream.is_none() {
         return Err(RemoteError::other(format!("Branch {branch} has no upstream: publish it first")));
     }
     let publish_ref = format!("HEAD:refs/heads/{branch}");
+    // `origin/main` → `main`: the branch on the remote a force push replaces.
+    let remote_branch = state.upstream.as_deref().and_then(|u| u.strip_prefix(remote)).and_then(|u| u.strip_prefix('/')).unwrap_or(branch);
+    let force_lease;
+    let force_ref;
     let (args, mode): (Vec<&str>, Mode) = match op {
         RemoteOp::Fetch => (vec!["fetch", "--prune", remote], Mode::Remote),
         RemoteOp::Pull => (vec!["pull", "--ff-only"], Mode::Hooks),
+        RemoteOp::PullRebase => (vec!["pull", "--rebase", "--autostash"], Mode::Hooks),
+        RemoteOp::PullMerge => (vec!["pull", "--no-rebase", "--no-edit"], Mode::Hooks),
         RemoteOp::Push => (vec!["push"], Mode::Remote),
         RemoteOp::Publish => (vec!["push", "-u", remote, &publish_ref], Mode::Remote),
+        RemoteOp::ForcePush => {
+            let Some(expected) = expected else {
+                return Err(RemoteError::other("A force push needs the commit it replaces"));
+            };
+            force_lease = format!("--force-with-lease=refs/heads/{remote_branch}:{expected}");
+            force_ref = format!("HEAD:refs/heads/{remote_branch}");
+            (vec!["push", &force_lease, remote, &force_ref], Mode::Remote)
+        }
+        RemoteOp::Abort => unreachable!("handled above"),
     };
     let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
-    let go = || {
-        let opts = Options { env: &[("GCM_INTERACTIVE", OsStr::new("never"))], ..Default::default() };
-        Ok(match exec::run_with(git, root, &args, mode, &opts) {
-            Ok(out) if out.success() => Ok(()),
-            Ok(out) => Err(RemoteError { kind: classify(&out.stderr), message: tail(&out.stderr) }),
-            Err(e) if e.contains("timed out") => Err(RemoteError { kind: FailureKind::Timeout, message: e }),
-            Err(e) => Err(RemoteError::other(e)),
-        })
-    };
-    let result = if matches!(op, RemoteOp::Pull | RemoteOp::Publish) { lock::with_mutation(git, root, go) } else { go() };
+    let locked = matches!(op, RemoteOp::Pull | RemoteOp::PullRebase | RemoteOp::PullMerge | RemoteOp::Publish);
+    let go = || Ok(run_git(git, root, &args, mode));
+    let result = if locked { lock::with_mutation(git, root, go) } else { go() };
     result.map_err(RemoteError::other)?
+}
+
+/// Ends the rebase or merge a pull left half done; the working tree goes back to before the pull.
+fn abort(git: &Path, root: &Path) -> Result<(), RemoteError> {
+    let info = super::repo::info(git, root).map_err(RemoteError::other)?.ok_or_else(|| RemoteError::other("Not a git repository"))?;
+    let rebasing = info.git_dir.join("rebase-merge").exists() || info.git_dir.join("rebase-apply").exists();
+    let merging = info.git_dir.join("MERGE_HEAD").exists();
+    let args: Vec<&OsStr> = match (rebasing, merging) {
+        (true, _) => vec![OsStr::new("rebase"), OsStr::new("--abort")],
+        (false, true) => vec![OsStr::new("merge"), OsStr::new("--abort")],
+        (false, false) => return Err(RemoteError::other("No pull is waiting to be aborted")),
+    };
+    lock::with_mutation(git, root, || Ok(run_git(git, root, &args, Mode::Local))).map_err(RemoteError::other)?
+}
+
+fn run_git(git: &Path, root: &Path, args: &[&OsStr], mode: Mode) -> Result<(), RemoteError> {
+    let opts = Options { env: &[("GCM_INTERACTIVE", OsStr::new("never"))], ..Default::default() };
+    match exec::run_with(git, root, args, mode, &opts) {
+        Ok(out) if out.success() => Ok(()),
+        Ok(out) => {
+            // A stopped merge or rebase explains itself on stdout ("CONFLICT (content): …").
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let text = [out.stderr.as_str(), stdout.trim()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n");
+            Err(RemoteError { kind: classify(&text), message: tail(&text) })
+        }
+        Err(e) if e.contains("timed out") => Err(RemoteError { kind: FailureKind::Timeout, message: e }),
+        Err(e) => Err(RemoteError::other(e)),
+    }
 }
 
 /// The kind of failure git's English message (`LC_ALL=C`) tells of.
@@ -357,7 +404,25 @@ mod tests {
     }
 
     fn run_op(repo: &TestRepo, op: RemoteOp) -> Result<(), RemoteError> {
-        run(&git_bin(), &repo.path, op, &state_of(repo))
+        let state = state_of(repo);
+        let expected = state.upstream_sha.clone();
+        run(&git_bin(), &repo.path, op, &state, expected.as_deref())
+    }
+
+    /// `repo` and a second clone each with a commit of their own, the clone's already on the remote:
+    /// the branch is diverged once fetched. Each commit writes `file` with the given content.
+    fn diverged(name: &str, local: (&str, &str), remote: (&str, &str)) -> (TestRepo, PathBuf, PathBuf) {
+        let (repo, origin) = TestRepo::with_remote(name);
+        let other = clone_of(&origin, &format!("{name}-other"));
+        std::fs::write(other.join(remote.0), remote.1).unwrap();
+        crate::git::test_repo::run_in(&other, &["add", "."]);
+        crate::git::test_repo::run_in(&other, &["commit", "-qm", "remote"]);
+        crate::git::test_repo::run_in(&other, &["push", "-q"]);
+        repo.write(local.0, local.1);
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "local"]);
+        run_op(&repo, RemoteOp::Fetch).unwrap();
+        (repo, origin, other)
     }
 
     #[test]
@@ -384,6 +449,63 @@ mod tests {
         assert_eq!(state_of(&repo).behind, 1);
         run_op(&repo, RemoteOp::Pull).unwrap();
         assert_eq!((state_of(&repo).behind, repo.path.join("b.txt").exists()), (0, true));
+    }
+
+    #[test]
+    fn a_diverged_branch_is_pulled_by_rebase_or_by_merge() {
+        // Rebase: the local commit goes on top of the remote's, even with uncommitted work.
+        let (repo, _origin, _other) = diverged("pull-rebase", ("a.txt", "a"), ("b.txt", "b"));
+        repo.write("README.md", "dirty\n");
+        run_op(&repo, RemoteOp::PullRebase).unwrap();
+        let state = state_of(&repo);
+        assert_eq!((state.ahead, state.behind), (1, 0));
+        assert!(repo.path.join("a.txt").exists() && repo.path.join("b.txt").exists());
+        assert_eq!(std::fs::read_to_string(repo.path.join("README.md")).unwrap(), "dirty\n", "autostash kept it");
+
+        // Merge: both histories stay, joined by a merge commit.
+        let (repo, _origin, _other) = diverged("pull-merge", ("a.txt", "a"), ("b.txt", "b"));
+        run_op(&repo, RemoteOp::PullMerge).unwrap();
+        assert!(repo.path.join("a.txt").exists() && repo.path.join("b.txt").exists());
+        assert!(!repo.git(&["rev-list", "--min-parents=2", "-1", "HEAD"]).trim().is_empty(), "a merge commit");
+    }
+
+    #[test]
+    fn a_conflicting_pull_stops_and_abort_puts_the_branch_back() {
+        for (op, dir) in [(RemoteOp::PullRebase, "rebase-merge"), (RemoteOp::PullMerge, "MERGE_HEAD")] {
+            let (repo, _origin, _other) = diverged(&format!("conflict-{dir}"), ("c.txt", "local\n"), ("c.txt", "remote\n"));
+            let before = repo.git(&["rev-parse", "HEAD"]);
+
+            let stopped = run_op(&repo, op).unwrap_err();
+            assert_eq!(stopped.kind, FailureKind::Conflict, "{}", stopped.message);
+            let git_dir = repo.path.join(".git");
+            assert!(git_dir.join(dir).exists(), "left mid-{dir}");
+
+            run_op(&repo, RemoteOp::Abort).unwrap();
+            assert!(!git_dir.join(dir).exists());
+            assert_eq!(repo.git(&["rev-parse", "HEAD"]), before, "back where it was");
+            assert_eq!(run_op(&repo, RemoteOp::Abort).unwrap_err().kind, FailureKind::Other, "nothing left to abort");
+        }
+    }
+
+    #[test]
+    fn a_force_push_replaces_the_remote_only_where_the_user_saw_it() {
+        let (repo, origin, other) = diverged("force", ("a.txt", "a"), ("b.txt", "b"));
+        let seen = state_of(&repo).upstream_sha.expect("the fetched upstream");
+        assert_eq!(run(&git_bin(), &repo.path, RemoteOp::ForcePush, &state_of(&repo), None).unwrap_err().kind, FailureKind::Other, "no lease, no push");
+
+        // The remote moves on after the user looked: the lease holds.
+        std::fs::write(other.join("c.txt"), "c").unwrap();
+        crate::git::test_repo::run_in(&other, &["add", "."]);
+        crate::git::test_repo::run_in(&other, &["commit", "-qm", "later"]);
+        crate::git::test_repo::run_in(&other, &["push", "-q"]);
+        let stale = run(&git_bin(), &repo.path, RemoteOp::ForcePush, &state_of(&repo), Some(&seen)).unwrap_err();
+        assert_eq!(stale.kind, FailureKind::Rejected, "{}", stale.message);
+
+        // Fetched again, the user confirms what they now see.
+        run_op(&repo, RemoteOp::Fetch).unwrap();
+        run_op(&repo, RemoteOp::ForcePush).unwrap();
+        let log = crate::git::test_repo::run_in(&origin, &["log", "--format=%s", "main"]);
+        assert!(log.contains("local") && !log.contains("later"), "{log}");
     }
 
     #[test]

@@ -5,7 +5,7 @@ import '../toolbar.js';
 
 /** @type {GitRepoView} */
 const GIT = {
-  repo: { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0, remote: null, hasRemotes: false, fetchedAt: null },
+  repo: { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0, upstreamSha: null, remote: null, hasRemotes: false, fetchedAt: null },
   error: null,
 };
 

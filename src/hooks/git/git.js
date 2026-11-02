@@ -4,7 +4,7 @@ import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
-import { remoteChip } from './remote.js';
+import { pullConfirm, remoteChip, remoteFailure } from './remote.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
@@ -151,26 +151,27 @@ export const git = Object.freeze({
   typeBadge,
   relativePath,
   remoteChip,
+  pullConfirm,
 
   /**
    * Fetches, pulls (fast-forward only), pushes or publishes the active root's branch. One at a time
    * app-wide; while it runs and after it fails `$gitRemoteOp` says so, and a failure is also a snackbar.
    * @param {GitRemoteAction} action
+   * @param {string | null} [expected] `forcePush`: the upstream commit it replaces, as the user saw it.
    */
-  async remote(action) {
+  async remote(action, expected = null) {
     const rootId = $rootId.get();
     if (rootId === null || $gitRemoteOp.get()?.state === 'running') return;
     $gitRemoteOp.set({ rootId, action, state: 'running', error: null });
     try {
       /** @type {GitRepoState} */
-      const repo = await ipc.invoke('git_remote', { rootId, action });
+      const repo = await ipc.invoke('git_remote', { rootId, action, ...(expected ? { expected } : {}) });
       if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
       $gitRemoteOp.set(null);
     } catch (err) {
       const error = remoteError(err);
       $gitRemoteOp.set({ rootId, action, state: 'failed', error });
-      const verb = action === 'publish' ? 'Publish' : action[0].toUpperCase() + action.slice(1);
-      app.reportError(`${verb} failed`, error.message.split('\n')[0]);
+      app.reportError(remoteFailure(action), error.message.split('\n')[0]);
     }
   },
 

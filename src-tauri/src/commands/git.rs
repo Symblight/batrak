@@ -82,13 +82,15 @@ pub async fn git_commit(
     Ok(done)
 }
 
-/// Fetches, pulls (fast-forward only), pushes or publishes the root's current branch, and replies
-/// with its new state. Never prompts for credentials; a failure carries its kind and git's message.
+/// Fetches, pulls (fast-forward, rebase or merge), pushes, publishes or force-pushes (`expected` is the
+/// upstream commit it replaces) the root's current branch, or aborts a pull stopped on a conflict, and
+/// replies with its new state. Never prompts for credentials; a failure carries its kind and git's message.
 #[tauri::command]
 pub async fn git_remote(
     workspaces: State<'_, Workspaces>,
     root_id: String,
     action: RemoteOp,
+    expected: Option<String>,
 ) -> Result<repo::RepoState, RemoteError> {
     let root = workspaces.get(&root_id).map_err(RemoteError::other)?;
     let result = blocking(move || {
@@ -98,7 +100,7 @@ pub async fn git_remote(
             .head(git, &root.path, root.epoch())
             .map_err(RemoteError::other)?
             .ok_or_else(|| RemoteError::other("Not a git repository"))?;
-        remote::run(git, &root.path, action, &state)?;
+        remote::run(git, &root.path, action, &state, expected.as_deref())?;
         root.git
             .head(git, &root.path, root.epoch())
             .map_err(RemoteError::other)?

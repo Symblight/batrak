@@ -19,6 +19,8 @@ pub struct RepoState {
     pub upstream: Option<String>,
     pub ahead: u32,
     pub behind: u32,
+    /// What the upstream branch pointed at when last fetched: the lease of a force push.
+    pub upstream_sha: Option<String>,
     /// The remote the branch syncs with (see [`remote::read`]); `None` when detached or without remotes.
     pub remote: Option<RemoteInfo>,
     /// The repository has a remote at all: "No remote" against "No upstream".
@@ -131,6 +133,12 @@ fn add_remote(git: &Path, root: &Path, info: &RepoInfo, state: &mut RepoState) -
     state.has_remotes = remotes.has_remotes;
     state.fetched_at = remotes.fetched_at;
     state.remote = if state.detached { None } else { remotes.remote };
+    // Only a remote-tracking branch has a lease to give; a local upstream branch is not on a remote.
+    if let (Some(upstream), Some(_)) = (&state.upstream, &state.remote) {
+        let reference = format!("refs/remotes/{upstream}");
+        let out = exec::run_with(git, root, &exec::args(&[&"rev-parse", &"-q", &"--verify", &reference]), Mode::Background, &Default::default())?;
+        state.upstream_sha = out.success().then(|| out.stdout_str().map(|t| t.trim().to_owned())).transpose()?.filter(|t| !t.is_empty());
+    }
     Ok(())
 }
 
@@ -143,6 +151,7 @@ impl RepoState {
             upstream: None,
             ahead: 0,
             behind: 0,
+            upstream_sha: None,
             remote: None,
             has_remotes: false,
             fetched_at: None,

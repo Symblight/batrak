@@ -7,13 +7,13 @@ import { git } from '../../hooks/git/git.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
-import { $activePath } from '../../stores/editor/editor.js';
+import { $activePath, openChanges } from '../../stores/editor/editor.js';
 import { $gitRemoteOpHere, $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
 import { $treeRoot } from '../../stores/session-root/session-root.js';
-import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { markProjectRead } from '../../stores/session-read/session-read.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
@@ -348,10 +348,18 @@ export class AcpApp extends ViewElement {
   }
 
   /** @param {Event} e */
-  #onGitRemote = (e) => {
-    const { action } = /** @type {CustomEvent<{ action: import('../../hooks/git/types.js').GitRemoteAction | 'dismiss' }>} */ (e).detail;
-    if (action === 'dismiss') git.dismissRemote();
-    else void git.remote(action);
+  #onGitRemote = async (e) => {
+    const { action, expected } = /** @type {CustomEvent<{ action: import('../../hooks/git/types.js').GitRemoteAction | 'dismiss' | 'showChanges', expected?: string }>} */ (e).detail;
+    if (action === 'dismiss') return git.dismissRemote();
+    if (action === 'showChanges') return openChanges();
+    // A pull changes the files under an agent that is working in the folder: ask first.
+    const folder = this.#workspace.value?.path;
+    const question = action.startsWith('pull') && folder ? git.pullConfirm($sessions.get(), folder) : null;
+    if (question) {
+      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('.acp-app__confirm'));
+      if (!(await dialog.confirm(question))) return;
+    }
+    await git.remote(action, expected);
   };
 
   /** @param {Event} e */
@@ -526,6 +534,7 @@ export class AcpApp extends ViewElement {
       <acp-search-view @acp-search-open=${this.#onSearchOpen} @acp-search-popout=${this.#onSearchPopout}></acp-search-view>
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
+      <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
       <acp-snackbars
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}

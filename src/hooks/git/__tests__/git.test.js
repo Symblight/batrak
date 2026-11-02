@@ -293,10 +293,11 @@ describe('git', () => {
       throw error;
     };
     // Act
-    await git.remote('push');
+    await git.remote('forcePush', 'f00d');
     // Assert
-    expect($gitRemoteOp.get()).to.deep.equal({ rootId, action: 'push', state: 'failed', error });
-    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Push failed: ! [rejected] main -> main (fetch first)']]);
+    expect(sent('git_remote'), 'a force push says which commit it replaces').to.deep.equal([{ rootId, action: 'forcePush', expected: 'f00d' }]);
+    expect($gitRemoteOp.get()).to.deep.equal({ rootId, action: 'forcePush', state: 'failed', error });
+    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Force push failed: ! [rejected] main -> main (fetch first)']]);
     // Act
     git.dismissRemote();
     // Assert

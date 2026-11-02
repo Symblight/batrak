@@ -11,10 +11,20 @@ const REPO = {
   upstream: 'origin/main',
   ahead: 0,
   behind: 0,
+  upstreamSha: null,
   remote: { name: 'origin', url: 'https://example.test/a/b.git', github: null },
   hasRemotes: true,
   fetchedAt: null,
 };
+
+/** @param {() => unknown} ready */
+async function until(ready) {
+  const started = Date.now();
+  while (!ready()) {
+    expect(Date.now() - started, 'timed out').to.be.lessThan(3000);
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
 
 describe('acp-remote-chip', () => {
   it('shows what the branch needs next with its tooltip, and nothing without a branch to sync', async () => {
@@ -48,7 +58,6 @@ describe('acp-remote-chip', () => {
       ['ahead', { ...REPO, ahead: 1 }, 'push'],
       ['behind', { ...REPO, behind: 1 }, 'pull'],
       ['no upstream', { ...REPO, upstream: null }, 'publish'],
-      ['diverged', { ...REPO, ahead: 1, behind: 1 }, null],
       ['no remote', { ...REPO, upstream: null, remote: null, hasRemotes: false }, null],
     ];
     for (const [why, repo, action] of cases) {
@@ -98,5 +107,67 @@ describe('acp-remote-chip', () => {
     for (const button of buttons) /** @type {HTMLElement} */ (button).click();
     // Assert
     expect(asked).to.deep.equal([{ action: 'push' }, { action: 'pull' }, { action: 'dismiss' }]);
+  });
+
+  it('offers a diverged branch its ways out: pull by rebase or merge, or replace the remote after a confirmation', async () => {
+    // Arrange
+    const repo = { ...REPO, ahead: 4, behind: 2, upstreamSha: 'f00d' };
+    const el = await fixture(html`<acp-remote-chip .repo=${repo}></acp-remote-chip>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    /** @type {unknown[]} */
+    const asked = [];
+    el.addEventListener('acp-git-remote', (/** @type {Event} */ e) => asked.push(/** @type {CustomEvent} */ (e).detail));
+    const open = async () => {
+      /** @type {HTMLElement} */ (root.querySelector('.acp-remote-chip__chip')).click();
+      await el.updateComplete;
+      return [.../** @type {HTMLElement} */ (root.querySelector('.acp-remote-chip__popover')).querySelectorAll('md-button')];
+    };
+    // Act
+    let items = await open();
+    // Assert
+    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Pull with rebase', 'Pull with merge', 'Force push…']);
+    expect(asked, 'opening the menu asks for nothing').to.deep.equal([]);
+
+    // Act
+    /** @type {HTMLElement} */ (items[0]).click();
+    items = await open();
+    /** @type {HTMLElement} */ (items[1]).click();
+    // Assert
+    expect(asked).to.deep.equal([{ action: 'pullRebase' }, { action: 'pullMerge' }]);
+
+    // Act: the force push waits for the answer
+    items = await open();
+    /** @type {HTMLElement} */ (items[2]).click();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
+    await until(() => dialog.shadowRoot?.querySelector('.acp-confirm-dialog__action_destructive'));
+    // Assert
+    expect(asked, 'not before the answer').to.have.length(2);
+    expect(dialog.shadowRoot?.textContent).to.contain('4 commits').and.to.contain('2 commits only on origin/main will be lost');
+    // Act
+    /** @type {HTMLElement} */ (dialog.shadowRoot?.querySelector('.acp-confirm-dialog__action_destructive')).click();
+    await until(() => asked.length === 3);
+    // Assert
+    expect(asked[2], 'with the commit the user saw').to.deep.equal({ action: 'forcePush', expected: 'f00d' });
+  });
+
+  it('offers a pull that stopped on a conflict to abort or to look at the changes, not to retry', async () => {
+    // Arrange
+    const error = { kind: /** @type {const} */ ('conflict'), message: 'CONFLICT (content): Merge conflict in a.txt' };
+    const el = await fixture(html`<acp-remote-chip
+      .repo=${REPO}
+      .op=${{ rootId: 'r', action: 'pullRebase', state: 'failed', error }}
+    ></acp-remote-chip>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    /** @type {unknown[]} */
+    const asked = [];
+    el.addEventListener('acp-git-remote', (/** @type {Event} */ e) => asked.push(/** @type {CustomEvent} */ (e).detail));
+    // Act
+    /** @type {HTMLElement} */ (root.querySelector('.acp-remote-chip__chip')).click();
+    await el.updateComplete;
+    const buttons = [.../** @type {HTMLElement} */ (root.querySelector('.acp-remote-chip__popover')).querySelectorAll('md-button')];
+    for (const button of buttons) /** @type {HTMLElement} */ (button).click();
+    // Assert
+    expect(buttons.map((b) => b.textContent?.trim())).to.deep.equal(['Show Changes', 'Abort', 'Dismiss']);
+    expect(asked).to.deep.equal([{ action: 'showChanges' }, { action: 'abort' }, { action: 'dismiss' }]);
   });
 });

@@ -18,6 +18,7 @@
  * @property {string | null} upstream
  * @property {number} ahead
  * @property {number} behind
+ * @property {string | null} upstreamSha What the upstream branch pointed at when last fetched; the lease of a force push.
  * @property {GitRemoteInfo | null} remote The remote the branch syncs with; `null` when detached or without remotes.
  * @property {boolean} hasRemotes The repository has a remote at all ("No remote" against "No upstream").
  * @property {number | null} fetchedAt Unix ms of the last fetch; `null` if it never ran.
@@ -40,7 +41,7 @@
  * @property {GitRemoteAction | null} action What a click runs; `null` when the chip isn't a button.
  */
 
-/** @typedef {'fetch' | 'pull' | 'push' | 'publish'} GitRemoteAction */
+/** @typedef {'fetch' | 'pull' | 'pullRebase' | 'pullMerge' | 'push' | 'publish' | 'forcePush' | 'abort'} GitRemoteAction */
 
 /**
  * Why a remote operation failed; mirrors `git::remote::RemoteError`.

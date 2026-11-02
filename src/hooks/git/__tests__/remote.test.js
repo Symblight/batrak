@@ -12,6 +12,7 @@ const repo = (fields = {}) => ({
   upstream: 'origin/main',
   ahead: 0,
   behind: 0,
+  upstreamSha: null,
   remote: { name: 'origin', url: 'https://example.test/a/b.git', github: null },
   hasRemotes: true,
   fetchedAt: NOW - 3 * MIN,
@@ -59,6 +60,10 @@ describe('git remote chip', () => {
     const verbs = [
       ['fetch', 'Fetching…', 'Fetch failed'],
       ['pull', 'Pulling…', 'Pull failed'],
+      ['pullRebase', 'Pulling…', 'Pull failed'],
+      ['pullMerge', 'Pulling…', 'Pull failed'],
+      ['forcePush', 'Pushing…', 'Force push failed'],
+      ['abort', 'Aborting…', 'Abort failed'],
       ['push', 'Pushing…', 'Push failed'],
       ['publish', 'Publishing…', 'Publish failed'],
     ];
@@ -69,6 +74,20 @@ describe('git remote chip', () => {
       const broke = git.remoteChip(repo({ ahead: 4 }), NOW, { rootId: 'r', action, state: 'failed', error });
       expect(broke, action).to.deep.include({ id: 'failed', label: failed, icon: 'error', tooltip: '! [rejected] main -> main (fetch first)', action: null });
     }
+  });
+
+  it('asks before a pull changes the files of a folder an agent is working in', () => {
+    const session = (/** @type {string} */ id, /** @type {string} */ status, folder = '/work/app') =>
+      /** @type {import('../../sessions/types.js').Session} */ (/** @type {unknown} */ ({ id, title: `Session ${id}`, status, folder }));
+    const sessions = [session('a', 'idle'), session('b', 'working', '/work/app-wt'), session('c', 'stopped'), session('d', 'waiting'), session('e', 'queued')];
+    // Act
+    const one = git.pullConfirm([sessions[0], sessions[1], sessions[3]], '/work/app');
+    const two = git.pullConfirm(sessions, '/work/app');
+    // Assert
+    expect(git.pullConfirm(sessions.slice(0, 3), '/work/app'), 'idle, stopped or in a worktree: nothing to protect').to.equal(null);
+    expect(one).to.deep.include({ headline: 'An agent is working here', confirmLabel: 'Pull anyway' });
+    expect(one?.message).to.contain('Session d');
+    expect(two?.message, 'several sessions are counted').to.contain('2 sessions');
   });
 
   it('shows nothing without a branch to sync', () => {

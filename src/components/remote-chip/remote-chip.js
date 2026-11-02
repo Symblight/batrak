@@ -11,6 +11,7 @@ import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import cloudUploadIcon from '@material-design-icons/svg/outlined/cloud_upload.svg?raw';
 import errorIcon from '@material-design-icons/svg/outlined/error.svg?raw';
 import swapVertIcon from '@material-design-icons/svg/outlined/swap_vert.svg?raw';
+import '../confirm-dialog/confirm-dialog.js';
 import { FloatingController } from '../../controllers/floating/FloatingController.js';
 import { git } from '../../hooks/git/git.js';
 import styles from './remote-chip.css?inline';
@@ -31,7 +32,7 @@ const ICONS = {
 /**
  * @tag acp-remote-chip
  * @summary The branch's sync with its remote as a compact chip: what to push or pull (a click does it), "Publish" without an upstream, "No remote", busy while an operation runs, and after a failure a popover with git's message and what to do about it; nothing for a detached HEAD.
- * @fires acp-git-remote `{ action: 'fetch' | 'pull' | 'push' | 'publish' | 'dismiss' }`
+ * @fires acp-git-remote `{ action, expected? }` `action` is a `GitRemoteAction`, `'showChanges'` or `'dismiss'`; `expected` (`forcePush`) is the upstream commit it replaces.
  */
 export class AcpRemoteChip extends LitElement {
   static properties = {
@@ -72,7 +73,7 @@ export class AcpRemoteChip extends LitElement {
   });
 
   /** When light dismiss last closed the popover: the press on the chip that caused it mustn't reopen it. */
-  #closedAt = 0;
+  #closedAt = -Infinity;
 
   willUpdate() {
     this.state = git.remoteChip(this.repo, Date.now(), this.op)?.id ?? null;
@@ -84,10 +85,33 @@ export class AcpRemoteChip extends LitElement {
     if (!this.open) this.#closedAt = performance.now();
   };
 
-  /** @param {string} action */
-  #ask(action) {
+  /**
+   * @param {string} action
+   * @param {string | null} [expected]
+   */
+  #ask(action, expected = null) {
     this.#popover?.hidePopover();
-    this.dispatchEvent(new CustomEvent('acp-git-remote', { detail: { action }, bubbles: true, composed: true }));
+    this.dispatchEvent(
+      new CustomEvent('acp-git-remote', { detail: { action, ...(expected ? { expected } : {}) }, bubbles: true, composed: true }),
+    );
+  }
+
+  /** Replaces the remote branch with the local one: asked first, with the commits that would be lost. */
+  async #forcePush() {
+    const repo = this.repo;
+    if (!repo) return;
+    this.#popover?.hidePopover();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+    const upstream = repo.upstream ?? 'the remote branch';
+    const plural = (/** @type {number} */ n) => `${n} commit${n === 1 ? '' : 's'}`;
+    const confirmed = await dialog.confirm({
+      headline: 'Force push?',
+      message: `Replace ${upstream} with your ${plural(repo.ahead)}? The ${plural(repo.behind)} only on ${upstream} will be lost.`,
+      detail: 'If it has moved since you last fetched, the push is refused instead.',
+      confirmLabel: 'Force push',
+      destructive: true,
+    });
+    if (confirmed) this.#ask('forcePush', repo.upstreamSha);
   }
 
   #onChipClick(/** @type {string | null} */ action) {
@@ -98,19 +122,31 @@ export class AcpRemoteChip extends LitElement {
     }
   }
 
-  #renderFailure() {
+  #renderPopover() {
     const op = this.op;
-    if (op?.state !== 'failed' || !op.error) return nothing;
-    const { action, error } = op;
-    const title = git.remoteChip(this.repo, Date.now(), op)?.label ?? '';
-    return html`<div class="acp-remote-chip__popover" popover="auto" role="dialog" aria-label=${title} @beforetoggle=${this.#onToggle}>
-      <p class="acp-remote-chip__title">${title}</p>
-      <pre class="acp-remote-chip__message">${error.message}</pre>
-      <div class="acp-remote-chip__actions">
-        <md-button variant="text" @click=${() => this.#ask(action)}>Retry</md-button>
-        ${error.kind === 'rejected' ? html`<md-button variant="text" @click=${() => this.#ask('pull')}>Pull</md-button>` : nothing}
-        <md-button variant="text" @click=${() => this.#ask('dismiss')}>Dismiss</md-button>
-      </div>
+    if (op?.state === 'failed' && op.error) {
+      const { action, error } = op;
+      const title = git.remoteChip(this.repo, Date.now(), op)?.label ?? '';
+      // A pull stopped on a conflict can't just run again: look at it, or give it up.
+      const conflict = error.kind === 'conflict';
+      return html`<div class="acp-remote-chip__popover" popover="auto" role="dialog" aria-label=${title} @beforetoggle=${this.#onToggle}>
+        <p class="acp-remote-chip__title">${title}</p>
+        <pre class="acp-remote-chip__message">${error.message}</pre>
+        <div class="acp-remote-chip__actions">
+          ${conflict
+            ? html`<md-button variant="text" @click=${() => this.#ask('showChanges')}>Show Changes</md-button>
+                <md-button variant="text" @click=${() => this.#ask('abort')}>Abort</md-button>`
+            : html`<md-button variant="text" @click=${() => this.#ask(action)}>Retry</md-button>`}
+          ${error.kind === 'rejected' ? html`<md-button variant="text" @click=${() => this.#ask('pull')}>Pull</md-button>` : nothing}
+          <md-button variant="text" @click=${() => this.#ask('dismiss')}>Dismiss</md-button>
+        </div>
+      </div>`;
+    }
+    if (this.state !== 'diverged') return nothing;
+    return html`<div class="acp-remote-chip__popover acp-remote-chip__popover_menu" popover="auto" role="dialog" aria-label="Diverged from the remote" @beforetoggle=${this.#onToggle}>
+      <md-button variant="text" @click=${() => this.#ask('pullRebase')}>Pull with rebase</md-button>
+      <md-button variant="text" @click=${() => this.#ask('pullMerge')}>Pull with merge</md-button>
+      <md-button variant="text" @click=${() => void this.#forcePush()}>Force push…</md-button>
     </div>`;
   }
 
@@ -118,19 +154,20 @@ export class AcpRemoteChip extends LitElement {
     const chip = git.remoteChip(this.repo, Date.now(), this.op);
     if (!chip) return nothing;
     const failed = chip.id === 'failed';
+    const menu = failed || chip.id === 'diverged';
     const content = html`${chip.id === 'busy'
       ? html`<md-progress-circular class="acp-remote-chip__spinner"></md-progress-circular>`
       : chip.icon
         ? html`<md-icon class="acp-remote-chip__icon">${unsafeSVG(ICONS[chip.icon] ?? '')}</md-icon>`
         : nothing}${chip.label}`;
     const chipElement =
-      chip.action || failed
+      chip.action || menu
         ? html`<button
             id="acp-remote-chip"
             class="acp-remote-chip__chip acp-remote-chip__chip_action"
             type="button"
-            aria-haspopup=${failed ? 'dialog' : nothing}
-            aria-expanded=${failed ? String(this.open) : nothing}
+            aria-haspopup=${menu ? 'dialog' : nothing}
+            aria-expanded=${menu ? String(this.open) : nothing}
             @click=${() => this.#onChipClick(chip.action)}
           >
             ${content}
@@ -138,7 +175,8 @@ export class AcpRemoteChip extends LitElement {
         : html`<span id="acp-remote-chip" class="acp-remote-chip__chip">${content}</span>`;
     return html`${chipElement}
       <md-tooltip for="acp-remote-chip" show-delay="800" placement="bottom">${chip.tooltip}</md-tooltip>
-      ${this.#renderFailure()}`;
+      ${this.#renderPopover()}
+      <acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }
 
