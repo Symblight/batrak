@@ -78,12 +78,21 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Talks to a remote (fetch, push): a longer timeout.
+    /// Talks to a remote (fetch, push): a longer timeout, and on it the whole process group is
+    /// stopped like `Hooks`.
     Remote,
     /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
     /// hook keeps running.
     Hooks,
+}
+
+impl Mode {
+    /// git leads its own process group, stopped as a whole on a timeout: hooks, ssh and credential
+    /// helpers it started hold our output pipes open and would outlive a kill of git alone.
+    fn own_group(self) -> bool {
+        matches!(self, Mode::Remote | Mode::Hooks)
+    }
 }
 
 #[derive(Debug, Default)]
@@ -173,7 +182,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
         .stderr(Stdio::piped());
     no_window(&mut command);
     #[cfg(unix)]
-    if mode == Mode::Hooks {
+    if mode.own_group() {
         use std::os::unix::process::CommandExt;
         command.process_group(0);
     }
@@ -198,7 +207,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
         Mode::Remote => REMOTE_TIMEOUT,
         Mode::Hooks => HOOKS_TIMEOUT,
     };
-    let status = wait_with_timeout(&mut child, timeout, mode == Mode::Hooks);
+    let status = wait_with_timeout(&mut child, timeout, mode.own_group());
     if let Some(writer) = writer {
         let _ = writer.join();
     }
@@ -235,7 +244,7 @@ fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
     (bytes, truncated)
 }
 
-/// `group`: the child leads its own process group (`Mode::Hooks`), stopped as a whole on timeout.
+/// `group`: the child leads its own process group (`Mode::own_group`), stopped as a whole on timeout.
 fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
@@ -351,6 +360,23 @@ mod tests {
         thread::sleep(Duration::from_millis(100));
         // SAFETY: signal 0 only checks that the process exists.
         assert_ne!(unsafe { libc::kill(sleeper, 0) }, 0, "the hook's child is gone");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_remote_git_leads_its_own_process_group_so_a_timeout_stops_ssh_and_helpers_too() {
+        use std::os::unix::fs::PermissionsExt;
+        // A git that prints its own pid and its process group.
+        let dir = crate::git::test_repo::temp_dir("remote-group");
+        let git = dir.join("git");
+        std::fs::write(&git, "#!/bin/sh\necho $$ $(ps -o pgid= -p $$)\n").unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let out = run(&git, &dir, &[OsStr::new("fetch")], Mode::Remote).unwrap();
+
+        let out = String::from_utf8(out).unwrap();
+        let ids: Vec<&str> = out.split_whitespace().collect();
+        assert_eq!(ids[0], ids[1], "pid and process group: {out}");
     }
     use crate::git::test_repo::{git_bin, TestRepo};
 
