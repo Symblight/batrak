@@ -48,10 +48,10 @@ describe('acp-session-sync', () => {
     expect(root.querySelector('md-icon'), 'no rotating icon').to.equal(null);
   });
 
-  it("says how each agent did in its md-tooltip, with a warning dot when one needs the user", async () => {
+  it("adds how each agent did to its short md-tooltip, with a warning dot, when one needs the user", async () => {
     const { root } = await render({ running: false, report: REPORT });
-    expect(tooltip(root).lines).to.deep.equal(['Synced just now', 'Claude Code · 3 sessions', 'Codex · needs sign-in']);
-    expect(root.querySelector('md-icon-button')?.getAttribute('aria-label')).to.equal('Resync sessions');
+    expect(tooltip(root).lines).to.deep.equal(['Refresh sessions', 'Claude Code · 3 sessions', 'Codex · needs sign-in']);
+    expect(root.querySelector('md-icon-button')?.getAttribute('aria-label')).to.equal('Refresh sessions');
     expect(root.querySelector('.acp-session-sync__warning')).to.not.equal(null);
     expect(root.querySelector('md-progress-circular'), 'no spinner when idle').to.equal(null);
     expect(root.querySelector('md-icon')).to.not.equal(null);

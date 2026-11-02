@@ -21,8 +21,17 @@
   color: var(--acp-color-on-surface-variant);
 }
 
+/* 28px icon button: 18px icon + 4px padding + the library's 1px border. */
+.acp-session-list__open-folder {
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+}
+
+.acp-session-list__open-folder::part(button) {
+  padding: 4px;
+}
+
 .acp-session-list__open-folder-icon {
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-md);
 }
 
 .acp-session-list__list {
