@@ -21,6 +21,7 @@ import styles from './toolbar.css?inline';
  * @fires acp-column-toggle `{ column }`
  * @fires acp-git-remote `{ action }` From the remote chip.
  * @fires acp-github-sign-in `null` From the GitHub slot.
+ * @fires acp-github-open `{ url }` From the GitHub slot.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
@@ -29,6 +30,7 @@ export class AcpToolbar extends LitElement {
     remoteOp: { attribute: false },
     fetchError: { attribute: false },
     githubSlot: { attribute: false },
+    githubReply: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -47,6 +49,8 @@ export class AcpToolbar extends LitElement {
     this.fetchError = null;
     /** @type {import('../../hooks/github/types.js').GithubSlot} What the GitHub slot beside the remote chip shows. */
     this.githubSlot = 'hidden';
+    /** @type {import('../../hooks/github/types.js').GithubPrReply | null} The shown branch's pull request lookup. */
+    this.githubReply = null;
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
@@ -116,7 +120,7 @@ export class AcpToolbar extends LitElement {
     return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
       <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
       <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>
-      <acp-pull-request-chip .status=${this.githubSlot}></acp-pull-request-chip>`;
+      <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
 
   render() {

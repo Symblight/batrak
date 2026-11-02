@@ -2,7 +2,10 @@
 
 use tauri::{AppHandle, Emitter};
 
-use crate::github::{self, Account};
+use crate::github::{self, Account, PrReply, PrStatus};
+use crate::workspace::Workspaces;
+use tauri::State;
+use crate::git::binary;
 
 use super::blocking;
 
@@ -35,4 +38,20 @@ pub async fn github_sign_in(app: AppHandle) -> Result<Account, String> {
 #[tauri::command]
 pub fn github_sign_in_cancel() {
     github::cancel_sign_in();
+}
+
+/// The pull request of the root's branch on GitHub, with the repository's default branch. `signedOut`
+/// when `gh` has no login; empty when the branch's remote isn't on github.com.
+#[tauri::command]
+pub async fn github_pull_request(workspaces: State<'_, Workspaces>, root_id: String) -> Result<PrReply, String> {
+    let root = workspaces.get(&root_id)?;
+    blocking(move || {
+        let Some(gh) = github::gh() else { return Ok(PrReply { status: PrStatus::SignedOut, pr: None, default_branch: None, message: Some("The GitHub CLI isn't installed".into()) }) };
+        let state = root.git.head(binary::git()?, &root.path, root.epoch())?;
+        let Some((repo, branch)) = state.as_ref().and_then(|s| Some((s.remote.as_ref()?.github.as_ref()?, s.branch.as_deref()?))) else {
+            return Ok(PrReply { status: PrStatus::Ok, pr: None, default_branch: None, message: None });
+        };
+        github::pull_request(&gh, &repo.owner, &repo.repo, branch)
+    })
+    .await?
 }

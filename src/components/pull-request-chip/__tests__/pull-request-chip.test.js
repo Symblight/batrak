@@ -27,4 +27,40 @@ describe('acp-pull-request-chip', () => {
       if (button) expect(tooltipOf(button), status).to.be.a('string').and.not.equal('');
     }
   });
+
+  it('shows the branch\'s pull request, or Create PR where one can be made, and opens the right page', async () => {
+    const repo = /** @type {import('../../../hooks/git/types.js').GitRepoState} */ ({
+      branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: null, hasRemotes: true, fetchedAt: null,
+      remote: { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } },
+    });
+    const pr = (/** @type {object} */ fields = {}) => ({ number: 128, title: 'T', url: 'https://github.com/a/b/pull/128', state: 'OPEN', isDraft: false, reviewDecision: null, checks: 'SUCCESS', ...fields });
+    const reply = (/** @type {object | null} */ found, defaultBranch = 'main') => ({ status: 'ok', pr: found, defaultBranch, message: null });
+    /** @type {[string, string, object | null, object, string | null, string | null, string | null][]} label, tooltip, reply, repo, opens, dot */
+    const cases = [
+      ['open', 'ok', reply(pr()), repo, '#128 Open', 'https://github.com/a/b/pull/128', 'ok'],
+      ['draft, checks running', 'ok', reply(pr({ isDraft: true, checks: 'PENDING' })), repo, '#128 Draft', 'https://github.com/a/b/pull/128', 'run'],
+      ['merged', 'ok', reply(pr({ state: 'MERGED' })), repo, '#128 Merged', 'https://github.com/a/b/pull/128', null],
+      ['none yet', 'ok', reply(null), repo, 'Create PR', 'https://github.com/a/b/compare/main...feat?expand=1', null],
+      ['none, not published', 'ok', reply(null), { ...repo, upstream: null }, 'Create PR', null, null],
+      ['looked up with no answer', 'ok', null, repo, null, null, null],
+      ['no access', 'noAccess', reply(null), repo, 'No access', null, null],
+    ];
+    for (const [why, status, found, state, label, opens, dot] of cases) {
+      // Arrange
+      const el = await fixture(html`<acp-pull-request-chip .status=${status} .reply=${found} .repo=${state}></acp-pull-request-chip>`);
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const chip = /** @type {HTMLButtonElement | null} */ (root.querySelector('.acp-pull-request-chip__button'));
+      /** @type {unknown[]} */
+      const asked = [];
+      el.addEventListener('acp-github-open', (/** @type {Event} */ e) => asked.push(/** @type {CustomEvent} */ (e).detail));
+      // Act
+      chip?.click();
+      // Assert
+      expect(chip?.textContent?.trim() ?? null, why).to.equal(label);
+      expect(asked, why).to.deep.equal(opens ? [{ url: opens }] : []);
+      expect(chip?.disabled ?? false, why).to.equal(label === 'Create PR' && !opens);
+      expect(root.querySelector('.acp-pull-request-chip__dot')?.getAttribute('data-checks') ?? null, why).to.equal(dot);
+      if (chip) expect(tooltipOf(chip), why).to.be.a('string').and.not.equal('');
+    }
+  });
 });

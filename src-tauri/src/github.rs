@@ -67,17 +67,32 @@ fn command(gh: &Path, args: &[&str]) -> Command {
     command
 }
 
-/// Who `gh` is signed in as on github.com.
-pub fn account(gh: Option<&Path>) -> Result<Account, String> {
-    let Some(gh) = gh else { return Ok(Account::NoCli) };
-    let mut child = command(gh, &["auth", "status", "--hostname", HOST, "--json", "hosts"])
-        .spawn()
-        .map_err(|e| format!("failed to run gh: {e}"))?;
+/// What a `gh` call printed and how it ended.
+struct Ran {
+    success: bool,
+    stdout: String,
+    stderr: String,
+}
+
+/// Runs `gh` to the end, or stops it after `timeout`.
+fn run(gh: &Path, args: &[&str], timeout: Duration) -> Result<Ran, String> {
+    let mut child = command(gh, args).spawn().map_err(|e| format!("failed to run gh: {e}"))?;
+    // Drained on threads: a full pipe would stop gh before it exits.
+    let drain = |pipe: Option<Box<dyn std::io::Read + Send>>| {
+        std::thread::spawn(move || {
+            let mut text = String::new();
+            if let Some(mut pipe) = pipe {
+                let _ = std::io::Read::read_to_string(&mut pipe, &mut text);
+            }
+            text
+        })
+    };
+    let (stdout, stderr) = (drain(child.stdout.take().map(boxed)), drain(child.stderr.take().map(boxed)));
     let started = Instant::now();
     let status = loop {
         match child.try_wait() {
             Ok(Some(status)) => break status,
-            Ok(None) if started.elapsed() > STATUS_TIMEOUT => {
+            Ok(None) if started.elapsed() > timeout => {
                 let _ = child.kill();
                 let _ = child.wait();
                 return Err("gh timed out".to_owned());
@@ -86,14 +101,17 @@ pub fn account(gh: Option<&Path>) -> Result<Account, String> {
             Err(e) => return Err(format!("failed to wait for gh: {e}")),
         }
     };
-    let mut out = String::new();
-    if let Some(mut stdout) = child.stdout.take() {
-        std::io::Read::read_to_string(&mut stdout, &mut out).map_err(|e| e.to_string())?;
+    Ok(Ran { success: status.success(), stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default().trim().to_owned() })
+}
+
+/// Who `gh` is signed in as on github.com.
+pub fn account(gh: Option<&Path>) -> Result<Account, String> {
+    let Some(gh) = gh else { return Ok(Account::NoCli) };
+    let ran = run(gh, &["auth", "status", "--hostname", HOST, "--json", "hosts"], STATUS_TIMEOUT)?;
+    if !ran.success {
+        return Err(format!("gh failed: {}", ran.stderr));
     }
-    if !status.success() {
-        return Err(format!("gh exited with {status}"));
-    }
-    Ok(parse_account(&out))
+    Ok(parse_account(&ran.stdout))
 }
 
 /// `{"hosts":{"github.com":[{"state":"success","active":true,"login":"x"}]}}` → the active, working login.
@@ -108,6 +126,104 @@ fn parse_account(json: &str) -> Account {
                 .and_then(|a| a["login"].as_str().map(str::to_owned))
         });
     login.map_or(Account::SignedOut, |login| Account::SignedIn { login })
+}
+
+/// A pull request of a branch, as the header shows it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PullRequest {
+    pub number: u64,
+    pub title: String,
+    pub url: String,
+    /// `OPEN`, `MERGED` or `CLOSED`.
+    pub state: String,
+    pub is_draft: bool,
+    /// `APPROVED`, `CHANGES_REQUESTED` or `REVIEW_REQUIRED` once reviews are asked for.
+    pub review_decision: Option<String>,
+    /// The latest commit's checks: `SUCCESS`, `FAILURE`, `ERROR`, `PENDING` or `EXPECTED`; `None` without any.
+    pub checks: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum PrStatus {
+    Ok,
+    /// The signed-in account can't see the repository.
+    NoAccess,
+    /// `gh` has no working login.
+    SignedOut,
+    /// GitHub couldn't be reached, or answered something else.
+    Error,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PrReply {
+    pub status: PrStatus,
+    pub pr: Option<PullRequest>,
+    /// The repository's default branch, the base of a new pull request.
+    pub default_branch: Option<String>,
+    pub message: Option<String>,
+}
+
+impl PrReply {
+    fn failed(status: PrStatus, message: impl Into<String>) -> PrReply {
+        PrReply { status, pr: None, default_branch: None, message: Some(message.into()) }
+    }
+}
+
+const PR_QUERY: &str = "query($owner:String!,$name:String!,$branch:String!){repository(owner:$owner,name:$name){defaultBranchRef{name} \
+    pullRequests(headRefName:$branch,first:5,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url state isDraft reviewDecision \
+    headRepositoryOwner{login} commits(last:1){nodes{commit{statusCheckRollup{state}}}}}}}}";
+
+/// The newest pull request whose head is `branch` of `owner/repo`, through `gh api graphql`. The
+/// variables are `gh` arguments, never part of the query text.
+pub fn pull_request(gh: &Path, owner: &str, repo: &str, branch: &str) -> Result<PrReply, String> {
+    let owner_arg = format!("owner={owner}");
+    let name_arg = format!("name={repo}");
+    let branch_arg = format!("branch={branch}");
+    let query_arg = format!("query={PR_QUERY}");
+    let args = ["api", "graphql", "-F", &owner_arg, "-F", &name_arg, "-F", &branch_arg, "-f", &query_arg];
+    let ran = run(gh, &args, STATUS_TIMEOUT)?;
+    if !ran.success {
+        let text = format!("{} {}", ran.stderr, ran.stdout);
+        let lower = text.to_ascii_lowercase();
+        let first_line = ran.stderr.lines().next().unwrap_or("gh failed").to_owned();
+        return Ok(if lower.contains("not_found") || lower.contains("could not resolve to a repository") {
+            PrReply::failed(PrStatus::NoAccess, first_line)
+        } else if lower.contains("gh auth login") || lower.contains("http 401") || lower.contains("bad credentials") {
+            PrReply::failed(PrStatus::SignedOut, first_line)
+        } else {
+            PrReply::failed(PrStatus::Error, first_line)
+        });
+    }
+    Ok(parse_pull_request(&ran.stdout, owner))
+}
+
+fn parse_pull_request(json: &str, owner: &str) -> PrReply {
+    let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
+        return PrReply::failed(PrStatus::Error, "GitHub answered something unexpected");
+    };
+    let repo = &v["data"]["repository"];
+    let text = |value: &serde_json::Value| value.as_str().map(str::to_owned);
+    // A pull request from a fork that happens to use the same branch name isn't this branch's.
+    let pr = repo["pullRequests"]["nodes"].as_array().and_then(|nodes| {
+        nodes.iter().find(|n| n["headRepositoryOwner"]["login"].as_str().is_some_and(|l| l.eq_ignore_ascii_case(owner)))
+    });
+    PrReply {
+        status: PrStatus::Ok,
+        default_branch: text(&repo["defaultBranchRef"]["name"]),
+        message: None,
+        pr: pr.map(|n| PullRequest {
+            number: n["number"].as_u64().unwrap_or(0),
+            title: text(&n["title"]).unwrap_or_default(),
+            url: text(&n["url"]).unwrap_or_default(),
+            state: text(&n["state"]).unwrap_or_default(),
+            is_draft: n["isDraft"].as_bool().unwrap_or(false),
+            review_decision: text(&n["reviewDecision"]),
+            checks: text(&n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"]),
+        }),
+    }
 }
 
 static SIGNING_IN: AtomicBool = AtomicBool::new(false);
@@ -244,6 +360,39 @@ mod tests {
         }
         assert_eq!(account(None).unwrap(), Account::NoCli);
         assert!(account(Some(&fake_gh("account-broken", "exit 3"))).is_err(), "gh itself failing is not 'signed out'");
+    }
+
+    #[test]
+    fn a_branch_s_pull_request_is_read_from_gh_and_what_went_wrong_is_told_apart() {
+        let node = |owner: &str, number: u64, state: &str, draft: bool, checks: &str| {
+            format!(
+                r#"{{"number":{number},"title":"T{number}","url":"https://github.com/o/r/pull/{number}","state":"{state}","isDraft":{draft},"reviewDecision":null,"headRepositoryOwner":{{"login":"{owner}"}},"commits":{{"nodes":[{{"commit":{{"statusCheckRollup":{checks}}}}}]}}}}"#
+            )
+        };
+        let reply = |nodes: &[String]| {
+            format!(r#"{{"data":{{"repository":{{"defaultBranchRef":{{"name":"main"}},"pullRequests":{{"nodes":[{}]}}}}}}}}"#, nodes.join(","))
+        };
+        let ask = |script: String| pull_request(&fake_gh("pr", &script), "o", "r", "feature/x").unwrap();
+
+        // None, then the newest of this repository's own (a fork's with the same branch name is skipped).
+        let none = ask(format!("echo '{}'", reply(&[])));
+        assert_eq!((none.status, none.pr, none.default_branch.as_deref()), (PrStatus::Ok, None, Some("main")));
+        let open = ask(format!("echo '{}'", reply(&[node("fork", 9, "OPEN", false, "null"), node("O", 8, "OPEN", true, r#"{"state":"PENDING"}"#), node("o", 7, "MERGED", false, "null")])));
+        let pr = open.pr.expect("a pull request");
+        assert_eq!((pr.number, pr.is_draft, pr.checks.as_deref(), pr.state.as_str()), (8, true, Some("PENDING"), "OPEN"));
+
+        // The variables reach gh as arguments, the branch as typed.
+        let echoing = fake_gh("pr-args", r#"for a in "$@"; do case "$a" in branch=*|owner=*|name=*) echo "$a" >> "$0.args";; esac; done; echo '{"data":{"repository":{"pullRequests":{"nodes":[]}}}}'"#);
+        pull_request(&echoing, "o", "r", "feature/x y").unwrap();
+        let args = std::fs::read_to_string(format!("{}.args", echoing.display())).unwrap();
+        assert_eq!(args, "owner=o\nname=r\nbranch=feature/x y\n");
+
+        // Failures.
+        let not_found = ask("echo \"gh: Could not resolve to a Repository with the name 'o/r'.\" >&2; exit 1".into());
+        let signed_out = ask("echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4".into());
+        let offline = ask("echo 'error connecting to api.github.com' >&2; exit 1".into());
+        assert_eq!((not_found.status, signed_out.status, offline.status), (PrStatus::NoAccess, PrStatus::SignedOut, PrStatus::Error));
+        assert_eq!(offline.message.as_deref(), Some("error connecting to api.github.com"));
     }
 
     #[test]

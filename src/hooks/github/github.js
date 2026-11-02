@@ -1,10 +1,13 @@
-import { $githubAccount, $githubSignIn, SIGN_IN_IDLE } from '../../stores/github/github.js';
+import { $rootId } from '../../stores/workspace/workspace.js';
+import { $gitRepo } from '../../stores/git/git.js';
+import { $githubAccount, $githubSignIn, $pullRequest, $pullRequestKey, SIGN_IN_IDLE } from '../../stores/github/github.js';
 import { notify } from '../../stores/notices/notices.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
-import { installCommand, slot } from './rules.js';
+import { createPr, installCommand, prChip, slot } from './rules.js';
 
 /** @typedef {import('./types.js').GithubAccount} GithubAccount */
+/** @typedef {import('./types.js').GithubPrReply} GithubPrReply */
 
 /** Where the one-time code is entered. */
 const DEVICE_URL = 'https://github.com/login/device';
@@ -12,8 +15,11 @@ const DEVICE_URL = 'https://github.com/login/device';
 const CANCELLED = 'Sign-in cancelled';
 /** Window focus asks `gh` again only after this long. */
 const REFRESH_MS = 30_000;
+/** A shown pull request is looked up again this often: its checks and reviews change without the branch moving. */
+const PR_REFRESH_MS = 60_000;
 
 let refreshedAt = 0;
+let pullRequestAt = 0;
 
 /**
  * GitHub through the user's GitHub CLI: who is signed in, and signing in (the CLI opens the
@@ -22,6 +28,8 @@ let refreshedAt = 0;
 export const github = Object.freeze({
   slot,
   installCommand,
+  prChip,
+  createPr,
 
   /** Asks who is signed in; keeps the last answer if `gh` can't say. */
   async refresh() {
@@ -33,17 +41,46 @@ export const github = Object.freeze({
     }
   },
 
+  /** Looks up the shown branch's pull request, if it is on GitHub and an account is signed in. */
+  async refreshPullRequest() {
+    const key = $pullRequestKey.get();
+    const rootId = $rootId.get();
+    const branch = $gitRepo.get().repo?.branch;
+    if (key === null || !rootId || !branch) return;
+    pullRequestAt = Date.now();
+    try {
+      /** @type {GithubPrReply} */
+      const reply = await ipc.invoke('github_pull_request', { rootId });
+      if ($pullRequestKey.get() !== key) return;
+      $pullRequest.set({ rootId, branch, reply });
+      // The account stopped working since it was read.
+      if (reply.status === 'signedOut') void github.refresh();
+    } catch (err) {
+      app.log('info', `Pull request lookup failed: ${err}`);
+    }
+  },
+
   /**
-   * Reads the account now and again when the window gets focus.
+   * Reads the account now and again when the window gets focus; looks up the shown branch's pull
+   * request when the branch or its remote commit moves, every minute, and on focus.
    * @returns {() => void} Stops.
    */
   start() {
     void github.refresh();
     const onFocus = () => {
       if (Date.now() - refreshedAt > REFRESH_MS) void github.refresh();
+      if (Date.now() - pullRequestAt > REFRESH_MS) void github.refreshPullRequest();
     };
+    const timer = setInterval(() => {
+      if (document.visibilityState === 'visible') void github.refreshPullRequest();
+    }, PR_REFRESH_MS);
+    const stopKey = $pullRequestKey.subscribe((key) => key && void github.refreshPullRequest());
     window.addEventListener('focus', onFocus);
-    return () => window.removeEventListener('focus', onFocus);
+    return () => {
+      window.removeEventListener('focus', onFocus);
+      clearInterval(timer);
+      stopKey();
+    };
   },
 
   /** Signs in: the CLI's one-time code in a dialog, the browser opened on the page for it. */

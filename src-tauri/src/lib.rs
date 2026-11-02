@@ -162,6 +162,7 @@ pub fn run() {
             commands::github::github_account,
             commands::github::github_sign_in,
             commands::github::github_sign_in_cancel,
+            commands::github::github_pull_request,
             commands::terminal::terminal_open,
             commands::terminal::terminal_attach,
             commands::terminal::terminal_write,

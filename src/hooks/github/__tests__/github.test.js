@@ -1,7 +1,9 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $githubAccount, $githubSignIn, SIGN_IN_IDLE } from '../../../stores/github/github.js';
+import { $gitRepo } from '../../../stores/git/git.js';
+import { $githubAccount, $githubSignIn, $pullRequestHere, SIGN_IN_IDLE } from '../../../stores/github/github.js';
+import { $workspace } from '../../../stores/workspace/workspace.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { github } from '../github.js';
 
@@ -26,6 +28,9 @@ describe('github sign-in', () => {
     answers = { github_account: () => ({ state: 'signedOut' }) };
     $githubAccount.set(null);
     $githubSignIn.set(SIGN_IN_IDLE);
+    $githubAccount.set(null);
+    $workspace.set(null);
+    $gitRepo.set({ repo: null, error: null });
     $notices.set([]);
     mockIPC(
       (cmd, args) => {
@@ -87,5 +92,42 @@ describe('github sign-in', () => {
     await github.signIn();
     expect($githubSignIn.get().phase).to.equal('noCli');
     expect(sent('github_sign_in'), 'no third start').to.have.length(2);
+  });
+  it('looks up the shown branch\'s pull request once signed in, again when the branch moves, and not for what is not on GitHub', async () => {
+    // Arrange
+    const reply = { status: 'ok', pr: { number: 8, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null }, defaultBranch: 'main', message: null };
+    answers.github_pull_request = () => reply;
+    const onGithub = { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } };
+    const repo = { branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: 'u1', remote: onGithub, hasRemotes: true, fetchedAt: null };
+    const stop = github.start();
+    await until(() => sent('github_account').length === 1);
+    $workspace.set({ path: '/work/a', name: 'a', rootId: 'r1' });
+
+    // Act: not signed in, then signed in
+    $gitRepo.set({ repo, error: null });
+    $githubAccount.set({ state: 'signedOut' });
+    await new Promise((r) => setTimeout(r, 30));
+    const whileSignedOut = sent('github_pull_request').length;
+    $githubAccount.set({ state: 'signedIn', login: 'octo' });
+    await until(() => $pullRequestHere.get() !== null);
+    // Assert
+    expect(whileSignedOut).to.equal(0);
+    expect(sent('github_pull_request').map((c) => c.args)).to.deep.equal([{ rootId: 'r1' }]);
+    expect($pullRequestHere.get()).to.deep.equal({ rootId: 'r1', branch: 'feat', reply });
+
+    // Act: a push moves the remote commit; counts alone do not matter
+    $gitRepo.set({ repo: { ...repo, behind: 2 }, error: null });
+    $gitRepo.set({ repo: { ...repo, upstreamSha: 'u2' }, error: null });
+    await until(() => sent('github_pull_request').length === 2);
+    // Assert
+    expect(sent('github_pull_request')).to.have.length(2);
+
+    // Act: another branch has no lookup of its own yet, and a remote elsewhere has none at all
+    $gitRepo.set({ repo: { ...repo, branch: 'other', remote: { ...onGithub, github: null } }, error: null });
+    await new Promise((r) => setTimeout(r, 30));
+    // Assert
+    expect($pullRequestHere.get(), 'not feat\'s').to.equal(null);
+    expect(sent('github_pull_request')).to.have.length(2);
+    stop();
   });
 });

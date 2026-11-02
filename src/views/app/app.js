@@ -9,7 +9,7 @@ import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath, openChanges } from '../../stores/editor/editor.js';
-import { $githubAccount, $githubSignIn } from '../../stores/github/github.js';
+import { $githubAccount, $githubSignIn, $pullRequestHere } from '../../stores/github/github.js';
 import { $gitFetchErrorHere, $gitRemoteOpHere, $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
@@ -131,6 +131,7 @@ export class AcpApp extends ViewElement {
   #gitFetchError = new StoreController(this, { store: $gitFetchErrorHere });
   #githubAccount = new StoreController(this, { store: $githubAccount });
   #githubSignIn = new StoreController(this, { store: $githubSignIn });
+  #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
@@ -488,12 +489,14 @@ export class AcpApp extends ViewElement {
         .git=${this.#gitRepo.value}
         .remoteOp=${this.#gitRemoteOp.value}
         .fetchError=${this.#gitFetchError.value}
-        .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value)}
+        .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value, this.#pullRequest.value?.reply ?? null)}
+        .githubReply=${this.#pullRequest.value?.reply ?? null}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
         @acp-git-remote=${this.#onGitRemote}
         @acp-github-sign-in=${this.#onGithubSignIn}
+        @acp-github-open=${this.#onGithubOpen}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split
