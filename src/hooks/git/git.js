@@ -1,11 +1,12 @@
 import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOp, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
+import { notify } from '../../stores/notices/notices.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { branchRows, switchBlocked } from './branches.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
-import { fetchDue, pullConfirm, remoteChip, remoteFailure } from './remote.js';
+import { fetchDue, pullConfirm, remoteChip, remoteDone, remoteFailure } from './remote.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
@@ -194,6 +195,7 @@ export const git = Object.freeze({
   relativePath,
   remoteChip,
   pullConfirm,
+  remoteDone,
   branchRows,
   switchBlocked,
   fetchDue,
@@ -207,6 +209,7 @@ export const git = Object.freeze({
   async remote(action, expected = null) {
     const rootId = $rootId.get();
     if (rootId === null || $gitRemoteOp.get()?.state === 'running') return;
+    const before = $gitRepo.get().repo;
     $gitRemoteOp.set({ rootId, action, state: 'running', error: null });
     try {
       /** @type {GitRepoState} */
@@ -214,6 +217,7 @@ export const git = Object.freeze({
       if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
       if (action === 'fetch') clearFetchError(rootId);
       $gitRemoteOp.set(null);
+      if (before) notify('info', remoteDone(action, before, repo));
     } catch (err) {
       const error = remoteError(err);
       $gitRemoteOp.set({ rootId, action, state: 'failed', error });

@@ -297,6 +297,7 @@ describe('git', () => {
     // Arrange
     const git = await started();
     const rootId = await open();
+    await until(() => $gitRepo.get().repo !== null);
     /** @type {((repo: unknown) => void)[]} */
     const answering = [];
     answers.git_remote = () => new Promise((resolve) => answering.push(resolve));
@@ -312,6 +313,7 @@ describe('git', () => {
     expect(sent('git_remote')).to.deep.equal([{ rootId, action: 'push' }]);
     expect($gitRepo.get().repo?.upstream).to.equal('origin/main');
     expect($gitRemoteOp.get(), 'done: nothing left to show').to.equal(null);
+    expect($notices.get().map((n) => [n.level, n.message]), 'the result is told in a snackbar').to.deep.equal([['info', 'Pushed to origin/main']]);
   });
 
   it('keeps a failed operation with its kind and message, tells the user once, and forgets it when dismissed', async () => {

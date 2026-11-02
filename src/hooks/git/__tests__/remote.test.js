@@ -124,3 +124,28 @@ describe('git remote chip', () => {
     expect(git.remoteChip(repo({ branch: null, detached: true, upstream: null }), NOW), 'detached').to.equal(null);
   });
 });
+
+describe('git remote result', () => {
+  it('words what an operation did, counting from the branch as it was before the click', () => {
+    /** @type {[string, import('../types.js').GitRemoteAction, Partial<import('../types.js').GitRepoState>, Partial<import('../types.js').GitRepoState>, string][]} */
+    const cases = [
+      ['push', 'push', { ahead: 4 }, { ahead: 0 }, 'Pushed 4 commits to origin/main'],
+      ['push of one', 'push', { ahead: 1 }, { ahead: 0 }, 'Pushed 1 commit to origin/main'],
+      ['publish', 'publish', { upstream: null }, { upstream: 'origin/main' }, 'Published main to origin'],
+      ['force push', 'forcePush', { ahead: 4, behind: 2 }, { ahead: 0, behind: 0 }, 'Force pushed main to origin/main'],
+      ['pull', 'pull', { behind: 2 }, { behind: 0 }, 'Pulled 2 commits from origin/main'],
+      ['pull by rebase', 'pullRebase', { ahead: 1, behind: 2 }, { ahead: 1, behind: 0 }, 'Pulled 2 commits from origin/main'],
+      ['pull with nothing new', 'pull', { behind: 0 }, { behind: 0 }, 'Already up to date with origin/main'],
+      ['fetch with nothing new', 'fetch', {}, {}, 'Up to date with origin/main'],
+      ['fetch that found commits', 'fetch', {}, { behind: 3 }, 'Fetched origin: 3 commits to pull'],
+      ['fetch of a branch with no upstream', 'fetch', { upstream: null }, { upstream: null }, 'Fetched origin'],
+      ['abort', 'abort', { behind: 2 }, { behind: 2 }, 'Pull aborted'],
+    ];
+    for (const [why, action, before, after, message] of cases) {
+      // Act
+      const done = git.remoteDone(action, repo(before), repo(after));
+      // Assert
+      expect(done, why).to.equal(message);
+    }
+  });
+});

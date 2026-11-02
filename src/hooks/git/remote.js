@@ -59,6 +59,36 @@ export function pullConfirm(sessions, folder) {
 const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
 
 /**
+ * What an operation did, for the snackbar once it succeeded.
+ * @param {GitRemoteAction} action
+ * @param {GitRepoState} before The branch as the user saw it when clicking: what a push or pull moved is counted from it.
+ * @param {GitRepoState} after
+ * @returns {string}
+ */
+export function remoteDone(action, before, after) {
+  const remote = after.remote?.name ?? before.remote?.name ?? 'the remote';
+  const upstream = after.upstream ?? before.upstream ?? remote;
+  const branch = after.branch ?? before.branch ?? 'the branch';
+  switch (action) {
+    case 'push':
+      return before.ahead ? `Pushed ${count(before.ahead, 'commit')} to ${upstream}` : `Pushed to ${upstream}`;
+    case 'publish':
+      return `Published ${branch} to ${remote}`;
+    case 'forcePush':
+      return `Force pushed ${branch} to ${upstream}`;
+    case 'pull':
+    case 'pullRebase':
+    case 'pullMerge':
+      return before.behind ? `Pulled ${count(before.behind, 'commit')} from ${upstream}` : `Already up to date with ${upstream}`;
+    case 'fetch':
+      if (after.behind) return `Fetched ${remote}: ${count(after.behind, 'commit')} to pull`;
+      return after.upstream ? `Up to date with ${upstream}` : `Fetched ${remote}`;
+    case 'abort':
+      return 'Pull aborted';
+  }
+}
+
+/**
  * What the header's remote chip shows for the branch; `null` when there is no branch to sync.
  * @param {GitRepoState | null} repo
  * @param {number} now ms.
