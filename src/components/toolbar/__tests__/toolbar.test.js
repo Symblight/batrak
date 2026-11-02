@@ -18,12 +18,14 @@ describe('acp-toolbar', () => {
       .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .git=${GIT}
       .remoteOp=${OP}
+      .githubSlot=${'signedOut'}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
     expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main');
     const chip = root.querySelector('acp-remote-chip');
     expect([chip?.repo, chip?.op], 'the sync state is the chip\'s').to.deep.equal([GIT.repo, OP]);
+    expect(root.querySelector('acp-pull-request-chip')?.status, 'GitHub slot').to.equal('signedOut');
     expect(root.querySelector('[title]')).to.equal(null);
   });
 

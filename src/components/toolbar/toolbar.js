@@ -3,6 +3,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
+import '../pull-request-chip/pull-request-chip.js';
 import '../remote-chip/remote-chip.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/open_in_full.svg?raw';
@@ -19,6 +20,7 @@ import styles from './toolbar.css?inline';
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-git-remote `{ action }` From the remote chip.
+ * @fires acp-github-sign-in `null` From the GitHub slot.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
@@ -26,6 +28,7 @@ export class AcpToolbar extends LitElement {
     git: { attribute: false },
     remoteOp: { attribute: false },
     fetchError: { attribute: false },
+    githubSlot: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -42,6 +45,8 @@ export class AcpToolbar extends LitElement {
     this.remoteOp = null;
     /** @type {import('../../hooks/git/types.js').GitFetchError | null} Why the shown project's last background fetch failed. */
     this.fetchError = null;
+    /** @type {import('../../hooks/github/types.js').GithubSlot} What the GitHub slot beside the remote chip shows. */
+    this.githubSlot = 'hidden';
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
@@ -110,7 +115,8 @@ export class AcpToolbar extends LitElement {
       .join(', ');
     return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
       <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
-      <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>`;
+      <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>
+      <acp-pull-request-chip .status=${this.githubSlot}></acp-pull-request-chip>`;
   }
 
   render() {

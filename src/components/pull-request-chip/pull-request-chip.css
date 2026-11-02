@@ -1,0 +1,33 @@
+:host {
+  display: inline-flex;
+  flex: none;
+}
+/* MD3 compact text button: 24px, 8px radius, 12px label, 16px icon. */
+.acp-pull-request-chip__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  box-sizing: border-box;
+  height: 24px;
+  padding-inline: var(--acp-space-1-5) var(--acp-space-2);
+  border: 0;
+  border-radius: var(--acp-shape-corner-small);
+  background: transparent;
+  color: var(--acp-color-primary);
+  font-family: inherit;
+  font-size: var(--acp-font-size-xs);
+  font-weight: var(--acp-font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--acp-color-primary) 8%, transparent);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 1px;
+  }
+}
+.acp-pull-request-chip__icon {
+  font-size: var(--acp-icon-size-sm);
+}

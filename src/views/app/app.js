@@ -4,10 +4,12 @@ import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { git } from '../../hooks/git/git.js';
+import { github } from '../../hooks/github/github.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath, openChanges } from '../../stores/editor/editor.js';
+import { $githubAccount, $githubSignIn } from '../../stores/github/github.js';
 import { $gitFetchErrorHere, $gitRemoteOpHere, $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
@@ -127,6 +129,8 @@ export class AcpApp extends ViewElement {
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #gitRemoteOp = new StoreController(this, { store: $gitRemoteOpHere });
   #gitFetchError = new StoreController(this, { store: $gitFetchErrorHere });
+  #githubAccount = new StoreController(this, { store: $githubAccount });
+  #githubSignIn = new StoreController(this, { store: $githubSignIn });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
@@ -215,6 +219,7 @@ export class AcpApp extends ViewElement {
     agents.start();
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
+    github.start();
     sessions.followRoot();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }
@@ -363,6 +368,18 @@ export class AcpApp extends ViewElement {
     await git.remote(action, expected);
   };
 
+  #onGithubSignIn = () => void github.signIn();
+
+  #onGithubCancel = () => github.cancelSignIn();
+
+  /** @param {Event} e */
+  #onGithubOpen = (e) => {
+    app.openUrl(/** @type {CustomEvent<{ url: string }>} */ (e).detail.url).catch((err) => app.reportError('Opening the page failed', err));
+  };
+
+  /** @param {Event} e */
+  #onGithubCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the code failed');
+
   /** @param {Event} e */
   #onColumnToggle(e) {
     toggleColumn(/** @type {CustomEvent<{ column: string }>} */ (e).detail.column);
@@ -471,10 +488,12 @@ export class AcpApp extends ViewElement {
         .git=${this.#gitRepo.value}
         .remoteOp=${this.#gitRemoteOp.value}
         .fetchError=${this.#gitFetchError.value}
+        .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value)}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
         @acp-git-remote=${this.#onGitRemote}
+        @acp-github-sign-in=${this.#onGithubSignIn}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split
@@ -537,6 +556,13 @@ export class AcpApp extends ViewElement {
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
+      <acp-github-sign-in
+        .state=${this.#githubSignIn.value}
+        @acp-github-sign-in=${this.#onGithubSignIn}
+        @acp-github-sign-in-cancel=${this.#onGithubCancel}
+        @acp-github-open=${this.#onGithubOpen}
+        @acp-github-copy=${this.#onGithubCopy}
+      ></acp-github-sign-in>
       <acp-snackbars
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}

@@ -7,6 +7,7 @@ pub mod dropped;
 pub mod fonts;
 pub mod fs;
 pub mod git;
+pub mod github;
 pub mod log;
 pub mod sessions;
 pub mod terminal;

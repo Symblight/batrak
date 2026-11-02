@@ -76,6 +76,8 @@ import type { AcpSessionRow } from './components/session-row/session-row.js';
 import type { AcpSessionList } from './components/session-list/session-list.js';
 import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
 import type { AcpSessionStatus } from './components/session-status/session-status.js';
+import type { AcpGithubSignIn } from './components/github-sign-in/github-sign-in.js';
+import type { AcpPullRequestChip } from './components/pull-request-chip/pull-request-chip.js';
 import type { AcpRemoteChip } from './components/remote-chip/remote-chip.js';
 import type { AcpSessionSync } from './components/session-sync/session-sync.js';
 import type { AcpSessionColumn } from './views/session-column/session-column.js';
@@ -159,6 +161,8 @@ declare global {
     'acp-session-list': AcpSessionList;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;
+    'acp-github-sign-in': AcpGithubSignIn;
+    'acp-pull-request-chip': AcpPullRequestChip;
     'acp-remote-chip': AcpRemoteChip;
     'acp-session-sync': AcpSessionSync;
     'acp-session-column': AcpSessionColumn;
