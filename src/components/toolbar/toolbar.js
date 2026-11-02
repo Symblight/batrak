@@ -16,12 +16,15 @@ import styles from './toolbar.css?inline';
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the opened folder's name and git branch, and the
+ * @summary Narrow app-wide bar above the columns: the opened folder's name and git branch (a popover to switch it), and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-git-remote `{ action }` From the remote chip.
  * @fires acp-github-sign-in `null` From the GitHub slot.
  * @fires acp-github-open `{ url }` From the GitHub slot.
+ * @fires acp-git-branches-query `null` From the branch popover.
+ * @fires acp-git-switch `{ branch, create }` From the branch popover.
+ * @fires acp-copy `{ text }` From the branch popover.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
@@ -31,6 +34,7 @@ export class AcpToolbar extends LitElement {
     fetchError: { attribute: false },
     githubSlot: { attribute: false },
     githubReply: { attribute: false },
+    branches: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -51,10 +55,20 @@ export class AcpToolbar extends LitElement {
     this.githubSlot = 'hidden';
     /** @type {import('../../hooks/github/types.js').GithubPrReply | null} The shown branch's pull request lookup. */
     this.githubReply = null;
+    /** @type {import('../../hooks/git/types.js').GitBranchList | null} The branch popover's lists, once asked for. */
+    this.branches = null;
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
     this.expandable = false;
+  }
+
+  /**
+   * The container's answer to a switch, passed on to the branch popover.
+   * @param {string | null} error `null`: it worked; else why it was refused.
+   */
+  switchFinished(error) {
+    this.renderRoot.querySelector('acp-branch-popover')?.switchFinished(error);
   }
 
   /** Button hiding the agent column, so the editor's tabs take the whole middle. */
@@ -110,15 +124,7 @@ export class AcpToolbar extends LitElement {
         <md-tooltip for="acp-toolbar-git-error" show-delay="800" placement="bottom">${error}</md-tooltip>`;
     }
     if (!repo) return nothing;
-    const name = repo.detached ? (repo.sha?.slice(0, 7) ?? 'HEAD') : (repo.branch ?? '');
-    const title = [
-      repo.detached ? `Detached HEAD at ${repo.sha ?? ''}` : `Branch ${repo.branch}`,
-      repo.upstream ? `tracking ${repo.upstream}` : 'no upstream',
-    ]
-      .filter(Boolean)
-      .join(', ');
-    return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
-      <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
+    return html`<acp-branch-popover .repo=${repo} .branches=${this.branches}></acp-branch-popover>
       <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }

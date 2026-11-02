@@ -4,7 +4,7 @@ use tauri::State;
 
 use crate::git::cache::StatusReply;
 use crate::git::remote::{self, RemoteError, RemoteOp};
-use crate::git::{binary, blob, commit, repo};
+use crate::git::{binary, blob, branch, commit, repo};
 use crate::workspace::{checked_rel, Workspaces};
 
 use super::blocking;
@@ -49,6 +49,34 @@ pub async fn git_file_at_head(
 pub async fn git_branches(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Vec<String>, String> {
     let root = workspaces.get(&root_id)?;
     blocking(move || repo::branches(binary::git()?, &root.path)).await?
+}
+
+/// The branch popover's lists: local branches with their counts and age, and the remote branches
+/// that have no local one yet.
+#[tauri::command]
+pub async fn git_branches_detail(workspaces: State<'_, Workspaces>, root_id: String) -> Result<branch::BranchList, String> {
+    let root = workspaces.get(&root_id)?;
+    blocking(move || branch::list(binary::git()?, &root.path)).await?
+}
+
+/// Switches the root's checkout to `branch` (`create`: makes it from HEAD) and replies with the new
+/// state. Git's refusal, e.g. local changes a switch would overwrite, is the error.
+#[tauri::command]
+pub async fn git_switch(
+    workspaces: State<'_, Workspaces>,
+    root_id: String,
+    branch: String,
+    create: bool,
+) -> Result<repo::RepoState, String> {
+    let root = workspaces.get(&root_id)?;
+    let state = blocking(move || {
+        let git = binary::git()?;
+        branch::switch(git, &root.path, &branch, create)?;
+        root.git.head(git, &root.path, root.epoch())?.ok_or_else(|| "Not a git repository".to_owned())
+    })
+    .await??;
+    tracing::info!(create, "switched branch");
+    Ok(state)
 }
 
 /// Message of the last commit, which Amend starts from; `null` before the first commit.

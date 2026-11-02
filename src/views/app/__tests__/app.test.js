@@ -225,6 +225,107 @@ describe('acp-app: mark all as read', () => {
   });
 });
 
+describe('acp-app: branch popover', () => {
+  /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
+  let calls;
+  /** @type {(cmd: string) => unknown} */
+  let answer;
+
+  /** @param {import('../../../hooks/sessions/types.js').SessionStatus} status @param {string} folder @returns {import('../../../hooks/sessions/types.js').Session} */
+  const session = (status, folder) => ({
+    id: 's',
+    projectId: folder,
+    title: 'Fix it',
+    status,
+    agentId: 'a',
+    config: {},
+    mode: 'local',
+    folder,
+    worktreePath: null,
+    branch: null,
+    baseCommit: null,
+    createdAt: '2026-01-01T00:00:00.000Z',
+    lastActivityAt: '2026-01-02T00:00:00.000Z',
+    titleSource: 'prompt',
+    agentTitle: null,
+  });
+
+  beforeEach(() => {
+    calls = [];
+    answer = () => undefined;
+    mockIPC((cmd, args) => {
+      const a = /** @type {Record<string, unknown>} */ (args ?? {});
+      calls.push({ cmd, args: a });
+      return answer(cmd) ?? startupAnswer(cmd, a);
+    });
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+  });
+
+  afterEach(() => {
+    $sessions.set([]);
+    $workspace.set(null);
+    clearMocks();
+  });
+
+  /** The app, and its toolbar with the answers to the switch recorded. */
+  async function render() {
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get());
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
+    /** @type {(string | null)[]} */
+    const finished = [];
+    toolbar.switchFinished = (error) => void finished.push(error);
+    /** @param {string} type @param {unknown} [detail] */
+    const fire = (type, detail = null) => toolbar.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    return { toolbar, finished, fire };
+  }
+
+  const switches = () => calls.filter((c) => c.cmd === 'git_switch').map((c) => c.args);
+
+  it('reads the project’s branches when the popover opens and hands them to the toolbar', async () => {
+    // Arrange
+    const list = { local: [{ name: 'main', current: true, ahead: 0, behind: 0, committedAt: 1 }], remote: [] };
+    answer = (cmd) => (cmd === 'git_branches_detail' ? list : undefined);
+    const { toolbar, fire } = await render();
+    // Act
+    fire('acp-git-branches-query');
+    await until(() => toolbar.branches !== null);
+    // Assert
+    expect(toolbar.branches).to.deep.equal(list);
+    expect(calls.find((c) => c.cmd === 'git_branches_detail')?.args).to.deep.equal({ rootId: 'r' });
+  });
+
+  it('switches the branch and tells the popover, whether git did it, refused, or an agent is working in the folder', async () => {
+    // Arrange
+    const { finished, fire } = await render();
+    // Act: it works
+    fire('acp-git-switch', { branch: 'dev', create: false });
+    await until(() => finished.length === 1);
+    // Assert
+    expect(switches()).to.deep.equal([{ rootId: 'r', branch: 'dev', create: false }]);
+    expect(finished).to.deep.equal([null]);
+
+    // Act: git refuses
+    answer = (cmd) => {
+      if (cmd === 'git_switch') throw new Error('would be overwritten');
+      return undefined;
+    };
+    fire('acp-git-switch', { branch: 'x', create: true });
+    await until(() => finished.length === 2);
+    // Assert
+    expect(finished[1]).to.contain('would be overwritten');
+
+    // Act: an agent works in this folder (one in another folder doesn't count)
+    answer = () => undefined;
+    $sessions.set([session('working', '/q'), session('working', '/p')]);
+    fire('acp-git-switch', { branch: 'dev', create: false });
+    await until(() => finished.length === 3);
+    // Assert
+    expect(finished[2]).to.contain('“Fix it” is working in this folder');
+    expect(switches(), 'git is not asked').to.have.length(2);
+  });
+});
+
 describe('acp-app: terminal panel layout', () => {
   /** @type {HTMLStyleElement} */
   let tokens;

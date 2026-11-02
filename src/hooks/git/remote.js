@@ -29,17 +29,30 @@ export function remoteFailure(action) {
 const WORKING = new Set(['working', 'queued', 'waiting']);
 
 /**
+ * Who works in `folder` right now, as a clause ("“Fix it” is working in this folder"); `null` when
+ * none does (a worktree session works elsewhere).
+ * @param {readonly Session[]} sessions
+ * @param {string} folder The project's folder.
+ * @returns {{ who: string, many: boolean } | null}
+ */
+export function workingIn(sessions, folder) {
+  const busy = sessions.filter((s) => s.folder === folder && WORKING.has(s.status));
+  if (busy.length === 0) return null;
+  const many = busy.length > 1;
+  return { who: many ? `${busy.length} sessions are working in this folder` : `“${busy[0].title}” is working in this folder`, many };
+}
+
+/**
  * The question to ask before a pull changes the files under agents that are working in `folder`;
- * `null` when none is (a worktree session works elsewhere).
+ * `null` when none is.
  * @param {readonly Session[]} sessions
  * @param {string} folder The project's folder.
  * @returns {ConfirmOptions | null}
  */
 export function pullConfirm(sessions, folder) {
-  const busy = sessions.filter((s) => s.folder === folder && WORKING.has(s.status));
-  if (busy.length === 0) return null;
-  const who = busy.length === 1 ? `“${busy[0].title}” is working in this folder` : `${busy.length} sessions are working in this folder`;
-  return { headline: 'An agent is working here', message: `${who}. A pull changes its files under it.`, confirmLabel: 'Pull anyway' };
+  const working = workingIn(sessions, folder);
+  if (!working) return null;
+  return { headline: 'An agent is working here', message: `${working.who}. A pull changes its files under it.`, confirmLabel: 'Pull anyway' };
 }
 
 /** @param {number} n @param {string} noun */

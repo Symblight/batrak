@@ -181,7 +181,7 @@ pub fn last_commit_message(git: &Path, root: &Path) -> Result<Option<String>, St
 }
 
 /// `ahead 2, behind 1` (any part may be missing; `gone` means no counts) → `(2, 1)`.
-fn parse_track(track: &str) -> (u32, u32) {
+pub(super) fn parse_track(track: &str) -> (u32, u32) {
     let (mut ahead, mut behind) = (0, 0);
     for part in track.split(", ") {
         if let Some(n) = part.strip_prefix("ahead ") {

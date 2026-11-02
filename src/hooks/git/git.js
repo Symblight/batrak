@@ -3,6 +3,7 @@ import { $rootId } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
+import { branchRows, switchBlocked } from './branches.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
 import { fetchDue, pullConfirm, remoteChip, remoteFailure } from './remote.js';
 import { SerialTask } from './serial-task.js';
@@ -15,6 +16,7 @@ import { SerialTask } from './serial-task.js';
 /** @typedef {import('./types.js').GitStatusReply} GitStatusReply */
 /** @typedef {import('./types.js').GitRemoteAction} GitRemoteAction */
 /** @typedef {import('./types.js').GitRemoteError} GitRemoteError */
+/** @typedef {import('./types.js').GitBranchList} GitBranchList */
 
 /**
  * Git state of an open root that isn't active, shown again (and checked) when it is.
@@ -192,6 +194,8 @@ export const git = Object.freeze({
   relativePath,
   remoteChip,
   pullConfirm,
+  branchRows,
+  switchBlocked,
   fetchDue,
 
   /**
@@ -310,6 +314,35 @@ export const git = Object.freeze({
    */
   branches(rootId) {
     return ipc.invoke('git_branches', { rootId });
+  },
+
+  /**
+   * The branch popover's lists: local branches with their counts and age, remote ones with no local branch.
+   * @param {string} rootId
+   * @returns {Promise<GitBranchList>}
+   */
+  branchList(rootId) {
+    return ipc.invoke('git_branches_detail', { rootId });
+  },
+
+  /**
+   * Switches the active root to a branch (`create`: makes it from HEAD), then shows the new state at once.
+   * @param {string} branch Local, or a remote's without the remote's name (it gets a tracking branch).
+   * @param {boolean} create
+   * @returns {Promise<void>} Fails with git's message, e.g. the files a switch would overwrite.
+   */
+  async switchBranch(branch, create) {
+    const rootId = $rootId.get();
+    if (rootId === null) throw new Error('No project is open');
+    try {
+      /** @type {GitRepoState} */
+      const repo = await ipc.invoke('git_switch', { rootId, branch, create });
+      if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
+    } finally {
+      // A hook may have changed files too.
+      headTask.schedule(0);
+      git.refreshChanges();
+    }
   },
 
   /**

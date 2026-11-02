@@ -16,18 +16,12 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.acp-toolbar__branch,
 .acp-toolbar__git-error {
   overflow: hidden;
   font-family: var(--acp-font-family-mono);
   font-size: var(--acp-font-size-sm);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-.acp-toolbar__branch {
-  color: var(--acp-color-on-surface-variant);
-}
-.acp-toolbar__git-error {
   color: var(--acp-color-error);
 }
 .acp-toolbar__spacer {

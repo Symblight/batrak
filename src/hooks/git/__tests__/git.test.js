@@ -198,14 +198,41 @@ describe('git', () => {
     stopWatching();
   });
 
+  it('switches the active project’s branch, shows the state git answers at once, and reads again also when git refuses', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    await until(() => sent('git_head').length === 1);
+    answers.git_switch = () => ({ ...REPO, branch: 'dev' });
+    // Act
+    await git.switchBranch('dev', false);
+    const shown = $gitRepo.get().repo?.branch;
+    await until(() => sent('git_head').length === 2);
+    answers.git_switch = () => {
+      throw new Error('would be overwritten');
+    };
+    const failure = await git.switchBranch('x', true).catch((err) => err);
+    await until(() => sent('git_head').length === 3);
+    // Assert
+    expect(shown).to.equal('dev');
+    expect(sent('git_switch')).to.deep.equal([
+      { rootId, branch: 'dev', create: false },
+      { rootId, branch: 'x', create: true },
+    ]);
+    expect(String(failure)).to.include('would be overwritten');
+  });
+
   it('refuses to commit with no project open', async () => {
     // Arrange
     const git = await started();
     // Act
     const failure = await git.commit(['a.txt'], 'x', false).catch((err) => err);
+    const switchFailure = await git.switchBranch('dev', false).catch((err) => err);
     // Assert
     expect(String(failure)).to.include('No project is open');
+    expect(String(switchFailure)).to.include('No project is open');
     expect(sent('git_commit')).to.deep.equal([]);
+    expect(sent('git_switch')).to.deep.equal([]);
   });
 
   it('shows nothing of the previous project, and gives a project still open back as it was', async () => {
@@ -256,12 +283,14 @@ describe('git', () => {
     // Arrange
     const git = await started();
     answers.git_branches = () => ['main', 'dev'];
+    answers.git_branches_detail = () => ({ local: [], remote: [] });
     answers.git_last_commit_message = () => 'Fix it';
     answers.git_file_at_head = () => 'text';
     // Act
-    const results = [await git.branches('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
+    const results = [await git.branches('r1'), await git.branchList('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
     // Assert
-    expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
+    expect(results).to.deep.equal([['main', 'dev'], { local: [], remote: [] }, 'Fix it', 'text']);
+    expect(sent('git_branches_detail')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
   });
   it('runs a remote operation one at a time, shows it running, and takes the branch state it answers with', async () => {

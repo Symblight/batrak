@@ -6,6 +6,7 @@
 pub mod apply;
 pub mod binary;
 pub mod blob;
+pub mod branch;
 pub mod cache;
 pub mod commit;
 pub mod exec;

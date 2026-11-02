@@ -67,6 +67,38 @@
  * @property {GitRemoteError | null} error Set when failed.
  */
 
+/**
+ * A local branch of the branch popover; mirrors `git::branch::LocalBranch`.
+ * @typedef {Object} GitLocalBranch
+ * @property {string} name
+ * @property {boolean} current
+ * @property {number} ahead Commits not on its upstream.
+ * @property {number} behind Commits only on its upstream.
+ * @property {number} committedAt Unix ms of its last commit.
+ */
+
+/**
+ * A branch on a remote that has no local branch of the same name.
+ * @typedef {Object} GitRemoteBranch
+ * @property {string} remote
+ * @property {string} name Without the remote's name; what a switch takes to make the tracking branch.
+ */
+
+/**
+ * Reply of `git_branches_detail`; mirrors `git::branch::BranchList`.
+ * @typedef {Object} GitBranchList
+ * @property {GitLocalBranch[]} local Most recently committed first.
+ * @property {GitRemoteBranch[]} remote
+ */
+
+/**
+ * A line of the branch popover's lists.
+ * @typedef {Object} GitBranchRow
+ * @property {string} name
+ * @property {boolean} current
+ * @property {string} detail Counts for the current branch, else its age ("2h", "session · 1d").
+ */
+
 /** @typedef {'modified' | 'added' | 'deleted' | 'renamed' | 'typeChanged' | 'untracked' | 'conflicted'} GitFileKind */
 
 /**

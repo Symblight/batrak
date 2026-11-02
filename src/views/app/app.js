@@ -116,6 +116,7 @@ export class AcpApp extends ViewElement {
   static properties = {
     sideView: { state: true },
     quickOpenFiles: { state: true },
+    branches: { state: true },
   };
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
@@ -208,6 +209,8 @@ export class AcpApp extends ViewElement {
     this.sideView = 'files';
     /** @type {QuickOpenItem[]} */
     this.quickOpenFiles = [];
+    /** @type {import('../../hooks/git/types.js').GitBranchList | null} The branch popover's lists, read when it opens. */
+    this.branches = null;
   }
 
   connectedCallback() {
@@ -369,6 +372,36 @@ export class AcpApp extends ViewElement {
     await git.remote(action, expected);
   };
 
+  /** The branch popover opened: read the shown project's branches for it. */
+  #onBranchesQuery = async () => {
+    const rootId = this.#rootId.value;
+    if (rootId === null) return;
+    try {
+      this.branches = await git.branchList(rootId);
+    } catch (err) {
+      app.reportError('Reading the branches failed', err);
+    }
+  };
+
+  /** @param {Event} e */
+  #onGitSwitch = async (e) => {
+    const { branch, create } = /** @type {CustomEvent<{ branch: string, create: boolean }>} */ (e).detail;
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (this.renderRoot.querySelector('acp-toolbar'));
+    // A switch changes the files under an agent that is working in the folder: not while it does.
+    const folder = this.#workspace.value?.path;
+    const blocked = folder ? git.switchBlocked($sessions.get(), folder) : null;
+    if (blocked) return toolbar.switchFinished(blocked);
+    try {
+      await git.switchBranch(branch, create);
+      toolbar.switchFinished(null);
+    } catch (err) {
+      toolbar.switchFinished(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  /** @param {Event} e */
+  #onBranchCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the branch name failed');
+
   #onGithubSignIn = () => void github.signIn();
 
   #onGithubCancel = () => github.cancelSignIn();
@@ -491,10 +524,14 @@ export class AcpApp extends ViewElement {
         .fetchError=${this.#gitFetchError.value}
         .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value, this.#pullRequest.value?.reply ?? null)}
         .githubReply=${this.#pullRequest.value?.reply ?? null}
+        .branches=${this.branches}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
         @acp-git-remote=${this.#onGitRemote}
+        @acp-git-branches-query=${this.#onBranchesQuery}
+        @acp-git-switch=${this.#onGitSwitch}
+        @acp-copy=${this.#onBranchCopy}
         @acp-github-sign-in=${this.#onGithubSignIn}
         @acp-github-open=${this.#onGithubOpen}
       ></acp-toolbar>

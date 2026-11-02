@@ -156,6 +156,8 @@ pub fn run() {
             commands::git::git_file_at_head,
             commands::git::git_last_commit_message,
             commands::git::git_branches,
+            commands::git::git_branches_detail,
+            commands::git::git_switch,
             commands::git::git_commit,
             commands::git::git_remote,
             commands::git::git_fetch_quiet,

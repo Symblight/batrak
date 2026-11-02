@@ -9,6 +9,9 @@ const GIT = {
   error: null,
 };
 
+/** @type {import('../../../hooks/git/types.js').GitBranchList} */
+const BRANCHES = { local: [{ name: 'main', current: true, ahead: 2, behind: 0, committedAt: 0 }], remote: [] };
+
 /** @type {import('../../../hooks/git/types.js').GitRemoteOp} */
 const OP = { rootId: 'r1', action: 'push', state: 'running', error: null };
 
@@ -16,17 +19,19 @@ const OP = { rootId: 'r1', action: 'push', state: 'running', error: null };
 const REPLY = { status: 'ok', pr: null, defaultBranch: 'main', message: null };
 
 describe('acp-toolbar', () => {
-  it("shows the project's path and the branch state in tooltips, not titles", async () => {
+  it("shows the project's path in a tooltip, and the branch, sync state and GitHub slot as components of their own, not titles", async () => {
     const el = await fixture(html`<acp-toolbar
       .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .git=${GIT}
       .remoteOp=${OP}
+      .branches=${BRANCHES}
       .githubSlot=${'ok'}
       .githubReply=${REPLY}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
-    expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main');
+    const branch = root.querySelector('acp-branch-popover');
+    expect([branch?.repo, branch?.branches], 'the branch button is the popover\'s').to.deep.equal([GIT.repo, BRANCHES]);
     const chip = root.querySelector('acp-remote-chip');
     expect([chip?.repo, chip?.op], 'the sync state is the chip\'s').to.deep.equal([GIT.repo, OP]);
     const slot = root.querySelector('acp-pull-request-chip');
