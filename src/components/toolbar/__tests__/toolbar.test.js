@@ -5,7 +5,7 @@ import '../toolbar.js';
 
 /** @type {GitRepoView} */
 const GIT = {
-  repo: { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0 },
+  repo: { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0, remote: null, hasRemotes: false, fetchedAt: null },
   error: null,
 };
 
@@ -17,7 +17,8 @@ describe('acp-toolbar', () => {
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
-    expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main, 2 ahead');
+    expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main');
+    expect(root.querySelector('acp-remote-chip'), 'the sync state is the chip\'s').to.have.property('repo', GIT.repo);
     expect(root.querySelector('[title]')).to.equal(null);
   });
 

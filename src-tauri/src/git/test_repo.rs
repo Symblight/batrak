@@ -44,6 +44,18 @@ impl TestRepo {
         repo
     }
 
+    /// A repository with one commit whose `main` tracks `origin/main`, a bare repository in its own
+    /// temp folder (returned, so a test can move the remote with a second clone).
+    pub fn with_remote(name: &str) -> (TestRepo, PathBuf) {
+        let mut repo = TestRepo::with_commit(name);
+        let bare = temp_dir(&format!("{name}-origin"));
+        run_in(&bare, &["init", "-q", "--bare", "-b", "main"]);
+        repo.git(&["remote", "add", "origin", bare.to_str().unwrap()]);
+        repo.git(&["push", "-q", "-u", "origin", "main"]);
+        repo.extra.push(bare.clone());
+        (repo, bare)
+    }
+
     pub fn write(&self, rel: &str, content: &str) {
         let path = self.path.join(rel);
         fs::create_dir_all(path.parent().unwrap()).unwrap();

@@ -27,9 +27,6 @@
 .acp-toolbar__branch {
   color: var(--acp-color-on-surface-variant);
 }
-.acp-toolbar__sync {
-  margin-inline-start: var(--acp-space-2);
-}
 .acp-toolbar__git-error {
   color: var(--acp-color-error);
 }

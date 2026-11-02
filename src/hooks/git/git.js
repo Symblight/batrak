@@ -3,6 +3,7 @@ import { $rootId } from '../../stores/workspace/workspace.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
+import { remoteChip } from './remote.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
@@ -135,6 +136,7 @@ export const git = Object.freeze({
   changeRows,
   typeBadge,
   relativePath,
+  remoteChip,
 
   /**
    * Starts following the active root; once however often it is called.

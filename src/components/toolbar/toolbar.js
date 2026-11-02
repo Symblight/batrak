@@ -3,6 +3,7 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
+import '../remote-chip/remote-chip.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/open_in_full.svg?raw';
 import collapseIcon from '@material-design-icons/svg/outlined/close_fullscreen.svg?raw';
@@ -93,19 +94,15 @@ export class AcpToolbar extends LitElement {
     }
     if (!repo) return nothing;
     const name = repo.detached ? (repo.sha?.slice(0, 7) ?? 'HEAD') : (repo.branch ?? '');
-    const sync = [repo.ahead ? `↑${repo.ahead}` : '', repo.behind ? `↓${repo.behind}` : ''].filter(Boolean).join(' ');
     const title = [
       repo.detached ? `Detached HEAD at ${repo.sha ?? ''}` : `Branch ${repo.branch}`,
       repo.upstream ? `tracking ${repo.upstream}` : 'no upstream',
-      repo.ahead ? `${repo.ahead} ahead` : '',
-      repo.behind ? `${repo.behind} behind` : '',
     ]
       .filter(Boolean)
       .join(', ');
-    return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch"
-        >${name}${sync ? html`<span class="acp-toolbar__sync">${sync}</span>` : nothing}</span
-      >
-      <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>`;
+    return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
+      <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
+      <acp-remote-chip .repo=${repo}></acp-remote-chip>`;
   }
 
   render() {

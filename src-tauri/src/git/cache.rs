@@ -140,11 +140,11 @@ impl GitCache {
         // The fingerprint is taken before git reads, so a change while it runs makes the next call
         // read again. It covers the upstream ref only once the upstream is known: when the read
         // finds another one (the first read, or a new upstream), read once more with it covered.
-        let mut state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
+        let mut state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
         if state.upstream != upstream {
             upstream = state.upstream.clone();
             fingerprint = self::fingerprint(&info, upstream.as_deref());
-            state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
+            state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
         }
         *slot = (state.upstream == upstream).then(|| CachedHead { fingerprint, state: state.clone() });
         Ok(Some(state))
@@ -168,7 +168,7 @@ impl GitCache {
             !force && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
         if !valid {
             let status = match &info {
-                Some(info) => Some(repo::status_in(git, root, &info.prefix).inspect_err(|_| self.forget_info())?),
+                Some(info) => Some(repo::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
                 None => None,
             };
             if slot.cached.as_ref().map(|c| &c.status) != Some(&status) {

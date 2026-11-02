@@ -18,6 +18,25 @@
  * @property {string | null} upstream
  * @property {number} ahead
  * @property {number} behind
+ * @property {GitRemoteInfo | null} remote The remote the branch syncs with; `null` when detached or without remotes.
+ * @property {boolean} hasRemotes The repository has a remote at all ("No remote" against "No upstream").
+ * @property {number | null} fetchedAt Unix ms of the last fetch; `null` if it never ran.
+ */
+
+/**
+ * @typedef {Object} GitRemoteInfo
+ * @property {string} name
+ * @property {string} url Without credentials.
+ * @property {{ owner: string, repo: string } | null} github Set for a github.com remote.
+ */
+
+/**
+ * What the header's remote chip shows for a branch.
+ * @typedef {Object} GitRemoteChip
+ * @property {'none' | 'publish' | 'synced' | 'push' | 'pull' | 'diverged'} id
+ * @property {string} label
+ * @property {string} icon Material icon name; empty for none.
+ * @property {string} tooltip
  */
 
 /** @typedef {'modified' | 'added' | 'deleted' | 'renamed' | 'typeChanged' | 'untracked' | 'conflicted'} GitFileKind */

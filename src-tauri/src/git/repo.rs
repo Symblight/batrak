@@ -6,6 +6,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use super::exec::{self, Mode};
+use super::remote::{self, RemoteInfo};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -18,6 +19,12 @@ pub struct RepoState {
     pub upstream: Option<String>,
     pub ahead: u32,
     pub behind: u32,
+    /// The remote the branch syncs with (see [`remote::read`]); `None` when detached or without remotes.
+    pub remote: Option<RemoteInfo>,
+    /// The repository has a remote at all: "No remote" against "No upstream".
+    pub has_remotes: bool,
+    /// Unix ms of the last fetch; `None` if it never ran.
+    pub fetched_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -91,11 +98,12 @@ pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
     if info(git, root)?.is_none() {
         return Ok(None);
     }
-    head_in(git, root).map(Some)
+    let info = info(git, root)?.expect("checked above");
+    head_in(git, root, &info).map(Some)
 }
 
 /// [`head`] for a `root` known to be in a repository.
-pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
+pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, String> {
     // Each of these exits non-zero for a legitimate "none": detached HEAD, no commits, no upstream.
     let optional = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Option<String>, String> {
         let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
@@ -104,7 +112,7 @@ pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
     };
     let branch = optional(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"])?;
     let sha = optional(&[&"rev-parse", &"-q", &"--verify", &"HEAD"])?;
-    let mut state = RepoState { detached: branch.is_none(), branch, sha, upstream: None, ahead: 0, behind: 0 };
+    let mut state = RepoState::new(branch, sha);
     if let Some(branch) = &state.branch {
         let reference = format!("refs/heads/{branch}");
         let line = optional(&[&"for-each-ref", &"--format=%(upstream:short)%00%(upstream:track,nobracket)", &reference])?;
@@ -113,7 +121,33 @@ pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
             (state.ahead, state.behind) = parse_track(track);
         }
     }
+    add_remote(git, root, info, &mut state)?;
     Ok(state)
+}
+
+/// Fills in the remote a branch syncs with; none for a detached HEAD.
+fn add_remote(git: &Path, root: &Path, info: &RepoInfo, state: &mut RepoState) -> Result<(), String> {
+    let remotes = remote::read(git, root, info, state.branch.as_deref())?;
+    state.has_remotes = remotes.has_remotes;
+    state.fetched_at = remotes.fetched_at;
+    state.remote = if state.detached { None } else { remotes.remote };
+    Ok(())
+}
+
+impl RepoState {
+    fn new(branch: Option<String>, sha: Option<String>) -> RepoState {
+        RepoState {
+            detached: branch.is_none(),
+            branch,
+            sha,
+            upstream: None,
+            ahead: 0,
+            behind: 0,
+            remote: None,
+            has_remotes: false,
+            fetched_at: None,
+        }
+    }
 }
 
 /// Local branches a session can start from, most recently committed first; the sessions' own
@@ -154,11 +188,11 @@ fn parse_track(track: &str) -> (u32, u32) {
 #[cfg(test)]
 pub fn status(git: &Path, root: &Path) -> Result<Option<Status>, String> {
     let Some(info) = info(git, root)? else { return Ok(None) };
-    status_in(git, root, &info.prefix).map(Some)
+    status_in(git, root, &info).map(Some)
 }
 
 /// [`status`] for a `root` known to be in a repository at `prefix` (see [`RepoInfo::prefix`]).
-pub fn status_in(git: &Path, root: &Path, prefix: &str) -> Result<Status, String> {
+pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, String> {
     // The line counts don't depend on the status: read them alongside it. Before the first commit
     // `diff HEAD` fails, and its result is not used.
     let (out, numstat) = std::thread::scope(|scope| {
@@ -187,14 +221,16 @@ pub fn status_in(git: &Path, root: &Path, prefix: &str) -> Result<Status, String
     });
     let out = out?;
     let text = std::str::from_utf8(&out).map_err(|_| "git status printed non-UTF-8 paths".to_owned())?;
-    let mut status = parse(text, prefix);
+    let mut status = parse(text, &info.prefix);
+    add_remote(git, root, info, &mut status.repo)?;
     let counts = if status.repo.sha.is_some() { parse_numstat(&String::from_utf8_lossy(&numstat?)) } else { HashMap::new() };
     add_line_counts(root, &mut status, &counts);
     Ok(status)
 }
 
 fn parse(text: &str, prefix: &str) -> Status {
-    let mut repo = RepoState { branch: None, sha: None, detached: false, upstream: None, ahead: 0, behind: 0 };
+    let mut repo = RepoState::new(None, None);
+    repo.detached = false;
     let mut files = Vec::new();
     let mut records = text.split('\0').filter(|r| !r.is_empty());
     let rel = |path: &str| path.strip_prefix(prefix).map(str::to_owned);

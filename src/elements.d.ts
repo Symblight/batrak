@@ -76,6 +76,7 @@ import type { AcpSessionRow } from './components/session-row/session-row.js';
 import type { AcpSessionList } from './components/session-list/session-list.js';
 import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
 import type { AcpSessionStatus } from './components/session-status/session-status.js';
+import type { AcpRemoteChip } from './components/remote-chip/remote-chip.js';
 import type { AcpSessionSync } from './components/session-sync/session-sync.js';
 import type { AcpSessionColumn } from './views/session-column/session-column.js';
 import type { AcpTerminal } from './components/terminal/terminal.js';
@@ -158,6 +159,7 @@ declare global {
     'acp-session-list': AcpSessionList;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;
+    'acp-remote-chip': AcpRemoteChip;
     'acp-session-sync': AcpSessionSync;
     'acp-session-column': AcpSessionColumn;
     'acp-settings': AcpSettings;
