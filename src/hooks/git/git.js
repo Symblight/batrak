@@ -112,6 +112,43 @@ async function autoFetch() {
   }
 }
 
+/** @type {string | null} The shown branch's state when the remote operation failed (`stateKey`). */
+let failedAt = null;
+
+/**
+ * What a failed operation's chip depends on: once it differs, something changed since the failure.
+ * @param {GitRepoState | null} repo
+ */
+function stateKey(repo) {
+  return repo ? [repo.branch, repo.sha, repo.upstream, repo.upstreamSha, repo.ahead, repo.behind].join('|') : null;
+}
+
+/**
+ * Reads the root's branch as a failed operation left it (a pull may stop mid-rebase).
+ * @param {string} rootId
+ * @returns {Promise<GitRepoState | null>}
+ */
+async function headAfterFailure(rootId) {
+  try {
+    /** @type {GitRepoState | null} */
+    const repo = await ipc.invoke('git_head', { rootId });
+    if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
+    return repo;
+  } catch {
+    return $rootId.get() === rootId ? $gitRepo.get().repo : null;
+  }
+}
+
+/**
+ * Forgets a failed operation of the shown root once its branch moved since the failure.
+ * @param {GitRepoView} view
+ */
+function forgetStaleFailure({ repo }) {
+  const op = $gitRemoteOp.get();
+  if (op?.state !== 'failed' || op.rootId !== $rootId.get() || !repo) return;
+  if (stateKey(repo) !== failedAt) $gitRemoteOp.set(null);
+}
+
 /** @param {string} rootId */
 function clearFetchError(rootId) {
   if ($gitFetchError.get()?.rootId === rootId) $gitFetchError.set(null);
@@ -202,7 +239,8 @@ export const git = Object.freeze({
 
   /**
    * Fetches, pulls (fast-forward only), pushes or publishes the active root's branch. One at a time
-   * app-wide; while it runs and after it fails `$gitRemoteOp` says so, and a failure is also a snackbar.
+   * app-wide; while it runs and after it fails `$gitRemoteOp` says so (until dismissed, or until the
+   * branch moves since), and a failure is also a snackbar.
    * @param {GitRemoteAction} action
    * @param {string | null} [expected] `forcePush`: the upstream commit it replaces, as the user saw it.
    */
@@ -220,6 +258,7 @@ export const git = Object.freeze({
       if (before) notify('info', remoteDone(action, before, repo));
     } catch (err) {
       const error = remoteError(err);
+      failedAt = stateKey(await headAfterFailure(rootId));
       $gitRemoteOp.set({ rootId, action, state: 'failed', error });
       app.reportError(remoteFailure(action), error.message.split('\n')[0]);
     }
@@ -245,6 +284,7 @@ export const git = Object.freeze({
     const fetchTimer = setInterval(() => void autoFetch(), FETCH_CHECK_MS);
     const stops = [
       $rootId.subscribe(switchRoot),
+      $gitRepo.listen(forgetStaleFailure),
       projects.onFsChange(({ git: moved }) => {
         if (moved) headTask.schedule(REFRESH_DELAY_MS);
         if (watchers) changesTask.schedule(REFRESH_DELAY_MS);

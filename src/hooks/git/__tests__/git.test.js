@@ -335,6 +335,33 @@ describe('git', () => {
     // Assert
     expect($gitRemoteOp.get()).to.equal(null);
   });
+  it('keeps a failed operation while the branch stays as the failure left it, and forgets it once the branch moves', async () => {
+    // Arrange: a pull that stopped on a conflict, leaving the branch mid-rebase
+    const git = await started();
+    const rootId = await open();
+    await until(() => $gitRepo.get().repo !== null);
+    const midRebase = { ...REPO, branch: null, detached: true, sha: 'r1' };
+    answers.git_remote = () => {
+      answers.git_head = () => midRebase;
+      throw { kind: 'conflict', message: 'CONFLICT (content): Merge conflict in a.txt' };
+    };
+    await git.remote('pullRebase');
+    // Act: the change the pull itself made is reported
+    const reads = sent('git_head').length;
+    await changed(rootId, { git: true });
+    await until(() => sent('git_head').length > reads);
+    await wait(30);
+    // Assert
+    expect($gitRemoteOp.get()?.state, 'its own leftovers are what Abort is for').to.equal('failed');
+
+    // Act: the rebase is finished in a terminal
+    answers.git_head = () => ({ ...REPO, sha: 'b2' });
+    await changed(rootId, { git: true });
+    await until(() => $gitRepo.get().repo?.sha === 'b2');
+    // Assert
+    expect($gitRemoteOp.get(), 'the chip shows the branch again').to.equal(null);
+  });
+
   it('fetches quietly once a project with a remote is shown, takes the counts it finds, and does not try again for five minutes', async () => {
     // Arrange
     const behind = { ...REPO, upstream: 'origin/main', behind: 2, fetchedAt: Date.now(), remote: { name: 'origin', url: 'u', github: null }, hasRemotes: true };
