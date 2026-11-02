@@ -9,6 +9,7 @@ import { app } from '../app/app.js';
  * @property {boolean} [ctrl] Ctrl on every platform.
  * @property {boolean} [shift]
  * @property {boolean} [alt]
+ * @property {string} [then] A chord: the key pressed after this one.
  */
 
 /** @typedef {keyof typeof TABLE} ShortcutId */
@@ -22,6 +23,8 @@ const TABLE = Object.freeze({
   newTerminal: { ctrl: true, key: '`' },
   save: { mod: true, key: 'S' },
   find: { mod: true, key: 'F' },
+  markdownSplit: { mod: true, key: 'K', then: 'V' },
+  markdownPreview: { mod: true, shift: true, key: 'V' },
   matchCase: { alt: true, key: 'C' },
   wholeWord: { alt: true, key: 'W' },
   regex: { alt: true, key: 'R' },
@@ -52,9 +55,10 @@ export const shortcuts = Object.freeze({
   hint(id, platform = app.platform) {
     const shortcut = TABLE[id];
     const mods = modifiers(shortcut, platform);
-    if (platform === 'mac') return mods.map((m) => MAC_SYMBOLS[m]).join('') + shortcut.key;
+    const chord = 'then' in shortcut ? ` ${shortcut.then}` : '';
+    if (platform === 'mac') return mods.map((m) => MAC_SYMBOLS[m]).join('') + shortcut.key + chord;
     const names = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', mod: 'Ctrl' };
-    return [...mods.map((m) => names[m]), shortcut.key].join('+');
+    return [...mods.map((m) => names[m]), shortcut.key].join('+') + chord;
   },
 
   /**

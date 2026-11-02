@@ -1,3 +1,4 @@
+import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampSplit } from '../../hooks/markdown/split.js';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
@@ -35,12 +36,9 @@ export function showColumn(name) {
 }
 
 /** Limits of the markdown split's editor share, in percent. */
-export const MARKDOWN_SPLIT_MIN = 20;
-export const MARKDOWN_SPLIT_MAX = 80;
-export const MARKDOWN_SPLIT_DEFAULT = 50;
-
-/** @param {number} percent */
-const clampSplit = (percent) => Math.min(MARKDOWN_SPLIT_MAX, Math.max(MARKDOWN_SPLIT_MIN, percent));
+export const MARKDOWN_SPLIT_MIN = SPLIT_MIN;
+export const MARKDOWN_SPLIT_MAX = SPLIT_MAX;
+export const MARKDOWN_SPLIT_DEFAULT = SPLIT_DEFAULT;
 
 /**
  * @param {unknown} raw

@@ -199,6 +199,24 @@ export class AcpMarkdown extends LitElement {
     }
   }
 
+  /** The top-level blocks of what the body shows, by their first line in the text. */
+  get blocks() {
+    return this.#blocks.map(({ line, node }) => ({ line, node }));
+  }
+
+  /** @type {Element | null} The block marked as where the editor is. */
+  #marked = null;
+
+  /**
+   * Marks one block as the place the editor is at; `null` clears the mark.
+   * @param {Node | null} node
+   */
+  markBlock(node) {
+    this.#marked?.classList.remove('acp-markdown__block_current');
+    this.#marked = node instanceof Element && node.isConnected ? node : null;
+    this.#marked?.classList.add('acp-markdown__block_current');
+  }
+
   /** @param {string} id */
   #scrollToHeading(id) {
     this.renderRoot.querySelector(`#${CSS.escape(id)}`)?.scrollIntoView({ block: 'start' });

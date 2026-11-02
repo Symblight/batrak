@@ -14,6 +14,11 @@ describe('shortcuts', () => {
       ['newTerminal', 'windows', 'Ctrl+`'],
       ['matchCase', 'mac', '⌥C'],
       ['matchCase', 'windows', 'Alt+C'],
+      ['markdownPreview', 'mac', '⇧⌘V'],
+      ['markdownPreview', 'linux', 'Ctrl+Shift+V'],
+      // A chord: the second key follows the first.
+      ['markdownSplit', 'mac', '⌘K V'],
+      ['markdownSplit', 'windows', 'Ctrl+K V'],
     ];
     for (const [id, platform, hint] of cases) {
       // Act + Assert

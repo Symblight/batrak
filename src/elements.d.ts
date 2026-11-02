@@ -1,5 +1,7 @@
 // Typed `querySelector('acp-…')` / `createElement('acp-…')`. Add every new custom element here.
 import type { AcpPanel } from './components/panel/panel.js';
+import type { AcpMarkdownView } from './components/markdown-view/markdown-view.js';
+import type { AcpMarkdownSwitcher } from './components/markdown-switcher/markdown-switcher.js';
 import type { AcpPane } from './components/pane/pane.js';
 import type { AcpSplit } from './components/split/split.js';
 import type { AcpPanelHeader } from './components/panel-header/panel-header.js';
@@ -122,6 +124,8 @@ declare global {
     'acp-context-meter': AcpContextMeter;
     'acp-image-preview': AcpImagePreview;
     'acp-markdown': AcpMarkdown;
+    'acp-markdown-switcher': AcpMarkdownSwitcher;
+    'acp-markdown-view': AcpMarkdownView;
     'acp-tab-overflow': AcpTabOverflow;
     'acp-tab-strip': AcpTabStrip;
     'acp-tab-view': AcpTabView;

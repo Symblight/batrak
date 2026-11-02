@@ -177,3 +177,18 @@
   font-family: var(--acp-font-family-mono);
   font-size: 0.88em;
 }
+
+/* Where the editor is, while the two scroll together: a bar in the margin. */
+.acp-markdown__block_current {
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: calc(-1 * var(--acp-space-2));
+    width: 2px;
+    border-radius: 1px;
+    background: var(--acp-color-primary);
+  }
+}

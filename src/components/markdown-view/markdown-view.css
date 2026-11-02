@@ -1,0 +1,96 @@
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The box the narrow layout is asked of, not the window. */
+.acp-markdown-view__stage {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  container: acp-markdown-view / inline-size;
+}
+
+.acp-markdown-view__split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.acp-markdown-view__pane {
+  min-width: 0;
+}
+
+.acp-markdown-view__editor {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The divider sits on the edge of the two panes, which have no gap between them. */
+.acp-markdown-view__handle {
+  z-index: var(--acp-z-raised);
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-markdown-view__handle_row {
+  margin-inline: calc(var(--acp-resize-handle-hit-width, 8px) / -2);
+}
+.acp-markdown-view__handle_column {
+  display: none;
+  margin-block: calc(var(--acp-resize-handle-hit-width, 8px) / -2);
+}
+
+/* Narrow: editor above, preview below, a horizontal divider. */
+@container acp-markdown-view (width < 560px) {
+  .acp-markdown-view__split {
+    flex-direction: column;
+  }
+  .acp-markdown-view__handle_row {
+    display: none;
+  }
+  .acp-markdown-view__handle_column:not([hidden]) {
+    display: block;
+  }
+}
+
+.acp-markdown-view__scroller {
+  flex: 1;
+  min-height: 0;
+  /* Clears the switcher over the corner. */
+  padding: 44px var(--acp-space-4) var(--acp-space-4);
+  overflow: auto;
+  background: var(--acp-column-background);
+  font-size: var(--acp-font-size-md);
+}
+
+/* Read on its own: centered, a line no longer than 720px. */
+.acp-markdown-view__preview_centered {
+  max-inline-size: 720px;
+  margin-inline: auto;
+}
+
+/* Over the corner of the editor's area, clear of its scrollbar. */
+.acp-markdown-view__switcher {
+  position: absolute;
+  inset-block-start: var(--acp-space-2);
+  inset-inline-end: 20px;
+  z-index: var(--acp-z-overlay);
+}
+
+.acp-markdown-view__rendering {
+  position: absolute;
+  inset-block-end: var(--acp-space-2);
+  inset-inline-end: 20px;
+  padding: var(--acp-space-0-5) var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-surface-container-high);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
