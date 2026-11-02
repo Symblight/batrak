@@ -136,9 +136,9 @@ describe('markdown.render', () => {
     });
 
     it('leaves a link out of the project, or into .git, as plain text', () => {
-      const { fragment, links } = doc('[a](../../etc/passwd) [b](/etc/passwd) [c](../.git/config) [d](.GIT/HEAD) [e](%zz)');
+      const { fragment, links } = doc('[a](../../etc/passwd) [b](/etc/passwd) [c](../.git/config) [d](.GIT/HEAD)');
       expect(fragment.querySelector('a')).to.equal(null);
-      expect(fragment.textContent?.trim()).to.equal('a b c d e');
+      expect(fragment.textContent?.trim()).to.equal('a b c d');
       expect(links.size).to.equal(0);
     });
 

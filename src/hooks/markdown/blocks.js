@@ -1,27 +1,23 @@
-/** Tokens that render to nothing: they take lines but never a node. */
-const SILENT = new Set(['space', 'def']);
-
 /**
  * @typedef {Object} BlockStart
  * @property {number} line 1-based line of the source where the block begins.
- * @property {string} raw The block's source, as `marked` lexed it.
+ * @property {string} raw The block's source lines.
  */
-
-/** @param {string} text */
-const newlinesIn = (text) => text.split('\n').length - 1;
 
 /**
- * Where each top-level block that renders to something starts in the source.
- * @param {readonly { type: string, raw: string }[]} tokens `marked`'s top-level tokens.
+ * Where each top-level block starts in the source. `markdown-it` maps every block token to its lines
+ * and gives none to what renders to nothing (blank lines, link definitions).
+ * @param {readonly { level: number, nesting: number, map: [number, number] | null }[]} tokens `markdown-it`'s tokens of the text.
+ * @param {string} text The text they were parsed from.
  * @returns {BlockStart[]}
  */
-export function blockStarts(tokens) {
+export function blockStarts(tokens, text) {
+  const lines = text.split(/\r\n|\r|\n/);
   /** @type {BlockStart[]} */
   const starts = [];
-  let line = 1;
-  for (const { type, raw } of tokens) {
-    if (!SILENT.has(type)) starts.push({ line, raw });
-    line += newlinesIn(raw);
+  for (const { level, nesting, map } of tokens) {
+    if (level !== 0 || nesting === -1 || !map) continue;
+    starts.push({ line: map[0] + 1, raw: lines.slice(map[0], map[1]).join('\n') });
   }
   return starts;
 }

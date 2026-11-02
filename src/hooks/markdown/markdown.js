@@ -1,4 +1,4 @@
-import { Marked } from 'marked';
+import MarkdownIt from 'markdown-it';
 import { blockStarts, createSlugger } from './blocks.js';
 import { classifyUrl, resolveInProject, sanitize } from './policy.js';
 
@@ -58,24 +58,42 @@ const CLASS_OF = {
 /** Heading ids start with this, so a file's own markup can't collide with anything. */
 const ID_PREFIX = 'acp-md-';
 
-/** @param {string} text */
-const escapeHtml = (text) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+/**
+ * GFM task lists: `- [x] text` starts with a checkbox, which the sanitizer then forces disabled.
+ * @param {import('markdown-it').StateCore} state
+ */
+function taskLists({ tokens, Token }) {
+  for (let i = 2; i < tokens.length; i++) {
+    const inline = tokens[i];
+    if (inline.type !== 'inline' || tokens[i - 1].type !== 'paragraph_open' || tokens[i - 2].type !== 'list_item_open') continue;
+    const mark = /^\[([ xX])\]\s+/.exec(inline.content);
+    const text = inline.children?.[0];
+    if (!mark || text?.type !== 'text' || !text.content.startsWith(mark[0])) continue;
+    text.content = text.content.slice(mark[0].length);
+    const checkbox = new Token('html_inline', '', 0);
+    checkbox.content = `<input type="checkbox" disabled${mark[1] === ' ' ? '' : ' checked'}> `;
+    inline.children?.unshift(checkbox);
+  }
+}
 
-/** @type {Record<import('./types.js').PolicyName, Marked>} */
-const parsers = {
-  reply: new Marked({
-    async: false,
-    gfm: true,
-    renderer: {
-      // An image would load as soon as the reply shows, so a reply could send data out in its URL.
-      /** @param {{ href: string, text: string }} token */
-      image({ href, text }) {
-        return `<a href="${escapeHtml(href)}">${escapeHtml(text || href)}</a>`;
-      },
-    },
-  }),
-  document: new Marked({ async: false, gfm: true }),
-};
+/** @param {import('./types.js').PolicyName} policy */
+function createParser(policy) {
+  const md = new MarkdownIt({ html: true, linkify: true });
+  // `README.md` is not a link, though `.md` is a country's domain.
+  md.linkify.set({ fuzzyLink: false, fuzzyEmail: false, fuzzyIP: false });
+  md.core.ruler.after('inline', 'task-lists', taskLists);
+  if (policy === 'reply') {
+    // An image would load as soon as the reply shows, so a reply could send data out in its URL.
+    md.renderer.rules.image = (tokens, i) => {
+      const href = String(tokens[i].attrGet('src') ?? '');
+      return `<a href="${md.utils.escapeHtml(href)}">${md.utils.escapeHtml(tokens[i].content || href)}</a>`;
+    };
+  }
+  return md;
+}
+
+/** @type {Record<import('./types.js').PolicyName, import('markdown-it').MarkdownIt>} */
+const parsers = { reply: createParser('reply'), document: createParser('document') };
 
 /** @param {Element} el */
 const unwrap = (el) => el.replaceWith(...el.childNodes);
@@ -168,8 +186,9 @@ function addHeadingIds(fragment) {
 function render(text, options = {}) {
   const { policy = 'reply', decorate = null } = options;
   const parser = parsers[policy];
-  const tokens = parser.lexer(text);
-  const fragment = sanitize(parser.parser(tokens), policy);
+  const env = {};
+  const tokens = parser.parse(text, env);
+  const fragment = sanitize(parser.renderer.render(tokens, parser.options, env), policy);
 
   const links = collectLinks(fragment, { ...options, policy });
   const images = policy === 'document' ? collectImages(fragment, options) : [];
@@ -184,7 +203,7 @@ function render(text, options = {}) {
   const nodes = [...fragment.childNodes].filter(
     (n) => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== ''),
   );
-  const starts = blockStarts(tokens);
+  const starts = blockStarts(tokens, text);
   const blocks = nodes.length === starts.length ? starts.map(({ line, raw }, i) => ({ line, raw, node: nodes[i] })) : [];
   return { fragment, blocks, images, links };
 }

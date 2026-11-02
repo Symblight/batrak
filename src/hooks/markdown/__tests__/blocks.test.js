@@ -1,9 +1,9 @@
 import { expect } from '@esm-bundle/chai';
-import { Lexer } from 'marked';
+import MarkdownIt from 'markdown-it';
 import { blockStarts, createSlugger, slugOf } from '../blocks.js';
 
 /** @param {string} text */
-const starts = (text) => blockStarts(new Lexer().lex(text)).map((b) => b.line);
+const starts = (text) => blockStarts(new MarkdownIt({ html: true }).parse(text, {}), text).map((b) => b.line);
 
 describe('markdown blocks', () => {
   describe('where blocks start', () => {
@@ -19,6 +19,11 @@ describe('markdown blocks', () => {
     it('counts a table, a rule and a definition among the lines, and keeps the block a definition leaves', () => {
       const text = ['| a | b |', '| - | - |', '| 1 | 2 |', '', '---', '', '[ref]: https://a.test', '', 'text [ref]'].join('\n');
       expect(starts(text)).to.deep.equal([1, 5, 9]);
+    });
+
+    it('reads each block’s source, for telling a changed block from one that stayed', () => {
+      const blocks = blockStarts(new MarkdownIt().parse('# a\n\npara\nmore\n\n- x\n- y', {}), '# a\n\npara\nmore\n\n- x\n- y');
+      expect(blocks.map((b) => b.raw)).to.deep.equal(['# a', 'para\nmore', '- x\n- y']);
     });
 
     it('gives no block for an empty text', () => {
