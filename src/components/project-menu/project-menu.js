@@ -86,8 +86,10 @@ export class AcpProjectMenu extends LitElement {
       ${current
         ? html`<md-icon slot="leading" class="acp-project-menu__check">${unsafeSVG(checkIcon)}</md-icon>`
         : html`<span slot="leading" class="acp-project-menu__tile acp-project-menu__tile_small">${projects.initialOf(project.name)}</span>`}
-      ${project.name}
-      <span class="acp-project-menu__path">${projects.parentLabel(project.path, this.home)}</span>
+      <span class="acp-project-menu__text">
+        <span class="acp-project-menu__title">${project.name}</span>
+        <span class="acp-project-menu__path">${projects.parentLabel(project.path, this.home)}</span>
+      </span>
       ${unread > 0
         ? html`<span slot="trailing" id=${dotId} class="acp-project-menu__dot"></span>
             <md-tooltip slot="trailing" for=${dotId} show-delay="800"

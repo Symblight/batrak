@@ -62,8 +62,30 @@
   }
 }
 
+.acp-project-menu__text {
+  display: flex;
+  align-items: baseline;
+  gap: var(--acp-space-2);
+  min-width: 0;
+}
+
+.acp-project-menu__title,
 .acp-project-menu__path {
-  margin-inline-start: var(--acp-space-2);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The name keeps its width; the folder takes what is left, and little. */
+.acp-project-menu__title {
+  flex: 0 0 auto;
+  max-inline-size: 100%;
+}
+
+.acp-project-menu__path {
+  flex: 0 1 auto;
+  max-inline-size: 6rem;
   font-size: var(--acp-font-size-sm);
   color: var(--acp-color-on-surface-variant);
 }
@@ -98,4 +120,5 @@
 /* Menu density comes from src/styles/shadow.css. */
 .acp-project-menu__menu {
   --md-menu-min-width: 12rem;
+  --md-menu-max-width: 15rem;
 }
