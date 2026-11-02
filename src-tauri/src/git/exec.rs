@@ -88,8 +88,8 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// git leads its own process group, stopped as a whole on a timeout: hooks, ssh and credential
-    /// helpers it started hold our output pipes open and would outlive a kill of git alone.
+    /// git leads its own session and process group, stopped as a whole on a timeout: hooks, ssh and
+    /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
     fn own_group(self) -> bool {
         matches!(self, Mode::Remote | Mode::Hooks)
     }
@@ -184,7 +184,13 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     #[cfg(unix)]
     if mode.own_group() {
         use std::os::unix::process::CommandExt;
-        command.process_group(0);
+        // A session of its own: it leads its process group, and has no controlling terminal, so ssh
+        // fails at once instead of asking for a passphrase or a host key on the tty we were run from
+        // (`GIT_TERMINAL_PROMPT` doesn't reach ssh). The user's ssh settings stay as they are.
+        // SAFETY: `setsid` is async-signal-safe and touches nothing of the parent.
+        unsafe {
+            command.pre_exec(|| if libc::setsid() == -1 { Err(io::Error::last_os_error()) } else { Ok(()) });
+        }
     }
 
     // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
@@ -364,19 +370,30 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_remote_git_leads_its_own_process_group_so_a_timeout_stops_ssh_and_helpers_too() {
+    fn a_remote_git_runs_without_a_terminal_and_leads_its_own_process_group() {
         use std::os::unix::fs::PermissionsExt;
-        // A git that prints its own pid and its process group.
-        let dir = crate::git::test_repo::temp_dir("remote-group");
-        let git = dir.join("git");
-        std::fs::write(&git, "#!/bin/sh\necho $$ $(ps -o pgid= -p $$)\n").unwrap();
+        // Arrange: a git that notes its pid, then runs a while
+        let dir = crate::git::test_repo::temp_dir("remote-session");
+        let (git, pid_file) = (dir.join("git"), dir.join("pid"));
+        std::fs::write(&git, format!("#!/bin/sh\necho $$ > '{}'\nsleep 1\n", pid_file.display())).unwrap();
         std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-        let out = run(&git, &dir, &[OsStr::new("fetch")], Mode::Remote).unwrap();
+        thread::scope(|scope| {
+            // Act
+            let running = scope.spawn(|| run(&git, &dir, &[OsStr::new("fetch")], Mode::Remote));
+            let pid = loop {
+                if let Some(pid) = std::fs::read_to_string(&pid_file).ok().and_then(|t| t.trim().parse::<libc::pid_t>().ok()) {
+                    break pid;
+                }
+                thread::sleep(Duration::from_millis(5));
+            };
+            // SAFETY: plain queries of a process that is still running.
+            let (session, group) = unsafe { (libc::getsid(pid), libc::getpgid(pid)) };
 
-        let out = String::from_utf8(out).unwrap();
-        let ids: Vec<&str> = out.split_whitespace().collect();
-        assert_eq!(ids[0], ids[1], "pid and process group: {out}");
+            // Assert: a session of its own has no terminal for ssh to prompt on; the group is stopped on a timeout
+            assert_eq!((session, group), (pid, pid), "session and process group of {pid}");
+            running.join().unwrap().unwrap();
+        });
     }
     use crate::git::test_repo::{git_bin, TestRepo};
 

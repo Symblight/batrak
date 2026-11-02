@@ -301,6 +301,7 @@ pub fn classify(stderr: &str) -> FailureKind {
         "could not read password",
         "terminal prompts disabled",
         "permission denied (publickey",
+        "host key verification failed",
         "invalid username or password",
         "returned error: 401",
         "returned error: 403",
@@ -766,6 +767,9 @@ mod tests {
             ("fatal: Authentication failed for 'https://github.com/a/b.git/'", FailureKind::Auth),
             ("fatal: could not read Username for 'https://github.com': terminal prompts disabled", FailureKind::Auth),
             ("git@github.com: Permission denied (publickey).", FailureKind::Auth),
+            // ssh with no terminal to ask on: an unknown host, a key that needs its passphrase.
+            ("Host key verification failed.\nfatal: Could not read from remote repository.", FailureKind::Auth),
+            ("Load key \"/u/.ssh/id_ed25519\": incorrect passphrase supplied to decrypt private key\r\ngit@h: Permission denied (publickey).", FailureKind::Auth),
             ("fatal: unable to access 'https://h/x.git/': The requested URL returned error: 403", FailureKind::Auth),
             ("fatal: unable to access 'https://h/x.git/': The requested URL returned error: 404", FailureKind::NotFound),
             ("ERROR: Repository not found.", FailureKind::NotFound),
