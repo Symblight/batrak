@@ -44,18 +44,25 @@ function ensureChipTemplates() {
 
 /**
  * A file chip for a ref: the file's (or folder's) name and lines, the path as written in `data-path`.
+ * Made in the document of the nodes it goes into (the markdown fragment's inert one), not through
+ * `buildChipElement`: that upgrades the chip in the page, and a shadow root that is moved to another
+ * document loses its adopted stylesheets, which left the chip unstyled.
  * @param {FileRef} ref
+ * @param {Document} doc
  */
-function refChip(ref) {
+function refChip(ref, doc) {
   const name = ref.path.slice(ref.path.lastIndexOf('/') + 1);
   const lines = chat.linesOf(ref);
-  const chip = buildChipElement({
-    templateId: FILE_CHIP_TEMPLATE,
-    label: lines ? `${name}:${lines}` : name,
-    icon: fileIcon.svgFor(name, ref.folder),
-    data: ref.folder ? { path: ref.path, kind: 'folder' } : lines ? { path: ref.path, lines } : { path: ref.path },
-  });
+  const chip = doc.createElement('chx-chip');
+  chip.dataset.templateId = FILE_CHIP_TEMPLATE;
+  chip.dataset.path = ref.path;
+  if (ref.folder) chip.dataset.kind = 'folder';
+  else if (lines) chip.dataset.lines = lines;
   chip.title = lines ? `${ref.path}:${lines}` : ref.path;
+  const icon = doc.createElement('md-icon');
+  icon.slot = 'icon';
+  icon.innerHTML = fileIcon.svgFor(name, ref.folder);
+  chip.append(icon, lines ? `${name}:${lines}` : name);
   return chip;
 }
 
@@ -127,7 +134,7 @@ export function formatFileRefs(root, { links }) {
   }
   for (const code of root.querySelectorAll('code')) {
     const ref = code.closest('a') ? null : chat.parseFileRef(code.textContent ?? '');
-    if (ref) code.replaceWith(refChip(ref));
+    if (ref) code.replaceWith(refChip(ref, code.ownerDocument));
   }
   // A chip's label is a text node too (`app.js:12`), which would read as a ref of its own.
   const skip = 'a, code, chx-code-block, [data-template-id]';
@@ -143,7 +150,7 @@ export function formatFileRefs(root, { links }) {
     node.replaceWith(
       ...segments.map(({ text, ref }) => {
         if (!ref) return text;
-        return !links || ref.mention || ref.fromLine !== null ? refChip(ref) : refLink(ref, text);
+        return !links || ref.mention || ref.fromLine !== null ? refChip(ref, node.ownerDocument) : refLink(ref, text);
       }),
     );
   }
