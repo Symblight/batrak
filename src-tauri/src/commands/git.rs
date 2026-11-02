@@ -3,6 +3,7 @@
 use tauri::State;
 
 use crate::git::cache::StatusReply;
+use crate::git::remote::{self, RemoteError, RemoteOp};
 use crate::git::{binary, blob, commit, repo};
 use crate::workspace::{checked_rel, Workspaces};
 
@@ -79,4 +80,35 @@ pub async fn git_commit(
     let done = blocking(move || commit::commit(binary::git()?, &root.path, &paths, &message, amend)).await??;
     tracing::info!(sha = %done.sha, files = count, amend, "committed");
     Ok(done)
+}
+
+/// Fetches, pulls (fast-forward only), pushes or publishes the root's current branch, and replies
+/// with its new state. Never prompts for credentials; a failure carries its kind and git's message.
+#[tauri::command]
+pub async fn git_remote(
+    workspaces: State<'_, Workspaces>,
+    root_id: String,
+    action: RemoteOp,
+) -> Result<repo::RepoState, RemoteError> {
+    let root = workspaces.get(&root_id).map_err(RemoteError::other)?;
+    let result = blocking(move || {
+        let git = binary::git().map_err(RemoteError::other)?;
+        let state = root
+            .git
+            .head(git, &root.path, root.epoch())
+            .map_err(RemoteError::other)?
+            .ok_or_else(|| RemoteError::other("Not a git repository"))?;
+        remote::run(git, &root.path, action, &state)?;
+        root.git
+            .head(git, &root.path, root.epoch())
+            .map_err(RemoteError::other)?
+            .ok_or_else(|| RemoteError::other("Not a git repository"))
+    })
+    .await
+    .map_err(RemoteError::other)?;
+    match &result {
+        Ok(_) => tracing::info!(?action, "git remote operation done"),
+        Err(e) => tracing::info!(?action, kind = ?e.kind, "git remote operation failed"),
+    }
+    result
 }

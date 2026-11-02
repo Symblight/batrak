@@ -1,7 +1,8 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitRemoteOp, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $notices } from '../../../stores/notices/notices.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
 
@@ -66,6 +67,8 @@ describe('git', () => {
     };
     $workspace.set(null);
     $gitRepo.set(NO_REPO);
+    $gitRemoteOp.set(null);
+    $notices.set([]);
     setCommitSelection([]);
     mockIPC(
       (cmd, args) => {
@@ -259,5 +262,44 @@ describe('git', () => {
     // Assert
     expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
+  });
+  it('runs a remote operation one at a time, shows it running, and takes the branch state it answers with', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    /** @type {((repo: unknown) => void)[]} */
+    const answering = [];
+    answers.git_remote = () => new Promise((resolve) => answering.push(resolve));
+    // Act
+    const first = git.remote('push');
+    await until(() => answering.length === 1);
+    const whileRunning = $gitRemoteOp.get();
+    await git.remote('fetch'); // ignored: one at a time
+    answering[0]({ ...REPO, ahead: 0, upstream: 'origin/main' });
+    await first;
+    // Assert
+    expect(whileRunning).to.deep.equal({ rootId, action: 'push', state: 'running', error: null });
+    expect(sent('git_remote')).to.deep.equal([{ rootId, action: 'push' }]);
+    expect($gitRepo.get().repo?.upstream).to.equal('origin/main');
+    expect($gitRemoteOp.get(), 'done: nothing left to show').to.equal(null);
+  });
+
+  it('keeps a failed operation with its kind and message, tells the user once, and forgets it when dismissed', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    const error = { kind: 'rejected', message: '! [rejected] main -> main (fetch first)\nerror: failed to push' };
+    answers.git_remote = () => {
+      throw error;
+    };
+    // Act
+    await git.remote('push');
+    // Assert
+    expect($gitRemoteOp.get()).to.deep.equal({ rootId, action: 'push', state: 'failed', error });
+    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Push failed: ! [rejected] main -> main (fetch first)']]);
+    // Act
+    git.dismissRemote();
+    // Assert
+    expect($gitRemoteOp.get()).to.equal(null);
   });
 });

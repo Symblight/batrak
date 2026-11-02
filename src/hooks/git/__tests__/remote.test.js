@@ -39,6 +39,38 @@ describe('git remote chip', () => {
     }
   });
 
+  it('is a button only where one click does the obvious thing', () => {
+    /** @type {[Partial<import('../types.js').GitRepoState>, string | null][]} */
+    const cases = [
+      [{}, 'fetch'],
+      [{ ahead: 1 }, 'push'],
+      [{ behind: 1 }, 'pull'],
+      [{ ahead: 1, behind: 1 }, null],
+      [{ upstream: null }, 'publish'],
+      [{ upstream: null, remote: null, hasRemotes: false }, null],
+    ];
+    for (const [fields, action] of cases) {
+      expect(git.remoteChip(repo(fields), NOW)?.action, JSON.stringify(fields)).to.equal(action);
+    }
+  });
+
+  it('shows a running operation as busy and a failed one with its reason, over the branch state', () => {
+    /** @type {[import('../types.js').GitRemoteAction, string, string][]} */
+    const verbs = [
+      ['fetch', 'Fetching…', 'Fetch failed'],
+      ['pull', 'Pulling…', 'Pull failed'],
+      ['push', 'Pushing…', 'Push failed'],
+      ['publish', 'Publishing…', 'Publish failed'],
+    ];
+    for (const [action, busy, failed] of verbs) {
+      const running = git.remoteChip(repo({ ahead: 4 }), NOW, { rootId: 'r', action, state: 'running', error: null });
+      expect(running, action).to.deep.include({ id: 'busy', label: busy, action: null });
+      const error = { kind: /** @type {const} */ ('rejected'), message: '! [rejected] main -> main (fetch first)\nerror: failed to push' };
+      const broke = git.remoteChip(repo({ ahead: 4 }), NOW, { rootId: 'r', action, state: 'failed', error });
+      expect(broke, action).to.deep.include({ id: 'failed', label: failed, icon: 'error', tooltip: '! [rejected] main -> main (fetch first)', action: null });
+    }
+  });
+
   it('shows nothing without a branch to sync', () => {
     expect(git.remoteChip(null, NOW), 'outside a repository').to.equal(null);
     expect(git.remoteChip(repo({ branch: null, detached: true, upstream: null }), NOW), 'detached').to.equal(null);

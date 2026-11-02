@@ -78,8 +78,7 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Talks to a remote: a longer timeout. No fetch or push yet.
-    #[allow(dead_code)]
+    /// Talks to a remote (fetch, push): a longer timeout.
     Remote,
     /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no

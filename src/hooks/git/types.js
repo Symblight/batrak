@@ -33,10 +33,29 @@
 /**
  * What the header's remote chip shows for a branch.
  * @typedef {Object} GitRemoteChip
- * @property {'none' | 'publish' | 'synced' | 'push' | 'pull' | 'diverged'} id
+ * @property {'none' | 'publish' | 'synced' | 'push' | 'pull' | 'diverged' | 'busy' | 'failed'} id
  * @property {string} label
  * @property {string} icon Material icon name; empty for none.
  * @property {string} tooltip
+ * @property {GitRemoteAction | null} action What a click runs; `null` when the chip isn't a button.
+ */
+
+/** @typedef {'fetch' | 'pull' | 'push' | 'publish'} GitRemoteAction */
+
+/**
+ * Why a remote operation failed; mirrors `git::remote::RemoteError`.
+ * @typedef {Object} GitRemoteError
+ * @property {'auth' | 'rejected' | 'notFastForward' | 'conflict' | 'dirty' | 'network' | 'notFound' | 'timeout' | 'other'} kind
+ * @property {string} message
+ */
+
+/**
+ * The remote operation running or just failed for a root (`$gitRemoteOp`).
+ * @typedef {Object} GitRemoteOp
+ * @property {string} rootId
+ * @property {GitRemoteAction} action
+ * @property {'running' | 'failed'} state
+ * @property {GitRemoteError | null} error Set when failed.
  */
 
 /** @typedef {'modified' | 'added' | 'deleted' | 'renamed' | 'typeChanged' | 'untracked' | 'conflicted'} GitFileKind */

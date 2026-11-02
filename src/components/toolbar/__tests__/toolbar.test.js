@@ -9,16 +9,21 @@ const GIT = {
   error: null,
 };
 
+/** @type {import('../../../hooks/git/types.js').GitRemoteOp} */
+const OP = { rootId: 'r1', action: 'push', state: 'running', error: null };
+
 describe('acp-toolbar', () => {
   it("shows the project's path and the branch state in tooltips, not titles", async () => {
     const el = await fixture(html`<acp-toolbar
       .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .git=${GIT}
+      .remoteOp=${OP}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
     expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main');
-    expect(root.querySelector('acp-remote-chip'), 'the sync state is the chip\'s').to.have.property('repo', GIT.repo);
+    const chip = root.querySelector('acp-remote-chip');
+    expect([chip?.repo, chip?.op], 'the sync state is the chip\'s').to.deep.equal([GIT.repo, OP]);
     expect(root.querySelector('[title]')).to.equal(null);
   });
 

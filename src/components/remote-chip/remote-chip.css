@@ -20,7 +20,23 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   color: var(--acp-color-on-surface-variant);
+  /* A chip that does something is a <button>: no browser look. */
+  border: 0;
+  background: transparent;
+  font-family: inherit;
 }
+.acp-remote-chip__chip_action {
+  cursor: pointer;
+
+  &:hover {
+    background-image: linear-gradient(var(--acp-state-hover), var(--acp-state-hover));
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 1px;
+  }
+}
+
 :host([state='none']) .acp-remote-chip__chip {
   font-weight: normal;
 }
@@ -42,4 +58,53 @@
 }
 .acp-remote-chip__icon {
   font-size: var(--acp-icon-size-sm);
+}
+
+:host([state='busy']) .acp-remote-chip__chip {
+  background: var(--acp-color-surface-container-highest);
+}
+:host([state='failed']) .acp-remote-chip__chip {
+  background: var(--acp-color-error-container);
+  color: var(--acp-color-on-error-container);
+}
+.acp-remote-chip__spinner {
+  font-size: var(--acp-icon-size-sm);
+}
+/* An auto popover in the top layer; FloatingController writes `left` / `top`. */
+.acp-remote-chip__popover {
+  position: fixed;
+  inset: auto;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 360px;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  padding: var(--acp-space-4);
+  border: 0;
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container);
+  box-shadow: var(--acp-elevation-2);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-md);
+}
+.acp-remote-chip__title {
+  margin: 0 0 var(--acp-space-2);
+  font-weight: var(--acp-font-weight-medium);
+}
+.acp-remote-chip__message {
+  max-height: 160px;
+  margin: 0;
+  overflow: auto;
+  font-family: var(--acp-font-family-mono);
+  font-size: var(--acp-font-size-sm);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+.acp-remote-chip__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--acp-space-1);
+  margin-top: var(--acp-space-3);
 }

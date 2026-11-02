@@ -10,6 +10,7 @@ import collapseIcon from '@material-design-icons/svg/outlined/close_fullscreen.s
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
 /** @typedef {import('../../hooks/projects/types.js').Workspace} Workspace */
 
 /**
@@ -17,11 +18,13 @@ import styles from './toolbar.css?inline';
  * @summary Narrow app-wide bar above the columns: the opened folder's name and git branch, and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
+ * @fires acp-git-remote `{ action }` From the remote chip.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
     workspace: { attribute: false },
     git: { attribute: false },
+    remoteOp: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -34,6 +37,8 @@ export class AcpToolbar extends LitElement {
     this.workspace = null;
     /** @type {GitRepoView} */
     this.git = { repo: null, error: null };
+    /** @type {GitRemoteOp | null} The fetch, pull or push running or failed for the shown project. */
+    this.remoteOp = null;
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
@@ -102,7 +107,7 @@ export class AcpToolbar extends LitElement {
       .join(', ');
     return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
       <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
-      <acp-remote-chip .repo=${repo}></acp-remote-chip>`;
+      <acp-remote-chip .repo=${repo} .op=${this.remoteOp}></acp-remote-chip>`;
   }
 
   render() {

@@ -156,6 +156,7 @@ pub fn run() {
             commands::git::git_last_commit_message,
             commands::git::git_branches,
             commands::git::git_commit,
+            commands::git::git_remote,
             commands::terminal::terminal_open,
             commands::terminal::terminal_attach,
             commands::terminal::terminal_write,

@@ -1,5 +1,6 @@
-import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitRemoteOp, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
+import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
@@ -12,6 +13,8 @@ import { SerialTask } from './serial-task.js';
 /** @typedef {import('./types.js').GitCommitted} GitCommitted */
 /** @typedef {import('./types.js').GitRepoState} GitRepoState */
 /** @typedef {import('./types.js').GitStatusReply} GitStatusReply */
+/** @typedef {import('./types.js').GitRemoteAction} GitRemoteAction */
+/** @typedef {import('./types.js').GitRemoteError} GitRemoteError */
 
 /**
  * Git state of an open root that isn't active, shown again (and checked) when it is.
@@ -123,6 +126,17 @@ async function readChanges() {
 }
 
 /**
+ * What came back from a failed `git_remote`: the backend's `{ kind, message }`, or anything else
+ * (the call itself failing) as a message.
+ * @param {unknown} err
+ * @returns {GitRemoteError}
+ */
+function remoteError(err) {
+  if (typeof err === 'object' && err !== null && 'kind' in err && 'message' in err) return /** @type {GitRemoteError} */ (err);
+  return { kind: 'other', message: err instanceof Error ? err.message : String(err) };
+}
+
+/**
  * Git state of the active root. The branch (`$gitRepo`) is cheap and kept current while a project
  * is open: on root change, repository changes and window focus (a root inside a larger repository
  * or a worktree has its `.git` outside the watched folder). Changed files (`$gitChanges`) are kept
@@ -137,6 +151,33 @@ export const git = Object.freeze({
   typeBadge,
   relativePath,
   remoteChip,
+
+  /**
+   * Fetches, pulls (fast-forward only), pushes or publishes the active root's branch. One at a time
+   * app-wide; while it runs and after it fails `$gitRemoteOp` says so, and a failure is also a snackbar.
+   * @param {GitRemoteAction} action
+   */
+  async remote(action) {
+    const rootId = $rootId.get();
+    if (rootId === null || $gitRemoteOp.get()?.state === 'running') return;
+    $gitRemoteOp.set({ rootId, action, state: 'running', error: null });
+    try {
+      /** @type {GitRepoState} */
+      const repo = await ipc.invoke('git_remote', { rootId, action });
+      if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
+      $gitRemoteOp.set(null);
+    } catch (err) {
+      const error = remoteError(err);
+      $gitRemoteOp.set({ rootId, action, state: 'failed', error });
+      const verb = action === 'publish' ? 'Publish' : action[0].toUpperCase() + action.slice(1);
+      app.reportError(`${verb} failed`, error.message.split('\n')[0]);
+    }
+  },
+
+  /** Clears a failed remote operation, so the chip shows the branch's state again. */
+  dismissRemote() {
+    if ($gitRemoteOp.get()?.state === 'failed') $gitRemoteOp.set(null);
+  },
 
   /**
    * Starts following the active root; once however often it is called.

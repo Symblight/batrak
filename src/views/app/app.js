@@ -8,7 +8,7 @@ import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
-import { $gitRepo } from '../../stores/git/git.js';
+import { $gitRemoteOpHere, $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
@@ -125,6 +125,7 @@ export class AcpApp extends ViewElement {
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
   #rootId = new StoreController(this, { store: $rootId });
   #gitRepo = new StoreController(this, { store: $gitRepo });
+  #gitRemoteOp = new StoreController(this, { store: $gitRemoteOpHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
@@ -347,6 +348,13 @@ export class AcpApp extends ViewElement {
   }
 
   /** @param {Event} e */
+  #onGitRemote = (e) => {
+    const { action } = /** @type {CustomEvent<{ action: import('../../hooks/git/types.js').GitRemoteAction | 'dismiss' }>} */ (e).detail;
+    if (action === 'dismiss') git.dismissRemote();
+    else void git.remote(action);
+  };
+
+  /** @param {Event} e */
   #onColumnToggle(e) {
     toggleColumn(/** @type {CustomEvent<{ column: string }>} */ (e).detail.column);
   }
@@ -452,9 +460,11 @@ export class AcpApp extends ViewElement {
         slot="header"
         .workspace=${this.#workspace.value}
         .git=${this.#gitRepo.value}
+        .remoteOp=${this.#gitRemoteOp.value}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
+        @acp-git-remote=${this.#onGitRemote}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split

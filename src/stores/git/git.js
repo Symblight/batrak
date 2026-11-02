@@ -1,7 +1,9 @@
 import { atom, computed } from 'nanostores';
+import { $rootId } from '../workspace/workspace.js';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };
@@ -45,3 +47,9 @@ export function pickForCommit(ids, picked) {
 
 /** Notifies only when HEAD moves (commit, checkout, reset). */
 export const $gitHead = computed($gitRepo, ({ repo }) => (repo ? `${repo.branch ?? ''}@${repo.sha ?? ''}` : null));
+
+/** The fetch, pull or push running (or just failed) for a root; written by the `git` hook. */
+export const $gitRemoteOp = atom(/** @type {GitRemoteOp | null} */ (null));
+
+/** [`$gitRemoteOp`] when it is the shown root's. */
+export const $gitRemoteOpHere = computed([$gitRemoteOp, $rootId], (op, rootId) => (op && op.rootId === rootId ? op : null));
