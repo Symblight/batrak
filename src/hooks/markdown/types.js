@@ -17,6 +17,7 @@ export {};
 /**
  * @typedef {Object} RenderedBlock
  * @property {number} line 1-based line of the source where the block begins.
+ * @property {string} raw The block's source; equal sources from the start of two renders give equal nodes.
  * @property {Node} node The block's node in the fragment.
  */
 

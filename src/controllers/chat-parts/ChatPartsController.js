@@ -117,7 +117,7 @@ function decodedHref(link) {
 /**
  * Turns the file refs in rendered text into chips and links: inline code that is a path, `@path`
  * and `path:12` become chips, a bare `src/app.js` a link, a link to a file opens it.
- * @param {HTMLElement} root
+ * @param {ParentNode} root
  * @param {{ links: boolean }} options `false`: every ref in the text becomes a chip.
  */
 export function formatFileRefs(root, { links }) {

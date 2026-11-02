@@ -185,7 +185,7 @@ function render(text, options = {}) {
     (n) => n.nodeType === Node.ELEMENT_NODE || (n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== ''),
   );
   const starts = blockStarts(tokens);
-  const blocks = nodes.length === starts.length ? starts.map(({ line }, i) => ({ line, node: nodes[i] })) : [];
+  const blocks = nodes.length === starts.length ? starts.map(({ line, raw }, i) => ({ line, raw, node: nodes[i] })) : [];
   return { fragment, blocks, images, links };
 }
 
