@@ -57,7 +57,7 @@ pub fn read(git: &Path, root: &Path, info: &RepoInfo, branch: Option<&str>) -> R
             Some((name.to_owned(), url.to_owned()))
         })
         .collect();
-    let fetched_at = std::fs::metadata(info.common_dir.join("FETCH_HEAD"))
+    let fetched_at = std::fs::metadata(info.git_dir.join("FETCH_HEAD"))
         .and_then(|m| m.modified())
         .ok()
         .and_then(|t| t.duration_since(UNIX_EPOCH).ok())

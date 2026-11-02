@@ -32,7 +32,8 @@ fn fingerprint(info: &RepoInfo, upstream: Option<&str>) -> Fingerprint {
         git_dir.join("index"),
         common.join("packed-refs"),
         common.join("config"),
-        common.join("FETCH_HEAD"),
+        // Per worktree, like `HEAD` (git keeps every pseudo ref in the worktree's own git dir).
+        git_dir.join("FETCH_HEAD"),
         common.join("info/exclude"),
     ];
     paths.extend(head_ref.map(|r| common.join(r)));
@@ -265,6 +266,21 @@ mod tests {
         crate::git::test_repo::run_in(&wt, &["add", "README.md"]);
         let staged = ask(&cache, &wt, 0, Some(first.version));
         assert!(!staged.unchanged, "the worktree's index lives under the main .git");
+    }
+
+    #[test]
+    fn a_fetch_in_a_worktree_dates_the_worktree_s_branch() {
+        // Arrange: a worktree of a repository with a remote, its head cached before any fetch
+        let (mut repo, _origin) = TestRepo::with_remote("cache-wt-fetch");
+        let wt = repo.worktree("cache-wt-fetch-dir", "wt-branch");
+        let (git, cache) = (git_bin(), GitCache::default());
+        assert_eq!(cache.head(&git, &wt, 0).unwrap().unwrap().fetched_at, None);
+
+        // Act: fetched from the worktree; the watcher reports nothing (same epoch)
+        crate::git::test_repo::run_in(&wt, &["fetch", "-q", "origin"]);
+
+        // Assert
+        assert!(cache.head(&git, &wt, 0).unwrap().unwrap().fetched_at.is_some(), "FETCH_HEAD is the worktree's own");
     }
 
     /// An edit the watcher doesn't report (same epoch): a cached answer must not see it.
