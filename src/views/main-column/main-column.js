@@ -6,6 +6,7 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
+import { markdownView } from '../../hooks/markdown-view/markdown-view.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
@@ -91,9 +92,65 @@ export class AcpMainColumn extends ViewElement {
   }
 
   disconnectedCallback() {
+    this.#disarmChord();
     this.removeEventListener('acp-file-open', this.#onFileOpen);
     super.disconnectedCallback();
   }
+
+  /** The active tab's path when it is a markdown file. */
+  get #activeMarkdownPath() {
+    const active = $activePath.get();
+    const tab = this.#files.tabs.find((t) => t.id === active);
+    return tab && contentKindOf(tab) === 'markdown' ? tab.path : null;
+  }
+
+  /** Waiting for the second key of Mod+K. */
+  #chordTimer = 0;
+
+  #disarmChord() {
+    clearTimeout(this.#chordTimer);
+    this.#chordTimer = 0;
+  }
+
+  /**
+   * The markdown view's keys, while the active tab is a markdown file: Mod+K then V toggles Split (the
+   * chord waits 1.2 s), Mod+Shift+V Preview, Esc leaves Preview unless text is selected. In the
+   * capture phase, so the editor's own keymap doesn't see them first.
+   * @param {KeyboardEvent} e
+   */
+  #onKeydown = (e) => {
+    const path = this.#activeMarkdownPath;
+    if (path === null) {
+      this.#disarmChord();
+      return;
+    }
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
+    const key = e.key.toLowerCase();
+    const mod = e.metaKey || e.ctrlKey;
+    const claim = () => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    if (this.#chordTimer) {
+      this.#disarmChord();
+      if (key === 'v' && !e.altKey && !e.shiftKey) {
+        claim();
+        markdownView.toggle(path, 'split');
+        return;
+      }
+    }
+    if (mod && !e.altKey && !e.shiftKey && key === 'k') {
+      claim();
+      this.#chordTimer = window.setTimeout(() => this.#disarmChord(), 1200);
+    } else if (mod && !e.altKey && e.shiftKey && key === 'v') {
+      claim();
+      markdownView.toggle(path, 'preview');
+    } else if (e.key === 'Escape' && !mod && !e.altKey && !e.shiftKey && markdownView.modeOf(path) === 'preview') {
+      if (getSelection()?.toString()) return;
+      claim();
+      markdownView.setMode(path, 'raw');
+    }
+  };
 
   /**
    * Rendered unconditionally, so present after the first render.
@@ -214,6 +271,7 @@ export class AcpMainColumn extends ViewElement {
         .terminalBusy=${terminals.busy}
         .worktrees=${this.#worktrees.value}
         .renderContent=${this.#renderTabContent}
+        @keydown=${{ handleEvent: this.#onKeydown, capture: true }}
         .dropName=${tabs.editorDrop}
         .acceptsDrop=${tabs.isTerminal}
         @acp-tab-receive=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) =>

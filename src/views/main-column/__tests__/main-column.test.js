@@ -6,6 +6,8 @@ import { $gitChanges } from '../../../stores/git/git.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
+import { markdownView } from '../../../hooks/markdown-view/markdown-view.js';
 import '../main-column.js';
 
 /** @typedef {import('../main-column.js').AcpMainColumn} AcpMainColumn */
@@ -97,5 +99,98 @@ describe('acp-main-column', () => {
       await new Promise((r) => setTimeout(r, 10));
     }
     expect(el.querySelector('acp-tab-view')?.shadowRoot?.querySelector('acp-editor-view acp-code-view'), 'through the editor view').to.not.equal(null);
+  });
+
+  describe('markdown view keys', () => {
+    afterEach(() => $markdownModes.setKey('/p', undefined));
+
+    /**
+     * @param {Element} target
+     * @param {KeyboardEventInit} init
+     */
+    function press(target, init) {
+      const event = new KeyboardEvent('keydown', { bubbles: true, composed: true, cancelable: true, ...init });
+      target.dispatchEvent(event);
+      return event;
+    }
+    const mode = () => markdownView.modeOf('/p/docs/a.md');
+
+    it('toggles Preview with Mod+Shift+V, from Raw and from Split', async () => {
+      openTab('/p/docs/a.md');
+      const { tabView } = await render();
+
+      const first = press(tabView, { key: 'V', metaKey: true, shiftKey: true });
+      expect([mode(), first.defaultPrevented]).to.deep.equal(['preview', true]);
+      press(tabView, { key: 'v', ctrlKey: true, shiftKey: true });
+      expect(mode()).to.equal('raw');
+
+      markdownView.setMode('/p/docs/a.md', 'split');
+      press(tabView, { key: 'V', metaKey: true, shiftKey: true });
+      expect(mode()).to.equal('preview');
+    });
+
+    it('toggles Split with Mod+K, then V', async () => {
+      openTab('/p/docs/a.md');
+      const { tabView } = await render();
+
+      const chord = press(tabView, { key: 'k', metaKey: true });
+      const second = press(tabView, { key: 'v' });
+      expect([mode(), chord.defaultPrevented, second.defaultPrevented]).to.deep.equal(['split', true, true]);
+
+      press(tabView, { key: 'k', ctrlKey: true });
+      press(tabView, { key: 'v', ctrlKey: true });
+      expect(mode(), 'with Mod still held').to.equal('raw');
+    });
+
+    it('drops the chord at any other key, which is not swallowed, and when it waited too long', async () => {
+      openTab('/p/docs/a.md');
+      const { tabView } = await render();
+
+      press(tabView, { key: 'k', metaKey: true });
+      press(tabView, { key: 'Shift', shiftKey: true });
+      const other = press(tabView, { key: 'x' });
+      press(tabView, { key: 'v' });
+      expect([mode(), other.defaultPrevented], 'cancelled').to.deep.equal(['raw', false]);
+
+      press(tabView, { key: 'k', metaKey: true });
+      await new Promise((resolve) => setTimeout(resolve, 1300));
+      const late = press(tabView, { key: 'v' });
+      expect([mode(), late.defaultPrevented], 'too late').to.deep.equal(['raw', false]);
+    });
+
+    it('goes back from Preview to Raw with Esc, unless something is selected', async () => {
+      openTab('/p/docs/a.md');
+      const { tabView } = await render();
+      markdownView.setMode('/p/docs/a.md', 'preview');
+      const host = document.createElement('p');
+      host.textContent = 'some text';
+      document.body.append(host);
+      getSelection()?.selectAllChildren(host);
+
+      press(tabView, { key: 'Escape' });
+      expect(mode(), 'with a selection').to.equal('preview');
+
+      getSelection()?.removeAllRanges();
+      host.remove();
+      const esc = press(tabView, { key: 'Escape' });
+      expect([mode(), esc.defaultPrevented]).to.deep.equal(['raw', true]);
+
+      const again = press(tabView, { key: 'Escape' });
+      expect(again.defaultPrevented, 'not in Preview').to.equal(false);
+    });
+
+    it('leaves the keys alone for any other tab', async () => {
+      openTab('/p/a.js');
+      const { tabView } = await render();
+
+      const events = [
+        press(tabView, { key: 'V', metaKey: true, shiftKey: true }),
+        press(tabView, { key: 'k', metaKey: true }),
+        press(tabView, { key: 'v' }),
+      ];
+
+      expect(events.map((e) => e.defaultPrevented)).to.deep.equal([false, false, false]);
+      expect($markdownModes.get()['/p']).to.equal(undefined);
+    });
   });
 });

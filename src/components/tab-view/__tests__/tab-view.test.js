@@ -1,6 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../tab-view.js';
 import '../../code-view/code-view.js';
+import '../../markdown-view/markdown-view.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -281,6 +282,38 @@ describe('acp-tab-view', () => {
       await untilSelected(el, '');
       const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (codeView(el).shadowRoot?.querySelector('cdx-code-editor'));
       expect(editor.selection.getCursor()?.line).to.equal(3);
+    });
+
+    describe('in a markdown file', () => {
+      const mdPath = '/p/a.md';
+      const markdownContent = (/** @type {EditorTab} */ tab) => html`<acp-markdown-view .tab=${tab} .mode=${'split'}></acp-markdown-view>`;
+
+      it('selects a match in the editor inside the markdown view, and says what is selected', async () => {
+        const tab = { ...fileTab(mdPath), content: '', loaded: false };
+        const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+          await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${mdPath} .root=${'/p'} .renderContent=${markdownContent}></acp-tab-view>`)
+        );
+
+        el.revealLine(mdPath, { line: 2, column: 3, length: 6 });
+        el.tabs = [{ ...tab, loaded: true, content: 'a\nb needle c' }];
+
+        await untilSelected(el, 'needle');
+      });
+
+      it('puts the caret on a line', async () => {
+        const tab = { ...fileTab(mdPath), loaded: true, content: 'a\nb\nc' };
+        const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
+          await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${mdPath} .root=${'/p'} .renderContent=${markdownContent}></acp-tab-view>`)
+        );
+
+        el.revealLine(mdPath, 3);
+
+        const view = /** @type {HTMLElementTagNameMap['acp-markdown-view']} */ (el.shadowRoot?.querySelector('acp-markdown-view'));
+        const code = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (view.shadowRoot?.querySelector('acp-code-view'));
+        const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (code.shadowRoot?.querySelector('cdx-code-editor'));
+        for (let i = 0; i < 100 && editor.selection?.getCursor()?.line !== 3; i++) await new Promise((r) => setTimeout(r, 20));
+        expect(editor.selection.getCursor()?.line).to.equal(3);
+      });
     });
 
     it('has no selected text without a code tab', async () => {

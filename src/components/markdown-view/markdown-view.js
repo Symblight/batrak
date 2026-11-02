@@ -70,8 +70,6 @@ export class AcpMarkdownView extends LitElement {
   #dragShare = null;
   /** @type {{ start: number, total: number } | null} */
   #drag = null;
-  /** @type {number | null} A line the editor is to show once it can. */
-  #pendingLine = null;
 
   #sync = new MarkdownScrollSyncController(this, {
     editor: () => this.#editorScroller(),
@@ -139,12 +137,23 @@ export class AcpMarkdownView extends LitElement {
     };
   }
 
+  /** @type {RevealAt | null} Where the editor is to put the caret once it is shown. */
+  #pendingAt = null;
+
   /**
-   * Puts the caret on a line of the editor, or selects a range there.
+   * Puts the caret on a line of the editor, or selects a range there; in Preview the editor is
+   * opened first (as Split).
    * @param {RevealAt} at
    */
   revealLine(at) {
-    return this.#codeView?.revealLine(at);
+    if (this.mode === 'preview') {
+      this.#pendingAt = at;
+      this.#emit('acp-markdown-mode', { id: this.tab?.id, mode: 'split' });
+      return undefined;
+    }
+    const code = this.#codeView;
+    // Not rendered yet (a tab just opened): once it is.
+    return code ? code.revealLine(at) : this.updateComplete.then(() => this.#codeView?.revealLine(at));
   }
 
   /** The editor's selected text, `''` when none. */
@@ -209,10 +218,10 @@ export class AcpMarkdownView extends LitElement {
   }
 
   updated() {
-    if (this.#pendingLine !== null && this.mode !== 'preview') {
-      const line = this.#pendingLine;
-      this.#pendingLine = null;
-      this.revealLine(line);
+    if (this.#pendingAt !== null && this.mode !== 'preview') {
+      const at = this.#pendingAt;
+      this.#pendingAt = null;
+      this.revealLine(at);
     }
   }
 
@@ -235,13 +244,7 @@ export class AcpMarkdownView extends LitElement {
   /** A block double-clicked: its first line in the editor, which a Preview opens (as Split) first. */
   #onBlockActivate = (/** @type {Event} */ e) => {
     e.stopPropagation();
-    const { line } = /** @type {CustomEvent<{ line: number }>} */ (e).detail;
-    if (this.mode === 'preview') {
-      this.#pendingLine = line;
-      this.#emit('acp-markdown-mode', { id: this.tab?.id, mode: 'split' });
-    } else {
-      this.revealLine(line);
-    }
+    this.revealLine(/** @type {CustomEvent<{ line: number }>} */ (e).detail.line);
   };
 
   /**

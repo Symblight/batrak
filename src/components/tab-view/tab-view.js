@@ -57,7 +57,7 @@ export class AcpTabView extends LitElement {
   #content = new TabContentController({
     views: {
       code: (tab) => this.#renderFile(tab, () => this.#renderHosted(tab)),
-      // The editor until the rendered preview exists: it keeps the diff gutter, comments and selection actions.
+      // The markdown view holds the editor, which keeps the diff gutter, comments and selection actions.
       markdown: (tab) => this.#renderFile(tab, () => this.#renderHosted(tab)),
       image: (tab) =>
         this.#renderFile(
@@ -130,8 +130,10 @@ export class AcpTabView extends LitElement {
     return this.#activeCodeView()?.selectedText() ?? '';
   }
 
+  /** The active tab's editor: a code view, or a markdown view, which holds one. */
   #activeCodeView() {
-    return this.renderRoot.querySelector('.acp-tab-view__panel[active]')?.querySelector('acp-code-view') ?? null;
+    const panel = this.renderRoot.querySelector('.acp-tab-view__panel[active]');
+    return panel?.querySelector('acp-code-view') ?? panel?.querySelector('acp-markdown-view') ?? null;
   }
 
   /**
