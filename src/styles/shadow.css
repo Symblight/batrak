@@ -38,6 +38,21 @@ md-option {
   margin-inline: 0.25rem;
 }
 
+/* Every snackbar: compact, a 2rem line. The library fixes its padding, its 3rem minimum height and the
+   close button's size inside its shadow root, where only a rule of this specificity reaches them. */
+:host(md-snackbar) .md-snackbar {
+  min-block-size: 2rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.75rem 0.25rem;
+}
+:host(md-snackbar) .md-snackbar__close {
+  margin-block: 0;
+  --md-icon-button-font-size: 1rem;
+}
+:host(md-snackbar) .md-snackbar__close::part(button) {
+  padding: 0.25rem;
+}
+
 /* The agent's replies read as a document across the list's full width, not a bubble; your own
    messages keep theirs. */
 chx-message {
