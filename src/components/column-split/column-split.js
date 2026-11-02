@@ -27,7 +27,7 @@ import styles from './column-split.css?inline';
 
 /**
  * @tag acp-column-split
- * @summary The app's row of columns: a pane for each, its content slotted by name, a divider beside each resizable one, widths dragged inline and reported when they settle. Whatever else is slotted follows the panes.
+ * @summary The app's row of columns (stacked rows with `direction="column"`, dividers dragged up and down, sizes as heights): a pane for each, its content slotted by name, a divider beside each resizable one, widths dragged inline and reported when they settle. Whatever else is slotted follows the panes.
  * @fires acp-columns-resize `{ widths }` all the widths, when a drag ends, a key steps one or a divider resets
  */
 export class AcpColumnSplit extends LitElement {
@@ -36,6 +36,8 @@ export class AcpColumnSplit extends LitElement {
     widths: { attribute: false },
     hiddenColumns: { attribute: false },
     fillColumns: { attribute: false },
+    direction: { type: String, reflect: true },
+    flush: { type: Boolean, reflect: true },
   };
 
   static styles = styles;
@@ -47,6 +49,7 @@ export class AcpColumnSplit extends LitElement {
 
   #resize = new ColumnResizeController(this, {
     columns: () => this.#resizableColumns(),
+    axis: () => this.#axis,
     widths: () => this.widths,
     onCommit: (widths) =>
       this.dispatchEvent(new CustomEvent('acp-columns-resize', { detail: { widths }, bubbles: true, composed: true })),
@@ -62,6 +65,15 @@ export class AcpColumnSplit extends LitElement {
     this.hiddenColumns = [];
     /** @type {readonly string[]} Columns with no width of their own: they take what the others leave. */
     this.fillColumns = [];
+    /** @type {'row' | 'column'} `column`: the panes are stacked rows, and `size`, `minSize` and `maxSize` are heights. */
+    this.direction = 'row';
+    /** @type {boolean} Without the window's edge padding, for a split inside a pane. */
+    this.flush = false;
+  }
+
+  /** @returns {'x' | 'y'} Along which the dividers are dragged and the panes sized. */
+  get #axis() {
+    return this.direction === 'column' ? 'y' : 'x';
   }
 
   /** The resizable columns as the controller wants them; the same object until `columns` changes. */
@@ -86,10 +98,11 @@ export class AcpColumnSplit extends LitElement {
    */
   #paneStyle({ name, size, minSize, maxSize, shrink = 1, resize }, hidden, fill) {
     if (fill) return '--acp-pane-flex: 1';
+    const dimension = this.#axis === 'y' ? 'height' : 'width';
     const style = [];
-    if (size) style.push(`--acp-pane-flex: 0 ${shrink} var(${size})`, `--acp-pane-width: var(${size})`);
-    if (minSize) style.push(`--acp-pane-min-width: var(${minSize})`);
-    if (maxSize) style.push(`--acp-pane-max-width: var(${maxSize})`);
+    if (size) style.push(`--acp-pane-flex: 0 ${shrink} var(${size})`, `--acp-pane-${dimension}: var(${size})`);
+    if (minSize) style.push(`--acp-pane-min-${dimension}: var(${minSize})`);
+    if (maxSize) style.push(`--acp-pane-max-${dimension}: var(${maxSize})`);
     // A hidden column drops its inline width, so its collapse can take it to nothing.
     if (resize && !hidden) style.push(this.#resize.columnStyle(name));
     return style.join('; ');
@@ -102,6 +115,7 @@ export class AcpColumnSplit extends LitElement {
       class="acp-split__handle"
       name=${name}
       edge=${resize?.edge ?? 'end'}
+      axis=${this.#axis}
       label=${resize?.label ?? ''}
       .value=${value}
       .min=${min}
@@ -126,7 +140,7 @@ export class AcpColumnSplit extends LitElement {
       });
       if (divider && side === 'end') items.push({ key: `handle:${column.name}`, template: this.#renderDivider(column) });
     }
-    return html`<acp-split>${repeat(items, (item) => item.key, (item) => item.template)}<slot></slot></acp-split>`;
+    return html`<acp-split direction=${this.direction} ?flush=${this.flush}>${repeat(items, (item) => item.key, (item) => item.template)}<slot></slot></acp-split>`;
   }
 }
 

@@ -1,9 +1,16 @@
-import { $projectTabs, closeProjectTab } from '../../stores/editor/editor.js';
+import { $projectTabs } from '../../stores/editor/editor.js';
 import { $activeFolder, $sessions } from '../../stores/sessions/sessions.js';
 import {
+  $projectTerminalPanels,
+  $projectTerminalTabs,
+  $terminalPanel,
+  $terminalTabs,
   $terminals,
+  closeTerminalTab,
+  focusTerminal,
   forgetTerminal,
   openTerminal,
+  setTerminalPanelOpen,
   terminalExited,
   terminalFailed,
   terminalRestarting,
@@ -13,7 +20,7 @@ import { $workspace } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from './rules.js';
+import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
 
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('./types.js').TerminalBusy} TerminalBusy */
@@ -181,7 +188,7 @@ function exited(id, exit) {
   const info = $terminals.get()[id];
   if (!info || info.status === 'exited') return;
   if (info.sessionId) terminalExited(id, exit);
-  else if (exit.code === 0 && exit.signal === null) closeProjectTab(info.projectPath, tabs.terminalId(id));
+  else if (exit.code === 0 && exit.signal === null) closeTerminalTab(info.projectPath, id);
   else terminalExited(id, exit);
 }
 
@@ -235,12 +242,27 @@ export const terminals = Object.freeze({
    */
   start() {
     previousClosed();
+    // A terminal's tab is in its project's editor tabs or in its terminal panel's.
+    const releaseGone = () => {
+      const editor = $projectTabs.get();
+      const panel = $projectTerminalTabs.get();
+      const gone = Object.entries($terminals.get())
+        .filter(([id, t]) => {
+          const tab = tabs.terminalId(id);
+          const root = t.projectPath ?? '';
+          return !t.sessionId && !editor[root]?.paths.includes(tab) && !panel[root]?.paths.includes(tab);
+        })
+        .map(([id]) => id);
+      if (gone.length) release(gone);
+    };
     const stops = [
-      $projectTabs.listen((projects) => {
-        const gone = Object.entries($terminals.get())
-          .filter(([id, t]) => !t.sessionId && !projects[t.projectPath ?? '']?.paths.includes(tabs.terminalId(id)))
-          .map(([id]) => id);
-        if (gone.length) release(gone);
+      $projectTabs.listen(releaseGone),
+      $projectTerminalTabs.listen((panel) => {
+        // A panel is never shown empty.
+        for (const [root, state] of Object.entries($projectTerminalPanels.get())) {
+          if (state?.open && !panel[root]?.paths.length) setTerminalPanelOpen(root, false);
+        }
+        releaseGone();
       }),
       // A session's CLI is closed by the backend (`session_close_cli`); only its stream is dropped here.
       $terminals.listen((all) => {
@@ -252,22 +274,38 @@ export const terminals = Object.freeze({
     return () => stops.forEach((stop) => stop());
   },
 
-  /** New Terminal: in the active session's folder, the project, or home. */
+  /**
+   * The nav rail's Terminal button: shows the panel with its terminals, or with a first one in the
+   * project's folder; with the panel shown, focuses its active terminal.
+   */
+  async showPanel() {
+    const { open } = $terminalPanel.get();
+    const { paths, active } = $terminalTabs.get();
+    if (open && active !== null) {
+      focusTerminal(tabs.terminalOf(active) ?? '');
+    } else if (paths.length) {
+      setTerminalPanelOpen($workspace.get()?.path ?? null, true);
+    } else {
+      const project = $workspace.get()?.path ?? null;
+      const home = project === null ? await ipc.homeDir() : '';
+      openIn(projectTerminalFolder({ project, home }));
+    }
+  },
+
+  /** Hides the shown project's panel; its shells keep running. */
+  hidePanel() {
+    setTerminalPanelOpen($workspace.get()?.path ?? null, false);
+  },
+
+  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the active session's folder, the project, or home. */
   async newTerminal() {
     const project = $workspace.get()?.path ?? null;
     const home = project === null ? await ipc.homeDir() : '';
     openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
   },
 
-  /** Project Terminal: always in the project root folder, or home if no project. */
-  async projectTerminal() {
-    const project = $workspace.get()?.path ?? null;
-    const home = project === null ? await ipc.homeDir() : '';
-    openIn(projectTerminalFolder({ project, home }));
-  },
-
   /**
-   * Open in → Terminal: in the session's folder, among the shown project's tabs.
+   * Open in → Terminal: in the session's folder, in the shown project's panel.
    * @param {Session} session
    */
   openInSession(session) {
@@ -327,4 +365,6 @@ export const terminals = Object.freeze({
   close,
 
   shellPaths,
+
+  terminalTab,
 });

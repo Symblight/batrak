@@ -1,3 +1,5 @@
+import { DropTargetController } from '../drop-target/DropTargetController.js';
+
 /** @typedef {import('lit').LitElement} SortableHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 
@@ -18,6 +20,8 @@ const SCROLL_SPEED = 12;
  * @property {(id: string) => string} [group] Items move only among their group; each group must be
  *   one contiguous run of the list. One group by default.
  * @property {(id: string, index: number) => void} onReorder Move `id` to `index` of the list without it.
+ * @property {() => string | null} [dropTo] The name of the `DropTargetController`s the items may be dragged
+ *   to, another host's list; over one, the item is handed over on release (its `drop`) instead of reordered here.
  */
 
 /**
@@ -44,6 +48,7 @@ const SCROLL_SPEED = 12;
  * @property {{ x: number, y: number }} pointer The pointer now.
  * @property {number | null} index Where it would land, in the list without it; `null` outside the
  *   container.
+ * @property {DropTargetController | null} target The drop target it is over.
  */
 
 /**
@@ -53,7 +58,7 @@ const SCROLL_SPEED = 12;
  * that ends a drag is swallowed. While an item is dragged the host renders `offsetOf(id)` as a
  * translation: the dragged item follows the pointer along `axis`, the others make room where it would
  * land (animated only while `dragging` is set). The landing spot comes from the pointer against the
- * items' resting midpoints, so items moving under the pointer don't change it. Drags never cross hosts.
+ * items' resting midpoints, so items moving under the pointer don't change it. A drag crosses hosts only to a `DropTargetController` named by `dropTo`.
  * @implements {ReactiveController}
  */
 export class SortableController {
@@ -83,6 +88,15 @@ export class SortableController {
   /** @returns {string | null} Id of the item being dragged. */
   get dragging() {
     return this.#drag?.id ?? null;
+  }
+
+  /**
+   * @returns {{ x: number, y: number } | null} Where to draw the dragged item when it can be dropped on
+   *   another host's list and the pointer has left its own container (a list that scrolls would clip it).
+   */
+  get ghost() {
+    const drag = this.#drag;
+    return drag && drag.index === null && this.#config.dropTo?.() ? drag.pointer : null;
   }
 
   /**
@@ -272,6 +286,7 @@ export class SortableController {
       origin: this.#along(press),
       pointer: { x: press.x, y: press.y },
       index: start,
+      target: null,
     };
     try {
       element.setPointerCapture(press.pointerId);
@@ -291,6 +306,11 @@ export class SortableController {
     const { x, y } = drag.pointer;
     const over = !!rect && x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom;
     drag.index = over ? this.#indexAt(drag) : null;
+    const name = this.#config.dropTo?.() ?? null;
+    const target = name && !over ? DropTargetController.at(name, drag.id, drag.pointer) : null;
+    if (target !== drag.target) drag.target?.leave();
+    drag.target = target;
+    target?.over(drag.id, drag.pointer, drag.step);
     this.#host.requestUpdate();
   }
 
@@ -309,6 +329,12 @@ export class SortableController {
       // Already released.
     }
     this.#host.requestUpdate();
+    if (drag.target) {
+      // Another host's list takes it, or it goes back.
+      if (drop) drag.target.drop(drag.id, drag.pointer);
+      else drag.target.leave();
+      return;
+    }
     // Lands in the same update: the host drops the offsets and their transition together with the
     // reorder, which puts every item where its offset showed it, so nothing jumps.
     if (!drop || drag.index === null || drag.index === drag.start) return;

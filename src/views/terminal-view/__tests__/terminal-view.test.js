@@ -72,6 +72,17 @@ describe('acp-terminal-view', () => {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  it('puts the keyboard in its terminal when asked to focus', async () => {
+    // Arrange
+    const { el, terminal } = await render();
+    let focused = 0;
+    terminal.focus = () => focused++;
+    // Act
+    el.focus();
+    // Assert
+    expect(focused).to.equal(1);
+  });
+
   it('shows the terminal its id names, in the editor’s font, and nothing once the terminal is gone', async () => {
     // Arrange
     $settings.set({ ...$settings.get(), editorFont: 'Mono X', editorFontSize: 15 });

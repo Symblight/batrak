@@ -11,6 +11,7 @@ import { $activePath } from '../../stores/editor/editor.js';
 import { $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
+import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
 import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
@@ -24,6 +25,7 @@ import '../session-column/session-column.js';
 import '../agent-column/agent-column.js';
 import '../main-column/main-column.js';
 import '../file-column/file-column.js';
+import '../terminals-view/terminals-view.js';
 import '../../components/nav-rail/nav-rail.js';
 import '../../components/quick-open/quick-open.js';
 import '../search-view/search-view.js';
@@ -38,9 +40,11 @@ import '../../components/column-split/column-split.js';
 /** @typedef {import('../../hooks/search/types.js').SearchDialogState} SearchDialogState */
 
 /*
- * The row of columns. Session and file columns shrink, down to their resize minimums, to fit the main
- * column's minimum only once the agent column (its far larger shrink factor) is at its own; a drag
- * starts from the rendered width.
+ * The window is a row of the session column, the center and the file column; the center is a
+ * column of the middle (a row of the agent and main columns) over the terminal panel. Session and
+ * file columns shrink, down to their resize minimums, to fit the center's minimum; in the middle the
+ * agent column shrinks first (its far larger shrink factor), down to its own minimum. A drag starts
+ * from the rendered width. Every split reads and writes the one `$columnWidths`.
  */
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */
 const COLUMNS = [
@@ -50,16 +54,9 @@ const COLUMNS = [
     minSize: '--acp-session-column-min-width',
     maxSize: '--acp-column-max-width',
     collapse: 'end',
-    resize: { min: 180, max: 524, partner: 'agent', label: 'Resize sessions column' },
+    resize: { min: 180, max: 524, label: 'Resize sessions column' },
   },
-  {
-    name: 'agent',
-    size: '--acp-agent-column-width',
-    minSize: '--acp-agent-column-min-width',
-    shrink: 1000,
-    resize: { min: 280, max: 1600, label: 'Resize agent column' },
-  },
-  { name: 'main', minSize: '--acp-main-column-min-width' },
+  { name: 'center', minSize: '--acp-center-min-width' },
   {
     name: 'side',
     size: '--acp-file-tree-width',
@@ -70,10 +67,39 @@ const COLUMNS = [
   },
 ];
 
+/** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} The same, while no file is open: the center is the agent column alone. */
+const COLUMNS_AGENT_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { ...column, minSize: '--acp-agent-column-min-width' } : column));
+
+/** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */
+const MIDDLE_COLUMNS = [
+  {
+    name: 'agent',
+    size: '--acp-agent-column-width',
+    minSize: '--acp-agent-column-min-width',
+    shrink: 1000,
+    resize: { min: 280, max: 1600, label: 'Resize agent column' },
+  },
+  { name: 'main', minSize: '--acp-main-column-min-width' },
+];
+
+/** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */
+const CENTER_COLUMNS = [
+  { name: 'middle', minSize: '--acp-middle-min-height' },
+  {
+    name: 'terminals',
+    size: '--acp-terminal-panel-height',
+    resize: { min: TERMINAL_PANEL_MIN_HEIGHT, max: TERMINAL_PANEL_MAX_HEIGHT, label: 'Resize terminal panel', edge: 'start' },
+  },
+];
+
 /** @type {readonly string[]} The same array each render, so the row sees no change. */
 const NO_COLUMNS = Object.freeze([]);
 /** @type {readonly string[]} */
 const AGENT_FILLS = Object.freeze(['agent']);
+/** @type {readonly string[]} */
+const NO_MAIN = Object.freeze(['main']);
+/** @type {readonly string[]} */
+const NO_PANEL = Object.freeze(['terminals']);
 
 /**
  * @tag acp-app
@@ -89,6 +115,9 @@ export class AcpApp extends ViewElement {
   #activePath = new StoreController(this, { store: $activePath });
   #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
   #workspace = new StoreController(this, { store: $workspace });
+  #terminalPanel = new StoreController(this, { store: $terminalPanel });
+  #terminalTabs = new StoreController(this, { store: $terminalTabs });
+  #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
   #rootId = new StoreController(this, { store: $rootId });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #notices = new StoreController(this, { store: $notices });
@@ -110,7 +139,7 @@ export class AcpApp extends ViewElement {
   }
 
   #openProjectTerminal() {
-    terminals.projectTerminal().catch((err) => app.reportError('Opening a terminal failed', err));
+    terminals.showPanel().catch((err) => app.reportError('Opening a terminal failed', err));
   }
 
   /**
@@ -384,9 +413,33 @@ export class AcpApp extends ViewElement {
     this.#main.goToLine(/** @type {CustomEvent<{ line: number }>} */ (e).detail.line);
   }
 
+  /** @type {import('../../hooks/settings/types.js').ColumnWidths} The shown project's panel height as the split takes it; the same object until it changes. */
+  #panelWidthsOf = {};
+
+  get #panelWidths() {
+    const height = this.#panelHeight.value;
+    if ((this.#panelWidthsOf.terminals ?? null) !== height) this.#panelWidthsOf = height === null ? {} : { terminals: height };
+    return this.#panelWidthsOf;
+  }
+
+  /** @param {CustomEvent<{ widths: import('../../hooks/settings/types.js').ColumnWidths }>} e */
+  #onColumnsResize = (e) => {
+    e.stopPropagation();
+    $columnWidths.set(e.detail.widths);
+  };
+
+  /** @param {CustomEvent<{ widths: import('../../hooks/settings/types.js').ColumnWidths }>} e */
+  #onPanelResize = (e) => {
+    e.stopPropagation();
+    const height = e.detail.widths.terminals;
+    if (height === undefined) clearTerminalPanelHeight();
+    else setTerminalPanelHeight(height);
+  };
+
   render() {
     const hasCode = this.#activePath.value !== null;
     const hidden = this.#hiddenColumns.value;
+    const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
     return html`<acp-panel variant="window">
       <acp-toolbar
         slot="header"
@@ -395,21 +448,41 @@ export class AcpApp extends ViewElement {
         .hiddenColumns=${hidden}
         @acp-column-toggle=${this.#onColumnToggle}
       ></acp-toolbar>
-      <!-- With no tabs, the main column is hidden and the agent column takes the space. -->
+      <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split
-        .columns=${COLUMNS}
+        .columns=${hasCode ? COLUMNS : COLUMNS_AGENT_ONLY}
         .widths=${this.#columnWidths.value}
-        .hiddenColumns=${hasCode ? hidden : [...hidden, 'main']}
-        .fillColumns=${hasCode ? NO_COLUMNS : AGENT_FILLS}
-        @acp-columns-resize=${(/** @type {CustomEvent<{ widths: import('../../hooks/settings/types.js').ColumnWidths }>} */ e) => $columnWidths.set(e.detail.widths)}
+        .hiddenColumns=${hidden}
+        @acp-columns-resize=${this.#onColumnsResize}
       >
         <acp-session-column slot="session"></acp-session-column>
-        <acp-agent-column
-          slot="agent"
-          @acp-file-open=${this.#onChatFileOpen}
-          @acp-file-reveal=${this.#onChatFileReveal}
-        ></acp-agent-column>
-        <acp-main-column slot="main" @acp-file-reveal=${this.#onFileReveal}></acp-main-column>
+        <acp-column-split
+          slot="center"
+          direction="column"
+          flush
+          .columns=${CENTER_COLUMNS}
+          .widths=${this.#panelWidths}
+          .hiddenColumns=${panelShown ? NO_COLUMNS : NO_PANEL}
+          @acp-columns-resize=${this.#onPanelResize}
+        >
+          <acp-column-split
+            slot="middle"
+            flush
+            .columns=${MIDDLE_COLUMNS}
+            .widths=${this.#columnWidths.value}
+            .hiddenColumns=${hasCode ? NO_COLUMNS : NO_MAIN}
+            .fillColumns=${hasCode ? NO_COLUMNS : AGENT_FILLS}
+            @acp-columns-resize=${this.#onColumnsResize}
+          >
+            <acp-agent-column
+              slot="agent"
+              @acp-file-open=${this.#onChatFileOpen}
+              @acp-file-reveal=${this.#onChatFileReveal}
+            ></acp-agent-column>
+            <acp-main-column slot="main" @acp-file-reveal=${this.#onFileReveal}></acp-main-column>
+          </acp-column-split>
+          <acp-terminals-view slot="terminals"></acp-terminals-view>
+        </acp-column-split>
         <acp-file-column
           slot="side"
           @acp-file-open=${this.#onFileOpen}

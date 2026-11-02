@@ -8,8 +8,24 @@
 :host([hidden]) {
   display: none;
 }
-.acp-tab-view__strip {
+.acp-tab-view__header {
+  display: flex;
   flex: none;
+  align-items: center;
+  min-width: 0;
+}
+.acp-tab-view__strip {
+  flex: 1 1 auto;
+}
+/* With an add button after the tabs, the strip takes the room its tabs need, and scrolls when they don't fit. */
+.acp-tab-view__strip_hugging {
+  flex-grow: 0;
+}
+.acp-tab-view__actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  margin-inline-start: auto;
 }
 .acp-tab-view__panel {
   flex: 1;

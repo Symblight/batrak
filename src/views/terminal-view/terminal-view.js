@@ -52,6 +52,11 @@ export class AcpTerminalView extends ViewElement {
     super.disconnectedCallback();
   }
 
+  /** Puts the keyboard in the terminal. */
+  focus() {
+    this.#terminalRef.value?.focus();
+  }
+
   /** Files dropped from the OS on a running terminal: their paths are typed in, as a native terminal does. A session's CLI gets them through the session's input, which keeps them until it runs. */
   #onFileDrop = (/** @type {FileDrop} */ { target, paths }) => {
     if (this.sessionId) return;

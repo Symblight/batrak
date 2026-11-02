@@ -36,7 +36,7 @@ import {
   sendToChat,
 } from '../../stores/comments/comments.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
-import { $terminals } from '../../stores/terminals/terminals.js';
+import { $terminals, moveTerminalToEditor } from '../../stores/terminals/terminals.js';
 import { $workspace } from '../../stores/workspace/workspace.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
@@ -214,6 +214,10 @@ export class AcpMainColumn extends ViewElement {
         .terminalBusy=${terminals.busy}
         .worktrees=${this.#worktrees.value}
         .renderContent=${this.#renderTabContent}
+        .dropName=${tabs.editorDrop}
+        .acceptsDrop=${tabs.isTerminal}
+        @acp-tab-receive=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) =>
+          moveTerminalToEditor(tabs.terminalOf(e.detail.id) ?? '', e.detail.index)}
         @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
         @acp-tab-close=${this.#onTabClose}
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) =>

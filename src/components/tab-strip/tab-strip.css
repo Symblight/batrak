@@ -74,6 +74,33 @@
     transition: none;
   }
 }
+/* Dragged out of the strip to another one: drawn by the ghost instead. */
+.acp-tab-strip__tab_away {
+  opacity: 0;
+}
+/* The dragged tab outside its strip, in the top layer at the pointer. */
+.acp-tab-strip__ghost {
+  position: fixed;
+  inset: auto;
+  align-items: center;
+  gap: var(--acp-space-1);
+  margin: 0;
+  padding: var(--acp-space-1) var(--acp-space-3);
+  border: 0;
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-surface-container-high);
+  box-shadow: var(--acp-elevation-2);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-sm);
+  opacity: 0.9;
+  pointer-events: none;
+  translate: -50% -50%;
+  white-space: nowrap;
+
+  &:popover-open {
+    display: inline-flex;
+  }
+}
 /* It follows the pointer (its shift), above the others and not lagging behind. */
 .acp-tab-strip__tab_dragging {
   z-index: 1;

@@ -1,10 +1,25 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
-import { $hiddenColumns } from '../../../stores/layout/layout.js';
+import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
+import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
 import { $sessions, $sessionsLoaded } from '../../../stores/sessions/sessions.js';
+import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
+import {
+  $projectTerminalPanelHeights,
+  $projectTerminalPanels,
+  $projectTerminalTabs,
+  $terminalPanel,
+  $terminalPanelHeight,
+  $terminalTabs,
+  $terminals,
+  forgetTerminal,
+  openTerminal,
+  setTerminalPanelHeight,
+  setTerminalPanelOpen,
+} from '../../../stores/terminals/terminals.js';
 import '../app.js';
 
 /** @typedef {import('../app.js').AcpApp} AcpApp */
@@ -207,5 +222,184 @@ describe('acp-app: mark all as read', () => {
     shortcut('R', { shiftKey: true });
     // Assert
     expect($unreadSessions.get(), 'only the active project’s').to.deep.equal(['other']);
+  });
+});
+
+describe('acp-app: terminal panel layout', () => {
+  /** @type {HTMLStyleElement} */
+  let tokens;
+
+  before(async function () {
+    // The default sizes come from the app's tokens, which the page loads and the tests do not.
+    this.timeout(10000);
+    tokens = document.createElement('style');
+    tokens.textContent = await (await fetch('/src/styles/tokens.css')).text();
+    document.head.append(tokens);
+  });
+
+  after(() => tokens.remove());
+
+  /** @type {string[]} */
+  let commands;
+
+  beforeEach(() => {
+    commands = [];
+    mockIPC((cmd, args) => {
+      commands.push(cmd);
+      return cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}));
+    });
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $hiddenColumns.set([]);
+  });
+
+  afterEach(() => {
+    closeAllTabs();
+    for (const id of Object.keys($terminals.get())) forgetTerminal(id);
+    $projectTerminalTabs.set({});
+    $projectTerminalPanels.set({});
+    $projectTerminalPanelHeights.setKey('/p', undefined);
+    $hiddenColumns.set([]);
+    $workspace.set(null);
+    clearMocks();
+  });
+
+  /** @param {string} tag */
+  const boxOf = (/** @type {AcpApp} */ app, tag) => /** @type {HTMLElement} */ (app.querySelector(tag)?.assignedSlot?.parentElement).getBoundingClientRect();
+  const panelBox = (/** @type {AcpApp} */ app) => boxOf(app, 'acp-terminals-view');
+
+  /** Waits for the panes to finish sliding in, as they do when they first show. */
+  async function slidIn(/** @type {AcpApp} */ app) {
+    await new Promise((resolve) => requestAnimationFrame(resolve));
+    const panes = [...app.querySelectorAll('acp-column-split')].flatMap((split) => [...(split.shadowRoot?.querySelectorAll('acp-pane') ?? [])]);
+    await Promise.all(panes.flatMap((pane) => pane.getAnimations().map((animation) => animation.finished)));
+  }
+
+  /** @param {{ file: boolean, panel: boolean }} shown */
+  async function render({ file, panel }) {
+    if (file) openTab('view:settings');
+    if (panel) openTerminal('/p', '/p', 'p');
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get());
+    await slidIn(app);
+    return app;
+  }
+
+  /** @returns {number} The gap between columns, px. */
+  function gapPx() {
+    const probe = document.createElement('div');
+    probe.style.cssText = 'position: absolute; visibility: hidden; width: var(--acp-column-gap)';
+    document.body.append(probe);
+    const px = probe.getBoundingClientRect().width;
+    probe.remove();
+    return px;
+  }
+
+  for (const [name, panel, hide] of /** @type {const} */ ([
+    ['has no terminals', false, false],
+    ['is hidden with its terminals', true, true],
+  ])) {
+    it(`leaves the columns at the full height of the window while the panel ${name}`, async () => {
+      // Arrange / Act
+      const app = await render({ file: true, panel });
+      if (hide) {
+        setTerminalPanelOpen('/p', false);
+        await slidIn(app);
+      }
+      const [session, agent, main, side] = ['acp-session-column', 'acp-agent-column', 'acp-main-column', 'acp-file-column'].map((tag) => boxOf(app, tag));
+
+      // Assert
+      for (const box of [agent, main, side]) {
+        expect([box.top, box.height], 'same row as the sessions').to.deep.equal([session.top, session.height]);
+      }
+      expect(agent.left, 'agent after sessions').to.be.closeTo(session.right + gapPx(), 0.5);
+      expect(main.left, 'main after agent').to.be.closeTo(agent.right + gapPx(), 0.5);
+      expect(panelBox(app).width, 'the panel takes no room').to.equal(0);
+    });
+  }
+
+  for (const [name, hiddenColumns, file] of /** @type {const} */ ([
+    ['with a file tab', [], true],
+    ['without one: the agent column is the whole middle', [], false],
+    ['with the sessions column hidden', ['session'], true],
+    ['with the file column hidden', ['side'], true],
+  ])) {
+    it(`sits under the agent and editor columns, which keep the sessions and files full height, ${name}`, async () => {
+      // Arrange
+      $hiddenColumns.set([...hiddenColumns]);
+
+      // Act
+      const app = await render({ file, panel: true });
+      const panel = panelBox(app);
+      const agent = boxOf(app, 'acp-agent-column');
+      const main = boxOf(app, 'acp-main-column');
+      const full = /** @type {readonly string[]} */ (hiddenColumns).includes('session') ? boxOf(app, 'acp-file-column') : boxOf(app, 'acp-session-column');
+
+      // Assert
+      expect(panel.left, 'from the agent column').to.equal(agent.left);
+      expect(panel.right, 'to the editor column, or the agent column alone').to.equal(file ? main.right : agent.right);
+      expect(panel.top, 'below them').to.be.closeTo(agent.bottom + gapPx(), 0.5);
+      expect(panel.bottom, 'to the window’s end').to.equal(full.bottom);
+      expect(agent.height, 'they gave it the room').to.be.lessThan(full.height);
+    });
+  }
+
+  it('is as tall as its project’s stored height; its handle changes that height and the agent column’s only the column widths', async () => {
+    // Arrange
+    setTerminalPanelHeight(300);
+    const app = await render({ file: true, panel: true });
+    const heightBefore = panelBox(app).height;
+    const splits = [...app.querySelectorAll('acp-column-split')];
+    const handleOf = (/** @type {string} */ name) =>
+      /** @type {HTMLElement} */ (splits.map((split) => split.shadowRoot?.querySelector(`acp-resize-handle[name="${name}"]`)).find(Boolean));
+    const press = (/** @type {HTMLElement} */ handle, /** @type {string} */ key) => handle.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }));
+    $columnWidths.set({});
+
+    // Act: the panel is the row below its handle, so up makes it taller
+    press(handleOf('terminals'), 'ArrowUp');
+    await until(() => $terminalPanelHeight.get() === 310);
+    const afterPanel = [panelBox(app).height, { ...$columnWidths.get() }];
+    press(handleOf('agent'), 'ArrowRight');
+    await until(() => $columnWidths.get().agent !== undefined);
+
+    // Assert
+    expect(heightBefore).to.equal(300);
+    expect(afterPanel, 'the panel’s own height, no column width').to.deep.equal([310, {}]);
+    expect($terminalPanelHeight.get(), 'the agent column’s handle leaves it').to.equal(310);
+    expect(Object.keys($columnWidths.get())).to.deep.equal(['agent']);
+  });
+
+  it('moves a terminal tab dragged from the panel onto the editor’s tabs, its shell kept and the empty panel hidden', async () => {
+    // Arrange
+    const app = await render({ file: true, panel: true });
+    const [terminalTab] = $terminalTabs.get().paths;
+    const terminalId = tabs.terminalOf(terminalTab) ?? '';
+    /** The md-tab of `id` in the strip inside `host`'s tab view. */
+    const tabIn = (/** @type {string} */ host, /** @type {string} */ id) => {
+      const strip = app.querySelector(host)?.querySelector('acp-tab-view')?.shadowRoot?.querySelector('acp-tab-strip');
+      return /** @type {HTMLElement} */ (strip?.shadowRoot?.querySelector(`.acp-tab-strip__tab[value="${CSS.escape(id)}"]`));
+    };
+    const pressed = /** @type {HTMLElement} */ (tabIn('acp-terminals-view', terminalTab).querySelector('.acp-tab-strip__label'));
+    const rect = tabIn('acp-terminals-view', terminalTab).getBoundingClientRect();
+    const target = tabIn('acp-main-column', 'view:settings').getBoundingClientRect();
+    const send = (/** @type {string} */ type, /** @type {number} */ x, /** @type {number} */ y) =>
+      pressed.dispatchEvent(
+        new PointerEvent(type, { bubbles: true, composed: true, cancelable: true, pointerId: 1, pointerType: 'mouse', isPrimary: true, button: type === 'pointermove' ? -1 : 0, buttons: type === 'pointerup' ? 0 : 1, clientX: x, clientY: y }),
+      );
+    const start = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    const drop = { x: target.right + 4, y: target.top + target.height / 2 };
+
+    // Act
+    send('pointerdown', start.x, start.y);
+    send('pointermove', start.x + 10, start.y);
+    send('pointermove', drop.x, drop.y);
+    send('pointerup', drop.x, drop.y);
+    await until(() => !$terminalPanel.get().open);
+
+    // Assert
+    expect($editorTabs.get().paths).to.deep.equal(['view:settings', terminalTab]);
+    expect($editorTabs.get().active).to.equal(terminalTab);
+    expect($terminalTabs.get().paths).to.deep.equal([]);
+    expect(commands, 'the shell lives on').to.not.include('terminal_close');
+    expect($terminals.get()[terminalId], 'its terminal is still known').to.not.equal(undefined);
   });
 });

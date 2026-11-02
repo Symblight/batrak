@@ -325,7 +325,7 @@ function select(id) {
 }
 
 /**
- * Open in → Terminal: a terminal in the session's folder, among its project's tabs, shown with the session.
+ * Open in → Terminal: a terminal in the session's folder, in its project's terminal panel, shown with the session.
  * @param {string} id
  */
 async function openInTerminal(id) {

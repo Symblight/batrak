@@ -35,6 +35,20 @@ class TestColumns extends LitElement {
 }
 customElements.define('test-columns', TestColumns);
 
+class TestRows extends LitElement {
+  resize = new ColumnResizeController(this, {
+    columns: () => ({ panel: { property: '--test-panel-height', min: 100, max: 500 } }),
+    widths: () => ({ panel: 240 }),
+    onCommit: () => {},
+    axis: () => 'y',
+  });
+
+  render() {
+    return html`<div class="panel" style=${this.resize.columnStyle('panel')}></div>`;
+  }
+}
+customElements.define('test-rows', TestRows);
+
 /** @param {string} name */
 const column = (/** @type {TestColumns} */ host, name) =>
   /** @type {HTMLElement} */ (host.renderRoot.querySelector(`.${name}`));
@@ -83,5 +97,17 @@ describe('ColumnResizeController', () => {
     host.widths = { left: 320 };
     await host.updateComplete;
     expect(column(host, 'left').style.width).to.equal('320px');
+  });
+
+  it('sizes a row by its height when the axis is vertical', async () => {
+    const rows = /** @type {TestRows} */ (document.createElement('test-rows'));
+    document.body.append(rows);
+    await rows.updateComplete;
+    const panel = /** @type {HTMLElement} */ (rows.renderRoot.querySelector('.panel'));
+    rows.remove();
+
+    expect(panel.style.flexBasis).to.equal('240px');
+    expect(panel.style.height).to.equal('240px');
+    expect(panel.style.width).to.equal('');
   });
 });

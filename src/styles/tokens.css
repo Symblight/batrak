@@ -63,12 +63,17 @@
   --acp-file-tree-width: calc((100vw - var(--acp-nav-rail-width)) * 0.2);
   --acp-agent-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.6);
   --acp-column-gap: var(--acp-space-1);
+  /* The terminal panel under the agent and editor columns: its default height, and the room the columns above it keep */
+  --acp-terminal-panel-height: 280px;
+  --acp-middle-min-height: 160px;
   --acp-column-toggle-duration: 125ms;
   /* Column limits: the resize handles' CSS minimums and maximums */
   --acp-session-column-min-width: 180px;
   --acp-file-tree-min-width: 200px;
   --acp-agent-column-min-width: 280px;
   --acp-main-column-min-width: 400px;
+  /* The middle of the row (agent and editor columns): the room both need, or the agent column alone */
+  --acp-center-min-width: calc(var(--acp-agent-column-min-width) + var(--acp-column-gap) + var(--acp-main-column-min-width));
   --acp-column-max-width: 524px;
   /* The agent chat's readable widths in a wider column (<acp-chat> reads them as its public properties): its banner and composer, its messages */
   --acp-chat-content-max-width: 810px;

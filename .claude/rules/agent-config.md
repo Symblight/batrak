@@ -129,7 +129,7 @@ paths:
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd
   `<app data>/probe`); `agents_sign_in` returns its `LoginTab` (also in `agents://sign-in`'s
   `terminal`, which every window hears; a window joining another's login gets none back), which
-  `openLoginTerminal()` shows as a running terminal tab among the sign-in's project's tabs
+  `openLoginTerminal()` shows as a running tab of the sign-in's project's terminal panel (`terminal-panel.md`; a login moved to the editor is shown there)
   (`TerminalInfo.login`: its command line as tooltip, no Restart: the sign-in runs it again); exit
   0 signs in (`Sessions::login_ended`), another exit fails, closing the tab cancels, and a cancel
   closes the tab (`noteSignIn()`). The banner offers every method but API keys, says which terminal

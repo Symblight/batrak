@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  flex: none;
+  align-items: center;
+  padding-inline: var(--acp-space-1);
+}
+/* Compact icon buttons: 24px square around a small icon. */
+.acp-terminal-action__button {
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+
+  flex: none;
+
+  &::part(button) {
+    padding: var(--acp-space-0-5);
+  }
+  &::part(button):focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 1px;
+  }
+}
+.acp-terminal-action__icon {
+  font-size: var(--acp-icon-size-sm);
+}

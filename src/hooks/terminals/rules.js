@@ -1,5 +1,6 @@
 /** @typedef {import('../app/types.js').Platform} Platform */
 /** @typedef {import('../sessions/types.js').Session} Session */
+/** @typedef {import('../tabs/types.js').EditorTab} EditorTab */
 
 /**
  * @typedef {Object} TerminalFolder
@@ -79,4 +80,24 @@ export function folderLabel(folder, sessions) {
  */
 export function shellPaths(paths, platform) {
   return paths.map((path) => `${quote(path, platform)} `).join('');
+}
+
+/**
+ * @param {string} id A terminal's tab id.
+ * @returns {EditorTab} The tab as a tab view takes it: a view, with no file behind it.
+ */
+export function terminalTab(id) {
+  return {
+    id,
+    kind: 'terminal',
+    path: '',
+    content: '',
+    error: '',
+    loaded: false,
+    image: null,
+    baseline: null,
+    draft: null,
+    changedOnDisk: false,
+    deletedOnDisk: false,
+  };
 }

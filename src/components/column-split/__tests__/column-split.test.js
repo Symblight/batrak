@@ -90,4 +90,32 @@ describe('acp-column-split', () => {
     expect(reported).to.deep.equal([{ widths: { d: 320, a: 250, b: 550 } }]);
     expect(pane(el, 'b').style.width, 'its partner gave the width').to.equal('550px');
   });
+
+  it('stacks its panes in a column, with a horizontal divider that resizes the pane’s height', async () => {
+    // Arrange
+    const el = /** @type {AcpColumnSplit} */ (
+      await fixture(html`<acp-column-split
+        direction="column"
+        .columns=${[
+          { name: 'top' },
+          { name: 'bottom', size: '--t-h-height', minSize: '--t-h-min', maxSize: '--t-h-max', resize: { min: 50, max: 400, label: 'Resize bottom', edge: 'start' } },
+        ]}
+        .widths=${{ bottom: 260 }}
+      ></acp-column-split>`)
+    );
+    await el.updateComplete;
+
+    // Assert
+    const bottom = pane(el, 'bottom').style;
+    expect(layoutOf(el)).to.deep.equal(['pane:top', 'handle:bottom', 'pane:bottom']);
+    expect(el.shadowRoot?.querySelector('acp-resize-handle')?.getAttribute('axis')).to.equal('y');
+    expect(el.shadowRoot?.querySelector('acp-split')?.getAttribute('direction')).to.equal('column');
+    expect(bottom.height, 'the given size is its height').to.equal('260px');
+    expect(bottom.width).to.equal('');
+    expect(
+      ['--acp-pane-height', '--acp-pane-min-height', '--acp-pane-max-height'].map((name) => bottom.getPropertyValue(name)),
+      'its tokens are heights',
+    ).to.deep.equal(['var(--t-h-height)', 'var(--t-h-min)', 'var(--t-h-max)']);
+    expect(bottom.getPropertyValue('--acp-pane-width')).to.equal('');
+  });
 });
