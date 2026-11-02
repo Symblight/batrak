@@ -60,6 +60,50 @@ describe('settings', () => {
     });
   });
 
+  describe('app fonts', () => {
+    /** @type {FontFace[]} */
+    let faces = [];
+    afterEach(() => {
+      for (const face of faces) document.fonts.delete(face);
+      faces = [];
+    });
+
+    /**
+     * Registers a face like `styles/fonts/fonts.css` does; it loads only when asked for.
+     * @param {string} family
+     * @param {string} file
+     * @param {FontFaceDescriptors} [descriptors]
+     */
+    function bundled(family, file, descriptors) {
+      const face = new FontFace(family, `url(/src/styles/fonts/${file})`, descriptors);
+      document.fonts.add(face);
+      faces.push(face);
+      return face;
+    }
+
+    it('loads the interface font and the editor font, upright and italic, before resolving', async () => {
+      // Arrange
+      const loaded = [
+        bundled('Google Sans Flex', 'google-sans-flex-latin.woff2'),
+        bundled('Google Sans Code', 'google-sans-code-latin.woff2'),
+        bundled('Google Sans Code', 'google-sans-code-latin-italic.woff2', { style: 'italic' }),
+      ];
+      // Act
+      await settings.loadAppFonts();
+      // Assert
+      expect(loaded.map((face) => face.status)).to.deep.equal(['loaded', 'loaded', 'loaded']);
+    });
+
+    it('resolves anyway when a font fails to load', async () => {
+      // Arrange
+      const broken = bundled('Google Sans Code', 'missing.woff2');
+      // Act
+      await settings.loadAppFonts();
+      // Assert
+      expect(broken.status).to.equal('error');
+    });
+  });
+
   describe('system fonts', () => {
     beforeEach(() => {
       $systemFonts.set(null);

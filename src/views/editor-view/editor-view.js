@@ -19,7 +19,7 @@ import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 
 /**
  * @tag acp-editor-view
- * @summary A file tab's code editor wired to its data: the project, the file's picked language, the editor's font and the file's comments; a markdown file's in the markdown view, with the view it was left in.
+ * @summary A file tab's code editor wired to its data: the project, the file's picked language and the file's comments; a markdown file's in the markdown view, with the view it was left in.
  * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
  * @fires acp-tab-save `{ id }` Mod+S in an editable file.
  * @fires acp-tab-conflict `{ id }` Mod+S in an editable file changed on disk since its edits started.
@@ -82,7 +82,7 @@ export class AcpEditorView extends ViewElement {
 
   /** @param {EditorTab} tab */
   #renderMarkdown(tab) {
-    const { editorFont, editorFontSize, markdownScrollSync } = this.#settings.value;
+    const { markdownScrollSync } = this.#settings.value;
     return html`<acp-markdown-view
       .tab=${tab}
       .mode=${markdownView.modeOf(tab.path)}
@@ -93,8 +93,6 @@ export class AcpEditorView extends ViewElement {
       .rootId=${this.#rootId.value}
       .worktrees=${this.#worktrees.value}
       .listDir=${projects.listDir}
-      .editorFont=${editorFont}
-      .editorFontSize=${editorFontSize}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
       .loadImage=${this.#loadImage}
@@ -123,7 +121,6 @@ export class AcpEditorView extends ViewElement {
     const tab = this.tab;
     if (!tab) return nothing;
     if (contentKindOf(tab) === 'markdown') return this.#renderMarkdown(tab);
-    const { editorFont, editorFontSize } = this.#settings.value;
     return html`<acp-code-view
       .tab=${tab}
       .language=${this.#languages.value[tab.path] ?? ''}
@@ -131,8 +128,6 @@ export class AcpEditorView extends ViewElement {
       .rootId=${this.#rootId.value}
       .worktrees=${this.#worktrees.value}
       .listDir=${projects.listDir}
-      .editorFont=${editorFont}
-      .editorFontSize=${editorFontSize}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
       @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) => {

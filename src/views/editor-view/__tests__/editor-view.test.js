@@ -49,10 +49,9 @@ describe('acp-editor-view', () => {
     return { el, code };
   }
 
-  it("gives the file's editor what it needs: the project, the file's language, the editor font, and the file's comments", async () => {
+  it("gives the file's editor what it needs: the project, the file's language and the file's comments", async () => {
     // Arrange
     setFileLanguage('/p/a.js', 'python');
-    $settings.set({ ...settings, editorFont: 'Fira Code', editorFontSize: 15 });
     $comments.set({ '/p/a.js': [{ id: 't1', line: 1, comments: [] }] });
     $commentFocus.set({ path: '/p/a.js', threadId: 't1' });
 
@@ -64,7 +63,6 @@ describe('acp-editor-view', () => {
     expect(code.root, 'project').to.equal('/p');
     expect(code.rootId, 'its snapshot').to.equal($rootId.get());
     expect(code.language, 'picked').to.equal('python');
-    expect([code.editorFont, code.editorFontSize], 'font').to.deep.equal(['Fira Code', 15]);
     expect(Object.keys(code.comments), 'comments').to.deep.equal(['/p/a.js']);
     expect(code.commentFocus).to.deep.equal({ path: '/p/a.js', threadId: 't1' });
   });
@@ -108,15 +106,15 @@ describe('acp-editor-view', () => {
      */
     const fire = (from, type, detail) => from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 
-    it('is shown in the markdown view, with the project, the view it was left in and the editor’s font', async () => {
-      $settings.set({ ...settings, editorFont: 'Fira Code', markdownDefaultView: 'split', markdownScrollSync: false });
+    it('is shown in the markdown view, with the project and the view it was left in', async () => {
+      $settings.set({ ...settings, markdownDefaultView: 'split', markdownScrollSync: false });
       $markdownSplit.set(35);
 
       const { view } = await renderMarkdown();
 
       expect(view.tab).to.equal(md);
       expect([view.mode, view.scrollSync, view.ratio]).to.deep.equal(['split', false, 35]);
-      expect([view.root, view.editorFont]).to.deep.equal(['/p', 'Fira Code']);
+      expect(view.root).to.equal('/p');
       expect(typeof view.loadImage).to.equal('function');
     });
 

@@ -49,8 +49,6 @@ export class AcpMarkdownView extends LitElement {
     rootId: { attribute: false },
     worktrees: { attribute: false },
     listDir: { attribute: false },
-    editorFont: { attribute: false },
-    editorFontSize: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
     loadImage: { attribute: false },
@@ -99,10 +97,6 @@ export class AcpMarkdownView extends LitElement {
     this.worktrees = [];
     /** @type {ListDir} */
     this.listDir = async () => [];
-    /** @type {string | null} */
-    this.editorFont = null;
-    /** @type {number} */
-    this.editorFontSize = 13;
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} */
     this.comments = {};
     /** @type {CommentFocus | null} */
@@ -291,8 +285,6 @@ export class AcpMarkdownView extends LitElement {
       .rootId=${this.rootId}
       .worktrees=${this.worktrees}
       .listDir=${this.listDir}
-      .editorFont=${this.editorFont}
-      .editorFontSize=${this.editorFontSize}
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
     ></acp-code-view>`;

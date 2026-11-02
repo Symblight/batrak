@@ -1,8 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
-import { settings } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
-import { styleMap } from 'lit/directives/style-map.js';
 import '@symblight/code-editor';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
@@ -57,8 +55,6 @@ export class AcpCodeView extends LitElement {
     rootId: { attribute: false },
     worktrees: { attribute: false },
     listDir: { attribute: false },
-    editorFont: { attribute: false },
-    editorFontSize: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
   };
@@ -110,10 +106,6 @@ export class AcpCodeView extends LitElement {
     this.worktrees = [];
     /** @type {ListDir} Lists a project folder for a footer crumb. */
     this.listDir = async () => [];
-    /** @type {string | null} The editor's font family; `null` for its default. */
-    this.editorFont = null;
-    /** @type {number} px */
-    this.editorFontSize = 13;
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
     this.comments = {};
     /** @type {CommentFocus | null} */
@@ -318,16 +310,6 @@ export class AcpCodeView extends LitElement {
     </md-menu>`;
   }
 
-  /** Font settings for the editor; views keep the library defaults. */
-  #editorStyle() {
-    const size = this.editorFontSize;
-    return styleMap({
-      '--cdx-code-editor-mono-font-family': this.editorFont ? settings.fontStack(this.editorFont) : null,
-      '--cdx-code-editor-code-font-size': `${size}px`,
-      '--cdx-code-editor-code-line-height': `${settings.lineHeightFor(size)}px`,
-    });
-  }
-
   render() {
     const tab = this.tab;
     if (!tab) return nothing;
@@ -338,7 +320,6 @@ export class AcpCodeView extends LitElement {
           </div>`
         : nothing}<cdx-code-editor
         class="acp-code-view__editor"
-        style=${this.#editorStyle()}
         .readOnly=${!editable}
         .plugins=${codeEditor.plugins}
         filename=${tab.path}
