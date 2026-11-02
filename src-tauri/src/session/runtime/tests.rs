@@ -679,7 +679,6 @@ async fn a_page_attaching_to_a_running_session_gets_its_history_before_its_statu
 
     let got = lock(&page.events).clone();
     assert_eq!((got[0].kind, got[1].kind), ("snapshot", "status"), "{got:#?}");
-    assert_eq!(got[0].payload["inTurn"], false);
     assert_eq!(
         snapshot_messages(&got[0]),
         [
@@ -707,7 +706,6 @@ async fn a_page_attaching_mid_turn_gets_the_reply_so_far_then_the_rest() {
     page.wait_turn_end().await;
 
     let snapshot = page.wait_for("snapshot", |e| e.kind == "snapshot").await;
-    assert_eq!(snapshot.payload["inTurn"], true);
     let messages = snapshot_messages(&snapshot);
     assert_eq!(messages[0], pair("user_message_chunk", "slow"));
     let so_far = &messages[1].1;

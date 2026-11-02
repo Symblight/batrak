@@ -120,7 +120,7 @@ impl SessionState {
         let mut sinks = lock(&self.sinks);
         let updates = lock(&self.replay).as_ref().map(|log| log.updates().to_vec());
         if let Some(updates) = updates {
-            let snapshot = serde_json::json!({ "updates": updates, "inTurn": self.in_turn.load(Ordering::SeqCst) });
+            let snapshot = serde_json::json!({ "updates": updates });
             if !sink.send(&self.envelope("snapshot", snapshot)) {
                 return;
             }

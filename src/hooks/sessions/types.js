@@ -102,6 +102,7 @@
  * `cli-exited`: the session's CLI (its Terminal view) ended.
  * @typedef {{ sessionId: string, seq: number } & (
  *   { kind: 'update', payload: AcpSessionUpdate }
+ *   | { kind: 'snapshot', payload: { updates: AcpSessionUpdate[] } }
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
  *   | { kind: 'permission-request',
  *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }

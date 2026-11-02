@@ -172,11 +172,16 @@ export function handleSessionEvent(event) {
       }
       return;
     }
+    case 'snapshot':
+      // A running agent's conversation, for this page attaching to it; the status after it ends it.
+      for (const update of event.payload.updates) replay(sessionId, update);
+      return;
     case 'status': {
       const { status, message } = event.payload;
       setSessionStatus(sessionId, status);
       setSessionNotice(sessionId, noticeOf(sessionId, status, message ?? null));
-      if (status !== 'preparing' && status !== 'starting') {
+      // Not on a turn's `working` / `waiting`: a snapshot taken mid-turn goes on until its end.
+      if (status === 'idle' || status === 'stopped' || status === 'error') {
         endReplay(sessionId);
         if (replaying.delete(sessionId)) loaded.add(sessionId);
       }

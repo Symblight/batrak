@@ -16,7 +16,7 @@ pub struct Envelope {
     /// for a sign-in; `null` once a start works or Stop), `held` (`{ prompt }`: the turn's prompt
     /// waits for that sign-in), `prompt-returned` (`{ prompt }`: a held prompt was dropped) or
     /// `cli-exited` (`{ code, signal }`: its agent's CLI, in a terminal, exited). A window
-    /// attaching while the agent runs first gets `snapshot` (`{ updates, inTurn }`:
+    /// attaching while the agent runs first gets `snapshot` (`{ updates }`:
     /// the conversation so far as ACP updates, `replay`).
     pub kind: &'static str,
     pub payload: Value,
