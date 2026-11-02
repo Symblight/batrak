@@ -149,6 +149,7 @@ export class AcpToolbar extends LitElement {
         .unread=${this.unread}
         .home=${this.home}
       ></acp-project-menu>
+      ${workspace && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
       ${workspace ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
       ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;

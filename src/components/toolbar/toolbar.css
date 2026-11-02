@@ -16,6 +16,12 @@
   white-space: nowrap;
   color: var(--acp-color-error);
 }
+.acp-toolbar__divider {
+  flex: none;
+  inline-size: 1px;
+  block-size: 20px;
+  background: var(--acp-color-outline-variant);
+}
 .acp-toolbar__spacer {
   flex: 1;
 }

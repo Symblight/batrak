@@ -4,7 +4,6 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
-import '@symblight/wc-material/select'; // registers md-hr, the menu divider
 import '@symblight/wc-material/tooltip';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
@@ -88,7 +87,7 @@ export class AcpProjectMenu extends LitElement {
         ? html`<md-icon slot="leading" class="acp-project-menu__check">${unsafeSVG(checkIcon)}</md-icon>`
         : html`<span slot="leading" class="acp-project-menu__tile acp-project-menu__tile_small">${projects.initialOf(project.name)}</span>`}
       ${project.name}
-      <span slot="supporting-text">${projects.parentLabel(project.path, this.home)}</span>
+      <span class="acp-project-menu__path">${projects.parentLabel(project.path, this.home)}</span>
       ${unread > 0
         ? html`<span slot="trailing" id=${dotId} class="acp-project-menu__dot"></span>
             <md-tooltip slot="trailing" for=${dotId} show-delay="800"
@@ -141,17 +140,21 @@ export class AcpProjectMenu extends LitElement {
         @closing=${() => (this.open = false)}
       >
         ${this.projects.length
-          ? html`<md-menu-group label="Projects">
+          ? html`<md-item-group>
+              <md-menu-group label="Projects">
                 ${repeat(this.projects, (p) => p.id, (p, i) => this.#renderProject(p, i))}
               </md-menu-group>
-              <md-hr></md-hr>`
+            </md-item-group>`
           : nothing}
-        ${this.#renderAction('open-folder', addIcon, 'Add project…', shortcuts.hint('openFolder'))}
+        <md-item-group>
+          ${this.#renderAction('open-folder', addIcon, 'Add project…', shortcuts.hint('openFolder'))}
+        </md-item-group>
         ${current
-          ? html`<md-hr></md-hr>
+          ? html`<md-item-group>
               ${this.#renderAction('reveal', folderOpenIcon, app.revealLabel)}
               ${this.#renderAction('open-terminal', terminalIcon, 'Open in terminal')}
-              ${this.#renderAction('remove', removeIcon, 'Remove from list')}`
+              ${this.#renderAction('remove', removeIcon, 'Remove from list')}
+            </md-item-group>`
           : nothing}
       </md-menu>
     `;

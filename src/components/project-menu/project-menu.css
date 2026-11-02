@@ -5,7 +5,7 @@
 
 .acp-project-menu__button {
   min-width: 0;
-  --md-button-font-size: var(--acp-font-size-lg);
+  --md-button-font-size: var(--acp-font-size-md);
   --md-button-font-weight: var(--acp-font-weight-medium);
   --md-button-block-start-space: var(--acp-button-block-space-compact);
   --md-button-block-end-space: var(--acp-button-block-space-compact);
@@ -53,13 +53,19 @@
 
 .acp-project-menu__name {
   min-width: 2ch;
-  max-inline-size: 220px;
+  max-inline-size: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
 
   @container acp-toolbar (width < 720px) {
     display: none;
   }
+}
+
+.acp-project-menu__path {
+  margin-inline-start: var(--acp-space-2);
+  font-size: var(--acp-font-size-sm);
+  color: var(--acp-color-on-surface-variant);
 }
 
 .acp-project-menu__icon {
@@ -91,5 +97,5 @@
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-project-menu__menu {
-  --md-menu-min-width: 16.25rem;
+  --md-menu-min-width: 19rem;
 }

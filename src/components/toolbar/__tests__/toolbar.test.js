@@ -46,6 +46,7 @@ describe('acp-toolbar', () => {
     expect([chip?.repo, chip?.op], 'the sync state is the chip\'s').to.deep.equal([GIT.repo, OP]);
     const slot = root.querySelector('acp-pull-request-chip');
     expect([slot?.status, slot?.reply, slot?.repo], 'GitHub slot').to.deep.equal(['ok', REPLY, GIT.repo]);
+    expect(root.querySelector('.acp-toolbar__divider') !== null, 'a divider between the project and git').to.equal(true);
     expect(root.querySelector('[title]')).to.equal(null);
   });
 
@@ -54,6 +55,7 @@ describe('acp-toolbar', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(root.querySelector('acp-project-menu')?.currentId).to.equal(null);
     expect(root.querySelector('acp-branch-popover')).to.equal(null);
+    expect(root.querySelector('.acp-toolbar__divider')).to.equal(null);
   });
 
   it('says why git is unavailable in a tooltip', async () => {

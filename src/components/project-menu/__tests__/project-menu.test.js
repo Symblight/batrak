@@ -62,11 +62,12 @@ describe('acp-project-menu', () => {
 
     // Assert
     expect(rows.map((r) => r.getAttribute('data-project'))).to.deep.equal(PROJECTS.map((p) => p.id));
-    expect(rows.map((r) => r.querySelector('[slot="supporting-text"]')?.textContent?.trim())).to.deep.equal([
+    expect(rows.map((r) => r.querySelector('.acp-project-menu__path')?.textContent?.trim())).to.deep.equal([
       '~/Projects',
       '~/Projects',
       '/opt/work',
     ]);
+    expect(rows.some((r) => r.querySelector('[slot="supporting-text"]')), 'name and folder share one line').to.equal(false);
     expect(rows.map((r) => r.hasAttribute('selected'))).to.deep.equal([true, false, false]);
     const dots = rows.map((r) => r.querySelector('.acp-project-menu__dot'));
     expect(dots.map((d) => d !== null)).to.deep.equal([false, true, false]);
