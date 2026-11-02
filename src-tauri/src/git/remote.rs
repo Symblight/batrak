@@ -183,15 +183,17 @@ pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState, expected: O
         RemoteOp::Abort => unreachable!("handled above"),
     };
     let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
-    let locked = matches!(op, RemoteOp::Pull | RemoteOp::PullRebase | RemoteOp::PullMerge | RemoteOp::Publish);
     let gh = state.remote.as_ref().filter(|r| uses_github_https(r)).and_then(|_| crate::github::gh());
-    let go = || Ok(run_git_with_gh(git, root, &args, mode, gh.as_deref()));
+    let key = lock::common_dir(git, root).map_err(RemoteError::other)?;
     if op == RemoteOp::Fetch {
-        let key = lock::common_dir(git, root).map_err(RemoteError::other)?;
         return fetch_joined(key, || run_git_with_gh(git, root, &args, mode, gh.as_deref()));
     }
-    let result = if locked { lock::with_mutation(git, root, go) } else { go() };
-    result.map_err(RemoteError::other)?
+    // Pulls and pushes write the remote-tracking refs a fetch writes: never both at once. The fetch
+    // slot is always taken before the mutation lock, so the two can't deadlock.
+    after_fetches(key, || {
+        lock::with_mutation(git, root, || Ok(run_git_with_gh(git, root, &args, mode, gh.as_deref())))
+            .map_err(RemoteError::other)?
+    })
 }
 
 type FetchResult = Result<(), RemoteError>;
@@ -215,6 +217,13 @@ fn fetch_joined(key: PathBuf, fetch: impl FnOnce() -> FetchResult) -> FetchResul
     let result = fetch();
     *last = Some((Instant::now(), result.clone()));
     result
+}
+
+/// Runs `f` while no fetch of the repository `key` names runs, without taking a fetch's result.
+fn after_fetches<T>(key: PathBuf, f: impl FnOnce() -> T) -> T {
+    let slot = Arc::clone(FETCHES.lock().unwrap_or_else(PoisonError::into_inner).entry(key).or_default());
+    let _running = slot.lock().unwrap_or_else(PoisonError::into_inner);
+    f()
 }
 
 /// The background fetch: fetches the branch's remote if it has one, and says why it couldn't.
@@ -572,6 +581,53 @@ mod tests {
         run_op(&repo, RemoteOp::ForcePush).unwrap();
         let log = crate::git::test_repo::run_in(&origin, &["log", "--format=%s", "main"]);
         assert!(log.contains("local") && !log.contains("later"), "{log}");
+    }
+
+    #[test]
+    fn a_push_or_pull_waits_for_a_running_fetch_or_change_of_the_repository() {
+        use std::time::{Duration, Instant};
+        type Hold = fn(&Path, &dyn Fn());
+        let holders: [(&str, Hold); 2] = [
+            ("a fetch", |path, wait| {
+                let key = lock::common_dir(&git_bin(), path).unwrap();
+                fetch_joined(key, || {
+                    wait();
+                    Ok(())
+                })
+                .unwrap();
+            }),
+            ("a change", |path, wait| {
+                lock::with_mutation(&git_bin(), path, || {
+                    wait();
+                    Ok(())
+                })
+                .unwrap();
+            }),
+        ];
+        for (holder, hold) in holders {
+            for op in [RemoteOp::Push, RemoteOp::ForcePush, RemoteOp::Pull] {
+                // Arrange: a branch one commit ahead, and the repository held by someone else
+                let (repo, _origin) = TestRepo::with_remote(&format!("wait-{op:?}"));
+                repo.write("a.txt", "a");
+                repo.git(&["add", "."]);
+                repo.git(&["commit", "-qm", "local"]);
+                let why = format!("{op:?} during {holder}");
+                std::thread::scope(|scope| {
+                    let held = scope.spawn(|| {
+                        hold(&repo.path, &|| std::thread::sleep(Duration::from_millis(300)));
+                        Instant::now()
+                    });
+                    std::thread::sleep(Duration::from_millis(50));
+
+                    // Act
+                    run_op(&repo, op).unwrap();
+                    let done = Instant::now();
+
+                    // Assert
+                    assert!(done >= held.join().unwrap(), "{why}: ran before it ended");
+                });
+            }
+        }
     }
 
     #[test]
