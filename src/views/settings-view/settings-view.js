@@ -10,7 +10,6 @@ import {
   setAppearance,
   setEditorFont,
   setEditorFontSize,
-  setMarkdownDefaultView,
   setMarkdownScrollSync,
 } from '../../stores/settings/settings.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -47,7 +46,6 @@ export class AcpSettingsView extends ViewElement {
     if (patch.accent !== undefined) setAccent(patch.accent);
     if (patch.editorFont !== undefined) setEditorFont(patch.editorFont);
     if (patch.editorFontSize !== undefined) setEditorFontSize(patch.editorFontSize);
-    if (patch.markdownDefaultView !== undefined) setMarkdownDefaultView(patch.markdownDefaultView);
     if (patch.markdownScrollSync !== undefined) setMarkdownScrollSync(patch.markdownScrollSync);
   }
 

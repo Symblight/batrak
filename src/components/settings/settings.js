@@ -164,11 +164,6 @@ export class AcpSettings extends LitElement {
     this.#change({ editorFont: /** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value || null });
   };
 
-  #onMarkdownViewChange = (/** @type {Event} */ e) => {
-    const view = /** @type {HTMLElementTagNameMap['md-select']} */ (e.target).value;
-    if (view === 'raw' || view === 'split' || view === 'preview') this.#change({ markdownDefaultView: view });
-  };
-
   #onMarkdownSyncChange = (/** @type {Event} */ e) => {
     this.#change({ markdownScrollSync: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.target).selected });
   };
@@ -355,20 +350,6 @@ export class AcpSettings extends LitElement {
         <span class="acp-settings__hint"
           >${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Line height follows: ${editorFontSize} / ${lineHeight}.</span
         >
-      </div>
-      <div class="acp-settings__field">
-        <md-select
-          class="acp-settings__input acp-settings__input_markdown-view"
-          variant="outlined"
-          label="Open markdown files in"
-          .value=${settings.markdownDefaultView}
-          @change=${this.#onMarkdownViewChange}
-        >
-          <md-option class="acp-settings__option" value="raw">Editor</md-option>
-          <md-option class="acp-settings__option" value="split">Split</md-option>
-          <md-option class="acp-settings__option" value="preview">Preview</md-option>
-        </md-select>
-        <span class="acp-settings__hint">Each file remembers the view you leave it in.</span>
       </div>
       <label class="acp-settings__toggle">
         <md-switch

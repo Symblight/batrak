@@ -95,8 +95,6 @@ describe('acp-settings', () => {
 
   describe('markdown', () => {
     /** @param {ShadowRoot} root */
-    const select = (root) => /** @type {HTMLElementTagNameMap['md-select']} */ (root.querySelector('.acp-settings__input_markdown-view'));
-    /** @param {ShadowRoot} root */
     const toggle = (root) => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_markdown-sync'));
 
     /** @param {AcpSettings} el */
@@ -106,29 +104,6 @@ describe('acp-settings', () => {
       el.addEventListener('acp-settings-change', (e) => patches.push(/** @type {CustomEvent} */ (e).detail.patch));
       return patches;
     }
-
-    it('offers the three views for a markdown file never set, the default one picked', async () => {
-      const { el, root } = await render();
-      el.settings = { ...settingsHook.defaults, markdownDefaultView: 'split' };
-      await el.updateComplete;
-
-      expect([...select(root).querySelectorAll('md-option')].map((o) => [o.getAttribute('value'), o.textContent?.trim()])).to.deep.equal([
-        ['raw', 'Editor'],
-        ['split', 'Split'],
-        ['preview', 'Preview'],
-      ]);
-      expect(select(root).value).to.equal('split');
-    });
-
-    it('asks for the view that is picked', async () => {
-      const { el, root } = await render();
-      const patches = changes(el);
-
-      select(root).value = 'preview';
-      select(root).dispatchEvent(new Event('change', { bubbles: true }));
-
-      expect(patches).to.deep.equal([{ markdownDefaultView: 'preview' }]);
-    });
 
     it('shows whether the editor and preview scroll together, and asks to flip it', async () => {
       const { el, root } = await render();
@@ -146,7 +121,7 @@ describe('acp-settings', () => {
 
     it('is reset with the rest of the Editor section', async () => {
       const { el, root } = await render();
-      el.settings = { ...settingsHook.defaults, markdownDefaultView: 'split' };
+      el.settings = { ...settingsHook.defaults, markdownScrollSync: false };
       await el.updateComplete;
       /** @type {unknown[]} */
       const resets = [];

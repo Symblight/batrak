@@ -72,11 +72,6 @@ export function setEditorFontSize(size) {
   update('editorFontSize', Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
 }
 
-/** @param {Settings['markdownDefaultView']} view */
-export function setMarkdownDefaultView(view) {
-  update('markdownDefaultView', view);
-}
-
 /** @param {boolean} on */
 export function setMarkdownScrollSync(on) {
   update('markdownScrollSync', on);

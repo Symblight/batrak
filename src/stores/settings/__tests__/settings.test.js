@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $settings, parseSettings, setMarkdownDefaultView, setMarkdownScrollSync } from '../settings.js';
+import { $settings, parseSettings, setMarkdownScrollSync } from '../settings.js';
 import { DEFAULT_SETTINGS } from '../rules.js';
 
 describe('settings store: markdown', () => {
@@ -26,9 +26,8 @@ describe('settings store: markdown', () => {
     });
   });
 
-  it('sets the default view, and the scroll sync', () => {
-    setMarkdownDefaultView('split');
+  it('sets the scroll sync', () => {
     setMarkdownScrollSync(false);
-    expect($settings.get()).to.include({ markdownDefaultView: 'split', markdownScrollSync: false });
+    expect($settings.get().markdownScrollSync).to.equal(false);
   });
 });
