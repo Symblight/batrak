@@ -161,22 +161,33 @@ describe('acp-main-column', () => {
     it('goes back from Preview to Raw with Esc, unless something is selected', async () => {
       openTab('/p/docs/a.md');
       const { tabView } = await render();
+      const content = /** @type {HTMLElement} */ (tabView.shadowRoot?.querySelector('.acp-tab-view__panel[active]'));
       markdownView.setMode('/p/docs/a.md', 'preview');
       const host = document.createElement('p');
       host.textContent = 'some text';
       document.body.append(host);
       getSelection()?.selectAllChildren(host);
 
-      press(tabView, { key: 'Escape' });
+      press(content, { key: 'Escape' });
       expect(mode(), 'with a selection').to.equal('preview');
 
       getSelection()?.removeAllRanges();
       host.remove();
-      const esc = press(tabView, { key: 'Escape' });
+      const esc = press(content, { key: 'Escape' });
       expect([mode(), esc.defaultPrevented]).to.deep.equal(['raw', true]);
 
-      const again = press(tabView, { key: 'Escape' });
+      const again = press(content, { key: 'Escape' });
       expect(again.defaultPrevented, 'not in Preview').to.equal(false);
+    });
+
+    it('leaves Esc to a dialog of the tab view, which is not in the file’s panel', async () => {
+      openTab('/p/docs/a.md');
+      const { tabView } = await render();
+      markdownView.setMode('/p/docs/a.md', 'preview');
+
+      const esc = press(tabView, { key: 'Escape' });
+
+      expect([mode(), esc.defaultPrevented]).to.deep.equal(['preview', false]);
     });
 
     it('leaves the keys alone for any other tab', async () => {

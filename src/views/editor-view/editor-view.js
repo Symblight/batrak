@@ -3,6 +3,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/code-view/code-view.js';
 import '../../components/markdown-view/markdown-view.js';
 import { imageType } from '../../components/image-preview/image-type.js';
+import { app } from '../../hooks/app/app.js';
 import { markdownView } from '../../hooks/markdown-view/markdown-view.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -48,8 +49,12 @@ export class AcpEditorView extends ViewElement {
   }
 
   /** Reads a local image of a markdown file for its preview. */
-  #loadImage = async (/** @type {string} */ path) =>
-    new Blob([await projects.readFileBytes(path)], { type: imageType.of(path).mime });
+  #loadImage = async (/** @type {string} */ path) => {
+    // The text can name any file: only an image is read, not a video or a log of 64 MB.
+    const { mime } = imageType.of(path);
+    if (mime === '') throw new Error('Not an image');
+    return new Blob([await projects.readFileBytes(path)], { type: mime });
+  };
 
   /**
    * Whether a path of the project is in its listing; any other is taken to be there.
@@ -107,6 +112,10 @@ export class AcpEditorView extends ViewElement {
       @acp-markdown-ratio=${(/** @type {CustomEvent<{ ratio: number }>} */ e) => {
         e.stopPropagation();
         setMarkdownSplit(e.detail.ratio);
+      }}
+      @acp-markdown-error=${(/** @type {CustomEvent<{ error: unknown }>} */ e) => {
+        e.stopPropagation();
+        app.reportError('Rendering the markdown failed', e.detail.error);
       }}
       @acp-file-open=${this.#onPreviewTarget}
       @acp-file-reveal=${this.#onPreviewTarget}

@@ -192,3 +192,8 @@
     background: var(--acp-color-primary);
   }
 }
+
+.acp-markdown__error {
+  margin: 0;
+  color: var(--acp-color-error);
+}

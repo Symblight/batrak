@@ -2,16 +2,11 @@
   display: inline-flex;
 }
 
-/* A floating pill over the editor. */
+/* Flat: it sits in a bar of its own, not over the content. */
 .acp-markdown-switcher__group {
   display: flex;
   align-items: center;
   gap: 2px;
-  padding: 2px;
-  border: 1px solid var(--acp-color-outline-variant);
-  border-radius: var(--acp-shape-corner-small);
-  background: color-mix(in srgb, var(--acp-color-surface-container-high) 92%, transparent);
-  box-shadow: var(--acp-elevation-2);
 }
 
 .acp-markdown-switcher__segment {

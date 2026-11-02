@@ -21,6 +21,7 @@ import styles from './markdown.css?inline';
  * @fires acp-file-open `{ path }` A link to a file in the project (document).
  * @fires acp-file-reveal `{ path, expand: true }` A link to a folder in the project (document).
  * @fires acp-block-activate `{ line }` A block was double-clicked; its 1-based first line in the text (document).
+ * @fires acp-markdown-error `{ error }` The text could not be rendered; the body says so in its place.
  */
 export class AcpMarkdown extends LitElement {
   static properties = {
@@ -49,6 +50,8 @@ export class AcpMarkdown extends LitElement {
   #urls = new Map();
   /** Makes the ids of the hints of images that failed to load. */
   #hints = 0;
+  /** Images whose bytes are still being read. */
+  #reading = 0;
 
   constructor() {
     super();
@@ -74,7 +77,8 @@ export class AcpMarkdown extends LitElement {
 
   disconnectedCallback() {
     cancelAnimationFrame(this.#frame);
-    if (this.#frame || this.#urls.size) {
+    // What was still being read is lost with the element's connection: paint again when it is back.
+    if (this.#frame || this.#urls.size || this.#reading) {
       this.#painted = null;
       this.#blocks = [];
     }
@@ -103,18 +107,44 @@ export class AcpMarkdown extends LitElement {
     const body = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-markdown__body'));
     if (!body) return;
     this.#painted = this.text;
-    const { fragment, blocks, images, links } = markdown.render(this.text, {
-      policy: this.policy,
-      baseDir: this.baseDir,
-      root: this.root,
-      decorate: this.decorate,
-    });
+    /** @type {import('../../hooks/markdown/types.js').Rendered} */
+    let rendered;
+    try {
+      rendered = markdown.render(this.text, {
+        policy: this.policy,
+        baseDir: this.baseDir,
+        root: this.root,
+        decorate: this.decorate,
+      });
+    } catch (error) {
+      this.#showError(body, error);
+      return;
+    }
+    const { fragment, blocks, images, links } = rendered;
     const kept = this.#show(body, fragment, blocks);
     // Links of the blocks that stayed are still in the body; the rest are the new ones.
     this.#links = new Map([...this.#links, ...links].filter(([link]) => link.isConnected));
-    this.#blocks = [...this.#blocks.slice(0, kept), ...blocks.slice(kept)];
+    // A kept block keeps its node, but sits where the text now has it.
+    this.#blocks = blocks.map((block, i) => (i < kept ? { ...block, node: this.#blocks[i].node } : block));
     this.#revokeUnused();
     for (const { node, path } of images) if (node.isConnected) this.#loadInto(node, path);
+  }
+
+  /**
+   * The body says the text could not be rendered, and the host is told why.
+   * @param {HTMLElement} body
+   * @param {unknown} error
+   */
+  #showError(body, error) {
+    const row = document.createElement('p');
+    row.className = 'acp-markdown__error';
+    row.setAttribute('role', 'alert');
+    row.textContent = 'Couldn’t render this text';
+    body.replaceChildren(row);
+    this.#blocks = [];
+    this.#links = new Map();
+    this.#revokeUnused();
+    this.#emit('acp-markdown-error', { error });
   }
 
   /**
@@ -151,6 +181,7 @@ export class AcpMarkdown extends LitElement {
    * @param {string} path
    */
   async #loadInto(img, path) {
+    this.#reading++;
     try {
       if (!this.loadImage) throw new Error('');
       const blob = await this.loadImage(path);
@@ -161,6 +192,8 @@ export class AcpMarkdown extends LitElement {
       img.src = url;
     } catch (err) {
       if (img.isConnected) this.#showBroken(img, err instanceof Error ? err.message : String(err));
+    } finally {
+      this.#reading--;
     }
   }
 

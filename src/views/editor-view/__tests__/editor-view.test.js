@@ -154,6 +154,33 @@ describe('acp-editor-view', () => {
       expect(blob.size).to.equal(4);
     });
 
+    it('reads no file that is no image, whatever the text asks for', async () => {
+      /** @type {string[]} */
+      const asked = [];
+      mockIPC((cmd) => {
+        asked.push(cmd);
+        return new Uint8Array(4).buffer;
+      });
+      const { view } = await renderMarkdown();
+      const load = /** @type {(path: string) => Promise<Blob>} */ (view.loadImage);
+
+      for (const path of ['/p/notes.txt', '/p/clip.mp4', '/p/noextension']) {
+        let error = null;
+        await load(path).catch((e) => (error = e));
+        expect(error, path).to.be.instanceOf(Error);
+      }
+
+      expect(asked).to.deep.equal([]);
+    });
+
+    it('reports a text the preview could not render', async () => {
+      const { view } = await renderMarkdown();
+
+      fire(view, 'acp-markdown-error', { error: new Error('sanitizer failed') });
+
+      expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Rendering the markdown failed: sanitizer failed']]);
+    });
+
     describe('a link of the preview', () => {
       /** @param {string} cmd @param {any} args */
       const listing = (cmd, args) => {

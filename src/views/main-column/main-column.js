@@ -114,7 +114,7 @@ export class AcpMainColumn extends ViewElement {
 
   /**
    * The markdown view's keys, while the active tab is a markdown file: Mod+K then V toggles Split (the
-   * chord waits 1.2 s), Mod+Shift+V Preview, Esc leaves Preview unless text is selected. In the
+   * chord waits 1.2 s), Mod+Shift+V Preview, Esc (from the file's panel) leaves Preview unless text is selected. In the
    * capture phase, so the editor's own keymap doesn't see them first.
    * @param {KeyboardEvent} e
    */
@@ -146,7 +146,9 @@ export class AcpMainColumn extends ViewElement {
       claim();
       markdownView.toggle(path, 'preview');
     } else if (e.key === 'Escape' && !mod && !e.altKey && !e.shiftKey && markdownView.modeOf(path) === 'preview') {
-      if (getSelection()?.toString()) return;
+      // Only in the file's own panel: a dialog of the tab view answers its Esc itself.
+      const inPanel = e.composedPath().some((n) => n instanceof Element && n.localName === 'md-tab-panel' && n.hasAttribute('active'));
+      if (!inPanel || getSelection()?.toString()) return;
       claim();
       markdownView.setMode(path, 'raw');
     }

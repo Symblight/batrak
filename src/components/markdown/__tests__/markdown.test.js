@@ -93,6 +93,43 @@ describe('acp-markdown', () => {
     });
   });
 
+  describe('a text it cannot render', () => {
+    /** A host whose rewrite fails on a text that says `bad`. */
+    const failOnBad = (/** @type {ParentNode} */ root) => {
+      if (root.textContent?.includes('bad')) throw new Error('rewrite failed');
+    };
+
+    it('says so in place of the text, tells the host, and renders the next text', async () => {
+      const el = await fixture(html`<acp-markdown .decorate=${failOnBad}></acp-markdown>`);
+      /** @type {string[]} */
+      const heard = [];
+      el.addEventListener('acp-markdown-error', (/** @type {Event} */ e) => heard.push(/** @type {CustomEvent} */ (e).detail.error.message));
+
+      await show(el, 'a bad text');
+      expect(body(el).querySelector('.acp-markdown__error')?.textContent).to.equal('Couldn’t render this text');
+      expect(body(el).textContent).to.not.contain('bad text');
+      expect(heard).to.deep.equal(['rewrite failed']);
+
+      await show(el, 'a good text');
+      expect(body(el).querySelector('.acp-markdown__error')).to.equal(null);
+      expect(body(el).textContent?.trim()).to.equal('a good text');
+    });
+
+    it('says so once for a text, not at every update', async () => {
+      const el = await fixture(html`<acp-markdown .decorate=${failOnBad}></acp-markdown>`);
+      /** @type {unknown[]} */
+      const heard = [];
+      el.addEventListener('acp-markdown-error', (/** @type {Event} */ e) => heard.push(e));
+
+      await show(el, 'bad');
+      el.requestUpdate();
+      await el.updateComplete;
+      await frame();
+
+      expect(heard).to.have.length(1);
+    });
+  });
+
   describe('links', () => {
     /**
      * @param {AcpMarkdown} el
@@ -163,6 +200,18 @@ describe('acp-markdown', () => {
 
       await show(el, '');
       expect(body(el).children).to.have.length(0);
+    });
+
+    it('keeps the nodes of blocks a blank line moved, but names the lines they are on now', async () => {
+      const el = await fixture(html`<acp-markdown policy="document" .text=${'one\n\ntwo\n\nthree'}></acp-markdown>`);
+      const nodes = [...body(el).children];
+      expect(el.blocks.map((/** @type {{ line: number }} */ b) => b.line)).to.deep.equal([1, 3, 5]);
+
+      await show(el, 'one\n\n\n\ntwo\n\nthree');
+
+      expect([...body(el).children]).to.deep.equal(nodes);
+      expect(el.blocks.map((/** @type {{ line: number }} */ b) => b.line)).to.deep.equal([1, 5, 7]);
+      expect(el.blocks.map((/** @type {{ node: Node }} */ b) => b.node)).to.deep.equal(nodes);
     });
 
     it('streams: a block that grows is redone, the finished ones before it are not', async () => {
@@ -297,6 +346,25 @@ describe('acp-markdown', () => {
       expect(body(el).querySelector('img')).to.equal(img);
       expect(reads).to.equal(1);
       expect(urls.revoked).to.have.length(0);
+    });
+
+    it('reads its images again when it was away while they were read', async () => {
+      /** @type {Array<(blob: Blob) => void>} */
+      const arrivals = [];
+      const el = await preview('![one](a.png)', { loadImage: () => new Promise((resolve) => arrivals.push(resolve)) });
+      const host = /** @type {HTMLElement} */ (el.parentElement);
+
+      el.remove();
+      arrivals[0](await png('a.png'));
+      await settle();
+      host.append(el);
+      await el.updateComplete;
+      await settle();
+      arrivals[1]?.(await png('a.png'));
+      await settle();
+
+      expect(arrivals).to.have.length(2);
+      expect(/** @type {HTMLImageElement} */ (body(el).querySelector('img')).src).to.match(/^blob:/);
     });
 
     describe('clicks', () => {

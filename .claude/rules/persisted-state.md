@@ -59,7 +59,7 @@ paths:
   share of Split in percent, 20–80), `$settings` (`brama:settings`,
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, the code editor's font, `markdownDefaultView` (`raw` / `split` / `preview`: how a markdown file never set
-  opens) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
+  opens; no control in Settings, so `raw` unless the stored value is edited) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
   `src/hooks/settings/types.js`.
 
@@ -68,7 +68,7 @@ paths:
 Spec: `docs/specs/markdown-view-modes.md`. A `.md` / `.mdx` tab (content kind `markdown`) is shown by
 `<acp-editor-view>` in `<acp-markdown-view>` (`src/components/markdown-view/`): the code editor
 (`<acp-code-view>`, hidden in Preview, never removed, so the caret, undo and an unsaved draft survive),
-a live preview of `tab.draft ?? tab.content`, and `<acp-markdown-switcher>` floating over them (Raw /
+a live preview of `tab.draft ?? tab.content`, and `<acp-markdown-switcher>` in a bar above them (Raw /
 Split / Preview, and in Split the scroll sync toggle). There is no status-bar mode item: `cdx-footer`
 has no slot for one.
 

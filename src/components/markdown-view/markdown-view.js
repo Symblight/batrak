@@ -30,7 +30,7 @@ const HANDLE = 'markdown';
 
 /**
  * @tag acp-markdown-view
- * @summary A markdown file's tab: its code editor, a live rendered preview, or both side by side, with a switcher over them; the editor is hidden in Preview, never removed.
+ * @summary A markdown file's tab: a bar with the view switcher over its code editor, a live rendered preview, or both side by side; the editor is hidden in Preview, never removed.
  * @fires acp-markdown-mode `{ id, mode }` A view was picked (or a double-click in Preview asks for Split).
  * @fires acp-markdown-sync `{ on }` The scroll sync was switched.
  * @fires acp-markdown-ratio `{ ratio }` The divider was set: the editor's share, in percent.
@@ -169,39 +169,36 @@ export class AcpMarkdownView extends LitElement {
     return tab?.loaded ? (tab.draft ?? tab.content) : '';
   }
 
-  /** Follows the text: at once the first time and for another file, else a moment after the typing stops. */
+  /**
+   * Follows the text: at once the first time and for another file, else a moment after the typing
+   * stops. A file of more than a megabyte waits to be rendered either way.
+   */
   willUpdate() {
     const tab = this.tab;
     const text = this.#textOf(tab);
+    clearTimeout(this.#timer);
+    this.#timer = undefined;
+    this.#rendering = false;
     if (this.mode === 'raw') {
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
       this.#shown = null;
-      this.#rendering = false;
-    } else if (this.#shown === null || (tab?.id ?? null) !== this.#shownTab) {
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
-      this.#shown = text;
-      this.#shownTab = tab?.id ?? null;
-      this.#rendering = false;
-    } else if (text === this.#shown) {
-      clearTimeout(this.#timer);
-      this.#timer = undefined;
-      this.#rendering = false;
-    } else {
-      clearTimeout(this.#timer);
-      const big = text.length > BIG_FILE;
-      this.#rendering = big;
-      this.#timer = setTimeout(
-        () => {
-          this.#timer = undefined;
-          this.#shown = this.#textOf(this.tab);
-          this.#rendering = false;
-          this.requestUpdate();
-        },
-        big ? BIG_FILE_DELAY : RENDER_DELAY,
-      );
+      return;
     }
+    if (this.#shown === null || (tab?.id ?? null) !== this.#shownTab) {
+      this.#shown = text.length > BIG_FILE ? '' : text;
+      this.#shownTab = tab?.id ?? null;
+    }
+    if (text === this.#shown) return;
+    const big = text.length > BIG_FILE;
+    this.#rendering = big;
+    this.#timer = setTimeout(
+      () => {
+        this.#timer = undefined;
+        this.#shown = this.#textOf(this.tab);
+        this.#rendering = false;
+        this.requestUpdate();
+      },
+      big ? BIG_FILE_DELAY : RENDER_DELAY,
+    );
   }
 
   async firstUpdated() {
@@ -323,6 +320,10 @@ export class AcpMarkdownView extends LitElement {
       @acp-markdown-mode=${this.#onSwitcher}
       @acp-markdown-sync=${this.#onSwitcher}
     >
+      <div class="acp-markdown-view__bar">
+        ${this.#rendering ? html`<span class="acp-markdown-view__rendering" role="status">Rendering…</span>` : nothing}
+        <acp-markdown-switcher class="acp-markdown-view__switcher" .mode=${mode} .scrollSync=${this.scrollSync}></acp-markdown-switcher>
+      </div>
       <div class="acp-markdown-view__split">
         <acp-pane class="acp-markdown-view__pane" style=${styleMap({ flex: `${share} 1 0` })} ?hidden=${mode === 'preview'}>
           ${this.#renderEditor(tab)}
@@ -343,8 +344,6 @@ export class AcpMarkdownView extends LitElement {
           ${mode === 'raw' ? nothing : this.#renderPreview(tab)}
         </acp-pane>
       </div>
-      <acp-markdown-switcher class="acp-markdown-view__switcher" .mode=${mode} .scrollSync=${this.scrollSync}></acp-markdown-switcher>
-      ${this.#rendering ? html`<div class="acp-markdown-view__rendering" role="status">Rendering…</div>` : nothing}
     </div>`;
   }
 }

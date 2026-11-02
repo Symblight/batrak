@@ -107,6 +107,14 @@ describe('acp-markdown-view', () => {
       expect(editor.value).to.equal('# Draft\n\nunsaved');
     });
 
+    it('puts the switcher in a bar above the panes, not over them', async () => {
+      const el = await view({ mode: 'split' });
+      const bar = /** @type {HTMLElement} */ (root(el).querySelector('acp-markdown-switcher')?.parentElement);
+
+      expect(bar.className).to.equal('acp-markdown-view__bar');
+      expect(bar.nextElementSibling?.className).to.equal('acp-markdown-view__split');
+    });
+
     it('shows the switcher on top, with the view that is shown', async () => {
       const el = await view({ mode: 'split', scrollSync: false });
       const switcher = /** @type {import('../../markdown-switcher/markdown-switcher.js').AcpMarkdownSwitcher} */ (root(el).querySelector('acp-markdown-switcher'));
@@ -195,6 +203,27 @@ describe('acp-markdown-view', () => {
       expect(note()).to.equal(null);
       await frame();
       await frame();
+      expect(inPreview(el, 'p')?.textContent?.length).to.equal(big.length);
+    });
+  });
+
+  describe('a file of more than a megabyte, shown for the first time', () => {
+    it('waits to render it too, the editor already usable', async () => {
+      const big = 'x'.repeat(1_000_100);
+      const el = await view({ mode: 'split', tab: tab({ content: big }) });
+      const note = () => root(el).querySelector('.acp-markdown-view__rendering');
+
+      expect(note()?.textContent?.trim()).to.equal('Rendering…');
+      expect(inPreview(el, 'p')).to.equal(null);
+      expect(root(el).querySelector('acp-code-view')).to.not.equal(null);
+
+      for (let i = 0; i < 40 && note(); i++) {
+        await wait(100);
+        await el.updateComplete;
+      }
+      await frame();
+      await frame();
+      expect(note()).to.equal(null);
       expect(inPreview(el, 'p')?.textContent?.length).to.equal(big.length);
     });
   });

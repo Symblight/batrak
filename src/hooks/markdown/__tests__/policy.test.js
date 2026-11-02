@@ -96,10 +96,15 @@ describe('markdown policy', () => {
       expectClean('<div><span style="color:red"><b>x</b> <i>y</i></span></div><center><u>z</u></center><font color="red">w</font>', 'x yzw');
     });
 
-    it('keeps the document elements and drops them from a reply', () => {
+    it('keeps the document elements, and from a reply only their text', () => {
       const html = '<details><summary>s</summary>d</details><kbd>k</kbd><sup>1</sup><sub>2</sub><img src="a.png" alt="a">';
       expectClean(html, html);
-      expectClean(html, '', 'reply');
+      expectClean(html, 'sdk12', 'reply');
+    });
+
+    it('keeps the text of an element it does not know, which a stray <tag> in prose opens', () => {
+      expectClean('<p>Use <path> to open <b>it</b>, then <your-key>paste it</p>', '<p>Use  to open it, then paste it</p>');
+      expectClean('<ul><li>Vec<t>items</li></ul><table><tr><td>a<x>b</td></tr></table>', '<ul><li>Vecitems</li></ul><table><tbody><tr><td>ab</td></tr></tbody></table>', 'reply');
     });
 
     it('keeps the structure of a document', () => {
@@ -137,6 +142,13 @@ describe('markdown policy', () => {
       expectClean('<img src="javascript:alert(1)" alt="x">', 'x');
       expectClean('<img src="//evil.test/x.png" alt="x">', 'x');
       expectClean('<img alt="nothing">', 'nothing');
+    });
+
+    it('shows the alt text of a web image that is the content of a link, so the link stays one link', () => {
+      expectClean(
+        '<a href="https://target.test"><img src="https://img.test/b.svg" alt="badge"></a>',
+        '<a href="https://target.test" rel="noopener noreferrer ugc">badge</a>',
+      );
     });
 
     it('falls back to the address when a web image has no alt text', () => {

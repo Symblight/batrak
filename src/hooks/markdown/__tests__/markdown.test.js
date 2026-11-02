@@ -103,6 +103,11 @@ describe('markdown.render', () => {
       expect(fragment.querySelector('input[type=checkbox]')).to.not.equal(null);
     });
 
+    it('keeps the text around something like <path> or Vec<T> that is no markup', () => {
+      const { fragment } = markdown.render('Use <path> to open it. A Vec<T> of things, and <your-key> last.', { policy: 'reply' });
+      expect(fragment.textContent).to.contain('to open it').and.contain('of things').and.contain('last.');
+    });
+
     it('records the web links to open in the browser', () => {
       const { links } = markdown.render('[a](https://a.test/x?q=1) and <https://b.test> and [m](mailto:me@a.test)', { policy: 'reply' });
       expect([...links.values()]).to.deep.equal([
@@ -180,6 +185,14 @@ describe('markdown.render', () => {
       expect(fragment.querySelector('img')).to.equal(null);
       expect(fragment.textContent?.trim()).to.equal('a b c d');
       expect(fragment.querySelector('a')?.getAttribute('href')).to.equal('https://a.test/b.png');
+    });
+
+    it('keeps a badge that is a link one link to where the link goes', () => {
+      const { fragment, links } = doc('[![build](https://img.test/b.svg)](https://target.test/ci)');
+
+      expect(fragment.querySelectorAll('a')).to.have.length(1);
+      expect([...links.values()]).to.deep.equal([{ kind: 'external', target: 'https://target.test/ci' }]);
+      expect(fragment.querySelector('a')?.textContent).to.equal('build');
     });
 
     it('lists at most 200 and gives the rest as alt text', () => {

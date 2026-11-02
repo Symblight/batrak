@@ -15,7 +15,7 @@ import styles from './markdown-switcher.css?inline';
 
 /**
  * @tag acp-markdown-switcher
- * @summary The segmented control that floats over a markdown file: Raw, Split and Preview, and in Split a toggle for scrolling the two panes together.
+ * @summary The segmented control of a markdown file's bar: Raw, Split and Preview, and in Split a toggle for scrolling the two panes together.
  * @fires acp-markdown-mode `{ mode }` A view other than the shown one was pressed.
  * @fires acp-markdown-sync `{ on }` The scroll sync toggle was pressed.
  */

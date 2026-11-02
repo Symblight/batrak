@@ -114,9 +114,13 @@ function configOf(policy) {
     ALLOWED_TAGS: ['#text', ...BASE_TAGS, ...EXTRA_TAGS[policy], ...WRAPPERS],
     ALLOWED_ATTR: ALL_ATTRS,
     FORBID_TAGS: NEVER,
+    // An element that isn't allowed is unwrapped, so the text of `Use <path> to open it` stays (HTML
+    // reads `<path>` as an element holding the rest of the paragraph). What can hold markup or code of
+    // its own, the `NEVER` elements, goes with its content.
+    ADD_FORBID_CONTENTS: NEVER,
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
-    KEEP_CONTENT: false,
+    KEEP_CONTENT: true,
     RETURN_DOM_FRAGMENT: /** @type {const} */ (true),
   };
 }
@@ -148,8 +152,9 @@ function applyRules(fragment) {
     const alt = img.getAttribute('alt') ?? '';
     const kind = classifyUrl(src);
     if (kind === 'relative') continue;
-    // Never fetched: a web image is a link to where it lives, anything else its description.
-    if (kind === 'external' && !src.trim().toLowerCase().startsWith('mailto:')) {
+    // Never fetched: a web image is a link to where it lives, anything else its description. Inside a
+    // link (a badge) it is only the description: a link in a link is no link.
+    if (kind === 'external' && !src.trim().toLowerCase().startsWith('mailto:') && !img.closest('a')) {
       const link = /** @type {HTMLAnchorElement} */ (img.ownerDocument.createElement('a'));
       link.setAttribute('href', src);
       link.textContent = alt || src;

@@ -8,11 +8,23 @@
 
 /* The box the narrow layout is asked of, not the window. */
 .acp-markdown-view__stage {
-  position: relative;
   display: flex;
   flex: 1;
+  flex-direction: column;
   min-height: 0;
   container: acp-markdown-view / inline-size;
+}
+
+/* A row of its own between the tabs and the content, the switcher at its end. */
+.acp-markdown-view__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--acp-space-2);
+  padding: var(--acp-space-0-5) var(--acp-space-2);
+  background: var(--acp-column-background);
+  border-block-end: 1px solid var(--acp-color-outline-variant);
 }
 
 .acp-markdown-view__split {
@@ -63,8 +75,7 @@
 .acp-markdown-view__scroller {
   flex: 1;
   min-height: 0;
-  /* Clears the switcher over the corner. */
-  padding: 44px var(--acp-space-4) var(--acp-space-4);
+  padding: var(--acp-space-4);
   overflow: auto;
   background: var(--acp-column-background);
   font-size: var(--acp-font-size-md);
@@ -76,21 +87,9 @@
   margin-inline: auto;
 }
 
-/* Over the corner of the editor's area, clear of its scrollbar. */
-.acp-markdown-view__switcher {
-  position: absolute;
-  inset-block-start: var(--acp-space-2);
-  inset-inline-end: 20px;
-  z-index: var(--acp-z-overlay);
-}
-
+/* Said at the start of the bar, away from the switcher. */
 .acp-markdown-view__rendering {
-  position: absolute;
-  inset-block-end: var(--acp-space-2);
-  inset-inline-end: 20px;
-  padding: var(--acp-space-0-5) var(--acp-space-2);
-  border-radius: var(--acp-shape-corner-small);
-  background: var(--acp-color-surface-container-high);
+  margin-inline-end: auto;
   color: var(--acp-color-on-surface-variant);
   font-size: var(--acp-font-size-sm);
 }
