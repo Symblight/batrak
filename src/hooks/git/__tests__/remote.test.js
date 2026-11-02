@@ -76,6 +76,35 @@ describe('git remote chip', () => {
     }
   });
 
+  it('says in the tooltip when the background fetch could not reach the remote', () => {
+    const fetchError = { rootId: 'r', at: NOW - 2 * MIN, message: 'Authentication failed for origin' };
+    // Act
+    const tooltip = git.remoteChip(repo({ ahead: 1 }), NOW, null, fetchError)?.tooltip;
+    // Assert
+    expect(tooltip).to.equal("1 commit to push to origin/main · fetched 3 minutes ago · couldn't fetch 2 minutes ago: Authentication failed for origin");
+    expect(git.remoteChip(repo({ upstream: null, remote: null, hasRemotes: false }), NOW, null, fetchError)?.tooltip, 'nothing to fetch, nothing to say').to.not.contain("couldn't");
+  });
+
+  it('fetches in the background only a shown, visible branch with a remote, five minutes after the last fetch or try', () => {
+    const MINUTE = 60_000;
+    /** @type {[string, Partial<Parameters<typeof git.fetchDue>[0]>, boolean][]} */
+    const cases = [
+      ['never fetched', { repo: repo({ fetchedAt: null }) }, true],
+      ['fetched 6 minutes ago', { repo: repo({ fetchedAt: NOW - 6 * MINUTE }) }, true],
+      ['fetched 4 minutes ago', { repo: repo({ fetchedAt: NOW - 4 * MINUTE }) }, false],
+      ['old fetch but tried a minute ago', { repo: repo({ fetchedAt: NOW - 60 * MINUTE }), lastAttempt: NOW - MINUTE }, false],
+      ['old fetch, last try 6 minutes ago', { repo: repo({ fetchedAt: NOW - 60 * MINUTE }), lastAttempt: NOW - 6 * MINUTE }, true],
+      ['window hidden', { repo: repo({ fetchedAt: null }), visible: false }, false],
+      ['an operation is running', { repo: repo({ fetchedAt: null }), busy: true }, false],
+      ['no remote', { repo: repo({ fetchedAt: null, remote: null, hasRemotes: false }) }, false],
+      ['detached', { repo: repo({ fetchedAt: null, branch: null, detached: true }) }, false],
+      ['no repository', { repo: null }, false],
+    ];
+    for (const [why, fields, due] of cases) {
+      expect(git.fetchDue({ repo: repo(), now: NOW, lastAttempt: null, visible: true, busy: false, ...fields }), why).to.equal(due);
+    }
+  });
+
   it('asks before a pull changes the files of a folder an agent is working in', () => {
     const session = (/** @type {string} */ id, /** @type {string} */ status, folder = '/work/app') =>
       /** @type {import('../../sessions/types.js').Session} */ (/** @type {unknown} */ ({ id, title: `Session ${id}`, status, folder }));

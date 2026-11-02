@@ -3,6 +3,7 @@ import { sessions } from '../sessions/sessions.js';
 /** @typedef {import('./types.js').GitRepoState} GitRepoState */
 /** @typedef {import('./types.js').GitRemoteChip} GitRemoteChip */
 /** @typedef {import('./types.js').GitRemoteOp} GitRemoteOp */
+/** @typedef {import('./types.js').GitFetchError} GitFetchError */
 /** @typedef {import('./types.js').GitRemoteAction} GitRemoteAction */
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
@@ -49,9 +50,38 @@ const count = (n, noun) => `${n} ${noun}${n === 1 ? '' : 's'}`;
  * @param {GitRepoState | null} repo
  * @param {number} now ms.
  * @param {GitRemoteOp | null} [op] The operation running or failed for this root; it hides the branch's state.
+ * @param {GitFetchError | null} [fetchError] Why the last background fetch failed; added to the tooltip.
  * @returns {GitRemoteChip | null}
  */
-export function remoteChip(repo, now, op = null) {
+export function remoteChip(repo, now, op = null, fetchError = null) {
+  const chip = branchChip(repo, now, op);
+  if (chip && fetchError && repo?.remote && (chip.id !== 'busy' && chip.id !== 'failed')) {
+    const age = sessions.ageLabel(new Date(fetchError.at).toISOString(), now);
+    chip.tooltip += ` · couldn't fetch ${age}: ${fetchError.message}`;
+  }
+  return chip;
+}
+
+/** How long after a fetch, or a try, the background fetch goes again. */
+export const FETCH_INTERVAL_MS = 5 * 60_000;
+
+/**
+ * Whether the background fetch should run now: a visible window, a branch with a remote, nothing
+ * else running, and the last fetch or try at least [`FETCH_INTERVAL_MS`] ago.
+ * @param {{ repo: GitRepoState | null, now: number, lastAttempt: number | null, visible: boolean, busy: boolean }} state
+ */
+export function fetchDue({ repo, now, lastAttempt, visible, busy }) {
+  if (!visible || busy || !repo?.branch || !repo.remote) return false;
+  return now - Math.max(repo.fetchedAt ?? 0, lastAttempt ?? 0) >= FETCH_INTERVAL_MS;
+}
+
+/**
+ * @param {GitRepoState | null} repo
+ * @param {number} now
+ * @param {GitRemoteOp | null} op
+ * @returns {GitRemoteChip | null}
+ */
+function branchChip(repo, now, op) {
   if (!repo?.branch) return null;
   if (op) {
     const verbs = VERBS[op.action];

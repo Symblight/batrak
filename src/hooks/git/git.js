@@ -1,10 +1,10 @@
-import { $commitSelection, $gitChanges, $gitRemoteOp, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOp, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
-import { pullConfirm, remoteChip, remoteFailure } from './remote.js';
+import { fetchDue, pullConfirm, remoteChip, remoteFailure } from './remote.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
@@ -76,6 +76,44 @@ function switchRoot(rootId) {
   if (watchers) changesTask.schedule(0);
 }
 
+/** How often a due background fetch is looked for; the fetch itself goes by `fetchDue()`. */
+const FETCH_CHECK_MS = 60_000;
+/** @type {Map<string, number>} When a background fetch of a root was last tried, by root id. */
+const fetchAttempts = new Map();
+let quietFetching = false;
+
+/** Fetches the shown branch's remote in the background if it is due; nobody is told of a failure but the chip's tooltip. */
+async function autoFetch() {
+  const rootId = $rootId.get();
+  const now = Date.now();
+  const due = fetchDue({
+    repo: $gitRepo.get().repo,
+    now,
+    lastAttempt: rootId === null ? null : (fetchAttempts.get(rootId) ?? null),
+    visible: document.visibilityState === 'visible',
+    busy: $gitRemoteOp.get()?.state === 'running',
+  });
+  if (rootId === null || quietFetching || !due) return;
+  fetchAttempts.set(rootId, now);
+  quietFetching = true;
+  try {
+    /** @type {{ repo: GitRepoState | null, error: GitRemoteError | null }} */
+    const reply = await ipc.invoke('git_fetch_quiet', { rootId });
+    if ($rootId.get() === rootId && reply.repo) $gitRepo.set({ repo: reply.repo, error: null });
+    if (reply.error) $gitFetchError.set({ rootId, at: Date.now(), message: reply.error.message.split('\n')[0] });
+    else clearFetchError(rootId);
+  } catch (err) {
+    $gitFetchError.set({ rootId, at: Date.now(), message: String(err) });
+  } finally {
+    quietFetching = false;
+  }
+}
+
+/** @param {string} rootId */
+function clearFetchError(rootId) {
+  if ($gitFetchError.get()?.rootId === rootId) $gitFetchError.set(null);
+}
+
 async function readHead() {
   const rootId = $rootId.get();
   if (rootId === null) {
@@ -88,7 +126,9 @@ async function readHead() {
     if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
   } catch (err) {
     if ($rootId.get() === rootId) $gitRepo.set({ repo: null, error: String(err) });
+    return;
   }
+  void autoFetch();
 }
 
 async function readChanges() {
@@ -152,6 +192,7 @@ export const git = Object.freeze({
   relativePath,
   remoteChip,
   pullConfirm,
+  fetchDue,
 
   /**
    * Fetches, pulls (fast-forward only), pushes or publishes the active root's branch. One at a time
@@ -167,6 +208,7 @@ export const git = Object.freeze({
       /** @type {GitRepoState} */
       const repo = await ipc.invoke('git_remote', { rootId, action, ...(expected ? { expected } : {}) });
       if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
+      if (action === 'fetch') clearFetchError(rootId);
       $gitRemoteOp.set(null);
     } catch (err) {
       const error = remoteError(err);
@@ -189,7 +231,10 @@ export const git = Object.freeze({
     const onFocus = () => {
       headTask.schedule(0);
       if (watchers) changesTask.schedule(0);
+      void autoFetch();
     };
+    const onVisible = () => void autoFetch();
+    const fetchTimer = setInterval(() => void autoFetch(), FETCH_CHECK_MS);
     const stops = [
       $rootId.subscribe(switchRoot),
       projects.onFsChange(({ git: moved }) => {
@@ -198,9 +243,12 @@ export const git = Object.freeze({
       }),
     ];
     window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
     following = () => {
       stops.forEach((stop) => stop());
       window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+      clearInterval(fetchTimer);
       headTask.cancel();
       changesTask.cancel();
       following = null;

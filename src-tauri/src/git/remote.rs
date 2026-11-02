@@ -1,8 +1,10 @@
 //! The remote a branch syncs with: its name, URL and, for github.com, owner and repository.
 
+use std::collections::HashMap;
 use std::ffi::OsStr;
-use std::path::Path;
-use std::time::UNIX_EPOCH;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, LazyLock, Mutex, PoisonError};
+use std::time::{Instant, UNIX_EPOCH};
 
 use serde::{Deserialize, Serialize};
 
@@ -183,8 +185,44 @@ pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState, expected: O
     let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
     let locked = matches!(op, RemoteOp::Pull | RemoteOp::PullRebase | RemoteOp::PullMerge | RemoteOp::Publish);
     let go = || Ok(run_git(git, root, &args, mode));
+    if op == RemoteOp::Fetch {
+        let key = lock::common_dir(git, root).map_err(RemoteError::other)?;
+        return fetch_joined(key, || run_git(git, root, &args, mode));
+    }
     let result = if locked { lock::with_mutation(git, root, go) } else { go() };
     result.map_err(RemoteError::other)?
+}
+
+type FetchResult = Result<(), RemoteError>;
+/// The last fetch of a repository: when it ended, and how.
+type LastFetch = Option<(Instant, FetchResult)>;
+
+static FETCHES: LazyLock<Mutex<HashMap<PathBuf, Arc<Mutex<LastFetch>>>>> = LazyLock::new(Default::default);
+
+/// Runs `fetch` unless another fetch of the repository `key` names ends while this one waits for
+/// its turn: then that one's result is this one's. So the user's Fetch click during a background
+/// fetch neither starts a second git nor misses its failure.
+fn fetch_joined(key: PathBuf, fetch: impl FnOnce() -> FetchResult) -> FetchResult {
+    let started = Instant::now();
+    let slot = Arc::clone(FETCHES.lock().unwrap_or_else(PoisonError::into_inner).entry(key).or_default());
+    let mut last = slot.lock().unwrap_or_else(PoisonError::into_inner);
+    if let Some((ended, result)) = &*last {
+        if *ended >= started {
+            return result.clone();
+        }
+    }
+    let result = fetch();
+    *last = Some((Instant::now(), result.clone()));
+    result
+}
+
+/// The background fetch: fetches the branch's remote if it has one, and says why it couldn't.
+/// A detached HEAD or a repository without a remote has nothing to fetch, which is no failure.
+pub fn fetch_quietly(git: &Path, root: &Path, state: &RepoState) -> Option<RemoteError> {
+    if state.branch.is_none() || state.remote.is_none() {
+        return None;
+    }
+    run(git, root, RemoteOp::Fetch, state, None).err()
 }
 
 /// Ends the rebase or merge a pull left half done; the working tree goes back to before the pull.
@@ -506,6 +544,44 @@ mod tests {
         run_op(&repo, RemoteOp::ForcePush).unwrap();
         let log = crate::git::test_repo::run_in(&origin, &["log", "--format=%s", "main"]);
         assert!(log.contains("local") && !log.contains("later"), "{log}");
+    }
+
+    #[test]
+    fn a_fetch_that_ends_while_another_waits_is_the_waiter_s_result() {
+        use std::sync::atomic::{AtomicU32, Ordering};
+        use std::time::Duration;
+        let key = PathBuf::from("fetch-joined-test");
+        let runs = AtomicU32::new(0);
+        let slow = || {
+            runs.fetch_add(1, Ordering::SeqCst);
+            std::thread::sleep(Duration::from_millis(200));
+            Err(RemoteError::other("offline"))
+        };
+        std::thread::scope(|scope| {
+            let first = scope.spawn(|| fetch_joined(key.clone(), slow));
+            std::thread::sleep(Duration::from_millis(50));
+            let joined = fetch_joined(key.clone(), || {
+                runs.fetch_add(1, Ordering::SeqCst);
+                Ok(())
+            });
+            assert_eq!(joined, Err(RemoteError::other("offline")), "the running fetch's failure, not a second fetch");
+            assert_eq!(first.join().unwrap(), joined);
+        });
+        assert_eq!(runs.load(Ordering::SeqCst), 1);
+        // A fetch asked for after both ended is a new one.
+        assert_eq!(fetch_joined(key, || Ok(())), Ok(()));
+    }
+
+    #[test]
+    fn the_background_fetch_has_nothing_to_do_without_a_remote_and_says_why_it_failed() {
+        let none = TestRepo::with_commit("quiet-none");
+        assert_eq!(fetch_quietly(&git_bin(), &none.path, &state_of(&none)), None);
+
+        let (repo, _origin) = TestRepo::with_remote("quiet-dead");
+        assert_eq!(fetch_quietly(&git_bin(), &repo.path, &state_of(&repo)), None);
+        repo.git(&["remote", "set-url", "origin", "/nonexistent/repo.git"]);
+        let failed = fetch_quietly(&git_bin(), &repo.path, &state_of(&repo)).expect("a failure");
+        assert_eq!(failed.kind, FailureKind::NotFound);
     }
 
     #[test]

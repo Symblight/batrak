@@ -41,6 +41,14 @@
  * @property {GitRemoteAction | null} action What a click runs; `null` when the chip isn't a button.
  */
 
+/**
+ * Why the last background fetch of a root failed; it only reaches the chip's tooltip.
+ * @typedef {Object} GitFetchError
+ * @property {string} rootId
+ * @property {number} at Unix ms.
+ * @property {string} message First line of git's.
+ */
+
 /** @typedef {'fetch' | 'pull' | 'pullRebase' | 'pullMerge' | 'push' | 'publish' | 'forcePush' | 'abort'} GitRemoteAction */
 
 /**

@@ -25,6 +25,7 @@ export class AcpToolbar extends LitElement {
     workspace: { attribute: false },
     git: { attribute: false },
     remoteOp: { attribute: false },
+    fetchError: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -39,6 +40,8 @@ export class AcpToolbar extends LitElement {
     this.git = { repo: null, error: null };
     /** @type {GitRemoteOp | null} The fetch, pull or push running or failed for the shown project. */
     this.remoteOp = null;
+    /** @type {import('../../hooks/git/types.js').GitFetchError | null} Why the shown project's last background fetch failed. */
+    this.fetchError = null;
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
@@ -107,7 +110,7 @@ export class AcpToolbar extends LitElement {
       .join(', ');
     return html`<span id="acp-toolbar-branch" class="acp-toolbar__branch">${name}</span>
       <md-tooltip for="acp-toolbar-branch" show-delay="800" placement="bottom">${title}</md-tooltip>
-      <acp-remote-chip .repo=${repo} .op=${this.remoteOp}></acp-remote-chip>`;
+      <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>`;
   }
 
   render() {

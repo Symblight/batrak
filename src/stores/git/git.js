@@ -4,6 +4,7 @@ import { $rootId } from '../workspace/workspace.js';
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
+/** @typedef {import('../../hooks/git/types.js').GitFetchError} GitFetchError */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };
@@ -53,3 +54,9 @@ export const $gitRemoteOp = atom(/** @type {GitRemoteOp | null} */ (null));
 
 /** [`$gitRemoteOp`] when it is the shown root's. */
 export const $gitRemoteOpHere = computed([$gitRemoteOp, $rootId], (op, rootId) => (op && op.rootId === rootId ? op : null));
+
+/** Why the last background fetch failed, until one succeeds; written by the `git` hook. */
+export const $gitFetchError = atom(/** @type {GitFetchError | null} */ (null));
+
+/** [`$gitFetchError`] when it is the shown root's. */
+export const $gitFetchErrorHere = computed([$gitFetchError, $rootId], (error, rootId) => (error && error.rootId === rootId ? error : null));

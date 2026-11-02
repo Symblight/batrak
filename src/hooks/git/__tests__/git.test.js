@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $commitSelection, $gitChanges, $gitRemoteOp, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOp, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
@@ -68,6 +68,7 @@ describe('git', () => {
     $workspace.set(null);
     $gitRepo.set(NO_REPO);
     $gitRemoteOp.set(null);
+    $gitFetchError.set(null);
     $notices.set([]);
     setCommitSelection([]);
     mockIPC(
@@ -302,5 +303,43 @@ describe('git', () => {
     git.dismissRemote();
     // Assert
     expect($gitRemoteOp.get()).to.equal(null);
+  });
+  it('fetches quietly once a project with a remote is shown, takes the counts it finds, and does not try again for five minutes', async () => {
+    // Arrange
+    const behind = { ...REPO, upstream: 'origin/main', behind: 2, fetchedAt: Date.now(), remote: { name: 'origin', url: 'u', github: null }, hasRemotes: true };
+    const stale = { ...REPO, upstream: 'origin/main', remote: behind.remote, hasRemotes: true, fetchedAt: null };
+    let fetched = false;
+    answers.git_head = () => (fetched ? behind : stale);
+    answers.git_fetch_quiet = () => {
+      fetched = true;
+      return { repo: behind, error: null };
+    };
+    const git = await started();
+    // Act
+    const rootId = await open();
+    await until(() => $gitRepo.get().repo?.behind === 2);
+    await changed(rootId, { git: true });
+    await until(() => sent('git_head').length === 2);
+    await wait(50);
+    // Assert
+    expect(sent('git_fetch_quiet')).to.deep.equal([{ rootId }]);
+    expect($notices.get(), 'quiet').to.deep.equal([]);
+    expect($gitFetchError.get()).to.equal(null);
+    expect(git.remoteChip($gitRepo.get().repo, Date.now())?.label).to.equal('Pull 2');
+  });
+
+  it('keeps why a background fetch failed for the tooltip, and says nothing else', async () => {
+    // Arrange
+    const stale = { ...REPO, upstream: 'origin/main', remote: { name: 'origin', url: 'u', github: null }, hasRemotes: true, fetchedAt: null };
+    answers.git_head = () => stale;
+    answers.git_fetch_quiet = () => ({ repo: stale, error: { kind: 'auth', message: 'Authentication failed for origin\nfatal: …' } });
+    await started();
+    // Act
+    const rootId = await open();
+    await until(() => $gitFetchError.get() !== null);
+    // Assert
+    expect($gitFetchError.get()).to.deep.include({ rootId, message: 'Authentication failed for origin' });
+    expect($notices.get()).to.deep.equal([]);
+    expect($gitRemoteOp.get(), 'the chip is not shown as failed').to.equal(null);
   });
 });

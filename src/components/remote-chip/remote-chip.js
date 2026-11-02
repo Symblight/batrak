@@ -18,6 +18,7 @@ import styles from './remote-chip.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
+/** @typedef {import('../../hooks/git/types.js').GitFetchError} GitFetchError */
 
 /** @type {Record<string, string>} */
 const ICONS = {
@@ -38,6 +39,7 @@ export class AcpRemoteChip extends LitElement {
   static properties = {
     repo: { attribute: false },
     op: { attribute: false },
+    fetchError: { attribute: false },
     state: { reflect: true },
     open: { state: true },
   };
@@ -50,6 +52,8 @@ export class AcpRemoteChip extends LitElement {
     this.repo = null;
     /** @type {GitRemoteOp | null} The operation running or failed for this branch's root. */
     this.op = null;
+    /** @type {GitFetchError | null} Why the last background fetch failed. */
+    this.fetchError = null;
     /** @type {string | null} The chip's state, for styling. */
     this.state = null;
     /** @type {boolean} The failure popover is showing. */
@@ -151,7 +155,7 @@ export class AcpRemoteChip extends LitElement {
   }
 
   render() {
-    const chip = git.remoteChip(this.repo, Date.now(), this.op);
+    const chip = git.remoteChip(this.repo, Date.now(), this.op, this.fetchError);
     if (!chip) return nothing;
     const failed = chip.id === 'failed';
     const menu = failed || chip.id === 'diverged';

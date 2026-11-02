@@ -114,3 +114,30 @@ pub async fn git_remote(
     }
     result
 }
+
+/// What a background fetch found: the branch's state afterwards, and why it couldn't fetch if it couldn't.
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FetchQuiet {
+    pub repo: Option<repo::RepoState>,
+    pub error: Option<RemoteError>,
+}
+
+/// Fetches the root's branch remote for the counts on the remote chip, without prompting. A failure
+/// is data, not an error: nobody asked for this fetch, so nobody is told but the chip's tooltip.
+#[tauri::command]
+pub async fn git_fetch_quiet(workspaces: State<'_, Workspaces>, root_id: String) -> Result<FetchQuiet, String> {
+    let root = workspaces.get(&root_id)?;
+    blocking(move || {
+        let git = binary::git()?;
+        let Some(state) = root.git.head(git, &root.path, root.epoch())? else {
+            return Ok(FetchQuiet { repo: None, error: None });
+        };
+        let error = remote::fetch_quietly(git, &root.path, &state);
+        if let Some(e) = &error {
+            tracing::debug!(kind = ?e.kind, "background fetch failed");
+        }
+        Ok(FetchQuiet { repo: root.git.head(git, &root.path, root.epoch())?, error })
+    })
+    .await?
+}
