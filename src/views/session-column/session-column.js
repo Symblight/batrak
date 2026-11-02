@@ -132,19 +132,9 @@ export class AcpSessionColumn extends ViewElement {
    * @param {Event} e
    */
   async #onProjectRemove(e) {
-    const project = this.#projects.value.find((p) => p.id === this.#projectIdOf(e));
+    const id = this.#projectIdOf(e);
     const dialog = this.#dialog;
-    if (!project || !dialog) return;
-    const confirmed = await dialog.confirm({
-      headline: 'Remove project?',
-      message: `${project.name} will be removed from Brama.`,
-      detail: 'The folder on disk stays.',
-      confirmLabel: 'Remove',
-      destructive: true,
-    });
-    if (!confirmed) return;
-    projects.remove(project.id);
-    this.#clearFailure(project.id);
+    if (dialog && (await projects.confirmRemove(id, dialog))) this.#clearFailure(id);
   }
 
   /** @param {Event} e */
