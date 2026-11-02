@@ -3,6 +3,8 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
+import '../branch-popover/branch-popover.js';
+import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
 import '../remote-chip/remote-chip.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
@@ -16,7 +18,7 @@ import styles from './toolbar.css?inline';
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the opened folder's name and git branch (a popover to switch it), and the
+ * @summary Narrow app-wide bar above the columns: the project menu and git branch (a popover to switch it), and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-git-remote `{ action }` From the remote chip.
@@ -29,6 +31,9 @@ import styles from './toolbar.css?inline';
 export class AcpToolbar extends LitElement {
   static properties = {
     workspace: { attribute: false },
+    projects: { attribute: false },
+    unread: { attribute: false },
+    home: {},
     git: { attribute: false },
     remoteOp: { attribute: false },
     fetchError: { attribute: false },
@@ -45,6 +50,12 @@ export class AcpToolbar extends LitElement {
     super();
     /** @type {Workspace | null} */
     this.workspace = null;
+    /** @type {readonly import('../../hooks/projects/types.js').Project[]} The project menu's list. */
+    this.projects = [];
+    /** @type {Readonly<Record<string, number>>} Unread sessions by project id, for the menu's dots. */
+    this.unread = {};
+    /** @type {string | null} Shown as `~` in the menu's paths. */
+    this.home = null;
     /** @type {GitRepoView} */
     this.git = { repo: null, error: null };
     /** @type {GitRemoteOp | null} The fetch, pull or push running or failed for the shown project. */
@@ -132,12 +143,12 @@ export class AcpToolbar extends LitElement {
   render() {
     const workspace = this.workspace;
     return html`${this.#renderColumnToggle('session', 'sessions column', 'start')}
-      <span id="acp-toolbar-name" class="acp-toolbar__name">${workspace?.name ?? ''}</span>
-      ${workspace
-        ? html`<md-tooltip for="acp-toolbar-name" show-delay="800" placement="bottom" style="width: max-content; max-inline-size: none"
-            >${workspace.path}</md-tooltip
-          >`
-        : nothing}
+      <acp-project-menu
+        .projects=${this.projects}
+        .currentId=${workspace?.path ?? null}
+        .unread=${this.unread}
+        .home=${this.home}
+      ></acp-project-menu>
       ${workspace ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
       ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;

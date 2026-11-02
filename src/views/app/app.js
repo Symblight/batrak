@@ -17,7 +17,8 @@ import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX
 import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
-import { markProjectRead } from '../../stores/session-read/session-read.js';
+import { $unreadSessions, markProjectRead } from '../../stores/session-read/session-read.js';
+import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -117,12 +118,15 @@ export class AcpApp extends ViewElement {
     sideView: { state: true },
     quickOpenFiles: { state: true },
     branches: { state: true },
+    home: { state: true },
   };
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
   #activePath = new StoreController(this, { store: $activePath });
   #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
   #workspace = new StoreController(this, { store: $workspace });
+  #projects = new StoreController(this, { store: $projects });
+  #unread = new StoreController(this, { store: $unreadSessions });
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
@@ -211,6 +215,8 @@ export class AcpApp extends ViewElement {
     this.quickOpenFiles = [];
     /** @type {import('../../hooks/git/types.js').GitBranchList | null} The branch popover's lists, read when it opens. */
     this.branches = null;
+    /** @type {string | null} Shown as `~` in the project menu's paths. */
+    this.home = null;
   }
 
   connectedCallback() {
@@ -226,6 +232,10 @@ export class AcpApp extends ViewElement {
     github.start();
     sessions.followRoot();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
+    projects
+      .homeDir()
+      .then((home) => (this.home = home.replace(/[\\/]+$/, '')))
+      .catch(() => {});
   }
 
   disconnectedCallback() {
@@ -355,6 +365,30 @@ export class AcpApp extends ViewElement {
     this.sideView = 'search';
     showColumn('side');
     this.#files.showSearch(state);
+  }
+
+  /** @param {Event} e */
+  #onProjectSelect(e) {
+    const id = /** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId;
+    toggleProject(id, true);
+    projects.activate(id).catch((err) => app.reportError('Opening project failed', err));
+  }
+
+  #onProjectOpenFolder() {
+    projects.open().catch((err) => app.reportError('Opening folder failed', err));
+  }
+
+  /** @param {Event} e */
+  #onProjectReveal(e) {
+    projects
+      .reveal(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId)
+      .catch((err) => app.reportError('Revealing folder failed', err));
+  }
+
+  /** @param {Event} e */
+  #onProjectRemove(e) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('.acp-app__confirm'));
+    projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, dialog);
   }
 
   /** @param {Event} e */
@@ -519,6 +553,9 @@ export class AcpApp extends ViewElement {
       <acp-toolbar
         slot="header"
         .workspace=${this.#workspace.value}
+        .projects=${this.#projects.value}
+        .unread=${projects.unreadByProject($sessions.get(), this.#unread.value)}
+        .home=${this.home}
         .git=${this.#gitRepo.value}
         .remoteOp=${this.#gitRemoteOp.value}
         .fetchError=${this.#gitFetchError.value}
@@ -528,6 +565,11 @@ export class AcpApp extends ViewElement {
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
+        @acp-project-select=${this.#onProjectSelect}
+        @acp-project-open-folder=${this.#onProjectOpenFolder}
+        @acp-project-reveal=${this.#onProjectReveal}
+        @acp-project-open-terminal=${this.#openProjectTerminal}
+        @acp-project-remove=${this.#onProjectRemove}
         @acp-git-remote=${this.#onGitRemote}
         @acp-git-branches-query=${this.#onBranchesQuery}
         @acp-git-switch=${this.#onGitSwitch}

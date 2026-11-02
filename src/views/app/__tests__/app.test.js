@@ -2,6 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
+import { $projects } from '../../../stores/projects/projects.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
@@ -323,6 +324,70 @@ describe('acp-app: branch popover', () => {
     // Assert
     expect(finished[2]).to.contain('“Fix it” is working in this folder');
     expect(switches(), 'git is not asked').to.have.length(2);
+  });
+});
+
+describe('acp-app: project menu', () => {
+  /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
+  let calls;
+
+  beforeEach(() => {
+    calls = [];
+    mockIPC((cmd, args) => {
+      const a = /** @type {Record<string, unknown>} */ (args ?? {});
+      calls.push({ cmd, args: a });
+      if (cmd === 'open_workspace') return { rootId: `root:${a.path}`, path: a.path };
+      return startupAnswer(cmd, a);
+    });
+    $projects.set([
+      { id: '/p', name: 'p', path: '/p' },
+      { id: '/q', name: 'q', path: '/q' },
+    ]);
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+  });
+
+  afterEach(() => {
+    $projects.set([]);
+    $workspace.set(null);
+    clearMocks();
+  });
+
+  /** The app, and a way to fire the project menu's events from the toolbar. */
+  async function render() {
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get());
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
+    /** @param {string} type @param {unknown} [detail] */
+    const fire = (type, detail = null) => toolbar.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    return { app, toolbar, fire };
+  }
+
+  it('hands the projects to the toolbar, and switches, reveals and removes as the menu asks', async () => {
+    // Arrange
+    const { app, toolbar, fire } = await render();
+    expect(toolbar.projects.map((p) => p.id), 'the listed projects').to.deep.equal(['/p', '/q']);
+
+    // Act: switch
+    fire('acp-project-select', { projectId: '/q' });
+    await until(() => calls.some((c) => c.cmd === 'open_workspace' && c.args.path === '/q'));
+    // Act: reveal the shown project
+    fire('acp-project-reveal', { projectId: '/p' });
+    await until(() => calls.some((c) => c.cmd === 'reveal_path'));
+    // Act: remove asks first
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (app.querySelector('.acp-app__confirm'));
+    /** @type {string[]} */
+    const asked = [];
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return true;
+    };
+    fire('acp-project-remove', { projectId: '/q' });
+    await until(() => $projects.get().length === 1);
+
+    // Assert
+    expect(calls.find((c) => c.cmd === 'reveal_path')?.args).to.deep.equal({ path: '/p' });
+    expect(asked).to.deep.equal(['Remove project?']);
+    expect($projects.get().map((p) => p.id)).to.deep.equal(['/p']);
   });
 });
 

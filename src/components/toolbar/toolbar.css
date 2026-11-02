@@ -1,4 +1,5 @@
 :host {
+  container: acp-toolbar / inline-size;
   display: flex;
   align-items: center;
   gap: var(--acp-space-2);
@@ -6,15 +7,6 @@
   height: var(--acp-toolbar-height);
   padding: 0 var(--acp-space-2);
   background: var(--acp-app-background);
-}
-.acp-toolbar__name {
-  overflow: hidden;
-  padding-inline: var(--acp-space-2);
-  font-size: var(--acp-font-size-title);
-  font-weight: var(--acp-font-weight-title);
-  color: var(--acp-color-on-surface);
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .acp-toolbar__git-error {
   overflow: hidden;

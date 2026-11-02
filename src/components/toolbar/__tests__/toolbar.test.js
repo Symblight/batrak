@@ -19,9 +19,13 @@ const OP = { rootId: 'r1', action: 'push', state: 'running', error: null };
 const REPLY = { status: 'ok', pr: null, defaultBranch: 'main', message: null };
 
 describe('acp-toolbar', () => {
-  it("shows the project's path in a tooltip, and the branch, sync state and GitHub slot as components of their own, not titles", async () => {
+  it('shows the project menu with the listed projects, and the branch, sync state and GitHub slot as components of their own, not titles', async () => {
+    const projects = [{ id: '/work/app', name: 'app', path: '/work/app' }];
     const el = await fixture(html`<acp-toolbar
       .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
+      .projects=${projects}
+      .unread=${{ '/work/app': 1 }}
+      .home=${'/work'}
       .git=${GIT}
       .remoteOp=${OP}
       .branches=${BRANCHES}
@@ -29,7 +33,13 @@ describe('acp-toolbar', () => {
       .githubReply=${REPLY}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
+    const menu = root.querySelector('acp-project-menu');
+    expect([menu?.projects, menu?.currentId, menu?.unread, menu?.home], 'the project button is the menu\'s').to.deep.equal([
+      projects,
+      '/work/app',
+      { '/work/app': 1 },
+      '/work',
+    ]);
     const branch = root.querySelector('acp-branch-popover');
     expect([branch?.repo, branch?.branches], 'the branch button is the popover\'s').to.deep.equal([GIT.repo, BRANCHES]);
     const chip = root.querySelector('acp-remote-chip');
@@ -37,6 +47,13 @@ describe('acp-toolbar', () => {
     const slot = root.querySelector('acp-pull-request-chip');
     expect([slot?.status, slot?.reply, slot?.repo], 'GitHub slot').to.deep.equal(['ok', REPLY, GIT.repo]);
     expect(root.querySelector('[title]')).to.equal(null);
+  });
+
+  it('offers the project menu with no project open, and no git beside it', async () => {
+    const el = await fixture(html`<acp-toolbar></acp-toolbar>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('acp-project-menu')?.currentId).to.equal(null);
+    expect(root.querySelector('acp-branch-popover')).to.equal(null);
   });
 
   it('says why git is unavailable in a tooltip', async () => {
