@@ -27,7 +27,7 @@ async function until(ready) {
 }
 
 describe('acp-remote-chip', () => {
-  it('shows what the branch needs next with its tooltip, and nothing without a branch to sync', async () => {
+  it('shows what the branch needs next, describes it to a screen reader instead of a tooltip, and shows nothing without a branch to sync', async () => {
     /** @type {[string, GitRepoState | null, string | null, string | null][]} */
     const cases = [
       ['in sync', REPO, 'Synced', 'Up to date with origin/main · not fetched yet'],
@@ -46,8 +46,9 @@ describe('acp-remote-chip', () => {
       const chip = root.querySelector('.acp-remote-chip__chip');
       // Assert
       expect(chip?.textContent?.trim() ?? null, why).to.equal(label);
-      expect(tooltipOf(chip), why).to.equal(tooltip);
-      expect(root.querySelector('[title]'), why).to.equal(null);
+      expect(chip?.getAttribute('aria-description') ?? null, why).to.equal(tooltip);
+      expect(tooltipOf(chip), 'results are told in snackbars, not a tooltip').to.equal(null);
+      expect(root.querySelector('[title], md-tooltip'), why).to.equal(null);
     }
   });
 

@@ -4,7 +4,6 @@ import { flip, offset, shift } from '@floating-ui/dom';
 import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/progress-circular';
-import '@symblight/wc-material/tooltip';
 import arrowDownwardIcon from '@material-design-icons/svg/outlined/arrow_downward.svg?raw';
 import arrowUpwardIcon from '@material-design-icons/svg/outlined/arrow_upward.svg?raw';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
@@ -170,15 +169,15 @@ export class AcpRemoteChip extends LitElement {
             id="acp-remote-chip"
             class="acp-remote-chip__chip acp-remote-chip__chip_action"
             type="button"
+            aria-description=${chip.tooltip}
             aria-haspopup=${menu ? 'dialog' : nothing}
             aria-expanded=${menu ? String(this.open) : nothing}
             @click=${() => this.#onChipClick(chip.action)}
           >
             ${content}
           </button>`
-        : html`<span id="acp-remote-chip" class="acp-remote-chip__chip">${content}</span>`;
+        : html`<span id="acp-remote-chip" class="acp-remote-chip__chip" aria-description=${chip.tooltip}>${content}</span>`;
     return html`${chipElement}
-      <md-tooltip for="acp-remote-chip" show-delay="800" placement="bottom">${chip.tooltip}</md-tooltip>
       ${this.#renderPopover()}
       <acp-confirm-dialog></acp-confirm-dialog>`;
   }
