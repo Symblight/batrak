@@ -8,8 +8,8 @@ import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
 import '../remote-chip/remote-chip.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
-import expandIcon from '@material-design-icons/svg/outlined/open_in_full.svg?raw';
-import collapseIcon from '@material-design-icons/svg/outlined/close_fullscreen.svg?raw';
+import expandIcon from '@material-design-icons/svg/outlined/fullscreen.svg?raw';
+import collapseIcon from '@material-design-icons/svg/outlined/fullscreen_exit.svg?raw';
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
