@@ -97,5 +97,5 @@
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-project-menu__menu {
-  --md-menu-min-width: 19rem;
+  --md-menu-min-width: 14rem;
 }
