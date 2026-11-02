@@ -184,10 +184,11 @@ pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState, expected: O
     };
     let args: Vec<&OsStr> = args.iter().map(OsStr::new).collect();
     let locked = matches!(op, RemoteOp::Pull | RemoteOp::PullRebase | RemoteOp::PullMerge | RemoteOp::Publish);
-    let go = || Ok(run_git(git, root, &args, mode));
+    let gh = state.remote.as_ref().filter(|r| uses_github_https(r)).and_then(|_| crate::github::gh());
+    let go = || Ok(run_git_with_gh(git, root, &args, mode, gh.as_deref()));
     if op == RemoteOp::Fetch {
         let key = lock::common_dir(git, root).map_err(RemoteError::other)?;
-        return fetch_joined(key, || run_git(git, root, &args, mode));
+        return fetch_joined(key, || run_git_with_gh(git, root, &args, mode, gh.as_deref()));
     }
     let result = if locked { lock::with_mutation(git, root, go) } else { go() };
     result.map_err(RemoteError::other)?
@@ -236,6 +237,33 @@ fn abort(git: &Path, root: &Path) -> Result<(), RemoteError> {
         (false, false) => return Err(RemoteError::other("No pull is waiting to be aborted")),
     };
     lock::with_mutation(git, root, || Ok(run_git(git, root, &args, Mode::Local))).map_err(RemoteError::other)?
+}
+
+/// A github.com remote over https: where git's own credentials may be missing and the GitHub CLI's can stand in.
+fn uses_github_https(remote: &RemoteInfo) -> bool {
+    remote.github.is_some() && remote.url.starts_with("https://")
+}
+
+/// `-c` options making the GitHub CLI the one credential helper for github.com in a single git
+/// call: it hands git its own token, so the app never reads it and nothing lands in the user's config.
+fn gh_credential_args(gh: &Path) -> Vec<String> {
+    let gh = gh.to_string_lossy().replace('\\', "/").replace('\'', "'\\''");
+    vec![
+        "-c".to_owned(),
+        "credential.https://github.com.helper=".to_owned(),
+        "-c".to_owned(),
+        format!("credential.https://github.com.helper=!'{gh}' auth git-credential"),
+    ]
+}
+
+/// [`run_git`], and when it fails to authenticate and `gh` is given, once more with `gh`'s credentials.
+fn run_git_with_gh(git: &Path, root: &Path, args: &[&OsStr], mode: Mode, gh: Option<&Path>) -> Result<(), RemoteError> {
+    let first = run_git(git, root, args, mode);
+    let (Some(gh), Err(RemoteError { kind: FailureKind::Auth, .. })) = (gh, &first) else { return first };
+    let credentials = gh_credential_args(gh);
+    let retry: Vec<&OsStr> = credentials.iter().map(OsStr::new).chain(args.iter().copied()).collect();
+    // gh signed out or without access: that failure is the same kind, and the first message is as good.
+    run_git(git, root, &retry, mode).or(first)
 }
 
 fn run_git(git: &Path, root: &Path, args: &[&OsStr], mode: Mode) -> Result<(), RemoteError> {
@@ -582,6 +610,46 @@ mod tests {
         repo.git(&["remote", "set-url", "origin", "/nonexistent/repo.git"]);
         let failed = fetch_quietly(&git_bin(), &repo.path, &state_of(&repo)).expect("a failure");
         assert_eq!(failed.kind, FailureKind::NotFound);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_https_github_push_that_fails_to_authenticate_is_tried_again_with_the_cli_s_credentials() {
+        use std::os::unix::fs::PermissionsExt;
+        // A git that lets only a call with gh as the credential helper through, and counts its calls.
+        let dir = crate::git::test_repo::temp_dir("gh-retry");
+        let git = dir.join("git");
+        let log = dir.join("calls");
+        std::fs::write(
+            &git,
+            format!(
+                "#!/bin/sh\necho call >> '{}'\ncase \"$*\" in *'auth git-credential'*) exit 0;; esac\n{}",
+                log.display(),
+                "echo \"fatal: Authentication failed for 'https://github.com/a/b.git/'\" >&2; exit 128"
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let calls = || std::fs::read_to_string(&log).map(|t| t.lines().count()).unwrap_or(0);
+        let args = [OsStr::new("push")];
+        let gh = Path::new("/opt/gh dir/gh");
+
+        // With the CLI: the second call goes through.
+        assert_eq!(run_git_with_gh(&git, &dir, &args, Mode::Remote, Some(gh)), Ok(()));
+        assert_eq!(calls(), 2);
+        // Without it: the authentication failure stays.
+        let failed = run_git_with_gh(&git, &dir, &args, Mode::Remote, None).unwrap_err();
+        assert_eq!((failed.kind, calls()), (FailureKind::Auth, 3));
+
+        // Only a github.com https remote is offered the CLI's credentials.
+        let remote = |url: &str| RemoteInfo { name: "origin".into(), url: url.into(), github: parse_github(url) };
+        assert!(uses_github_https(&remote("https://github.com/a/b.git")));
+        assert!(!uses_github_https(&remote("git@github.com:a/b.git")), "ssh keys are the user's");
+        assert!(!uses_github_https(&remote("https://gitlab.com/a/b.git")));
+        // The path is one word to the shell that runs the helper, and clears the helper list first.
+        let args = gh_credential_args(gh);
+        assert_eq!(args[1], "credential.https://github.com.helper=");
+        assert_eq!(args[3], "credential.https://github.com.helper=!'/opt/gh dir/gh' auth git-credential");
     }
 
     #[test]
