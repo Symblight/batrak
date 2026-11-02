@@ -179,3 +179,51 @@ export function sanitize(html, policy) {
   applyRules(fragment);
   return fragment;
 }
+
+/**
+ * A link or image target as a path in the project.
+ * @typedef {Object} ProjectTarget
+ * @property {string} path Absolute, normalized.
+ * @property {boolean} folder The target ended in a slash.
+ * @property {string} hash The `#fragment`, decoded, without the `#`.
+ */
+
+/**
+ * Resolves a relative or absolute target against a file's folder. The same containment the backend
+ * applies: nothing outside the project, and nothing in `.git`.
+ * @param {string} target As written in the markdown, percent-encoded.
+ * @param {string | null} baseDir Absolute folder of the file the markdown is from.
+ * @param {string | null} root Absolute project folder.
+ * @returns {ProjectTarget | null} `null` when it points elsewhere, or can't be read.
+ */
+export function resolveInProject(target, baseDir, root) {
+  if (baseDir === null || root === null) return null;
+  const [beforeHash, ...fragment] = target.trim().split('#');
+  const pathPart = beforeHash.split('?')[0];
+  let decoded;
+  let hash;
+  try {
+    decoded = decodeURIComponent(pathPart);
+    hash = decodeURIComponent(fragment.join('#'));
+  } catch {
+    return null;
+  }
+  if (decoded === '' || decoded.includes('\0')) return null;
+
+  const rootParts = root.split(/[\\/]+/).filter(Boolean);
+  const absolute = /^[\\/]/.test(decoded);
+  /** @type {string[]} */
+  const parts = [];
+  for (const part of (absolute ? decoded : `${baseDir}/${decoded}`).split(/[\\/]+/)) {
+    if (part === '' || part === '.') continue;
+    if (part === '..') parts.pop();
+    else parts.push(part);
+  }
+  if (parts.length < rootParts.length || !rootParts.every((part, i) => parts[i] === part)) return null;
+  if (parts.slice(rootParts.length).some((part) => part.toLowerCase() === '.git')) return null;
+  return {
+    path: (root.startsWith('/') ? '/' : '') + parts.join('/'),
+    folder: /[\\/]$/.test(decoded),
+    hash,
+  };
+}
