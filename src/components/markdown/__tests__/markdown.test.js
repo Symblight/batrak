@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { fixture, html } from '../../../../test/fixture.js';
+import { fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../markdown.js';
 
 /** @typedef {import('../markdown.js').AcpMarkdown} AcpMarkdown */
@@ -174,6 +174,213 @@ describe('acp-markdown', () => {
       expect(body(el).firstElementChild).to.equal(intro);
       expect(body(el).children).to.have.length(3);
       expect(body(el).children[1].textContent).to.equal('second paragraph');
+    });
+  });
+
+  describe('a document', () => {
+    const FILE = { baseDir: '/p/docs', root: '/p' };
+    // A 1×1 PNG, so the image decodes.
+    const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=='), (c) => c.charCodeAt(0));
+
+    /** @type {{ created: Blob[], revoked: string[] }} */
+    let urls;
+    const realCreate = URL.createObjectURL;
+    const realRevoke = URL.revokeObjectURL;
+    beforeEach(() => {
+      urls = { created: [], revoked: [] };
+      URL.createObjectURL = (blob) => {
+        urls.created.push(/** @type {Blob} */ (blob));
+        return realCreate.call(URL, blob);
+      };
+      URL.revokeObjectURL = (url) => {
+        urls.revoked.push(url);
+        realRevoke.call(URL, url);
+      };
+    });
+    afterEach(() => {
+      URL.createObjectURL = realCreate;
+      URL.revokeObjectURL = realRevoke;
+    });
+
+    /** @param {string} [_path] */
+    const png = async (_path) => new Blob([PNG], { type: 'image/png' });
+    const settle = async () => {
+      for (let i = 0; i < 3; i++) await new Promise((resolve) => setTimeout(resolve, 0));
+    };
+
+    /**
+     * @param {string} text
+     * @param {Partial<{ loadImage: (path: string) => Promise<Blob> }>} [extra]
+     */
+    const preview = (text, extra = {}) =>
+      fixture(html`<acp-markdown policy="document" base-dir=${FILE.baseDir} root=${FILE.root} .loadImage=${extra.loadImage ?? png} .text=${text}></acp-markdown>`);
+
+    it('gives headings ids and shows task lists, quotes and tables', async () => {
+      const el = await preview('# Title\n\n- [x] done\n- [ ] todo\n\n> q\n\n| a |\n| - |\n| 1 |');
+
+      expect(body(el).querySelector('h1')?.id).to.equal('acp-md-title');
+      expect([...body(el).querySelectorAll('input[type=checkbox]')].map((i) => /** @type {HTMLInputElement} */ (i).checked)).to.deep.equal([true, false]);
+      expect(body(el).querySelector('table')).to.not.equal(null);
+    });
+
+    it('shows a local image from its bytes, read through the host', async () => {
+      /** @type {string[]} */
+      const asked = [];
+      const el = await preview('![alt text](pics/a.png)', { loadImage: (path) => (asked.push(path), png(path)) });
+      await settle();
+
+      const img = /** @type {HTMLImageElement} */ (body(el).querySelector('img'));
+      expect(asked).to.deep.equal(['/p/docs/pics/a.png']);
+      expect(img.src).to.match(/^blob:/);
+      expect(img.alt).to.equal('alt text');
+      await img.decode();
+      expect(img.naturalWidth).to.equal(1);
+    });
+
+    it('shows the alt text of an image it cannot read, with the error as its hint', async () => {
+      const el = await preview('![the logo](missing.png)', { loadImage: async () => Promise.reject(new Error('No such file')) });
+      await settle();
+      await el.updateComplete;
+
+      expect(body(el).querySelector('img')).to.equal(null);
+      const broken = /** @type {HTMLElement} */ (body(el).querySelector('.acp-markdown__image_broken'));
+      expect(broken.textContent?.trim()).to.equal('the logo');
+      expect(tooltipOf(broken)).to.equal('No such file');
+      expect(broken.hasAttribute('title')).to.equal(false);
+    });
+
+    it('asks for no web image and no image outside the project', async () => {
+      /** @type {string[]} */
+      const asked = [];
+      const el = await preview('![a](https://a.test/x.png) ![b](../../x.png) ![c](data:image/png;base64,AAAA)', { loadImage: (path) => (asked.push(path), png(path)) });
+      await settle();
+
+      expect(asked).to.deep.equal([]);
+      expect(body(el).querySelector('img')).to.equal(null);
+      expect(body(el).textContent).to.contain('b').and.contain('c');
+    });
+
+    it('frees the image’s URL when a repaint drops it, and when it goes away', async () => {
+      const el = await preview('![one](a.png)\n\n![two](b.png)');
+      await settle();
+      expect(urls.created).to.have.length(2);
+
+      await show(el, '![one](a.png)');
+      await settle();
+      expect(urls.revoked).to.have.length(1);
+
+      el.remove();
+      expect(urls.revoked).to.have.length(2);
+    });
+
+    it('makes no URL for an image whose block went before its bytes came', async () => {
+      /** @type {(blob: Blob) => void} */
+      let arrive = () => {};
+      const el = await preview('![one](a.png)', { loadImage: () => new Promise((resolve) => (arrive = resolve)) });
+
+      await show(el, 'gone');
+      arrive(await png('a.png'));
+      await settle();
+
+      expect(urls.created).to.have.length(0);
+    });
+
+    it('keeps the image of a block that stayed, without reading it again', async () => {
+      let reads = 0;
+      const el = await preview('![one](a.png)\n\ntext', { loadImage: (path) => (reads++, png(path)) });
+      await settle();
+      const img = body(el).querySelector('img');
+
+      await show(el, '![one](a.png)\n\ntext more');
+      await settle();
+
+      expect(body(el).querySelector('img')).to.equal(img);
+      expect(reads).to.equal(1);
+      expect(urls.revoked).to.have.length(0);
+    });
+
+    describe('clicks', () => {
+      /**
+       * @param {AcpMarkdown} el
+       * @param {string[]} types
+       */
+      function listen(el, types) {
+        /** @type {Array<[string, unknown]>} */
+        const heard = [];
+        for (const type of types) el.addEventListener(type, (e) => heard.push([type, /** @type {CustomEvent} */ (e).detail]));
+        return heard;
+      }
+      /** @param {AcpMarkdown} el @param {string} text */
+      const click = (el, text) =>
+        [...body(el).querySelectorAll('a')].find((a) => a.textContent === text)?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, cancelable: true }));
+
+      it('opens a link to a file in a tab, a folder in the tree, a web page in the browser', async () => {
+        const el = await preview('[doc](other.md) [dir](sub/) [web](https://a.test/x)');
+        const heard = listen(el, ['acp-file-open', 'acp-file-reveal', 'acp-link-open']);
+
+        click(el, 'doc');
+        click(el, 'dir');
+        click(el, 'web');
+
+        expect(heard).to.deep.equal([
+          ['acp-file-open', { path: '/p/docs/other.md' }],
+          ['acp-file-reveal', { path: '/p/docs/sub', expand: true }],
+          ['acp-link-open', { url: 'https://a.test/x' }],
+        ]);
+      });
+
+      it('scrolls to the heading an anchor names', async () => {
+        const wrap = await fixture(
+          html`<div style="height: 80px; overflow: auto">
+            <acp-markdown policy="document" base-dir="/p" root="/p" .text=${`[go](#The-End)\n\n${'filler\n\n'.repeat(40)}## The End\n\n${'filler\n\n'.repeat(40)}last`}></acp-markdown>
+          </div>`,
+        );
+        const el = /** @type {AcpMarkdown} */ (wrap.firstElementChild);
+        await el.updateComplete;
+        const heard = listen(el, ['acp-file-open', 'acp-link-open']);
+
+        click(el, 'go');
+        await frame();
+
+        const top = /** @type {HTMLElement} */ (body(el).querySelector('#acp-md-the-end')).getBoundingClientRect().top;
+        expect(wrap.scrollTop).to.be.greaterThan(100);
+        expect(Math.abs(top - wrap.getBoundingClientRect().top)).to.be.lessThan(20);
+        expect(heard).to.deep.equal([]);
+      });
+
+      it('leaves a link outside the project as text, with nothing to click', async () => {
+        const el = await preview('[out](../../etc/passwd)');
+
+        expect(body(el).querySelector('a')).to.equal(null);
+      });
+
+      it('names the source line of a block that is double-clicked', async () => {
+        const el = await preview('# Title\n\nfirst\n\n- a\n- b\n\nlast');
+        const heard = listen(el, ['acp-block-activate']);
+
+        const target = (/** @type {string} */ selector) => /** @type {HTMLElement} */ (body(el).querySelector(selector));
+        target('h1').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true }));
+        target('li:last-child').dispatchEvent(new MouseEvent('dblclick', { bubbles: true, composed: true }));
+
+        expect(heard).to.deep.equal([
+          ['acp-block-activate', { line: 1 }],
+          ['acp-block-activate', { line: 5 }],
+        ]);
+      });
+    });
+
+    it('gives a reply none of this', async () => {
+      const el = await fixture(html`<acp-markdown base-dir="/p/docs" root="/p" .loadImage=${png} .text=${'# T\n\n![x](a.png) [f](b.md)'}></acp-markdown>`);
+      await settle();
+
+      expect(body(el).querySelector('img')).to.equal(null);
+      expect(body(el).querySelector('[id]')).to.equal(null);
+      expect(urls.created).to.have.length(0);
+      /** @type {Event[]} */
+      const heard = [];
+      el.addEventListener('acp-file-open', (/** @type {Event} */ e) => heard.push(e));
+      body(el).querySelector('a[href="b.md"]')?.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true, cancelable: true }));
+      expect(heard).to.have.length(0);
     });
   });
 });
