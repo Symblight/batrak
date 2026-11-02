@@ -95,7 +95,7 @@ describe('acp-branch-popover', () => {
     await open(el, root);
     // Assert
     expect(rows(root)).to.deep.equal(['main ↑2 · now', 'feature/x 2h', 'brama/session-1 session · 1d', 'feature/y origin']);
-    expect(q(root, '.acp-branch-popover__row_current').textContent).to.contain('main');
+    expect(q(root, '[aria-current="true"]').textContent).to.contain('main');
 
     // Act
     const filter = /** @type {HTMLInputElement} */ (q(root, '.acp-branch-popover__filter'));

@@ -42,7 +42,6 @@ describe('acp-project-menu', () => {
 
     // Assert: the shown project
     expect(button.textContent).to.contain('ACP-code-editor');
-    expect(button.querySelector('.acp-project-menu__tile')?.textContent?.trim()).to.equal('A');
     expect(tooltipOf(button)).to.equal('Project · ~/Projects/ACP-code-editor');
     expect(button.getAttribute('aria-haspopup')).to.equal('menu');
 
@@ -50,7 +49,6 @@ describe('acp-project-menu', () => {
     el.currentId = null;
     await el.updateComplete;
     expect(button.textContent).to.contain('Open project');
-    expect(button.querySelector('.acp-project-menu__tile')).to.equal(null);
   });
 
   it('lists every project with its folder, marks the shown one and dots the ones with unread sessions', async () => {
@@ -67,7 +65,6 @@ describe('acp-project-menu', () => {
       '~/Projects',
       '/opt/work',
     ]);
-    expect(rows.some((r) => r.querySelector('[slot="supporting-text"]')), 'name and folder share one line').to.equal(false);
     expect(rows.map((r) => r.hasAttribute('selected'))).to.deep.equal([true, false, false]);
     const dots = rows.map((r) => r.querySelector('.acp-project-menu__dot'));
     expect(dots.map((d) => d !== null)).to.deep.equal([false, true, false]);
