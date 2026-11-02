@@ -1,5 +1,6 @@
 //! A running agent's conversation, kept for a page that attaches to it later (a reload, another
-//! window): the agent's `session/load` replay and each turn since it started, as ACP updates.
+//! window): the agent's `session/load` replay and each turn since it started, as ACP updates,
+//! and the permission requests it asked.
 //! In memory only, and only while the agent runs, like the page's own copy: a stopped session's
 //! history is its agent's replay at the next start (spec: `docs/specs/session-reattach.md`).
 
@@ -10,6 +11,8 @@ use crate::acp::PromptBlock;
 #[derive(Default)]
 pub(super) struct ReplayLog {
     updates: Vec<Value>,
+    /// The `permission-request`s it asked; the connection says which still wait.
+    permissions: Vec<Value>,
 }
 
 impl ReplayLog {
@@ -42,8 +45,17 @@ impl ReplayLog {
         }
     }
 
+    pub(super) fn push_permission(&mut self, request: &Value) {
+        self.permissions.push(request.clone());
+    }
+
     pub(super) fn updates(&self) -> &[Value] {
         &self.updates
+    }
+
+    /// The requests asked whose id is among `pending`.
+    pub(super) fn permissions_in(&self, pending: &[String]) -> Vec<Value> {
+        self.permissions.iter().filter(|r| r["requestId"].as_str().is_some_and(|id| pending.iter().any(|p| p == id))).cloned().collect()
     }
 }
 

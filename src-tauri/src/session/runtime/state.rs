@@ -105,9 +105,11 @@ impl SessionState {
 
     pub(super) fn emit(&self, kind: &'static str, payload: Value) {
         let mut sinks = lock(&self.sinks);
-        if kind == "update" {
-            if let Some(log) = lock(&self.replay).as_mut() {
-                log.push(&payload);
+        if let Some(log) = lock(&self.replay).as_mut() {
+            match kind {
+                "update" => log.push(&payload),
+                "permission-request" => log.push_permission(&payload),
+                _ => {}
             }
         }
         let envelope = self.envelope(kind, payload);
@@ -115,14 +117,19 @@ impl SessionState {
     }
 
     /// Takes `sink` as `key`'s; while an agent runs, it first gets the conversation so far
-    /// (`snapshot`), in `seq` order with the events around it.
+    /// (`snapshot`) and the permission requests still waiting, in `seq` order with the events
+    /// around it.
     pub(super) fn add_sink(&self, key: &str, sink: Arc<dyn EventSink>) {
         let mut sinks = lock(&self.sinks);
-        let updates = lock(&self.replay).as_ref().map(|log| log.updates().to_vec());
-        if let Some(updates) = updates {
-            let snapshot = serde_json::json!({ "updates": updates });
-            if !sink.send(&self.envelope("snapshot", snapshot)) {
-                return;
+        let pending = self.conn().map(|conn| conn.pending_permissions()).unwrap_or_default();
+        let replay = lock(&self.replay).as_ref().map(|log| (log.updates().to_vec(), log.permissions_in(&pending)));
+        if let Some((updates, permissions)) = replay {
+            let events = std::iter::once(("snapshot", serde_json::json!({ "updates": updates })))
+                .chain(permissions.into_iter().map(|request| ("permission-request", request)));
+            for (kind, payload) in events {
+                if !sink.send(&self.envelope(kind, payload)) {
+                    return;
+                }
             }
         }
         sinks.insert(key.to_owned(), sink);

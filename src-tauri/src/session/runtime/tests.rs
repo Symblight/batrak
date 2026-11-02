@@ -552,6 +552,27 @@ async fn permission_allow_then_cancel_with_a_pending_one() {
 }
 
 #[tokio::test]
+async fn a_page_attaching_while_a_permission_waits_is_asked_it_again_until_it_is_answered() {
+    let f = fixture("permission-attach", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("p", text("permission")).unwrap();
+    let asked = events.wait_for("permission request", |e| e.kind == "permission-request").await;
+
+    let page = attach_page(&f.sessions, "p", "reloaded");
+
+    let kinds: Vec<_> = lock(&page.events).iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, ["snapshot", "permission-request", "status"]);
+    assert_eq!(lock(&page.events)[1].payload, asked.payload);
+
+    let id = asked.payload["requestId"].as_str().unwrap();
+    f.sessions.respond_permission("p", id, Some("allow".to_owned())).unwrap();
+    events.wait_turn_end().await;
+    let later = attach_page(&f.sessions, "p", "later");
+    assert!(!has(&later, "permission-request"), "answered: not asked again");
+}
+
+#[tokio::test]
 async fn a_second_prompt_during_a_turn_is_refused_and_cancel_stops_it() {
     let f = fixture("busy", FakeAgentOptions::default());
     let (_, events) = f.create("b", "fake").unwrap();

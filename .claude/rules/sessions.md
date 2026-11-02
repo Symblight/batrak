@@ -165,7 +165,8 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   after an idle stop adds nothing); an agent with only `session/resume` continues it without
   history (the banner says so). A page that opens a session whose agent runs (a reload, another
   window) gets its conversation since that start as a `snapshot` event (`session/runtime/replay.rs`,
-  in memory while the agent runs), which goes through the same `replay()`; a replay ends only on
+  in memory while the agent runs), then each permission request still pending again, and the
+  snapshot goes through the same `replay()`; a replay ends only on
   `idle` / `stopped` / `error`, so one taken mid-turn takes the rest of the turn (spec:
   `docs/specs/session-reattach.md`). Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
   `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`
