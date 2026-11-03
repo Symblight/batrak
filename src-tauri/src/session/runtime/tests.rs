@@ -3142,3 +3142,24 @@ async fn parallel_turns_in_one_workspace_hear_of_each_others_changes_in_its_fold
     a.wait_for("overlap", |e| e.kind == "overlap" && e.payload["other"]["id"] == "b").await;
     b.wait_for("overlap", |e| e.kind == "overlap" && e.payload["other"]["id"] == "a").await;
 }
+
+#[tokio::test]
+async fn a_session_listed_in_a_workspaces_folder_lands_in_that_workspace() {
+    let options = listing();
+    let f = git_fixture_with("sync-workspace", options.clone());
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    options.stored.lock().unwrap().extend([
+        fake_agent::FakeSession::new("in-ws", &ws.folder, Some("In the workspace"), None),
+        fake_agent::FakeSession::new("in-main", &f.project, Some("In Main"), None),
+    ]);
+
+    f.sessions.sync(&f.project, None).await;
+
+    let listed = f.sessions.list();
+    let by_title = |t: &str| listed.iter().find(|s| s.title == t).unwrap().clone();
+    let in_ws = by_title("In the workspace");
+    assert_eq!(in_ws.workspace_id.as_deref(), Some(ws.id.as_str()));
+    assert_eq!(PathBuf::from(&in_ws.folder), ws.folder, "its folder is its cwd");
+    assert_eq!((in_ws.mode, in_ws.branch.as_deref()), (Mode::Worktree, Some(ws.branch.as_str())));
+    assert_eq!(by_title("In Main").workspace_id, None);
+}

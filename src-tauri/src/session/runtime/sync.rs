@@ -15,9 +15,10 @@ use super::{lock, new_state, Inner, LaunchKey, Launched, SessionState, Sessions,
 use crate::acp::process::AgentProcess;
 use crate::acp::{Catalog, CatalogOptions, ConnectError, ListedSession};
 use crate::config::AgentConfig;
-use crate::session::env::Mode;
+use crate::session::env::{self, Mode};
 use crate::session::{iso_from_millis, iso_now, parse_iso_millis, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::storage::JsonFile;
+use crate::workspace::WorkspaceRecord;
 
 /// How long one agent may take to start and list its sessions.
 pub(super) const SYNC_TIMEOUT: Duration = Duration::from_secs(15);
@@ -236,15 +237,9 @@ impl Inner {
         lock(&self.sign_ins_needed).contains_key(key) || lock(&self.signing_in).contains_key(key)
     }
 
-    /// The folders a project's sessions run in: the project, and its worktree sessions' folders.
+    /// The folders a project's sessions run in: the project (Main) and its workspaces' folders.
     fn sync_folders(&self, project: &Path) -> Vec<PathBuf> {
-        let mut folders = vec![project.to_path_buf()];
-        for record in self.known().into_iter().filter(|r| r.project_path == project && r.mode == Mode::Worktree) {
-            if !folders.contains(&record.agent_cwd) {
-                folders.push(record.agent_cwd);
-            }
-        }
-        folders
+        std::iter::once(project.to_path_buf()).chain(self.workspaces.list(project).into_iter().map(|w| w.folder)).collect()
     }
 
     /// Starts `agent` in the probe folder for its session store only.
@@ -339,7 +334,10 @@ impl Inner {
     /// date, each new one listed (unless hidden); when the list is complete, a
     /// session it no longer has goes unless it runs here. Returns how many it listed.
     fn apply_listing(&self, project: &Path, agent: &AgentConfig, folders: &[PathBuf], listing: Listing) -> usize {
-        let in_folders = |cwd: &Path| folders.iter().any(|f| f == cwd) || dunce::canonicalize(cwd).is_ok_and(|c| folders.contains(&c));
+        let canonical = |cwd: &Path| dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+        let in_folders = |cwd: &Path| folders.iter().any(|f| f == cwd) || folders.contains(&canonical(cwd));
+        let workspaces = self.workspaces.list(project);
+        let workspace_of = |cwd: &Path| workspaces.iter().find(|w| w.folder == cwd || w.folder == canonical(cwd));
         let mut sessions = lock(&self.sessions);
         let hidden = lock(&self.hidden);
         let mut seen = HashSet::new();
@@ -355,7 +353,7 @@ impl Inner {
             if hidden.contains_key(&item.session_id) {
                 continue;
             }
-            let record = listed_record(project, agent, item);
+            let record = listed_record(project, workspace_of(&item.cwd), agent, item);
             if sessions.contains_key(&record.session_id) {
                 continue;
             }
@@ -431,15 +429,20 @@ fn listed_id(agent_id: &str, acp_id: &str) -> String {
     format!("{}~{}", safe(agent_id), safe(acp_id))
 }
 
-/// A session first seen in its agent's list: local, in the listed folder.
-fn listed_record(project: &Path, agent: &AgentConfig, item: &ListedSession) -> SessionRecord {
+/// A session first seen in its agent's list: in the workspace whose folder it was listed in, else
+/// in Main.
+fn listed_record(project: &Path, workspace: Option<&WorkspaceRecord>, agent: &AgentConfig, item: &ListedSession) -> SessionRecord {
     let at = item.updated_at.as_deref().and_then(parse_iso_millis).map_or_else(iso_now, iso_from_millis);
+    let placement = workspace.map_or_else(
+        || env::Placement { agent_cwd: project.to_path_buf(), worktree_path: None, branch: None, base_commit: None },
+        WorkspaceRecord::placement,
+    );
     SessionRecord {
         session_id: listed_id(&agent.id, &item.session_id),
         acp_session_id: Some(item.session_id.clone()),
         agent_id: agent.id.clone(),
-        mode: Mode::Local,
-        agent_cwd: project.to_path_buf(),
+        mode: if workspace.is_some() { Mode::Worktree } else { Mode::Local },
+        agent_cwd: placement.agent_cwd,
         project_path: project.to_path_buf(),
         title: String::new(),
         title_source: TitleSource::Agent,
@@ -448,13 +451,13 @@ fn listed_record(project: &Path, agent: &AgentConfig, item: &ListedSession) -> S
         created_at: at,
         last_activity_at: None,
         config: Default::default(),
-        worktree_path: None,
-        branch: None,
-        base_commit: None,
+        worktree_path: placement.worktree_path,
+        branch: placement.branch,
+        base_commit: placement.base_commit,
         launch: None,
         agent_name: Some(agent.name.clone()),
         hidden: false,
-        workspace_id: None,
+        workspace_id: workspace.map(|w| w.id.clone()),
     }
 }
 
