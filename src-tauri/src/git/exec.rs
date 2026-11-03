@@ -11,7 +11,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
-const REMOTE_TIMEOUT: Duration = Duration::from_secs(120);
 /// A pre-commit hook may run a test suite.
 const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
@@ -59,6 +58,12 @@ impl Drop for Permit {
     }
 }
 
+#[cfg(test)]
+thread_local! {
+    /// A test's own timeout for the git calls of its thread: waiting out the real ones is no test.
+    pub static TEST_TIMEOUT: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
+}
+
 /// Inherited variables that would point git at another repository or index than `cwd`'s.
 pub const SCRUBBED_ENV: &[&str] = &[
     "GIT_DIR",
@@ -78,13 +83,18 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Talks to a remote: a longer timeout. No fetch or push yet.
-    #[allow(dead_code)]
-    Remote,
     /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
     /// hook keeps running.
     Hooks,
+}
+
+impl Mode {
+    /// git leads its own session and process group, stopped as a whole on a timeout: hooks and
+    /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
+    fn own_group(self) -> bool {
+        self == Mode::Hooks
+    }
 }
 
 #[derive(Debug, Default)]
@@ -133,7 +143,8 @@ pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Opti
     let elapsed = started.elapsed();
     match &result {
         Ok(out) => tracing::debug!(cwd = %cwd.display(), args = %Args(args), status = %out.status, ?elapsed, "git"),
-        Err(e) => tracing::warn!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {e}"),
+        // The first line: a timeout's error goes on with git's output, which may hold anything.
+        Err(e) => tracing::warn!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {}", e.lines().next().unwrap_or_default()),
     }
     result
 }
@@ -174,9 +185,15 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
         .stderr(Stdio::piped());
     no_window(&mut command);
     #[cfg(unix)]
-    if mode == Mode::Hooks {
+    if mode.own_group() {
         use std::os::unix::process::CommandExt;
-        command.process_group(0);
+        // A session of its own: it leads its process group, and has no controlling terminal, so ssh
+        // fails at once instead of asking for a passphrase or a host key on the tty we were run from
+        // (`GIT_TERMINAL_PROMPT` doesn't reach ssh). The user's ssh settings stay as they are.
+        // SAFETY: `setsid` is async-signal-safe and touches nothing of the parent.
+        unsafe {
+            command.pre_exec(|| if libc::setsid() == -1 { Err(io::Error::last_os_error()) } else { Ok(()) });
+        }
     }
 
     // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
@@ -196,20 +213,32 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
 
     let timeout = match mode {
         Mode::Local | Mode::Background => LOCAL_TIMEOUT,
-        Mode::Remote => REMOTE_TIMEOUT,
         Mode::Hooks => HOOKS_TIMEOUT,
     };
-    let status = wait_with_timeout(&mut child, timeout, mode == Mode::Hooks);
+    #[cfg(test)]
+    let timeout = TEST_TIMEOUT.get().unwrap_or(timeout);
+    let status = wait_with_timeout(&mut child, timeout, mode.own_group());
     if let Some(writer) = writer {
         let _ = writer.join();
     }
     let (stdout, truncated) = stdout.join().unwrap_or_default();
     let (stderr, _) = stderr.join().unwrap_or_default();
-    let status = status?;
+    let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
+    let status = status.map_err(|e| stopped_message(e, &stderr))?;
     if truncated {
         return Err(format!("{TOO_LARGE} ({max_output} bytes)"));
     }
-    Ok(Output { status, stdout, stderr: String::from_utf8_lossy(&stderr).trim().to_owned() })
+    Ok(Output { status, stdout, stderr })
+}
+
+/// The error of a git that was stopped (`wait_with_timeout`'s), with what it printed before: where it
+/// got stuck.
+fn stopped_message(error: String, stderr: &str) -> String {
+    if stderr.is_empty() {
+        error
+    } else {
+        format!("{error}\n{stderr}")
+    }
 }
 
 /// git's own message for a failed call, or its exit status when it printed nothing.
@@ -236,7 +265,7 @@ fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
     (bytes, truncated)
 }
 
-/// `group`: the child leads its own process group (`Mode::Hooks`), stopped as a whole on timeout.
+/// `group`: the child leads its own process group (`Mode::own_group`), stopped as a whole on timeout.
 fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
@@ -353,6 +382,34 @@ mod tests {
         // SAFETY: signal 0 only checks that the process exists.
         assert_ne!(unsafe { libc::kill(sleeper, 0) }, 0, "the hook's child is gone");
     }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_git_running_hooks_has_no_terminal_and_leads_its_own_process_group() {
+        use std::os::unix::fs::PermissionsExt;
+        // Arrange: a git that notes its pid, then runs a while
+        let dir = crate::git::test_repo::temp_dir("hooks-session");
+        let (git, pid_file) = (dir.join("git"), dir.join("pid"));
+        std::fs::write(&git, format!("#!/bin/sh\necho $$ > '{}'\nsleep 1\n", pid_file.display())).unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        thread::scope(|scope| {
+            // Act
+            let running = scope.spawn(|| run(&git, &dir, &[OsStr::new("commit")], Mode::Hooks));
+            let pid = loop {
+                if let Some(pid) = std::fs::read_to_string(&pid_file).ok().and_then(|t| t.trim().parse::<libc::pid_t>().ok()) {
+                    break pid;
+                }
+                thread::sleep(Duration::from_millis(5));
+            };
+            // SAFETY: plain queries of a process that is still running.
+            let (session, group) = unsafe { (libc::getsid(pid), libc::getpgid(pid)) };
+
+            // Assert: a session of its own has no terminal for ssh to prompt on; the group is stopped on a timeout
+            assert_eq!((session, group), (pid, pid), "session and process group of {pid}");
+            running.join().unwrap().unwrap();
+        });
+    }
     use crate::git::test_repo::{git_bin, TestRepo};
 
     #[test]
@@ -379,6 +436,30 @@ mod tests {
         // Setting them process-wide would leak into tests running in parallel, so check the list.
         for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
             assert!(SCRUBBED_ENV.contains(&key), "{key}");
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_timeout_keeps_what_git_said() {
+        use std::os::unix::fs::PermissionsExt;
+        let cases = [("echo 'Connecting to h' >&2; sleep 30", Some("Connecting to h")), ("exec sleep 30", None)];
+        for (body, said) in cases {
+            // Arrange: a git that outlives a short timeout
+            let dir = crate::git::test_repo::temp_dir("timeout");
+            let git = dir.join("git");
+            std::fs::write(&git, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+            TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
+
+            // Act
+            let err = run(&git, &dir, &[OsStr::new("status")], Mode::Local).unwrap_err();
+            TEST_TIMEOUT.set(None);
+
+            // Assert
+            assert!(err.contains("timed out"), "{err}");
+            assert!(said.is_none_or(|s| err.contains(s)), "{body}: {err}");
+            let _ = std::fs::remove_dir_all(&dir);
         }
     }
 

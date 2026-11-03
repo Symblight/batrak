@@ -4,6 +4,7 @@ mod agents;
 mod commands;
 mod config;
 mod git;
+mod github;
 mod logging;
 mod menu;
 mod session;
@@ -156,6 +157,8 @@ pub fn run() {
             commands::git::git_last_commit_message,
             commands::git::git_branches,
             commands::git::git_commit,
+            commands::github::github_account,
+            commands::github::github_pull_request,
             commands::terminal::terminal_open,
             commands::terminal::terminal_attach,
             commands::terminal::terminal_write,

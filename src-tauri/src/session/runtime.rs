@@ -3,7 +3,8 @@
 //! the agents' to say (`sync`). This file holds `Sessions` and the lifecycle calls; each child
 //! module adds its part to `Sessions` / `Inner`: `api` (options, requests, events), `state` (one
 //! session in memory), `start`, `turn`, `sign_in`, `agents` (following agents.json), `host` (the
-//! ACP client side), `worktree`, `sync` (the agents' session lists), `slots` (the local turn slot).
+//! ACP client side), `replay` (a running agent's conversation, for a page attaching), `worktree`,
+//! `sync` (the agents' session lists), `slots` (the local turn slot).
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fs::{File, OpenOptions};
@@ -194,10 +195,10 @@ impl Sessions {
     }
 
     /// Sends this window's events of a session to `sink` (replacing an earlier one), starting
-    /// with the current status.
+    /// with the conversation so far while its agent runs (`snapshot`), then the current status.
     pub fn attach(&self, id: &str, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
         let state = self.get(id)?;
-        lock(&state.sinks).insert(sink_key.to_owned(), sink);
+        state.add_sink(sink_key, sink);
         let status = state.status();
         state.emit("status", json!({ "status": status }));
         Ok(state.page())
@@ -451,6 +452,7 @@ impl Inner {
         let taken = state.live.lock().await.take();
         lock(&state.conn).take();
         lock(&state.env).take();
+        state.end_replay();
         if let Some(mut live) = taken {
             if state.turn_running.load(Ordering::SeqCst) {
                 let _ = live.conn.cancel();
@@ -473,6 +475,7 @@ impl Inner {
         drop(live);
         lock(&state.conn).take();
         lock(&state.env).take();
+        state.end_replay();
         self.leave_queue(state);
         if let Some(mut process) = taken.and_then(|l| l.process) {
             process.stop().await;
@@ -492,6 +495,7 @@ mod agents;
 mod api;
 mod cli;
 mod host;
+mod replay;
 mod sign_in;
 mod slots;
 mod start;

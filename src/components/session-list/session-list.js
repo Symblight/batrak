@@ -20,6 +20,7 @@ import '../session-sync/session-sync.js';
 import { TreeNavigationController } from '../../controllers/tree-navigation/TreeNavigationController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { app } from '../../hooks/app/app.js';
+import { projects } from '../../hooks/projects/projects.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './session-list.css?inline';
@@ -152,10 +153,7 @@ export class AcpSessionList extends LitElement {
 
   /** @param {string} path */
   #displayPath(path) {
-    const home = this.home;
-    return home && (path === home || path.startsWith(`${home}/`) || path.startsWith(`${home}\\`))
-      ? `~${path.slice(home.length)}`
-      : path;
+    return projects.tildePath(path, this.home);
   }
 
   /**

@@ -4,18 +4,21 @@ import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { git } from '../../hooks/git/git.js';
+import { github } from '../../hooks/github/github.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
+import { $githubAccount, $pullRequestHere } from '../../stores/github/github.js';
 import { $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
 import { $treeRoot } from '../../stores/session-root/session-root.js';
-import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
-import { markProjectRead } from '../../stores/session-read/session-read.js';
+import { $unreadSessions, markProjectRead } from '../../stores/session-read/session-read.js';
+import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -114,17 +117,22 @@ export class AcpApp extends ViewElement {
   static properties = {
     sideView: { state: true },
     quickOpenFiles: { state: true },
+    home: { state: true },
   };
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
   #activePath = new StoreController(this, { store: $activePath });
   #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
   #workspace = new StoreController(this, { store: $workspace });
+  #projects = new StoreController(this, { store: $projects });
+  #unread = new StoreController(this, { store: $unreadSessions });
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
   #rootId = new StoreController(this, { store: $rootId });
   #gitRepo = new StoreController(this, { store: $gitRepo });
+  #githubAccount = new StoreController(this, { store: $githubAccount });
+  #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
@@ -149,7 +157,7 @@ export class AcpApp extends ViewElement {
 
   /**
    * Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: the search dialog. Cmd/Ctrl+Shift+T: the session in chat /
-   * terminal. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
+   * terminal. Cmd/Ctrl+O: add a project, unless a dialog has the key. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
    * key. Ctrl+`: New Terminal. While the search dialog is open, only Cmd/Ctrl+Shift+F.
    */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
@@ -170,6 +178,9 @@ export class AcpApp extends ViewElement {
     if (key === 'p' && !e.shiftKey) {
       e.preventDefault();
       this.#showQuickOpen();
+    } else if (key === 'o' && !e.shiftKey && !AcpApp.#inDialog(e)) {
+      e.preventDefault();
+      this.#onProjectOpenFolder();
     } else if (key === 't' && e.shiftKey) {
       e.preventDefault();
       this.renderRoot.querySelector('acp-agent-column')?.toggleView();
@@ -185,14 +196,21 @@ export class AcpApp extends ViewElement {
    * @returns {boolean} The key was pressed in a dialog or a text field, which keep it.
    */
   static #takesKeys(e) {
-    const path = e.composedPath();
-    const origin = path[0];
+    const origin = e.composedPath()[0];
     const editable =
       origin instanceof HTMLInputElement ||
       origin instanceof HTMLTextAreaElement ||
       origin instanceof HTMLSelectElement ||
       (origin instanceof HTMLElement && origin.isContentEditable);
-    return editable || path.some((n) => n instanceof HTMLElement && (n.localName === 'dialog' || n.localName === 'md-dialog'));
+    return editable || AcpApp.#inDialog(e);
+  }
+
+  /**
+   * @param {KeyboardEvent} e
+   * @returns {boolean} The key was pressed inside a dialog.
+   */
+  static #inDialog(e) {
+    return e.composedPath().some((n) => n instanceof HTMLElement && (n.localName === 'dialog' || n.localName === 'md-dialog'));
   }
 
   constructor() {
@@ -201,6 +219,8 @@ export class AcpApp extends ViewElement {
     this.sideView = 'files';
     /** @type {QuickOpenItem[]} */
     this.quickOpenFiles = [];
+    /** @type {string | null} Shown as `~` in the project menu's paths. */
+    this.home = null;
   }
 
   connectedCallback() {
@@ -213,8 +233,13 @@ export class AcpApp extends ViewElement {
     agents.start();
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
+    github.start();
     sessions.followRoot();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
+    projects
+      .homeDir()
+      .then((home) => (this.home = home.replace(/[\\/]+$/, '')))
+      .catch(() => {});
   }
 
   disconnectedCallback() {
@@ -347,6 +372,38 @@ export class AcpApp extends ViewElement {
   }
 
   /** @param {Event} e */
+  #onProjectSelect(e) {
+    const id = /** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId;
+    toggleProject(id, true);
+    projects.activate(id).catch((err) => app.reportError('Opening project failed', err));
+  }
+
+  #onProjectOpenFolder() {
+    projects.open().catch((err) => app.reportError('Opening folder failed', err));
+  }
+
+  /** @param {Event} e */
+  #onProjectReveal(e) {
+    projects
+      .reveal(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId)
+      .catch((err) => app.reportError('Revealing folder failed', err));
+  }
+
+  /** @param {Event} e */
+  #onProjectRemove(e) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('.acp-app__confirm'));
+    projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, dialog);
+  }
+
+  /** @param {Event} e */
+  #onBranchCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the branch name failed');
+
+  /** @param {Event} e */
+  #onGithubOpen = (e) => {
+    app.openUrl(/** @type {CustomEvent<{ url: string }>} */ (e).detail.url).catch((err) => app.reportError('Opening the page failed', err));
+  };
+
+  /** @param {Event} e */
   #onColumnToggle(e) {
     toggleColumn(/** @type {CustomEvent<{ column: string }>} */ (e).detail.column);
   }
@@ -451,10 +508,22 @@ export class AcpApp extends ViewElement {
       <acp-toolbar
         slot="header"
         .workspace=${this.#workspace.value}
+        .projects=${this.#projects.value}
+        .unread=${projects.unreadByProject($sessions.get(), this.#unread.value)}
+        .home=${this.home}
         .git=${this.#gitRepo.value}
+        .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value, this.#pullRequest.value?.reply ?? null)}
+        .githubReply=${this.#pullRequest.value?.reply ?? null}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
+        @acp-project-select=${this.#onProjectSelect}
+        @acp-project-open-folder=${this.#onProjectOpenFolder}
+        @acp-project-reveal=${this.#onProjectReveal}
+        @acp-project-open-terminal=${this.#openProjectTerminal}
+        @acp-project-remove=${this.#onProjectRemove}
+        @acp-copy=${this.#onBranchCopy}
+        @acp-github-open=${this.#onGithubOpen}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split
@@ -516,6 +585,7 @@ export class AcpApp extends ViewElement {
       <acp-search-view @acp-search-open=${this.#onSearchOpen} @acp-search-popout=${this.#onSearchPopout}></acp-search-view>
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
+      <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
       <acp-snackbars
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}

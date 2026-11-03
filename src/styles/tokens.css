@@ -7,6 +7,8 @@
      which services/theme.js regenerates for the OS light/dark scheme */
   --acp-color-primary: var(--md-sys-color-primary);
   --acp-color-on-primary: var(--md-sys-color-on-primary);
+  --acp-color-primary-container: var(--md-sys-color-primary-container);
+  --acp-color-on-primary-container: var(--md-sys-color-on-primary-container);
   --acp-color-secondary: var(--md-sys-color-secondary);
   --acp-color-secondary-container: var(--md-sys-color-secondary-container);
   --acp-color-on-secondary-container: var(--md-sys-color-on-secondary-container);
@@ -46,6 +48,10 @@
   --acp-vcs-add: #1b7a3d;
   --acp-diff-add-fg: #0a5c2c;
   --acp-diff-del-fg: #93211a;
+  /* "Ok" role (push, open pull request): MD3 has none, so it follows the diff greens. */
+  --acp-color-ok: var(--acp-vcs-add);
+  --acp-color-ok-container: color-mix(in srgb, var(--acp-vcs-add) 22%, var(--acp-color-surface));
+  --acp-color-on-ok-container: var(--acp-diff-add-fg);
   --acp-search-hit: color-mix(in srgb, var(--acp-color-primary) 22%, transparent);
   /* MD3 state layers: on-surface over the element's own background */
   --acp-state-hover: color-mix(in srgb, var(--acp-color-on-surface) 8%, transparent);

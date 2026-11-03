@@ -64,3 +64,44 @@ export function shownPath(root, worktrees, abs) {
   const worktree = worktreeOf(worktrees, abs);
   return relPath(worktree ? worktree.folder : root, abs) ?? abs;
 }
+
+/**
+ * @param {string} name A project's name.
+ * @returns {string} Its tile letter: the first letter or digit, upper-cased; `?` when there is none.
+ */
+export function initialOf(name) {
+  return name.match(/[\p{L}\p{N}]/u)?.[0].toLocaleUpperCase() ?? '?';
+}
+
+/**
+ * @param {string} path Absolute.
+ * @param {string | null} home The home folder, without a trailing separator.
+ * @returns {string} The path with the home folder shown as `~`.
+ */
+export function tildePath(path, home) {
+  return home && (path === home || path.startsWith(`${home}/`) || path.startsWith(`${home}\\`))
+    ? `~${path.slice(home.length)}`
+    : path;
+}
+
+/**
+ * @param {string} path A project's absolute path.
+ * @param {string | null} home
+ * @returns {string} The folder it lies in, as `tildePath` shows it.
+ */
+export function parentLabel(path, home) {
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return tildePath(path.slice(0, Math.max(cut, 1)), home);
+}
+
+/**
+ * @param {readonly { id: string, projectId: string }[]} sessions
+ * @param {readonly string[]} unread Ids of the unread sessions.
+ * @returns {Record<string, number>} How many unread sessions each project has; projects with none are left out.
+ */
+export function unreadByProject(sessions, unread) {
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const s of sessions) if (unread.includes(s.id)) counts[s.projectId] = (counts[s.projectId] ?? 0) + 1;
+  return counts;
+}

@@ -17,7 +17,8 @@ paths:
   only. During a merge, cherry-pick or revert (no partial commits) the picks are staged and the
   whole index committed. Paths go through stdin (`--pathspec-from-file`, `update-index --stdin`),
   never argv; never pass an empty pathspec file (git then commits the whole index). Hooks and
-  filters run under `Mode::Hooks`: 10 min timeout, own process group, stopped with SIGTERM first
+  filters run under `Mode::Hooks`: 10 min timeout, own session and process group (no controlling
+  terminal, so ssh fails instead of prompting), stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
 - `worktree` backs worktree sessions (`add` / `attach` check out under `Mode::Hooks`: a big
   tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a worktree session's Apply

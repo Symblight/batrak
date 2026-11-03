@@ -1,6 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { fileIcon } from '../../../components/file-icon/file-icon.js';
-import { locationChip } from '../ChatPartsController.js';
+import { markdown } from '../../../hooks/markdown/markdown.js';
+import { formatFileRefs, locationChip } from '../ChatPartsController.js';
 
 /** @param {string | null} svg The markup as the DOM serializes it. */
 const asHtml = (svg) => Object.assign(document.createElement('div'), { innerHTML: svg ?? '' }).innerHTML;
@@ -20,5 +21,25 @@ describe('locationChip', () => {
     expect(chip.querySelector('md-icon')?.innerHTML).to.equal(asHtml(fileIcon.svgFor('README')));
     expect(chip.title).to.equal('notes.unknownext');
     expect({ ...chip.dataset }).to.deep.equal({ path: 'notes.unknownext' });
+  });
+});
+
+describe('formatFileRefs', () => {
+  it('turns a file ref in a reply into a chip that carries its path and lines', async () => {
+    // Arrange: a reply with a file ref, rendered into the inert fragment
+    const { fragment } = markdown.render('See `src/main.js:3` now', {
+      decorate: (root) => formatFileRefs(root, { links: true }),
+    });
+    const host = document.body.appendChild(document.createElement('div'));
+
+    // Act: the fragment goes into the page
+    host.append(fragment);
+    const chip = /** @type {HTMLElement} */ (host.querySelector('chx-chip'));
+
+    // Assert
+    expect({ ...chip.dataset }).to.deep.equal({ templateId: 'acp-chat-file-chip', path: 'src/main.js', lines: '3' });
+    expect(chip.title).to.equal('src/main.js:3');
+    expect(chip.textContent).to.equal('main.js:3');
+    host.remove();
   });
 });

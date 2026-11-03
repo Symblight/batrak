@@ -10,6 +10,7 @@ pub mod cache;
 pub mod commit;
 pub mod exec;
 pub mod lock;
+pub mod remote;
 pub mod repo;
 #[allow(dead_code)]
 pub mod worktree;

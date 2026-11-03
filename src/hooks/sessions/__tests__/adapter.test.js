@@ -42,6 +42,51 @@ describe('acp-adapter', () => {
     }
   });
 
+  it("shows a running session's conversation to a page that attaches: once, and mid-turn with the rest of the turn", () => {
+    const text = (/** @type {string} */ kind, /** @type {string} */ t) => ({ sessionUpdate: kind, content: { type: 'text', text: t } });
+    const cases = [
+      {
+        name: 'idle, attached twice',
+        // Arrange
+        events: [
+          ['snapshot', { updates: [text('user_message_chunk', 'Question'), text('agent_message_chunk', 'Answer')] }],
+          ['status', { status: 'idle' }],
+          ['snapshot', { updates: [text('user_message_chunk', 'Question'), text('agent_message_chunk', 'Answer')] }],
+          ['status', { status: 'idle' }],
+        ],
+        shown: ['Question', 'Answer'],
+      },
+      {
+        name: 'mid-turn, past a permission wait',
+        events: [
+          ['snapshot', { updates: [text('user_message_chunk', 'Count'), text('agent_message_chunk', '1 ')] }],
+          ['status', { status: 'working' }],
+          ['update', text('agent_message_chunk', '2 ')],
+          ['status', { status: 'waiting' }],
+          ['update', text('agent_message_chunk', '3')],
+          ['turn-end', { stopReason: 'end_turn', at: AT }],
+          ['status', { status: 'idle' }],
+        ],
+        shown: ['Count', '1 ', '2 ', '3'],
+      },
+    ];
+    for (const [n, { name, events, shown }] of cases.entries()) {
+      /** @type {{ delta?: { text?: string } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act
+        for (const [seq, [kind, payload]] of events.entries()) {
+          handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: `attached-${n}`, seq, kind, payload }));
+        }
+        // Assert
+        expect(chunks.map((c) => c.delta?.text).filter(Boolean), name).to.deep.equal(shown);
+      } finally {
+        unsubscribe?.();
+      }
+    }
+  });
+
   it('replays a history again once forgotten: turns a CLI ran since', () => {
     /** @type {{ delta?: { text?: string } }[]} */
     const chunks = [];

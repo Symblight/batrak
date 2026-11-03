@@ -12,7 +12,7 @@ import styles from './session-sync.css?inline';
 
 /**
  * @tag acp-session-sync
- * @summary The project's sync of its sessions with its agents: Resync, a spinner in place of its icon while it runs, its tooltip saying when it last synced and how each agent did, a dot when an agent needs the user.
+ * @summary The project's sync of its sessions with its agents: a compact Refresh button, a spinner in place of its icon while it runs, a short tooltip (how each agent did too while it runs or when one needs the user), a dot when an agent needs the user.
  * @fires acp-session-resync `null`
  */
 export class AcpSessionSync extends LitElement {
@@ -35,10 +35,11 @@ export class AcpSessionSync extends LitElement {
   render() {
     if (this.sync === null) return nothing;
     const { label, lines, warn } = sessions.syncSummary(this.sync, Date.now());
+    const tip = this.sync.running ? [label, ...lines] : ['Refresh sessions', ...(warn ? lines : [])];
     return html`<md-icon-button
         id="acp-session-sync-button"
         class="acp-session-sync__button"
-        aria-label="Resync sessions"
+        aria-label="Refresh sessions"
         @click=${this.#onClick}
       >
         ${this.sync.running
@@ -46,7 +47,7 @@ export class AcpSessionSync extends LitElement {
           : html`<md-icon class="acp-session-sync__icon">${unsafeSVG(syncIcon)}</md-icon>`}
       </md-icon-button>
       <md-tooltip for="acp-session-sync-button" show-delay="500" placement="bottom">
-        ${[label, ...lines].map((line) => html`<div class="acp-session-sync__line">${line}</div>`)}
+        ${tip.map((line) => html`<div class="acp-session-sync__line">${line}</div>`)}
       </md-tooltip>
       ${warn ? html`<span class="acp-session-sync__warning" aria-hidden="true"></span>` : nothing}`;
   }

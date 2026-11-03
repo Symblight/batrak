@@ -2,6 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $notices } from '../../../stores/notices/notices.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
 
@@ -31,16 +32,52 @@ async function started() {
 }
 
 const sent = (/** @type {string} */ cmd) => calls.filter((c) => c.cmd === cmd).map((c) => c.args);
-/** @param {() => boolean} pred */
+
+/** The hook's wait for more changes after one (`REFRESH_DELAY_MS`). */
+const DEBOUNCE_MS = 300;
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+/** @type {Map<number, () => void>} The hook's debounced reads, fired by `until()` instead of after 300 ms. */
+const held = new Map();
+let heldId = 1_000_000;
+function holdDebounces() {
+  globalThis.setTimeout = /** @type {never} */ ((/** @type {() => void} */ fn, /** @type {number} */ ms) => {
+    if (ms !== DEBOUNCE_MS) return realSetTimeout(fn, ms);
+    held.set(++heldId, fn);
+    return heldId;
+  });
+  globalThis.clearTimeout = /** @type {never} */ ((/** @type {number} */ id) => {
+    if (!held.delete(id)) realClearTimeout(id);
+  });
+}
+function releaseDebounces() {
+  globalThis.setTimeout = realSetTimeout;
+  globalThis.clearTimeout = realClearTimeout;
+  held.clear();
+}
+
+/**
+ * Waits for `pred`, firing the debounced reads pending meanwhile (as if their 300 ms had passed).
+ * @param {() => boolean} pred
+ */
 async function until(pred) {
   const started = Date.now();
   while (!pred()) {
-    expect(Date.now() - started, 'timed out').to.be.lessThan(3000);
-    await new Promise((r) => setTimeout(r, 5));
+    expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
+    const due = [...held.values()];
+    held.clear();
+    due.forEach((fn) => fn());
+    await new Promise((r) => realSetTimeout(r, 5));
   }
 }
 /** @param {number} ms */
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
+/** Fires the debounced reads still pending, and lets what they started finish. */
+async function settle() {
+  [...held.values()].forEach((fn) => fn());
+  held.clear();
+  await wait(30);
+}
 
 /**
  * Opens a project of its own (roots stay open across tests).
@@ -59,6 +96,7 @@ const changed = (rootId, changes = {}) =>
 describe('git', () => {
   beforeEach(() => {
     calls = [];
+    holdDebounces();
     answers = {
       open_workspace: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
       git_head: () => REPO,
@@ -66,6 +104,7 @@ describe('git', () => {
     };
     $workspace.set(null);
     $gitRepo.set(NO_REPO);
+    $notices.set([]);
     setCommitSelection([]);
     mockIPC(
       (cmd, args) => {
@@ -77,6 +116,7 @@ describe('git', () => {
     );
   });
   afterEach(() => {
+    releaseDebounces();
     stop?.();
     stop = null;
     clearMocks();
@@ -93,8 +133,8 @@ describe('git', () => {
     await changed(rootId, { git: true });
     await changed('root:elsewhere', { git: true });
     await changed(rootId); // no repository change
-    await until(() => sent('git_head').length === 2);
-    await wait(450);
+    await until(() => sent('git_head').length >= 2);
+    await settle();
     const afterBurst = sent('git_head').length;
     window.dispatchEvent(new Event('focus'));
     await until(() => sent('git_head').length === 3);
@@ -124,7 +164,7 @@ describe('git', () => {
     first();
     second();
     await changed(rootId);
-    await wait(450);
+    await settle();
     // Assert
     expect(unwatched, 'no scan before anyone watches').to.equal(0);
     expect(sent('git_status').length, 'none after the last watcher stopped').to.equal(2);
@@ -258,6 +298,7 @@ describe('git', () => {
     const results = [await git.branches('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
     // Assert
     expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
+    expect(sent('git_branches')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
   });
 });

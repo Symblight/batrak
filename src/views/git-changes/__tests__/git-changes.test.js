@@ -22,7 +22,7 @@ async function until(pred) {
 const file = (path) => ({ path, kind: 'modified', staged: false, unstaged: true, origPath: null, added: 1, removed: 0 });
 const CHANGES = { files: [file('a.js'), file('b.js')], loaded: true, loading: false, error: null };
 /** @type {import('../../../hooks/git/types.js').GitRepoView} */
-const REPO = { repo: { branch: 'main', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0 }, error: null };
+const REPO = { repo: { branch: 'main', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null }, error: null };
 
 describe('acp-git-changes', () => {
   /** @type {{ cmd: string, args: Record<string, unknown> }[]} */

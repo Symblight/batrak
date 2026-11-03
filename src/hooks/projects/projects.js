@@ -6,7 +6,19 @@ import { $projects, addProject, removeProject } from '../../stores/projects/proj
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { files } from './files.js';
-import { absPath, basename, isAbsolute, projectPathOf, relPath, shownPath, worktreeOf } from './rules.js';
+import {
+  absPath,
+  basename,
+  initialOf,
+  isAbsolute,
+  parentLabel,
+  projectPathOf,
+  relPath,
+  shownPath,
+  tildePath,
+  unreadByProject,
+  worktreeOf,
+} from './rules.js';
 
 /** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
 /** @typedef {import('./types.js').OpenedRoot} OpenedRoot */
@@ -140,6 +152,10 @@ export const projects = Object.freeze({
   isAbsolute,
   basename,
   shownPath,
+  initialOf,
+  tildePath,
+  parentLabel,
+  unreadByProject,
 
   /** @returns {string | null} Canonical absolute path of the opened folder. */
   path: currentPath,
@@ -271,6 +287,26 @@ export const projects = Object.freeze({
     removeProjectTerminals(id);
     removeProjectExpandedFolders(id);
     if (next) projects.activate(next.path).catch((err) => app.reportError('Opening project failed', err));
+  },
+
+  /**
+   * Asks, then removes a project (its folder on disk stays).
+   * @param {string} id
+   * @param {{ confirm: (options: import('../app/types.js').ConfirmOptions) => Promise<boolean> }} dialog
+   * @returns {Promise<boolean>} Whether it was removed.
+   */
+  async confirmRemove(id, dialog) {
+    const project = $projects.get().find((p) => p.id === id);
+    if (!project) return false;
+    const confirmed = await dialog.confirm({
+      headline: 'Remove project?',
+      message: `${project.name} will be removed from Brama.`,
+      detail: 'The folder on disk stays.',
+      confirmLabel: 'Remove',
+      destructive: true,
+    });
+    if (confirmed) projects.remove(id);
+    return confirmed;
   },
 
   /**

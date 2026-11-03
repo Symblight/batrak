@@ -2,6 +2,7 @@ import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommit
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
+import { remoteLine } from './branch.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
@@ -72,6 +73,15 @@ function switchRoot(rootId) {
   if (watchers) changesTask.schedule(0);
 }
 
+/**
+ * Shows an answer about the root's branch, unless another root is shown by now.
+ * @param {string} rootId
+ * @param {GitRepoView} view
+ */
+function showRepo(rootId, view) {
+  if ($rootId.get() === rootId) $gitRepo.set(view);
+}
+
 async function readHead() {
   const rootId = $rootId.get();
   if (rootId === null) {
@@ -81,9 +91,9 @@ async function readHead() {
   try {
     /** @type {GitRepoState | null} */
     const repo = await ipc.invoke('git_head', { rootId });
-    if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
+    showRepo(rootId, { repo, error: null });
   } catch (err) {
-    if ($rootId.get() === rootId) $gitRepo.set({ repo: null, error: String(err) });
+    showRepo(rootId, { repo: null, error: String(err) });
   }
 }
 
@@ -112,7 +122,7 @@ async function readChanges() {
     version = reply.version;
     // The scan read the branch too: no need for a separate head read. Before the files, so views
     // hear of a HEAD move before they settle on the new status.
-    $gitRepo.set({ repo: reply.status?.repo ?? null, error: null });
+    showRepo(rootId, { repo: reply.status?.repo ?? null, error: null });
     $gitChanges.set({ files: reply.status?.files ?? [], loaded: true, loading: false, error: null });
   } catch (err) {
     if (!current()) return;
@@ -135,6 +145,7 @@ export const git = Object.freeze({
   changeRows,
   typeBadge,
   relativePath,
+  remoteLine,
 
   /**
    * Starts following the active root; once however often it is called.

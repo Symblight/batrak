@@ -552,6 +552,27 @@ async fn permission_allow_then_cancel_with_a_pending_one() {
 }
 
 #[tokio::test]
+async fn a_page_attaching_while_a_permission_waits_is_asked_it_again_until_it_is_answered() {
+    let f = fixture("permission-attach", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("p", text("permission")).unwrap();
+    let asked = events.wait_for("permission request", |e| e.kind == "permission-request").await;
+
+    let page = attach_page(&f.sessions, "p", "reloaded");
+
+    let kinds: Vec<_> = lock(&page.events).iter().map(|e| e.kind).collect();
+    assert_eq!(kinds, ["snapshot", "permission-request", "status"]);
+    assert_eq!(lock(&page.events)[1].payload, asked.payload);
+
+    let id = asked.payload["requestId"].as_str().unwrap();
+    f.sessions.respond_permission("p", id, Some("allow".to_owned())).unwrap();
+    events.wait_turn_end().await;
+    let later = attach_page(&f.sessions, "p", "later");
+    assert!(!has(&later, "permission-request"), "answered: not asked again");
+}
+
+#[tokio::test]
 async fn a_second_prompt_during_a_turn_is_refused_and_cancel_stops_it() {
     let f = fixture("busy", FakeAgentOptions::default());
     let (_, events) = f.create("b", "fake").unwrap();
@@ -642,6 +663,92 @@ async fn resume_starts_a_stopped_agent_once_without_reporting_it_stopped() {
     assert_eq!(agent.loads.load(Ordering::SeqCst), 1, "it continues its ACP session");
     let events = lock(&events.events).clone();
     assert!(!events.iter().any(|e| e.kind == "error" || (e.kind == "status" && e.payload["status"] == "stopped")), "{events:#?}");
+}
+
+/// Another page (a reload, a second window) opens the session's channel.
+fn attach_page(sessions: &Sessions, id: &str, page: &str) -> Arc<Recorder> {
+    let events = Arc::new(Recorder::default());
+    sessions.attach(id, page, Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    events
+}
+
+/// A snapshot's updates as (kind, text) pairs.
+fn snapshot_messages(snapshot: &Envelope) -> Vec<(String, String)> {
+    snapshot.payload["updates"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|u| (u["sessionUpdate"].as_str().unwrap().to_owned(), u["content"]["text"].as_str().unwrap_or_default().to_owned()))
+        .collect()
+}
+
+fn pair(kind: &str, text: &str) -> (String, String) {
+    (kind.to_owned(), text.to_owned())
+}
+
+#[tokio::test]
+async fn a_page_attaching_to_a_running_session_gets_its_history_before_its_status() {
+    let f = fixture("snapshot", FakeAgentOptions { load_session: true, ..Default::default() });
+    let (_, events) = f.create("s", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("s").await.unwrap();
+    f.sessions.resume("s").await.unwrap();
+    events.wait_status("idle").await;
+    f.ask("s", &events, "hello").await;
+
+    let page = attach_page(&f.sessions, "s", "reloaded");
+
+    let got = lock(&page.events).clone();
+    assert_eq!((got[0].kind, got[1].kind), ("snapshot", "status"), "{got:#?}");
+    assert_eq!(
+        snapshot_messages(&got[0]),
+        [
+            pair("user_message_chunk", "earlier question"),
+            pair("agent_message_chunk", "earlier answer"),
+            pair("user_message_chunk", "hello"),
+            pair("agent_message_chunk", "Hello, world"),
+        ],
+        "the agent's replay, then the turn: its prompt and its reply's chunks merged"
+    );
+    assert!(lock(&events.events).iter().all(|e| e.kind != "snapshot"), "only the attaching page gets it");
+}
+
+#[tokio::test]
+async fn a_page_attaching_mid_turn_gets_the_reply_so_far_then_the_rest() {
+    let f = fixture("snapshot-turn", FakeAgentOptions::default());
+    let (_, events) = f.create("t", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("t", text("slow")).unwrap();
+    events.wait_for("a few chunks", |e| e.payload["content"]["text"] == "3 ").await;
+
+    let page = attach_page(&f.sessions, "t", "reloaded");
+    page.wait_for("more chunks", |e| e.kind == "update").await;
+    f.sessions.cancel("t").unwrap();
+    page.wait_turn_end().await;
+
+    let snapshot = page.wait_for("snapshot", |e| e.kind == "snapshot").await;
+    let messages = snapshot_messages(&snapshot);
+    assert_eq!(messages[0], pair("user_message_chunk", "slow"));
+    let so_far = &messages[1].1;
+    assert_eq!(format!("{so_far}{}", page.texts().join("")), events.texts().join(""), "nothing lost or repeated");
+}
+
+#[tokio::test]
+async fn a_page_attaching_to_a_stopped_or_crashed_session_gets_no_snapshot() {
+    let f = fixture("snapshot-stopped", FakeAgentOptions::default());
+    let (_, a) = f.create("a", "fake").unwrap();
+    let (_, b) = f.create("b", "fake").unwrap();
+    a.wait_status("idle").await;
+    b.wait_status("idle").await;
+    f.ask("a", &a, "hello").await;
+    f.sessions.stop("a").await.unwrap();
+    f.sessions.send_prompt("b", text("crash")).unwrap();
+    b.wait_status("error").await;
+
+    for id in ["a", "b"] {
+        let page = attach_page(&f.sessions, id, "reloaded");
+        assert!(!has(&page, "snapshot"), "{id}: its agent's next start replays it");
+    }
 }
 
 #[tokio::test]

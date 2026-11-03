@@ -3,20 +3,29 @@
   display: inline-flex;
 }
 
+/* 28px icon button: 18px icon + 4px padding + the library's 1px border. */
+.acp-session-sync__button {
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+}
+
+.acp-session-sync__button::part(button) {
+  padding: 4px;
+}
+
 .acp-session-sync__icon {
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-md);
 }
 
 .acp-session-sync__spinner {
-  font-size: var(--acp-icon-size-md);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-session-sync__warning {
   position: absolute;
-  inset-block-start: 6px;
-  inset-inline-end: 6px;
-  width: 8px;
-  height: 8px;
+  inset-block-start: 4px;
+  inset-inline-end: 4px;
+  width: 6px;
+  height: 6px;
   border-radius: var(--acp-shape-corner-full);
   background: var(--acp-color-error);
   pointer-events: none;

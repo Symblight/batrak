@@ -2,23 +2,58 @@ import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../toolbar.js';
 
 /** @typedef {import('../../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../../hooks/git/types.js').GitRepoState} GitRepoState */
+
+/** @type {GitRepoState} */
+const REPO = { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0, upstreamSha: null, remote: null };
 
 /** @type {GitRepoView} */
-const GIT = {
-  repo: { branch: 'main', sha: 'abc1234def', detached: false, upstream: 'origin/main', ahead: 2, behind: 0 },
-  error: null,
-};
+const GIT = { repo: REPO, error: null };
+
+/** @type {import('../../../hooks/github/types.js').GithubPrReply} */
+const REPLY = { status: 'ok', pr: null, defaultBranch: 'main', message: null };
 
 describe('acp-toolbar', () => {
-  it("shows the project's path and the branch state in tooltips, not titles", async () => {
+  it('shows the project menu with the listed projects, and the GitHub slot as a component of its own, not titles', async () => {
+    const projects = [{ id: '/work/app', name: 'app', path: '/work/app' }];
     const el = await fixture(html`<acp-toolbar
       .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
+      .projects=${projects}
+      .unread=${{ '/work/app': 1 }}
+      .home=${'/work'}
       .git=${GIT}
+      .githubSlot=${'ok'}
+      .githubReply=${REPLY}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    expect(tooltipOf(root.querySelector('.acp-toolbar__name'))).to.equal('/work/app');
-    expect(tooltipOf(root.querySelector('.acp-toolbar__branch'))).to.equal('Branch main, tracking origin/main, 2 ahead');
+    const menu = root.querySelector('acp-project-menu');
+    expect([menu?.projects, menu?.currentId, menu?.unread, menu?.home], 'the project button is the menu\'s').to.deep.equal([
+      projects,
+      '/work/app',
+      { '/work/app': 1 },
+      '/work',
+    ]);
+    const slot = root.querySelector('acp-pull-request-chip');
+    expect([slot?.status, slot?.reply, slot?.repo], 'GitHub slot').to.deep.equal(['ok', REPLY, GIT.repo]);
     expect(root.querySelector('[title]')).to.equal(null);
+  });
+
+  it('offers the project menu with no project open, and no git beside it', async () => {
+    const el = await fixture(html`<acp-toolbar></acp-toolbar>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    expect(root.querySelector('acp-project-menu')?.currentId).to.equal(null);
+    expect(root.querySelector('acp-branch-popover')).to.equal(null);
+  });
+
+  it('shows the branch in its card, with the pull request found for it', async () => {
+    // Arrange
+    /** @type {import('../../../hooks/github/types.js').GithubPrReply} */
+    const found = { ...REPLY, pr: { number: 9, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null, failedChecks: [] } };
+    // Act
+    const el = await fixture(html`<acp-toolbar .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }} .git=${GIT} .githubReply=${found}></acp-toolbar>`);
+    // Assert
+    const card = /** @type {ShadowRoot} */ (el.shadowRoot).querySelector('acp-branch-popover');
+    expect([card?.repo, card?.pr]).to.deep.equal([REPO, found.pr]);
   });
 
   it('says why git is unavailable in a tooltip', async () => {

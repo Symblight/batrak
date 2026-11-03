@@ -18,6 +18,15 @@
  * @property {string | null} upstream
  * @property {number} ahead
  * @property {number} behind
+ * @property {string | null} upstreamSha What the upstream branch pointed at when last fetched; the lease of a force push.
+ * @property {GitRemoteInfo | null} remote The remote the branch syncs with; `null` when detached or without remotes.
+ */
+
+/**
+ * @typedef {Object} GitRemoteInfo
+ * @property {string} name
+ * @property {string} url Without credentials.
+ * @property {{ owner: string, repo: string } | null} github Set for a github.com remote.
  */
 
 /** @typedef {'modified' | 'added' | 'deleted' | 'renamed' | 'typeChanged' | 'untracked' | 'conflicted'} GitFileKind */

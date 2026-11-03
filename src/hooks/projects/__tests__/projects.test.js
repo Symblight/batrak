@@ -219,6 +219,30 @@ describe('projects', () => {
       expect($projectTerminalPanelHeights.get()).to.deep.equal({});
     });
 
+    it('asks before removing a project, and removes it only when confirmed', async () => {
+      const projects = await fresh();
+      await projects.activate('/work/a');
+      await projects.activate('/work/b');
+      /** @type {import('../../app/types.js').ConfirmOptions[]} */
+      const asked = [];
+      const dialog = (/** @type {boolean} */ answer) => ({
+        confirm: async (/** @type {import('../../app/types.js').ConfirmOptions} */ o) => {
+          asked.push(o);
+          return answer;
+        },
+      });
+
+      const declined = await projects.confirmRemove('/work/a', dialog(false));
+      expect(declined).to.equal(false);
+      expect($projects.get().map((p) => p.id)).to.deep.equal(['/work/a', '/work/b']);
+
+      const confirmed = await projects.confirmRemove('/work/a', dialog(true));
+      expect(confirmed).to.equal(true);
+      expect($projects.get().map((p) => p.id)).to.deep.equal(['/work/b']);
+      expect(asked[0]).to.include({ headline: 'Remove project?', destructive: true });
+      expect(asked[0].message).to.contain('a');
+    });
+
     it('moves on to the next project when the shown one goes, or closes the workspace with none left', async () => {
       const projects = await fresh();
       await projects.activate('/work/a');

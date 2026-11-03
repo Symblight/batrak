@@ -19,6 +19,8 @@
   --md-snackbar-min-inline-size: 0;
   --md-snackbar-max-inline-size: 100%;
   --md-snackbar-text-font: var(--acp-font-family);
+  --md-snackbar-text-size: var(--acp-font-size-sm);
+  --md-snackbar-text-line-height: 1rem;
   --_acp-snackbars-icon-color: var(--acp-color-inverse-primary);
 
   pointer-events: auto;
@@ -37,11 +39,11 @@
 .acp-snackbars__content {
   display: flex;
   align-items: flex-start;
-  gap: var(--acp-space-3);
+  gap: var(--acp-space-2);
 }
 .acp-snackbars__icon {
   flex: none;
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-md);
   color: var(--_acp-snackbars-icon-color);
 }
 .acp-snackbars__message {
