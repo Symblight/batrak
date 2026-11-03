@@ -88,3 +88,24 @@ export function nextWaiting(order, statuses, shownId) {
   const rotated = [...order.slice(from), ...order.slice(0, from)];
   return rotated.find((id) => id !== shownId && statuses[id] === 'waiting') ?? null;
 }
+
+/**
+ * What changed between two lists of a project's workspaces, as snackbar messages: created, deleted,
+ * renamed by the user (not its agent's titles), its folder recreated.
+ * @param {readonly Workspace[]} before
+ * @param {readonly Workspace[]} after
+ * @returns {string[]}
+ */
+export function noticesOf(before, after) {
+  const was = new Map(before.map((w) => [w.id, w]));
+  const notices = [];
+  for (const w of after) {
+    const old = was.get(w.id);
+    if (old === undefined) notices.push(`Created workspace "${w.name}" on ${w.branch}`);
+    else if (old.name !== w.name && w.nameSource === 'user') notices.push(`Renamed workspace "${old.name}" to "${w.name}"`);
+    else if (old.missing && !w.missing) notices.push(`Recreated the folder of "${w.name}"`);
+  }
+  const kept = new Set(after.map((w) => w.id));
+  for (const w of before) if (!kept.has(w.id)) notices.push(`Deleted workspace "${w.name}"`);
+  return notices;
+}

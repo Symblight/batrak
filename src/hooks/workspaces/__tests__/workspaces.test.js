@@ -57,6 +57,35 @@ describe('workspaces hook', () => {
     expect($workspaces.get().map((w) => w.id)).to.deep.equal(['w2']);
   });
 
+  it('says in a snackbar what changed in the shown project’s list, not what it had when shown', async () => {
+    // Arrange: a second workspace appears with the next change
+    let lists = 0;
+    mockIPC(
+      (cmd, args) => {
+        if (cmd !== 'workspaces_list') return null;
+        const { projectPath } = /** @type {{ projectPath: string }} */ (args);
+        lists++;
+        const task = { id: 'w1', projectPath, name: 'Fix login', branch: 'brama/fix-login', nameSource: 'user' };
+        return lists === 1 ? [task] : [task, { ...task, id: 'w2', name: 'Add search', branch: 'brama/add-search' }];
+      },
+      { shouldMockEvents: true },
+    );
+    $notices.set([]);
+    stop = workspaces.start();
+    $project.set({ path: '/work/a', name: 'a', rootId: null });
+    await until(() => $workspaces.get().length === 1);
+    const shown = $notices.get().map((n) => n.message);
+
+    // Act
+    await emit('workspaces://changed', { projectPath: '/work/a' });
+    await until(() => $workspaces.get().length === 2);
+
+    // Assert
+    expect(shown, 'the list as shown').to.deep.equal([]);
+    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Created workspace "Add search" on brama/add-search']]);
+    $notices.set([]);
+  });
+
   it('keeps the latest list when an older reply arrives after it', async () => {
     // Arrange: the first list call answers only after the second
     /** @type {((list: unknown) => void)[]} */

@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { choiceOf, nextWaiting, orderWorkspaces, statusOf, statusesOf } from '../rules.js';
+import { choiceOf, nextWaiting, noticesOf, orderWorkspaces, statusesOf, statusOf } from '../rules.js';
 
 /** @typedef {import('../types.js').Workspace} Workspace */
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -103,6 +103,22 @@ describe('workspaces rules', () => {
     for (const [statuses, shown, next, why] of cases) {
       // Act + Assert
       expect(nextWaiting(order, /** @type {Record<string, import('../types.js').WorkspaceStatus>} */ (statuses), /** @type {string} */ (shown)), /** @type {string} */ (why)).to.equal(next);
+    }
+  });
+  it('noticesOf: what changed between two lists of a project, worth a snackbar', () => {
+    const task = workspace({ id: 'w1', name: 'Fix login', branch: 'brama/fix-login', nameSource: 'user' });
+    const cases = [
+      // [before, after, notices, why]
+      [[], [task], ['Created workspace "Fix login" on brama/fix-login'], 'a new one'],
+      [[task], [], ['Deleted workspace "Fix login"'], 'one gone'],
+      [[task], [{ ...task, name: 'Login form' }], ['Renamed workspace "Fix login" to "Login form"'], 'renamed by the user'],
+      [[{ ...task, nameSource: 'agent' }], [{ ...task, nameSource: 'agent', name: 'Login form' }], [], 'its agent titled it'],
+      [[{ ...task, missing: true }], [task], ['Recreated the folder of "Fix login"'], 'its folder back'],
+      [[task], [{ ...task, lastActiveAt: '2026-11-03T00:00:00.000Z' }], [], 'nothing to say'],
+    ];
+    for (const [before, after, notices, why] of cases) {
+      // Act + Assert
+      expect(noticesOf(/** @type {Workspace[]} */ (before), /** @type {Workspace[]} */ (after)), /** @type {string} */ (why)).to.deep.equal(notices);
     }
   });
 });

@@ -6,6 +6,7 @@ import {
   $draftWorkspaces,
   $workspaceOpening,
   $workspaces,
+  $workspacesProject,
   MAIN,
   addDraftWorkspace,
   dropDraftWorkspace,
@@ -16,7 +17,7 @@ import { $activeSession, $sessions, dropDrafts, forgetLastSession, newSession, s
 import { queueFirstPrompt } from '../../stores/chat/chat.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
-import { nextWaiting } from './rules.js';
+import { nextWaiting, noticesOf } from './rules.js';
 import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -44,7 +45,12 @@ async function refresh(projectPath) {
   try {
     /** @type {Workspace[]} */
     const list = await ipc.invoke('workspaces_list', { projectPath });
-    if (turn === latest) setWorkspaces(Array.isArray(list) ? list : [], projectPath);
+    if (turn !== latest) return;
+    const next = Array.isArray(list) ? list : [];
+    // What changed since this project's last list (here or in another window); none when it's shown.
+    const before = $workspacesProject.get() === projectPath ? $workspaces.get() : null;
+    setWorkspaces(next, projectPath);
+    if (before !== null) for (const message of noticesOf(before, next)) notify('info', message);
   } catch (err) {
     app.reportError('Listing workspaces failed', err);
     // Listed as none: a stored choice falls back to Main instead of waiting for a list that won't come.

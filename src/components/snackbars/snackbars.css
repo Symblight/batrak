@@ -3,7 +3,7 @@
   z-index: var(--acp-z-overlay);
   inset-block-end: var(--acp-space-4);
   inset-inline-end: calc(var(--acp-nav-rail-width) + var(--acp-space-4));
-  width: min(440px, calc(100vw - var(--acp-nav-rail-width) - 2 * var(--acp-space-4)));
+  width: min(480px, calc(100vw - var(--acp-nav-rail-width) - 2 * var(--acp-space-4)));
   display: flex;
   /* Only the snackbars take clicks, not the gaps between them. */
   pointer-events: none;
@@ -19,8 +19,8 @@
   --md-snackbar-min-inline-size: 0;
   --md-snackbar-max-inline-size: 100%;
   --md-snackbar-text-font: var(--acp-font-family);
-  --md-snackbar-text-size: var(--acp-font-size-sm);
-  --md-snackbar-text-line-height: 1rem;
+  --md-snackbar-text-size: var(--acp-font-size-md);
+  --md-snackbar-text-line-height: 1.25rem;
   --_acp-snackbars-icon-color: var(--acp-color-inverse-primary);
 
   pointer-events: auto;
@@ -43,7 +43,7 @@
 }
 .acp-snackbars__icon {
   flex: none;
-  font-size: var(--acp-icon-size-md);
+  font-size: var(--acp-icon-size-lg);
   color: var(--_acp-snackbars-icon-color);
 }
 .acp-snackbars__message {
