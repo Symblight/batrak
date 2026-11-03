@@ -10,15 +10,6 @@
  */
 
 /**
- * The sign-in dialog (`$githubSignIn`).
- * @typedef {Object} GithubSignIn
- * @property {'idle' | 'noCli' | 'starting' | 'code' | 'failed'} phase `idle`: closed.
- * @property {string | null} code The one-time code, once the CLI printed it.
- * @property {string | null} error Why it failed.
- * @property {string | null} installCommand `noCli`: the command that installs the CLI on this system.
- */
-
-/**
  * A branch's pull request; mirrors `github::PullRequest`.
  * @typedef {Object} GithubPullRequest
  * @property {number} number
@@ -28,6 +19,7 @@
  * @property {boolean} isDraft
  * @property {string | null} reviewDecision `APPROVED`, `CHANGES_REQUESTED` or `REVIEW_REQUIRED`.
  * @property {string | null} checks The latest commit's: `SUCCESS`, `FAILURE`, `ERROR`, `PENDING` or `EXPECTED`.
+ * @property {string[]} failedChecks Names of the latest commit's failed checks.
  */
 
 /**

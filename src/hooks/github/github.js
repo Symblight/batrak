@@ -1,18 +1,12 @@
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { $gitRepo } from '../../stores/git/git.js';
-import { $githubAccount, $githubSignIn, $pullRequest, $pullRequestKey, SIGN_IN_IDLE } from '../../stores/github/github.js';
-import { notify } from '../../stores/notices/notices.js';
+import { $githubAccount, $pullRequest, $pullRequestKey } from '../../stores/github/github.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
-import { createPr, installCommand, prChip, slot } from './rules.js';
+import { checksLine, createPr, prChip, slot } from './rules.js';
 
-/** @typedef {import('./types.js').GithubAccount} GithubAccount */
 /** @typedef {import('./types.js').GithubPrReply} GithubPrReply */
 
-/** Where the one-time code is entered. */
-const DEVICE_URL = 'https://github.com/login/device';
-/** What the backend rejects a cancelled sign-in with. */
-const CANCELLED = 'Sign-in cancelled';
 /** Window focus asks `gh` again only after this long. */
 const REFRESH_MS = 30_000;
 /** A shown pull request is looked up again this often: its checks and reviews change without the branch moving. */
@@ -24,14 +18,14 @@ let pullRequestAt = 0;
 let following = null;
 
 /**
- * GitHub through the user's GitHub CLI: who is signed in, and signing in (the CLI opens the
- * browser flow; the app keeps no token).
+ * GitHub through the user's GitHub CLI: who is signed in (`gh auth login` in a terminal; the app
+ * keeps no token) and the shown branch's pull request.
  */
 export const github = Object.freeze({
   slot,
-  installCommand,
   prChip,
   createPr,
+  checksLine,
 
   /** Asks who is signed in; keeps the last answer if `gh` can't say. */
   async refresh() {
@@ -69,7 +63,7 @@ export const github = Object.freeze({
   },
 
   /**
-   * Reads the account now, when the window gets focus and when another window signs in or out; looks
+   * Reads the account now, when the window gets focus and when the backend finds the login stopped working; looks
    * up the shown branch's pull request when the branch or its remote commit moves, every minute, and
    * on focus. Once however often it is called.
    * @returns {() => void} Stops.
@@ -97,48 +91,4 @@ export const github = Object.freeze({
     return following;
   },
 
-  /** Signs in: the CLI's one-time code in a dialog, the browser opened on the page for it. */
-  async signIn() {
-    await github.refresh();
-    const account = $githubAccount.get();
-    if (account?.state === 'noCli') {
-      $githubSignIn.set({ ...SIGN_IN_IDLE, phase: 'noCli', installCommand: installCommand(navigator.platform) });
-      return;
-    }
-    $githubSignIn.set({ ...SIGN_IN_IDLE, phase: 'starting' });
-    const stopListening = await ipc.listen('github://code', (/** @type {string} */ code) => {
-      // Printed before a cancel stopped the CLI.
-      if ($githubSignIn.get().phase !== 'starting') return;
-      $githubSignIn.set({ ...SIGN_IN_IDLE, phase: 'code', code });
-      app.openUrl(DEVICE_URL).catch((err) => app.reportError('Opening GitHub failed', err));
-    });
-    try {
-      /** @type {GithubAccount} */
-      const signedIn = await ipc.invoke('github_sign_in');
-      $githubAccount.set(signedIn);
-      $githubSignIn.set(SIGN_IN_IDLE);
-      if (signedIn.state === 'signedIn') notify('info', `Signed in to GitHub as ${signedIn.login}`);
-    } catch (err) {
-      const message = String(err);
-      // Cancelled by the user: the dialog is closed already.
-      if ($githubSignIn.get().phase !== 'idle' && message !== CANCELLED) {
-        $githubSignIn.set({ ...SIGN_IN_IDLE, phase: 'failed', error: message });
-      }
-    } finally {
-      stopListening();
-    }
-  },
-
-  /** Stops a sign-in waiting for the browser and closes the dialog. */
-  cancelSignIn() {
-    const { phase } = $githubSignIn.get();
-    $githubSignIn.set(SIGN_IN_IDLE);
-    // Only a running sign-in has a CLI to stop; the backend keeps a cancel for the one about to start.
-    if (phase === 'starting' || phase === 'code') ipc.invoke('github_sign_in_cancel').catch(() => {});
-  },
-
-  /** Closes the dialog after a failure or a missing CLI. */
-  closeSignIn() {
-    $githubSignIn.set(SIGN_IN_IDLE);
-  },
 });

@@ -3,17 +3,10 @@ import { $gitRepo } from '../git/git.js';
 import { $rootId } from '../workspace/workspace.js';
 
 /** @typedef {import('../../hooks/github/types.js').GithubAccount} GithubAccount */
-/** @typedef {import('../../hooks/github/types.js').GithubSignIn} GithubSignIn */
 /** @typedef {import('../../hooks/github/types.js').GithubBranchPr} GithubBranchPr */
-
-/** @type {GithubSignIn} */
-export const SIGN_IN_IDLE = { phase: 'idle', code: null, error: null, installCommand: null };
 
 /** Who the GitHub CLI is signed in as; `null` until first read. Written by the `github` hook. */
 export const $githubAccount = atom(/** @type {GithubAccount | null} */ (null));
-
-/** The sign-in dialog. Written by the `github` hook. */
-export const $githubSignIn = atom(SIGN_IN_IDLE);
 
 /** The last pull request lookup, of one branch of one root. Written by the `github` hook. */
 export const $pullRequest = atom(/** @type {GithubBranchPr | null} */ (null));

@@ -4,7 +4,6 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/tooltip';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import closeIcon from '@material-design-icons/svg/outlined/close.svg?raw';
-import downloadIcon from '@material-design-icons/svg/outlined/download.svg?raw';
 import editNoteIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
 import lockIcon from '@material-design-icons/svg/outlined/lock.svg?raw';
 import loginIcon from '@material-design-icons/svg/outlined/login.svg?raw';
@@ -22,8 +21,7 @@ const ICONS = { add: addIcon, close: closeIcon, edit_note: editNoteIcon, merge: 
 
 /**
  * @tag acp-pull-request-chip
- * @summary The header's GitHub slot for a branch whose remote is on github.com: the way in while the GitHub CLI is missing or signed out, the branch's pull request with its checks (or Create PR), or that the account has no access.
- * @fires acp-github-sign-in `null`
+ * @summary The header's GitHub slot for a branch whose remote is on github.com: how to sign in while the GitHub CLI is signed out, the branch's pull request with its checks (or Create PR), or that the account has no access.
  * @fires acp-github-open `{ url }` The pull request, or GitHub's page to create one.
  */
 export class AcpPullRequestChip extends LitElement {
@@ -95,10 +93,8 @@ export class AcpPullRequestChip extends LitElement {
 
   render() {
     switch (this.status) {
-      case 'noCli':
-        return this.#chip({ label: 'Install GitHub CLI', tooltip: 'Brama uses the GitHub CLI to sign in to GitHub', icon: downloadIcon, mod: 'acp-pull-request-chip__button_create', click: () => this.#emit('acp-github-sign-in') });
       case 'signedOut':
-        return this.#chip({ label: 'Sign in to GitHub', tooltip: 'Sign in to GitHub in your browser, to see this branch’s pull request', icon: loginIcon, mod: 'acp-pull-request-chip__button_create', click: () => this.#emit('acp-github-sign-in') });
+        return this.#chip({ label: 'Not signed in', tooltip: 'Sign in to GitHub to see this branch’s pull request: run gh auth login in a terminal.', icon: loginIcon });
       case 'noAccess':
         return this.#chip({ label: 'No access', tooltip: 'The signed-in GitHub account can’t see this repository. Sign in with another account: run gh auth login in a terminal.', icon: lockIcon });
       case 'ok':

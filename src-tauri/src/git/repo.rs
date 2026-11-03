@@ -17,26 +17,21 @@ pub struct RepoState {
     pub sha: Option<String>,
     pub detached: bool,
     pub upstream: Option<String>,
+    /// Commits on the branch that its upstream lacks, and the other way round, as of the last fetch.
     pub ahead: u32,
     pub behind: u32,
-    /// What the upstream branch pointed at when last fetched: the lease of a force push.
+    /// What the upstream branch pointed at when last fetched or pushed: the pull request chip
+    /// looks again when it moves.
     pub upstream_sha: Option<String>,
-    /// The upstream's remote (`.` for a local upstream) and its branch there (`refs/heads/main`),
-    /// what a force push names; not derived from `upstream`, which a `/` in a remote name or
-    /// another refspec would mislead.
+    /// The upstream's remote, `.` for a local upstream; not derived from `upstream`, which a `/`
+    /// in a remote name would mislead.
     #[serde(skip)]
     pub upstream_remote: Option<String>,
-    #[serde(skip)]
-    pub upstream_merge: Option<String>,
     /// The remote-tracking ref of the upstream (`refs/remotes/origin/main`).
     #[serde(skip)]
     pub upstream_ref: Option<String>,
     /// The remote the branch syncs with (see [`remote::read`]); `None` when detached or without remotes.
     pub remote: Option<RemoteInfo>,
-    /// The repository has a remote at all: "No remote" against "No upstream".
-    pub has_remotes: bool,
-    /// Unix ms of the last fetch; `None` if it never ran.
-    pub fetched_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -110,12 +105,11 @@ pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
     if info(git, root)?.is_none() {
         return Ok(None);
     }
-    let info = info(git, root)?.expect("checked above");
-    head_in(git, root, &info).map(Some)
+    head_in(git, root).map(Some)
 }
 
 /// [`head`] for a `root` known to be in a repository.
-pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, String> {
+pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
     // Each of these exits non-zero for a legitimate "none": detached HEAD, no commits, no upstream.
     let optional = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Option<String>, String> {
         let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
@@ -127,34 +121,32 @@ pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, St
     let mut state = RepoState::new(branch, sha);
     if let Some(branch) = &state.branch {
         let reference = format!("refs/heads/{branch}");
-        let format = "--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)";
+        let format = "--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream)%00%(upstream:remotename)";
         let line = optional(&[&"for-each-ref", &format, &reference])?;
         if let Some(line) = line {
             let mut fields = line.split('\0');
             let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
             state.upstream = next();
             (state.ahead, state.behind) = parse_track(&next().unwrap_or_default());
-            (state.upstream_ref, state.upstream_remote, state.upstream_merge) = (next(), next(), next());
+            (state.upstream_ref, state.upstream_remote) = (next(), next());
         }
     }
-    add_remote(git, root, info, &mut state)?;
+    add_remote(git, root, &mut state)?;
     Ok(state)
 }
 
 /// Fills in the remote a branch syncs with; none for a detached HEAD.
-fn add_remote(git: &Path, root: &Path, info: &RepoInfo, state: &mut RepoState) -> Result<(), String> {
-    let remotes = remote::read(git, root, info, state.branch.as_deref())?;
-    state.has_remotes = remotes.has_remotes;
-    state.fetched_at = remotes.fetched_at;
-    state.remote = if state.detached { None } else { remotes.remote };
+fn add_remote(git: &Path, root: &Path, state: &mut RepoState) -> Result<(), String> {
+    let remote = remote::read(git, root, state.branch.as_deref())?;
+    state.remote = if state.detached { None } else { remote };
     // `status --porcelain` names the upstream only by its short name.
     if let (Some(branch), Some(_), None) = (&state.branch, &state.upstream, &state.upstream_ref) {
         let reference = format!("refs/heads/{branch}");
-        let format = "--format=%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)";
+        let format = "--format=%(upstream)%00%(upstream:remotename)";
         let out = exec::run_with(git, root, &exec::args(&[&"for-each-ref", &format, &reference]), Mode::Background, &Default::default())?;
         let mut fields = out.stdout_str()?.trim_end_matches('\n').split('\0');
         let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
-        (state.upstream_ref, state.upstream_remote, state.upstream_merge) = (next(), next(), next());
+        (state.upstream_ref, state.upstream_remote) = (next(), next());
     }
     // Only a remote-tracking branch has a lease to give; a local upstream branch is not on a remote.
     let on_remote = state.upstream_remote.as_deref().is_some_and(|r| r != ".");
@@ -176,11 +168,8 @@ impl RepoState {
             behind: 0,
             upstream_sha: None,
             upstream_remote: None,
-            upstream_merge: None,
             upstream_ref: None,
             remote: None,
-            has_remotes: false,
-            fetched_at: None,
         }
     }
 }
@@ -200,14 +189,8 @@ pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
         .collect())
 }
 
-/// Full message of the last commit, for amending it; `None` before the first commit.
-pub fn last_commit_message(git: &Path, root: &Path) -> Result<Option<String>, String> {
-    let out = exec::run_with(git, root, &exec::args(&[&"log", &"-1", &"--format=%B"]), Mode::Background, &Default::default())?;
-    Ok(out.success().then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_owned()))
-}
-
 /// `ahead 2, behind 1` (any part may be missing; `gone` means no counts) → `(2, 1)`.
-pub(super) fn parse_track(track: &str) -> (u32, u32) {
+fn parse_track(track: &str) -> (u32, u32) {
     let (mut ahead, mut behind) = (0, 0);
     for part in track.split(", ") {
         if let Some(n) = part.strip_prefix("ahead ") {
@@ -217,6 +200,12 @@ pub(super) fn parse_track(track: &str) -> (u32, u32) {
         }
     }
     (ahead, behind)
+}
+
+/// Full message of the last commit, for amending it; `None` before the first commit.
+pub fn last_commit_message(git: &Path, root: &Path) -> Result<Option<String>, String> {
+    let out = exec::run_with(git, root, &exec::args(&[&"log", &"-1", &"--format=%B"]), Mode::Background, &Default::default())?;
+    Ok(out.success().then(|| String::from_utf8_lossy(&out.stdout).trim_end().to_owned()))
 }
 
 /// Status of the files under `root`; `None` when `root` is not inside a git repository.
@@ -257,7 +246,7 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
     let out = out?;
     let text = std::str::from_utf8(&out).map_err(|_| "git status printed non-UTF-8 paths".to_owned())?;
     let mut status = parse(text, &info.prefix);
-    add_remote(git, root, info, &mut status.repo)?;
+    add_remote(git, root, &mut status.repo)?;
     let counts = if status.repo.sha.is_some() { parse_numstat(&String::from_utf8_lossy(&numstat?)) } else { HashMap::new() };
     add_line_counts(root, &mut status, &counts);
     Ok(status)
@@ -580,15 +569,6 @@ mod tests {
         repo.git(&["add", "."]);
         repo.git(&["commit", "-qm", "Subject line", "-m", "Body paragraph."]);
         assert_eq!(last_commit_message(&git, &repo.path).unwrap().as_deref(), Some("Subject line\n\nBody paragraph."));
-    }
-
-    #[test]
-    fn track_formats() {
-        assert_eq!(parse_track(""), (0, 0));
-        assert_eq!(parse_track("ahead 3"), (3, 0));
-        assert_eq!(parse_track("behind 2"), (0, 2));
-        assert_eq!(parse_track("ahead 1, behind 4"), (1, 4));
-        assert_eq!(parse_track("gone"), (0, 0));
     }
 
     #[test]

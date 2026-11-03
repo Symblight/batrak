@@ -11,8 +11,6 @@ const repo = (fields = {}) => ({
   behind: 0,
   upstreamSha: null,
   remote: { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } },
-  hasRemotes: true,
-  fetchedAt: null,
   ...fields,
 });
 
@@ -25,7 +23,7 @@ describe('github rules', () => {
       ['no CLI', repo(), { state: 'noCli' }, 'noCli'],
       ['account not read yet', repo(), null, 'loading'],
       ['another host', repo({ remote: { name: 'origin', url: 'u', github: null } }), { state: 'signedOut' }, 'hidden'],
-      ['no remote', repo({ remote: null, hasRemotes: false }), { state: 'signedOut' }, 'hidden'],
+      ['no remote', repo({ remote: null }), { state: 'signedOut' }, 'hidden'],
       ['detached', repo({ branch: null, detached: true }), { state: 'signedOut' }, 'hidden'],
       ['no repository', null, { state: 'signedOut' }, 'hidden'],
     ];
@@ -44,7 +42,7 @@ describe('github rules', () => {
 
   it('shows a pull request as a state, a number, and its checks and reviews in words', () => {
     /** @param {Partial<import('../types.js').GithubPullRequest>} [fields] @returns {import('../types.js').GithubPullRequest} */
-    const pr = (fields = {}) => ({ number: 128, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null, ...fields });
+    const pr = (fields = {}) => ({ number: 128, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null, failedChecks: [], ...fields });
     /** @type {[Partial<import('../types.js').GithubPullRequest>, Record<string, unknown>][]} */
     const cases = [
       [{}, { state: 'open', label: '#128 Open', icon: 'merge_type', checks: null, tooltip: 'Open' }],
@@ -76,11 +74,23 @@ describe('github rules', () => {
     }
   });
 
-  it('names the install command of the system, where there is one', () => {
-    expect([github.installCommand('MacIntel'), github.installCommand('Win32'), github.installCommand('Linux x86_64')]).to.deep.equal([
-      'brew install gh',
-      'winget install --id GitHub.cli',
-      null,
-    ]);
+
+  it('says which checks of a pull request failed, or that they run or passed', () => {
+    /** @type {[string | null, string[], { text: string, state: 'ok' | 'fail' | 'run' } | null][]} */
+    const cases = [
+      ['FAILURE', ['backend'], { text: '1 check failing: backend', state: 'fail' }],
+      ['ERROR', ['lint', 'e2e'], { text: '2 checks failing: lint, e2e', state: 'fail' }],
+      ['FAILURE', [], { text: 'Checks failing', state: 'fail' }],
+      ['PENDING', [], { text: 'Checks running', state: 'run' }],
+      ['SUCCESS', [], { text: 'Checks passed', state: 'ok' }],
+      [null, [], null],
+    ];
+    for (const [checks, failedChecks, line] of cases) {
+      // Arrange
+      /** @type {import('../types.js').GithubPullRequest} */
+      const pr = { number: 9, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks, failedChecks };
+      // Act + Assert
+      expect(github.checksLine(pr), String(checks)).to.deep.equal(line);
+    }
   });
 });

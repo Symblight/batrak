@@ -1,10 +1,7 @@
 import { atom, computed } from 'nanostores';
-import { $rootId } from '../workspace/workspace.js';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
-/** @typedef {import('../../hooks/git/types.js').GitFetchError} GitFetchError */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };
@@ -48,15 +45,3 @@ export function pickForCommit(ids, picked) {
 
 /** Notifies only when HEAD moves (commit, checkout, reset). */
 export const $gitHead = computed($gitRepo, ({ repo }) => (repo ? `${repo.branch ?? ''}@${repo.sha ?? ''}` : null));
-
-/** The fetch, pull or push running (or just failed) of each root, by root id; written by the `git` hook. */
-export const $gitRemoteOps = atom(/** @type {Readonly<Record<string, GitRemoteOp>>} */ ({}));
-
-/** The shown root's entry of [`$gitRemoteOps`]. */
-export const $gitRemoteOpHere = computed([$gitRemoteOps, $rootId], (ops, rootId) => (rootId === null ? null : (ops[rootId] ?? null)));
-
-/** Why the last background fetch failed, until one succeeds; written by the `git` hook. */
-export const $gitFetchError = atom(/** @type {GitFetchError | null} */ (null));
-
-/** [`$gitFetchError`] when it is the shown root's. */
-export const $gitFetchErrorHere = computed([$gitFetchError, $rootId], (error, rootId) => (error && error.rootId === rootId ? error : null));

@@ -8,9 +8,9 @@ import { github } from '../../hooks/github/github.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
-import { $activePath, openChanges } from '../../stores/editor/editor.js';
-import { $githubAccount, $githubSignIn, $pullRequestHere } from '../../stores/github/github.js';
-import { $gitFetchErrorHere, $gitRemoteOpHere, $gitRepo } from '../../stores/git/git.js';
+import { $activePath } from '../../stores/editor/editor.js';
+import { $githubAccount, $pullRequestHere } from '../../stores/github/github.js';
+import { $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
@@ -117,7 +117,6 @@ export class AcpApp extends ViewElement {
   static properties = {
     sideView: { state: true },
     quickOpenFiles: { state: true },
-    branches: { state: true },
     home: { state: true },
   };
 
@@ -130,13 +129,9 @@ export class AcpApp extends ViewElement {
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
-  // The branch popover's list is the shown project's only.
-  #rootId = new StoreController(this, { store: $rootId, onChange: () => (this.branches = null) });
+  #rootId = new StoreController(this, { store: $rootId });
   #gitRepo = new StoreController(this, { store: $gitRepo });
-  #gitRemoteOp = new StoreController(this, { store: $gitRemoteOpHere });
-  #gitFetchError = new StoreController(this, { store: $gitFetchErrorHere });
   #githubAccount = new StoreController(this, { store: $githubAccount });
-  #githubSignIn = new StoreController(this, { store: $githubSignIn });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
@@ -224,8 +219,6 @@ export class AcpApp extends ViewElement {
     this.sideView = 'files';
     /** @type {QuickOpenItem[]} */
     this.quickOpenFiles = [];
-    /** @type {import('../../hooks/git/types.js').GitBranchList | null} The branch popover's lists, read when it opens. */
-    this.branches = null;
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
   }
@@ -403,64 +396,12 @@ export class AcpApp extends ViewElement {
   }
 
   /** @param {Event} e */
-  #onGitRemote = async (e) => {
-    const { action, expected } = /** @type {CustomEvent<{ action: import('../../hooks/git/types.js').GitRemoteAction | 'dismiss' | 'showChanges', expected?: string }>} */ (e).detail;
-    if (action === 'dismiss') return git.dismissRemote();
-    if (action === 'showChanges') return openChanges();
-    // A pull changes the files under an agent that is working in the folder: ask first. The answer
-    // is for this project, not one shown meanwhile.
-    const rootId = this.#rootId.value;
-    const folder = this.#workspace.value?.path;
-    const question = action.startsWith('pull') && folder ? git.pullConfirm($sessions.get(), folder) : null;
-    if (question) {
-      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('.acp-app__confirm'));
-      if (!(await dialog.confirm(question))) return;
-    }
-    await git.remote(action, expected ?? null, rootId);
-  };
-
-  /** The branch popover opened: read the shown project's branches for it. */
-  #onBranchesQuery = async () => {
-    const rootId = this.#rootId.value;
-    if (rootId === null) return;
-    try {
-      const branches = await git.branchList(rootId);
-      if (this.#rootId.value === rootId) this.branches = branches;
-    } catch (err) {
-      app.reportError('Reading the branches failed', err);
-    }
-  };
-
-  /** @param {Event} e */
-  #onGitSwitch = async (e) => {
-    const { branch, create, remote } = /** @type {CustomEvent<{ branch: string, create: boolean, remote?: string }>} */ (e).detail;
-    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (this.renderRoot.querySelector('acp-toolbar'));
-    // A switch changes the files under an agent that is working in the folder: not while it does.
-    const folder = this.#workspace.value?.path;
-    const blocked = folder ? git.switchBlocked($sessions.get(), folder) : null;
-    if (blocked) return toolbar.switchFinished(blocked);
-    try {
-      await git.switchBranch(branch, create, remote ?? null);
-      toolbar.switchFinished(null);
-    } catch (err) {
-      toolbar.switchFinished(err instanceof Error ? err.message : String(err));
-    }
-  };
-
-  /** @param {Event} e */
   #onBranchCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the branch name failed');
-
-  #onGithubSignIn = () => void github.signIn();
-
-  #onGithubCancel = () => github.cancelSignIn();
 
   /** @param {Event} e */
   #onGithubOpen = (e) => {
     app.openUrl(/** @type {CustomEvent<{ url: string }>} */ (e).detail.url).catch((err) => app.reportError('Opening the page failed', err));
   };
-
-  /** @param {Event} e */
-  #onGithubCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the code failed');
 
   /** @param {Event} e */
   #onColumnToggle(e) {
@@ -571,11 +512,8 @@ export class AcpApp extends ViewElement {
         .unread=${projects.unreadByProject($sessions.get(), this.#unread.value)}
         .home=${this.home}
         .git=${this.#gitRepo.value}
-        .remoteOp=${this.#gitRemoteOp.value}
-        .fetchError=${this.#gitFetchError.value}
         .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value, this.#pullRequest.value?.reply ?? null)}
         .githubReply=${this.#pullRequest.value?.reply ?? null}
-        .branches=${this.branches}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
         @acp-column-toggle=${this.#onColumnToggle}
@@ -584,11 +522,7 @@ export class AcpApp extends ViewElement {
         @acp-project-reveal=${this.#onProjectReveal}
         @acp-project-open-terminal=${this.#openProjectTerminal}
         @acp-project-remove=${this.#onProjectRemove}
-        @acp-git-remote=${this.#onGitRemote}
-        @acp-git-branches-query=${this.#onBranchesQuery}
-        @acp-git-switch=${this.#onGitSwitch}
         @acp-copy=${this.#onBranchCopy}
-        @acp-github-sign-in=${this.#onGithubSignIn}
         @acp-github-open=${this.#onGithubOpen}
       ></acp-toolbar>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
@@ -652,13 +586,6 @@ export class AcpApp extends ViewElement {
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
-      <acp-github-sign-in
-        .state=${this.#githubSignIn.value}
-        @acp-github-sign-in=${this.#onGithubSignIn}
-        @acp-github-sign-in-cancel=${this.#onGithubCancel}
-        @acp-github-open=${this.#onGithubOpen}
-        @acp-github-copy=${this.#onGithubCopy}
-      ></acp-github-sign-in>
       <acp-snackbars
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}

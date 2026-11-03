@@ -32,8 +32,6 @@ fn fingerprint(info: &RepoInfo, upstream: Option<&str>) -> Fingerprint {
         git_dir.join("index"),
         common.join("packed-refs"),
         common.join("config"),
-        // Per worktree, like `HEAD` (git keeps every pseudo ref in the worktree's own git dir).
-        git_dir.join("FETCH_HEAD"),
         common.join("info/exclude"),
     ];
     paths.extend(head_ref.map(|r| common.join(r)));
@@ -88,8 +86,6 @@ struct CachedInfo {
 struct StatusSlot {
     version: u64,
     cached: Option<CachedStatus>,
-    /// Read again on the next request, as with `force` (see [`GitCache::invalidate`]).
-    stale: bool,
 }
 
 /// Locks ignoring poisoning: a panicked reader must not take the cache down.
@@ -128,13 +124,6 @@ impl GitCache {
         lock(&self.info).take();
     }
 
-    /// Forgets the cached head and status: after the app itself changed the repository (a pull, a
-    /// switch), whose files may keep their mtimes on a filesystem with coarse ones.
-    pub fn invalidate(&self) {
-        lock(&self.head).take();
-        lock(&self.status).stale = true;
-    }
-
     /// Branch, HEAD and upstream; `None` outside a repository. `epoch` is the root's change epoch,
     /// read before calling. Blocking.
     pub fn head(&self, git: &Path, root: &Path, epoch: u64) -> Result<Option<RepoState>, String> {
@@ -150,11 +139,11 @@ impl GitCache {
         // The fingerprint is taken before git reads, so a change while it runs makes the next call
         // read again. It covers the upstream ref only once the upstream is known: when the read
         // finds another one (the first read, or a new upstream), read once more with it covered.
-        let mut state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
+        let mut state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
         if state.upstream != upstream {
             upstream = state.upstream.clone();
             fingerprint = self::fingerprint(&info, upstream.as_deref());
-            state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
+            state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
         }
         *slot = (state.upstream == upstream).then(|| CachedHead { fingerprint, state: state.clone() });
         Ok(Some(state))
@@ -175,7 +164,6 @@ impl GitCache {
         let upstream = slot.cached.as_ref().and_then(|c| c.status.as_ref()?.repo.upstream.clone());
         let fingerprint = info.as_deref().map(|info| fingerprint(info, upstream.as_deref()));
         let valid = !force
-            && !slot.stale
             && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
         if !valid {
             let status = match &info {
@@ -186,7 +174,7 @@ impl GitCache {
                 slot.version += 1;
             }
             // The scan found another upstream (the first scan, or a new upstream): cover its ref from
-            // now on. Unlike `head`, no second scan to close the gap — only ahead/behind could be
+            // now on. Unlike `head`, no second scan to close the gap — only the counts could be
             // stale, and only if that ref moved in the moment since git read it.
             let new_upstream = status.as_ref().and_then(|s| s.repo.upstream.clone());
             let fingerprint = match &info {
@@ -194,7 +182,6 @@ impl GitCache {
                 _ => fingerprint,
             };
             slot.cached = Some(CachedStatus { epoch, fingerprint, status });
-            slot.stale = false;
         }
         let version = slot.version;
         let unchanged = since == Some(version);
@@ -248,23 +235,20 @@ mod tests {
 
     #[test]
     fn head_follows_the_repository_files() {
-        let repo = TestRepo::with_commit("cache-head");
+        let (repo, _origin) = TestRepo::with_remote("cache-head");
         let (git, cache) = (git_bin(), GitCache::default());
         let main = cache.head(&git, &repo.path, 0).unwrap().unwrap();
         assert_eq!(main.branch.as_deref(), Some("main"));
         repo.git(&["switch", "-qc", "topic"]);
         assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().branch.as_deref(), Some("topic"));
-
-        repo.git(&["branch", "-q", "--set-upstream-to=main"]);
-        repo.write("a.txt", "a");
-        repo.git(&["add", "."]);
-        repo.git(&["commit", "-qm", "ahead"]);
-        let state = cache.head(&git, &repo.path, 0).unwrap().unwrap();
-        assert_eq!((state.upstream.as_deref(), state.ahead), (Some("main"), 1));
         repo.git(&["switch", "-q", "main"]);
-        repo.git(&["merge", "-q", "--ff-only", "topic"]);
-        repo.git(&["switch", "-q", "topic"]);
-        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().ahead, 0, "upstream ref moved");
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().upstream_sha, main.sha);
+
+        // The upstream ref moves (a push or fetch in a terminal), without an epoch.
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let moved = repo.git(&["commit-tree", "-p", "HEAD", "-m", "remote moves", tree.trim()]);
+        repo.git(&["update-ref", "refs/remotes/origin/main", moved.trim()]);
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().upstream_sha.as_deref(), Some(moved.trim()), "upstream ref moved");
     }
 
     #[test]
@@ -277,21 +261,6 @@ mod tests {
         crate::git::test_repo::run_in(&wt, &["add", "README.md"]);
         let staged = ask(&cache, &wt, 0, Some(first.version));
         assert!(!staged.unchanged, "the worktree's index lives under the main .git");
-    }
-
-    #[test]
-    fn a_fetch_in_a_worktree_dates_the_worktree_s_branch() {
-        // Arrange: a worktree of a repository with a remote, its head cached before any fetch
-        let (mut repo, _origin) = TestRepo::with_remote("cache-wt-fetch");
-        let wt = repo.worktree("cache-wt-fetch-dir", "wt-branch");
-        let (git, cache) = (git_bin(), GitCache::default());
-        assert_eq!(cache.head(&git, &wt, 0).unwrap().unwrap().fetched_at, None);
-
-        // Act: fetched from the worktree; the watcher reports nothing (same epoch)
-        crate::git::test_repo::run_in(&wt, &["fetch", "-q", "origin"]);
-
-        // Assert
-        assert!(cache.head(&git, &wt, 0).unwrap().unwrap().fetched_at.is_some(), "FETCH_HEAD is the worktree's own");
     }
 
     /// An edit the watcher doesn't report (same epoch): a cached answer must not see it.
@@ -313,41 +282,6 @@ mod tests {
         let first = ask(&cache, &repo.path, 0, None);
         untracked_unreported(&repo);
         assert!(ask(&cache, &repo.path, 0, Some(first.version)).unchanged, "the second visit reuses the first scan");
-
-        // The upstream ref moves: ahead/behind change, without an epoch.
-        repo.git(&["switch", "-q", "base"]);
-        repo.write("b.txt", "b");
-        repo.git(&["add", "b.txt"]);
-        repo.git(&["commit", "-qm", "base moves"]);
-        repo.git(&["switch", "-q", "main"]);
-        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 1);
-    }
-
-    #[test]
-    fn invalidating_reads_again_what_the_fingerprint_misses() {
-        // Arrange: `main` tracks `base`; head and status cached
-        let repo = TestRepo::with_commit("cache-invalidate");
-        repo.git(&["branch", "base"]);
-        repo.git(&["branch", "-q", "--set-upstream-to=base"]);
-        let (git, cache) = (git_bin(), GitCache::default());
-        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 0);
-        let first = ask(&cache, &repo.path, 0, None);
-        // `base` moves within the same mtime and size, as on a filesystem with coarse mtimes
-        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
-        let ahead = repo.git(&["commit-tree", "-p", "HEAD", "-m", "base moves", tree.trim()]);
-        let base = repo.path.join(".git/refs/heads/base");
-        let mtime = fs::metadata(&base).unwrap().modified().unwrap();
-        fs::write(&base, ahead).unwrap();
-        fs::File::options().write(true).open(&base).unwrap().set_modified(mtime).unwrap();
-        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 0, "unseen while cached");
-
-        // Act
-        cache.invalidate();
-
-        // Assert
-        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 1);
-        let status = ask(&cache, &repo.path, 0, Some(first.version));
-        assert_eq!(status.status.map(|s| s.repo.behind), Some(1));
     }
 
     #[test]

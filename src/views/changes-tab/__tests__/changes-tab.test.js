@@ -27,7 +27,7 @@ const FILES = [
 ];
 const CHANGES = { files: FILES, loaded: true, loading: false, error: null };
 /** @type {import('../../../hooks/git/types.js').GitRepoView} */
-const REPO = { repo: { branch: 'main', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null, hasRemotes: false, fetchedAt: null }, error: null };
+const REPO = { repo: { branch: 'main', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null }, error: null };
 
 describe('acp-changes-tab', () => {
   /** @type {{ cmd: string, args: Record<string, unknown> }[]} */

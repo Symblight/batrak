@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOpHere, $gitRemoteOps, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
@@ -104,8 +104,6 @@ describe('git', () => {
     };
     $workspace.set(null);
     $gitRepo.set(NO_REPO);
-    $gitRemoteOps.set({});
-    $gitFetchError.set(null);
     $notices.set([]);
     setCommitSelection([]);
     mockIPC(
@@ -236,43 +234,14 @@ describe('git', () => {
     stopWatching();
   });
 
-  it('switches the active project’s branch, shows the state git answers at once, and reads again also when git refuses', async () => {
-    // Arrange
-    const git = await started();
-    const rootId = await open();
-    await until(() => sent('git_head').length === 1);
-    answers.git_switch = () => ({ ...REPO, branch: 'dev' });
-    // Act
-    await git.switchBranch('dev', false);
-    const shown = $gitRepo.get().repo?.branch;
-    await until(() => sent('git_head').length === 2);
-    answers.git_switch = () => {
-      throw new Error('would be overwritten');
-    };
-    const failure = await git.switchBranch('x', true).catch((err) => err);
-    await until(() => sent('git_head').length === 3);
-    await git.switchBranch('feature/y', false, 'origin').catch(() => {});
-    // Assert
-    expect(shown).to.equal('dev');
-    expect(sent('git_switch')).to.deep.equal([
-      { rootId, branch: 'dev', create: false },
-      { rootId, branch: 'x', create: true },
-      { rootId, branch: 'feature/y', create: false, remote: 'origin' },
-    ]);
-    expect(String(failure)).to.include('would be overwritten');
-  });
-
   it('refuses to commit with no project open', async () => {
     // Arrange
     const git = await started();
     // Act
     const failure = await git.commit(['a.txt'], 'x', false).catch((err) => err);
-    const switchFailure = await git.switchBranch('dev', false).catch((err) => err);
     // Assert
     expect(String(failure)).to.include('No project is open');
-    expect(String(switchFailure)).to.include('No project is open');
     expect(sent('git_commit')).to.deep.equal([]);
-    expect(sent('git_switch')).to.deep.equal([]);
   });
 
   it('shows nothing of the previous project, and gives a project still open back as it was', async () => {
@@ -323,162 +292,13 @@ describe('git', () => {
     // Arrange
     const git = await started();
     answers.git_branches = () => ['main', 'dev'];
-    answers.git_branches_detail = () => ({ local: [], remote: [] });
     answers.git_last_commit_message = () => 'Fix it';
     answers.git_file_at_head = () => 'text';
     // Act
-    const results = [await git.branches('r1'), await git.branchList('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
+    const results = [await git.branches('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
     // Assert
-    expect(results).to.deep.equal([['main', 'dev'], { local: [], remote: [] }, 'Fix it', 'text']);
-    expect(sent('git_branches_detail')).to.deep.equal([{ rootId: 'r1' }]);
+    expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
+    expect(sent('git_branches')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
-  });
-  it('runs a remote operation one at a time, shows it running, and takes the branch state it answers with', async () => {
-    // Arrange
-    const git = await started();
-    const rootId = await open();
-    await until(() => $gitRepo.get().repo !== null);
-    /** @type {((repo: unknown) => void)[]} */
-    const answering = [];
-    answers.git_remote = () => new Promise((resolve) => answering.push(resolve));
-    // Act
-    const first = git.remote('push');
-    await until(() => answering.length === 1);
-    const whileRunning = $gitRemoteOpHere.get();
-    await git.remote('fetch'); // ignored: one at a time
-    answering[0]({ ...REPO, ahead: 0, upstream: 'origin/main' });
-    await first;
-    // Assert
-    expect(whileRunning).to.deep.equal({ rootId, action: 'push', state: 'running', error: null });
-    expect(sent('git_remote')).to.deep.equal([{ rootId, action: 'push' }]);
-    expect($gitRepo.get().repo?.upstream).to.equal('origin/main');
-    expect($gitRemoteOpHere.get(), 'done: nothing left to show').to.equal(null);
-    expect($notices.get().map((n) => [n.level, n.message]), 'the result is told in a snackbar').to.deep.equal([['info', 'Pushed to origin/main']]);
-  });
-
-  it('runs one operation per project: another project syncs while one pushes, and an operation asked for a project no longer shown is dropped', async () => {
-    // Arrange: project A pushing
-    const git = await started();
-    const a = await open();
-    /** @type {((repo: unknown) => void)[]} */
-    const answering = [];
-    answers.git_remote = () => new Promise((resolve) => answering.push(resolve));
-    const pushing = git.remote('push');
-    await until(() => answering.length === 1);
-    // Act: project B shown, and asked to fetch
-    const b = await open();
-    const fetching = git.remote('fetch');
-    await until(() => answering.length === 2);
-    // Assert
-    expect(sent('git_remote').map((c) => c.rootId)).to.deep.equal([a, b]);
-    expect($gitRemoteOpHere.get()).to.deep.include({ rootId: b, action: 'fetch', state: 'running' });
-    // Act: A's push ends
-    answering[0](REPO);
-    await pushing;
-    // Assert
-    expect($gitRemoteOpHere.get()?.state, "B's fetch still runs").to.equal('running');
-    answering[1](REPO);
-    await fetching;
-
-    // Act: a pull confirmed for A after B was shown
-    await git.remote('pull', null, a);
-    // Assert
-    expect(sent('git_remote'), 'not run in B').to.have.length(2);
-  });
-
-  it('keeps a failed operation with its kind and message, tells the user once, and forgets it when dismissed', async () => {
-    // Arrange
-    const git = await started();
-    const rootId = await open();
-    const error = { kind: 'rejected', message: '! [rejected] main -> main (fetch first)\nerror: failed to push' };
-    answers.git_remote = () => {
-      throw error;
-    };
-    // Act
-    await git.remote('forcePush', 'f00d');
-    // Assert
-    expect(sent('git_remote'), 'a force push says which commit it replaces').to.deep.equal([{ rootId, action: 'forcePush', expected: 'f00d' }]);
-    expect($gitRemoteOpHere.get()).to.deep.equal({ rootId, action: 'forcePush', state: 'failed', error });
-    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Force push failed: ! [rejected] main -> main (fetch first)']]);
-    // Act
-    git.dismissRemote();
-    // Assert
-    expect($gitRemoteOpHere.get()).to.equal(null);
-  });
-  it('keeps a failed operation while the branch stays as the failure left it, and forgets it once the branch moves', async () => {
-    // Arrange: a pull that stopped on a conflict, leaving the branch mid-rebase
-    const git = await started();
-    const rootId = await open();
-    await until(() => $gitRepo.get().repo !== null);
-    const midRebase = { ...REPO, branch: null, detached: true, sha: 'r1' };
-    /** @type {((repo: unknown) => void)[]} */
-    const earlierReads = [];
-    answers.git_head = () => new Promise((resolve) => earlierReads.push(resolve));
-    window.dispatchEvent(new Event('focus'));
-    await until(() => earlierReads.length === 1);
-    answers.git_remote = () => {
-      answers.git_head = () => midRebase;
-      throw { kind: 'conflict', message: 'CONFLICT (content): Merge conflict in a.txt' };
-    };
-    await git.remote('pullRebase');
-    // Act: a read started before the pull answers after it, with the branch as it was
-    earlierReads[0](REPO);
-    await wait(30);
-    // Assert
-    expect($gitRemoteOpHere.get()?.state, 'an answer from before the failure is not a move').to.equal('failed');
-
-    // Act: the change the pull itself made is reported
-    const reads = sent('git_head').length;
-    await changed(rootId, { git: true });
-    await until(() => sent('git_head').length > reads);
-    await wait(30);
-    // Assert
-    expect($gitRemoteOpHere.get()?.state, 'its own leftovers are what Abort is for').to.equal('failed');
-
-    // Act: the rebase is finished in a terminal
-    answers.git_head = () => ({ ...REPO, sha: 'b2' });
-    await changed(rootId, { git: true });
-    await until(() => $gitRepo.get().repo?.sha === 'b2');
-    // Assert
-    expect($gitRemoteOpHere.get(), 'the chip shows the branch again').to.equal(null);
-  });
-
-  it('fetches quietly once a project with a remote is shown, takes the counts it finds, and does not try again for five minutes', async () => {
-    // Arrange
-    const behind = { ...REPO, upstream: 'origin/main', behind: 2, fetchedAt: Date.now(), remote: { name: 'origin', url: 'u', github: null }, hasRemotes: true };
-    const stale = { ...REPO, upstream: 'origin/main', remote: behind.remote, hasRemotes: true, fetchedAt: null };
-    let fetched = false;
-    answers.git_head = () => (fetched ? behind : stale);
-    answers.git_fetch_quiet = () => {
-      fetched = true;
-      return { repo: behind, error: null };
-    };
-    const git = await started();
-    // Act
-    const rootId = await open();
-    await until(() => $gitRepo.get().repo?.behind === 2);
-    await changed(rootId, { git: true });
-    await until(() => sent('git_head').length === 2);
-    await wait(50);
-    // Assert
-    expect(sent('git_fetch_quiet')).to.deep.equal([{ rootId }]);
-    expect($notices.get(), 'quiet').to.deep.equal([]);
-    expect($gitFetchError.get()).to.equal(null);
-    expect(git.remoteChip($gitRepo.get().repo, Date.now())?.label).to.equal('Pull 2');
-  });
-
-  it('keeps why a background fetch failed for the tooltip, and says nothing else', async () => {
-    // Arrange
-    const stale = { ...REPO, upstream: 'origin/main', remote: { name: 'origin', url: 'u', github: null }, hasRemotes: true, fetchedAt: null };
-    answers.git_head = () => stale;
-    answers.git_fetch_quiet = () => ({ repo: stale, error: { kind: 'auth', message: 'Authentication failed for origin\nfatal: …' } });
-    await started();
-    // Act
-    const rootId = await open();
-    await until(() => $gitFetchError.get() !== null);
-    // Assert
-    expect($gitFetchError.get()).to.deep.include({ rootId, message: 'Authentication failed for origin' });
-    expect($notices.get()).to.deep.equal([]);
-    expect($gitRemoteOpHere.get(), 'the chip is not shown as failed').to.equal(null);
   });
 });

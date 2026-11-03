@@ -18,6 +18,7 @@
   border: 0;
   border-radius: var(--acp-shape-corner-small);
   background: transparent;
+  color: inherit;
   cursor: pointer;
 
   &:hover {
@@ -43,7 +44,8 @@
   white-space: nowrap;
 }
 
-/* An auto popover in the top layer; FloatingController writes `left` / `top`. */
+/* An auto popover in the top layer; FloatingController writes `left` / `top`. A block, its rows a
+   grid inside: a grid popover takes its full height in WebKit and stretches the rows over it. */
 .acp-branch-popover__popover {
   position: fixed;
   inset: auto;
@@ -53,13 +55,20 @@
   width: 380px;
   max-width: calc(100vw - 16px);
   margin: 0;
-  padding: var(--acp-space-3);
+  padding: var(--acp-space-2) var(--acp-space-3);
   border: 0;
   border-radius: var(--acp-shape-corner-medium);
   background: var(--acp-color-surface-container-high);
   box-shadow: var(--acp-elevation-2);
   color: var(--acp-color-on-surface);
   font-size: var(--acp-font-size-md);
+}
+.acp-branch-popover__rows {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 32px;
+  align-content: start;
+  align-items: center;
+  gap: var(--acp-space-1) var(--acp-space-2);
 }
 /* Opens and closes like `md-menu`: fades in while growing down from its top edge. */
 @media (prefers-reduced-motion: no-preference) {
@@ -83,130 +92,49 @@
     }
   }
 }
-.acp-branch-popover__facts {
-  display: grid;
-  grid-template-columns: 56px 1fr auto;
-  align-items: center;
-  gap: 0 var(--acp-space-2);
-}
 .acp-branch-popover__label {
+  color: var(--acp-color-on-surface-variant);
   font-size: var(--acp-font-size-sm);
 }
-.acp-branch-popover__branch {
+.acp-branch-popover__value {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  min-height: 32px;
   overflow: hidden;
-  font-family: var(--acp-font-family-mono);
   font-size: var(--acp-font-size-sm);
-  font-weight: var(--acp-font-weight-medium);
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.acp-branch-popover__remote {
-  grid-column: span 2;
-  padding-block: var(--acp-space-1);
+.acp-branch-popover__value_mono {
+  display: block;
+  line-height: 32px;
+  font-family: var(--acp-font-family-mono);
+  font-weight: var(--acp-font-weight-medium);
 }
-.acp-branch-popover__copy {
+.acp-branch-popover__action {
   --md-icon-button-font-size: var(--acp-icon-size-lg);
 }
-.acp-branch-popover__copy::part(button) {
+.acp-branch-popover__action::part(button) {
   padding: 5px;
 }
-.acp-branch-popover__copy-icon {
+.acp-branch-popover__action-icon {
   font-size: var(--acp-icon-size-md);
 }
-.acp-branch-popover__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--acp-space-2);
-  margin-block: var(--acp-space-3);
+.acp-branch-popover__pr_open,
+.acp-branch-popover__checks_ok {
+  color: var(--acp-color-ok);
 }
-.acp-branch-popover__button {
-  --md-button-block-start-space: var(--acp-button-block-space-compact);
-  --md-button-block-end-space: var(--acp-button-block-space-compact);
-  --md-button-inline-start-space: var(--acp-space-3);
-  --md-button-inline-end-space: var(--acp-space-3);
-  --md-button-font-size: var(--acp-font-size-sm);
+.acp-branch-popover__pr_merged {
+  color: var(--acp-color-tertiary);
 }
-/* The filter and the new branch's name: an outlined pill. */
-.acp-branch-popover__search {
-  display: flex;
-  align-items: center;
-  gap: var(--acp-space-2);
-  box-sizing: border-box;
-  height: 32px;
-  margin-block-end: var(--acp-space-2);
-  padding-inline: var(--acp-space-3);
-  border: 1px solid;
-  border-radius: var(--acp-shape-corner-full);
+.acp-branch-popover__pr_draft,
+.acp-branch-popover__pr_closed {
+  color: var(--acp-color-on-surface-variant);
 }
-.acp-branch-popover__filter,
-.acp-branch-popover__name {
-  flex: 1;
-  min-width: 0;
-  padding: 0;
-  border: none;
-  outline: none;
-  background: transparent;
-  font: inherit;
-  font-size: var(--acp-font-size-md);
+.acp-branch-popover__checks_fail {
+  color: var(--acp-color-error);
 }
-.acp-branch-popover__error {
-  margin: 0 0 var(--acp-space-2);
-  font-family: var(--acp-font-family-mono);
-  font-size: var(--acp-font-size-sm);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-  user-select: text;
-}
-.acp-branch-popover__list {
-  display: flex;
-  flex-direction: column;
-  max-height: 240px;
-  overflow: auto;
-}
-.acp-branch-popover__heading {
-  padding: var(--acp-space-2) var(--acp-space-2) var(--acp-space-1);
-  font-size: var(--acp-font-size-xs);
-  font-weight: var(--acp-font-weight-medium);
-  text-transform: uppercase;
-}
-.acp-branch-popover__row {
-  display: flex;
-  align-items: center;
-  gap: var(--acp-space-2);
-  box-sizing: border-box;
-  height: 32px;
-  padding-inline: var(--acp-space-2);
-  border: 0;
-  border-radius: var(--acp-shape-corner-small);
-  background: transparent;
-  color: inherit;
-  font: inherit;
-  text-align: start;
-  cursor: pointer;
-
-  &:hover {
-    background-image: linear-gradient(var(--acp-state-hover), var(--acp-state-hover));
-  }
-  &:focus-visible {
-    outline: 2px solid;
-    outline-offset: -2px;
-  }
-}
-.acp-branch-popover__row_current {
-  font-weight: var(--acp-font-weight-medium);
-}
-.acp-branch-popover__name-text {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  font-family: var(--acp-font-family-mono);
-  font-size: var(--acp-font-size-sm);
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.acp-branch-popover__detail {
-  flex: none;
-  opacity: 0.7;
-  font-size: var(--acp-font-size-xs);
-  font-variant-numeric: tabular-nums;
+.acp-branch-popover__checks_run {
+  color: var(--acp-notice-warn);
 }

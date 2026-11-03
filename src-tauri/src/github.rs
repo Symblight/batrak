@@ -1,23 +1,16 @@
 //! GitHub through the user's GitHub CLI (`gh`): who is signed in, and signing in. The app keeps no
 //! token and has no OAuth app: `gh` logs in through the browser and holds the credentials.
 
-use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
-use std::sync::{mpsc, Mutex};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use serde::Serialize;
 
-use crate::git::exec::stop_group;
 
 const HOST: &str = "github.com";
 /// How long `gh auth status` may take: it checks the token with GitHub.
 const STATUS_TIMEOUT: Duration = Duration::from_secs(15);
-/// How long `gh auth login` may print nothing before it is given up on (it changed, or wants a terminal).
-const CODE_TIMEOUT: Duration = Duration::from_secs(10);
-/// GitHub's one-time code lives 15 minutes.
-const LOGIN_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "state", rename_all = "camelCase")]
@@ -105,6 +98,10 @@ fn run(gh: &Path, args: &[&str], timeout: Duration) -> Result<Ran, String> {
     Ok(Ran { success: status.success(), stdout: stdout.join().unwrap_or_default(), stderr: stderr.join().unwrap_or_default().trim().to_owned() })
 }
 
+fn boxed(pipe: impl std::io::Read + Send + 'static) -> Box<dyn std::io::Read + Send> {
+    Box::new(pipe)
+}
+
 /// Who `gh` is signed in as on github.com.
 pub fn account(gh: Option<&Path>) -> Result<Account, String> {
     let Some(gh) = gh else { return Ok(Account::NoCli) };
@@ -146,6 +143,8 @@ pub struct PullRequest {
     pub review_decision: Option<String>,
     /// The latest commit's checks: `SUCCESS`, `FAILURE`, `ERROR`, `PENDING` or `EXPECTED`; `None` without any.
     pub checks: Option<String>,
+    /// Names of the latest commit's checks that failed (a check run or a commit status).
+    pub failed_checks: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -179,7 +178,8 @@ impl PrReply {
 /// The branch's own ref, so that forks' branches with the same name (`patch-1`) don't crowd it out.
 const PR_QUERY: &str = "query($owner:String!,$name:String!,$qualified:String!){repository(owner:$owner,name:$name){defaultBranchRef{name} \
     ref(qualifiedName:$qualified){associatedPullRequests(first:1,orderBy:{field:UPDATED_AT,direction:DESC}){nodes{number title url state isDraft \
-    reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state}}}}}}}}}";
+    reviewDecision commits(last:1){nodes{commit{statusCheckRollup{state contexts(first:100){nodes{__typename \
+    ... on CheckRun{name conclusion} ... on StatusContext{context state}}}}}}}}}}}}";
 
 /// The newest pull request whose head is `branch` of `owner/repo`, through `gh api graphql`. The
 /// variables are `gh` string arguments, never part of the query text.
@@ -205,6 +205,22 @@ pub fn pull_request(gh: &Path, owner: &str, repo: &str, branch: &str) -> Result<
     Ok(parse_pull_request(&ran.stdout))
 }
 
+/// The names of the failed ones among a rollup's check runs and commit statuses.
+fn failed_checks(nodes: &serde_json::Value) -> Vec<String> {
+    const FAILED: &[&str] = &["FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"];
+    let nodes = nodes.as_array().map(Vec::as_slice).unwrap_or_default();
+    nodes
+        .iter()
+        .filter_map(|n| match n["__typename"].as_str() {
+            Some("CheckRun") => Some((n["name"].as_str()?, n["conclusion"].as_str()?)),
+            Some("StatusContext") => Some((n["context"].as_str()?, n["state"].as_str()?)),
+            _ => None,
+        })
+        .filter(|(_, result)| FAILED.contains(result))
+        .map(|(name, _)| name.to_owned())
+        .collect()
+}
+
 fn parse_pull_request(json: &str) -> PrReply {
     let Ok(v) = serde_json::from_str::<serde_json::Value>(json) else {
         return PrReply::failed(PrStatus::Error, "GitHub answered something unexpected");
@@ -225,189 +241,16 @@ fn parse_pull_request(json: &str) -> PrReply {
             is_draft: n["isDraft"].as_bool().unwrap_or(false),
             review_decision: text(&n["reviewDecision"]),
             checks: text(&n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["state"]),
+            failed_checks: failed_checks(&n["commits"]["nodes"][0]["commit"]["statusCheckRollup"]["contexts"]["nodes"]),
         }),
     }
-}
-
-/// The sign-in flows: the newest one runs, an older one still running stops.
-struct Flows {
-    /// The newest flow's number; a flow whose number isn't this one has been replaced.
-    newest: u64,
-    /// Whether the newest flow is still running.
-    running: bool,
-    /// Asked to stop the newest flow, or the one about to start; cleared when it ends.
-    cancel: bool,
-}
-
-static FLOWS: Mutex<Flows> = Mutex::new(Flows { newest: 0, running: false, cancel: false });
-
-fn flows() -> std::sync::MutexGuard<'static, Flows> {
-    FLOWS.lock().unwrap_or_else(|e| e.into_inner())
-}
-
-/// Stops the sign-in that is running, or the one about to start.
-pub fn cancel_sign_in() {
-    flows().cancel = true;
-}
-
-/// Stops a running sign-in and its `gh` (the app quits); returns once it has stopped, or after 2 s.
-pub fn stop_sign_in() {
-    {
-        let mut flows = flows();
-        if !flows.running {
-            return;
-        }
-        flows.cancel = true;
-    }
-    let started = Instant::now();
-    while flows().running && started.elapsed() < Duration::from_secs(2) {
-        std::thread::sleep(Duration::from_millis(20));
-    }
-}
-
-/// Runs `gh auth login --web` and calls `on_code` with the one-time code it prints, then waits for
-/// the user to finish in the browser. A new one replaces one still running (a reloaded page's).
-pub fn sign_in(gh: &Path, on_code: impl Fn(&str)) -> Result<(), String> {
-    sign_in_within(gh, on_code, CODE_TIMEOUT, LOGIN_TIMEOUT)
-}
-
-fn sign_in_within(gh: &Path, on_code: impl Fn(&str), code_timeout: Duration, login_timeout: Duration) -> Result<(), String> {
-    let flow = {
-        let mut flows = flows();
-        flows.newest += 1;
-        flows.running = true;
-        flows.newest
-    };
-    let stopped = || {
-        let flows = flows();
-        flows.newest != flow || flows.cancel
-    };
-    let result = run_login(gh, on_code, &stopped, code_timeout, login_timeout);
-    let mut flows = flows();
-    // A replaced flow leaves the new one's state alone.
-    if flows.newest == flow {
-        flows.running = false;
-        flows.cancel = false;
-    }
-    result
-}
-
-/// How long gh's output is still read after it exited, for its last lines.
-const OUTPUT_GRACE: Duration = Duration::from_millis(500);
-
-fn run_login(gh: &Path, on_code: impl Fn(&str), stopped: &dyn Fn() -> bool, code_timeout: Duration, login_timeout: Duration) -> Result<(), String> {
-    if stopped() {
-        return Err("Sign-in cancelled".to_owned());
-    }
-    let mut command = command(gh, &["auth", "login", "--hostname", HOST, "--web", "--git-protocol", "https", "--skip-ssh-key"]);
-    #[cfg(unix)]
-    {
-        use std::os::unix::process::CommandExt;
-        // A process group of its own, so that stopping it stops what it started (the browser launcher).
-        // SAFETY: `setsid` is async-signal-safe and touches nothing of the parent.
-        unsafe {
-            command.pre_exec(|| if libc::setsid() == -1 { Err(std::io::Error::last_os_error()) } else { Ok(()) });
-        }
-    }
-    let mut child = command.spawn().map_err(|e| format!("failed to run gh: {e}"))?;
-    // gh prints its code and URL on either stream, depending on its version; its errors on stderr.
-    let (lines, output) = mpsc::channel::<(bool, String)>();
-    for (is_stderr, pipe) in [(false, child.stdout.take().map(boxed)), (true, child.stderr.take().map(boxed))] {
-        let Some(pipe) = pipe else { continue };
-        let lines = lines.clone();
-        std::thread::spawn(move || {
-            for line in BufReader::new(pipe).lines().map_while(Result::ok) {
-                if lines.send((is_stderr, line)).is_err() {
-                    break;
-                }
-            }
-        });
-    }
-    drop(lines);
-
-    let started = Instant::now();
-    let mut code_seen = false;
-    // The last non-empty line of stdout and of stderr.
-    let mut last = [String::new(), String::new()];
-    let mut exited = None;
-    loop {
-        match output.recv_timeout(Duration::from_millis(100)) {
-            Ok((is_stderr, line)) => {
-                if !code_seen {
-                    if let Some(code) = find_code(&line) {
-                        code_seen = true;
-                        on_code(code);
-                    }
-                }
-                if !line.trim().is_empty() {
-                    last[usize::from(is_stderr)] = line.trim().to_owned();
-                }
-            }
-            Err(mpsc::RecvTimeoutError::Timeout) => {}
-            Err(mpsc::RecvTimeoutError::Disconnected) => break,
-        }
-        // Something gh started may hold its output open after it exited: its exit status ends it.
-        match exited {
-            Some(at) if Instant::now().duration_since(at) > OUTPUT_GRACE => break,
-            Some(_) => continue,
-            None => {}
-        }
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            exited = Some(Instant::now());
-            continue;
-        }
-        let give_up = if stopped() {
-            Some("Sign-in cancelled")
-        } else if !code_seen && started.elapsed() > code_timeout {
-            Some("The GitHub CLI didn't start the sign-in. Run `gh auth login` in a terminal.")
-        } else if started.elapsed() > login_timeout {
-            Some("The sign-in code expired")
-        } else {
-            None
-        };
-        if let Some(reason) = give_up {
-            stop_group(&mut child);
-            let _ = child.wait();
-            return Err(reason.to_owned());
-        }
-    }
-    let [stdout_last, stderr_last] = last;
-    finish(&mut child, if stderr_last.is_empty() { &stdout_last } else { &stderr_last })
-}
-
-fn boxed(pipe: impl std::io::Read + Send + 'static) -> Box<dyn std::io::Read + Send> {
-    Box::new(pipe)
-}
-
-fn finish(child: &mut Child, last_line: &str) -> Result<(), String> {
-    let status = child.wait().map_err(|e| format!("failed to wait for gh: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else if last_line.is_empty() {
-        Err(format!("gh exited with {status}"))
-    } else {
-        Err(last_line.to_owned())
-    }
-}
-
-/// `XXXX-XXXX` in a line like `! One-time code (91BE-580F) copied to clipboard`.
-fn find_code(line: &str) -> Option<&str> {
-    line.split(|c: char| !(c.is_ascii_alphanumeric() || c == '-')).find(|word| {
-        word.len() == 9
-            && word.as_bytes()[4] == b'-'
-            && word.bytes().enumerate().all(|(i, b)| i == 4 || b.is_ascii_uppercase() || b.is_ascii_digit())
-    })
 }
 
 #[cfg(all(test, unix))]
 mod tests {
     use std::os::unix::fs::PermissionsExt;
-    use std::sync::Mutex;
 
     use super::*;
-
-    /// Sign-in uses process-wide flags: one test at a time.
-    static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
 
     /// A `gh` that runs `script` (shell).
     fn fake_gh(name: &str, script: &str) -> PathBuf {
@@ -479,125 +322,24 @@ mod tests {
     }
 
     #[test]
+    fn a_pull_request_names_its_failed_checks() {
+        let json = r#"{"data":{"repository":{"defaultBranchRef":{"name":"main"},"ref":{"associatedPullRequests":{"nodes":[{"number":9,"title":"T","url":"u","state":"OPEN","isDraft":false,"reviewDecision":null,"commits":{"nodes":[{"commit":{"statusCheckRollup":{"state":"FAILURE","contexts":{"nodes":[
+            {"__typename":"CheckRun","name":"backend","conclusion":"FAILURE"},
+            {"__typename":"CheckRun","name":"frontend","conclusion":"SUCCESS"},
+            {"__typename":"CheckRun","name":"e2e","conclusion":null},
+            {"__typename":"StatusContext","context":"ci/lint","state":"ERROR"},
+            {"__typename":"StatusContext","context":"ci/docs","state":"SUCCESS"}
+        ]}}}}]}}]}}}}}"#;
+        let pr = parse_pull_request(json).pr.expect("a pull request");
+        assert_eq!(pr.checks.as_deref(), Some("FAILURE"));
+        assert_eq!(pr.failed_checks, ["backend", "ci/lint"]);
+        assert!(PR_QUERY.contains("contexts("), "the query asks for each check");
+    }
+
+    #[test]
     fn gh_never_sees_a_token_from_the_environment() {
         let c = command(Path::new("gh"), &["auth", "status"]);
         let removed: Vec<_> = c.get_envs().filter(|(_, v)| v.is_none()).map(|(k, _)| k.to_string_lossy().into_owned()).collect();
         assert!(removed.contains(&"GH_TOKEN".to_owned()) && removed.contains(&"GITHUB_TOKEN".to_owned()), "{removed:?}");
-    }
-
-    #[test]
-    fn sign_in_reports_the_code_then_waits_for_gh_and_says_why_it_failed() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let codes = Mutex::new(Vec::new());
-        let on_code = |c: &str| codes.lock().unwrap().push(c.to_owned());
-        let shown = "echo '! One-time code (91BE-580F) copied to clipboard' >&2; echo 'Open this URL to continue in your web browser: https://github.com/login/device'";
-
-        // Signed in once the user finishes in the browser.
-        let ok = fake_gh("login-ok", &format!("{shown}; sleep 0.3"));
-        assert_eq!(sign_in_within(&ok, on_code, CODE_TIMEOUT, LOGIN_TIMEOUT), Ok(()));
-        assert_eq!(*codes.lock().unwrap(), ["91BE-580F"], "once, as soon as printed");
-
-        // Declined or expired in the browser: gh's last line is the reason.
-        // gh writes its error to stderr; what stdout printed later isn't the reason.
-        let declined = fake_gh("login-declined", &format!("{shown}; echo 'authorization was declined' >&2; sleep 0.2; echo 'Press Enter to open github.com in your browser...'; exit 1"));
-        assert_eq!(sign_in_within(&declined, on_code, CODE_TIMEOUT, LOGIN_TIMEOUT), Err("authorization was declined".into()));
-
-        // No code at all: not waited on for ever.
-        let silent = fake_gh("login-silent", "sleep 30");
-        let err = sign_in_within(&silent, on_code, Duration::from_millis(300), LOGIN_TIMEOUT).unwrap_err();
-        assert!(err.contains("didn't start the sign-in"), "{err}");
-    }
-
-    #[test]
-    fn a_running_sign_in_can_be_cancelled() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let waiting = fake_gh("login-cancel", "echo '! One-time code (AAAA-1111) copied to clipboard'; sleep 30");
-        let started = Instant::now();
-        let result = std::thread::scope(|scope| {
-            let login = scope.spawn(|| sign_in_within(&waiting, |_| {}, CODE_TIMEOUT, LOGIN_TIMEOUT));
-            std::thread::sleep(Duration::from_millis(400));
-            cancel_sign_in();
-            login.join().unwrap()
-        });
-        assert_eq!(result, Err("Sign-in cancelled".into()));
-        assert!(started.elapsed() < Duration::from_secs(10));
-    }
-
-    #[test]
-    fn a_cancel_sent_before_the_sign_in_starts_still_stops_it_and_only_it() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let waiting = fake_gh("login-precancel", "echo '! One-time code (AAAA-1111) copied to clipboard'; sleep 30");
-        cancel_sign_in();
-        assert_eq!(sign_in_within(&waiting, |_| {}, CODE_TIMEOUT, Duration::from_secs(2)), Err("Sign-in cancelled".into()));
-        // That cancel is used up: the next sign-in runs.
-        let ok = fake_gh("login-after-cancel", "echo '! One-time code (AAAA-1111) copied to clipboard'; sleep 0.2");
-        assert_eq!(sign_in_within(&ok, |_| {}, CODE_TIMEOUT, LOGIN_TIMEOUT), Ok(()));
-    }
-
-    #[test]
-    fn a_new_sign_in_replaces_one_still_running() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let left_over = fake_gh("login-left-over", "echo '! One-time code (AAAA-1111) copied to clipboard'; sleep 30");
-        let fresh = fake_gh("login-fresh", "echo '! One-time code (BBBB-2222) copied to clipboard'; sleep 0.5");
-        let (shown, code) = mpsc::channel();
-        let (old, new) = std::thread::scope(|scope| {
-            let old = scope.spawn(|| sign_in_within(&left_over, |_| shown.send(()).unwrap(), CODE_TIMEOUT, Duration::from_secs(5)));
-            code.recv_timeout(Duration::from_secs(5)).unwrap();
-            let new = sign_in_within(&fresh, |_| {}, CODE_TIMEOUT, LOGIN_TIMEOUT);
-            (old.join().unwrap(), new)
-        });
-        assert_eq!((old, new), (Err("Sign-in cancelled".into()), Ok(())));
-    }
-
-    /// Whether process `pid` is gone, given a moment to be reaped.
-    fn gone(pid: i32) -> bool {
-        let started = Instant::now();
-        while started.elapsed() < Duration::from_secs(2) {
-            // SAFETY: signal 0 only checks the process exists.
-            if unsafe { libc::kill(pid, 0) } == -1 {
-                return true;
-            }
-            std::thread::sleep(Duration::from_millis(20));
-        }
-        false
-    }
-
-    #[test]
-    fn stopping_a_sign_in_stops_what_gh_started_too() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        // gh starts a helper (a browser launcher) that outlives it unless its group is stopped.
-        let gh = fake_gh("login-group", "sleep 30 >/dev/null 2>&1 & echo $! > \"$0.child\"; echo '! One-time code (AAAA-1111) copied to clipboard'; wait");
-        let (shown, code) = mpsc::channel();
-        let result = std::thread::scope(|scope| {
-            let login = scope.spawn(|| sign_in_within(&gh, |_| shown.send(()).unwrap(), CODE_TIMEOUT, Duration::from_secs(5)));
-            code.recv_timeout(Duration::from_secs(5)).unwrap();
-            // What quitting the app does: returns once the sign-in has stopped.
-            stop_sign_in();
-            assert!(login.is_finished(), "stopped before returning");
-            login.join().unwrap()
-        });
-        assert_eq!(result, Err("Sign-in cancelled".into()));
-        let child: i32 = std::fs::read_to_string(format!("{}.child", gh.display())).unwrap().trim().parse().unwrap();
-        assert!(gone(child), "gh's helper was stopped with it");
-    }
-
-    #[test]
-    fn a_sign_in_ends_when_gh_exits_even_if_its_helper_keeps_the_output_open() {
-        let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
-        let gh = fake_gh("login-helper", "sleep 30 & echo $! > \"$0.child\"; echo '! One-time code (AAAA-1111) copied to clipboard'; sleep 0.2; exit 0");
-        let started = Instant::now();
-        let result = sign_in_within(&gh, |_| {}, CODE_TIMEOUT, Duration::from_secs(3));
-        let child: i32 = std::fs::read_to_string(format!("{}.child", gh.display())).unwrap().trim().parse().unwrap();
-        // SAFETY: the test's own sleep.
-        unsafe { libc::kill(child, libc::SIGKILL) };
-        assert_eq!(result, Ok(()));
-        assert!(started.elapsed() < Duration::from_secs(2), "{:?}", started.elapsed());
-    }
-
-    #[test]
-    fn finds_the_code_in_what_gh_prints() {
-        assert_eq!(find_code("! One-time code (91BE-580F) copied to clipboard"), Some("91BE-580F"));
-        assert_eq!(find_code("! First copy your one-time code: ABCD-1234"), Some("ABCD-1234"));
-        assert_eq!(find_code("Open this URL to continue in your web browser: https://github.com/login/device"), None);
     }
 }

@@ -46,6 +46,22 @@ export function prChip(pr) {
 }
 
 /**
+ * The branch card's Checks row: which checks of the pull request's latest commit failed, or that
+ * they run or passed; `null` without checks.
+ * @param {GithubPullRequest} pr
+ * @returns {{ text: string, state: 'ok' | 'fail' | 'run' } | null}
+ */
+export function checksLine(pr) {
+  const state = /** @type {'ok' | 'fail' | 'run' | undefined} */ (CHECKS[pr.checks ?? '']);
+  if (!state) return null;
+  if (state === 'run') return { text: 'Checks running', state };
+  if (state === 'ok') return { text: 'Checks passed', state };
+  const failed = pr.failedChecks;
+  if (!failed.length) return { text: 'Checks failing', state };
+  return { text: `${failed.length} check${failed.length === 1 ? '' : 's'} failing: ${failed.join(', ')}`, state };
+}
+
+/**
  * Where "Create PR" goes: GitHub's compare page of the branch, as it is named on the remote, against
  * the default one. Not for a branch that isn't on the remote yet, or that is the default itself.
  * @param {GitRepoState} repo
@@ -66,12 +82,3 @@ export function createPr(repo, defaultBranch) {
   return { url: `https://github.com/${github.owner}/${github.repo}/compare/${range}?expand=1`, tooltip: `Create a pull request for ${head}` };
 }
 
-/**
- * The command that installs the GitHub CLI on a system, or `null` where there is no one-liner.
- * @param {string} platform `navigator.platform`.
- */
-export function installCommand(platform) {
-  if (/mac/i.test(platform)) return 'brew install gh';
-  if (/win/i.test(platform)) return 'winget install --id GitHub.cli';
-  return null;
-}

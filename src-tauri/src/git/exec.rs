@@ -11,7 +11,6 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
-const REMOTE_TIMEOUT: Duration = Duration::from_secs(120);
 /// A pre-commit hook may run a test suite.
 const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
@@ -77,11 +76,6 @@ pub const SCRUBBED_ENV: &[&str] = &[
     "GIT_CONFIG_PARAMETERS",
 ];
 
-/// GitHub tokens git never reads, but would pass on to `gh auth git-credential` (the credential
-/// retry), where one would win over the user's gh login. Only git's calls drop them: terminals and
-/// agents keep them.
-const GITHUB_TOKENS: &[&str] = &["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"];
-
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Mode {
     /// A user-requested local operation.
@@ -89,9 +83,6 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Talks to a remote (fetch, push): a longer timeout, and on it the whole process group is
-    /// stopped like `Hooks`.
-    Remote,
     /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
     /// hook keeps running.
@@ -99,10 +90,10 @@ pub enum Mode {
 }
 
 impl Mode {
-    /// git leads its own session and process group, stopped as a whole on a timeout: hooks, ssh and
+    /// git leads its own session and process group, stopped as a whole on a timeout: hooks and
     /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
     fn own_group(self) -> bool {
-        matches!(self, Mode::Remote | Mode::Hooks)
+        self == Mode::Hooks
     }
 }
 
@@ -177,7 +168,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let mut command = Command::new(git);
     // Paths with non-ASCII names print as-is instead of octal-escaped.
     command.args(["-c", "core.quotepath=off"]).args(args).current_dir(cwd);
-    for key in SCRUBBED_ENV.iter().chain(GITHUB_TOKENS) {
+    for key in SCRUBBED_ENV {
         command.env_remove(key);
     }
     // Never block on a credential prompt nobody can answer; parse English output.
@@ -222,7 +213,6 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
 
     let timeout = match mode {
         Mode::Local | Mode::Background => LOCAL_TIMEOUT,
-        Mode::Remote => REMOTE_TIMEOUT,
         Mode::Hooks => HOOKS_TIMEOUT,
     };
     #[cfg(test)]
@@ -234,7 +224,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let (stdout, truncated) = stdout.join().unwrap_or_default();
     let (stderr, _) = stderr.join().unwrap_or_default();
     let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
-    let status = status.map_err(|e| stopped_message(e, &stderr, mode))?;
+    let status = status.map_err(|e| stopped_message(e, &stderr))?;
     if truncated {
         return Err(format!("{TOO_LARGE} ({max_output} bytes)"));
     }
@@ -242,14 +232,12 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
 }
 
 /// The error of a git that was stopped (`wait_with_timeout`'s), with what it printed before: where it
-/// got stuck. A remote that never answered gets the usual cause instead.
-fn stopped_message(error: String, stderr: &str, mode: Mode) -> String {
-    if !stderr.is_empty() {
-        format!("{error}\n{stderr}")
-    } else if mode == Mode::Remote && error.starts_with("git timed out") {
-        format!("{error}: the remote never answered; if it uses SSH, a key that isn't loaded is the usual cause (ssh-add)")
-    } else {
+/// got stuck.
+fn stopped_message(error: String, stderr: &str) -> String {
+    if stderr.is_empty() {
         error
+    } else {
+        format!("{error}\n{stderr}")
     }
 }
 
@@ -305,7 +293,7 @@ fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool) -> Resul
 /// SIGTERM to the child's process group: git's signal handler removes its lock files, and hooks
 /// it started stop too (they also hold our output pipes open). SIGKILL if it outlives the grace.
 #[cfg(unix)]
-pub(crate) fn stop_group(child: &mut Child) {
+fn stop_group(child: &mut Child) {
     let Ok(pid) = libc::pid_t::try_from(child.id()) else {
         let _ = child.kill();
         return;
@@ -325,7 +313,7 @@ pub(crate) fn stop_group(child: &mut Child) {
 
 /// Windows has no process groups to signal here: the git process alone is killed.
 #[cfg(not(unix))]
-pub(crate) fn stop_group(child: &mut Child) {
+fn stop_group(child: &mut Child) {
     let _ = child.kill();
 }
 
@@ -397,17 +385,17 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_remote_git_runs_without_a_terminal_and_leads_its_own_process_group() {
+    fn a_git_running_hooks_has_no_terminal_and_leads_its_own_process_group() {
         use std::os::unix::fs::PermissionsExt;
         // Arrange: a git that notes its pid, then runs a while
-        let dir = crate::git::test_repo::temp_dir("remote-session");
+        let dir = crate::git::test_repo::temp_dir("hooks-session");
         let (git, pid_file) = (dir.join("git"), dir.join("pid"));
         std::fs::write(&git, format!("#!/bin/sh\necho $$ > '{}'\nsleep 1\n", pid_file.display())).unwrap();
         std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         thread::scope(|scope| {
             // Act
-            let running = scope.spawn(|| run(&git, &dir, &[OsStr::new("fetch")], Mode::Remote));
+            let running = scope.spawn(|| run(&git, &dir, &[OsStr::new("commit")], Mode::Hooks));
             let pid = loop {
                 if let Some(pid) = std::fs::read_to_string(&pid_file).ok().and_then(|t| t.trim().parse::<libc::pid_t>().ok()) {
                     break pid;
@@ -453,14 +441,10 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
-    fn a_timeout_keeps_what_git_said_and_a_silent_remote_hints_at_ssh() {
+    fn a_timeout_keeps_what_git_said() {
         use std::os::unix::fs::PermissionsExt;
-        let cases = [
-            ("echo 'Connecting to h' >&2; sleep 30", Mode::Remote, Some("Connecting to h"), false),
-            ("exec sleep 30", Mode::Remote, None, true),
-            ("exec sleep 30", Mode::Local, None, false),
-        ];
-        for (body, mode, said, hint) in cases {
+        let cases = [("echo 'Connecting to h' >&2; sleep 30", Some("Connecting to h")), ("exec sleep 30", None)];
+        for (body, said) in cases {
             // Arrange: a git that outlives a short timeout
             let dir = crate::git::test_repo::temp_dir("timeout");
             let git = dir.join("git");
@@ -469,55 +453,14 @@ mod tests {
             TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
 
             // Act
-            let err = run(&git, &dir, &[OsStr::new("fetch")], mode).unwrap_err();
+            let err = run(&git, &dir, &[OsStr::new("status")], Mode::Local).unwrap_err();
             TEST_TIMEOUT.set(None);
 
             // Assert
             assert!(err.contains("timed out"), "{err}");
-            assert!(said.is_none_or(|s| err.contains(s)), "{mode:?} {body}: {err}");
-            assert_eq!(err.contains("ssh-add"), hint, "{mode:?} {body}: {err}");
+            assert!(said.is_none_or(|s| err.contains(s)), "{body}: {err}");
             let _ = std::fs::remove_dir_all(&dir);
         }
-    }
-
-    /// Set in the child run of [`github_tokens_of_the_app_s_environment_never_reach_git`].
-    const TOKENS_CHILD: &str = "BRAMA_TEST_TOKENS_CHILD";
-    const TOKENS: [&str; 4] = ["GH_TOKEN", "GITHUB_TOKEN", "GH_ENTERPRISE_TOKEN", "GITHUB_ENTERPRISE_TOKEN"];
-
-    #[cfg(unix)]
-    #[test]
-    fn github_tokens_of_the_app_s_environment_never_reach_git() {
-        // The tokens must be in this process's environment, which tests running in parallel share:
-        // the test runs itself again in a child process that has them.
-        if std::env::var_os(TOKENS_CHILD).is_none() {
-            // Arrange
-            let mut child = Command::new(std::env::current_exe().unwrap());
-            child.args(["--exact", "git::exec::tests::github_tokens_of_the_app_s_environment_never_reach_git", "--test-threads=1"]);
-            child.env(TOKENS_CHILD, "1");
-            for key in TOKENS {
-                child.env(key, "secret-token");
-            }
-            // Act
-            let out = child.output().unwrap();
-            // Assert
-            let text = String::from_utf8_lossy(&out.stdout);
-            assert!(out.status.success() && text.contains("1 passed"), "{text}{}", String::from_utf8_lossy(&out.stderr));
-            return;
-        }
-        // In the child: a git that prints what of the tokens it was given (`gh auth git-credential`,
-        // run by git, would take an env token over the user's gh login).
-        use std::os::unix::fs::PermissionsExt;
-        let dir = crate::git::test_repo::temp_dir("env-tokens");
-        let git = dir.join("git");
-        let script: String = TOKENS.iter().map(|key| format!("echo \"{key}=${{{key}}}\"\n")).collect();
-        std::fs::write(&git, format!("#!/bin/sh\n{script}")).unwrap();
-        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-        let out = run(&git, &dir, &[OsStr::new("push")], Mode::Remote).unwrap();
-
-        let out = String::from_utf8(out).unwrap();
-        assert!(!out.contains("secret-token"), "{out}");
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

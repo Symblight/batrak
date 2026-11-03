@@ -6,27 +6,21 @@ import '@symblight/wc-material/tooltip';
 import '../branch-popover/branch-popover.js';
 import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
-import '../remote-chip/remote-chip.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/fullscreen.svg?raw';
 import collapseIcon from '@material-design-icons/svg/outlined/fullscreen_exit.svg?raw';
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../hooks/git/types.js').GitRemoteOp} GitRemoteOp */
 /** @typedef {import('../../hooks/projects/types.js').Workspace} Workspace */
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the project menu and git branch (a popover to switch it), and the
+ * @summary Narrow app-wide bar above the columns: the project menu and git branch (a card with its remote and pull request), and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
- * @fires acp-git-remote `{ action }` From the remote chip.
- * @fires acp-github-sign-in `null` From the GitHub slot.
- * @fires acp-github-open `{ url }` From the GitHub slot.
- * @fires acp-git-branches-query `null` From the branch popover.
- * @fires acp-git-switch `{ branch, create }` From the branch popover.
- * @fires acp-copy `{ text }` From the branch popover.
+ * @fires acp-github-open `{ url }` From the GitHub slot and the branch card.
+ * @fires acp-copy `{ text }` From the branch card.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
@@ -35,11 +29,8 @@ export class AcpToolbar extends LitElement {
     unread: { attribute: false },
     home: {},
     git: { attribute: false },
-    remoteOp: { attribute: false },
-    fetchError: { attribute: false },
     githubSlot: { attribute: false },
     githubReply: { attribute: false },
-    branches: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
   };
@@ -58,28 +49,14 @@ export class AcpToolbar extends LitElement {
     this.home = null;
     /** @type {GitRepoView} */
     this.git = { repo: null, error: null };
-    /** @type {GitRemoteOp | null} The fetch, pull or push running or failed for the shown project. */
-    this.remoteOp = null;
-    /** @type {import('../../hooks/git/types.js').GitFetchError | null} Why the shown project's last background fetch failed. */
-    this.fetchError = null;
-    /** @type {import('../../hooks/github/types.js').GithubSlot} What the GitHub slot beside the remote chip shows. */
+    /** @type {import('../../hooks/github/types.js').GithubSlot} What the GitHub slot beside the branch shows. */
     this.githubSlot = 'hidden';
     /** @type {import('../../hooks/github/types.js').GithubPrReply | null} The shown branch's pull request lookup. */
     this.githubReply = null;
-    /** @type {import('../../hooks/git/types.js').GitBranchList | null} The branch popover's lists, once asked for. */
-    this.branches = null;
     /** @type {string[]} Names of the hidden columns. */
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
     this.expandable = false;
-  }
-
-  /**
-   * The container's answer to a switch, passed on to the branch popover.
-   * @param {string | null} error `null`: it worked; else why it was refused.
-   */
-  switchFinished(error) {
-    this.renderRoot.querySelector('acp-branch-popover')?.switchFinished(error);
   }
 
   /** Button hiding the agent column, so the editor's tabs take the whole middle. */
@@ -135,8 +112,7 @@ export class AcpToolbar extends LitElement {
         <md-tooltip for="acp-toolbar-git-error" show-delay="800" placement="bottom">${error}</md-tooltip>`;
     }
     if (!repo) return nothing;
-    return html`<acp-branch-popover .repo=${repo} .branches=${this.branches} .fetchError=${this.fetchError}></acp-branch-popover>
-      <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>
+    return html`<acp-branch-popover .repo=${repo} .pr=${this.githubReply?.pr ?? null}></acp-branch-popover>
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
 

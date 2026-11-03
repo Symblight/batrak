@@ -156,14 +156,8 @@ pub fn run() {
             commands::git::git_file_at_head,
             commands::git::git_last_commit_message,
             commands::git::git_branches,
-            commands::git::git_branches_detail,
-            commands::git::git_switch,
             commands::git::git_commit,
-            commands::git::git_remote,
-            commands::git::git_fetch_quiet,
             commands::github::github_account,
-            commands::github::github_sign_in,
-            commands::github::github_sign_in_cancel,
             commands::github::github_pull_request,
             commands::terminal::terminal_open,
             commands::terminal::terminal_attach,
@@ -177,10 +171,9 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Brama")
         .run(|app, event| {
-            // No agent process, shell or GitHub sign-in outlives the app: every session's and
-            // terminal's process group is stopped, and the sign-in's.
+            // No agent process or shell outlives the app: every session's and terminal's process
+            // group is stopped.
             if let tauri::RunEvent::Exit = event {
-                github::stop_sign_in();
                 app.state::<session::Sessions>().shutdown();
                 app.state::<terminal::Terminals>().stop_all(std::time::Duration::from_millis(200));
             }
