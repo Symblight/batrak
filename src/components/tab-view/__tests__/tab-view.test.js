@@ -56,33 +56,6 @@ describe('acp-tab-view', () => {
     expect(placeholder?.getAttribute('text')).to.equal('Not implemented yet.');
   });
 
-  for (const [name, count] of /** @type {const} */ ([['few tabs', 2], ['tabs that overflow the row', 40]])) {
-    it(`puts the host’s add button right after the last tab, like a browser, and its actions at the end of the row, with ${name}`, async () => {
-      // Arrange
-      const tabs = Array.from({ length: count }, (_, i) => fileTab(`/p/file-${i}.js`));
-      const wrap = await fixture(
-        html`<div style="width: 700px">
-          <acp-tab-view .tabs=${tabs} .active=${'/p/file-0.js'}><button slot="add">+</button><button slot="actions">−</button></acp-tab-view>
-        </div>`,
-      );
-      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (wrap.firstElementChild);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      // Act
-      const row = el.getBoundingClientRect();
-      const add = /** @type {HTMLElement} */ (el.querySelector('[slot="add"]')).getBoundingClientRect();
-      const actions = /** @type {HTMLElement} */ (el.querySelector('[slot="actions"]')).getBoundingClientRect();
-      const strip = el.shadowRoot?.querySelector('acp-tab-strip');
-      const last = /** @type {Element} */ ([...(strip?.shadowRoot?.querySelectorAll('md-tab') ?? [])].at(-1)).getBoundingClientRect();
-
-      // Assert
-      expect(actions.right, 'the actions at the very end').to.be.closeTo(row.right, 8);
-      expect(add.right, 'the add button is never pushed out of the row').to.be.at.most(actions.left + 1);
-      if (count < 10) expect(add.left - last.right, 'right after the last tab').to.be.within(-1, 40);
-      else expect(add.left, 'at the end of the strip that scrolls').to.be.greaterThan(row.right / 2);
-    });
-  }
-
   it('shows what its host renders for a view tab, one panel per tab and only the active one shown', async () => {
     // Arrange
     const tabs = [

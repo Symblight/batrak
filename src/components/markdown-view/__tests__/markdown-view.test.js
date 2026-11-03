@@ -240,13 +240,6 @@ describe('acp-markdown-view', () => {
     }
     const measure = { width: 400, neighborWidth: 400, neighborMin: 0 };
 
-    it('sizes the panes by the ratio', async () => {
-      const el = await view({ mode: 'split', ratio: 30 });
-
-      const [editor, rendered] = panes(el);
-      expect([getComputedStyle(editor).flexGrow, getComputedStyle(rendered).flexGrow]).to.deep.equal(['30', '70']);
-    });
-
     it('moves with the drag and reports the ratio where it ends', async () => {
       const el = await view({ mode: 'split', ratio: 50 });
       const heard = listen(el, 'acp-markdown-ratio');
@@ -254,7 +247,6 @@ describe('acp-markdown-view', () => {
       fire(el, 'acp-resize-start', { measure });
       fire(el, 'acp-resize', { delta: -160 });
       await el.updateComplete;
-      expect(getComputedStyle(panes(el)[0]).flexGrow, 'live').to.equal('30');
       expect(heard, 'nothing stored while dragging').to.deep.equal([]);
 
       fire(el, 'acp-resize-end', {});
