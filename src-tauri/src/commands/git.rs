@@ -4,15 +4,15 @@ use tauri::State;
 
 use crate::git::cache::StatusReply;
 use crate::git::{binary, blob, commit, repo};
-use crate::workspace::{checked_rel, Workspaces};
+use crate::roots::{checked_rel, Roots};
 
 use super::blocking;
 
 /// Branch and upstream of the root's repository, without scanning files; `null` when the root
 /// isn't in one. Fails with "git not found" when git isn't installed.
 #[tauri::command]
-pub async fn git_head(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Option<repo::RepoState>, String> {
-    let root = workspaces.get(&root_id)?;
+pub async fn git_head(roots: State<'_, Roots>, root_id: String) -> Result<Option<repo::RepoState>, String> {
+    let root = roots.get(&root_id)?;
     blocking(move || root.git.head(binary::git()?, &root.path, root.epoch())).await?
 }
 
@@ -21,12 +21,12 @@ pub async fn git_head(workspaces: State<'_, Workspaces>, root_id: String) -> Res
 /// still current. Fails with "git not found" when git isn't installed.
 #[tauri::command]
 pub async fn git_status(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     root_id: String,
     since: Option<u64>,
     force: bool,
 ) -> Result<StatusReply, String> {
-    let root = workspaces.get(&root_id)?;
+    let root = roots.get(&root_id)?;
     blocking(move || root.git.status(binary::git()?, &root.path, root.epoch(), since, force)).await?
 }
 
@@ -34,29 +34,29 @@ pub async fn git_status(
 /// binary, too large, or not in a repository). `path` is relative to the root.
 #[tauri::command]
 pub async fn git_file_at_head(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     root_id: String,
     path: String,
 ) -> Result<Option<String>, String> {
-    let root = workspaces.get(&root_id)?;
+    let root = roots.get(&root_id)?;
     checked_rel(&path)?;
     blocking(move || blob::file_at_head(binary::git()?, &root.path, &path)).await?
 }
 
 /// Local branches a worktree session can start from, most recently committed first.
 #[tauri::command]
-pub async fn git_branches(workspaces: State<'_, Workspaces>, root_id: String) -> Result<Vec<String>, String> {
-    let root = workspaces.get(&root_id)?;
+pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<Vec<String>, String> {
+    let root = roots.get(&root_id)?;
     blocking(move || repo::branches(binary::git()?, &root.path)).await?
 }
 
 /// Message of the last commit, which Amend starts from; `null` before the first commit.
 #[tauri::command]
 pub async fn git_last_commit_message(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     root_id: String,
 ) -> Result<Option<String>, String> {
-    let root = workspaces.get(&root_id)?;
+    let root = roots.get(&root_id)?;
     blocking(move || repo::last_commit_message(binary::git()?, &root.path)).await?
 }
 
@@ -65,13 +65,13 @@ pub async fn git_last_commit_message(
 /// failure is the error.
 #[tauri::command]
 pub async fn git_commit(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     root_id: String,
     paths: Vec<String>,
     message: String,
     amend: bool,
 ) -> Result<commit::Committed, String> {
-    let root = workspaces.get(&root_id)?;
+    let root = roots.get(&root_id)?;
     for path in &paths {
         checked_rel(path)?;
     }

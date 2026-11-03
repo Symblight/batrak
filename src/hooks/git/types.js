@@ -1,5 +1,5 @@
 /**
- * Payload of the `workspace://changed` event. All paths are relative.
+ * Payload of the `roots://changed` event. All paths are relative.
  * @typedef {Object} WorkspaceChanges
  * @property {string} rootId
  * @property {string[]} dirs Directories whose child list changed (`''` = root).

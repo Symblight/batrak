@@ -9,7 +9,7 @@ use tauri::{AppHandle, Manager, State, Window};
 
 use crate::session::Sessions;
 use crate::terminal::{Busy, OpenRequest, Opened, TerminalEvent, TerminalSink, Terminals};
-use crate::workspace::Workspaces;
+use crate::roots::Roots;
 
 use super::blocking;
 
@@ -38,7 +38,7 @@ pub async fn terminal_open(
     app: AppHandle,
     window: Window,
     terminals: State<'_, Terminals>,
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     sessions: State<'_, Sessions>,
     id: String,
     cwd: String,
@@ -47,7 +47,7 @@ pub async fn terminal_open(
     rows: u16,
 ) -> Result<Opened, String> {
     let terminals = terminals.inner().clone();
-    let workspaces = workspaces.inner().clone();
+    let roots = roots.inner().clone();
     let sessions = sessions.inner().clone();
     let home = app.path().home_dir().ok().and_then(|home| dunce::canonicalize(home).ok());
     let group = window.label().to_owned();
@@ -55,7 +55,7 @@ pub async fn terminal_open(
         let fallback = fallback.map(PathBuf::from);
         let req = OpenRequest { id: &id, group: &group, cwd: Path::new(&cwd), fallback: fallback.as_deref(), cols, rows };
         let allowed = |path: &Path| {
-            workspaces.contains(path) || sessions.contains_folder(path) || home.as_deref() == Some(path)
+            roots.contains(path) || sessions.contains_folder(path) || home.as_deref() == Some(path)
         };
         terminals.open(&req, &allowed)
     })

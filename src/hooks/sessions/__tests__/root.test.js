@@ -60,8 +60,8 @@ describe('sessions root', () => {
       await until(() => $sessionRoot.get()?.sessionId === id);
     }
     expect($sessionRoot.get()).to.include({ rootId: 'root:d', path: '/wt/d', label: 'd' });
-    await until(() => calls.some((c) => c.cmd === 'close_workspace'));
-    expect(calls.filter((c) => c.cmd === 'close_workspace').map((c) => c.args), 'the oldest').to.deep.equal([{ rootId: 'root:a' }]);
+    await until(() => calls.some((c) => c.cmd === 'close_root'));
+    expect(calls.filter((c) => c.cmd === 'close_root').map((c) => c.args), 'the oldest').to.deep.equal([{ rootId: 'root:a' }]);
     $activeSessionId.set(null);
     await until(() => $sessionRoot.get() === null);
     expect(calls.filter((c) => c.cmd === 'open_session_root').length, 'showing none opens nothing').to.equal(4);
@@ -75,11 +75,11 @@ describe('sessions root', () => {
     const heard = [];
     const stop = root.onFsChange((changes) => heard.push(changes));
     await new Promise((r) => setTimeout(r, 30));
-    await emit('workspace://changed', { rootId: 'root:other', dirs: [] });
-    await emit('workspace://changed', { rootId: 'root:s1', dirs: ['src'] });
+    await emit('roots://changed', { rootId: 'root:other', dirs: [] });
+    await emit('roots://changed', { rootId: 'root:s1', dirs: ['src'] });
     await until(() => heard.length === 1);
     stop();
-    await emit('workspace://changed', { rootId: 'root:s1', dirs: ['src'] });
+    await emit('roots://changed', { rootId: 'root:s1', dirs: ['src'] });
     await new Promise((r) => setTimeout(r, 30));
     expect(heard).to.deep.equal([{ rootId: 'root:s1', dirs: ['src'] }]);
   });

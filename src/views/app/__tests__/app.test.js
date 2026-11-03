@@ -249,7 +249,7 @@ describe('acp-app: project menu', () => {
     mockIPC((cmd, args) => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
-      if (cmd === 'open_workspace') return { rootId: `root:${a.path}`, path: a.path };
+      if (cmd === 'open_root') return { rootId: `root:${a.path}`, path: a.path };
       return startupAnswer(cmd, a);
     });
     $projects.set([
@@ -282,7 +282,7 @@ describe('acp-app: project menu', () => {
 
     // Act: switch
     fire('acp-project-select', { projectId: '/q' });
-    await until(() => calls.some((c) => c.cmd === 'open_workspace' && c.args.path === '/q'));
+    await until(() => calls.some((c) => c.cmd === 'open_root' && c.args.path === '/q'));
     // Act: reveal the shown project
     fire('acp-project-reveal', { projectId: '/p' });
     await until(() => calls.some((c) => c.cmd === 'reveal_path'));

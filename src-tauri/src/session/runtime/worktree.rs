@@ -83,7 +83,7 @@ impl Sessions {
     /// A worktree session's file (relative to its folder) at its base commit; `None` when it
     /// wasn't there, is binary or too large. Blocking.
     pub fn file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
-        crate::workspace::checked_rel(path)?;
+        crate::roots::checked_rel(path)?;
         let (dir, base) = self.worktree_of(id)?;
         crate::git::blob::file_at(crate::git::binary::git()?, &dir, &base, path)
     }

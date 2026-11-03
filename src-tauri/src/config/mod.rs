@@ -57,7 +57,7 @@ pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
 /// `.brama/workspace.json`: how the project's sessions start.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct WorkspaceSettings {
+pub struct ProjectSettings {
     /// Run target a new session starts with: `local` or `worktree`.
     pub default_mode: String,
     pub local_turns: LocalTurns,
@@ -76,7 +76,7 @@ pub enum LocalTurns {
 
 /// The project's workspace.json; a missing, invalid or unknown setting is the default (`worktree`).
 /// Blocking.
-pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
+pub fn project_settings(project: &Path) -> ProjectSettings {
     #[derive(Deserialize)]
     #[serde(rename_all = "camelCase")]
     struct File {
@@ -109,7 +109,7 @@ pub fn workspace_settings(project: &Path) -> WorkspaceSettings {
         Some(serde_json::Value::String(s)) if s == "parallel" => LocalTurns::Parallel,
         _ => LocalTurns::Queue,
     };
-    WorkspaceSettings { default_mode: default_mode.unwrap_or_else(|| "worktree".to_owned()), local_turns }
+    ProjectSettings { default_mode: default_mode.unwrap_or_else(|| "worktree".to_owned()), local_turns }
 }
 
 /// One agent as configured. `env` values are templates (`${env:NAME}`, `${keychain:name}`),
@@ -1189,19 +1189,19 @@ mod tests {
     }
 
     #[test]
-    fn workspace_settings_fall_back_to_worktree() {
-        let project = temp_project("workspace-settings");
-        assert_eq!(workspace_settings(&project).default_mode, "worktree", "no file");
+    fn project_settings_fall_back_to_worktree() {
+        let project = temp_project("project-settings");
+        assert_eq!(project_settings(&project).default_mode, "worktree", "no file");
         ensure_project_dir(&project).unwrap();
-        assert_eq!(workspace_settings(&project).default_mode, "worktree", "the default file");
+        assert_eq!(project_settings(&project).default_mode, "worktree", "the default file");
         let file = project.join(".brama/workspace.json");
         fs::write(&file, r#"{"version":1,"defaultMode":"local"}"#).unwrap();
-        assert_eq!(workspace_settings(&project).default_mode, "local");
+        assert_eq!(project_settings(&project).default_mode, "local");
         fs::write(&file, LEGACY_DEFAULT_WORKSPACE).unwrap();
-        assert_eq!(workspace_settings(&project).default_mode, "worktree", "the file older versions wrote");
+        assert_eq!(project_settings(&project).default_mode, "worktree", "the file older versions wrote");
         for invalid in [r#"{"version":1,"defaultMode":"cloud"}"#, "{ not json", r#"{"version":2,"defaultMode":"local"}"#] {
             fs::write(&file, invalid).unwrap();
-            assert_eq!(workspace_settings(&project).default_mode, "worktree", "{invalid}");
+            assert_eq!(project_settings(&project).default_mode, "worktree", "{invalid}");
         }
         fs::remove_dir_all(project).unwrap();
     }
@@ -1209,15 +1209,15 @@ mod tests {
     #[test]
     fn local_turns_queue_unless_the_project_says_parallel() {
         let project = temp_project("local-turns");
-        assert_eq!(workspace_settings(&project).local_turns, LocalTurns::Queue, "no file");
+        assert_eq!(project_settings(&project).local_turns, LocalTurns::Queue, "no file");
         ensure_project_dir(&project).unwrap();
-        assert_eq!(workspace_settings(&project).local_turns, LocalTurns::Queue, "the default file");
+        assert_eq!(project_settings(&project).local_turns, LocalTurns::Queue, "the default file");
         let file = project.join(".brama/workspace.json");
         fs::write(&file, r#"{"version":1,"defaultMode":"local","localTurns":"parallel"}"#).unwrap();
-        assert_eq!(workspace_settings(&project), WorkspaceSettings { default_mode: "local".into(), local_turns: LocalTurns::Parallel });
+        assert_eq!(project_settings(&project), ProjectSettings { default_mode: "local".into(), local_turns: LocalTurns::Parallel });
         for other in [r#""queue""#, r#""both""#, "3", "null"] {
             fs::write(&file, format!(r#"{{"version":1,"defaultMode":"local","localTurns":{other}}}"#)).unwrap();
-            let settings = workspace_settings(&project);
+            let settings = project_settings(&project);
             assert_eq!(settings.local_turns, LocalTurns::Queue, "{other}");
             assert_eq!(settings.default_mode, "local", "{other} keeps the rest");
         }

@@ -59,7 +59,7 @@ function closeRoot(path) {
   const root = roots.get(path);
   if (!root) return;
   roots.delete(path);
-  ipc.invoke('close_workspace', { rootId: root.rootId }).catch(() => {});
+  ipc.invoke('close_root', { rootId: root.rootId }).catch(() => {});
 }
 
 /** Closes the least recently active roots beyond `KEEP_OPEN`. */
@@ -100,7 +100,7 @@ async function switchTo(path, id) {
   /** @type {OpenedRoot} */
   let opened;
   try {
-    opened = await ipc.invoke('open_workspace', { path });
+    opened = await ipc.invoke('open_root', { path });
   } catch (err) {
     // A newer open from this window cancels the older scan in the backend; that's not a failure.
     if (id !== generation) return;
@@ -113,7 +113,7 @@ async function switchTo(path, id) {
     // the project was removed or is open already.
     const listed = $projects.get().some((p) => p.id === opened.path);
     if (!listed || roots.has(opened.path)) {
-      ipc.invoke('close_workspace', { rootId: opened.rootId }).catch(() => {});
+      ipc.invoke('close_root', { rootId: opened.rootId }).catch(() => {});
       return;
     }
     roots = new Map([[opened.path, { rootId: opened.rootId, name }], ...roots]);
@@ -188,7 +188,7 @@ export const projects = Object.freeze({
    */
   ready() {
     readyPromise ??= ipc
-      .invoke('close_window_workspaces')
+      .invoke('close_window_roots')
       .then(() => {})
       .catch((err) => app.reportError('Closing previous projects failed', err));
     return readyPromise;
@@ -202,7 +202,7 @@ export const projects = Object.freeze({
    */
   onFsChange(listener) {
     const stop = ipc
-      .listen('workspace://changed', (/** @type {WorkspaceChanges} */ changes) => {
+      .listen('roots://changed', (/** @type {WorkspaceChanges} */ changes) => {
         if (changes.rootId === $rootId.get()) listener(changes);
       })
       .catch((err) => {

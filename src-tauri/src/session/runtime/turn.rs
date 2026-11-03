@@ -214,7 +214,7 @@ impl Inner {
             return Ok(None);
         }
         let project = record.project_path.clone();
-        let turns = tokio::task::spawn_blocking(move || crate::config::workspace_settings(&project).local_turns)
+        let turns = tokio::task::spawn_blocking(move || crate::config::project_settings(&project).local_turns)
             .await
             .map_err(|e| e.to_string())?;
         if turns == LocalTurns::Parallel {
@@ -262,7 +262,7 @@ pub(super) fn prompt_blocks(env: &dyn SessionEnv, prompt: Vec<PromptInput>) -> R
             let host = env::confine(env.project_dir(), Path::new(path), Access::Read)?;
             return Ok((host.clone(), host));
         }
-        let rel = crate::workspace::checked_rel(path)?;
+        let rel = crate::roots::checked_rel(path)?;
         let host = env::confine(env.host_dir(), &env.host_dir().join(rel), Access::Read).map_err(|e| {
             if env.host_dir() != env.project_dir() && env.project_dir().join(rel).exists() {
                 format!("{path}: not in this session's worktree (untracked or ignored in the project)")

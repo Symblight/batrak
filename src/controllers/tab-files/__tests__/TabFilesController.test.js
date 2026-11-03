@@ -36,7 +36,7 @@ async function until(pred) {
  * @param {{ added?: string[], removed?: string[], modified?: string[] }} changes Root-relative paths.
  */
 function report({ added = [], removed = [], modified = [] }) {
-  return emit('workspace://changed', { rootId: 'r', dirs: [], added, removed, modified, git: false });
+  return emit('roots://changed', { rootId: 'r', dirs: [], added, removed, modified, git: false });
 }
 
 /** The watcher reports the file changed. */

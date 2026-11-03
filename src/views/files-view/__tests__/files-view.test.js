@@ -29,7 +29,7 @@ async function emitUntil(change, heard) {
   const started = Date.now();
   while (!heard()) {
     expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
-    await emit('workspace://changed', change);
+    await emit('roots://changed', change);
     await new Promise((r) => setTimeout(r, 10));
   }
 }
@@ -137,7 +137,7 @@ describe('acp-files-view', () => {
     const reloaded = [];
     tree.reload = (dirs) => reloaded.push(dirs);
     // Act: the project's change arrives first, then the session's
-    await emit('workspace://changed', change('r', ['src']));
+    await emit('roots://changed', change('r', ['src']));
     await emitUntil(change('wt', ['lib']), () => reloaded.length > 0);
     // Assert
     expect(reloaded.every((dirs) => dirs.join() === 'lib'), 'only the session folder’s').to.equal(true);
@@ -158,12 +158,12 @@ describe('acp-files-view', () => {
     const second = el.refresh();
     await Promise.all([first, second]);
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
+    expect(calls.filter((c) => c.cmd === 'rescan_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
     expect(reloaded).to.deep.equal([['', 'src']]);
     // Act: once it is done, the next one runs
     await el.refresh();
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace')).to.have.length(2);
+    expect(calls.filter((c) => c.cmd === 'rescan_root')).to.have.length(2);
   });
 
   it('says so when the scan fails, lists nothing again, and can be tried again', async () => {
@@ -172,7 +172,7 @@ describe('acp-files-view', () => {
     mockIPC(
       (cmd, args) => {
         calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
-        if (cmd === 'rescan_workspace' && failing) throw 'disk gone';
+        if (cmd === 'rescan_root' && failing) throw 'disk gone';
         return cmd === 'list_dir' ? [] : null;
       },
       { shouldMockEvents: true },
@@ -200,7 +200,7 @@ describe('acp-files-view', () => {
     mockIPC(
       (cmd, args) => {
         calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
-        if (cmd === 'rescan_workspace') return new Promise((resolve) => (finishScan = () => resolve(null)));
+        if (cmd === 'rescan_root') return new Promise((resolve) => (finishScan = () => resolve(null)));
         return cmd === 'list_dir' ? [] : null;
       },
       { shouldMockEvents: true },
@@ -211,7 +211,7 @@ describe('acp-files-view', () => {
     tree.reload = (dirs) => reloaded.push(dirs);
     // Act
     const refreshing = el.refresh();
-    await until(() => calls.some((c) => c.cmd === 'rescan_workspace'));
+    await until(() => calls.some((c) => c.cmd === 'rescan_root'));
     $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
     finishScan();
     await refreshing;

@@ -77,7 +77,7 @@ describe('sessions views', () => {
   it("opens no terminal for an unknown session, or when its project can't be opened", async () => {
     // Arrange
     $sessions.set([session({ id: 's1', projectId: '/gone' })]);
-    answer = (cmd) => (cmd === 'open_workspace' ? new Error('no such folder') : null);
+    answer = (cmd) => (cmd === 'open_root' ? new Error('no such folder') : null);
     // Act
     await sessions.openInTerminal('nope');
     await sessions.openInTerminal('s1');

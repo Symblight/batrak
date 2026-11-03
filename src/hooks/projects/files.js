@@ -38,7 +38,7 @@ function readFileBytes(path) {
  * @returns {Promise<void>}
  */
 function closeWorkspace(rootId) {
-  return ipc.invoke('close_workspace', { rootId });
+  return ipc.invoke('close_root', { rootId });
 }
 
 /**
@@ -52,12 +52,12 @@ function listDir(rootId, path) {
 }
 
 /**
- * Scans a root again from disk, for changes its watcher missed; they arrive as `workspace://changed`.
+ * Scans a root again from disk, for changes its watcher missed; they arrive as `roots://changed`.
  * @param {string} rootId
  * @returns {Promise<void>}
  */
 function rescanWorkspace(rootId) {
-  return ipc.invoke('rescan_workspace', { rootId });
+  return ipc.invoke('rescan_root', { rootId });
 }
 
 /**
@@ -66,7 +66,7 @@ function rescanWorkspace(rootId) {
  * @returns {Promise<() => void>} Unsubscribe.
  */
 function onWorkspaceChanged(callback) {
-  return ipc.listen('workspace://changed', callback);
+  return ipc.listen('roots://changed', callback);
 }
 
 /** @returns {Promise<string>} The user's home folder. */

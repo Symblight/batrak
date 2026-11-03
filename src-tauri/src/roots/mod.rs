@@ -1,4 +1,4 @@
-//! Workspace snapshots: one per opened root (today the project; later each session's
+//! Root snapshots: one per opened root (today the project; later each session's
 //! git worktree). The file tree, Quick Open and Find in Files all read from here.
 
 pub mod quick_open;
@@ -24,7 +24,7 @@ use crate::git::cache::GitCache;
 use snapshot::{Changes, Snapshot};
 
 /// Tauri event carrying [`ChangedPayload`] after the watcher patched a snapshot.
-pub const CHANGED_EVENT: &str = "workspace://changed";
+pub const CHANGED_EVENT: &str = "roots://changed";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -46,11 +46,11 @@ pub fn checked_rel(rel: &str) -> Result<&str, String> {
     if ok {
         Ok(rel)
     } else {
-        Err(format!("{rel:?}: not a path inside the workspace"))
+        Err(format!("{rel:?}: not a path inside the root"))
     }
 }
 
-/// Locks ignoring poisoning: a panicked reader must not take the whole workspace down.
+/// Locks ignoring poisoning: a panicked reader must not take the whole root down.
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -100,7 +100,7 @@ pub struct Root {
     /// Cancel flag of the running Find in Files per slot (the Search pane's, the dialog's),
     /// replaced on every new search in that slot.
     search_cancel: Mutex<HashMap<String, Arc<AtomicBool>>>,
-    /// Set by `Workspaces::close`; stops a watcher rescan still running for a closed root.
+    /// Set by `Roots::close`; stops a watcher rescan still running for a closed root.
     pub closed: AtomicBool,
     /// Bumped by the watcher after every batch that changed something (or lost events): a cached
     /// result computed at an older epoch may be out of date.
@@ -189,7 +189,7 @@ pub const SUPERSEDED: &str = "superseded by a newer open";
 
 /// All opened roots, by id. Cheap to clone.
 #[derive(Clone, Default)]
-pub struct Workspaces {
+pub struct Roots {
     roots: Arc<Mutex<HashMap<String, Arc<Root>>>>,
     next_id: Arc<AtomicU64>,
     /// Cancel flag of the scan in progress per group (a window): a newer open stops the older scan
@@ -197,7 +197,7 @@ pub struct Workspaces {
     opening: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
 }
 
-impl Workspaces {
+impl Roots {
     /// Scans `path` and starts watching it; changes go to the frontend as [`CHANGED_EVENT`].
     /// A later open in the same `group` cancels this one's scan, which then fails with
     /// [`SUPERSEDED`]. Blocking: call off the main thread.
@@ -313,7 +313,7 @@ impl Workspaces {
     }
 
     pub fn get(&self, id: &str) -> Result<Arc<Root>, String> {
-        lock(&self.roots).get(id).cloned().ok_or_else(|| format!("unknown workspace root: {id}"))
+        lock(&self.roots).get(id).cloned().ok_or_else(|| format!("unknown root: {id}"))
     }
 
     /// Whether a canonical `path` lies inside an opened root (compared by component, so
@@ -334,27 +334,27 @@ mod tests {
 
     #[test]
     fn a_newer_open_cancels_the_older_scan_in_its_group_only() {
-        let workspaces = Workspaces::default();
-        let first = workspaces.begin_open("main");
-        let other_window = workspaces.begin_open("second");
-        let second = workspaces.begin_open("main");
+        let roots = Roots::default();
+        let first = roots.begin_open("main");
+        let other_window = roots.begin_open("second");
+        let second = roots.begin_open("main");
         assert!(first.load(Ordering::Relaxed), "older scan in the same window is cancelled");
         assert!(!second.load(Ordering::Relaxed));
         assert!(!other_window.load(Ordering::Relaxed), "another window's scan keeps going");
 
-        workspaces.end_open("main", &first); // late finish of the cancelled open
-        assert!(lock(&workspaces.opening).contains_key("main"), "doesn't forget the newer one");
-        workspaces.end_open("main", &second);
-        assert!(!lock(&workspaces.opening).contains_key("main"));
+        roots.end_open("main", &first); // late finish of the cancelled open
+        assert!(lock(&roots.opening).contains_key("main"), "doesn't forget the newer one");
+        roots.end_open("main", &second);
+        assert!(!lock(&roots.opening).contains_key("main"));
     }
 
     #[test]
     fn a_session_roots_scan_and_the_projects_dont_cancel_each_other() {
-        let workspaces = Workspaces::default();
-        let project = workspaces.begin_open("main");
-        let session = workspaces.begin_open(&session_key("main"));
+        let roots = Roots::default();
+        let project = roots.begin_open("main");
+        let session = roots.begin_open(&session_key("main"));
         assert!(!project.load(Ordering::Relaxed));
-        let newer = workspaces.begin_open(&session_key("main"));
+        let newer = roots.begin_open(&session_key("main"));
         assert!(session.load(Ordering::Relaxed), "a newer session root cancels the older one");
         assert!(!project.load(Ordering::Relaxed) && !newer.load(Ordering::Relaxed));
     }
@@ -365,9 +365,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("src")).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
-        let workspaces = Workspaces::default();
+        let roots = Roots::default();
         let root =
-            workspaces.open_with(&base, "main", &AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap()).unwrap();
+            roots.open_with(&base, "main", &AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap()).unwrap();
         // No watcher: every change from here on is one it missed.
         lock(&root.watcher).take();
         std::fs::write(base.join("src/missed.rs"), "").unwrap();
@@ -383,7 +383,7 @@ mod tests {
 
         root.rescan();
         assert!(rx.try_recv().is_err(), "nothing changed, nothing reported");
-        workspaces.close(&root.id);
+        roots.close(&root.id);
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -394,8 +394,8 @@ mod tests {
         std::fs::create_dir_all(base.join("src")).unwrap();
         let rescanning = std::thread::current().id();
         let (tx, rx) = std::sync::mpsc::channel();
-        let workspaces = Workspaces::default();
-        let root = workspaces
+        let roots = Roots::default();
+        let root = roots
             .open_with(&base, "main", &AtomicBool::new(false), false, {
                 let base = base.clone();
                 move |root, _| {
@@ -419,7 +419,7 @@ mod tests {
             assert!(Instant::now() < deadline, "the watcher's batch applies after the rescan");
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
-        workspaces.close(&root.id);
+        roots.close(&root.id);
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -427,10 +427,10 @@ mod tests {
     fn a_cancelled_open_fails_as_superseded_and_registers_nothing() {
         let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
         std::fs::create_dir_all(base.join("src")).unwrap();
-        let workspaces = Workspaces::default();
-        let err = workspaces.open_with(&base, "main", &AtomicBool::new(true), false, |_, _| {}).err();
+        let roots = Roots::default();
+        let err = roots.open_with(&base, "main", &AtomicBool::new(true), false, |_, _| {}).err();
         assert_eq!(err.as_deref(), Some(SUPERSEDED));
-        assert!(!workspaces.contains(&dunce::canonicalize(&base).unwrap().join("src")));
+        assert!(!roots.contains(&dunce::canonicalize(&base).unwrap().join("src")));
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -439,14 +439,14 @@ mod tests {
         let base = std::env::temp_dir().join(format!("brama-session-root-{}", std::process::id()));
         std::fs::create_dir_all(base.join("proj")).unwrap();
         std::fs::create_dir_all(base.join("worktree")).unwrap();
-        let workspaces = Workspaces::default();
-        let project = workspaces.open_with(&base.join("proj"), "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
-        let session = workspaces.open_with(&base.join("worktree"), "main", &AtomicBool::new(false), true, |_, _| {}).unwrap();
+        let roots = Roots::default();
+        let project = roots.open_with(&base.join("proj"), "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let session = roots.open_with(&base.join("worktree"), "main", &AtomicBool::new(false), true, |_, _| {}).unwrap();
 
         let agents = |root: &Root| root.path.join(".brama/agents.json");
-        assert!(workspaces.contains_project(&agents(&project)));
-        assert!(workspaces.contains(&agents(&session)), "its files are readable");
-        assert!(!workspaces.contains_project(&agents(&session)), "but it isn't a project");
+        assert!(roots.contains_project(&agents(&project)));
+        assert!(roots.contains(&agents(&session)), "its files are readable");
+        assert!(!roots.contains_project(&agents(&session)), "but it isn't a project");
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -456,8 +456,8 @@ mod tests {
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(base.join("a.txt"), "needle\n").unwrap();
-        let workspaces = Workspaces::default();
-        let root = workspaces.open_with(&base, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let roots = Roots::default();
+        let root = roots.open_with(&base, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
         let done = |cancel: &AtomicBool| {
             let options = search::SearchOptions {
                 query: "needle".into(),
@@ -487,7 +487,7 @@ mod tests {
         let panel_again = root.start_search("panel");
         assert!(!dialog_again.load(Ordering::Relaxed));
 
-        workspaces.close(&root.id);
+        roots.close(&root.id);
         assert!(panel_again.load(Ordering::Relaxed) && dialog_again.load(Ordering::Relaxed), "closing cancels all");
         std::fs::remove_dir_all(&base).unwrap();
     }
@@ -508,15 +508,15 @@ mod tests {
         let root = base.join("proj");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
-        let workspaces = Workspaces::default();
-        let opened = workspaces.open_with(&root, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let roots = Roots::default();
+        let opened = roots.open_with(&root, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
 
-        assert!(workspaces.contains(&opened.path.join("src/main.rs")));
-        assert!(!workspaces.contains(&opened.path.with_file_name("proj-other").join("x")));
-        assert!(!workspaces.contains(Path::new("/etc/passwd")));
+        assert!(roots.contains(&opened.path.join("src/main.rs")));
+        assert!(!roots.contains(&opened.path.with_file_name("proj-other").join("x")));
+        assert!(!roots.contains(Path::new("/etc/passwd")));
 
-        workspaces.close(&opened.id);
-        assert!(!workspaces.contains(&opened.path.join("src/main.rs")));
+        roots.close(&opened.id);
+        assert!(!roots.contains(&opened.path.join("src/main.rs")));
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -525,17 +525,17 @@ mod tests {
         let base = std::env::temp_dir().join(format!("brama-group-{}", std::process::id()));
         std::fs::create_dir_all(base.join("a")).unwrap();
         std::fs::create_dir_all(base.join("b")).unwrap();
-        let workspaces = Workspaces::default();
+        let roots = Roots::default();
         let open = |dir: &str, group: &str| {
-            workspaces.open_with(&base.join(dir), group, &AtomicBool::new(false), false, |_, _| {}).unwrap()
+            roots.open_with(&base.join(dir), group, &AtomicBool::new(false), false, |_, _| {}).unwrap()
         };
         let (a1, b1, a2) = (open("a", "main"), open("b", "main"), open("a", "second"));
 
-        workspaces.close_group("main");
-        assert!(workspaces.get(&a1.id).is_err() && workspaces.get(&b1.id).is_err());
+        roots.close_group("main");
+        assert!(roots.get(&a1.id).is_err() && roots.get(&b1.id).is_err());
         assert!(a1.closed.load(Ordering::Relaxed), "its watcher rescans stop too");
-        assert!(workspaces.get(&a2.id).is_ok(), "another window's root stays open");
-        workspaces.close_group("second");
+        assert!(roots.get(&a2.id).is_ok(), "another window's root stays open");
+        roots.close_group("second");
         std::fs::remove_dir_all(&base).unwrap();
     }
 }

@@ -135,7 +135,7 @@ impl Snapshot {
     pub fn load_ignored_dir(&mut self, rel: &str) -> Result<(), String> {
         match self.entries.get(rel) {
             Some(e) if e.is_dir => {}
-            _ => return Err(format!("{rel}: not a directory in the workspace")),
+            _ => return Err(format!("{rel}: not a directory in the root")),
         }
         let abs = self.abs(rel);
         let entries = read_children(&abs, rel, &HashSet::new()).map_err(|e| format!("{}: {e}", abs.display()))?;

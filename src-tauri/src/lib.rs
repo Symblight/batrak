@@ -10,7 +10,7 @@ mod menu;
 mod session;
 mod storage;
 mod terminal;
-mod workspace;
+mod roots;
 
 use tauri::Manager;
 
@@ -19,7 +19,7 @@ pub fn run() {
     logging::install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .manage(workspace::Workspaces::default())
+        .manage(roots::Roots::default())
         .manage(commands::dropped::DroppedFiles::default())
         .on_menu_event(menu::on_event)
         .setup(|app| {
@@ -84,7 +84,7 @@ pub fn run() {
             }
             if let tauri::WindowEvent::Destroyed = event {
                 window.state::<commands::dropped::DroppedFiles>().forget(window.label());
-                window.state::<workspace::Workspaces>().close_group(window.label());
+                window.state::<roots::Roots>().close_group(window.label());
                 window.state::<session::Sessions>().detach_all(window.label());
                 window.state::<terminal::Terminals>().close_group(window.label());
             }
@@ -124,7 +124,7 @@ pub fn run() {
             commands::agents::agents_update_version,
             commands::agents::agents_update_all,
             commands::agents::agents_view,
-            commands::agents::workspace_settings,
+            commands::agents::project_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
             commands::agents::agents_sign_in,
@@ -141,16 +141,16 @@ pub fn run() {
             commands::fs::reveal_path,
             commands::fs::open_url,
             commands::log::write_log,
-            commands::workspace::open_workspace,
-            commands::workspace::open_session_root,
-            commands::workspace::close_workspace,
-            commands::workspace::close_window_workspaces,
-            commands::workspace::list_dir,
-            commands::workspace::rescan_workspace,
-            commands::workspace::quick_open,
-            commands::workspace::note_file_opened,
-            commands::workspace::find_in_files,
-            commands::workspace::cancel_search,
+            commands::roots::open_root,
+            commands::roots::open_session_root,
+            commands::roots::close_root,
+            commands::roots::close_window_roots,
+            commands::roots::list_dir,
+            commands::roots::rescan_root,
+            commands::roots::quick_open,
+            commands::roots::note_file_opened,
+            commands::roots::find_in_files,
+            commands::roots::cancel_search,
             commands::git::git_head,
             commands::git::git_status,
             commands::git::git_file_at_head,

@@ -91,14 +91,14 @@ async function open() {
 
 /** @param {string} rootId @param {Partial<{ git: boolean }>} [changes] */
 const changed = (rootId, changes = {}) =>
-  emit('workspace://changed', { rootId, dirs: [], added: [], removed: [], modified: ['a.txt'], git: false, ...changes });
+  emit('roots://changed', { rootId, dirs: [], added: [], removed: [], modified: ['a.txt'], git: false, ...changes });
 
 describe('git', () => {
   beforeEach(() => {
     calls = [];
     holdDebounces();
     answers = {
-      open_workspace: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
+      open_root: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
       git_head: () => REPO,
       git_status: () => ({ version: 1, unchanged: false, status: { repo: REPO, files: [FILE] } }),
     };

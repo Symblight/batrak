@@ -54,7 +54,7 @@ describe('acp-file-column', () => {
     let finishScan = () => {};
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
-      if (cmd === 'rescan_workspace') return new Promise((resolve) => (finishScan = () => resolve(null)));
+      if (cmd === 'rescan_root') return new Promise((resolve) => (finishScan = () => resolve(null)));
       return cmd === 'list_dir' ? [] : null;
     });
     const el = await render();
@@ -65,7 +65,7 @@ describe('acp-file-column', () => {
     view.reveal = (rel, options) => revealed.push([rel, options]);
     // Act
     header.dispatchEvent(new CustomEvent('acp-panel-header-action', { bubbles: true, composed: true }));
-    await until(() => calls.some((c) => c.cmd === 'rescan_workspace'));
+    await until(() => calls.some((c) => c.cmd === 'rescan_root'));
     await el.updateComplete;
     // Assert
     expect(header.hasAttribute('action-disabled'), 'while it runs').to.equal(true);
@@ -81,7 +81,7 @@ describe('acp-file-column', () => {
       return !header.hasAttribute('action-disabled');
     });
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
+    expect(calls.filter((c) => c.cmd === 'rescan_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
     // Act: from another pane
     el.sideView = 'changes';
     await el.reveal('src/a.js', { expand: true });

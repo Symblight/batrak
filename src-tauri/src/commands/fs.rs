@@ -7,7 +7,7 @@ use tauri::{AppHandle, State};
 
 use crate::config::AgentConfigs;
 use crate::session::Sessions;
-use crate::workspace::Workspaces;
+use crate::roots::Roots;
 
 use super::blocking;
 
@@ -19,17 +19,17 @@ fn user_agents_file(configs: &AgentConfigs) -> Option<std::path::PathBuf> {
 /// Images larger than this aren't sent to the page: one IPC reply holds the whole file.
 const MAX_BYTES: u64 = 64 * 1024 * 1024;
 
-/// A path the page may read, canonical: inside an opened workspace root, a worktree session's
+/// A path the page may read, canonical: inside an opened root, a worktree session's
 /// folder, or the user's agents.json. Symlinks are resolved first, so none can lead out of a root.
 fn readable(
-    workspaces: &Workspaces,
+    roots: &Roots,
     configs: &AgentConfigs,
     sessions: &Sessions,
     path: &str,
 ) -> Result<std::path::PathBuf, String> {
     // Same form as the roots (no `\\?\` on Windows), so `contains` can compare them.
     let canonical = dunce::canonicalize(Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
-    let inside = workspaces.contains(&canonical) || sessions.contains(&canonical);
+    let inside = roots.contains(&canonical) || sessions.contains(&canonical);
     if !inside && Some(&canonical) != user_agents_file(configs).as_ref() {
         return Err(format!("{path}: outside the opened folder"));
     }
@@ -39,16 +39,16 @@ fn readable(
 /// Reads a readable file (see `readable`) as UTF-8 text. Fails for binary (non-UTF-8) files.
 #[tauri::command]
 pub async fn read_file(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     configs: State<'_, AgentConfigs>,
     sessions: State<'_, Sessions>,
     path: String,
 ) -> Result<String, String> {
-    let workspaces = workspaces.inner().clone();
+    let roots = roots.inner().clone();
     let configs = configs.inner().clone();
     let sessions = sessions.inner().clone();
     blocking(move || {
-        let canonical = readable(&workspaces, &configs, &sessions, &path)?;
+        let canonical = readable(&roots, &configs, &sessions, &path)?;
         fs::read_to_string(&canonical).map_err(|e| format!("{path}: {e}"))
     })
     .await?
@@ -68,16 +68,16 @@ fn read_capped(path: &Path, max: u64) -> Result<Vec<u8>, String> {
 /// `ArrayBuffer`, not a JSON array. At most `MAX_BYTES`.
 #[tauri::command]
 pub async fn read_file_bytes(
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     configs: State<'_, AgentConfigs>,
     sessions: State<'_, Sessions>,
     path: String,
 ) -> Result<Response, String> {
-    let workspaces = workspaces.inner().clone();
+    let roots = roots.inner().clone();
     let configs = configs.inner().clone();
     let sessions = sessions.inner().clone();
     blocking(move || {
-        let canonical = readable(&workspaces, &configs, &sessions, &path)?;
+        let canonical = readable(&roots, &configs, &sessions, &path)?;
         read_capped(&canonical, MAX_BYTES).map(Response::new)
     })
     .await?
@@ -123,16 +123,16 @@ fn writable(
 #[tauri::command]
 pub async fn write_file(
     app: AppHandle,
-    workspaces: State<'_, Workspaces>,
+    roots: State<'_, Roots>,
     configs: State<'_, AgentConfigs>,
     path: String,
     content: String,
 ) -> Result<(), String> {
-    let workspaces = workspaces.inner().clone();
+    let roots = roots.inner().clone();
     let configs = configs.inner().clone();
     blocking(move || {
         let (canonical, project) =
-            writable(&path, configs.user_file(), |p| workspaces.contains_project(p))?;
+            writable(&path, configs.user_file(), |p| roots.contains_project(p))?;
         crate::session::env::write_atomic(&canonical, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
         let changed = match &project {
             Some(project) => configs.reload(project),

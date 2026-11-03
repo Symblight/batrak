@@ -136,7 +136,7 @@ mod tests {
             assert!(!is_repo_state(no), "{no}");
         }
     }
-    use crate::workspace::Workspaces;
+    use crate::roots::Roots;
 
     /// Waits for a batch that satisfies `pred`, skipping unrelated ones.
     fn wait_for(rx: &mpsc::Receiver<Changes>, pred: impl Fn(&Changes) -> bool) -> Changes {
@@ -157,8 +157,8 @@ mod tests {
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::write(dir.join(".gitignore"), "*.log\n").unwrap();
         let (tx, rx) = mpsc::channel();
-        let workspaces = Workspaces::default();
-        let root = workspaces
+        let roots = Roots::default();
+        let root = roots
             .open_with(&dir, "main", &std::sync::atomic::AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap())
             .unwrap();
         let has = |path: &str| root.read().files().any(|e| e.path == path);
@@ -187,7 +187,7 @@ mod tests {
         let git = wait_for(&rx, |c| c.git);
         assert!(git.added.is_empty() && git.dirs.is_empty(), ".git stays out of the tree");
 
-        workspaces.close(&root.id);
+        roots.close(&root.id);
         fs::remove_dir_all(dir).unwrap();
     }
 }

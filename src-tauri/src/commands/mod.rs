@@ -11,7 +11,7 @@ pub mod github;
 pub mod log;
 pub mod sessions;
 pub mod terminal;
-pub mod workspace;
+pub mod roots;
 
 /// Runs blocking work (disk IO, scans) off the async runtime's threads.
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {

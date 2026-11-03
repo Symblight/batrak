@@ -241,7 +241,7 @@ export function sessionOpenLog(sessionId) {
  * @returns {Promise<WorkspaceSettings>}
  */
 export function workspaceSettings(projectPath) {
-  return ipc.invoke('workspace_settings', { projectPath });
+  return ipc.invoke('project_settings', { projectPath });
 }
 
 /**
