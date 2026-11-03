@@ -3,6 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $project } from '../../../stores/project/project.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
+import { $activeSubagent, $subagents, showSubagent } from '../../../stores/session-runtime/session-runtime.js';
 import { setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../session-column.js';
 
@@ -124,5 +125,33 @@ describe('acp-session-column', () => {
     expect($unreadSessions.get(), 'a read').to.have.members(['b', 'c', 'q']);
     ask('acp-session-mark-read', { sessionId: 'a', read: false });
     expect($unreadSessions.get(), 'a unread again').to.have.members(ids);
+  });
+
+  it("hands the list each chat's subagents; one picked there is shown, its chat's row goes back to the chat", async () => {
+    // Arrange
+    /** @type {import('../../../hooks/sessions/types.js').Subagent} */
+    const sub = { id: 'c1', title: 'Find usages', description: 'Explore', state: 'running', stopReason: null, cancellable: true, announcedAt: '2026-01-01T00:00:00.000Z' };
+    $subagents.set({ a: [sub] });
+    const el = /** @type {AcpSessionColumn} */ (await fixture(html`<acp-session-column></acp-session-column>`));
+    const list = /** @type {HTMLElementTagNameMap['acp-session-list']} */ (el.querySelector('acp-session-list'));
+    /** @param {string} type @param {object} detail */
+    const ask = (type, detail) => list.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    try {
+      // Act
+      ask('acp-subagent-open', { sessionId: 'a', subagentId: 'c1' });
+      await el.updateComplete;
+      // Assert
+      expect(list.subagents).to.deep.equal({ a: [sub] });
+      expect($activeSessionId.get()).to.equal('a');
+      expect($activeSubagent.get()).to.deep.equal(sub);
+      expect(list.activeSubagentId).to.equal('c1');
+      // Act
+      ask('acp-session-select', { sessionId: 'a' });
+      // Assert
+      expect($activeSubagent.get(), 'back to the chat').to.equal(null);
+    } finally {
+      showSubagent(null);
+      $subagents.set({});
+    }
   });
 });

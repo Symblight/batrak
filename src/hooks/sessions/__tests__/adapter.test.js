@@ -1,10 +1,11 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from '../adapter.js';
+import { USER_ID, acpAdapter, forgetHistory, forgetSession, handleSessionEvent } from '../adapter.js';
 import { $terminals, addSessionTerminal } from '../../../stores/terminals/terminals.js';
 import { $returnedPrompts, takeReturnedPrompt } from '../../../stores/chat/chat.js';
 import { $sessions, newSession, startSession } from '../../../stores/sessions/sessions.js';
-import { $sessionNotices, dismissSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
+import { $permissionRequests, $sessionNotices, $subagents, clearPermissionRequests, dismissSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
+import { subagentConversationId } from '../rules.js';
 import { $awaitingTrust } from '../../../stores/trust/trust.js';
 import { $sessionReads, $unreadSessions, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $contextUsage, forgetContextUsage } from '../../../stores/context-usage/context-usage.js';
@@ -283,6 +284,103 @@ describe('acp-adapter', () => {
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'update', payload: { sessionUpdate: 'usage_update', used: 24000, size: 200000, cost } });
     expect($contextUsage.get()[id]).to.deep.equal({ used: 24000, size: 200000 });
     forgetContextUsage(id);
+  });
+
+  describe('subagents', () => {
+    const id = 'parent';
+    let seq = 0;
+    const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+      handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+    afterEach(() => {
+      forgetSession(id);
+      forgetContextUsage(id);
+    });
+
+    it('lists the subagents the agent announces, patched by its later updates', () => {
+      // Arrange
+      const announce = { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', capabilities: { cancel: {} }, state: { state: 'running' } };
+      // Act
+      send('update', announce);
+      send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', capabilities: null, state: { state: 'idle', stopReason: 'end_turn' } });
+      // Assert
+      const [subagent] = $subagents.get()[id];
+      expect({ ...subagent, announcedAt: typeof subagent.announcedAt }).to.deep.equal({
+        id: 'c1',
+        title: 'Find usages',
+        description: 'Explore',
+        state: 'idle',
+        stopReason: 'end_turn',
+        cancellable: false,
+        announcedAt: 'string',
+      });
+    });
+
+    it("shows a subagent's own updates in its own conversation, never in the chat or its context usage", () => {
+      // Arrange
+      /** @type {{ conversationId?: string, delta?: { text?: string } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'running' } });
+        send('update', { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }], subagentId: 'c1' });
+        send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' });
+        send('update', { sessionUpdate: 'usage_update', used: 10, size: 100, subagentId: 'c1' });
+        send('permission-request', { requestId: 'r1', toolCall: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Read a.txt' }, options: [], subagentId: 'c1' });
+        // Assert
+        const shown = chunks.filter((c) => c.delta?.text).map((c) => [c.conversationId, c.delta?.text]);
+        expect(shown, 'its task first').to.deep.equal([[subagentConversationId(id, 'c1'), 'Look for md-menu'], [subagentConversationId(id, 'c1'), 'found']]);
+        expect($contextUsage.get()[id]).to.equal(undefined);
+        expect($permissionRequests.get()[id]?.map((r) => r.subagentId)).to.deep.equal(['c1']);
+      } finally {
+        unsubscribe?.();
+      }
+    });
+
+    it("routes a running chat's subagents in a snapshot as it does live: their list, card and own conversation", () => {
+      // Arrange
+      /** @type {{ conversationId?: string, partType?: string, delta?: { text?: string, data?: Record<string, unknown> } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act: a page attaches mid-run
+        send('snapshot', {
+          updates: [
+            { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', state: { state: 'running' } },
+            { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look' }] },
+            { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' },
+          ],
+        });
+        // Assert
+        expect($subagents.get()[id]?.map((s) => s.id)).to.deep.equal(['c1']);
+        const where = chunks.filter((c) => c.delta?.text || c.delta?.data?.subagentId).map((c) => [c.conversationId, c.delta?.text ?? 'card']);
+        expect(where).to.deep.equal([[id, 'card'], [subagentConversationId(id, 'c1'), 'found']]);
+      } finally {
+        unsubscribe?.();
+        send('status', { status: 'idle' });
+      }
+    });
+
+    it('shows the task handed to a subagent as a card in the chat, its status following the subagent', () => {
+      // Arrange
+      /** @type {{ conversationId?: string, partType?: string, delta?: { label?: string, status?: string, data?: Record<string, unknown> } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', state: { state: 'running' } });
+        send('update', { sessionUpdate: 'session_message', messageId: 'm1', senderSessionId: 'acp-parent', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }] });
+        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'idle', stopReason: 'end_turn' } });
+        // Assert
+        const cards = chunks.filter((c) => c.conversationId === id && c.partType === 'tool_call').map((c) => c.delta);
+        expect(cards.map((d) => [d?.label, d?.status, d?.data?.subagentId])).to.deep.equal([
+          ['Explore · Find usages', 'in_progress', 'c1'],
+          [undefined, 'completed', 'c1'],
+        ]);
+      } finally {
+        unsubscribe?.();
+      }
+    });
   });
 
   describe('signing in', () => {

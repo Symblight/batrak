@@ -271,6 +271,25 @@ describe('acp-session-list', () => {
     });
   });
 
+  it("shows a chat's subagents under its row; the arrows inside them stay out of the list's own", async () => {
+    // Arrange
+    /** @type {import('../../../hooks/sessions/types.js').Subagent} */
+    const sub = { id: 'c1', title: 'Find usages', description: 'Explore', state: 'running', stopReason: null, cancellable: true, announcedAt: '2026-01-01T00:00:00.000Z' };
+    const { el, root } = await render({ subagents: { a: [sub] } });
+    const tree = /** @type {HTMLElementTagNameMap['acp-subagent-tree']} */ (root.querySelector('acp-subagent-tree'));
+    const keys = record(el, 'keydown');
+    // Act
+    tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
+    // Assert
+    const order = [...root.querySelectorAll('acp-session-row, acp-subagent-tree')].map((n) =>
+      n instanceof HTMLElement && n.localName === 'acp-subagent-tree' ? `subagents of ${tree.sessionId}` : /** @type {HTMLElementTagNameMap['acp-session-row']} */ (n).session?.title,
+    );
+    expect(order)
+      .to.deep.equal(['Session b', 'Session a', 'subagents of a', 'Session c']);
+    expect(tree.subagents).to.deep.equal([sub]);
+    expect(keys, 'not walked by the list').to.have.length(0);
+  });
+
   describe('as a tree', () => {
     /** @param {Element} rowEl @param {string} key */
     const press = (rowEl, key) =>

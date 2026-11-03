@@ -78,7 +78,7 @@
  * fields the chat reads are typed.
  * @typedef {Object} AcpSessionUpdate
  * @property {string} sessionUpdate
- * @property {AcpContent} [content] Message, thought and user chunks.
+ * @property {AcpContent | AcpContent[]} [content] Message, thought and user chunks; `session_message`: its blocks.
  * @property {string} [toolCallId]
  * @property {string | null} [title]
  * @property {string | null} [kind]
@@ -88,6 +88,35 @@
  * @property {number} [used] `usage_update`: tokens in context.
  * @property {number} [size] `usage_update`: the context window, tokens.
  * @property {{ amount: number, currency: string } | null} [cost] `usage_update`: the session's so far.
+ * @property {string} [subagentId] Added by the backend: the subagent (its ACP session id) whose
+ *   update this is, on the chat's channel; absent for the chat's own.
+ * @property {string} [sessionId] `subagent_update`: the subagent it announces or patches.
+ * @property {string | null} [description] `subagent_update`: what kind of subagent (Explore, Plan, …).
+ * @property {{ cancel?: object | null } | null} [capabilities] `subagent_update`: what the client may do to it.
+ * @property {{ state: SubagentState, stopReason?: string | object | null } | null} [state] `subagent_update`.
+ * @property {string} [messageId] `session_message` / `session_message_chunk`.
+ * @property {string | null} [senderSessionId] `session_message` / `session_message_chunk`.
+ * @property {string | null} [recipientSessionId] `session_message` / `session_message_chunk`.
+ */
+
+/**
+ * What an ACP subagent session is doing: working, blocked on the user (a permission), done (its
+ * `stopReason` says how), or not known.
+ * @typedef {'running' | 'requires_action' | 'idle' | 'unknown'} SubagentState
+ */
+
+/**
+ * A subagent of a chat: an ACP subagent session the chat's agent announced (`subagent_update`).
+ * Runtime state of its chat, known only for chats that streamed or replayed this launch; not a
+ * chat itself (spec: `docs/specs/workspaces.md` §2.12).
+ * @typedef {Object} Subagent
+ * @property {string} id Its ACP session id.
+ * @property {string | null} title
+ * @property {string | null} description Its kind (Explore, Plan, …).
+ * @property {SubagentState | null} state `null`: not reported.
+ * @property {string | null} stopReason `idle`: `end_turn`, `cancelled`, `error`, …
+ * @property {boolean} cancellable The agent lets the user stop it.
+ * @property {string} announcedAt ISO time it was first seen.
  */
 
 /**
@@ -106,7 +135,7 @@
  *   | { kind: 'snapshot', payload: { updates: AcpSessionUpdate[] } }
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
  *   | { kind: 'permission-request',
- *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }
+ *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[], subagentId?: string } }
  *   | { kind: 'turn-start', payload: Record<string, never> }
  *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
  *   | { kind: 'overlap', payload: { path: string, other: { id: string, title: string } } }
@@ -177,6 +206,7 @@
  * @property {string | null} toolCallId
  * @property {string} title What the agent wants to do.
  * @property {AcpPermissionOption[]} options
+ * @property {string | null} [subagentId] The subagent asking; absent for the chat itself.
  */
 
 /**

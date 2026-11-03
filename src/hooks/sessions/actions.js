@@ -2,9 +2,10 @@ import { app } from '../app/app.js';
 import { notify } from '../../stores/notices/notices.js';
 import { composerOf, revertConfigOption, setConfigOption } from '../../stores/composer/composer.js';
 import { upsertSession, $sessions } from '../../stores/sessions/sessions.js';
-import { dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
+import { $permissionRequests, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import {
   sessionApplyLocally,
+  sessionCancelSubagent,
   sessionCheckOutBranch,
   sessionOpenLog,
   sessionRename,
@@ -42,6 +43,23 @@ function setConfigOptionFor(id, configId, value) {
 function respondPermission(id, requestId, optionId) {
   removePermissionRequest(id, requestId);
   sessionRespondPermission(id, requestId, optionId).catch((err) => app.reportError('Answering the agent failed', err));
+}
+
+/**
+ * Stops one subagent of the session; the backend answers its permission requests `cancelled`, which
+ * leave the banner then (a refused stop keeps them to answer).
+ * @param {string} id
+ * @param {string} subagentId
+ */
+function cancelSubagent(id, subagentId) {
+  sessionCancelSubagent(id, subagentId).then(
+    () => {
+      for (const request of $permissionRequests.get()[id] ?? []) {
+        if (request.subagentId === subagentId) removePermissionRequest(id, request.requestId);
+      }
+    },
+    (err) => app.reportError('Stopping the subagent failed', err),
+  );
 }
 
 /**
@@ -134,6 +152,7 @@ function dismissNotice(id) {
 export const actions = Object.freeze({
   setConfigOption: setConfigOptionFor,
   respondPermission,
+  cancelSubagent,
   stop,
   applyLocally,
   checkOutBranch,

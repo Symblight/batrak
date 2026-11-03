@@ -205,3 +205,57 @@ export function syncSummary({ running, report }, now) {
 function linesOf(report) {
   return report.agents.map((a) => `${a.agentName} · ${OUTCOMES[a.outcome](a.count, a.error)}`);
 }
+
+/**
+ * The `<chx-chat>` conversation that shows a chat's subagent.
+ * @param {string} sessionId
+ * @param {string} subagentId Its ACP session id.
+ */
+export function subagentConversationId(sessionId, subagentId) {
+  return `${sessionId}/${subagentId}`;
+}
+
+/** @typedef {import('./types.js').Subagent} Subagent */
+/**
+ * The status a subagent's row shows.
+ * @typedef {'running' | 'waiting' | 'done' | 'failed' | 'stopped' | 'unknown'} SubagentIndicator
+ */
+
+/** @type {Readonly<Record<SubagentIndicator, string>>} */
+export const SUBAGENT_INDICATOR_LABELS = Object.freeze({
+  running: 'Working',
+  waiting: 'Waiting for you',
+  done: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped',
+  unknown: 'Status unknown',
+});
+
+/**
+ * @param {Subagent} subagent
+ * @returns {SubagentIndicator}
+ */
+export function subagentIndicator({ state, stopReason }) {
+  if (state === 'running') return 'running';
+  if (state === 'requires_action') return 'waiting';
+  if (state !== 'idle') return 'unknown';
+  if (stopReason === 'cancelled') return 'stopped';
+  return stopReason === null || stopReason === 'end_turn' ? 'done' : 'failed';
+}
+
+/**
+ * A subagent's name in a row: its kind and title (`Explore · Find usages`).
+ * @param {Subagent} subagent
+ */
+export function subagentLabel({ description, title }) {
+  return [description, title ?? 'Subagent'].filter(Boolean).join(' · ');
+}
+
+/**
+ * The tool call id of a subagent's card in its chat's reply: its part's key. What makes it a card
+ * is its `data.subagentId`, not this id.
+ * @param {string} subagentId
+ */
+export function subagentCardId(subagentId) {
+  return `subagent-${subagentId}`;
+}

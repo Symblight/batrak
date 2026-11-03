@@ -23,6 +23,7 @@ import '../model-picker/model-picker.js';
 import '../part-thinking/part-thinking.js';
 import '../run-target/run-target.js';
 import '../session-banner/session-banner.js';
+import '../subagent-bar/subagent-bar.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('../../controllers/file-mentions/chips.js').ComposerTextbox} ComposerTextbox */
@@ -34,6 +35,7 @@ import '../session-banner/session-banner.js';
 /** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
 /** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
@@ -60,6 +62,8 @@ const splitOnSend = createSplitOnSendHandler(chat.MESSAGE_PART_RULES);
  * @fires acp-chat-file-query `{ query }` Files and folders for `@` to search for; `null` drops the search.
  * @fires acp-chat-attach `{ files }` Files attached (picked, pasted): saved, they come back as path chips (`insertFiles()`).
  * @fires acp-workspace-recreate `{ id }` Recreate folder, while `blocked`.
+ * @fires acp-subagent-close `null` From the subagent's bar.
+ * @fires acp-subagent-stop `{ subagentId }` From the subagent's bar.
  */
 export class AcpChat extends LitElement {
   static properties = {
@@ -89,6 +93,8 @@ export class AcpChat extends LitElement {
     signInRun: { attribute: false },
     /** Files dragged from the OS are over it. */
     dropping: { type: Boolean, reflect: true },
+    /** A subagent's read-only chat is shown (`conversationId` is its): its bar in place of the composer. */
+    subagent: { attribute: false },
   };
 
   static styles = styles;
@@ -104,6 +110,8 @@ export class AcpChat extends LitElement {
     super();
     /** @type {string | undefined} */
     this.conversationId = undefined;
+    /** @type {{ subagent: Subagent, chatTitle: string } | null} */
+    this.subagent = null;
     /** @type {boolean} */
     this.empty = false;
     /** @type {ChxChat['adapter']} */
@@ -330,6 +338,14 @@ export class AcpChat extends LitElement {
           .notice=${this.notice}
           .signInRun=${this.signInRun}
         ></acp-session-banner>
+        ${this.subagent
+          ? html`<acp-subagent-bar
+              slot="input-banner"
+              class="acp-chat__subagent"
+              .subagent=${this.subagent.subagent}
+              .chatTitle=${this.subagent.chatTitle}
+            ></acp-subagent-bar>`
+          : nothing}
         <chx-message-composer
           slot="message-composer"
           class="acp-chat__composer"
@@ -337,6 +353,7 @@ export class AcpChat extends LitElement {
           layout="stacked"
           send-button="always"
           ?disabled=${this.blocked !== null}
+          ?hidden=${this.subagent !== null}
           busy-action="stop"
         >
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>

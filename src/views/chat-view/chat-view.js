@@ -16,7 +16,7 @@ import { git } from '../../hooks/git/git.js';
 import { $activeContextUsage } from '../../stores/context-usage/context-usage.js';
 import { openAgents } from '../../stores/editor/editor.js';
 import { $activeFolder, $activeSession, $activeSessionId, $draftSessions } from '../../stores/sessions/sessions.js';
-import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
+import { $activeNotice, $activePermission, $activeSubagent, $sessionNotices, showSubagent } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
 import { $activeWorkspace, $shownFolder, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
@@ -34,7 +34,7 @@ const NO_BRANCHES = { local: [], remotes: [], default: null };
 
 /**
  * @tag acp-chat-view
- * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, `@` file picks.
+ * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, `@` file picks; a subagent's read-only chat in its place (Stop, Back).
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
@@ -66,6 +66,7 @@ export class AcpChatView extends ViewElement {
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #permission = new StoreController(this, { store: $activePermission });
+  #subagent = new StoreController(this, { store: $activeSubagent });
   #notice = new StoreController(this, { store: $activeNotice });
   /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
   #signIns = new StoreController(this, { store: $signIns });
@@ -278,15 +279,46 @@ export class AcpChatView extends ViewElement {
     app.openUrl(url).catch((err) => app.reportError('Opening the link failed', err));
   }
 
+  /** A subagent's card in the chat (`ChatPartsController`, on this element): its read-only chat. */
+  #onSubagentOpen = (/** @type {Event} */ e) => {
+    showSubagent(/** @type {CustomEvent<{ sessionId: string, subagentId: string }>} */ (e).detail);
+  };
+
+  connectedCallback() {
+    super.connectedCallback();
+    this.addEventListener('acp-subagent-open', this.#onSubagentOpen);
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.removeEventListener('acp-subagent-open', this.#onSubagentOpen);
+  }
+
+  /** @param {Event} e The subagent's bar asks to stop it. */
+  #onSubagentStop(e) {
+    const sessionId = this.#activeSessionId.value;
+    const { subagentId } = /** @type {CustomEvent<{ subagentId: string }>} */ (e).detail;
+    if (sessionId !== null) sessions.cancelSubagent(sessionId, subagentId);
+  }
+
+  /** The subagent shown in place of the chat, with its chat's title. */
+  get #shownSubagent() {
+    const subagent = this.#subagent.value;
+    return subagent === null ? null : { subagent, chatTitle: this.#activeSession.value?.title ?? '' };
+  }
+
   render() {
     const project = this.#project.value;
     if (project === null) return html``;
+    const subagent = this.#shownSubagent;
+    const sessionId = this.#activeSessionId.value;
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
     const workspace = this.#workspace.value;
     return html`<acp-chat
       ?hidden=${this.concealed}
-      .conversationId=${this.#session.conversationId}
+      .conversationId=${subagent && sessionId !== null ? sessions.subagentConversationId(sessionId, subagent.subagent.id) : this.#session.conversationId}
+      .subagent=${subagent}
       ?empty=${this.#session.empty}
       .adapter=${sessions.adapter}
       .userId=${sessions.USER_ID}
@@ -318,6 +350,8 @@ export class AcpChatView extends ViewElement {
       @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-run-target-change=${this.#onRunTarget}
       @acp-link-open=${this.#onLinkOpen}
+      @acp-subagent-stop=${this.#onSubagentStop}
+      @acp-subagent-close=${() => showSubagent(null)}
     ></acp-chat>`;
   }
 }

@@ -3,7 +3,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { actions } from '../actions.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { applyAgentOptions, composerOf } from '../../../stores/composer/composer.js';
-import { $sessionNotices, $permissionRequests } from '../../../stores/session-runtime/session-runtime.js';
+import { $sessionNotices, $permissionRequests, addPermissionRequest, clearPermissionRequests } from '../../../stores/session-runtime/session-runtime.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 
 /** @typedef {import('../types.js').Session} Session */
@@ -59,6 +59,38 @@ describe('session actions', () => {
     expect(sent('session_restart')).to.deep.equal([{ sessionId: 's1' }]);
     expect($sessionNotices.get().s1).to.deep.include({ kind: 'progress', message: 'Starting agent…' });
     expect($permissionRequests.get().s1 ?? [], 'the answered requests are gone').to.deep.equal([]);
+  });
+
+  it("stops one subagent, dropping only its permission requests, which the backend answers", async () => {
+    // Arrange
+    addPermissionRequest('s1', { requestId: 'r1', toolCallId: null, title: 'Read', options: [], subagentId: 'c1' });
+    addPermissionRequest('s1', { requestId: 'r2', toolCallId: null, title: 'Edit', options: [] });
+    try {
+      // Act
+      actions.cancelSubagent('s1', 'c1');
+      await tick();
+      // Assert
+      expect(sent('session_cancel_subagent')).to.deep.equal([{ sessionId: 's1', subagentId: 'c1' }]);
+      expect($permissionRequests.get().s1?.map((r) => r.requestId)).to.deep.equal(['r2']);
+    } finally {
+      clearPermissionRequests('s1');
+    }
+  });
+
+  it('keeps a subagent\'s permission requests to answer when stopping it fails', async () => {
+    // Arrange
+    answer = (cmd) => (cmd === 'session_cancel_subagent' ? new Error('the agent is not running') : null);
+    addPermissionRequest('s1', { requestId: 'r1', toolCallId: null, title: 'Read', options: [], subagentId: 'c1' });
+    try {
+      // Act
+      actions.cancelSubagent('s1', 'c1');
+      await tick();
+      // Assert
+      expect($permissionRequests.get().s1?.map((r) => r.requestId)).to.deep.equal(['r1']);
+      expect($notices.get().map((n) => n.level)).to.include('error');
+    } finally {
+      clearPermissionRequests('s1');
+    }
   });
 
   it('shows a failed stop as a notice instead of throwing', async () => {

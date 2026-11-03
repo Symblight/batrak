@@ -4,6 +4,7 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/skeleton';
 import '../session-menu/session-menu.js';
 import '../session-row/session-row.js';
+import '../subagent-tree/subagent-tree.js';
 import { TreeNavigationController } from '../../controllers/tree-navigation/TreeNavigationController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -14,10 +15,11 @@ const { SESSIONS_PAGE, orderSessions, unreadIn, visibleSessions } = sessions;
 /** @typedef {import('../session-row/session-row.js').AcpSessionRow} AcpSessionRow */
 /** @typedef {import('../../controllers/tree-navigation/TreeNavigationController.js').TreeNode} TreeNode */
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
+/** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
 
 /**
  * @tag acp-session-list
- * @summary One workspace's chats, pinned first, then by last activity (five, and five more with each Show more, which counts the unread behind it; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary One workspace's chats (each with its subagents' tree under it), pinned first, then by last activity (five, and five more with each Show more, which counts the unread behind it; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-mark-read `{ sessionId, read }` Mark as read (`read: true`) or as unread.
@@ -25,6 +27,7 @@ const { SESSIONS_PAGE, orderSessions, unreadIn, visibleSessions } = sessions;
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
+ * @fires acp-subagent-open `{ sessionId, subagentId }` From a chat's `<acp-subagent-tree>`.
  */
 export class AcpSessionList extends LitElement {
   static properties = {
@@ -33,6 +36,8 @@ export class AcpSessionList extends LitElement {
     pinned: { attribute: false },
     unread: { attribute: false },
     waiting: { attribute: false },
+    subagents: { attribute: false },
+    activeSubagentId: { attribute: false },
     loading: { type: Boolean },
     now: { attribute: false },
     limit: { state: true },
@@ -67,6 +72,10 @@ export class AcpSessionList extends LitElement {
     this.unread = [];
     /** @type {readonly string[]} Sessions with a permission request waiting for the user. */
     this.waiting = [];
+    /** @type {Readonly<Record<string, readonly Subagent[]>>} Each chat's subagents, by session id. */
+    this.subagents = {};
+    /** @type {string | null} The subagent whose chat is shown (of the active session). */
+    this.activeSubagentId = null;
     /** @type {boolean} The chats are loading: skeleton rows while there are none to show yet. */
     this.loading = false;
     /** @type {number} The time, ms: a session active in another app shows so until its time is up. */
@@ -162,7 +171,27 @@ export class AcpSessionList extends LitElement {
       .menuOpen=${this.#sessionMenu.target?.id === session.id}
       .now=${this.now}
       @acp-session-row-menu=${this.#onSessionRowMenu}
-    ></acp-session-row>`;
+    ></acp-session-row>${this.#renderSubagents(session)}`;
+  }
+
+  /**
+   * The chat's subagents: a tree of its own, outside the list's arrow-key walk.
+   * @param {Session} session
+   */
+  #renderSubagents(session) {
+    const subagents = this.subagents[session.id];
+    if (!subagents?.length) return nothing;
+    /** @param {Event} e */
+    const ownKeys = (e) => e.stopPropagation();
+    return html`<acp-subagent-tree
+      class="acp-session-list__subagents"
+      .sessionId=${session.id}
+      .subagents=${subagents}
+      .activeSubagentId=${session.id === this.activeSessionId ? this.activeSubagentId : null}
+      .now=${this.now}
+      @keydown=${ownKeys}
+      @focusin=${ownKeys}
+    ></acp-subagent-tree>`;
   }
 
   /**

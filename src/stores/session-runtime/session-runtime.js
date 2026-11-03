@@ -3,9 +3,32 @@ import { $activeSessionId } from '../sessions/sessions.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
+/** @typedef {import('../../hooks/sessions/types.js').AcpSessionUpdate} AcpSessionUpdate */
 
 /** Permission requests waiting for the user, by session id, oldest first. Written by the ACP adapter. */
 export const $permissionRequests = atom(/** @type {Readonly<Record<string, readonly PermissionRequest[]>>} */ ({}));
+
+/** Each chat's subagents, by session id, in the order announced. Written by the ACP adapter. */
+export const $subagents = atom(/** @type {Readonly<Record<string, readonly Subagent[]>>} */ ({}));
+
+/**
+ * The subagent whose read-only chat the agent column shows in place of its chat's: per window, in
+ * memory. Shown only while its chat is the active session (`$activeSubagent`).
+ */
+export const $shownSubagent = atom(/** @type {{ sessionId: string, subagentId: string } | null} */ (null));
+
+/** The active session's subagent the agent column shows, or `null` for the chat itself. */
+export const $activeSubagent = computed([$shownSubagent, $activeSessionId, $subagents], (shown, id, all) =>
+  shown === null || shown.sessionId !== id ? null : (all[id]?.find((s) => s.id === shown.subagentId) ?? null),
+);
+
+/**
+ * @param {{ sessionId: string, subagentId: string } | null} shown `null`: back to the chat.
+ */
+export function showSubagent(shown) {
+  $shownSubagent.set(shown);
+}
 
 /** What the chat says about each session above its composer, by session id (a draft's too). */
 export const $sessionNotices = atom(/** @type {Readonly<Record<string, SessionNotice>>} */ ({}));
@@ -78,4 +101,45 @@ export function setSessionNotice(sessionId, notice) {
  */
 export function dismissSessionNotice(sessionId) {
   setSessionNotice(sessionId, $sessionNotices.get()[sessionId]?.under ?? null);
+}
+
+/**
+ * A `subagent_update` upserts its subagent: the first announces it, later ones patch it (an
+ * omitted field stays, `null` clears it).
+ * @param {readonly Subagent[]} subagents
+ * @param {AcpSessionUpdate} update
+ * @param {string} now ISO time, for a new one.
+ * @returns {readonly Subagent[]}
+ */
+export function applySubagentUpdate(subagents, update, now) {
+  const id = update.sessionId;
+  if (!id) return subagents;
+  const known = subagents.find((s) => s.id === id);
+  /** @type {Subagent} */
+  const next = { ...(known ?? { id, title: null, description: null, state: null, stopReason: null, cancellable: false, announcedAt: now }) };
+  if (update.title !== undefined) next.title = update.title;
+  if (update.description !== undefined) next.description = update.description;
+  if (update.capabilities !== undefined) next.cancellable = Boolean(update.capabilities?.cancel);
+  if (update.state !== undefined) {
+    next.state = update.state?.state ?? null;
+    const reason = update.state?.stopReason;
+    next.stopReason = reason == null ? null : typeof reason === 'string' ? reason : 'error';
+  }
+  return known ? subagents.map((s) => (s === known ? next : s)) : [...subagents, next];
+}
+
+/**
+ * @param {string} sessionId
+ * @param {AcpSessionUpdate} update A `subagent_update` of the session's.
+ */
+export function upsertSubagent(sessionId, update) {
+  const all = $subagents.get();
+  const next = applySubagentUpdate(all[sessionId] ?? [], update, new Date().toISOString());
+  if (next !== all[sessionId]) $subagents.set({ ...all, [sessionId]: next });
+}
+
+/** @param {string} sessionId */
+export function forgetSubagents(sessionId) {
+  const { [sessionId]: dropped, ...rest } = $subagents.get();
+  if (dropped) $subagents.set(rest);
 }

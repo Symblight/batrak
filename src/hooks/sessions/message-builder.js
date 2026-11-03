@@ -1,4 +1,5 @@
 import { folderOf } from '../../stores/sessions/sessions.js';
+import { subagentCardId } from './rules.js';
 
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
 /** @typedef {NonNullable<ChxChat['adapter']>} ChxChatAdapter */
@@ -59,6 +60,23 @@ export class MessageBuilder {
   /** @param {string} toolCallId */
   toolPartId(toolCallId) {
     return `${this.messageId}-tool-${toolCallId}`;
+  }
+
+  /**
+   * The card of a subagent the agent handed work to: a tool call part keyed by the subagent, so
+   * later fields (its status) update it.
+   * @param {string} subagentId
+   * @param {Partial<ChxMessagePart>} fields
+   * @returns {ChxChunk[]}
+   */
+  subagentCard(subagentId, fields) {
+    this.#lastKind = 'tool';
+    return [...this.#endThought(), this.chunk(this.subagentPartId(subagentId), 'tool_call', { ...fields, data: subagentCardData(subagentId) })];
+  }
+
+  /** @param {string} subagentId */
+  subagentPartId(subagentId) {
+    return this.toolPartId(subagentCardId(subagentId));
   }
 
   /**
@@ -152,10 +170,18 @@ export class MessageBuilder {
   }
 }
 
+/**
+ * A subagent card's `data`: `subagentId` tells it from a tool call.
+ * @param {string} subagentId
+ */
+export function subagentCardData(subagentId) {
+  return { toolCallId: subagentCardId(subagentId), subagentId };
+}
+
 /** @param {AcpSessionUpdate} update */
 function textOf(update) {
   const content = update.content;
-  return content?.type === 'text' ? (content.text ?? '') : '';
+  return !Array.isArray(content) && content?.type === 'text' ? (content.text ?? '') : '';
 }
 
 /**

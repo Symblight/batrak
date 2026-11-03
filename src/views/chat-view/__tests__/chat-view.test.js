@@ -5,6 +5,8 @@ import { $project } from '../../../stores/project/project.js';
 import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { $composer, forgetComposer, setRunTarget } from '../../../stores/composer/composer.js';
 import { $gitRepo, NO_REPO } from '../../../stores/git/git.js';
+import { $activeSubagent, $subagents, showSubagent } from '../../../stores/session-runtime/session-runtime.js';
+import { sessions } from '../../../hooks/sessions/sessions.js';
 import '../chat-view.js';
 
 /** A repository with a commit: the project can have workspaces. */
@@ -108,6 +110,41 @@ describe('acp-chat-view', () => {
 
       // Assert
       expect(calls.find((c) => c.cmd === command)?.args, String(type)).to.deep.equal(args);
+    }
+  });
+
+  it("shows a subagent's read-only chat in place of its chat's when its card is clicked, stops it and goes back as its bar asks", async () => {
+    // Arrange
+    /** @type {import('../../../hooks/sessions/types.js').Subagent} */
+    const sub = { id: 'c1', title: 'Find usages', description: 'Explore', state: 'running', stopReason: null, cancellable: true, announcedAt: '2026-01-01T00:00:00.000Z' };
+    $subagents.set({ d1: [sub] });
+    try {
+      const el = await render();
+      const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (el.querySelector('acp-chat'));
+      // Act: its card in the chat is clicked
+      fire(el, 'acp-subagent-open', { sessionId: 'd1', subagentId: 'c1' });
+      await el.updateComplete;
+      await chat.updateComplete;
+      const root = /** @type {ShadowRoot} */ (chat.shadowRoot);
+      const bar = /** @type {HTMLElementTagNameMap['acp-subagent-bar']} */ (root.querySelector('acp-subagent-bar'));
+      // Assert
+      expect(chat.conversationId).to.equal(sessions.subagentConversationId('d1', 'c1'));
+      expect(bar.subagent).to.deep.equal(sub);
+      expect(root.querySelector('chx-message-composer')?.hasAttribute('hidden'), 'read-only').to.equal(true);
+      // Act
+      bar.dispatchEvent(new CustomEvent('acp-subagent-stop', { detail: { subagentId: 'c1' }, bubbles: true, composed: true }));
+      await until(() => calls.some((c) => c.cmd === 'session_cancel_subagent'));
+      bar.dispatchEvent(new CustomEvent('acp-subagent-close', { detail: null, bubbles: true, composed: true }));
+      await el.updateComplete;
+      await chat.updateComplete;
+      // Assert
+      expect(calls.find((c) => c.cmd === 'session_cancel_subagent')?.args).to.deep.equal({ sessionId: 'd1', subagentId: 'c1' });
+      expect($activeSubagent.get(), 'back').to.equal(null);
+      expect(chat.conversationId).to.equal('d1');
+      expect(root.querySelector('chx-message-composer')?.hasAttribute('hidden')).to.equal(false);
+    } finally {
+      showSubagent(null);
+      $subagents.set({});
     }
   });
 

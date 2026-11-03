@@ -102,6 +102,14 @@ export function sessionCancel(sessionId) {
 
 /**
  * @param {string} sessionId
+ * @param {string} subagentId Its ACP session id.
+ */
+export function sessionCancelSubagent(sessionId, subagentId) {
+  return ipc.invoke('session_cancel_subagent', { sessionId, subagentId });
+}
+
+/**
+ * @param {string} sessionId
  * @param {string} requestId
  * @param {string | null} optionId `null` cancels the request.
  * @returns {Promise<void>}

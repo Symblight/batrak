@@ -10,7 +10,7 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
-import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
+import { $activeSubagent, $permissionRequests, $subagents, showSubagent } from '../../stores/session-runtime/session-runtime.js';
 import { $unreadSessions, markRead, markUnread } from '../../stores/session-read/session-read.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
@@ -23,7 +23,7 @@ import { $waitingElsewhere } from '../../stores/workspace-status/workspace-statu
 
 /**
  * @tag acp-session-column
- * @summary The Sessions column's container: the shown workspace's header (name, New chat, the sync, its banners) and its chats from the stores, and what they ask for (select, new chat, rename, reveal, remove, mark read or unread, resync, recreate or delete the workspace).
+ * @summary The Sessions column's container: the shown workspace's header (name, New chat, the sync, its banners) and its chats from the stores, and what they ask for (select, open a subagent, new chat, rename, reveal, remove, mark read or unread, resync, recreate or delete the workspace).
  */
 export class AcpSessionColumn extends ViewElement {
   #sessions = new StoreController(this, { store: $sessions });
@@ -38,6 +38,8 @@ export class AcpSessionColumn extends ViewElement {
   #sync = new StoreController(this, { store: $sessionSync });
   #loaded = new StoreController(this, { store: $sessionsLoaded });
   #now = new StoreController(this, { store: $now });
+  #subagents = new StoreController(this, { store: $subagents });
+  #activeSubagent = new StoreController(this, { store: $activeSubagent });
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.renderRoot.querySelector('acp-confirm-dialog') });
 
@@ -55,7 +57,15 @@ export class AcpSessionColumn extends ViewElement {
 
   /** @param {Event} e */
   #onSessionSelect(e) {
+    showSubagent(null);
     sessions.select(/** @type {CustomEvent<{ sessionId: string }>} */ (e).detail.sessionId);
+  }
+
+  /** @param {Event} e A subagent's row: its chat is shown, with the subagent's in place of it. */
+  #onSubagentOpen(e) {
+    const shown = /** @type {CustomEvent<{ sessionId: string, subagentId: string }>} */ (e).detail;
+    sessions.select(shown.sessionId);
+    showSubagent(shown);
   }
 
   /** @param {Event} e */
@@ -117,7 +127,10 @@ export class AcpSessionColumn extends ViewElement {
         .waiting=${Object.keys(this.#permissions.value)}
         .loading=${loading}
         .now=${this.#now.value}
+        .subagents=${this.#subagents.value}
+        .activeSubagentId=${this.#activeSubagent.value?.id ?? null}
         @acp-session-select=${this.#onSessionSelect}
+        @acp-subagent-open=${this.#onSubagentOpen}
         @acp-session-mark-read=${this.#onSessionMarkRead}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>

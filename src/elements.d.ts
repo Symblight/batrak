@@ -75,6 +75,8 @@ import type { AcpSessionHeader } from './components/session-header/session-heade
 import type { AcpProjectMenu } from './components/project-menu/project-menu.js';
 import type { AcpSessionRow } from './components/session-row/session-row.js';
 import type { AcpSessionList } from './components/session-list/session-list.js';
+import type { AcpSubagentTree } from './components/subagent-tree/subagent-tree.js';
+import type { AcpSubagentBar } from './components/subagent-bar/subagent-bar.js';
 import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
 import type { AcpWorkspaceStatus } from './components/workspace-status/workspace-status.js';
 import type { AcpWorkspacePicker } from './components/workspace-picker/workspace-picker.js';
@@ -165,6 +167,8 @@ declare global {
     'acp-project-menu': AcpProjectMenu;
     'acp-session-row': AcpSessionRow;
     'acp-session-list': AcpSessionList;
+    'acp-subagent-bar': AcpSubagentBar;
+    'acp-subagent-tree': AcpSubagentTree;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;
     'acp-workspace-status': AcpWorkspaceStatus;
