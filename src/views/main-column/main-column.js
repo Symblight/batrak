@@ -7,6 +7,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
 import { markdownView } from '../../hooks/markdown-view/markdown-view.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { contentKindOf } from '../../controllers/tab-content/TabContentController.js';
@@ -113,8 +114,8 @@ export class AcpMainColumn extends ViewElement {
   }
 
   /**
-   * The markdown view's keys, while the active tab is a markdown file: Mod+K then V toggles Split (the
-   * chord waits 1.2 s), Mod+Shift+V Preview, Esc (from the file's panel) leaves Preview unless text is selected. In the
+   * The markdown view's keys, while the active tab is a markdown file: `markdownSplit` (Mod+K then V; the
+   * chord waits 1.2 s) toggles Split, `markdownPreview` Preview, Esc (from the file's panel) leaves Preview unless text is selected. In the
    * capture phase, so the editor's own keymap doesn't see them first.
    * @param {KeyboardEvent} e
    */
@@ -125,27 +126,25 @@ export class AcpMainColumn extends ViewElement {
       return;
     }
     if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return;
-    const key = e.key.toLowerCase();
-    const mod = e.metaKey || e.ctrlKey;
     const claim = () => {
       e.preventDefault();
       e.stopPropagation();
     };
     if (this.#chordTimer) {
       this.#disarmChord();
-      if (key === 'v' && !e.altKey && !e.shiftKey) {
+      if (shortcuts.matchesThen('markdownSplit', e)) {
         claim();
         markdownView.toggle(path, 'split');
         return;
       }
     }
-    if (mod && !e.altKey && !e.shiftKey && key === 'k') {
+    if (shortcuts.matches('markdownSplit', e)) {
       claim();
       this.#chordTimer = window.setTimeout(() => this.#disarmChord(), 1200);
-    } else if (mod && !e.altKey && e.shiftKey && key === 'v') {
+    } else if (shortcuts.matches('markdownPreview', e)) {
       claim();
       markdownView.toggle(path, 'preview');
-    } else if (e.key === 'Escape' && !mod && !e.altKey && !e.shiftKey && markdownView.modeOf(path) === 'preview') {
+    } else if (e.key === 'Escape' && !e.metaKey && !e.ctrlKey && !e.altKey && !e.shiftKey && markdownView.modeOf(path) === 'preview') {
       // Only in the file's own panel: a dialog of the tab view answers its Esc itself.
       const inPanel = e.composedPath().some((n) => n instanceof Element && n.localName === 'md-tab-panel' && n.hasAttribute('active'));
       if (!inPanel || getSelection()?.toString()) return;

@@ -2,10 +2,11 @@ import { expect } from '@esm-bundle/chai';
 import { initialQuery, optionForKey } from '../options.js';
 
 /**
+ * A key as macOS gives it with ⌥ held: a symbol, so read by position.
  * @param {string} code
  * @param {Partial<{ altKey: boolean, metaKey: boolean, ctrlKey: boolean, shiftKey: boolean }>} [mods]
  */
-const key = (code, mods = { altKey: true }) => ({ code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, ...mods });
+const key = (code, mods = { altKey: true }) => ({ key: '∂', code, altKey: false, metaKey: false, ctrlKey: false, shiftKey: false, ...mods });
 
 describe('search options', () => {
   it('reads Alt+C / W / R by the physical key, and nothing else', () => {
@@ -18,6 +19,7 @@ describe('search options', () => {
       [key('KeyC', {}), null],
       [key('KeyC', { altKey: true, metaKey: true }), null],
       [key('KeyC', { altKey: true, ctrlKey: true }), null],
+      [key('KeyC', { altKey: true, shiftKey: true }), null],
     ];
     for (const [event, option] of cases) {
       // Act + Assert

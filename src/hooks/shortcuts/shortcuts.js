@@ -1,40 +1,39 @@
 import { app } from '../app/app.js';
+import { comboOf, keyMatches } from './keys.js';
 
 /** @typedef {import('../app/types.js').Platform} Platform */
-
-/**
- * @typedef {Object} Shortcut
- * @property {string} key Shown as is; a letter in upper case.
- * @property {boolean} [mod] Command on macOS, Ctrl elsewhere.
- * @property {boolean} [ctrl] Ctrl on every platform.
- * @property {boolean} [shift]
- * @property {boolean} [alt]
- * @property {string} [then] A chord: the key pressed after this one.
- */
+/** @typedef {import('./types.js').Combo} Combo */
+/** @typedef {import('./types.js').ShortcutRow} ShortcutRow */
+/** @typedef {Pick<KeyboardEvent, 'key' | 'code' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>} KeyPress */
 
 /** @typedef {keyof typeof TABLE} ShortcutId */
 
-/** Every shortcut the app owns; the handlers read the keys themselves. */
-const TABLE = Object.freeze({
-  quickOpen: { mod: true, key: 'P' },
-  openFolder: { mod: true, key: 'O' },
-  searchInFiles: { mod: true, shift: true, key: 'F' },
-  toggleSessionView: { mod: true, shift: true, key: 'T' },
-  markProjectRead: { mod: true, shift: true, key: 'R' },
-  newTerminal: { ctrl: true, key: '`' },
-  save: { mod: true, key: 'S' },
-  find: { mod: true, key: 'F' },
-  markdownSplit: { mod: true, key: 'K', then: 'V' },
-  markdownPreview: { mod: true, shift: true, key: 'V' },
-  matchCase: { alt: true, key: 'C' },
-  wholeWord: { alt: true, key: 'W' },
-  regex: { alt: true, key: 'R' },
-});
+/** Every shortcut the app owns; handlers check their keys with `matches()`. */
+const TABLE = Object.freeze(
+  /** @satisfies {Record<string, ShortcutRow>} */ ({
+    quickOpen: { mod: true, key: 'P' },
+    openFolder: { mod: true, key: 'O' },
+    searchInFiles: { mod: true, shift: true, key: 'F' },
+    toggleSessionView: { mod: true, shift: true, key: 'T' },
+    markProjectRead: { mod: true, shift: true, key: 'R' },
+    newTerminal: { ctrl: true, key: '`' },
+    save: { mod: true, key: 'S' },
+    find: { mod: true, key: 'F' },
+    markdownSplit: { mod: true, key: 'K', then: 'V' },
+    markdownPreview: { mod: true, shift: true, key: 'V' },
+    matchCase: { alt: true, key: 'C' },
+    wholeWord: { alt: true, key: 'W' },
+    regex: { alt: true, key: 'R' },
+    focusSelectionActions: { alt: true, key: 'F10' },
+    // On macOS the menu's Settings… item has ⌘,.
+    settings: { mac: { mod: true, key: ',', menu: true }, other: { ctrl: true, key: ',' } },
+  }),
+);
 
 const MAC_SYMBOLS = { ctrl: '⌃', alt: '⌥', shift: '⇧', mod: '⌘' };
 
 /**
- * @param {Shortcut} shortcut
+ * @param {Combo} combo
  * @param {Platform} platform
  * @returns {('ctrl' | 'alt' | 'shift' | 'mod')[]} The modifiers in the order the platform writes them.
  */
@@ -45,18 +44,30 @@ function modifiers({ ctrl, alt, shift, mod }, platform) {
 }
 
 /**
- * The shortcut table: what to show next to a control and what to tell assistive technology.
+ * @param {ShortcutId} id
+ * @param {Platform} platform
+ */
+function combo(id, platform) {
+  return comboOf(TABLE[id], platform);
+}
+
+/**
+ * The shortcut table: what to show next to a control, what to tell assistive technology, and
+ * whether a key press is a shortcut.
  */
 export const shortcuts = Object.freeze({
+  /** Every row's id. */
+  ids: /** @type {readonly ShortcutId[]} */ (Object.freeze(Object.keys(TABLE))),
+
   /**
    * The text for a hint: `⌘⇧F` on macOS, `Ctrl+Shift+F` elsewhere.
    * @param {ShortcutId} id
    * @param {Platform} [platform]
    */
   hint(id, platform = app.platform) {
-    const shortcut = TABLE[id];
+    const shortcut = combo(id, platform);
     const mods = modifiers(shortcut, platform);
-    const chord = 'then' in shortcut ? ` ${shortcut.then}` : '';
+    const chord = shortcut.then ? ` ${shortcut.then}` : '';
     if (platform === 'mac') return mods.map((m) => MAC_SYMBOLS[m]).join('') + shortcut.key + chord;
     const names = { ctrl: 'Ctrl', alt: 'Alt', shift: 'Shift', mod: 'Ctrl' };
     return [...mods.map((m) => names[m]), shortcut.key].join('+') + chord;
@@ -68,7 +79,7 @@ export const shortcuts = Object.freeze({
    * @param {Platform} [platform]
    */
   aria(id, platform = app.platform) {
-    const shortcut = TABLE[id];
+    const shortcut = combo(id, platform);
     const names = { ctrl: 'Control', alt: 'Alt', shift: 'Shift', mod: platform === 'mac' ? 'Meta' : 'Control' };
     return [...modifiers(shortcut, 'windows').map((m) => names[m]), shortcut.key].join('+');
   },
@@ -79,7 +90,7 @@ export const shortcuts = Object.freeze({
    * @param {Platform} [platform]
    */
   group(ids, platform = app.platform) {
-    return [shortcuts.hint(ids[0], platform), ...ids.slice(1).map((id) => TABLE[id].key)].join('/');
+    return [shortcuts.hint(ids[0], platform), ...ids.slice(1).map((id) => combo(id, platform).key)].join('/');
   },
 
   /**
@@ -90,5 +101,33 @@ export const shortcuts = Object.freeze({
    */
   labelled(label, id, platform = app.platform) {
     return `${label} (${shortcuts.hint(id, platform)})`;
+  },
+
+  /**
+   * The key press is the shortcut (its first stroke, for a chord): the key, and exactly its
+   * modifiers (Mod is ⌘ on macOS, Ctrl elsewhere, where the Windows / Super key must be up).
+   * Never for a combo the native menu handles.
+   * @param {ShortcutId} id
+   * @param {KeyPress} e
+   * @param {Platform} [platform]
+   */
+  matches(id, e, platform = app.platform) {
+    const shortcut = combo(id, platform);
+    if (shortcut.menu || !keyMatches(shortcut.key, e)) return false;
+    const mac = platform === 'mac';
+    const meta = mac && !!shortcut.mod;
+    const ctrl = !!shortcut.ctrl || (!mac && !!shortcut.mod);
+    return e.metaKey === meta && e.ctrlKey === ctrl && e.altKey === !!shortcut.alt && e.shiftKey === !!shortcut.shift;
+  },
+
+  /**
+   * The key press is a chord's second stroke: its key, with Alt and Shift up (Mod / Ctrl may be held).
+   * @param {ShortcutId} id
+   * @param {KeyPress} e
+   * @param {Platform} [platform]
+   */
+  matchesThen(id, e, platform = app.platform) {
+    const then = combo(id, platform).then;
+    return !!then && !e.altKey && !e.shiftKey && keyMatches(then, e);
   },
 });

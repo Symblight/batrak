@@ -8,6 +8,7 @@ import { AcpChangesReview } from '../../../components/changes-review/changes-rev
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
 import { markdownView } from '../../../hooks/markdown-view/markdown-view.js';
+import { app } from '../../../hooks/app/app.js';
 import '../main-column.js';
 
 /** @typedef {import('../main-column.js').AcpMainColumn} AcpMainColumn */
@@ -114,18 +115,20 @@ describe('acp-main-column', () => {
       return event;
     }
     const mode = () => markdownView.modeOf('/p/docs/a.md');
+    /** The platform's Mod held. */
+    const mod = { [app.platform === 'mac' ? 'metaKey' : 'ctrlKey']: true };
 
     it('toggles Preview with Mod+Shift+V, from Raw and from Split', async () => {
       openTab('/p/docs/a.md');
       const { tabView } = await render();
 
-      const first = press(tabView, { key: 'V', metaKey: true, shiftKey: true });
+      const first = press(tabView, { key: 'V', code: 'KeyV', ...mod, shiftKey: true });
       expect([mode(), first.defaultPrevented]).to.deep.equal(['preview', true]);
-      press(tabView, { key: 'v', ctrlKey: true, shiftKey: true });
+      press(tabView, { key: 'v', code: 'KeyV', ...mod, shiftKey: true });
       expect(mode()).to.equal('raw');
 
       markdownView.setMode('/p/docs/a.md', 'split');
-      press(tabView, { key: 'V', metaKey: true, shiftKey: true });
+      press(tabView, { key: 'V', code: 'KeyV', ...mod, shiftKey: true });
       expect(mode()).to.equal('preview');
     });
 
@@ -133,28 +136,32 @@ describe('acp-main-column', () => {
       openTab('/p/docs/a.md');
       const { tabView } = await render();
 
-      const chord = press(tabView, { key: 'k', metaKey: true });
-      const second = press(tabView, { key: 'v' });
+      const chord = press(tabView, { key: 'k', code: 'KeyK', ...mod });
+      const second = press(tabView, { key: 'v', code: 'KeyV' });
       expect([mode(), chord.defaultPrevented, second.defaultPrevented]).to.deep.equal(['split', true, true]);
 
-      press(tabView, { key: 'k', ctrlKey: true });
-      press(tabView, { key: 'v', ctrlKey: true });
+      press(tabView, { key: 'k', code: 'KeyK', ...mod });
+      press(tabView, { key: 'v', code: 'KeyV', ...mod });
       expect(mode(), 'with Mod still held').to.equal('raw');
+
+      press(tabView, { key: 'л', code: 'KeyK', ...mod });
+      press(tabView, { key: 'м', code: 'KeyV' });
+      expect(mode(), 'by position on a non-Latin layout').to.equal('split');
     });
 
     it('drops the chord at any other key, which is not swallowed, and when it waited too long', async () => {
       openTab('/p/docs/a.md');
       const { tabView } = await render();
 
-      press(tabView, { key: 'k', metaKey: true });
+      press(tabView, { key: 'k', code: 'KeyK', ...mod });
       press(tabView, { key: 'Shift', shiftKey: true });
-      const other = press(tabView, { key: 'x' });
-      press(tabView, { key: 'v' });
+      const other = press(tabView, { key: 'x', code: 'KeyX' });
+      press(tabView, { key: 'v', code: 'KeyV' });
       expect([mode(), other.defaultPrevented], 'cancelled').to.deep.equal(['raw', false]);
 
-      press(tabView, { key: 'k', metaKey: true });
+      press(tabView, { key: 'k', code: 'KeyK', ...mod });
       await new Promise((resolve) => setTimeout(resolve, 1300));
-      const late = press(tabView, { key: 'v' });
+      const late = press(tabView, { key: 'v', code: 'KeyV' });
       expect([mode(), late.defaultPrevented], 'too late').to.deep.equal(['raw', false]);
     });
 
@@ -195,9 +202,9 @@ describe('acp-main-column', () => {
       const { tabView } = await render();
 
       const events = [
-        press(tabView, { key: 'V', metaKey: true, shiftKey: true }),
-        press(tabView, { key: 'k', metaKey: true }),
-        press(tabView, { key: 'v' }),
+        press(tabView, { key: 'V', code: 'KeyV', ...mod, shiftKey: true }),
+        press(tabView, { key: 'k', code: 'KeyK', ...mod }),
+        press(tabView, { key: 'v', code: 'KeyV' }),
       ];
 
       expect(events.map((e) => e.defaultPrevented)).to.deep.equal([false, false, false]);

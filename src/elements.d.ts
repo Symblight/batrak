@@ -55,6 +55,7 @@ import type { AcpResizeHandle } from './components/resize-handle/resize-handle.j
 import type { AcpRunTarget } from './components/run-target/run-target.js';
 import type { AcpQuickOpen } from './components/quick-open/quick-open.js';
 import type { AcpSelectionActions } from './components/selection-actions/selection-actions.js';
+import type { AcpShortcut } from './components/shortcut/shortcut.js';
 import type { AcpSearchBar } from './components/search-bar/search-bar.js';
 import type { AcpSearchDialog } from './components/search-dialog/search-dialog.js';
 import type { AcpSearchEmpty } from './components/search-empty/search-empty.js';
@@ -154,6 +155,7 @@ declare global {
     'acp-search-results': AcpSearchResults;
     'acp-search-view-picker': AcpSearchViewPicker;
     'acp-selection-actions': AcpSelectionActions;
+    'acp-shortcut': AcpShortcut;
     'acp-session-banner': AcpSessionBanner;
     'acp-session-header': AcpSessionHeader;
     'acp-project-menu': AcpProjectMenu;

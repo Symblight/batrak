@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { app } from '../../../hooks/app/app.js';
 import '../code-view.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
@@ -21,6 +22,18 @@ const fileTab = (path) => ({
   deletedOnDisk: false,
 });
 
+/**
+ * Polls until `pred` holds; fails after 2s.
+ * @param {() => boolean} pred
+ */
+async function until(pred) {
+  const started = Date.now();
+  while (!pred()) {
+    expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
+    await new Promise((r) => setTimeout(r, 10));
+  }
+}
+
 describe('acp-code-view', () => {
   it('says when a file was deleted on disk, still showing it', async () => {
     const path = '/p/.brama/agents.json';
@@ -39,9 +52,13 @@ describe('acp-code-view', () => {
 
   describe('Mod+S', () => {
     const path = '/p/.brama/agents.json';
+    const mod = app.platform === 'mac' ? 'metaKey' : 'ctrlKey';
 
-    /** @param {Partial<EditorTab>} props */
-    async function save(props) {
+    /**
+     * @param {Partial<EditorTab>} props
+     * @param {KeyboardEventInit} [keys] The keys pressed: Mod+S unless given.
+     */
+    async function save(props, keys = { key: 's', code: 'KeyS', [mod]: true }) {
       const tab = { ...fileTab(path), loaded: true, content: '{}', draft: '{ "x": 1 }', ...props };
       const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (
         await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'}></acp-code-view>`)
@@ -53,7 +70,7 @@ describe('acp-code-view', () => {
       }
       el.shadowRoot
         ?.querySelector('cdx-code-editor')
-        ?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, composed: true }));
+        ?.dispatchEvent(new KeyboardEvent('keydown', { ...keys, bubbles: true, composed: true }));
       return fired;
     }
 
@@ -61,9 +78,41 @@ describe('acp-code-view', () => {
       expect(await save({})).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path } }]);
     });
 
+    it('saves on Mod+S by position on a non-Latin layout, not with Shift added', async () => {
+      // Act + Assert
+      expect(await save({}, { key: 'ы', code: 'KeyS', [mod]: true }), 'Cyrillic').to.have.length(1);
+      expect(await save({}, { key: 'S', code: 'KeyS', [mod]: true, shiftKey: true }), 'Mod+Shift+S').to.deep.equal([]);
+    });
+
     it('reports a conflict instead when the file changed on disk', async () => {
       expect(await save({ changedOnDisk: true })).to.deep.equal([{ type: 'acp-tab-conflict', detail: { id: path } }]);
     });
+  });
+
+  it('moves focus into the selection’s actions on Alt+F10, not on Ctrl+Alt+F10', async () => {
+    // Arrange
+    /** @type {EditorTab} */
+    const tab = { ...fileTab('/p/a.js'), loaded: true, content: 'one two\n' };
+    const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'}></acp-code-view>`));
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (root.querySelector('cdx-code-editor'));
+    await until(() => !!editor.view);
+    editor.selection.set(0, 3);
+    await until(() => !!root.querySelector('acp-selection-actions'));
+    const actions = /** @type {HTMLElement} */ (root.querySelector('acp-selection-actions'));
+    const press = (/** @type {KeyboardEventInit} */ init) =>
+      editor.view?.contentDOM.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'F10', code: 'F10', altKey: true, bubbles: true, composed: true, cancelable: true, ...init }),
+      );
+
+    // Act + Assert: an extra modifier
+    press({ ctrlKey: true });
+    expect(actions.matches(':focus-within'), 'Ctrl+Alt+F10').to.equal(false);
+
+    // Act
+    press({});
+    // Assert
+    expect(actions.matches(':focus-within'), 'Alt+F10').to.equal(true);
   });
 
   describe('footer menus', () => {

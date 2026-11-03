@@ -33,7 +33,7 @@ describe('acp-nav-rail', () => {
       ['search', 'acp-find-in-files', 'Search', 'searchInFiles'],
       ['changes', 'acp-show-changes', 'Changes'],
       ['terminal', 'acp-open-terminal', 'Terminal', 'newTerminal'],
-      ['settings', 'acp-show-settings', 'Settings'],
+      ['settings', 'acp-show-settings', 'Settings', 'settings'],
     ];
     for (const [name, type, label, shortcut] of buttons) {
       // Arrange

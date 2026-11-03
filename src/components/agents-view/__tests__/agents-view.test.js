@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { app } from '../../../hooks/app/app.js';
 import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../agents-view.js';
 
@@ -169,10 +170,18 @@ describe('acp-agents-view', () => {
     ]);
   });
 
-  it('focuses the search on ⌘F / Ctrl+F', async () => {
+  it('focuses the search on ⌘F / Ctrl+F, not on the modifier that is not Mod', async () => {
+    // Arrange
     const { root } = await render();
-    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true }));
-    expect(root.activeElement).to.equal(root.querySelector('.acp-agents-view__search-input'));
+    const input = root.querySelector('.acp-agents-view__search-input');
+    const [mod, notMod] = app.platform === 'mac' ? ['metaKey', 'ctrlKey'] : ['ctrlKey', 'metaKey'];
+    // Act + Assert: the other modifier
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', [notMod]: true, bubbles: true }));
+    expect(root.activeElement === input, 'the modifier that is not Mod').to.equal(false);
+    // Act
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'f', code: 'KeyF', [mod]: true, bubbles: true }));
+    // Assert
+    expect(root.activeElement === input, 'Mod').to.equal(true);
     expect(root.activeElement?.getAttribute('aria-keyshortcuts')).to.equal(shortcuts.aria('find'));
   });
 

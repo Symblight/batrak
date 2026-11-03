@@ -159,9 +159,11 @@ describe('acp-terminal', () => {
     input(el).dispatchEvent(
       new KeyboardEvent('keydown', { key: 'p', code: 'KeyP', keyCode: 80, metaKey: mac, ctrlKey: !mac, bubbles: true, composed: true }),
     );
+    // New Terminal by position: Ctrl+^ on a German layout (keyCode 220, which xterm would send as Ctrl+\).
+    input(el).dispatchEvent(new KeyboardEvent('keydown', { key: '^', code: 'Backquote', keyCode: 220, ctrlKey: true, bubbles: true, composed: true }));
     window.removeEventListener('keydown', listener);
     expect(calls.writes).to.deep.equal([]);
-    expect(reached.map((e) => e.key)).to.deep.equal(['p']);
+    expect(reached.map((e) => e.key)).to.deep.equal(['p', '^']);
   });
 
   it('resizes the shell with its tab', async () => {
