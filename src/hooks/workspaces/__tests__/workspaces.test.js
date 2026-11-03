@@ -51,4 +51,32 @@ describe('workspaces hook', () => {
     expect(asked, 'the open project, then its own change only').to.deep.equal(['/work/a', '/work/a']);
     expect($workspaces.get().map((w) => w.id)).to.deep.equal(['w2']);
   });
+
+  it('keeps the latest list when an older reply arrives after it', async () => {
+    // Arrange: the first list call answers only after the second
+    /** @type {((list: unknown) => void)[]} */
+    const pending = [];
+    clearMocks();
+    mockIPC(
+      (cmd) => {
+        if (cmd !== 'workspaces_list') return null;
+        return new Promise((resolve) => pending.push(resolve));
+      },
+      { shouldMockEvents: true },
+    );
+    stop = workspaces.start();
+    $project.set({ path: '/work/a', name: 'a', rootId: null });
+    await until(() => pending.length === 1);
+    await emit('workspaces://changed', { projectPath: '/work/a' });
+    await until(() => pending.length === 2);
+
+    // Act
+    pending[1]([{ id: 'w', projectPath: '/work/a', name: 'Task', creating: false }]);
+    await until(() => $workspaces.get().length === 1);
+    pending[0]([{ id: 'w', projectPath: '/work/a', name: 'Task', creating: true }]);
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Assert
+    expect($workspaces.get().map((w) => w.creating)).to.deep.equal([false]);
+  });
 });

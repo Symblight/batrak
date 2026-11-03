@@ -5,12 +5,16 @@ import { app } from '../app/app.js';
 
 /** @typedef {import('./types.js').Workspace} Workspace */
 
+/** Numbers refreshes: only the latest one's reply is kept, whatever order replies come in. */
+let latest = 0;
+
 /**
- * Loads the shown project's workspaces into `$workspaces`; a reply for a project no longer shown
- * is dropped.
+ * Loads the shown project's workspaces into `$workspaces`; a reply older than the latest refresh
+ * (another project's, or overtaken) is dropped.
  * @param {string | null} projectPath
  */
 async function refresh(projectPath) {
+  const turn = ++latest;
   if (projectPath === null) {
     setWorkspaces([]);
     return;
@@ -18,7 +22,7 @@ async function refresh(projectPath) {
   try {
     /** @type {Workspace[]} */
     const list = await ipc.invoke('workspaces_list', { projectPath });
-    if ($projectPath.get() === projectPath) setWorkspaces(Array.isArray(list) ? list : []);
+    if (turn === latest) setWorkspaces(Array.isArray(list) ? list : []);
   } catch (err) {
     app.reportError('Listing workspaces failed', err);
   }
