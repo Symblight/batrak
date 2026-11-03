@@ -16,86 +16,29 @@ impl Sessions {
         Ok(record.agent_cwd.clone())
     }
 
-    /// Applies a worktree session's work since its base (commits and uncommitted changes) to the
-    /// project's checkout, unstaged; a checkout that moved on gets a three-way merge. Refused while
-    /// a turn runs.
+    /// Applies the work of a chat's workspace to the project (`workspace_apply_locally`).
     pub async fn apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
-        let state = self.get(id)?;
-        let (dir, base) = self.worktree_of(id)?;
-        let _slot = Self::idle_worktree(&state)?;
-        let project = state.record().project_path;
-        let outcome = tokio::task::spawn_blocking(move || {
-            crate::git::apply::apply_locally(crate::git::binary::git()?, &dir, &base, &project)
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-        tracing::info!(session = %id, ?outcome, "applied the worktree's work to the project");
-        Ok(outcome)
+        self.workspace_apply_locally(&self.workspace_of_chat(id)?).await
     }
 
-    /// Hands a worktree session's branch to the project: stops the agent and checks the branch out
-    /// in the project's checkout (the worktree is left detached; the session goes on only once the
-    /// project is on another branch). Refused while a turn runs or the worktree has uncommitted
-    /// changes, which a checkout would leave behind.
+    /// Hands the branch of a chat's workspace to the project (`workspace_check_out_branch`).
     pub async fn check_out_branch(&self, id: &str) -> Result<(), String> {
-        let state = self.get(id)?;
-        self.worktree_of(id)?;
-        let _slot = Self::idle_worktree(&state)?;
-        let record = state.record();
-        let (Some(root), Some(branch)) = (record.worktree_path, record.branch) else {
-            return Err("the session's worktree is missing from its record".to_owned());
-        };
-        let check = root.clone();
-        let dirty = tokio::task::spawn_blocking(move || crate::git::worktree::is_dirty(crate::git::binary::git()?, &check))
-            .await
-            .map_err(|e| e.to_string())??;
-        if dirty {
-            return Err("The worktree has uncommitted changes, which a checkout would leave behind: Apply Locally brings them, or ask the agent to commit them".to_owned());
-        }
-        self.inner.stop(&state).await;
-        self.inner.set_status(&state, SessionStatus::Stopped, None);
-        let project = record.project_path;
-        let handed = branch.clone();
-        tokio::task::spawn_blocking(move || {
-            crate::git::apply::check_out_branch(crate::git::binary::git()?, &root, &handed, &project)
-        })
-        .await
-        .map_err(|e| e.to_string())??;
-        tracing::info!(session = %id, %branch, "checked the session's branch out in the project");
-        Ok(())
+        self.workspace_check_out_branch(&self.workspace_of_chat(id)?).await
     }
 
-    /// Takes the session's turn slot for git work on its worktree, so no prompt starts while it runs
-    /// (`send_prompt` then refuses); released when the guard drops. Refused while a turn runs.
-    fn idle_worktree(state: &Arc<SessionState>) -> Result<SlotGuard, String> {
-        if state.turn_running.swap(true, Ordering::SeqCst) {
-            return Err("The agent is working in the worktree; wait for its turn to end, or stop it".to_owned());
-        }
-        Ok(SlotGuard(Arc::clone(state)))
-    }
-
-    /// A worktree session's changed files since its base commit, relative to its folder. Blocking.
+    /// The changes of a chat's workspace since its base (`workspace_changes`). Blocking.
     pub fn changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
-        let (dir, base) = self.worktree_of(id)?;
-        crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base)
+        self.workspace_changes(&self.workspace_of_chat(id)?)
     }
 
-    /// A worktree session's file (relative to its folder) at its base commit; `None` when it
-    /// wasn't there, is binary or too large. Blocking.
+    /// A file of a chat's workspace at its base (`workspace_file_at_base`). Blocking.
     pub fn file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
-        crate::roots::checked_rel(path)?;
-        let (dir, base) = self.worktree_of(id)?;
-        crate::git::blob::file_at(crate::git::binary::git()?, &dir, &base, path)
+        self.workspace_file_at_base(&self.workspace_of_chat(id)?, path)
     }
 
-    /// A worktree session's folder and base commit.
-    fn worktree_of(&self, id: &str) -> Result<(PathBuf, String), String> {
-        let record = self.get(id)?.record();
-        match (record.mode, record.base_commit) {
-            (Mode::Worktree, Some(base)) if record.agent_cwd.is_dir() => Ok((record.agent_cwd, base)),
-            (Mode::Worktree, Some(_)) => Err(format!("{}: the worktree isn't checked out", record.agent_cwd.display())),
-            _ => Err("only worktree sessions have changes of their own".to_owned()),
-        }
+    /// The workspace a chat runs in.
+    fn workspace_of_chat(&self, id: &str) -> Result<String, String> {
+        self.get(id)?.record().workspace_id.ok_or_else(|| "only chats in a workspace (a worktree) have changes of their own".to_owned())
     }
 
     /// At launch: drops the worktree metadata of deleted folders in every project with

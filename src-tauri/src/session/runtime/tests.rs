@@ -1070,58 +1070,6 @@ async fn a_worktree_sessions_changes_are_listed_against_its_base() {
 }
 
 #[tokio::test]
-async fn applying_a_worktree_sessions_work_brings_it_to_the_project_unstaged() {
-    let f = git_fixture("wt-apply");
-    let (session, events) = f.create_in("a", "fake", Mode::Worktree, None).unwrap();
-    let (_, local) = f.create("l", "fake").unwrap();
-    events.wait_status("idle").await;
-    local.wait_status("idle").await;
-    assert_eq!(f.sessions.apply_locally("a").await.unwrap(), ApplyOutcome::Empty);
-    assert!(f.sessions.apply_locally("l").await.unwrap_err().contains("worktree"));
-
-    let wt = PathBuf::from(&session.folder);
-    std::fs::write(wt.join("committed.txt"), "c\n").unwrap();
-    run_in(&wt, &["add", "."]);
-    run_in(&wt, &["commit", "-qm", "agent"]);
-    assert_eq!(f.ask("a", &events, &format!("write {} edited", wt.join("a.txt").display())).await, "written");
-
-    // Not while the agent works on it.
-    events.clear();
-    f.sessions.send_prompt("a", text("slow")).unwrap();
-    events.wait_for("first chunk", |e| e.kind == "update").await;
-    assert!(f.sessions.apply_locally("a").await.unwrap_err().contains("working"));
-    f.sessions.cancel("a").unwrap();
-    events.wait_turn_end().await;
-
-    assert_eq!(f.sessions.apply_locally("a").await.unwrap(), ApplyOutcome::Clean);
-    assert_eq!(std::fs::read_to_string(f.project.join("a.txt")).unwrap(), "edited");
-    assert_eq!(std::fs::read_to_string(f.project.join("committed.txt")).unwrap(), "c\n");
-    assert!(run_in(&f.project, &["diff", "--cached", "--name-only"]).is_empty(), "unstaged");
-    assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), "main");
-}
-
-#[tokio::test]
-async fn apply_and_check_out_hold_the_turn_slot_only_while_they_run() {
-    let f = git_fixture("wt-slot");
-    let (session, events) = f.create_in("s", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    let state = f.sessions.get("s").unwrap();
-    assert_eq!(f.sessions.apply_locally("s").await.unwrap(), ApplyOutcome::Empty);
-    assert!(!state.turn_running.load(Ordering::SeqCst), "released after an apply");
-    std::fs::write(PathBuf::from(&session.folder).join("dirty.txt"), "d").unwrap();
-    assert!(f.sessions.check_out_branch("s").await.is_err());
-    assert!(!state.turn_running.load(Ordering::SeqCst), "released after a refusal");
-    assert_eq!(f.ask("s", &events, "hello").await, "Hello, world");
-
-    // A turn holds it: the git work waits for none.
-    let held = state.turn_running.swap(true, Ordering::SeqCst);
-    assert!(!held);
-    assert!(f.sessions.apply_locally("s").await.unwrap_err().contains("working"));
-    assert!(state.turn_running.load(Ordering::SeqCst), "a refused claim leaves the turn's slot alone");
-    state.turn_running.store(false, Ordering::SeqCst);
-}
-
-#[tokio::test]
 async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_over() {
     let f = git_fixture("wt-checkout");
     let (session, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
@@ -1130,7 +1078,7 @@ async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_o
     let branch = session.branch.clone().unwrap();
     std::fs::write(wt.join("work.txt"), "w\n").unwrap();
     let err = f.sessions.check_out_branch("c").await.unwrap_err();
-    assert!(err.contains("uncommitted") && err.contains("Apply Locally"), "{err}");
+    assert!(err.contains("uncommitted") && err.contains("Apply to Main"), "{err}");
     run_in(&wt, &["add", "."]);
     run_in(&wt, &["commit", "-qm", "agent"]);
 
@@ -3172,4 +3120,45 @@ async fn at_launch_a_workspaces_worktree_stays_though_no_chat_runs_in_it() {
     f.sessions.tidy_worktrees();
 
     assert!(ws.folder.join("a.txt").is_file(), "kept");
+}
+
+#[tokio::test]
+async fn a_workspaces_git_actions_wait_for_none_of_its_chats_and_hold_them_all() {
+    let f = git_fixture("ws-actions");
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let (_, busy) = f.create_in_workspace("busy", &ws.id).unwrap();
+    let (_, idle) = f.create_in_workspace("idle", &ws.id).unwrap();
+    busy.wait_status("idle").await;
+    idle.wait_status("idle").await;
+    std::fs::write(ws.folder.join("committed.txt"), "c\n").unwrap();
+    run_in(&ws.folder, &["add", "."]);
+    run_in(&ws.folder, &["commit", "-qm", "agent"]);
+    std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
+    let names = |files: Vec<crate::git::repo::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
+    assert_eq!(names(f.sessions.workspace_changes(&ws.id).unwrap()), ["a.txt", "committed.txt"]);
+    assert_eq!(f.sessions.workspace_file_at_base(&ws.id, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
+
+    // Refused while one chat works, naming it; the other chat's slot is left alone.
+    f.sessions.send_prompt("busy", text("slow")).unwrap();
+    busy.wait_for("first chunk", |e| e.kind == "update").await;
+    let err = f.sessions.workspace_apply_locally(&ws.id).await.unwrap_err();
+    assert!(err.contains("Session busy") && err.contains("working in this workspace"), "{err}");
+    assert_eq!(f.ask("idle", &idle, "hello").await, "Hello, world", "a refused claim holds no chat");
+    f.sessions.cancel("busy").unwrap();
+    busy.wait_turn_end().await;
+
+    // While it runs, every chat refuses a prompt.
+    let held = f.sessions.hold_workspace(&ws.id).unwrap();
+    assert!(f.sessions.send_prompt("idle", text("hello")).is_err());
+    drop(held);
+    assert_eq!(f.sessions.workspace_apply_locally(&ws.id).await.unwrap(), ApplyOutcome::Clean);
+    assert_eq!(std::fs::read_to_string(f.project.join("a.txt")).unwrap(), "edited");
+    assert_eq!(std::fs::read_to_string(f.project.join("committed.txt")).unwrap(), "c\n");
+
+    // Check out branch stops every chat and hands the branch to Main.
+    run_in(&f.project, &["stash", "-uq"]);
+    run_in(&ws.folder, &["checkout", "-q", "--", "a.txt"]);
+    f.sessions.workspace_check_out_branch(&ws.id).await.unwrap();
+    assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), ws.branch);
+    assert!(f.sessions.list().iter().all(|s| s.status == SessionStatus::Stopped));
 }
