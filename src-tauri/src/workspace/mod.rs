@@ -128,7 +128,7 @@ impl Workspaces {
             .map(|record| Workspace {
                 creating: creating.contains(&record.id),
                 error: failed.get(&record.id).cloned(),
-                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists(),
+                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists() && !record.never_checked_out(),
                 record,
             })
             .collect()
@@ -187,7 +187,6 @@ impl Workspaces {
             created_at: crate::session::iso_now(),
             last_active_at: None,
         };
-        lock(&self.inner.creating).insert(record.id.clone());
         self.inner.store.insert(record.clone())?;
         tracing::info!(workspace = %record.id, branch = %record.branch, "workspace created");
         self.changed(project);
@@ -203,11 +202,12 @@ impl Workspaces {
     }
 
     /// Before a chat of the workspace starts: waits for a checkout that runs, or runs the first
-    /// one of a workspace placed but never checked out. Blocking.
+    /// one of a workspace never checked out (placed, then its checkout failed or the app quit). A
+    /// folder deleted after its checkout stays missing until `check_out` (Recreate). Blocking.
     pub fn ready(&self, id: &str) -> Result<(), String> {
         let gate = self.gate(id);
         let _held = lock(&gate);
-        if lock(&self.inner.creating).contains(id) {
+        if self.get(id)?.never_checked_out() {
             return self.check_out_held(id);
         }
         Ok(())
@@ -328,6 +328,16 @@ impl Workspaces {
 }
 
 impl WorkspaceRecord {
+    /// Neither its worktree nor its branch is there: its first checkout is still to run. Blocking.
+    pub fn never_checked_out(&self) -> bool {
+        if self.worktree_path.join(".git").exists() {
+            return false;
+        }
+        let Ok(git) = crate::git::binary::git() else { return false };
+        let rev = format!("refs/heads/{}", self.branch);
+        exec::run(git, &self.project_path, &exec::args(&[&"rev-parse", &"--verify", &"--quiet", &rev]), GitMode::Background).is_err()
+    }
+
     /// Where its chats run.
     pub fn placement(&self) -> env::Placement {
         env::Placement {

@@ -156,7 +156,7 @@ fn every_change_is_announced_with_its_project_and_the_page_sees_creating_and_mis
     workspaces.on_change(Arc::new(move |project: &std::path::Path| sink.lock().unwrap().push(project.to_path_buf())));
 
     let ws = workspaces.place(&repo.path, "Task", NameSource::User, None).unwrap();
-    assert!(workspaces.pages(&repo.path)[0].creating, "placed, not checked out yet");
+    assert!(!workspaces.pages(&repo.path)[0].missing, "placed, not checked out yet: not missing");
     workspaces.check_out(&ws.id).unwrap();
     let page = &workspaces.pages(&repo.path)[0];
     assert!(!page.creating && !page.missing && page.error.is_none());
@@ -168,5 +168,28 @@ fn every_change_is_announced_with_its_project_and_the_page_sees_creating_and_mis
     let heard = heard.lock().unwrap();
     assert!(heard.len() >= 4, "place, checkout, rename, delete: {heard:?}");
     assert!(heard.iter().all(|p| *p == repo.path));
+    std::fs::remove_dir_all(data).unwrap();
+}
+
+#[test]
+fn a_chat_start_does_the_first_checkout_after_a_failed_one_or_a_relaunch() {
+    use crate::git::test_repo::TestRepo;
+    let repo = TestRepo::with_commit("ws-first-checkout");
+    let data = temp_dir("ws-first-checkout-data");
+
+    // Placed, then the app quit before any checkout: a new launch still checks it out.
+    let placed = Workspaces::new(&data).place(&repo.path, "Quit early", NameSource::User, None).unwrap();
+    Workspaces::new(&data).ready(&placed.id).unwrap();
+    assert!(placed.folder.join("README.md").is_file(), "checked out after a relaunch");
+
+    // A first checkout that failed is tried again.
+    let workspaces = Workspaces::new(&data);
+    let failed = workspaces.place(&repo.path, "Failed once", NameSource::User, None).unwrap();
+    std::fs::create_dir_all(failed.worktree_path.parent().unwrap()).unwrap();
+    std::fs::write(&failed.worktree_path, "in the way").unwrap();
+    assert!(workspaces.check_out(&failed.id).is_err());
+    std::fs::remove_file(&failed.worktree_path).unwrap();
+    workspaces.ready(&failed.id).unwrap();
+    assert!(failed.folder.join("README.md").is_file(), "retried");
     std::fs::remove_dir_all(data).unwrap();
 }
