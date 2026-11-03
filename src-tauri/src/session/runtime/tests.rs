@@ -3093,3 +3093,52 @@ async fn a_worktree_session_without_a_workspace_makes_one_named_after_its_title(
     assert_eq!(PathBuf::from(&chat.folder), ws.folder);
     assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");
 }
+
+#[tokio::test]
+async fn turns_in_one_workspace_queue_on_its_folder_and_main_doesnt_wait_for_them() {
+    let f = git_fixture("slot-workspace");
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let (_, first) = f.create_in_workspace("first", &ws.id).unwrap();
+    let (_, second) = f.create_in_workspace("second", &ws.id).unwrap();
+    let (_, main) = f.create("main", "fake").unwrap();
+    for events in [&first, &second, &main] {
+        events.wait_status("idle").await;
+    }
+    f.sessions.send_prompt("first", text("sleep 500")).unwrap();
+    first.wait_for("turn-start", |e| e.kind == "turn-start").await;
+
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    f.sessions.send_prompt("main", text("hello")).unwrap();
+
+    assert_eq!(main.wait_turn_end().await, "end_turn", "Main has a slot of its own");
+    assert!(!has(&main, "queued"));
+    let queued = second.wait_for("queued", |e| e.kind == "queued").await;
+    assert_eq!(queued.payload["holder"]["id"], "first", "behind the workspace's other chat");
+    assert_eq!(second.wait_turn_end().await, "end_turn");
+}
+
+#[tokio::test]
+async fn parallel_turns_in_one_workspace_hear_of_each_others_changes_in_its_folder() {
+    let f = git_fixture("overlap-workspace");
+    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let file = ws.folder.join("a.txt").to_string_lossy().into_owned();
+    let (_, a) = f.create_in_workspace("a", &ws.id).unwrap();
+    let (_, b) = f.create_in_workspace("b", &ws.id).unwrap();
+    for e in [&a, &b] {
+        e.wait_status("idle").await;
+    }
+    for id in ["a", "b"] {
+        f.sessions.send_prompt(id, text(&format!("edit {file} 400"))).unwrap();
+    }
+    for e in [&a, &b] {
+        e.kind_seen("tool_call_update").await;
+    }
+
+    f.sessions.note_changes(&f.project, &["a.txt".to_owned()]);
+    assert!(!has(&a, "overlap"), "Main's folder isn't the workspace's");
+    f.sessions.note_changes(&ws.folder, &["a.txt".to_owned()]);
+
+    a.wait_for("overlap", |e| e.kind == "overlap" && e.payload["other"]["id"] == "b").await;
+    b.wait_for("overlap", |e| e.kind == "overlap" && e.payload["other"]["id"] == "a").await;
+}
