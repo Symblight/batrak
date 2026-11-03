@@ -6,6 +6,7 @@ import {
   $activeWorkspaceId,
   $draftWorkspaces,
   $rootId,
+  $shownFolder,
   $workspaceOpening,
   addDraftWorkspace,
   setActiveWorkspace,
@@ -53,7 +54,7 @@ describe('workspaces store', () => {
     expect(seen).to.deep.equal(['main', 'w1', draft, 'main', 'main', 'w9', 'w1']);
   });
 
-  it("is the folder the window shows: Main's root, the workspace's once open, none for a draft", () => {
+  it("is the folder the window shows: Main's root, the workspace's once open, none for a draft (whose tabs and terminals are Main's)", () => {
     const cases = [
       // [workspace, opening, open roots, listed for, expected, why]
       ['main', null, {}, '/p', { path: '/p', rootId: 'root-1', opening: false }, 'Main: the project'],
@@ -77,6 +78,9 @@ describe('workspaces store', () => {
       // Assert
       expect($activeRoot.get(), /** @type {string} */ (why)).to.deep.equal(expected);
       expect($rootId.get(), /** @type {string} */ (why)).to.equal(/** @type {{ rootId: string | null }} */ (expected).rootId);
+      expect($shownFolder.get(), `${why}: the key of its tabs and terminals`).to.equal(
+        id === 'draft' ? '/p' : /** @type {{ path: string | null }} */ (expected).path,
+      );
     }
   });
 });

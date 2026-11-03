@@ -17,7 +17,7 @@ import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/se
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
-import { $activeWorkspace } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspace, $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
@@ -118,7 +118,7 @@ export class AcpChatView extends ViewElement {
     else if (action === 'open-terminal') sessions.openInTerminal(id);
     else if (action === 'show-login') {
       const terminal = this.#signInRun()?.terminal;
-      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $project.get()?.path ?? null);
+      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $shownFolder.get());
     }
     else if (action === 'restart') sessions.restart(id);
     else if (action === 'turn-on-agent') {

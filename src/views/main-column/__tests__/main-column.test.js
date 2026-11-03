@@ -15,7 +15,7 @@ import '../main-column.js';
 /** @typedef {import('../../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
 /** @type {TerminalInfo} */
-const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, projectPath: '/p', status: 'running', exit: null, error: null, login: null };
+const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, folder: '/p', projectPath: '/p', status: 'running', exit: null, error: null, login: null };
 
 describe('acp-main-column', () => {
   beforeEach(() => {

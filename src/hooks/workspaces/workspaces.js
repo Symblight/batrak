@@ -12,12 +12,14 @@ import {
   setActiveWorkspace,
   setWorkspaces,
 } from '../../stores/workspaces/workspaces.js';
-import { $activeSession, $sessions, dropDrafts } from '../../stores/sessions/sessions.js';
+import { $activeSession, $sessions, dropDrafts, forgetLastSession } from '../../stores/sessions/sessions.js';
 import { selectAgent } from '../../stores/composer/composer.js';
-import { openSessionChanges } from '../../stores/editor/editor.js';
+import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
+import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
 import { app } from '../app/app.js';
 import { projects } from '../projects/projects.js';
+import { terminals } from '../terminals/terminals.js';
 
 /** @typedef {import('./types.js').Workspace} Workspace */
 /** @typedef {import('./types.js').DeletePreview} DeletePreview */
@@ -91,6 +93,17 @@ async function follow(workspace) {
   } finally {
     if (turn === openTurn) $workspaceOpening.set(null);
   }
+}
+
+/**
+ * Forgets a deleted workspace's page state: its tabs, expanded folders and last shown chat (its
+ * terminals closed before the delete).
+ * @param {string} folder
+ */
+function forgetFolder(folder) {
+  removeProjectTabs(folder);
+  removeProjectExpandedFolders(folder);
+  forgetLastSession(folder);
 }
 
 /**
@@ -243,7 +256,7 @@ export const workspaces = Object.freeze({
     if (project !== null && $activeWorkspaceId.get() === id) setActiveWorkspace(project, MAIN);
     if (record !== null) {
       opened.delete(record.folder);
-      await projects.closeFolder(record.folder);
+      await Promise.all([projects.closeFolder(record.folder), terminals.closeFolder(record.folder)]);
     }
     try {
       await ipc.invoke('workspace_delete', { id, keepBranch });
@@ -252,6 +265,7 @@ export const workspaces = Object.freeze({
       return;
     }
     dropDrafts(id);
+    if (record !== null) forgetFolder(record.folder);
   },
 
   /**

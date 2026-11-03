@@ -19,6 +19,7 @@ import {
 } from '../../../stores/terminals/terminals.js';
 import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../tabs/tabs.js';
+import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 /** @typedef {import('../types.js').TerminalSink} TerminalSink */
@@ -121,28 +122,32 @@ describe('terminals', () => {
     $projectTerminalPanels.set({});
     $terminalFocus.set(null);
     clearMocks();
+    setActiveWorkspace('/p', MAIN);
+    setWorkspaces([]);
     $project.set(null);
     $sessions.set([]);
     $activeSessionId.set(null);
   });
 
-  it('opens a terminal where its kind says: the active session’s folder, the project root, a session’s folder', async () => {
+  it("opens the rail's first terminal, New Terminal and a session's Open in → Terminal in the shown workspace's folder and panel", async () => {
     // Arrange
     const { terminals } = await started();
     const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
     $project.set({ path: '/p', name: 'p', rootId: null });
+    setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1/app' })], '/p');
+    setActiveWorkspace('/p', 'w1');
     $sessions.set([wt]);
-    $activeSessionId.set('s1');
     // Act
     await terminals.showPanel();
     await terminals.newTerminal();
     terminals.openInSession(wt);
     // Assert
-    expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([
-      ['/p', '/p', 'p'],
-      ['/wt/s1/app', '/p', 's1'],
-      ['/wt/s1/app', '/p', 's1'],
+    expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label, t.folder])).to.deep.equal([
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
     ]);
+    expect($terminalPanel.get()).to.deep.equal({ open: true });
   });
 
   it('closes the previous page load’s shells as soon as it starts, before any view connects', async () => {
@@ -337,20 +342,17 @@ describe('terminals', () => {
       expect(sent('terminal_close')).to.have.length(0);
     });
 
-    it('adds a terminal with +, showing a hidden panel, in the active session’s folder', async () => {
+    it('adds a terminal with +, showing a hidden panel', async () => {
       // Arrange
       const { terminals } = await started();
-      const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
       $project.set({ path: '/p', name: 'p', rootId: null });
-      $sessions.set([wt]);
-      $activeSessionId.set('s1');
       await terminals.showPanel();
       terminals.hidePanel();
       // Act
       await terminals.newTerminal();
       // Assert
       expect($terminalPanel.get().open).to.equal(true);
-      expect(panelTerminals().map((id) => $terminals.get()[id].cwd)).to.deep.equal(['/p', '/wt/s1/app']);
+      expect(panelTerminals()).to.have.length(2);
     });
 
     it('hides the panel when its last terminal goes, and closes the shell of each terminal that goes', async () => {
@@ -370,16 +372,20 @@ describe('terminals', () => {
       expect(sent('terminal_close').flatMap((c) => c.args.ids)).to.deep.equal([a, b]);
     });
 
-    it('closes the shells of a removed project’s panel', async () => {
+    it('closes the shells of a removed project’s panels, its workspaces’ too', async () => {
       // Arrange
       await started();
       $project.set({ path: '/p', name: 'p', rootId: null });
-      const id = openTerminal('/p', '/p', 'p');
+      setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/task' })], '/p');
+      const main = openTerminal('/p', '/p', 'p');
+      setActiveWorkspace('/p', 'w1');
+      const workspace = openTerminal('/wt/task', '/p', 'task');
+      setActiveWorkspace('/p', MAIN);
       // Act
       removeProjectTerminals('/p');
       // Assert
-      await until(() => sent('terminal_close').length === 1);
-      expect(sent('terminal_close')[0].args).to.deep.equal({ ids: [id] });
+      await until(() => sent('terminal_close').flatMap((c) => c.args.ids).length === 2);
+      expect(sent('terminal_close').flatMap((c) => c.args.ids)).to.have.members([main, workspace]);
     });
   });
 });

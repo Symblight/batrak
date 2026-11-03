@@ -28,25 +28,15 @@ function quote(path, platform) {
 }
 
 /**
- * Where New Terminal starts: the active session's folder (a draft's is its project), else the
- * project, with the project as fallback; with no project, the home folder.
- * @param {{ activeFolder: string | null, project: string | null, home: string }} where
+ * Where New Terminal and the rail's first terminal start: the shown folder (Main's or the
+ * workspace's), else the project (a draft workspace has no folder yet), with the project as
+ * fallback; with no project, the home folder.
+ * @param {{ folder: string | null, project: string | null, home: string }} where
  * @returns {TerminalFolder}
  */
-export function newTerminalFolder({ activeFolder, project, home }) {
+export function newTerminalFolder({ folder, project, home }) {
   if (project === null) return { cwd: home, fallback: null };
-  return { cwd: activeFolder ?? project, fallback: project };
-}
-
-/**
- * Where Project Terminal starts: always the project folder, with the project as fallback; with no
- * project, the home folder.
- * @param {{ project: string | null, home: string }} where
- * @returns {TerminalFolder}
- */
-export function projectTerminalFolder({ project, home }) {
-  if (project === null) return { cwd: home, fallback: null };
-  return { cwd: project, fallback: project };
+  return { cwd: folder ?? project, fallback: project };
 }
 
 /**

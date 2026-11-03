@@ -19,6 +19,9 @@ import {
 } from '../editor.js';
 import { $project } from '../../project/project.js';
 import { terminalTabId } from '../../tab-ids/tab-ids.js';
+import { MAIN, setActiveWorkspace, setWorkspaces } from '../../workspaces/workspaces.js';
+
+/** @typedef {import('../../../hooks/workspaces/types.js').Workspace} Workspace */
 
 describe('editor', () => {
   afterEach(() => {
@@ -67,6 +70,57 @@ describe('editor', () => {
   it('forgets terminal tabs a stored project had, whose shells are gone', () => {
     const stored = { paths: ['/p/a.js', terminalTabId('t1'), 'view:terminal'], active: terminalTabId('t1'), pinned: [terminalTabId('t1')] };
     expect(parseTabs(stored)).to.deep.equal({ paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
+  });
+
+  describe('per workspace', () => {
+    const WORKSPACE = /** @type {Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/task' });
+
+    afterEach(() => {
+      setActiveWorkspace('/p', MAIN);
+      setWorkspaces([]);
+      $project.set(null);
+      for (const key of ['/p', '/wt/task']) $projectTabs.setKey(key, undefined);
+    });
+
+    it("shows the active folder's tabs, each workspace's kept while another is shown", () => {
+      // Arrange
+      $project.set({ path: '/p', name: 'p', rootId: 'root-1' });
+      setWorkspaces([WORKSPACE], '/p');
+      openTab('/p/a.js');
+
+      // Act
+      const seen = [];
+      setActiveWorkspace('/p', 'w1');
+      openTab('/wt/task/b.js');
+      openTab('/p/a.js');
+      seen.push($editorTabs.get().paths);
+      setActiveWorkspace('/p', MAIN);
+      seen.push($editorTabs.get().paths);
+      setActiveWorkspace('/p', 'w1');
+      seen.push($editorTabs.get().paths);
+
+      // Assert
+      expect(seen, "a file outside the workspace's folder isn't its tab").to.deep.equal([['/wt/task/b.js'], ['/p/a.js'], ['/wt/task/b.js']]);
+      expect(JSON.parse(localStorage.getItem('brama:editor:tabs:/wt/task') ?? 'null')?.paths).to.include('/wt/task/b.js');
+    });
+
+    it("moves tabs of a workspace's files from its project's entry to the workspace's once it's listed", () => {
+      // Arrange
+      $projectTabs.setKey('/p', { paths: ['/p/a.js', '/wt/task/b.js'], active: '/wt/task/b.js', pinned: ['/wt/task/b.js'] });
+      $projectTabs.setKey('/wt/task', { paths: ['/wt/task/c.js'], active: '/wt/task/c.js', pinned: [] });
+
+      // Act
+      setWorkspaces([WORKSPACE], '/p');
+      setWorkspaces([WORKSPACE], '/p');
+
+      // Assert
+      expect($projectTabs.get()['/p']).to.deep.equal({ paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
+      expect($projectTabs.get()['/wt/task'], 'once; the workspace keeps its own active tab').to.deep.equal({
+        paths: ['/wt/task/b.js', '/wt/task/c.js'],
+        active: '/wt/task/c.js',
+        pinned: ['/wt/task/b.js'],
+      });
+    });
   });
 
   describe('closeProjectTab', () => {

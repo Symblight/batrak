@@ -137,8 +137,9 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
 - **Session folders:** `Session.folder` is where the agent works (the project, or the project's
   folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
-  (`folderOf()`, `$activeFolder`). A worktree session's files open as tabs of its project
-  (`$worktrees`; `read_file` reads its folder through `Sessions::contains`), marked with a branch
+  (`folderOf()`, `$activeFolder`). A workspace's files open as tabs of its folder (each
+  folder has its own tabs and terminals, `persisted-state.md`; deleting the workspace forgets them
+  and its last chat; `read_file` reads its folder through `Sessions::contains`), marked with a branch
   icon, no diff gutter, re-read when its turn ends; its folder refs
   reveal the project's same folder. While a chat of a workspace is shown, the window shows that
   workspace's folder (`$activeRoot`, see CLAUDE.md "Open roots"): Files, Search, Changes, Quick Open

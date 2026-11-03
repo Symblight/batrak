@@ -1,5 +1,6 @@
 import { $projectTabs } from '../../stores/editor/editor.js';
-import { $activeFolder, $sessions } from '../../stores/sessions/sessions.js';
+import { $sessions } from '../../stores/sessions/sessions.js';
+import { $shownFolder } from '../../stores/workspaces/workspaces.js';
 import {
   $projectTerminalPanels,
   $projectTerminalTabs,
@@ -10,6 +11,7 @@ import {
   focusTerminal,
   forgetTerminal,
   openTerminal,
+  removeProjectTerminals,
   setTerminalPanelOpen,
   terminalExited,
   terminalFailed,
@@ -20,7 +22,7 @@ import { $project } from '../../stores/project/project.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
+import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
 
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('./types.js').TerminalBusy} TerminalBusy */
@@ -188,7 +190,7 @@ function exited(id, exit) {
   const info = $terminals.get()[id];
   if (!info || info.status === 'exited') return;
   if (info.sessionId) terminalExited(id, exit);
-  else if (exit.code === 0 && exit.signal === null) closeTerminalTab(info.projectPath, id);
+  else if (exit.code === 0 && exit.signal === null) closeTerminalTab(info.folder, id);
   else terminalExited(id, exit);
 }
 
@@ -249,7 +251,7 @@ export const terminals = Object.freeze({
       const gone = Object.entries($terminals.get())
         .filter(([id, t]) => {
           const tab = tabs.terminalId(id);
-          const root = t.projectPath ?? '';
+          const root = t.folder ?? '';
           return !t.sessionId && !editor[root]?.paths.includes(tab) && !panel[root]?.paths.includes(tab);
         })
         .map(([id]) => id);
@@ -276,7 +278,7 @@ export const terminals = Object.freeze({
 
   /**
    * The nav rail's Terminal button: shows the panel with its terminals, or with a first one in the
-   * project's folder; with the panel shown, focuses its active terminal.
+   * shown folder; with the panel shown, focuses its active terminal.
    */
   async showPanel() {
     const { open } = $terminalPanel.get();
@@ -284,24 +286,22 @@ export const terminals = Object.freeze({
     if (open && active !== null) {
       focusTerminal(tabs.terminalOf(active) ?? '');
     } else if (paths.length) {
-      setTerminalPanelOpen($project.get()?.path ?? null, true);
+      setTerminalPanelOpen($shownFolder.get(), true);
     } else {
-      const project = $project.get()?.path ?? null;
-      const home = project === null ? await ipc.homeDir() : '';
-      openIn(projectTerminalFolder({ project, home }));
+      await terminals.newTerminal();
     }
   },
 
-  /** Hides the shown project's panel; its shells keep running. */
+  /** Hides the shown folder's panel; its shells keep running. */
   hidePanel() {
-    setTerminalPanelOpen($project.get()?.path ?? null, false);
+    setTerminalPanelOpen($shownFolder.get(), false);
   },
 
-  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the active session's folder, the project, or home. */
+  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the shown folder, the project, or home. */
   async newTerminal() {
     const project = $project.get()?.path ?? null;
     const home = project === null ? await ipc.homeDir() : '';
-    openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
+    openIn(newTerminalFolder({ folder: $shownFolder.get(), project, home }));
   },
 
   /**
@@ -371,6 +371,29 @@ export const terminals = Object.freeze({
   },
 
   close,
+
+  /**
+   * Closes a folder's terminals, waiting for their shells to end, and forgets its panel: before its
+   * workspace is deleted, so no shell keeps the folder busy (Windows refuses to remove a cwd) or
+   * writes into it as it goes.
+   * @param {string} folder
+   */
+  async closeFolder(folder) {
+    const ids = Object.entries($terminals.get())
+      .filter(([, t]) => t.folder === folder && !t.sessionId)
+      .map(([id]) => id);
+    // Forgotten before their tabs close, so the tab listener doesn't close them again.
+    for (const id of ids) forgetTerminal(id);
+    for (const id of ids) closeTerminalTab(folder, id);
+    removeProjectTerminals(folder);
+    if (!ids.length) return;
+    try {
+      await previousClosed();
+      await close(ids);
+    } catch (err) {
+      app.reportError('Closing terminals failed', err);
+    }
+  },
 
   shellPaths,
 

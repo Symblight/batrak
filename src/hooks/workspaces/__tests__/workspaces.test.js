@@ -2,9 +2,12 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $project } from '../../../stores/project/project.js';
-import { $activeRoot, $activeWorkspaceId, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
+import { $activeRoot, $activeWorkspaceId, $shownFolder, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
+import { $projectTabs } from '../../../stores/editor/editor.js';
+import { $projectTerminalPanelHeights, $projectTerminalTabs, $terminals, openTerminal } from '../../../stores/terminals/terminals.js';
+import { $projectExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { workspaces } from '../workspaces.js';
 
 /** @param {() => boolean} pred */
@@ -190,5 +193,54 @@ describe('workspaces hook', () => {
     expect($activeWorkspaceId.get()).to.equal('main');
     expect($activeRoot.get().path, "Main's folder").to.equal('/work/a');
     setActiveWorkspace('/work/a', 'main');
+  });
+
+  it("closes a workspace's shells before deleting it, and forgets its tabs, expanded folders and last chat once deleted", async () => {
+    for (const fails of [true, false]) {
+      // Arrange
+      /** @type {string[]} */
+      const order = [];
+      clearMocks();
+      mockIPC(
+        (cmd, args) => {
+          if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/work/a', name: 'Task', folder: '/wt/one', creating: false, missing: false }];
+          if (cmd === 'open_workspace_root') return new Promise(() => {});
+          if (cmd === 'terminal_close') order.push(`close ${/** @type {{ ids: string[] }} */ (args).ids}`);
+          if (cmd === 'workspace_delete') order.push('delete');
+          if (cmd === 'workspace_delete' && fails) throw new Error('git failed');
+          return null;
+        },
+        { shouldMockEvents: true },
+      );
+      stop = workspaces.start();
+      $project.set({ path: '/work/a', name: 'a', rootId: 'r-a' });
+      await until(() => $workspaces.get().length === 1);
+      $sessions.set(/** @type {import('../../sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'ws-chat', projectId: '/work/a', workspaceId: 'w1', folder: '/wt/one' }])));
+      selectSession('ws-chat');
+      await until(() => $shownFolder.get() === '/wt/one');
+      const terminal = openTerminal('/wt/one', '/work/a', 'one');
+      $projectTerminalPanelHeights.setKey('/wt/one', 300);
+      $projectTabs.setKey('/wt/one', { paths: ['/wt/one/a.js'], active: '/wt/one/a.js', pinned: [] });
+      $projectExpandedFolders.setKey('/wt/one', ['src']);
+      const kept = () => [
+        $projectTabs.get()['/wt/one'] !== undefined,
+        $projectExpandedFolders.get()['/wt/one'] !== undefined,
+        localStorage.getItem('brama:sessions:last:/wt/one') !== null,
+      ];
+
+      // Act
+      await workspaces.delete('w1', true);
+
+      // Assert
+      expect(order, 'its shells are gone before its folder goes').to.deep.equal([`close ${terminal}`, 'delete']);
+      expect([$terminals.get()[terminal], $projectTerminalTabs.get()['/wt/one'], $projectTerminalPanelHeights.get()['/wt/one']]).to.deep.equal([undefined, undefined, undefined]);
+      expect(kept(), fails ? 'a failed delete forgets nothing else' : 'all forgotten').to.deep.equal(Array(3).fill(fails));
+
+      // Cleanup
+      stop();
+      stop = null;
+      selectSession(null);
+      $sessions.set([]);
+    }
   });
 });

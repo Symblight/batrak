@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
+import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -12,17 +12,15 @@ function session(fields) {
 }
 
 describe('terminals: rules', () => {
-  it('starts each kind of terminal in the session’s folder, the project, or home', () => {
+  it('starts each kind of terminal in the shown folder, a session’s, the project, or home', () => {
     // Arrange
     const home = '/Users/me';
     const wt = session({ mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
     const cases = [
-      ['new, in a worktree session', newTerminalFolder({ activeFolder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
-      ['new, in a local session', newTerminalFolder({ activeFolder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['new, in a draft', newTerminalFolder({ activeFolder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['new, with no project', newTerminalFolder({ activeFolder: null, project: null, home }), { cwd: home, fallback: null }],
-      ['project', projectTerminalFolder({ project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['project, with no project', projectTerminalFolder({ project: null, home }), { cwd: home, fallback: null }],
+      ['new, in a workspace', newTerminalFolder({ folder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
+      ['new, in Main', newTerminalFolder({ folder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, in a draft workspace', newTerminalFolder({ folder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, with no project', newTerminalFolder({ folder: null, project: null, home }), { cwd: home, fallback: null }],
       ['a worktree session’s', sessionTerminalFolder(wt), { cwd: '/wt/s1/app', fallback: '/p' }],
       ['a local session’s', sessionTerminalFolder(session({})), { cwd: '/p', fallback: '/p' }],
     ];

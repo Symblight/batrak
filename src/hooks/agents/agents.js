@@ -4,6 +4,7 @@ import { cacheAgentOptions, hasAgentOptions, whileLoadingOptions } from '../../s
 import { openAgents, openTab } from '../../stores/editor/editor.js';
 import { openLoginTerminal } from '../../stores/terminals/terminals.js';
 import { $projectPath } from '../../stores/project/project.js';
+import { $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import {
@@ -196,10 +197,12 @@ export const agents = Object.freeze({
    */
   async signIn(agentId, methodId) {
     const projectPath = $projectPath.get();
+    // The folder shown now: a switch while the backend answers mustn't move the login there.
+    const folder = $shownFolder.get();
     try {
       /** @type {LoginTab | null} */
       const login = await ipc.invoke('agents_sign_in', { projectPath, agentId, methodId });
-      if (login) openLoginTerminal(login, projectPath);
+      if (login) openLoginTerminal(login, folder);
     } catch (err) {
       app.reportError(`Signing in to ${nameOf(agentId)} failed`, err);
     }

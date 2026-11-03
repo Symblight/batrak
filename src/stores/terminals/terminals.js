@@ -2,7 +2,8 @@ import { atom, computed, map } from 'nanostores';
 import { $projectTabs, closeProjectTab, moveTab, openProjectTab, openTab } from '../editor/editor.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
-import { $project } from '../project/project.js';
+import { $shownFolder } from '../workspaces/workspaces.js';
+import { $projectPath } from '../project/project.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../hooks/terminals/types.js').TerminalExit} TerminalExit */
@@ -14,35 +15,38 @@ import { terminalTabId } from '../tab-ids/tab-ids.js';
 export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>} */ ({}));
 
 /**
- * The terminal panel's tabs by project path: terminal tabs only, in memory (shells don't outlive the
- * page, so neither does a tab), written through `terminalGroup`.
+ * The terminal panel's tabs by folder (`$shownFolder`'s keys): terminal tabs only, in memory (shells
+ * don't outlive the page, so neither does a tab), written through `terminalGroup`.
  */
 export const $projectTerminalTabs = map(/** @type {Record<string, EditorTabs | undefined>} */ ({}));
 
-/** The shown project's terminal tabs; with no project, those opened with none. */
+/** The shown folder's key in the per-folder maps; `NO_PROJECT` with none shown. */
+const shownKey = () => $shownFolder.get() ?? NO_PROJECT;
+
+/** The shown folder's terminal tabs; with none, those opened with none. */
 export const $terminalTabs = computed(
-  [$projectTerminalTabs, $project],
-  (projects, project) => projects[project?.path ?? NO_PROJECT] ?? NO_TABS,
+  [$projectTerminalTabs, $shownFolder],
+  (folders, folder) => folders[folder ?? NO_PROJECT] ?? NO_TABS,
 );
 
 /** The editor's tab rules, applied to the terminal group (a second group, not a second tab system). */
 export const terminalGroup = tabGroup({
   $projects: $projectTerminalTabs,
   $tabs: $terminalTabs,
-  shownKey: () => $project.get()?.path ?? NO_PROJECT,
+  shownKey,
 });
 
 /**
- * Whether each project's terminal panel is shown, by project path (`NO_PROJECT` for none). In memory,
- * like the shells; only a panel with terminals is ever open (the hook hides it with its last one).
+ * Whether each folder's terminal panel is shown, by folder (`NO_PROJECT` for none). In memory, like
+ * the shells; only a panel with terminals is ever open (the hook hides it with its last one).
  */
 export const $projectTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
 
-/** The shown project's panel. */
-export const $terminalPanel = computed([$projectTerminalPanels, $project], (panels, project) => panels[project?.path ?? NO_PROJECT] ?? { open: false });
+/** The shown folder's panel. */
+export const $terminalPanel = computed([$projectTerminalPanels, $shownFolder], (panels, folder) => panels[folder ?? NO_PROJECT] ?? { open: false });
 
 /**
- * @param {string | null} root The project's path; `null`: no project.
+ * @param {string | null} root The folder; `null`: none.
  * @param {boolean} open
  */
 export function setTerminalPanelOpen(root, open) {
@@ -54,15 +58,15 @@ export function setTerminalPanelOpen(root, open) {
 export const TERMINAL_PANEL_MIN_HEIGHT = 120;
 export const TERMINAL_PANEL_MAX_HEIGHT = 800;
 
-/** The panel's height by project path, one storage item per project; per window, like the tabs. Written only through `setKey()`. */
+/** The panel's height by folder, one storage item each; per window, like the tabs. Written only through `setKey()`. */
 export const $projectTerminalPanelHeights = persistentMapStore('brama:layout:terminal-panel:', (raw) =>
   typeof raw === 'number' && Number.isFinite(raw) ? clampHeight(raw) : null,
 );
 
-/** The shown project's panel height; `null` until it was resized (the token's default applies). */
+/** The shown folder's panel height; `null` until it was resized (the token's default applies). */
 export const $terminalPanelHeight = computed(
-  [$projectTerminalPanelHeights, $project],
-  (heights, project) => heights[project?.path ?? NO_PROJECT] ?? null,
+  [$projectTerminalPanelHeights, $shownFolder],
+  (heights, folder) => heights[folder ?? NO_PROJECT] ?? null,
 );
 
 /** @param {number} px */
@@ -70,15 +74,15 @@ function clampHeight(px) {
   return Math.min(TERMINAL_PANEL_MAX_HEIGHT, Math.max(TERMINAL_PANEL_MIN_HEIGHT, Math.round(px)));
 }
 
-/** @param {number} px The shown project's panel height; kept within the limits. */
+/** @param {number} px The shown folder's panel height; kept within the limits. */
 export function setTerminalPanelHeight(px) {
   if (!Number.isFinite(px)) return;
-  $projectTerminalPanelHeights.setKey($project.get()?.path ?? NO_PROJECT, clampHeight(px));
+  $projectTerminalPanelHeights.setKey(shownKey(), clampHeight(px));
 }
 
-/** The shown project's panel goes back to the default height. */
+/** The shown folder's panel goes back to the default height. */
 export function clearTerminalPanelHeight() {
-  const key = $project.get()?.path ?? NO_PROJECT;
+  const key = shownKey();
   if (key in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(key, undefined);
 }
 
@@ -96,23 +100,27 @@ export function terminalFocused(request) {
 }
 
 /**
- * Forgets a project's terminal tabs, panel and height, e.g. when it is removed from the app.
- * @param {string} root Project path.
+ * Forgets a folder's terminal tabs, panel and height, and a project's terminals in any of its
+ * folders, e.g. when the project is removed or a workspace deleted; the hook then closes their shells.
+ * @param {string} root The folder, or the project's path.
  */
 export function removeProjectTerminals(root) {
+  for (const [id, t] of Object.entries($terminals.get())) {
+    if (!t.sessionId && t.projectPath === root && t.folder !== root) closeTerminalTab(t.folder, id);
+  }
   terminalGroup.forget(root);
   if (root in $projectTerminalPanels.get()) $projectTerminalPanels.setKey(root, undefined);
   if (root in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(root, undefined);
 }
 
 /**
- * Closes a terminal's tab, among the editor's tabs or the panel's, of any project.
- * @param {string | null} projectPath
+ * Closes a terminal's tab, among the editor's tabs or the panel's, of any folder.
+ * @param {string | null} folder
  * @param {string} id The terminal's.
  */
-export function closeTerminalTab(projectPath, id) {
-  closeProjectTab(projectPath, terminalTabId(id));
-  terminalGroup.closeIn(projectPath, terminalTabId(id));
+export function closeTerminalTab(folder, id) {
+  closeProjectTab(folder, terminalTabId(id));
+  terminalGroup.closeIn(folder, terminalTabId(id));
 }
 
 /**
@@ -126,7 +134,7 @@ function patch(id, patch) {
 }
 
 /**
- * Adds a terminal and opens its tab (at the end of the strip, active) in the shown project's terminal
+ * Adds a terminal and opens its tab (at the end of the strip, active) in the shown folder's terminal
  * panel, showing the panel. Its shell starts when the tab is first shown.
  * @param {string} cwd
  * @param {string | null} fallback Where it starts when `cwd` doesn't exist.
@@ -136,7 +144,7 @@ function patch(id, patch) {
 export function openTerminal(cwd, fallback, label) {
   const id = addTerminal(cwd, fallback, label);
   terminalGroup.open(terminalTabId(id));
-  setTerminalPanelOpen($project.get()?.path ?? null, true);
+  setTerminalPanelOpen($shownFolder.get(), true);
   return id;
 }
 
@@ -144,14 +152,14 @@ export function openTerminal(cwd, fallback, label) {
  * @param {string} cwd
  * @param {string | null} fallback
  * @param {string} label
- * @returns {string} The id of the terminal added to the shown project's.
+ * @returns {string} The id of the terminal added to the shown folder's.
  */
 function addTerminal(cwd, fallback, label) {
   const id = crypto.randomUUID();
-  const projectPath = $project.get()?.path ?? null;
+  const folder = $shownFolder.get();
   $terminals.set({
     ...$terminals.get(),
-    [id]: { cwd, fallback, label, title: null, projectPath, status: 'starting', exit: null, error: null, login: null },
+    [id]: { cwd, fallback, label, title: null, folder, projectPath: $projectPath.get(), status: 'starting', exit: null, error: null, login: null },
   });
   return id;
 }
@@ -167,7 +175,7 @@ function addTerminal(cwd, fallback, label) {
 export function addSessionTerminal(id, sessionId, cwd, label) {
   $terminals.set({
     ...$terminals.get(),
-    [id]: { cwd, fallback: null, label, title: null, projectPath: null, status: 'running', exit: null, error: null, login: null, sessionId },
+    [id]: { cwd, fallback: null, label, title: null, folder: null, projectPath: null, status: 'running', exit: null, error: null, login: null, sessionId },
   });
 }
 
@@ -203,20 +211,20 @@ export function sessionTerminalOf(sessionId) {
 }
 
 /**
- * Shows a sign-in's login, which the backend started, as a tab of the terminal panel of the project the
- * sign-in started in, showing the panel (once: it's shown again as it is, where it is).
+ * Shows a sign-in's login, which the backend started, as a tab of the terminal panel of the folder
+ * shown when the sign-in started, showing the panel (once: it's shown again as it is, where it is).
  * @param {import('../../hooks/agents/types.js').LoginTab} tab
- * @param {string | null} projectPath
+ * @param {string | null} folder
  */
-export function openLoginTerminal({ terminalId, title, commandLine }, projectPath) {
+export function openLoginTerminal({ terminalId, title, commandLine }, folder) {
   const known = $terminals.get()[terminalId];
   if (!known) {
     $terminals.set({
       ...$terminals.get(),
-      [terminalId]: { cwd: '', fallback: null, label: title, title: null, projectPath, status: 'running', exit: null, error: null, login: commandLine },
+      [terminalId]: { cwd: '', fallback: null, label: title, title: null, folder, projectPath: $projectPath.get(), status: 'running', exit: null, error: null, login: commandLine },
     });
   }
-  const root = known ? known.projectPath : projectPath;
+  const root = known ? known.folder : folder;
   // Moved to the editor's tabs: shown there.
   if ($projectTabs.get()[root ?? NO_PROJECT]?.paths.includes(terminalTabId(terminalId))) {
     openProjectTab(root, terminalTabId(terminalId));
@@ -227,7 +235,7 @@ export function openLoginTerminal({ terminalId, title, commandLine }, projectPat
 }
 
 /**
- * Moves a terminal of the shown project from the panel to the editor's tabs, at an index, active and
+ * Moves a terminal of the shown folder from the panel to the editor's tabs, at an index, active and
  * unpinned. Its shell is never without a tab: it lands in the editor's before it leaves the panel's.
  * @param {string} terminalId
  * @param {number} index In the editor's tabs without it.
@@ -285,14 +293,4 @@ export function setTerminalTitle(id, title) {
 export function forgetTerminal(id) {
   const { [id]: _, ...rest } = $terminals.get();
   $terminals.set(rest);
-}
-
-/**
- * @param {string | null} projectPath
- * @returns {string[]} The terminals whose tabs that project holds.
- */
-export function terminalsOfProject(projectPath) {
-  return Object.entries($terminals.get())
-    .filter(([, t]) => t.projectPath === projectPath && !t.sessionId)
-    .map(([id]) => id);
 }

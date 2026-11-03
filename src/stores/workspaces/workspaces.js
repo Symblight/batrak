@@ -95,5 +95,15 @@ export const $activeRoot = computed(
   },
 );
 
+/**
+ * The shown folder (the active root's path): the key of what's kept per folder (editor tabs,
+ * terminals). A draft workspace's are Main's (the project path), where its terminals run until it
+ * has a folder; `null` with no project or a list still loading.
+ */
+export const $shownFolder = computed(
+  [$activeRoot, $activeWorkspaceId, $projectPath],
+  (root, id, project) => root.path ?? (id.startsWith('draft-') ? project : null),
+);
+
 /** The active root's backend id; notifies only when it changes. */
 export const $rootId = computed($activeRoot, (root) => root.rootId);

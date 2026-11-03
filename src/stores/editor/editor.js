@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { isRecord, persistentMapStore } from '../persistent/persistent.js';
 import { $sessionsLoaded, $worktrees } from '../sessions/sessions.js';
-import { $project } from '../project/project.js';
+import { $shownFolder, $workspaces, $workspacesProject } from '../workspaces/workspaces.js';
 import { isUserAgentsFile } from '../agents/rules.js';
 import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
 import { NO_PROJECT, NO_TABS, tabGroup, tabsOf } from '../tab-group/tab-group.js';
@@ -42,21 +42,18 @@ export function parseTabId(id) {
 }
 
 /**
- * Whether a tab may be open in a project: a file tab only inside its folder or one of its worktree
- * sessions' (the user's agents.json anywhere), a session's changes while it's one of them, any other
- * view anywhere.
+ * Whether a tab may be open in a folder: a file tab only inside it (the user's agents.json anywhere),
+ * a session's changes while it's a worktree session's, any other view anywhere.
  * @param {string} id Tab id.
- * @param {string} root Absolute project folder; `NO_PROJECT` contains no file.
- * @param {readonly WorktreeFolder[] | null} worktrees The project's worktree sessions; `null` until
- *   the sessions are listed, when a tab that may be one's is kept (a write now must not drop it).
+ * @param {string} folder Absolute; `NO_PROJECT` contains no file.
+ * @param {readonly WorktreeFolder[] | null} worktrees Worktree sessions; `null` until the sessions are
+ *   listed, when a session's changes are kept (a write now must not drop them).
  */
-function belongsTo(id, root, worktrees) {
+function belongsTo(id, folder, worktrees) {
   const { kind, path } = parseTabId(id);
   if (kind === 'session-changes') return worktrees === null || worktrees.some((w) => w.sessionId === sessionOfTab(id));
   if (kind !== 'file' || isUserAgentsFile(path)) return true;
-  if (root === NO_PROJECT) return false;
-  if (worktrees === null) return true;
-  return [root, ...worktrees.map((w) => w.folder)].some((folder) => path.startsWith(`${folder}/`));
+  return folder !== NO_PROJECT && path.startsWith(`${folder}/`);
 }
 
 /** The Terminal tab before terminals had ids. */
@@ -114,37 +111,63 @@ try {
 }
 
 /**
- * Open tabs by project path, one storage item per project. Per window, like the folder they belong
- * to; two windows on one project take turns. Only the active project's entry is shown
- * (`$editorTabs`); the others wait here, untouched, until their project is activated.
+ * Open tabs by folder (a project's, Main's, or a workspace's), one storage item each. Per window, like
+ * the folder they belong to; two windows on one take turns. Only the shown folder's entry is shown
+ * (`$editorTabs`); the others wait here, untouched, until it is shown again.
  */
 export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
 
 /**
- * Tabs of the active project (`$project`), only files inside it or its worktree sessions' folders;
- * while no project is open, the tabs that show no file (Settings).
+ * Tabs of the shown folder (`$shownFolder`), only files inside it; while none is shown, the tabs that
+ * show no file (Settings).
  */
 export const $editorTabs = computed(
-  [$projectTabs, $project, $worktrees, $sessionsLoaded],
-  (projects, project, worktrees, loaded) => {
-    const root = project?.path ?? NO_PROJECT;
-    const tabs = projects[root];
+  [$projectTabs, $shownFolder, $worktrees, $sessionsLoaded],
+  (folders, shown, worktrees, loaded) => {
+    const folder = shown ?? NO_PROJECT;
+    const tabs = folders[folder];
     if (!tabs) return NO_TABS;
-    const own = loaded ? worktrees.filter((w) => w.projectId === root) : null;
-    return tabs.paths.every((id) => belongsTo(id, root, own))
+    const own = loaded ? worktrees : null;
+    return tabs.paths.every((id) => belongsTo(id, folder, own))
       ? tabs
       : tabsOf(
-          tabs.paths.filter((id) => belongsTo(id, root, own)),
+          tabs.paths.filter((id) => belongsTo(id, folder, own)),
           tabs.active,
           tabs.pinned,
         );
   },
 );
 
+/**
+ * Moves the tabs of a project's workspaces' files from the project's entry, where they were kept
+ * before workspaces had tabs of their own, to each workspace's (after its own, its active tab kept).
+ * Once: they're gone from the project's entry then.
+ * @param {string | null} project
+ * @param {readonly import('../../hooks/workspaces/types.js').Workspace[]} list Its workspaces.
+ */
+function moveWorkspaceTabs(project, list) {
+  if (project === null) return;
+  for (const { folder } of list) {
+    const from = $projectTabs.get()[project];
+    const moved = from?.paths.filter((id) => parseTabId(id).kind === 'file' && id.startsWith(`${folder}/`)) ?? [];
+    if (!from || !moved.length) continue;
+    const to = $projectTabs.get()[folder] ?? NO_TABS;
+    const added = moved.filter((id) => !to.paths.includes(id));
+    $projectTabs.setKey(
+      folder,
+      tabsOf([...to.paths, ...added], to.active ?? from.active, [...to.pinned, ...from.pinned.filter((id) => added.includes(id))]),
+    );
+    $projectTabs.setKey(project, tabsOf(from.paths.filter((id) => !moved.includes(id)), from.active, from.pinned));
+  }
+}
+
+$workspacesProject.subscribe((project) => moveWorkspaceTabs(project, $workspaces.get()));
+$workspaces.listen((list) => moveWorkspaceTabs($workspacesProject.get(), list));
+
 const group = tabGroup({
   $projects: $projectTabs,
   $tabs: $editorTabs,
-  shownKey: () => $project.get()?.path ?? NO_PROJECT,
+  shownKey: () => $shownFolder.get() ?? NO_PROJECT,
 });
 
 export const {

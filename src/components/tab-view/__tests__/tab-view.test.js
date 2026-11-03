@@ -39,7 +39,7 @@ const terminalInfo = {
   fallback: '/p',
   label: 'zsh — p',
   title: null,
-  projectPath: '/p',
+  folder: '/p', projectPath: '/p',
   status: 'running',
   exit: null,
   error: null,

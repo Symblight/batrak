@@ -285,6 +285,14 @@ export function touchSession(id, at) {
 }
 
 /**
+ * Forgets which session a folder last showed, e.g. when its workspace is deleted.
+ * @param {string} folder
+ */
+export function forgetLastSession(folder) {
+  if (folder in $lastByFolder.get()) $lastByFolder.setKey(folder, undefined);
+}
+
+/**
  * A removed session leaves the list; when it was shown, its workspace's last or newest session (or a
  * new draft) takes its place.
  * @param {string} id
