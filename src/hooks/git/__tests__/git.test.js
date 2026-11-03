@@ -32,16 +32,52 @@ async function started() {
 }
 
 const sent = (/** @type {string} */ cmd) => calls.filter((c) => c.cmd === cmd).map((c) => c.args);
-/** @param {() => boolean} pred */
+
+/** The hook's wait for more changes after one (`REFRESH_DELAY_MS`). */
+const DEBOUNCE_MS = 300;
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+/** @type {Map<number, () => void>} The hook's debounced reads, fired by `until()` instead of after 300 ms. */
+const held = new Map();
+let heldId = 1_000_000;
+function holdDebounces() {
+  globalThis.setTimeout = /** @type {never} */ ((/** @type {() => void} */ fn, /** @type {number} */ ms) => {
+    if (ms !== DEBOUNCE_MS) return realSetTimeout(fn, ms);
+    held.set(++heldId, fn);
+    return heldId;
+  });
+  globalThis.clearTimeout = /** @type {never} */ ((/** @type {number} */ id) => {
+    if (!held.delete(id)) realClearTimeout(id);
+  });
+}
+function releaseDebounces() {
+  globalThis.setTimeout = realSetTimeout;
+  globalThis.clearTimeout = realClearTimeout;
+  held.clear();
+}
+
+/**
+ * Waits for `pred`, firing the debounced reads pending meanwhile (as if their 300 ms had passed).
+ * @param {() => boolean} pred
+ */
 async function until(pred) {
   const started = Date.now();
   while (!pred()) {
-    expect(Date.now() - started, 'timed out').to.be.lessThan(3000);
-    await new Promise((r) => setTimeout(r, 5));
+    expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
+    const due = [...held.values()];
+    held.clear();
+    due.forEach((fn) => fn());
+    await new Promise((r) => realSetTimeout(r, 5));
   }
 }
 /** @param {number} ms */
-const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const wait = (ms) => new Promise((r) => realSetTimeout(r, ms));
+/** Fires the debounced reads still pending, and lets what they started finish. */
+async function settle() {
+  [...held.values()].forEach((fn) => fn());
+  held.clear();
+  await wait(30);
+}
 
 /**
  * Opens a project of its own (roots stay open across tests).
@@ -60,6 +96,7 @@ const changed = (rootId, changes = {}) =>
 describe('git', () => {
   beforeEach(() => {
     calls = [];
+    holdDebounces();
     answers = {
       open_workspace: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
       git_head: () => REPO,
@@ -81,6 +118,7 @@ describe('git', () => {
     );
   });
   afterEach(() => {
+    releaseDebounces();
     stop?.();
     stop = null;
     clearMocks();
@@ -97,8 +135,8 @@ describe('git', () => {
     await changed(rootId, { git: true });
     await changed('root:elsewhere', { git: true });
     await changed(rootId); // no repository change
-    await until(() => sent('git_head').length === 2);
-    await wait(450);
+    await until(() => sent('git_head').length >= 2);
+    await settle();
     const afterBurst = sent('git_head').length;
     window.dispatchEvent(new Event('focus'));
     await until(() => sent('git_head').length === 3);
@@ -128,7 +166,7 @@ describe('git', () => {
     first();
     second();
     await changed(rootId);
-    await wait(450);
+    await settle();
     // Assert
     expect(unwatched, 'no scan before anyone watches').to.equal(0);
     expect(sent('git_status').length, 'none after the last watcher stopped').to.equal(2);
@@ -373,11 +411,22 @@ describe('git', () => {
     const rootId = await open();
     await until(() => $gitRepo.get().repo !== null);
     const midRebase = { ...REPO, branch: null, detached: true, sha: 'r1' };
+    /** @type {((repo: unknown) => void)[]} */
+    const earlierReads = [];
+    answers.git_head = () => new Promise((resolve) => earlierReads.push(resolve));
+    window.dispatchEvent(new Event('focus'));
+    await until(() => earlierReads.length === 1);
     answers.git_remote = () => {
       answers.git_head = () => midRebase;
       throw { kind: 'conflict', message: 'CONFLICT (content): Merge conflict in a.txt' };
     };
     await git.remote('pullRebase');
+    // Act: a read started before the pull answers after it, with the branch as it was
+    earlierReads[0](REPO);
+    await wait(30);
+    // Assert
+    expect($gitRemoteOpHere.get()?.state, 'an answer from before the failure is not a move').to.equal('failed');
+
     // Act: the change the pull itself made is reported
     const reads = sent('git_head').length;
     await changed(rootId, { git: true });
