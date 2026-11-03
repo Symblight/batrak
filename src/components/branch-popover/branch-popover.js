@@ -24,6 +24,7 @@ import styles from './branch-popover.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoState} GitRepoState */
 /** @typedef {import('../../hooks/git/types.js').GitBranchList} GitBranchList */
+/** @typedef {import('../../hooks/git/types.js').GitFetchError} GitFetchError */
 
 /** @type {Record<string, string>} The chip's icons by name. */
 const ICONS = { arrow_downward: arrowDownwardIcon, arrow_upward: arrowUpwardIcon, cloud_upload: cloudUploadIcon };
@@ -32,7 +33,7 @@ const ICONS = { arrow_downward: arrowDownwardIcon, arrow_upward: arrowUpwardIcon
  * @tag acp-branch-popover
  * @summary The header's branch button and the card it opens: the branch with a Copy button, how it stands against its remote with the chip's action and Fetch, a new branch, and the local and remote branches to switch to.
  * @fires acp-git-branches-query `null` The card opened: the container answers with `branches`.
- * @fires acp-git-switch `{ branch, create }` A branch picked, or a new one named; the container answers with `switchFinished()`.
+ * @fires acp-git-switch `{ branch, create, remote? }` A branch picked (a remote one with its remote), or a new one named; the container answers with `switchFinished()`.
  * @fires acp-git-remote `{ action }` The remote action of the chip, or Fetch.
  * @fires acp-copy `{ text }` The branch's name.
  */
@@ -40,6 +41,7 @@ export class AcpBranchPopover extends LitElement {
   static properties = {
     repo: { attribute: false },
     branches: { attribute: false },
+    fetchError: { attribute: false },
     open: { state: true },
     filter: { state: true },
     creating: { state: true },
@@ -54,6 +56,8 @@ export class AcpBranchPopover extends LitElement {
     this.repo = null;
     /** @type {GitBranchList | null} The lists, once the container has answered the query. */
     this.branches = null;
+    /** @type {GitFetchError | null} Why the last background fetch failed, told beside the remote. */
+    this.fetchError = null;
     /** @type {boolean} The card is showing. */
     this.open = false;
     /** @type {string} */
@@ -121,10 +125,14 @@ export class AcpBranchPopover extends LitElement {
     this.#emit('acp-git-remote', { action });
   }
 
-  /** @param {string} branch @param {boolean} create */
-  #switch(branch, create) {
+  /**
+   * @param {string} branch
+   * @param {boolean} create
+   * @param {string} [remote] A remote branch's remote: a tracking branch of it is made.
+   */
+  #switch(branch, create, remote) {
     this.error = null;
-    this.#emit('acp-git-switch', { branch, create });
+    this.#emit('acp-git-switch', { branch, create, ...(remote ? { remote } : {}) });
   }
 
   #onTrigger() {
@@ -144,7 +152,7 @@ export class AcpBranchPopover extends LitElement {
 
   /** @param {GitRepoState} repo */
   #renderFacts(repo) {
-    const chip = git.remoteChip(repo, Date.now());
+    const chip = git.remoteChip(repo, Date.now(), null, this.fetchError);
     // A synced branch's click is a fetch, which has a button of its own.
     const primary = chip?.action && chip.id !== 'synced' ? chip : null;
     return html`<div class="acp-branch-popover__facts">
@@ -226,7 +234,7 @@ export class AcpBranchPopover extends LitElement {
         ${repeat(
           rows.remote,
           (row) => `${row.remote}/${row.name}`,
-          (row) => html`<button type="button" class="acp-branch-popover__row" @click=${() => this.#switch(row.name, false)}>
+          (row) => html`<button type="button" class="acp-branch-popover__row" @click=${() => this.#switch(row.name, false, row.remote)}>
             <md-icon class="acp-branch-popover__icon">${unsafeSVG(cloudIcon)}</md-icon>
             <span class="acp-branch-popover__name-text">${row.name}</span>
             <span class="acp-branch-popover__detail">${row.remote}</span>

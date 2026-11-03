@@ -40,7 +40,7 @@ describe('acp-pull-request-chip', () => {
       ['open', 'ok', reply(pr()), repo, '#128 Open', 'https://github.com/a/b/pull/128'],
       ['draft', 'ok', reply(pr({ isDraft: true, checks: 'PENDING' })), repo, '#128 Draft', 'https://github.com/a/b/pull/128'],
       ['merged', 'ok', reply(pr({ state: 'MERGED' })), repo, '#128 Merged', 'https://github.com/a/b/pull/128'],
-      ['none yet', 'ok', reply(null), repo, 'Create PR', 'https://github.com/a/b/compare/main...feat?expand=1'],
+      ['none yet', 'ok', reply(null), repo, 'Create PR', 'https://github.com/a/b/compare/main...a:feat?expand=1'],
       ['none, not published', 'ok', reply(null), { ...repo, upstream: null }, 'Create PR', null],
       ['looked up with no answer', 'ok', null, repo, null, null],
       ['no access', 'noAccess', reply(null), repo, 'No access', null],
@@ -61,5 +61,17 @@ describe('acp-pull-request-chip', () => {
       expect(chip?.disabled ?? false, why).to.equal(label === 'Create PR' && !opens);
       if (chip) expect(tooltipOf(chip), why).to.be.a('string').and.not.equal('');
     }
+  });
+
+  it('keeps showing the pull request while GitHub can\'t be reached, and says so', async () => {
+    // Arrange
+    const repo = { branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: null, hasRemotes: true, fetchedAt: null, remote: { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } } };
+    const reply = { status: 'ok', pr: { number: 128, title: 'T', url: 'https://github.com/a/b/pull/128', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null }, defaultBranch: 'main', message: null, stale: 'error connecting to api.github.com' };
+    // Act
+    const el = await fixture(html`<acp-pull-request-chip .status=${'ok'} .reply=${reply} .repo=${repo}></acp-pull-request-chip>`);
+    const chip = /** @type {ShadowRoot} */ (el.shadowRoot).querySelector('.acp-pull-request-chip__button');
+    // Assert
+    expect(chip?.textContent?.trim()).to.equal('#128 Open');
+    expect(tooltipOf(chip)).to.equal("Couldn't reach GitHub: error connecting to api.github.com; retrying");
   });
 });

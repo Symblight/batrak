@@ -12,6 +12,8 @@ const GIT = {
 /** @type {import('../../../hooks/git/types.js').GitBranchList} */
 const BRANCHES = { local: [{ name: 'main', current: true, ahead: 2, behind: 0, committedAt: 0 }], remote: [] };
 
+const FETCH_ERROR = { rootId: 'r1', at: 1, message: 'offline' };
+
 /** @type {import('../../../hooks/git/types.js').GitRemoteOp} */
 const OP = { rootId: 'r1', action: 'push', state: 'running', error: null };
 
@@ -29,6 +31,7 @@ describe('acp-toolbar', () => {
       .git=${GIT}
       .remoteOp=${OP}
       .branches=${BRANCHES}
+      .fetchError=${FETCH_ERROR}
       .githubSlot=${'ok'}
       .githubReply=${REPLY}
     ></acp-toolbar>`);
@@ -41,7 +44,7 @@ describe('acp-toolbar', () => {
       '/work',
     ]);
     const branch = root.querySelector('acp-branch-popover');
-    expect([branch?.repo, branch?.branches], 'the branch button is the popover\'s').to.deep.equal([GIT.repo, BRANCHES]);
+    expect([branch?.repo, branch?.branches, branch?.fetchError], 'the branch button is the popover\'s').to.deep.equal([GIT.repo, BRANCHES, FETCH_ERROR]);
     const chip = root.querySelector('acp-remote-chip');
     expect([chip?.repo, chip?.op], 'the sync state is the chip\'s').to.deep.equal([GIT.repo, OP]);
     const slot = root.querySelector('acp-pull-request-chip');

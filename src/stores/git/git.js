@@ -49,11 +49,11 @@ export function pickForCommit(ids, picked) {
 /** Notifies only when HEAD moves (commit, checkout, reset). */
 export const $gitHead = computed($gitRepo, ({ repo }) => (repo ? `${repo.branch ?? ''}@${repo.sha ?? ''}` : null));
 
-/** The fetch, pull or push running (or just failed) for a root; written by the `git` hook. */
-export const $gitRemoteOp = atom(/** @type {GitRemoteOp | null} */ (null));
+/** The fetch, pull or push running (or just failed) of each root, by root id; written by the `git` hook. */
+export const $gitRemoteOps = atom(/** @type {Readonly<Record<string, GitRemoteOp>>} */ ({}));
 
-/** [`$gitRemoteOp`] when it is the shown root's. */
-export const $gitRemoteOpHere = computed([$gitRemoteOp, $rootId], (op, rootId) => (op && op.rootId === rootId ? op : null));
+/** The shown root's entry of [`$gitRemoteOps`]. */
+export const $gitRemoteOpHere = computed([$gitRemoteOps, $rootId], (ops, rootId) => (rootId === null ? null : (ops[rootId] ?? null)));
 
 /** Why the last background fetch failed, until one succeeds; written by the `git` hook. */
 export const $gitFetchError = atom(/** @type {GitFetchError | null} */ (null));

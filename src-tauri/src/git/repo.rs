@@ -21,6 +21,16 @@ pub struct RepoState {
     pub behind: u32,
     /// What the upstream branch pointed at when last fetched: the lease of a force push.
     pub upstream_sha: Option<String>,
+    /// The upstream's remote (`.` for a local upstream) and its branch there (`refs/heads/main`),
+    /// what a force push names; not derived from `upstream`, which a `/` in a remote name or
+    /// another refspec would mislead.
+    #[serde(skip)]
+    pub upstream_remote: Option<String>,
+    #[serde(skip)]
+    pub upstream_merge: Option<String>,
+    /// The remote-tracking ref of the upstream (`refs/remotes/origin/main`).
+    #[serde(skip)]
+    pub upstream_ref: Option<String>,
     /// The remote the branch syncs with (see [`remote::read`]); `None` when detached or without remotes.
     pub remote: Option<RemoteInfo>,
     /// The repository has a remote at all: "No remote" against "No upstream".
@@ -117,10 +127,14 @@ pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, St
     let mut state = RepoState::new(branch, sha);
     if let Some(branch) = &state.branch {
         let reference = format!("refs/heads/{branch}");
-        let line = optional(&[&"for-each-ref", &"--format=%(upstream:short)%00%(upstream:track,nobracket)", &reference])?;
-        if let Some((upstream, track)) = line.as_deref().and_then(|l| l.split_once('\0')) {
-            state.upstream = Some(upstream.to_owned()).filter(|u| !u.is_empty());
-            (state.ahead, state.behind) = parse_track(track);
+        let format = "--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)";
+        let line = optional(&[&"for-each-ref", &format, &reference])?;
+        if let Some(line) = line {
+            let mut fields = line.split('\0');
+            let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
+            state.upstream = next();
+            (state.ahead, state.behind) = parse_track(&next().unwrap_or_default());
+            (state.upstream_ref, state.upstream_remote, state.upstream_merge) = (next(), next(), next());
         }
     }
     add_remote(git, root, info, &mut state)?;
@@ -133,9 +147,18 @@ fn add_remote(git: &Path, root: &Path, info: &RepoInfo, state: &mut RepoState) -
     state.has_remotes = remotes.has_remotes;
     state.fetched_at = remotes.fetched_at;
     state.remote = if state.detached { None } else { remotes.remote };
+    // `status --porcelain` names the upstream only by its short name.
+    if let (Some(branch), Some(_), None) = (&state.branch, &state.upstream, &state.upstream_ref) {
+        let reference = format!("refs/heads/{branch}");
+        let format = "--format=%(upstream)%00%(upstream:remotename)%00%(upstream:remoteref)";
+        let out = exec::run_with(git, root, &exec::args(&[&"for-each-ref", &format, &reference]), Mode::Background, &Default::default())?;
+        let mut fields = out.stdout_str()?.trim_end_matches('\n').split('\0');
+        let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
+        (state.upstream_ref, state.upstream_remote, state.upstream_merge) = (next(), next(), next());
+    }
     // Only a remote-tracking branch has a lease to give; a local upstream branch is not on a remote.
-    if let (Some(upstream), Some(_)) = (&state.upstream, &state.remote) {
-        let reference = format!("refs/remotes/{upstream}");
+    let on_remote = state.upstream_remote.as_deref().is_some_and(|r| r != ".");
+    if let (Some(reference), true, Some(_)) = (&state.upstream_ref, on_remote, &state.remote) {
         let out = exec::run_with(git, root, &exec::args(&[&"rev-parse", &"-q", &"--verify", &reference]), Mode::Background, &Default::default())?;
         state.upstream_sha = out.success().then(|| out.stdout_str().map(|t| t.trim().to_owned())).transpose()?.filter(|t| !t.is_empty());
     }
@@ -152,6 +175,9 @@ impl RepoState {
             ahead: 0,
             behind: 0,
             upstream_sha: None,
+            upstream_remote: None,
+            upstream_merge: None,
+            upstream_ref: None,
             remote: None,
             has_remotes: false,
             fetched_at: None,

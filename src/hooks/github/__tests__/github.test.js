@@ -74,6 +74,8 @@ describe('github sign-in', () => {
     };
     await github.signIn();
     expect($githubSignIn.get()).to.deep.include({ phase: 'failed', error: 'authorization was declined' });
+    github.cancelSignIn();
+    expect(sent('github_sign_in_cancel'), 'closing a failed one has nothing to stop').to.have.length(0);
 
     // Cancelled while waiting
     /** @type {(reason: unknown) => void} */
@@ -82,10 +84,12 @@ describe('github sign-in', () => {
     const signingIn = github.signIn();
     await until(() => sent('github_sign_in').length === 2);
     github.cancelSignIn();
+    await emit('github://code', '91BE-580F'); // printed by the CLI before it was stopped
     reject('Sign-in cancelled');
     await signingIn;
     expect($githubSignIn.get(), 'closed, not failed').to.deep.equal(SIGN_IN_IDLE);
     expect(sent('github_sign_in_cancel')).to.have.length(1);
+    expect(sent('open_url'), 'no browser for a cancelled sign-in').to.have.length(0);
 
     // No CLI: nothing is started
     answers.github_account = () => ({ state: 'noCli' });
@@ -129,5 +133,37 @@ describe('github sign-in', () => {
     expect($pullRequestHere.get(), 'not feat\'s').to.equal(null);
     expect(sent('github_pull_request')).to.have.length(2);
     stop();
+  });
+
+  it('follows the account once however often it is started, and reads it again when another window signs in', async () => {
+    // Arrange
+    const stops = [github.start(), github.start()];
+    await until(() => sent('github_account').length >= 1);
+    await new Promise((r) => setTimeout(r, 30));
+    const reads = sent('github_account').length;
+    // Act
+    await emit('github://account');
+    await until(() => sent('github_account').length > reads);
+    await new Promise((r) => setTimeout(r, 30));
+    // Assert
+    expect(reads, 'one read at start').to.equal(1);
+    expect(sent('github_account').length, 'one read per event').to.equal(reads + 1);
+    stops.forEach((stop) => stop());
+  });
+
+  it('keeps the last pull request it found while GitHub can\'t be reached, marked as such', async () => {
+    // Arrange
+    const found = { status: 'ok', pr: { number: 8, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null }, defaultBranch: 'main', message: null };
+    answers.github_pull_request = () => found;
+    const onGithub = { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } };
+    $workspace.set({ path: '/work/a', name: 'a', rootId: 'r1' });
+    $gitRepo.set({ repo: { branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: 'u1', remote: onGithub, hasRemotes: true, fetchedAt: null }, error: null });
+    $githubAccount.set({ state: 'signedIn', login: 'octo' });
+    await github.refreshPullRequest();
+    answers.github_pull_request = () => ({ status: 'error', pr: null, defaultBranch: null, message: 'error connecting to api.github.com' });
+    // Act
+    await github.refreshPullRequest();
+    // Assert
+    expect($pullRequestHere.get()?.reply).to.deep.equal({ ...found, stale: 'error connecting to api.github.com' });
   });
 });

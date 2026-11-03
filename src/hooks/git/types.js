@@ -59,7 +59,7 @@
  */
 
 /**
- * The remote operation running or just failed for a root (`$gitRemoteOp`).
+ * The remote operation running or just failed for a root (an entry of `$gitRemoteOps`).
  * @typedef {Object} GitRemoteOp
  * @property {string} rootId
  * @property {GitRemoteAction} action

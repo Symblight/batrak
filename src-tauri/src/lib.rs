@@ -177,9 +177,10 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Brama")
         .run(|app, event| {
-            // No agent process or shell outlives the app: every session's and terminal's process
-            // group is stopped.
+            // No agent process, shell or GitHub sign-in outlives the app: every session's and
+            // terminal's process group is stopped, and the sign-in's.
             if let tauri::RunEvent::Exit = event {
+                github::stop_sign_in();
                 app.state::<session::Sessions>().shutdown();
                 app.state::<terminal::Terminals>().stop_all(std::time::Duration::from_millis(200));
             }

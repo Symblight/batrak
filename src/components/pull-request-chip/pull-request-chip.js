@@ -75,11 +75,12 @@ export class AcpPullRequestChip extends LitElement {
     if (reply.pr) {
       const { url } = reply.pr;
       const chip = github.prChip(reply.pr);
+      const stale = reply.stale !== undefined;
       return this.#chip({
         label: chip.label,
-        tooltip: chip.tooltip,
+        tooltip: stale ? `Couldn't reach GitHub: ${reply.stale}; retrying` : chip.tooltip,
         icon: ICONS[chip.icon] ?? '',
-        mod: `acp-pull-request-chip__button_${chip.state}`,
+        mod: `acp-pull-request-chip__button_${chip.state}${stale ? ' acp-pull-request-chip__button_stale' : ''}`,
         dot: chip.checks,
         click: () => this.#emit('acp-github-open', { url }),
       });

@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOp, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOpHere, $gitRemoteOps, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $workspace } from '../../../stores/workspace/workspace.js';
 import { projects } from '../../projects/projects.js';
@@ -67,7 +67,7 @@ describe('git', () => {
     };
     $workspace.set(null);
     $gitRepo.set(NO_REPO);
-    $gitRemoteOp.set(null);
+    $gitRemoteOps.set({});
     $gitFetchError.set(null);
     $notices.set([]);
     setCommitSelection([]);
@@ -213,11 +213,13 @@ describe('git', () => {
     };
     const failure = await git.switchBranch('x', true).catch((err) => err);
     await until(() => sent('git_head').length === 3);
+    await git.switchBranch('feature/y', false, 'origin').catch(() => {});
     // Assert
     expect(shown).to.equal('dev');
     expect(sent('git_switch')).to.deep.equal([
       { rootId, branch: 'dev', create: false },
       { rootId, branch: 'x', create: true },
+      { rootId, branch: 'feature/y', create: false, remote: 'origin' },
     ]);
     expect(String(failure)).to.include('would be overwritten');
   });
@@ -304,7 +306,7 @@ describe('git', () => {
     // Act
     const first = git.remote('push');
     await until(() => answering.length === 1);
-    const whileRunning = $gitRemoteOp.get();
+    const whileRunning = $gitRemoteOpHere.get();
     await git.remote('fetch'); // ignored: one at a time
     answering[0]({ ...REPO, ahead: 0, upstream: 'origin/main' });
     await first;
@@ -312,8 +314,38 @@ describe('git', () => {
     expect(whileRunning).to.deep.equal({ rootId, action: 'push', state: 'running', error: null });
     expect(sent('git_remote')).to.deep.equal([{ rootId, action: 'push' }]);
     expect($gitRepo.get().repo?.upstream).to.equal('origin/main');
-    expect($gitRemoteOp.get(), 'done: nothing left to show').to.equal(null);
+    expect($gitRemoteOpHere.get(), 'done: nothing left to show').to.equal(null);
     expect($notices.get().map((n) => [n.level, n.message]), 'the result is told in a snackbar').to.deep.equal([['info', 'Pushed to origin/main']]);
+  });
+
+  it('runs one operation per project: another project syncs while one pushes, and an operation asked for a project no longer shown is dropped', async () => {
+    // Arrange: project A pushing
+    const git = await started();
+    const a = await open();
+    /** @type {((repo: unknown) => void)[]} */
+    const answering = [];
+    answers.git_remote = () => new Promise((resolve) => answering.push(resolve));
+    const pushing = git.remote('push');
+    await until(() => answering.length === 1);
+    // Act: project B shown, and asked to fetch
+    const b = await open();
+    const fetching = git.remote('fetch');
+    await until(() => answering.length === 2);
+    // Assert
+    expect(sent('git_remote').map((c) => c.rootId)).to.deep.equal([a, b]);
+    expect($gitRemoteOpHere.get()).to.deep.include({ rootId: b, action: 'fetch', state: 'running' });
+    // Act: A's push ends
+    answering[0](REPO);
+    await pushing;
+    // Assert
+    expect($gitRemoteOpHere.get()?.state, "B's fetch still runs").to.equal('running');
+    answering[1](REPO);
+    await fetching;
+
+    // Act: a pull confirmed for A after B was shown
+    await git.remote('pull', null, a);
+    // Assert
+    expect(sent('git_remote'), 'not run in B').to.have.length(2);
   });
 
   it('keeps a failed operation with its kind and message, tells the user once, and forgets it when dismissed', async () => {
@@ -328,12 +360,12 @@ describe('git', () => {
     await git.remote('forcePush', 'f00d');
     // Assert
     expect(sent('git_remote'), 'a force push says which commit it replaces').to.deep.equal([{ rootId, action: 'forcePush', expected: 'f00d' }]);
-    expect($gitRemoteOp.get()).to.deep.equal({ rootId, action: 'forcePush', state: 'failed', error });
+    expect($gitRemoteOpHere.get()).to.deep.equal({ rootId, action: 'forcePush', state: 'failed', error });
     expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['error', 'Force push failed: ! [rejected] main -> main (fetch first)']]);
     // Act
     git.dismissRemote();
     // Assert
-    expect($gitRemoteOp.get()).to.equal(null);
+    expect($gitRemoteOpHere.get()).to.equal(null);
   });
   it('keeps a failed operation while the branch stays as the failure left it, and forgets it once the branch moves', async () => {
     // Arrange: a pull that stopped on a conflict, leaving the branch mid-rebase
@@ -352,14 +384,14 @@ describe('git', () => {
     await until(() => sent('git_head').length > reads);
     await wait(30);
     // Assert
-    expect($gitRemoteOp.get()?.state, 'its own leftovers are what Abort is for').to.equal('failed');
+    expect($gitRemoteOpHere.get()?.state, 'its own leftovers are what Abort is for').to.equal('failed');
 
     // Act: the rebase is finished in a terminal
     answers.git_head = () => ({ ...REPO, sha: 'b2' });
     await changed(rootId, { git: true });
     await until(() => $gitRepo.get().repo?.sha === 'b2');
     // Assert
-    expect($gitRemoteOp.get(), 'the chip shows the branch again').to.equal(null);
+    expect($gitRemoteOpHere.get(), 'the chip shows the branch again').to.equal(null);
   });
 
   it('fetches quietly once a project with a remote is shown, takes the counts it finds, and does not try again for five minutes', async () => {
@@ -398,6 +430,6 @@ describe('git', () => {
     // Assert
     expect($gitFetchError.get()).to.deep.include({ rootId, message: 'Authentication failed for origin' });
     expect($notices.get()).to.deep.equal([]);
-    expect($gitRemoteOp.get(), 'the chip is not shown as failed').to.equal(null);
+    expect($gitRemoteOpHere.get(), 'the chip is not shown as failed').to.equal(null);
   });
 });

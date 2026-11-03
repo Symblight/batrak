@@ -46,21 +46,24 @@ export function prChip(pr) {
 }
 
 /**
- * Where "Create PR" goes: GitHub's compare page of the branch against the default one. Not for a
- * branch that isn't on the remote yet, or is the default itself.
+ * Where "Create PR" goes: GitHub's compare page of the branch, as it is named on the remote, against
+ * the default one. Not for a branch that isn't on the remote yet, or that is the default itself.
  * @param {GitRepoState} repo
  * @param {string | null} defaultBranch
  * @returns {{ url: string | null, tooltip: string }}
  */
 export function createPr(repo, defaultBranch) {
-  const github = repo.remote?.github;
-  const branch = repo.branch;
-  if (!github || !branch) return { url: null, tooltip: '' };
+  const remote = repo.remote;
+  const github = remote?.github;
+  if (!remote || !github || !repo.branch) return { url: null, tooltip: '' };
   if (!repo.upstream) return { url: null, tooltip: 'Publish the branch first' };
-  if (branch === defaultBranch) return { url: null, tooltip: 'This is the default branch' };
+  // `origin/team/fix` → `team/fix`: the head of the pull request is the remote branch.
+  const head = repo.upstream.startsWith(`${remote.name}/`) ? repo.upstream.slice(remote.name.length + 1) : repo.branch;
+  if (head === defaultBranch) return { url: null, tooltip: 'This is the default branch' };
   const path = (/** @type {string} */ name) => name.split('/').map(encodeURIComponent).join('/');
-  const range = defaultBranch ? `${path(defaultBranch)}...${path(branch)}` : path(branch);
-  return { url: `https://github.com/${github.owner}/${github.repo}/compare/${range}?expand=1`, tooltip: `Create a pull request for ${branch}` };
+  const compared = `${encodeURIComponent(github.owner)}:${path(head)}`;
+  const range = defaultBranch ? `${path(defaultBranch)}...${compared}` : compared;
+  return { url: `https://github.com/${github.owner}/${github.repo}/compare/${range}?expand=1`, tooltip: `Create a pull request for ${head}` };
 }
 
 /**

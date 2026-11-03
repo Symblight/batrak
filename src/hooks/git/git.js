@@ -1,4 +1,4 @@
-import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOp, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitFetchError, $gitRemoteOps, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
 import { $rootId } from '../../stores/workspace/workspace.js';
 import { app } from '../app/app.js';
@@ -94,7 +94,7 @@ async function autoFetch() {
     now,
     lastAttempt: rootId === null ? null : (fetchAttempts.get(rootId) ?? null),
     visible: document.visibilityState === 'visible',
-    busy: $gitRemoteOp.get()?.state === 'running',
+    busy: rootId !== null && $gitRemoteOps.get()[rootId]?.state === 'running',
   });
   if (rootId === null || quietFetching || !due) return;
   fetchAttempts.set(rootId, now);
@@ -112,8 +112,18 @@ async function autoFetch() {
   }
 }
 
-/** @type {string | null} The shown branch's state when the remote operation failed (`stateKey`). */
-let failedAt = null;
+/** @type {Map<string, string | null>} A root's branch state when its remote operation failed (`stateKey`), by root id. */
+const failedAt = new Map();
+
+/**
+ * Sets or clears a root's remote operation.
+ * @param {string} rootId
+ * @param {import('./types.js').GitRemoteOp | null} op
+ */
+function setOp(rootId, op) {
+  const { [rootId]: _, ...others } = $gitRemoteOps.get();
+  $gitRemoteOps.set(op ? { ...others, [rootId]: op } : others);
+}
 
 /**
  * What a failed operation's chip depends on: once it differs, something changed since the failure.
@@ -144,9 +154,9 @@ async function headAfterFailure(rootId) {
  * @param {GitRepoView} view
  */
 function forgetStaleFailure({ repo }) {
-  const op = $gitRemoteOp.get();
-  if (op?.state !== 'failed' || op.rootId !== $rootId.get() || !repo) return;
-  if (stateKey(repo) !== failedAt) $gitRemoteOp.set(null);
+  const rootId = $rootId.get();
+  if (rootId === null || !repo || $gitRemoteOps.get()[rootId]?.state !== 'failed') return;
+  if (stateKey(repo) !== failedAt.get(rootId)) setOp(rootId, null);
 }
 
 /** @param {string} rootId */
@@ -238,35 +248,37 @@ export const git = Object.freeze({
   fetchDue,
 
   /**
-   * Fetches, pulls (fast-forward only), pushes or publishes the active root's branch. One at a time
-   * app-wide; while it runs and after it fails `$gitRemoteOp` says so (until dismissed, or until the
-   * branch moves since), and a failure is also a snackbar.
+   * Fetches, pulls, pushes or publishes the shown root's branch. One at a time per root; while it
+   * runs and after it fails `$gitRemoteOps` says so (until dismissed, or until the branch moves
+   * since), and a failure is also a snackbar.
    * @param {GitRemoteAction} action
    * @param {string | null} [expected] `forcePush`: the upstream commit it replaces, as the user saw it.
+   * @param {string | null} [rootId] The root it was asked for (before a confirmation); nothing runs if
+   *   another one is shown by now.
    */
-  async remote(action, expected = null) {
-    const rootId = $rootId.get();
-    if (rootId === null || $gitRemoteOp.get()?.state === 'running') return;
+  async remote(action, expected = null, rootId = $rootId.get()) {
+    if (rootId === null || rootId !== $rootId.get() || $gitRemoteOps.get()[rootId]?.state === 'running') return;
     const before = $gitRepo.get().repo;
-    $gitRemoteOp.set({ rootId, action, state: 'running', error: null });
+    setOp(rootId, { rootId, action, state: 'running', error: null });
     try {
       /** @type {GitRepoState} */
       const repo = await ipc.invoke('git_remote', { rootId, action, ...(expected ? { expected } : {}) });
       if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
       if (action === 'fetch') clearFetchError(rootId);
-      $gitRemoteOp.set(null);
+      setOp(rootId, null);
       if (before) notify('info', remoteDone(action, before, repo));
     } catch (err) {
       const error = remoteError(err);
-      failedAt = stateKey(await headAfterFailure(rootId));
-      $gitRemoteOp.set({ rootId, action, state: 'failed', error });
+      failedAt.set(rootId, stateKey(await headAfterFailure(rootId)));
+      setOp(rootId, { rootId, action, state: 'failed', error });
       app.reportError(remoteFailure(action), error.message.split('\n')[0]);
     }
   },
 
   /** Clears a failed remote operation, so the chip shows the branch's state again. */
   dismissRemote() {
-    if ($gitRemoteOp.get()?.state === 'failed') $gitRemoteOp.set(null);
+    const rootId = $rootId.get();
+    if (rootId !== null && $gitRemoteOps.get()[rootId]?.state === 'failed') setOp(rootId, null);
   },
 
   /**
@@ -373,14 +385,15 @@ export const git = Object.freeze({
    * Switches the active root to a branch (`create`: makes it from HEAD), then shows the new state at once.
    * @param {string} branch Local, or a remote's without the remote's name (it gets a tracking branch).
    * @param {boolean} create
+   * @param {string | null} [remote] A remote branch's remote, so two remotes with the branch aren't ambiguous.
    * @returns {Promise<void>} Fails with git's message, e.g. the files a switch would overwrite.
    */
-  async switchBranch(branch, create) {
+  async switchBranch(branch, create, remote = null) {
     const rootId = $rootId.get();
     if (rootId === null) throw new Error('No project is open');
     try {
       /** @type {GitRepoState} */
-      const repo = await ipc.invoke('git_switch', { rootId, branch, create });
+      const repo = await ipc.invoke('git_switch', { rootId, branch, create, ...(remote ? { remote } : {}) });
       if ($rootId.get() === rootId) $gitRepo.set({ repo, error: null });
     } finally {
       // A hook may have changed files too.

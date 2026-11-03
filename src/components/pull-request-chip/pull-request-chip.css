@@ -60,6 +60,10 @@
   background-color: var(--acp-color-error-container);
   color: var(--acp-color-on-error-container);
 }
+/* The last answer while GitHub can't be reached. */
+.acp-pull-request-chip__button_stale {
+  opacity: 0.6;
+}
 .acp-pull-request-chip__dot {
   width: 8px;
   height: 8px;

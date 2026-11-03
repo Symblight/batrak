@@ -64,10 +64,12 @@ describe('github rules', () => {
   it('opens a pull request from the compare page only for a published branch that is not the default one', () => {
     /** @type {[string, import('../../git/types.js').GitRepoState, string | null, string | null, string][]} */
     const cases = [
-      ['published', repo({ branch: 'feature/x y' }), 'main', 'https://github.com/a/b/compare/main...feature/x%20y?expand=1', 'Create a pull request for feature/x y'],
+      ['published', repo({ branch: 'feature/x y', upstream: 'origin/feature/x y' }), 'main', 'https://github.com/a/b/compare/main...a:feature/x%20y?expand=1', 'Create a pull request for feature/x y'],
+      ['published under another name', repo({ branch: 'fix', upstream: 'origin/team/fix' }), 'main', 'https://github.com/a/b/compare/main...a:team/fix?expand=1', 'Create a pull request for team/fix'],
       ['not published', repo({ upstream: null }), 'main', null, 'Publish the branch first'],
       ['the default branch', repo(), 'main', null, 'This is the default branch'],
-      ['default unknown', repo({ branch: 'dev' }), null, 'https://github.com/a/b/compare/dev?expand=1', 'Create a pull request for dev'],
+      ['tracking the default branch', repo({ branch: 'local-main' }), 'main', null, 'This is the default branch'],
+      ['default unknown', repo({ branch: 'dev', upstream: 'origin/dev' }), null, 'https://github.com/a/b/compare/a:dev?expand=1', 'Create a pull request for dev'],
     ];
     for (const [why, state, base, url, tooltip] of cases) {
       expect(github.createPr(state, base), why).to.deep.equal({ url, tooltip });

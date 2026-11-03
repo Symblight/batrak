@@ -37,6 +37,7 @@
  * @property {GithubPullRequest | null} pr
  * @property {string | null} defaultBranch The base of a new pull request.
  * @property {string | null} message
+ * @property {string} [stale] Set by the `github` hook: GitHub couldn't be reached (why), so this is the last answer.
  */
 
 /**

@@ -283,27 +283,46 @@ describe('acp-app: branch popover', () => {
 
   const switches = () => calls.filter((c) => c.cmd === 'git_switch').map((c) => c.args);
 
-  it('reads the project’s branches when the popover opens and hands them to the toolbar', async () => {
+  it('reads the project’s branches when the popover opens and hands them to the toolbar, never another project’s', async () => {
     // Arrange
     const list = { local: [{ name: 'main', current: true, ahead: 0, behind: 0, committedAt: 1 }], remote: [] };
-    answer = (cmd) => (cmd === 'git_branches_detail' ? list : undefined);
+    /** @type {((value: unknown) => void)[]} */
+    const answering = [];
+    answer = (cmd) => (cmd === 'git_branches_detail' ? new Promise((resolve) => answering.push(resolve)) : undefined);
     const { toolbar, fire } = await render();
     // Act
     fire('acp-git-branches-query');
+    await until(() => answering.length === 1);
+    answering[0](list);
     await until(() => toolbar.branches !== null);
     // Assert
     expect(toolbar.branches).to.deep.equal(list);
     expect(calls.find((c) => c.cmd === 'git_branches_detail')?.args).to.deep.equal({ rootId: 'r' });
+
+    // Act: another project shown
+    $workspace.set({ path: '/q', name: 'q', rootId: 'q' });
+    await toolbar.updateComplete;
+    // Assert
+    expect(toolbar.branches, 'not the previous project’s').to.equal(null);
+
+    // Act: its answer comes after the project changed again
+    fire('acp-git-branches-query');
+    await until(() => answering.length === 2);
+    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    answering[1](list);
+    await new Promise((r) => setTimeout(r, 30));
+    // Assert
+    expect(toolbar.branches, 'q’s branches are not r’s').to.equal(null);
   });
 
   it('switches the branch and tells the popover, whether git did it, refused, or an agent is working in the folder', async () => {
     // Arrange
     const { finished, fire } = await render();
     // Act: it works
-    fire('acp-git-switch', { branch: 'dev', create: false });
+    fire('acp-git-switch', { branch: 'feature/y', create: false, remote: 'origin' });
     await until(() => finished.length === 1);
     // Assert
-    expect(switches()).to.deep.equal([{ rootId: 'r', branch: 'dev', create: false }]);
+    expect(switches()).to.deep.equal([{ rootId: 'r', branch: 'feature/y', create: false, remote: 'origin' }]);
     expect(finished).to.deep.equal([null]);
 
     // Act: git refuses

@@ -118,7 +118,7 @@ describe('acp-branch-popover', () => {
     // Assert
     expect(events.filter((e) => e.type === 'acp-git-switch').map((e) => e.detail)).to.deep.equal([
       { branch: 'feature/x', create: false },
-      { branch: 'feature/y', create: false },
+      { branch: 'feature/y', create: false, remote: 'origin' },
     ]);
   });
 
@@ -180,5 +180,19 @@ describe('acp-branch-popover', () => {
       const asked = events.filter((e) => e.type === 'acp-git-remote').map((e) => /** @type {{ action: string }} */ (e.detail).action);
       expect(asked, why).to.deep.equal([...(primary ? [primary] : []), ...(canFetch ? ['fetch'] : [])]);
     }
+  });
+
+  it('says why the background fetch failed beside the remote', async () => {
+    // Arrange
+    const el = await fixture(html`<acp-branch-popover
+      .repo=${REPO}
+      .branches=${BRANCHES}
+      .fetchError=${{ rootId: 'r', at: Date.now(), message: 'fatal: Authentication failed' }}
+    ></acp-branch-popover>`);
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    // Act
+    await open(el, root);
+    // Assert
+    expect(q(root, '.acp-branch-popover__remote').textContent).to.contain("couldn't fetch just now: fatal: Authentication failed");
   });
 });

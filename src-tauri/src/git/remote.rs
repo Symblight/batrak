@@ -161,24 +161,25 @@ pub fn run(git: &Path, root: &Path, op: RemoteOp, state: &RepoState, expected: O
         return Err(RemoteError::other(format!("Branch {branch} has no upstream: publish it first")));
     }
     let publish_ref = format!("HEAD:refs/heads/{branch}");
-    // `origin/main` → `main`: the branch on the remote a force push replaces.
-    let remote_branch = state.upstream.as_deref().and_then(|u| u.strip_prefix(remote)).and_then(|u| u.strip_prefix('/')).unwrap_or(branch);
+    // The branch on the remote a force push replaces; the local one's name before a fetch knew it.
+    let remote_branch = state.upstream_merge.clone().unwrap_or_else(|| format!("refs/heads/{branch}"));
     let force_lease;
     let force_ref;
+    // `--` before the remote: a hand-edited config may name one `-x`.
     let (args, mode): (Vec<&str>, Mode) = match op {
-        RemoteOp::Fetch => (vec!["fetch", "--prune", remote], Mode::Remote),
+        RemoteOp::Fetch => (vec!["fetch", "--prune", "--", remote], Mode::Remote),
         RemoteOp::Pull => (vec!["pull", "--ff-only"], Mode::Hooks),
         RemoteOp::PullRebase => (vec!["pull", "--rebase", "--autostash"], Mode::Hooks),
         RemoteOp::PullMerge => (vec!["pull", "--no-rebase", "--no-edit"], Mode::Hooks),
         RemoteOp::Push => (vec!["push"], Mode::Remote),
-        RemoteOp::Publish => (vec!["push", "-u", remote, &publish_ref], Mode::Remote),
+        RemoteOp::Publish => (vec!["push", "-u", "--", remote, &publish_ref], Mode::Remote),
         RemoteOp::ForcePush => {
             let Some(expected) = expected else {
                 return Err(RemoteError::other("A force push needs the commit it replaces"));
             };
-            force_lease = format!("--force-with-lease=refs/heads/{remote_branch}:{expected}");
-            force_ref = format!("HEAD:refs/heads/{remote_branch}");
-            (vec!["push", &force_lease, remote, &force_ref], Mode::Remote)
+            force_lease = format!("--force-with-lease={remote_branch}:{expected}");
+            force_ref = format!("HEAD:{remote_branch}");
+            (vec!["push", &force_lease, "--", remote, &force_ref], Mode::Remote)
         }
         RemoteOp::Abort => unreachable!("handled above"),
     };
@@ -245,7 +246,8 @@ fn abort(git: &Path, root: &Path) -> Result<(), RemoteError> {
         (false, true) => vec![OsStr::new("merge"), OsStr::new("--abort")],
         (false, false) => return Err(RemoteError::other("No pull is waiting to be aborted")),
     };
-    lock::with_mutation(git, root, || Ok(run_git(git, root, &args, Mode::Local))).map_err(RemoteError::other)?
+    // Checks files out: hooks and LFS filters run, like a pull.
+    lock::with_mutation(git, root, || Ok(run_git(git, root, &args, Mode::Hooks))).map_err(RemoteError::other)?
 }
 
 /// A github.com remote over https: where git's own credentials may be missing and the GitHub CLI's can stand in.
@@ -266,9 +268,11 @@ fn gh_credential_args(gh: &Path) -> Vec<String> {
 }
 
 /// [`run_git`], and when it fails to authenticate and `gh` is given, once more with `gh`'s credentials.
+/// Over https GitHub answers a private repository asked with the wrong account's credentials as
+/// "Repository not found", so that is retried too.
 fn run_git_with_gh(git: &Path, root: &Path, args: &[&OsStr], mode: Mode, gh: Option<&Path>) -> Result<(), RemoteError> {
     let first = run_git(git, root, args, mode);
-    let (Some(gh), Err(RemoteError { kind: FailureKind::Auth, .. })) = (gh, &first) else { return first };
+    let (Some(gh), Err(RemoteError { kind: FailureKind::Auth | FailureKind::NotFound, .. })) = (gh, &first) else { return first };
     let credentials = gh_credential_args(gh);
     let retry: Vec<&OsStr> = credentials.iter().map(OsStr::new).chain(args.iter().copied()).collect();
     // gh signed out or without access: that failure is the same kind, and the first message is as good.
@@ -285,7 +289,7 @@ fn run_git(git: &Path, root: &Path, args: &[&OsStr], mode: Mode) -> Result<(), R
             let text = [out.stderr.as_str(), stdout.trim()].into_iter().filter(|t| !t.is_empty()).collect::<Vec<_>>().join("\n");
             Err(RemoteError { kind: classify(&text), message: tail(&text) })
         }
-        Err(e) if e.contains("timed out") => Err(RemoteError { kind: FailureKind::Timeout, message: e }),
+        Err(e) if e.starts_with("git timed out") => Err(RemoteError { kind: FailureKind::Timeout, message: tail(&e) }),
         Err(e) => Err(RemoteError::other(e)),
     }
 }
@@ -563,6 +567,32 @@ mod tests {
         }
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn abort_checks_out_like_a_pull_in_a_process_group_of_its_own() {
+        use std::os::unix::fs::PermissionsExt;
+        // Arrange: a pull stopped on a conflict, and a git that notes its pid and process group on `--abort`
+        let (repo, _origin, _other) = diverged("abort-group", ("c.txt", "local\n"), ("c.txt", "remote\n"));
+        run_op(&repo, RemoteOp::PullRebase).unwrap_err();
+        let dir = crate::git::test_repo::temp_dir("abort-group-git");
+        let (git, noted) = (dir.join("git"), dir.join("group"));
+        let script = format!(
+            "#!/bin/sh\ncase \"$*\" in *--abort*) echo \"$$ $(ps -o pgid= -p $$)\" > '{}';; esac\nexec '{}' \"$@\"\n",
+            noted.display(),
+            git_bin().display()
+        );
+        std::fs::write(&git, script).unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        // Act
+        run(&git, &repo.path, RemoteOp::Abort, &state_of(&repo), None).unwrap();
+
+        // Assert: it leads its group, so hooks and filters it starts are stopped with it on a timeout
+        let text = std::fs::read_to_string(&noted).unwrap();
+        let ids: Vec<&str> = text.split_whitespace().collect();
+        assert_eq!(ids[0], ids[1], "pid and process group: {text}");
+    }
+
     #[test]
     fn a_force_push_replaces_the_remote_only_where_the_user_saw_it() {
         let (repo, origin, other) = diverged("force", ("a.txt", "a"), ("b.txt", "b"));
@@ -673,30 +703,42 @@ mod tests {
     #[test]
     fn an_https_github_push_that_fails_to_authenticate_is_tried_again_with_the_cli_s_credentials() {
         use std::os::unix::fs::PermissionsExt;
-        // A git that lets only a call with gh as the credential helper through, and counts its calls.
-        let dir = crate::git::test_repo::temp_dir("gh-retry");
-        let git = dir.join("git");
-        let log = dir.join("calls");
-        std::fs::write(
-            &git,
-            format!(
-                "#!/bin/sh\necho call >> '{}'\ncase \"$*\" in *'auth git-credential'*) exit 0;; esac\n{}",
-                log.display(),
-                "echo \"fatal: Authentication failed for 'https://github.com/a/b.git/'\" >&2; exit 128"
-            ),
-        )
-        .unwrap();
-        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let calls = || std::fs::read_to_string(&log).map(|t| t.lines().count()).unwrap_or(0);
-        let args = [OsStr::new("push")];
         let gh = Path::new("/opt/gh dir/gh");
+        let args = [OsStr::new("push")];
+        // GitHub answers a private repository asked with the wrong account's credentials as not found.
+        let cases = [
+            ("fatal: Authentication failed for 'https://github.com/a/b.git/'", FailureKind::Auth, true),
+            ("remote: Repository not found.\nfatal: repository 'https://github.com/a/b.git/' not found", FailureKind::NotFound, true),
+            ("fatal: unable to access 'https://github.com/a/b.git/': Could not resolve host: github.com", FailureKind::Network, false),
+        ];
+        for (stderr, kind, retried) in cases {
+            // Arrange: a git that lets only a call with gh as the credential helper through, and counts its calls
+            let dir = crate::git::test_repo::temp_dir("gh-retry");
+            let git = dir.join("git");
+            let log = dir.join("calls");
+            std::fs::write(
+                &git,
+                format!(
+                    "#!/bin/sh\necho call >> '{}'\ncase \"$*\" in *'auth git-credential'*) exit 0;; esac\nprintf '%s\\n' \"{stderr}\" >&2; exit 128\n",
+                    log.display(),
+                ),
+            )
+            .unwrap();
+            std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+            let calls = || std::fs::read_to_string(&log).map(|t| t.lines().count()).unwrap_or(0);
 
-        // With the CLI: the second call goes through.
-        assert_eq!(run_git_with_gh(&git, &dir, &args, Mode::Remote, Some(gh)), Ok(()));
-        assert_eq!(calls(), 2);
-        // Without it: the authentication failure stays.
-        let failed = run_git_with_gh(&git, &dir, &args, Mode::Remote, None).unwrap_err();
-        assert_eq!((failed.kind, calls()), (FailureKind::Auth, 3));
+            // Act + Assert: with the CLI, the second call goes through
+            let with_cli = run_git_with_gh(&git, &dir, &args, Mode::Remote, Some(gh));
+            if retried {
+                assert_eq!((with_cli, calls()), (Ok(()), 2), "{kind:?}");
+            } else {
+                assert_eq!((with_cli.unwrap_err().kind, calls()), (kind, 1), "{kind:?} is not retried");
+            }
+            // Without it: the failure stays.
+            let failed = run_git_with_gh(&git, &dir, &args, Mode::Remote, None).unwrap_err();
+            assert_eq!(failed.kind, kind, "{}", failed.message);
+            let _ = std::fs::remove_dir_all(&dir);
+        }
 
         // Only a github.com https remote is offered the CLI's credentials.
         let remote = |url: &str| RemoteInfo { name: "origin".into(), url: url.into(), github: parse_github(url) };
@@ -707,6 +749,79 @@ mod tests {
         let args = gh_credential_args(gh);
         assert_eq!(args[1], "credential.https://github.com.helper=");
         assert_eq!(args[3], "credential.https://github.com.helper=!'/opt/gh dir/gh' auth git-credential");
+    }
+
+    #[test]
+    fn a_force_push_replaces_the_upstream_branch_whatever_the_remote_and_its_refspec_are_named() {
+        // Arrange: remote `team/up` fetched into `refs/remotes/mirror/*`; local `topic` tracks its `main`,
+        // which moved on since `topic` started
+        let (repo, origin) = TestRepo::with_remote("slash-remote");
+        repo.git(&["remote", "rename", "origin", "team/up"]);
+        repo.git(&["config", "remote.team/up.fetch", "+refs/heads/*:refs/remotes/mirror/*"]);
+        let other = clone_of(&origin, "slash-remote-other");
+        std::fs::write(other.join("b.txt"), "b").unwrap();
+        crate::git::test_repo::run_in(&other, &["add", "."]);
+        crate::git::test_repo::run_in(&other, &["commit", "-qm", "remote"]);
+        crate::git::test_repo::run_in(&other, &["push", "-q"]);
+        repo.git(&["fetch", "-q", "team/up"]);
+        repo.git(&["switch", "-q", "-c", "topic"]);
+        repo.git(&["branch", "-q", "-u", "mirror/main"]);
+        repo.write("a.txt", "a");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "local"]);
+        let state = state_of(&repo);
+        let remote_main = crate::git::test_repo::run_in(&origin, &["rev-parse", "main"]);
+        assert_eq!(state.upstream_sha.as_deref(), Some(remote_main.trim()), "the lease is the upstream's commit");
+
+        // Act
+        run_op(&repo, RemoteOp::ForcePush).unwrap_or_else(|e| panic!("{:?}: {}", e.kind, e.message));
+
+        // Assert: the remote's `main` is replaced, no `topic` made there
+        let log = crate::git::test_repo::run_in(&origin, &["log", "--format=%s", "main"]);
+        assert!(log.contains("local") && !log.contains("remote"), "{log}");
+        assert_eq!(crate::git::test_repo::run_in(&origin, &["branch", "--list", "topic"]), "");
+    }
+
+    #[test]
+    fn a_remote_named_like_an_option_is_still_a_remote() {
+        // Arrange: a hand-edited config names the remote `-dash`; the branch is one commit ahead
+        let (repo, origin) = TestRepo::with_remote("dash-remote");
+        let config = repo.path.join(".git/config");
+        let text = std::fs::read_to_string(&config).unwrap();
+        std::fs::write(&config, text.replace("[remote \"origin\"]", "[remote \"-dash\"]").replace("remote = origin", "remote = -dash")).unwrap();
+        repo.write("a.txt", "a");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "local"]);
+
+        // Act + Assert: each op that names the remote reaches it
+        for op in [RemoteOp::Fetch, RemoteOp::ForcePush] {
+            run_op(&repo, op).unwrap_or_else(|e| panic!("{op:?}: {}", e.message));
+        }
+        assert!(crate::git::test_repo::run_in(&origin, &["log", "--format=%s", "main"]).contains("local"));
+        repo.git(&["switch", "-q", "-c", "topic"]);
+        run_op(&repo, RemoteOp::Publish).unwrap_or_else(|e| panic!("Publish: {}", e.message));
+        assert!(crate::git::test_repo::run_in(&origin, &["branch", "--list", "topic"]).contains("topic"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_remote_that_never_answers_is_a_timeout_that_tells_where_it_stuck() {
+        use std::os::unix::fs::PermissionsExt;
+        // Arrange: a git that says where it connects, then hangs past a short timeout
+        let dir = crate::git::test_repo::temp_dir("remote-timeout");
+        let git = dir.join("git");
+        std::fs::write(&git, "#!/bin/sh\necho 'Connecting to https://u:secret@h.test/x.git' >&2\nexec sleep 30\n").unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+        exec::TEST_TIMEOUT.set(Some(std::time::Duration::from_millis(1500)));
+
+        // Act
+        let failed = run_git(&git, &dir, &[OsStr::new("fetch")], Mode::Remote).unwrap_err();
+        exec::TEST_TIMEOUT.set(None);
+
+        // Assert
+        assert_eq!(failed.kind, FailureKind::Timeout, "{}", failed.message);
+        assert!(failed.message.contains("Connecting to https://h.test/x.git"), "{}", failed.message);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

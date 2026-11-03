@@ -130,7 +130,8 @@ export class AcpApp extends ViewElement {
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });
-  #rootId = new StoreController(this, { store: $rootId });
+  // The branch popover's list is the shown project's only.
+  #rootId = new StoreController(this, { store: $rootId, onChange: () => (this.branches = null) });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #gitRemoteOp = new StoreController(this, { store: $gitRemoteOpHere });
   #gitFetchError = new StoreController(this, { store: $gitFetchErrorHere });
@@ -406,14 +407,16 @@ export class AcpApp extends ViewElement {
     const { action, expected } = /** @type {CustomEvent<{ action: import('../../hooks/git/types.js').GitRemoteAction | 'dismiss' | 'showChanges', expected?: string }>} */ (e).detail;
     if (action === 'dismiss') return git.dismissRemote();
     if (action === 'showChanges') return openChanges();
-    // A pull changes the files under an agent that is working in the folder: ask first.
+    // A pull changes the files under an agent that is working in the folder: ask first. The answer
+    // is for this project, not one shown meanwhile.
+    const rootId = this.#rootId.value;
     const folder = this.#workspace.value?.path;
     const question = action.startsWith('pull') && folder ? git.pullConfirm($sessions.get(), folder) : null;
     if (question) {
       const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('.acp-app__confirm'));
       if (!(await dialog.confirm(question))) return;
     }
-    await git.remote(action, expected);
+    await git.remote(action, expected ?? null, rootId);
   };
 
   /** The branch popover opened: read the shown project's branches for it. */
@@ -421,7 +424,8 @@ export class AcpApp extends ViewElement {
     const rootId = this.#rootId.value;
     if (rootId === null) return;
     try {
-      this.branches = await git.branchList(rootId);
+      const branches = await git.branchList(rootId);
+      if (this.#rootId.value === rootId) this.branches = branches;
     } catch (err) {
       app.reportError('Reading the branches failed', err);
     }
@@ -429,14 +433,14 @@ export class AcpApp extends ViewElement {
 
   /** @param {Event} e */
   #onGitSwitch = async (e) => {
-    const { branch, create } = /** @type {CustomEvent<{ branch: string, create: boolean }>} */ (e).detail;
+    const { branch, create, remote } = /** @type {CustomEvent<{ branch: string, create: boolean, remote?: string }>} */ (e).detail;
     const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (this.renderRoot.querySelector('acp-toolbar'));
     // A switch changes the files under an agent that is working in the folder: not while it does.
     const folder = this.#workspace.value?.path;
     const blocked = folder ? git.switchBlocked($sessions.get(), folder) : null;
     if (blocked) return toolbar.switchFinished(blocked);
     try {
-      await git.switchBranch(branch, create);
+      await git.switchBranch(branch, create, remote ?? null);
       toolbar.switchFinished(null);
     } catch (err) {
       toolbar.switchFinished(err instanceof Error ? err.message : String(err));

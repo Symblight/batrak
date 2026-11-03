@@ -75,14 +75,22 @@ fn parse_local(line: &str) -> Option<LocalBranch> {
     })
 }
 
-/// Switches the checkout to `branch`, or with `create` makes it from HEAD first. A name that exists
-/// only on a remote becomes a local branch tracking it. Git's refusal (local changes a switch would
-/// overwrite, a branch checked out in a worktree) is the error.
-pub fn switch(git: &Path, root: &Path, branch: &str, create: bool) -> Result<(), String> {
-    if branch.is_empty() || branch.starts_with('-') {
-        return Err(format!("Not a branch name: {branch:?}"));
+/// Switches the checkout to `branch`, or with `create` makes it from HEAD first. With `remote`, makes
+/// `branch` a local branch tracking `<remote>/<branch>`; without it, a name that exists only on one
+/// remote becomes a local branch tracking it. Git's refusal (local changes a switch would overwrite,
+/// a branch checked out in a worktree) is the error.
+pub fn switch(git: &Path, root: &Path, branch: &str, create: bool, remote: Option<&str>) -> Result<(), String> {
+    for name in std::iter::once(branch).chain(remote) {
+        if name.is_empty() || name.starts_with('-') {
+            return Err(format!("Not a branch name: {name:?}"));
+        }
     }
-    let words: &[&str] = if create { &["switch", "-c", branch] } else { &["switch", branch] };
+    let tracked = remote.map(|remote| format!("{remote}/{branch}"));
+    let words: Vec<&str> = match (&tracked, create) {
+        (Some(tracked), _) => vec!["switch", "-c", branch, "--track", tracked],
+        (None, true) => vec!["switch", "-c", branch],
+        (None, false) => vec!["switch", branch],
+    };
     let args: Vec<&std::ffi::OsStr> = words.iter().map(std::ffi::OsStr::new).collect();
     // Checking out runs `post-checkout` and LFS filters, like a pull.
     with_mutation(git, root, || {
@@ -168,14 +176,41 @@ mod tests {
         let (git, root) = (git_bin(), repo.path.as_path());
 
         // Act + Assert
-        switch(&git, root, "existing", false).unwrap();
+        switch(&git, root, "existing", false, None).unwrap();
         assert_eq!(current(root), "existing");
-        switch(&git, root, "fresh", true).unwrap();
+        switch(&git, root, "fresh", true, None).unwrap();
         assert_eq!(current(root), "fresh");
-        switch(&git, root, "remote-only", false).unwrap();
+        switch(&git, root, "remote-only", false, None).unwrap();
         assert_eq!(current(root), "remote-only");
         let tracking = crate::git::repo::head(&git, root).unwrap().unwrap();
         assert_eq!(tracking.upstream.as_deref(), Some("origin/remote-only"));
+    }
+
+    #[test]
+    fn a_remote_branch_two_remotes_have_is_tracked_from_the_one_picked() {
+        // Arrange: `origin` and `fork` both have `shared`, from different commits
+        let (repo, origin) = TestRepo::with_remote("branch-two-remotes");
+        let fork = temp_dir("branch-two-remotes-fork");
+        crate::git::test_repo::run_in(&fork, &["clone", "-q", "--bare", origin.to_str().unwrap(), "."]);
+        repo.git(&["push", "-q", "origin", "HEAD:refs/heads/shared"]);
+        repo.write("f.txt", "fork");
+        repo.git(&["add", "."]);
+        repo.git(&["commit", "-qm", "fork only"]);
+        repo.git(&["remote", "add", "fork", fork.to_str().unwrap()]);
+        repo.git(&["push", "-q", "fork", "HEAD:refs/heads/shared"]);
+        repo.git(&["reset", "-q", "--hard", "HEAD~1"]);
+        repo.git(&["fetch", "-q", "--all"]);
+        let (git, root) = (git_bin(), repo.path.as_path());
+
+        // Act
+        switch(&git, root, "shared", false, Some("fork")).unwrap();
+
+        // Assert: the fork's branch, tracked
+        let state = crate::git::repo::head(&git, root).unwrap().unwrap();
+        assert_eq!((state.branch.as_deref(), state.upstream.as_deref()), (Some("shared"), Some("fork/shared")));
+        assert!(root.join("f.txt").exists(), "the fork's commit is checked out");
+        assert!(switch(&git, root, "shared", false, Some("-x")).is_err(), "no option for a remote");
+        let _ = std::fs::remove_dir_all(&fork);
     }
 
     #[test]
@@ -189,11 +224,11 @@ mod tests {
         repo.write("README.md", "local edit\n");
 
         // Act
-        let err = switch(&git_bin(), &repo.path, "other", false).unwrap_err();
+        let err = switch(&git_bin(), &repo.path, "other", false, None).unwrap_err();
 
         // Assert
         assert!(err.contains("README.md"), "{err}");
         assert_eq!(current(&repo.path), "main");
-        assert!(switch(&git_bin(), &repo.path, "nope", false).is_err());
+        assert!(switch(&git_bin(), &repo.path, "nope", false, None).is_err());
     }
 }

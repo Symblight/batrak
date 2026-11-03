@@ -88,6 +88,8 @@ struct CachedInfo {
 struct StatusSlot {
     version: u64,
     cached: Option<CachedStatus>,
+    /// Read again on the next request, as with `force` (see [`GitCache::invalidate`]).
+    stale: bool,
 }
 
 /// Locks ignoring poisoning: a panicked reader must not take the cache down.
@@ -124,6 +126,13 @@ impl GitCache {
     /// Forgets the repository after a failed git call: it may have been deleted or moved.
     fn forget_info(&self) {
         lock(&self.info).take();
+    }
+
+    /// Forgets the cached head and status: after the app itself changed the repository (a pull, a
+    /// switch), whose files may keep their mtimes on a filesystem with coarse ones.
+    pub fn invalidate(&self) {
+        lock(&self.head).take();
+        lock(&self.status).stale = true;
     }
 
     /// Branch, HEAD and upstream; `None` outside a repository. `epoch` is the root's change epoch,
@@ -165,8 +174,9 @@ impl GitCache {
         let mut slot = lock(&self.status);
         let upstream = slot.cached.as_ref().and_then(|c| c.status.as_ref()?.repo.upstream.clone());
         let fingerprint = info.as_deref().map(|info| fingerprint(info, upstream.as_deref()));
-        let valid =
-            !force && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
+        let valid = !force
+            && !slot.stale
+            && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
         if !valid {
             let status = match &info {
                 Some(info) => Some(repo::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
@@ -184,6 +194,7 @@ impl GitCache {
                 _ => fingerprint,
             };
             slot.cached = Some(CachedStatus { epoch, fingerprint, status });
+            slot.stale = false;
         }
         let version = slot.version;
         let unchanged = since == Some(version);
@@ -310,6 +321,33 @@ mod tests {
         repo.git(&["commit", "-qm", "base moves"]);
         repo.git(&["switch", "-q", "main"]);
         assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 1);
+    }
+
+    #[test]
+    fn invalidating_reads_again_what_the_fingerprint_misses() {
+        // Arrange: `main` tracks `base`; head and status cached
+        let repo = TestRepo::with_commit("cache-invalidate");
+        repo.git(&["branch", "base"]);
+        repo.git(&["branch", "-q", "--set-upstream-to=base"]);
+        let (git, cache) = (git_bin(), GitCache::default());
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 0);
+        let first = ask(&cache, &repo.path, 0, None);
+        // `base` moves within the same mtime and size, as on a filesystem with coarse mtimes
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let ahead = repo.git(&["commit-tree", "-p", "HEAD", "-m", "base moves", tree.trim()]);
+        let base = repo.path.join(".git/refs/heads/base");
+        let mtime = fs::metadata(&base).unwrap().modified().unwrap();
+        fs::write(&base, ahead).unwrap();
+        fs::File::options().write(true).open(&base).unwrap().set_modified(mtime).unwrap();
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 0, "unseen while cached");
+
+        // Act
+        cache.invalidate();
+
+        // Assert
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().behind, 1);
+        let status = ask(&cache, &repo.path, 0, Some(first.version));
+        assert_eq!(status.status.map(|s| s.repo.behind), Some(1));
     }
 
     #[test]

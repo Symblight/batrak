@@ -59,19 +59,23 @@ pub async fn git_branches_detail(workspaces: State<'_, Workspaces>, root_id: Str
     blocking(move || branch::list(binary::git()?, &root.path)).await?
 }
 
-/// Switches the root's checkout to `branch` (`create`: makes it from HEAD) and replies with the new
-/// state. Git's refusal, e.g. local changes a switch would overwrite, is the error.
+/// Switches the root's checkout to `branch` (`create`: makes it from HEAD; `remote`: makes it tracking
+/// `<remote>/<branch>`) and replies with the new state. Git's refusal, e.g. local changes a switch
+/// would overwrite, is the error.
 #[tauri::command]
 pub async fn git_switch(
     workspaces: State<'_, Workspaces>,
     root_id: String,
     branch: String,
     create: bool,
+    remote: Option<String>,
 ) -> Result<repo::RepoState, String> {
     let root = workspaces.get(&root_id)?;
     let state = blocking(move || {
         let git = binary::git()?;
-        branch::switch(git, &root.path, &branch, create)?;
+        branch::switch(git, &root.path, &branch, create, remote.as_deref())?;
+        // The reply must carry the new state even where the repository files keep their mtimes.
+        root.git.invalidate();
         root.git.head(git, &root.path, root.epoch())?.ok_or_else(|| "Not a git repository".to_owned())
     })
     .await??;
@@ -129,6 +133,8 @@ pub async fn git_remote(
             .map_err(RemoteError::other)?
             .ok_or_else(|| RemoteError::other("Not a git repository"))?;
         remote::run(git, &root.path, action, &state, expected.as_deref())?;
+        // The reply must carry the new counts even where the repository files keep their mtimes.
+        root.git.invalidate();
         root.git
             .head(git, &root.path, root.epoch())
             .map_err(RemoteError::other)?

@@ -135,7 +135,7 @@ export class AcpToolbar extends LitElement {
         <md-tooltip for="acp-toolbar-git-error" show-delay="800" placement="bottom">${error}</md-tooltip>`;
     }
     if (!repo) return nothing;
-    return html`<acp-branch-popover .repo=${repo} .branches=${this.branches}></acp-branch-popover>
+    return html`<acp-branch-popover .repo=${repo} .branches=${this.branches} .fetchError=${this.fetchError}></acp-branch-popover>
       <acp-remote-chip .repo=${repo} .op=${this.remoteOp} .fetchError=${this.fetchError}></acp-remote-chip>
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
