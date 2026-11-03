@@ -214,6 +214,13 @@ test that reproduces it.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
 
+## Working mode
+
+Invoke the `ub-mode` skill at the start of every task that changes code, and follow it. Where it
+differs from this file, this file wins: commit only after I say yes and never push unless asked
+(not "commit often, push at the end"), no worktrees (so no worktree cleanup), and its
+`crapper` / `dryer` / `mutator` steps are skipped while those tools aren't installed.
+
 ## Commits
 
 One commit per small task. When a task is done and the checks above pass, don't stop at the report:
