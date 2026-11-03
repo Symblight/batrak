@@ -22,7 +22,6 @@ import { $unreadSessions, markWorkspaceRead } from '../../stores/session-read/se
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $project } from '../../stores/project/project.js';
 import { $activeWorkspaceId, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
-import { $agentList } from '../../stores/agents/agents.js';
 import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -146,7 +145,6 @@ export class AcpApp extends ViewElement {
   #pickerWorkspaces = new StoreController(this, { store: $pickerWorkspaces });
   #workspaceStatuses = new StoreController(this, { store: $workspaceStatuses });
   #workspaceNumbers = new StoreController(this, { store: $workspaceNumbers });
-  #agentList = new StoreController(this, { store: $agentList });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
@@ -203,7 +201,7 @@ export class AcpApp extends ViewElement {
 
   /** @param {Event} e */
   #onWorkspaceCreate = (e) => {
-    void workspaces.create(/** @type {CustomEvent<{ name: string | null, baseBranch: string | null, agentId: string | null }>} */ (e).detail);
+    workspaces.create(/** @type {CustomEvent<import('../../hooks/workspaces/types.js').CreateRequest>} */ (e).detail);
   };
 
   /** @param {Event} e */
@@ -213,11 +211,27 @@ export class AcpApp extends ViewElement {
   };
 
   // A new workspace is based on Main's branches, whichever workspace is shown.
-  #onBranchesQuery = async () => {
+  // Before Create workspace's branch menu opens: fetch Main's repository, then list again.
+  #fetchBranches = async () => {
     const rootId = this.#project.value?.rootId ?? null;
     if (rootId === null) return;
     try {
+      await git.fetch(rootId);
+    } catch (err) {
+      app.reportError('Fetching branches failed', err);
+    }
+    await this.#onBranchesQuery();
+  };
+
+  #onBranchesQuery = async () => {
+    const rootId = this.#project.value?.rootId ?? null;
+    if (rootId === null) return;
+    // Never another project's: what was listed goes, and an answer for a project no longer shown is dropped.
+    this.branches = { local: [], remotes: [], default: null };
+    this.mainBranch = null;
+    try {
       const [branches, mainBranch] = await Promise.all([git.branches(rootId), git.branchOf(rootId)]);
+      if (this.#project.value?.rootId !== rootId) return;
       this.branches = branches;
       this.mainBranch = mainBranch;
     } catch (err) {
@@ -317,9 +331,9 @@ export class AcpApp extends ViewElement {
     this.quickOpenFiles = [];
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
-    /** @type {readonly string[]} The project's branches, for New workspace's Based on. */
-    this.branches = [];
-    /** @type {string | null} Main's checked-out branch, for New workspace's Based on. */
+    /** @type {import('../../hooks/git/types.js').BranchList} The project's branches, for Create workspace's From. */
+    this.branches = { local: [], remotes: [], default: null };
+    /** @type {string | null} Main's checked-out branch, for Create workspace's From. */
     this.mainBranch = null;
   }
 
@@ -607,7 +621,6 @@ export class AcpApp extends ViewElement {
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
     const picker = { list: this.#pickerWorkspaces.value, statuses: this.#workspaceStatuses.value };
     const workspaceId = this.#workspaceId.value;
-    const agents = this.#agentList.value;
     return html`<acp-panel variant="window">
       <acp-toolbar
         slot="header"
@@ -705,12 +718,13 @@ export class AcpApp extends ViewElement {
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
       <acp-workspace-dialog
+        .projects=${this.#projects.value}
+        .projectPath=${this.#project.value?.path ?? null}
         .branches=${this.branches}
-        .currentBranch=${this.mainBranch}
-        .taken=${this.#workspaces.value.map((w) => w.branch)}
-        .agents=${agents.agents.filter((a) => a.enabled)}
-        .agentId=${agents.defaultAgent}
+        .mainBranch=${this.mainBranch}
+        .fetchBranches=${this.#fetchBranches}
         @acp-branches-query=${this.#onBranchesQuery}
+        @acp-project-select=${this.#onProjectSelect}
         @acp-workspace-create=${this.#onWorkspaceCreate}
       ></acp-workspace-dialog>
       <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onWorkspaceDelete}></acp-workspace-delete-dialog>

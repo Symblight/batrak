@@ -1,5 +1,6 @@
 // Typed `querySelector('acp-…')` / `createElement('acp-…')`. Add every new custom element here.
 import type { AcpPanel } from './components/panel/panel.js';
+import type { AcpBranchPicker } from './components/branch-picker/branch-picker.js';
 import type { AcpMarkdownView } from './components/markdown-view/markdown-view.js';
 import type { AcpMarkdownSwitcher } from './components/markdown-switcher/markdown-switcher.js';
 import type { AcpPane } from './components/pane/pane.js';
@@ -170,6 +171,7 @@ declare global {
     'acp-workspace-picker': AcpWorkspacePicker;
     'acp-workspace-menu': AcpWorkspaceMenu;
     'acp-workspace-dialog': AcpWorkspaceDialog;
+    'acp-branch-picker': AcpBranchPicker;
     'acp-workspace-delete-dialog': AcpWorkspaceDeleteDialog;
     'acp-workspace-header': AcpWorkspaceHeader;
     'acp-branch-popover': AcpBranchPopover;

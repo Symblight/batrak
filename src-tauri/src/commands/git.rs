@@ -43,11 +43,19 @@ pub async fn git_file_at_head(
     blocking(move || blob::file_at_head(binary::git()?, &root.path, &path)).await?
 }
 
-/// Local branches a worktree session can start from, most recently committed first.
+/// Branches a workspace can be based on: local and remote-tracking ones, and the remote's default.
 #[tauri::command]
-pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<Vec<String>, String> {
+pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<repo::BranchList, String> {
     let root = roots.get(&root_id)?;
-    blocking(move || repo::branches(binary::git()?, &root.path)).await?
+    blocking(move || repo::branch_list(binary::git()?, &root.path)).await?
+}
+
+/// Fetches every remote of the root's repository (New workspace's refresh), pruning deleted branches.
+#[tauri::command]
+pub async fn git_fetch(roots: State<'_, Roots>, root_id: String) -> Result<(), String> {
+    let root = roots.get(&root_id)?;
+    tracing::info!(root = %root.path.display(), "fetching remotes");
+    blocking(move || repo::fetch(binary::git()?, &root.path)).await?
 }
 
 /// Message of the last commit, which Amend starts from; `null` before the first commit.

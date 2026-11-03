@@ -167,6 +167,7 @@ pub fn run() {
             commands::git::git_file_at_head,
             commands::git::git_last_commit_message,
             commands::git::git_branches,
+            commands::git::git_fetch,
             commands::git::git_commit,
             commands::github::github_account,
             commands::github::github_pull_request,

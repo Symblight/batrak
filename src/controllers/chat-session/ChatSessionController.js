@@ -1,6 +1,13 @@
 import { StoreController } from '../store/StoreController.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
-import { $historyResets, $returnedPrompts, takeHistoryResets, takeReturnedPrompt } from '../../stores/chat/chat.js';
+import {
+  $firstPrompts,
+  $historyResets,
+  $returnedPrompts,
+  takeFirstPrompt,
+  takeHistoryResets,
+  takeReturnedPrompt,
+} from '../../stores/chat/chat.js';
 import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../../stores/sessions/sessions.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -11,6 +18,7 @@ import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../
 /**
  * @typedef {Object} ChatSessionConfig
  * @property {() => ChxChat | null} chat The host's `<chx-chat>`.
+ * @property {(text: string) => Promise<boolean>} send Sends `text` from the composer as the user would; `false` while it isn't up.
  */
 
 /**
@@ -42,6 +50,8 @@ export class ChatSessionController {
   #host;
   /** @type {ChatSessionConfig} */
   #config;
+  /** A queued first message is being sent: another call waits for it. */
+  #sendingFirst = false;
   /** @type {Map<string, ComposerDraft>} Unsent composer content by session id. */
   #drafts = new Map();
   /** @type {StoreController<string | null>} */
@@ -89,7 +99,34 @@ export class ChatSessionController {
         if (chat && id !== null) this.#putBack(chat, id);
       },
     });
+    new StoreController(host, {
+      store: $firstPrompts,
+      onChange: () => {
+        const id = this.#activeId.value;
+        if (id !== null) void this.#sendFirst(id);
+      },
+    });
     host.addController(this);
+  }
+
+  /**
+   * The shown draft's queued first message (Create workspace's), sent from its composer once it's up.
+   * @param {string} id
+   */
+  async #sendFirst(id) {
+    if (this.#sendingFirst || !(id in $firstPrompts.get())) return;
+    this.#sendingFirst = true;
+    try {
+      // Queued with the draft just shown: the chat must show it before its composer sends.
+      await this.#host.updateComplete;
+      await this.#config.chat()?.updateComplete;
+      const text = $firstPrompts.get()[id];
+      if (this.#activeId.value !== id || this.#session.value !== null || text === undefined) return;
+      // Kept until it went: a switch shows the composer again and sends it then.
+      if (await this.#config.send(text)) takeFirstPrompt(id);
+    } finally {
+      this.#sendingFirst = false;
+    }
   }
 
   /**
@@ -214,5 +251,6 @@ export class ChatSessionController {
     if (draft?.files.length) shown.attachments.add(draft.files);
     this.#putBack(shown, id);
     if (oldId !== undefined) shown.input.focusEnd();
+    await this.#sendFirst(id);
   }
 }

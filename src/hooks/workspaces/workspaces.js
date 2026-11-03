@@ -12,11 +12,11 @@ import {
   setActiveWorkspace,
   setWorkspaces,
 } from '../../stores/workspaces/workspaces.js';
-import { $activeSession, $sessions, dropDrafts, forgetLastSession, selectSession } from '../../stores/sessions/sessions.js';
+import { $activeSession, $sessions, dropDrafts, forgetLastSession, newSession, selectSession } from '../../stores/sessions/sessions.js';
+import { queueFirstPrompt } from '../../stores/chat/chat.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { nextWaiting } from './rules.js';
-import { selectAgent } from '../../stores/composer/composer.js';
 import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -215,29 +215,19 @@ export const workspaces = Object.freeze({
   },
 
   /**
-   * New workspace: with a name, placed and checked out now; without, a draft until its first
-   * message. Either way it's shown with a new chat of `agentId`.
-   * @param {{ name: string | null, baseBranch: string | null, agentId: string | null }} request
+   * Create workspace: an isolated one is a draft until its first message (placed then, named after
+   * it); the project folder is Main. Either way a new chat is shown, `prompt` waiting as its first
+   * message.
+   * @param {import('./types.js').CreateRequest} request
    */
-  async create({ name, baseBranch, agentId }) {
+  create({ mode, baseBranch, prompt }) {
     const project = $projectPath.get();
     if (project === null) return;
-    let id;
-    if (name === null) id = addDraftWorkspace(project, baseBranch);
-    else {
-      try {
-        /** @type {Workspace} */
-        const created = await ipc.invoke('workspace_create', { projectPath: project, name, baseBranch });
-        if ($projectPath.get() !== project) return;
-        if (!$workspaces.get().some((w) => w.id === created.id)) setWorkspaces([...$workspaces.get(), created], project);
-        id = created.id;
-      } catch (err) {
-        app.reportError('Creating the workspace failed', err);
-        return;
-      }
-    }
+    const id = mode === 'isolated' ? addDraftWorkspace(project, baseBranch) : MAIN;
     setActiveWorkspace(project, id);
-    if (agentId !== null) selectAgent(agentId);
+    // A text goes into a draft of its own: a reused one may hold what the user typed there.
+    const chat = newSession(project, id, prompt === null);
+    if (prompt !== null) queueFirstPrompt(chat, prompt);
   },
 
   /**

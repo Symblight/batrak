@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { choiceOf, nextWaiting, orderWorkspaces, slugPreview, statusOf, statusesOf } from '../rules.js';
+import { choiceOf, nextWaiting, orderWorkspaces, statusOf, statusesOf } from '../rules.js';
 
 /** @typedef {import('../types.js').Workspace} Workspace */
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -60,26 +60,6 @@ describe('workspaces rules', () => {
 
     // Assert
     expect(ordered.map((w) => w.id)).to.deep.equal(['waiting', 'error', 'working', 'unread', 'chatted-idle', 'active-idle', 'new-idle', 'old-idle']);
-  });
-
-  it("slugPreview: the branch a name gets, numbered past the project's taken branches", () => {
-    /** @type {[string, string[], string][]} */
-    const cases = [
-      ['Fix login', [], 'brama/fix-login'],
-      ['  Fix   the LOGIN!! ', [], 'brama/fix-the-login'],
-      ['Fix login', ['brama/fix-login'], 'brama/fix-login-2'],
-      ['Fix login', ['brama/fix-login', 'brama/fix-login-2'], 'brama/fix-login-3'],
-      ['Ünïcode ✓', [], 'brama/n-code'],
-      ['!!!', [], 'brama/workspace'],
-      ['a'.repeat(40), [], `brama/${'a'.repeat(32)}`],
-    ];
-    for (const [name, taken, expected] of cases) {
-      // Act
-      const branch = slugPreview(name, taken);
-
-      // Assert
-      expect(branch, name).to.equal(expected);
-    }
   });
 
   it('choiceOf: Main, a draft workspace placed from its base, or the stored workspace', () => {

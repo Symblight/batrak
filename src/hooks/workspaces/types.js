@@ -55,4 +55,13 @@
  * @property {boolean} opening Its root is being scanned.
  */
 
+/**
+ * Create workspace's Create (`acp-workspace-create`): an isolated workspace from `baseBranch`, or a
+ * chat in the project folder (Main); `prompt` is its first message, `null` when nothing was typed.
+ * @typedef {Object} CreateRequest
+ * @property {'isolated' | 'project'} mode
+ * @property {string | null} baseBranch `null` in the project folder.
+ * @property {string | null} prompt
+ */
+
 export {};

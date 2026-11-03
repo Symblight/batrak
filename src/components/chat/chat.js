@@ -188,6 +188,20 @@ export class AcpChat extends LitElement {
     textbox.focus();
   }
 
+  /**
+   * Sends `text` as the user would: into the composer, then its Send (`chx-send-message`).
+   * @param {string} text
+   * @returns {Promise<boolean>} It went: `false` while the composer isn't up.
+   */
+  async send(text) {
+    const textbox = await this.#textbox();
+    const form = textbox?.closest('form');
+    if (!textbox || !form) return false;
+    textbox.setText(text);
+    form.requestSubmit();
+    return true;
+  }
+
   /** @returns {ComposerTextbox | null} The composer's textbox, as it is now. */
   get #readyTextbox() {
     return /** @type {ComposerTextbox | null} */ (

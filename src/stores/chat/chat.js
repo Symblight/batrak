@@ -89,6 +89,28 @@ export function takeReturnedPrompt(sessionId) {
   return text;
 }
 
+/** A draft's first message given before its composer was up (Create workspace), by session id: sent from it. */
+export const $firstPrompts = atom(/** @type {Readonly<Record<string, string>>} */ ({}));
+
+/**
+ * @param {string} sessionId A draft's.
+ * @param {string} text
+ */
+export function queueFirstPrompt(sessionId, text) {
+  if (text) $firstPrompts.set({ ...$firstPrompts.get(), [sessionId]: text });
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {string | null} The draft's first message, now no longer waiting.
+ */
+export function takeFirstPrompt(sessionId) {
+  const { [sessionId]: text, ...rest } = $firstPrompts.get();
+  if (text === undefined) return null;
+  $firstPrompts.set(rest);
+  return text;
+}
+
 /**
  * Sessions whose cached messages the chat drops, so their agent's next replay rebuilds them (a
  * session back from its CLI, which ran turns the chat never saw).

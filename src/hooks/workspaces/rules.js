@@ -47,27 +47,6 @@ export function orderWorkspaces(list, statuses, chats) {
 }
 
 /**
- * The branch a workspace named `name` gets (`brama/<slug>`, `-2`, `-3`… past `taken`), as the
- * backend's `env::slug` makes it.
- * @param {string} name
- * @param {readonly string[]} taken Branches the project's workspaces have.
- */
-export function slugPreview(name, taken) {
-  let slug = '';
-  for (const c of name.toLowerCase()) {
-    if (/^[a-z0-9]$/.test(c)) slug += c;
-    else if (slug !== '' && !slug.endsWith('-')) slug += '-';
-    if (slug.length >= 32) break;
-  }
-  const stem = `brama/${slug.replace(/-+$/, '') || 'workspace'}`;
-  const used = new Set(taken);
-  if (!used.has(stem)) return stem;
-  let n = 2;
-  while (used.has(`${stem}-${n}`)) n++;
-  return `${stem}-${n}`;
-}
-
-/**
  * Where a draft of workspace `workspaceId` creates its chat: Main, a draft workspace's new one
  * (placed from its base), or the stored one.
  * @param {string} workspaceId `main`, a stored workspace's id or a draft workspace's.

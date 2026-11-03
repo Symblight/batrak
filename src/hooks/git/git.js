@@ -222,13 +222,22 @@ export const git = Object.freeze({
   },
 
   /**
-   * Local branches a worktree session can start from, most recently committed first (the sessions'
-   * own `brama/…` left out).
+   * Branches a workspace can be based on: local and remote-tracking ones, most recently committed
+   * first (Brama's own `brama/…` left out), and the remote's default.
    * @param {string} rootId
-   * @returns {Promise<string[]>}
+   * @returns {Promise<import('./types.js').BranchList>}
    */
   branches(rootId) {
     return ipc.invoke('git_branches', { rootId });
+  },
+
+  /**
+   * Fetches every remote of the root's repository, pruning deleted branches (Create workspace's refresh).
+   * @param {string} rootId
+   * @returns {Promise<void>}
+   */
+  fetch(rootId) {
+    return ipc.invoke('git_fetch', { rootId });
   },
 
   /**

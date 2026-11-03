@@ -81,4 +81,12 @@
  * @property {string | null} error
  */
 
+/**
+ * Branches a workspace can be based on (`git_branches`).
+ * @typedef {Object} BranchList
+ * @property {string[]} local
+ * @property {{ remote: string, branches: string[] }[]} remotes Each remote's branches as full short names (`origin/main`).
+ * @property {string | null} default What `origin/HEAD` points at (`origin/main`).
+ */
+
 export {};

@@ -13,6 +13,8 @@ use std::time::{Duration, Instant};
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
 /// A pre-commit hook may run a test suite.
 const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
+/// A fetch over a slow network, a credential helper waiting on the keychain.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
 const TERM_GRACE: Duration = Duration::from_secs(3);
 /// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
@@ -87,13 +89,16 @@ pub enum Mode {
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
     /// hook keeps running.
     Hooks,
+    /// Talks to a remote (a fetch the user asked for): credential helpers and ssh run, so like
+    /// `Hooks` the whole process group is stopped on its timeout.
+    Network,
 }
 
 impl Mode {
     /// git leads its own session and process group, stopped as a whole on a timeout: hooks and
     /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
     fn own_group(self) -> bool {
-        self == Mode::Hooks
+        matches!(self, Mode::Hooks | Mode::Network)
     }
 }
 
@@ -214,6 +219,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let timeout = match mode {
         Mode::Local | Mode::Background => LOCAL_TIMEOUT,
         Mode::Hooks => HOOKS_TIMEOUT,
+        Mode::Network => NETWORK_TIMEOUT,
     };
     #[cfg(test)]
     let timeout = TEST_TIMEOUT.get().unwrap_or(timeout);

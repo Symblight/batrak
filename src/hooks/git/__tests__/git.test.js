@@ -291,13 +291,14 @@ describe('git', () => {
   it('passes the other git commands their project and path', async () => {
     // Arrange
     const git = await started();
-    answers.git_branches = () => ['main', 'dev'];
+    const list = { local: ['main'], remotes: [{ remote: 'origin', branches: ['origin/main'] }], default: 'origin/main' };
+    answers.git_branches = () => list;
     answers.git_last_commit_message = () => 'Fix it';
     answers.git_file_at_head = () => 'text';
     // Act
     const results = [await git.branches('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
     // Assert
-    expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
+    expect(results).to.deep.equal([list, 'Fix it', 'text']);
     expect(sent('git_branches')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
   });

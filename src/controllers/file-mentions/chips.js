@@ -21,7 +21,7 @@ import { fileIcon } from '../../components/file-icon/file-icon.js';
  * @typedef {{ state: { schema: PmSchema, selection: { from: number, to: number }, tr: PmTransaction },
  *   dispatch: (tr: PmTransaction) => void }} PmView
  * @typedef {HTMLElement & { updateComplete: Promise<boolean>, focus: () => void, focusEnd: () => void,
- *   editor?: { view: PmView } }} ComposerTextbox
+ *   setText: (text: string) => void, editor?: { view: PmView } }} ComposerTextbox
  */
 
 

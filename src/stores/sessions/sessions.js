@@ -161,11 +161,12 @@ export function selectSession(id) {
  * Opens a draft session in a project's workspace; a draft of it that's still empty is reused.
  * @param {string} projectId
  * @param {string} [workspaceId] `main` (default) for Main.
+ * @param {boolean} [reuse] `false`: always a new draft (one with text of its own to send).
  * @returns {string} The draft's id.
  */
-export function newSession(projectId, workspaceId = MAIN) {
+export function newSession(projectId, workspaceId = MAIN, reuse = true) {
   const drafts = $draftSessions.get();
-  let id = Object.keys(drafts).find((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId);
+  let id = reuse ? Object.keys(drafts).find((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId) : undefined;
   if (id === undefined) {
     id = crypto.randomUUID();
     $draftSessions.set({ ...drafts, [id]: { projectId, workspaceId } });
