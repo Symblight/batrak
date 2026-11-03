@@ -98,13 +98,12 @@ impl Sessions {
         }
     }
 
-    /// At launch: drops the worktree metadata of deleted folders in every project with worktree
-    /// sessions, and removes the worktrees in app data no session owns (left by a removal that
-    /// failed), unless they hold uncommitted work. Branches stay. Blocking.
+    /// At launch: drops the worktree metadata of deleted folders in every project with
+    /// workspaces, and removes the worktrees in app data no workspace owns (left by a removal
+    /// that failed), unless they hold uncommitted work. Branches stay. Blocking.
     pub fn tidy_worktrees(&self) {
-        let records = self.inner.known();
-        let worktrees: Vec<&SessionRecord> = records.iter().filter(|r| r.mode == Mode::Worktree).collect();
-        let projects: std::collections::HashSet<&Path> = worktrees.iter().map(|r| r.project_path.as_path()).collect();
+        let workspaces = self.inner.workspaces.store().list(None);
+        let projects: std::collections::HashSet<&Path> = workspaces.iter().map(|w| w.project_path.as_path()).collect();
         if let Ok(git) = crate::git::binary::git() {
             for project in projects.into_iter().filter(|p| p.is_dir()) {
                 if let Err(e) = crate::git::worktree::prune(git, project) {
@@ -116,8 +115,8 @@ impl Sessions {
         for group in groups.filter_map(Result::ok).map(|e| e.path()).filter(|p| p.is_dir()) {
             let Ok(group) = dunce::canonicalize(&group) else { continue };
             for path in std::fs::read_dir(&group).into_iter().flatten().filter_map(Result::ok).map(|e| e.path()) {
-                // Asked of the live sessions, not a list read earlier: one created meanwhile may be
-                // checking this folder out.
+                // Asked of the live list, not one read earlier: a workspace created meanwhile may
+                // be checking this folder out.
                 if !path.is_dir() || self.owns_worktree(&path) {
                     continue;
                 }
@@ -134,8 +133,8 @@ impl Sessions {
         }
     }
 
-    /// Whether a session's worktree is at `path`.
+    /// Whether a workspace's worktree is at `path`.
     fn owns_worktree(&self, path: &Path) -> bool {
-        self.inner.known().iter().any(|record| record.worktree_path.as_deref() == Some(path))
+        self.inner.workspaces.store().list(None).iter().any(|w| w.worktree_path == path)
     }
 }

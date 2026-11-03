@@ -3163,3 +3163,13 @@ async fn a_session_listed_in_a_workspaces_folder_lands_in_that_workspace() {
     assert_eq!((in_ws.mode, in_ws.branch.as_deref()), (Mode::Worktree, Some(ws.branch.as_str())));
     assert_eq!(by_title("In Main").workspace_id, None);
 }
+
+#[tokio::test]
+async fn at_launch_a_workspaces_worktree_stays_though_no_chat_runs_in_it() {
+    let f = git_fixture("tidy-workspace");
+    let ws = f.sessions.workspaces().create(&f.project, "Empty", None).unwrap();
+
+    f.sessions.tidy_worktrees();
+
+    assert!(ws.folder.join("a.txt").is_file(), "kept");
+}
