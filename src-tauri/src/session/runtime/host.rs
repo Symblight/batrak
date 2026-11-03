@@ -6,7 +6,7 @@ use super::*;
 pub(super) struct ProbeHost;
 
 impl ClientHost for ProbeHost {
-    fn on_update(&self, _update: Value) {}
+    fn on_update(&self, _update: Value, _subagent: Option<String>) {}
 
     fn on_permission_request(&self, _request: PermissionRequest) {}
 
@@ -69,6 +69,20 @@ impl SessionHost {
         lock(&state.touched).extend(named);
     }
 
+    /// A turn's output: what stamps the session's activity.
+    fn is_output(&self, update: &Value) -> bool {
+        matches!(
+            update["sessionUpdate"].as_str(),
+            Some("agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update")
+        )
+    }
+
+    fn stamp(&self, state: &SessionState) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner.stamp_output(state);
+        }
+    }
+
     pub(super) fn env(&self) -> Result<Arc<dyn SessionEnv>, FsError> {
         let state = self.state.upgrade().ok_or_else(|| FsError::Io("the session is gone".to_owned()))?;
         let env = lock(&state.env).clone();
@@ -110,8 +124,21 @@ fn normalize(path: &Path) -> PathBuf {
 const LOOKING_TOOL_KINDS: [&str; 4] = ["read", "search", "fetch", "think"];
 
 impl ClientHost for SessionHost {
-    fn on_update(&self, update: Value) {
+    /// A subagent's update goes to the page with its `subagentId`; its title and options are its
+    /// own, never the chat's.
+    fn on_update(&self, mut update: Value, subagent: Option<String>) {
         let Some(state) = self.state.upgrade() else { return };
+        if let Some(subagent) = subagent {
+            if self.is_output(&update) {
+                self.stamp(&state);
+            }
+            if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
+                self.note_touched(&state, &update);
+            }
+            update["subagentId"] = Value::String(subagent);
+            state.emit("update", update);
+            return;
+        }
         let options = state.conn().and_then(|conn| conn.note_update(&update));
         if update["sessionUpdate"] == "session_info_update" {
             if let Some(title) = update.get("title") {
@@ -121,13 +148,10 @@ impl ClientHost for SessionHost {
         if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
             self.note_touched(&state, &update);
         }
-        let output = matches!(
-            update["sessionUpdate"].as_str(),
-            Some("agent_message_chunk" | "agent_thought_chunk" | "tool_call" | "tool_call_update")
-        );
+        let output = self.is_output(&update);
         state.emit("update", update);
-        if let Some(inner) = output.then(|| self.inner.upgrade()).flatten() {
-            inner.stamp_output(&state);
+        if output {
+            self.stamp(&state);
         }
         if let Some(options) = options {
             // Saved with the next status change.
@@ -138,13 +162,12 @@ impl ClientHost for SessionHost {
 
     fn on_permission_request(&self, request: PermissionRequest) {
         let Some(state) = self.state.upgrade() else { return };
-        if let Some(inner) = self.inner.upgrade() {
-            inner.stamp_output(&state);
+        self.stamp(&state);
+        let mut payload = json!({ "requestId": request.request_id, "toolCall": request.tool_call, "options": request.options });
+        if let Some(subagent) = request.subagent {
+            payload["subagentId"] = Value::String(subagent);
         }
-        state.emit(
-            "permission-request",
-            json!({ "requestId": request.request_id, "toolCall": request.tool_call, "options": request.options }),
-        );
+        state.emit("permission-request", payload);
         lock(&state.record).status = SessionStatus::Waiting;
         state.emit("status", json!({ "status": SessionStatus::Waiting }));
     }

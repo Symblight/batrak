@@ -101,6 +101,12 @@ pub async fn session_cancel(sessions: State<'_, Sessions>, session_id: String) -
     sessions.cancel(&session_id)
 }
 
+/// Stops one subagent of the session (`subagent_id`: its ACP session id).
+#[tauri::command]
+pub async fn session_cancel_subagent(sessions: State<'_, Sessions>, session_id: String, subagent_id: String) -> Result<(), String> {
+    sessions.cancel_subagent(&session_id, &subagent_id)
+}
+
 /// `option_id: null` cancels the request.
 #[tauri::command]
 pub async fn session_respond_permission(

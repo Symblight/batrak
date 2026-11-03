@@ -98,6 +98,7 @@ pub fn run() {
             commands::sessions::session_open,
             commands::sessions::session_send_prompt,
             commands::sessions::session_cancel,
+            commands::sessions::session_cancel_subagent,
             commands::sessions::session_respond_permission,
             commands::sessions::session_stop,
             commands::sessions::session_changes,

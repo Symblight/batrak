@@ -572,6 +572,53 @@ async fn permission_allow_then_cancel_with_a_pending_one() {
     assert_eq!(events.wait_turn_end().await, "end_turn", "the next turn runs");
 }
 
+/// The `update` events' (subagentId, sessionUpdate), `-` for the session's own.
+fn tagged_updates<'a>(updates: impl Iterator<Item = &'a Value>) -> Vec<(String, String)> {
+    updates
+        .map(|u| (u["subagentId"].as_str().unwrap_or("-").to_owned(), u["sessionUpdate"].as_str().unwrap_or_default().to_owned()))
+        .collect()
+}
+
+#[tokio::test]
+async fn a_subagents_updates_and_permission_request_reach_the_page_tagged_with_it() {
+    // Arrange
+    let f = fixture("subagent", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+    // Act
+    f.sessions.send_prompt("p", text("subagent")).unwrap();
+    let request = events.wait_for("permission request", |e| e.kind == "permission-request").await;
+    let page = attach_page(&f.sessions, "p", "reloaded");
+    // Assert: live and in a reattaching page's snapshot
+    assert_eq!(request.payload["subagentId"], "child-1");
+    let expected = [pair("-", "subagent_update"), pair("child-1", "session_info_update"), pair("child-1", "tool_call"), pair("child-1", "agent_message_chunk")];
+    let live: Vec<Value> = lock(&events.events).iter().filter(|e| e.kind == "update").map(|e| e.payload.clone()).collect();
+    assert_eq!(tagged_updates(live.iter()), expected);
+    let snapshot = lock(&page.events)[0].clone();
+    assert_eq!(tagged_updates(snapshot.payload["updates"].as_array().unwrap().iter().filter(|u| u["sessionUpdate"] != "user_message_chunk")), expected);
+    assert_ne!(f.sessions.get("p").unwrap().record().title, "child title", "a subagent's title isn't the chat's");
+    let id = request.payload["requestId"].as_str().unwrap();
+    f.sessions.respond_permission("p", id, Some("allow".to_owned())).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+}
+
+#[tokio::test]
+async fn cancelling_a_subagent_answers_its_request_and_the_turn_goes_on() {
+    // Arrange
+    let f = fixture("subagent-cancel", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("p", text("subagent")).unwrap();
+    events.wait_status("waiting").await;
+    // Act
+    f.sessions.cancel_subagent("p", "child-1").unwrap();
+    // Assert
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(*lock(&lock(&f.launcher.agents)[0].cancelled_sessions), ["child-1"]);
+    assert!(events.texts().contains(&"child cancelled".to_owned()));
+    assert!(f.sessions.cancel_subagent("p", "child-9").is_err());
+}
+
 #[tokio::test]
 async fn a_page_attaching_while_a_permission_waits_is_asked_it_again_until_it_is_answered() {
     let f = fixture("permission-attach", FakeAgentOptions::default());
@@ -1799,13 +1846,9 @@ fn prompt_input_from_the_page() {
     assert_eq!(parsed[2], PromptInput::Selection { path: "a.rs".to_owned(), from_line: 1, to_line: 2 });
 }
 
-/// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, from a
-/// project's agents.json, trusted): needs network, Node and a signed-in Claude Code. Run with
-/// `cargo test --lib real_claude -- --ignored --nocapture`.
-#[tokio::test(flavor = "multi_thread")]
-#[ignore]
-async fn real_claude_agent_end_to_end() {
-    let dir = std::env::temp_dir().join(format!("brama-real-claude-{}", std::process::id()));
+/// Sessions with the real Claude Code agent (`claude`) in a fresh project under a temp `name`.
+fn real_claude(name: &str) -> (Sessions, PathBuf, PathBuf) {
+    let dir = std::env::temp_dir().join(format!("brama-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let project = dir.join("project");
     std::fs::create_dir_all(&project).unwrap();
@@ -1822,6 +1865,16 @@ async fn real_claude_agent_end_to_end() {
     let mut opts = SessionsOptions::for_app(dir.join("data"), configs);
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
+    (sessions, project, dir)
+}
+
+/// End to end with the real Claude Code agent (`npx @agentclientprotocol/claude-agent-acp`, from a
+/// project's agents.json, trusted): needs network, Node and a signed-in Claude Code. Run with
+/// `cargo test --lib real_claude -- --ignored --nocapture`.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn real_claude_agent_end_to_end() {
+    let (sessions, project, dir) = real_claude("real-claude");
     let probed = options_of(sessions.probe_options(Some(&project), "claude").await.unwrap());
     let categories: Vec<_> = probed.iter().map(|o| o["category"].as_str().unwrap_or("-")).collect();
     eprintln!("probed categories: {categories:?}");
@@ -1940,6 +1993,62 @@ async fn real_claude_agent_end_to_end() {
     let log = std::fs::read_to_string(sessions.log_path("real").unwrap()).unwrap_or_default();
     eprintln!("log tail: {}", log.lines().rev().take(5).collect::<Vec<_>>().join(" | "));
     let _ = std::fs::remove_dir_all(dir);
+}
+
+/// What the real Claude Code sends for a subagent (ACP subagent sessions, which Brama declares):
+/// prints the `subagent_update`s, `session_message`s and the subagent's own updates, and whether
+/// `session/list` gains a session. Needs what `real_claude_agent_end_to_end` does.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore]
+async fn real_claude_subagents() {
+    let (sessions, project, dir) = real_claude("real-claude-subagents");
+    std::fs::write(project.join("notes.md"), "The secret word is pelican.\n").unwrap();
+    let events = Arc::new(Recorder::default());
+    let req = CreateSession {
+        session_id: "real".to_owned(),
+        project_path: project.to_string_lossy().into_owned(),
+        agent_id: "claude".to_owned(),
+        title: "real".to_owned(),
+        config: BTreeMap::new(),
+        workspace: WorkspaceChoice::Main,
+    };
+    sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+    events.wait_status("idle").await;
+    sessions
+        .send_prompt("real", text("Use the Agent tool with subagent_type Explore to find the secret word in notes.md, then tell me the word."))
+        .unwrap();
+    let started = Instant::now();
+    let end = loop {
+        let pending: Vec<_> = lock(&events.events).iter().filter(|e| e.kind == "permission-request").cloned().collect();
+        for request in pending {
+            let id = request.payload["requestId"].as_str().unwrap_or_default().to_owned();
+            let allow = request.payload["options"].as_array().and_then(|o| o.iter().find(|o| o["kind"] == "allow_once")).map(|o| o["optionId"].as_str().unwrap_or_default().to_owned());
+            eprintln!("permission (subagent {:?}): allowing", request.payload["subagentId"]);
+            let _ = sessions.respond_permission("real", &id, allow);
+        }
+        lock(&events.events).retain(|e| e.kind != "permission-request");
+        if let Some(end) = lock(&events.events).iter().find(|e| e.kind == "turn-end").cloned() {
+            break end;
+        }
+        assert!(started.elapsed() < Duration::from_secs(300), "no turn-end");
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    };
+    let updates: Vec<Value> = lock(&events.events).iter().filter(|e| e.kind == "update").map(|e| e.payload.clone()).collect();
+    for u in updates.iter().filter(|u| matches!(u["sessionUpdate"].as_str(), Some("subagent_update" | "session_message"))) {
+        eprintln!("{}", serde_json::to_string(u).unwrap());
+    }
+    let mut by_subagent: BTreeMap<String, Vec<String>> = BTreeMap::new();
+    for u in updates.iter().filter(|u| u.get("subagentId").is_some()) {
+        by_subagent.entry(u["subagentId"].as_str().unwrap_or_default().to_owned()).or_default().push(u["sessionUpdate"].as_str().unwrap_or_default().to_owned());
+    }
+    eprintln!("subagents' own updates: {by_subagent:#?}");
+    eprintln!("turn: {:?}, reply {:?}", end.payload, events.texts().join(""));
+    sessions.sync(&project, None).await;
+    let listed: Vec<_> = sessions.list().into_iter().map(|s| s.title).collect();
+    eprintln!("listed after the turn: {listed:?}");
+    let _ = std::fs::remove_dir_all(dir);
+    assert!(updates.iter().any(|u| u["sessionUpdate"] == "subagent_update"), "no subagent_update");
+    assert!(!by_subagent.is_empty(), "no update came under a subagent's id");
 }
 
 #[tokio::test]

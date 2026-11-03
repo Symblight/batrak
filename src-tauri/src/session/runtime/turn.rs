@@ -104,6 +104,18 @@ impl Sessions {
         }
     }
 
+    /// `session/cancel` of one of the session's subagents (its ACP session id); its pending
+    /// permission requests are answered `cancelled`, the session's turn goes on.
+    pub fn cancel_subagent(&self, id: &str, subagent: &str) -> Result<(), String> {
+        let state = self.get(id)?;
+        let conn = state.conn().ok_or("the agent is not running")?;
+        conn.cancel_subagent(subagent)?;
+        if conn.pending_permissions().is_empty() && state.turn_running.load(Ordering::SeqCst) {
+            self.inner.set_status(&state, SessionStatus::Working, None);
+        }
+        Ok(())
+    }
+
     /// The user's answer to a permission request: an option id, or `None` to cancel it.
     pub fn respond_permission(&self, id: &str, request_id: &str, option_id: Option<String>) -> Result<(), String> {
         let state = self.get(id)?;
