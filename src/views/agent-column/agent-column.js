@@ -21,7 +21,6 @@ import { $activePermission } from '../../stores/session-runtime/session-runtime.
 import { $sessionTerminals, $terminals } from '../../stores/terminals/terminals.js';
 import { $activeShownView, $activeView } from '../../stores/session-views/session-views.js';
 import { $openingPath, $project } from '../../stores/project/project.js';
-import { $activeWorkspaceId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 
@@ -149,11 +148,6 @@ export class AcpAgentColumn extends ViewElement {
     ></acp-terminal-view>`;
   }
 
-  #onNewSession() {
-    const project = $project.get();
-    if (project) sessions.create(project.path, $activeWorkspaceId.get());
-  }
-
   /** The active session's header; a draft shows as a new session. */
   #renderHeader() {
     if (this.#activeSessionId.value === null) return nothing;
@@ -171,7 +165,6 @@ export class AcpAgentColumn extends ViewElement {
       .now=${this.#now.value}
       .view=${this.#shownView.value}
       view-disabled=${this.#activeView.value.disabled}
-      @acp-session-new=${this.#onNewSession}
       @acp-session-view=${this.#onSessionView}
     ></acp-session-header>`;
   }
