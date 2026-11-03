@@ -18,8 +18,43 @@ impl Sessions {
         tokio::task::spawn_blocking(move || workspaces.discard(&id, keep_branch)).await.map_err(|e| e.to_string())?
     }
 
+    /// What deleting a workspace would do: its uncommitted files and commits past the base, and
+    /// the titles of its chats in a turn, which it would stop.
+    pub async fn workspace_delete_preview(&self, id: &str) -> Result<DeletePreview, String> {
+        let workspaces = self.inner.workspaces.clone();
+        let ws = id.to_owned();
+        let (uncommitted, commits) =
+            tokio::task::spawn_blocking(move || workspaces.changes_counts(&ws)).await.map_err(|e| e.to_string())??;
+        let working = self
+            .inner
+            .known()
+            .into_iter()
+            .filter(|r| r.workspace_id.as_deref() == Some(id) && in_turn(r.status))
+            .map(|r| r.title)
+            .collect();
+        Ok(DeletePreview { uncommitted, commits, working })
+    }
+
     /// The ids of a workspace's chats.
     fn chats_of(&self, workspace: &str) -> Vec<String> {
         self.inner.known().into_iter().filter(|r| r.workspace_id.as_deref() == Some(workspace)).map(|r| r.session_id).collect()
     }
+}
+
+/// What deleting a workspace would touch (`workspace_delete_preview`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeletePreview {
+    pub uncommitted: usize,
+    pub commits: usize,
+    /// Titles of its chats in a turn.
+    pub working: Vec<String>,
+}
+
+/// Whether a chat is in a turn, or about to be: preparing, starting, working, waiting, queued.
+pub(super) fn in_turn(status: SessionStatus) -> bool {
+    matches!(
+        status,
+        SessionStatus::Preparing | SessionStatus::Starting | SessionStatus::Working | SessionStatus::Waiting | SessionStatus::Queued
+    )
 }

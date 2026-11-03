@@ -198,6 +198,30 @@ impl Workspaces {
         Ok(())
     }
 
+    /// What deleting a workspace would touch: its uncommitted files and its commits past the base.
+    /// A folder that isn't there has neither. Blocking.
+    pub fn changes_counts(&self, id: &str) -> Result<(usize, usize), String> {
+        let record = self.get(id)?;
+        if !record.worktree_path.join(".git").exists() {
+            return Ok((0, 0));
+        }
+        let git = crate::git::binary::git()?;
+        let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| exec::run(git, &record.worktree_path, &exec::args(args), GitMode::Background);
+        let status = run(&[&"status", &"--porcelain", &"-z", &"--untracked-files=all"])?;
+        // `-z` entries; a rename's entry is followed by its old path.
+        let mut uncommitted = 0;
+        let mut entries = status.split(|b| *b == 0).filter(|e| !e.is_empty());
+        while let Some(entry) = entries.next() {
+            uncommitted += 1;
+            if matches!(entry.first(), Some(b'R' | b'C')) {
+                entries.next();
+            }
+        }
+        let range = format!("{}..refs/heads/{}", record.base_commit, record.branch);
+        let commits = run(&[&"rev-list", &"--count", &range]).map(|o| String::from_utf8_lossy(&o).trim().parse().unwrap_or(0)).unwrap_or(0);
+        Ok((uncommitted, commits))
+    }
+
     /// Waits for a checkout of the workspace that is running. Blocking.
     pub fn wait_ready(&self, id: &str) {
         drop(lock(&self.gate(id)));

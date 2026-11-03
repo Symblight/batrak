@@ -3070,3 +3070,26 @@ async fn deleting_a_workspace_removes_its_chats_and_its_folder() {
     assert!(!ws.worktree_path.exists());
     assert!(f.sessions.workspaces().list(&f.project).is_empty());
 }
+
+#[tokio::test]
+async fn a_delete_preview_counts_uncommitted_files_and_commits_and_names_working_chats() {
+    let f = git_fixture("ws-preview");
+    let ws = f.sessions.workspaces().create(&f.project, "Fix login", None).unwrap();
+    let (_, events) = f.create_in_workspace("busy", &ws.id).unwrap();
+    let (_, idle) = f.create_in_workspace("idle", &ws.id).unwrap();
+    events.wait_status("idle").await;
+    idle.wait_status("idle").await;
+    std::fs::write(ws.folder.join("x.txt"), "x").unwrap();
+    run_in(&ws.folder, &["add", "."]);
+    run_in(&ws.folder, &["commit", "-qm", "work"]);
+    std::fs::write(ws.folder.join("a.txt"), "changed").unwrap();
+    std::fs::write(ws.folder.join("new.txt"), "new").unwrap();
+    f.sessions.send_prompt("busy", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+
+    let preview = f.sessions.workspace_delete_preview(&ws.id).await.unwrap();
+
+    assert_eq!((preview.uncommitted, preview.commits), (2, 1));
+    assert_eq!(preview.working, vec!["Session busy".to_owned()]);
+    f.sessions.cancel("busy").ok();
+}
