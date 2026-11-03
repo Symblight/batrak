@@ -6,7 +6,8 @@ impl Sessions {
     /// Deletes a workspace: each of its chats is removed as Remove session removes one (a running
     /// turn ends `cancelled`), then its folder (`Workspaces::discard`).
     pub async fn delete_workspace(&self, id: &str, keep_branch: bool) -> Result<(), String> {
-        self.inner.workspaces.get(id)?;
+        // Its chats' removal leaves it to this delete (and its Keep branch).
+        self.inner.workspaces.store().update(id, |w| w.made_for = None)?;
         for chat in self.chats_of(id) {
             self.remove(&chat).await?;
         }
@@ -125,6 +126,19 @@ impl Sessions {
         let workspaces = self.inner.workspaces.clone();
         let id = id.to_owned();
         tokio::task::spawn_blocking(move || workspaces.check_out(&id)).await.map_err(|e| e.to_string())?
+    }
+
+    /// After a chat's removal: deletes the workspace made for it (`made_for`) once it has no
+    /// other chat, keeping its work on its branch, as removing a worktree session did. Goes with
+    /// the Phase 1 bridge.
+    pub(super) async fn drop_workspace_made_for(&self, chat: &str) {
+        let made = self.inner.workspaces.store().list(None).into_iter().find(|w| w.made_for.as_deref() == Some(chat));
+        let Some(workspace) = made.filter(|w| self.chats_of(&w.id).is_empty()) else { return };
+        let workspaces = self.inner.workspaces.clone();
+        let removed = tokio::task::spawn_blocking(move || workspaces.discard(&workspace.id, true)).await;
+        if let Err(e) = removed.map_err(|e| e.to_string()).and_then(|r| r) {
+            tracing::warn!(session = %chat, "deleting the chat's workspace failed: {e}");
+        }
     }
 
     /// The ids of a workspace's chats.

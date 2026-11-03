@@ -177,7 +177,8 @@ impl Sessions {
             // Until the composer picks a workspace (spec Phase 3): a worktree session gets a
             // workspace of its own, checked out at its start.
             None if req.mode == Mode::Worktree => {
-                let workspace = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, req.base_branch.as_deref())?;
+                let placed = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, req.base_branch.as_deref())?;
+                let workspace = self.inner.workspaces.store().update(&placed.id, |w| w.made_for = Some(req.session_id.clone()))?;
                 workspace_id = Some(workspace.id.clone());
                 (Mode::Worktree, workspace.placement())
             }
@@ -317,6 +318,7 @@ impl Sessions {
         .await
         .map_err(|e| e.to_string())?;
         tracing::info!(session = %id, "session removed");
+        self.drop_workspace_made_for(id).await;
         Ok(())
     }
 

@@ -3186,3 +3186,34 @@ async fn recreating_a_workspaces_deleted_folder_checks_it_out_from_its_branch() 
     f.sessions.restart("c").await.unwrap();
     events.wait_status("idle").await;
 }
+
+#[tokio::test]
+async fn removing_the_chat_a_workspace_was_made_for_deletes_it_and_keeps_its_work() {
+    let f = git_fixture("ws-made-for");
+    let (dirty, events) = f.create_in("d", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(dirty.worktree_path.unwrap());
+    let branch = dirty.branch.unwrap();
+    std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
+
+    f.sessions.remove("d").await.unwrap();
+
+    assert!(!wt.exists(), "the folder goes with it");
+    assert_eq!(run_in(&f.project, &["show", &format!("{branch}:a.txt")]), "unsaved", "its work is on its branch");
+    assert!(f.sessions.workspaces().list(&f.project).is_empty(), "and so does its workspace");
+}
+
+#[tokio::test]
+async fn deleting_a_workspace_made_for_a_chat_follows_keep_branch() {
+    let f = git_fixture("ws-made-for-delete");
+    let (chat, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let wt = PathBuf::from(chat.worktree_path.unwrap());
+    std::fs::write(wt.join("x.txt"), "x").unwrap();
+    run_in(&wt, &["add", "."]);
+    run_in(&wt, &["commit", "-qm", "work"]);
+
+    f.sessions.delete_workspace(chat.workspace_id.as_deref().unwrap(), false).await.unwrap();
+
+    assert!(run_in(&f.project, &["branch", "--list", &chat.branch.unwrap()]).is_empty(), "Keep branch off: gone");
+}
