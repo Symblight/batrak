@@ -35,7 +35,7 @@ import { $activePermission, setSessionNotice } from '../../stores/session-runtim
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
 import { forgetPendingInput } from '../../stores/chat/chat.js';
 import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
-import { $workspacePath, setWorkspaceSettings } from '../../stores/workspace/workspace.js';
+import { $projectPath, setProjectSettings } from '../../stores/project/project.js';
 
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
@@ -93,7 +93,7 @@ async function init() {
     cancelIdleStop(id);
     show(id);
   });
-  $workspacePath.subscribe((path) => {
+  $projectPath.subscribe((path) => {
     loadSettings(path);
     if (path === null) return;
     // Before showing: the shown session's one-agent sync then waits for this one.
@@ -103,7 +103,7 @@ async function init() {
   // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
   // last time are asked now.
   $agentList.subscribe(({ agents: listed }) => {
-    const path = $workspacePath.get();
+    const path = $projectPath.get();
     const report = path === null ? null : syncOf(path).report;
     if (path === null || report === null || syncOf(path).running) return;
     const settled = new Set(
@@ -290,11 +290,11 @@ function openAll(sessions) {
  */
 async function loadSettings(path) {
   const load = ++settingsLoad;
-  setWorkspaceSettings(null);
+  setProjectSettings(null);
   if (path === null) return;
   try {
     const settings = await workspaceSettings(path);
-    if (load === settingsLoad) setWorkspaceSettings(settings);
+    if (load === settingsLoad) setProjectSettings(settings);
   } catch (err) {
     app.reportError('Reading .brama/workspace.json failed', err);
   }

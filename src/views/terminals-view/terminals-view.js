@@ -4,7 +4,7 @@ import { app } from '../../hooks/app/app.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { $terminalFocus, $terminalTabs, $terminals, terminalFocused, terminalGroup } from '../../stores/terminals/terminals.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/panel/panel.js';
 import '../../components/tab-view/tab-view.js';
@@ -22,7 +22,7 @@ import '../terminal-view/terminal-view.js';
 export class AcpTerminalsView extends ViewElement {
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #terminals = new StoreController(this, { store: $terminals });
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #focus = new StoreController(this, { store: $terminalFocus, onChange: (request) => request && this.#focusTerminal(request) });
 
   /** @type {Map<string, HTMLElementTagNameMap['acp-terminal-view']>} The terminals mounted, by terminal id. */
@@ -86,7 +86,7 @@ export class AcpTerminalsView extends ViewElement {
         .tabs=${this.#tabsOf(paths)}
         .active=${active}
         .pinned=${pinned}
-        .root=${this.#workspace.value?.path ?? null}
+        .root=${this.#project.value?.path ?? null}
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
         .renderContent=${this.#renderTerminal}

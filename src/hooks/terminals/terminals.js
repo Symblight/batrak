@@ -16,7 +16,7 @@ import {
   terminalRestarting,
   terminalStarted,
 } from '../../stores/terminals/terminals.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
@@ -284,9 +284,9 @@ export const terminals = Object.freeze({
     if (open && active !== null) {
       focusTerminal(tabs.terminalOf(active) ?? '');
     } else if (paths.length) {
-      setTerminalPanelOpen($workspace.get()?.path ?? null, true);
+      setTerminalPanelOpen($project.get()?.path ?? null, true);
     } else {
-      const project = $workspace.get()?.path ?? null;
+      const project = $project.get()?.path ?? null;
       const home = project === null ? await ipc.homeDir() : '';
       openIn(projectTerminalFolder({ project, home }));
     }
@@ -294,12 +294,12 @@ export const terminals = Object.freeze({
 
   /** Hides the shown project's panel; its shells keep running. */
   hidePanel() {
-    setTerminalPanelOpen($workspace.get()?.path ?? null, false);
+    setTerminalPanelOpen($project.get()?.path ?? null, false);
   },
 
   /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the active session's folder, the project, or home. */
   async newTerminal() {
-    const project = $workspace.get()?.path ?? null;
+    const project = $project.get()?.path ?? null;
     const home = project === null ? await ipc.homeDir() : '';
     openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
   },

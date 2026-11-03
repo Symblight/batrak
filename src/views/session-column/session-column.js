@@ -14,7 +14,7 @@ import { $unreadSessions, markProjectRead, markRead, markUnread } from '../../st
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
-import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
+import { $openingPath, $project } from '../../stores/project/project.js';
 
 /**
  * @tag acp-session-column
@@ -30,7 +30,7 @@ export class AcpSessionColumn extends ViewElement {
   #collapsed = new StoreController(this, { store: $collapsedProjects });
   #sessions = new StoreController(this, { store: $sessions });
   #activeSession = new StoreController(this, { store: $activeSessionId });
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #openingPath = new StoreController(this, { store: $openingPath });
   #pinned = new StoreController(this, { store: $pinnedSessions });
   #unread = new StoreController(this, { store: $unreadSessions });
@@ -97,7 +97,7 @@ export class AcpSessionColumn extends ViewElement {
    */
   #onProjectSelect(e) {
     const id = this.#projectIdOf(e);
-    if (id === this.#workspace.value?.path) {
+    if (id === this.#project.value?.path) {
       toggleProject(id);
       return;
     }
@@ -159,19 +159,19 @@ export class AcpSessionColumn extends ViewElement {
   }
 
   #onResync() {
-    const path = this.#workspace.value?.path;
+    const path = this.#project.value?.path;
     if (path) sessions.sync(path, { force: true });
   }
 
   render() {
-    const path = this.#workspace.value?.path ?? null;
+    const path = this.#project.value?.path ?? null;
     return html`<acp-panel>
       <acp-session-list
         class="acp-session-column__list"
         .projects=${this.#projects.value}
         .sessions=${this.#sessions.value}
         .collapsed=${this.#collapsed.value}
-        .activeProjectId=${this.#workspace.value?.path ?? null}
+        .activeProjectId=${this.#project.value?.path ?? null}
         .activeSessionId=${this.#activeSession.value}
         .openingProjectId=${this.#openingPath.value}
         .pinned=${this.#pinned.value}

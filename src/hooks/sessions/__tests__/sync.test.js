@@ -4,7 +4,7 @@ import { poll, sync, syncAgentOf } from '../sync.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $sessionSync, endSync, syncOf } from '../../../stores/session-sync/session-sync.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 
 /** @type {import('../types.js').SyncReport} */
 const REPORT = { projectPath: '/p', startedAt: '2026-01-01T00:00:00Z', endedAt: '2026-01-01T00:00:01Z', agents: [{ agentId: 'claude', agentName: 'Claude', outcome: 'listed', count: 2, error: null }] };
@@ -37,7 +37,7 @@ describe('sessions sync', () => {
   afterEach(() => {
     $sessionSync.set({});
     $sessions.set([]);
-    $workspace.set(null);
+    $project.set(null);
     $notices.set([]);
     clearMocks();
   });
@@ -83,7 +83,7 @@ describe('sessions sync', () => {
 
   it('polls only a shown project whose last sync listed or failed, quietly, and not while one runs', async () => {
     const id = fresh();
-    $workspace.set(/** @type {never} */ ({ path: id, rootId: null }));
+    $project.set(/** @type {never} */ ({ path: id, rootId: null }));
     poll();
     expect(asked, 'never synced: nothing to repeat').to.deep.equal([]);
     endSync(id, { ...REPORT, agents: [REPORT.agents[0], { agentId: 'codex', agentName: 'Codex', outcome: 'off', count: null, error: null }, { agentId: 'gem', agentName: 'Gem', outcome: 'failed', count: null, error: 'x' }] });

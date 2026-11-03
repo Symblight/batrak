@@ -2,7 +2,7 @@ import { LitElement, html as litHtml } from 'lit';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { FindInFilesController } from '../FindInFilesController.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 
 class DialogSearchHost extends LitElement {
   search = new FindInFilesController(this, { slot: 'dialog' });
@@ -38,12 +38,12 @@ describe('FindInFilesController', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
       return null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
   });
 
   it('searches and cancels in its own slot', async () => {

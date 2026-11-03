@@ -14,7 +14,7 @@ import { $markdownSplit, setMarkdownSplit } from '../../stores/layout/layout.js'
 import { notify } from '../../stores/notices/notices.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $settings, setMarkdownScrollSync } from '../../stores/settings/settings.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $rootId, $project } from '../../stores/project/project.js';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -32,7 +32,7 @@ export class AcpEditorView extends ViewElement {
     tab: { attribute: false },
   };
 
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #rootId = new StoreController(this, { store: $rootId });
   #worktrees = new StoreController(this, { store: $worktrees });
   #languages = new StoreController(this, { store: $fileLanguages });
@@ -94,7 +94,7 @@ export class AcpEditorView extends ViewElement {
       .scrollSync=${markdownScrollSync}
       .ratio=${this.#markdownSplit.value}
       .language=${this.#languages.value[tab.path] ?? ''}
-      .root=${this.#workspace.value?.path ?? null}
+      .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
       .worktrees=${this.#worktrees.value}
       .listDir=${projects.listDir}
@@ -133,7 +133,7 @@ export class AcpEditorView extends ViewElement {
     return html`<acp-code-view
       .tab=${tab}
       .language=${this.#languages.value[tab.path] ?? ''}
-      .root=${this.#workspace.value?.path ?? null}
+      .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
       .worktrees=${this.#worktrees.value}
       .listDir=${projects.listDir}

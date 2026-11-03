@@ -17,7 +17,7 @@ import {
   removeProjectTerminals,
   terminalFailed,
 } from '../../../stores/terminals/terminals.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../tabs/tabs.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -121,7 +121,7 @@ describe('terminals', () => {
     $projectTerminalPanels.set({});
     $terminalFocus.set(null);
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
     $sessions.set([]);
     $activeSessionId.set(null);
   });
@@ -130,7 +130,7 @@ describe('terminals', () => {
     // Arrange
     const { terminals } = await started();
     const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     $sessions.set([wt]);
     $activeSessionId.set('s1');
     // Act
@@ -270,7 +270,7 @@ describe('terminals', () => {
   it('closes the tab of a shell that exits with 0, keeps one that fails with Restart, and starts it afresh', async () => {
     // Arrange
     const { terminals } = await started();
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     const clean = openTerminal('/p', '/p', 'p');
     const failing = openTerminal('/p', '/p', 'p');
     const screens = { clean: view(), failing: view() };
@@ -300,7 +300,7 @@ describe('terminals', () => {
   it("closes a login's tab when its sign-in is cancelled", async () => {
     // Arrange
     await started();
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
     openLoginTerminal(terminal, '/p');
     // Act
@@ -319,7 +319,7 @@ describe('terminals', () => {
     it('follows the rail: the first click shows the panel with one terminal, later ones add none', async () => {
       // Arrange
       const { terminals } = await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       // Act
       await terminals.showPanel();
       const [first] = panelTerminals();
@@ -341,7 +341,7 @@ describe('terminals', () => {
       // Arrange
       const { terminals } = await started();
       const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       $sessions.set([wt]);
       $activeSessionId.set('s1');
       await terminals.showPanel();
@@ -356,7 +356,7 @@ describe('terminals', () => {
     it('hides the panel when its last terminal goes, and closes the shell of each terminal that goes', async () => {
       // Arrange
       await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       const a = openTerminal('/p', '/p', 'p');
       const b = openTerminal('/p', '/p', 'p');
       // Act
@@ -373,7 +373,7 @@ describe('terminals', () => {
     it('closes the shells of a removed project’s panel', async () => {
       // Arrange
       await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       const id = openTerminal('/p', '/p', 'p');
       // Act
       removeProjectTerminals('/p');

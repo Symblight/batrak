@@ -1,7 +1,7 @@
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('./types.js').WorkspaceEntry} WorkspaceEntry */
-/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').RootEntry} RootEntry */
+/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 
 /** The Rust commands about files and folders of open roots. */
 
@@ -45,7 +45,7 @@ function closeWorkspace(rootId) {
  * Children of a directory from the snapshot.
  * @param {string} rootId
  * @param {string} path Relative; `''` for the root.
- * @returns {Promise<WorkspaceEntry[]>}
+ * @returns {Promise<RootEntry[]>}
  */
 function listDir(rootId, path) {
   return ipc.invoke('list_dir', { rootId, path });
@@ -62,7 +62,7 @@ function rescanWorkspace(rootId) {
 
 /**
  * Subscribes to snapshot changes made by the file watcher.
- * @param {(changes: WorkspaceChanges) => void} callback
+ * @param {(changes: RootChanges) => void} callback
  * @returns {Promise<() => void>} Unsubscribe.
  */
 function onWorkspaceChanged(callback) {

@@ -7,8 +7,8 @@
  */
 
 /**
- * Workspace snapshot entry; mirrors `workspace::snapshot::Entry`.
- * @typedef {Object} WorkspaceEntry
+ * Root snapshot entry; mirrors `roots::snapshot::Entry`.
+ * @typedef {Object} RootEntry
  * @property {string} name
  * @property {string} path Relative to the root, `/`-separated.
  * @property {boolean} isDir
@@ -26,10 +26,10 @@
 /**
  * The opened folder. `path` and `name` are persisted; `rootId` exists only while the backend has the
  * folder open (`null` from launch until it's reopened).
- * @typedef {Object} Workspace
+ * @typedef {Object} OpenProject
  * @property {string} path Canonical absolute path.
  * @property {string} name Last path segment.
- * @property {string | null} rootId Workspace snapshot id; every workspace command takes it.
+ * @property {string | null} rootId Root snapshot id; every workspace command takes it.
  */
 
 /**
@@ -39,7 +39,7 @@
 
 /**
  * The open project's `.brama/workspace.json`.
- * @typedef {Object} WorkspaceSettings
+ * @typedef {Object} ProjectSettings
  * @property {'local' | 'worktree'} defaultMode The run target a new session starts with.
  * @property {LocalTurns} localTurns
  */

@@ -6,7 +6,7 @@ import { $sessionRoot, $sessionRootOpening, keepRecent, sessionRootAction, setSe
 
 /** @typedef {import('./types.js').Session} Session */
 /** @typedef {import('./types.js').SessionRoot} SessionRoot */
-/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 
 /**
  * Worktree sessions whose folder stays open (scan + watcher), the shown one included, like
@@ -24,7 +24,7 @@ const roots = new Map();
 let order = [];
 /** @type {(() => void) | null} */
 let unsubscribe = null;
-/** @type {Set<(changes: WorkspaceChanges) => void>} */
+/** @type {Set<(changes: RootChanges) => void>} */
 const listeners = new Set();
 
 /** The tree lists the project again; the roots stay open. */
@@ -131,7 +131,7 @@ export const root = Object.freeze({
   forget,
 
   /**
-   * @param {(changes: WorkspaceChanges) => void} listener
+   * @param {(changes: RootChanges) => void} listener
    * @returns {() => void} Stops listening.
    */
   onFsChange(listener) {

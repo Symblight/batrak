@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { $expandedFolders, $projectExpandedFolders, removeProjectExpandedFolders, setExpandedFolders } from '../file-tree.js';
 import { setSessionRoot } from '../../session-root/session-root.js';
-import { $workspace } from '../../workspace/workspace.js';
+import { $project } from '../../project/project.js';
 
 const WORKTREE = '/data/worktrees/app-1/fix-login-3f2a91bc';
 
@@ -10,11 +10,11 @@ describe('file tree expanded folders', () => {
     setSessionRoot(null);
     removeProjectExpandedFolders('/p');
     removeProjectExpandedFolders(WORKTREE);
-    $workspace.set(null);
+    $project.set(null);
   });
 
   it("keeps a worktree's apart from the project's, starting from the project's", () => {
-    $workspace.set({ path: '/p', name: 'p', rootId: 'root-1' });
+    $project.set({ path: '/p', name: 'p', rootId: 'root-1' });
     setExpandedFolders(['src', 'node_modules']);
 
     setSessionRoot({ sessionId: 'w', rootId: 'root-2', path: WORKTREE, label: 'fix-login-3f2a91bc' });

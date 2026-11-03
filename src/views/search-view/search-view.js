@@ -3,7 +3,7 @@ import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { search } from '../../hooks/search/search.js';
 import { $projectSearch, $searchDialogPrefs, addRecentSearch, saveProjectSearch, setSearchDialogPrefs } from '../../stores/search/search.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $rootId, $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import '../../components/search-dialog/search-dialog.js';
@@ -29,7 +29,7 @@ export class AcpSearchView extends ViewElement {
     foldersQuery: { state: true },
   };
 
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #rootId = new StoreController(this, { store: $rootId });
   #prefs = new StoreController(this, { store: $searchDialogPrefs });
   #saved = new StoreController(this, { store: $projectSearch });
@@ -57,7 +57,7 @@ export class AcpSearchView extends ViewElement {
 
   /** The open project's last search and recent queries. */
   get #savedSearch() {
-    const project = this.#workspace.value?.path;
+    const project = this.#project.value?.path;
     return project ? this.#saved.value[project] : undefined;
   }
 
@@ -84,7 +84,7 @@ export class AcpSearchView extends ViewElement {
     const { options, state, delay } = /** @type {CustomEvent<{ options: SearchOptions, state: SearchDialogState, delay: number }>} */ (e).detail;
     this.#search.setActive(true);
     this.#search.search(options, delay);
-    const project = this.#workspace.value?.path;
+    const project = this.#project.value?.path;
     if (project) saveProjectSearch(project, state);
   }
 
@@ -141,7 +141,7 @@ export class AcpSearchView extends ViewElement {
 
   /** @param {string} query */
   #record(query) {
-    const project = this.#workspace.value?.path;
+    const project = this.#project.value?.path;
     if (project) addRecentSearch(project, query);
   }
 

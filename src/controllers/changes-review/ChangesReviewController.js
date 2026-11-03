@@ -3,14 +3,14 @@ import { StoreController } from '../store/StoreController.js';
 import { git } from '../../hooks/git/git.js';
 import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
 import { $gitChanges, $gitHead } from '../../stores/git/git.js';
-import { $rootId } from '../../stores/workspace/workspace.js';
+import { $rootId } from '../../stores/project/project.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
 /** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/git/types.js').RootChanges} RootChanges */
 
 /**
  * Whether two status entries of one file describe the same change.
@@ -125,7 +125,7 @@ export class ChangesReviewController {
   /** Stops listening to the files changing on disk. */
   #stopWatching = () => {};
 
-  #onFsChange = (/** @type {WorkspaceChanges} */ { added, modified, removed }) => {
+  #onFsChange = (/** @type {RootChanges} */ { added, modified, removed }) => {
     for (const id of [...added, ...modified, ...removed]) {
       if (this.#expanded.has(id)) this.#staleDiffs.add(id);
     }

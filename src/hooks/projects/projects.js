@@ -1,4 +1,4 @@
-import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $openingPath, $rootId, $project } from '../../stores/project/project.js';
 import { removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectTerminals } from '../../stores/terminals/terminals.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
@@ -20,7 +20,7 @@ import {
   worktreeOf,
 } from './rules.js';
 
-/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 /** @typedef {import('./types.js').OpenedRoot} OpenedRoot */
 
 /**
@@ -39,7 +39,7 @@ let pending = null;
 let readyPromise = null;
 /** @returns {string | null} Canonical absolute path of the opened folder. */
 function currentPath() {
-  return $workspace.get()?.path ?? null;
+  return $project.get()?.path ?? null;
 }
 
 /** @param {{ path: string, done: Promise<void> } | null} next Mirrored into `$openingPath`. */
@@ -81,13 +81,13 @@ function show(path, name, rootId) {
   roots.set(path, { rootId, name });
   // Before the switch: the oldest is never the one still shown, as `KEEP_OPEN` is at least 2.
   evict();
-  $workspace.set({ path, name, rootId });
+  $project.set({ path, name, rootId });
 }
 
-/** Leaves the active workspace and closes its backend root. */
+/** Leaves the active project and closes its backend root. */
 function close() {
   const path = currentPath();
-  $workspace.set(null);
+  $project.set(null);
   if (path) closeRoot(path);
 }
 
@@ -138,7 +138,7 @@ function openFolder(path) {
 }
 
 /**
- * The opened projects: the active one lives in `$workspace` (subscribe to it, or to `$rootId`, for
+ * The opened projects: the active one lives in `$project` (subscribe to it, or to `$rootId`, for
  * changes). The last `KEEP_OPEN` active projects keep their backend root (scan + watcher), so
  * switching back to one is instant; an older one is closed and scanned afresh when activated again.
  * Also the rules about paths: a root and a relative path, and the worktree folders of sessions.
@@ -160,7 +160,7 @@ export const projects = Object.freeze({
   /** @returns {string | null} Canonical absolute path of the opened folder. */
   path: currentPath,
 
-  /** @returns {string | null} Workspace snapshot id; `null` until the backend has the folder open. */
+  /** @returns {string | null} Root snapshot id; `null` until the backend has the folder open. */
   rootId() {
     return $rootId.get();
   },
@@ -197,12 +197,12 @@ export const projects = Object.freeze({
   /**
    * Hands the changes of the active root's files on disk to `listener`, as the watcher reports them
    * (the other open roots' changes only reach their snapshots and git caches).
-   * @param {(changes: WorkspaceChanges) => void} listener
+   * @param {(changes: RootChanges) => void} listener
    * @returns {() => void} Stops listening.
    */
   onFsChange(listener) {
     const stop = ipc
-      .listen('roots://changed', (/** @type {WorkspaceChanges} */ changes) => {
+      .listen('roots://changed', (/** @type {RootChanges} */ changes) => {
         if (changes.rootId === $rootId.get()) listener(changes);
       })
       .catch((err) => {
@@ -229,7 +229,7 @@ export const projects = Object.freeze({
   },
 
   /**
-   * Makes a project the active workspace: at once when its root is still open, else by scanning it.
+   * Makes a project the active project: at once when its root is still open, else by scanning it.
    * @param {string} path Canonical absolute path (a project id).
    */
   async activate(path) {
@@ -250,12 +250,12 @@ export const projects = Object.freeze({
   async restore() {
     // Runs at every start: the last page load's roots close even with no folder to reopen.
     projects.ready();
-    const saved = $workspace.get();
+    const saved = $project.get();
     if (!saved || saved.rootId !== null) return;
     try {
       await openFolder(saved.path);
     } catch (err) {
-      if ($workspace.get() === saved) $workspace.set(null);
+      if ($project.get() === saved) $project.set(null);
       throw err;
     }
   },

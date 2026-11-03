@@ -8,13 +8,13 @@ import { git } from '../../hooks/git/git.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
-import { $rootId } from '../../stores/workspace/workspace.js';
+import { $rootId } from '../../stores/project/project.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
-/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/git/types.js').RootChanges} RootChanges */
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /** @param {string} path */
@@ -131,7 +131,7 @@ export class TabFilesController {
     this.#stopWatching();
   }
 
-  #onFsChange = (/** @type {WorkspaceChanges} */ { modified, added, removed }) => {
+  #onFsChange = (/** @type {RootChanges} */ { modified, added, removed }) => {
     for (const tab of this.#tabs) {
       const rel = projects.relPath(tab.path);
       if (rel === null) continue;

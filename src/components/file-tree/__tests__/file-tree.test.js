@@ -1,17 +1,17 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../file-tree.js';
 
-/** @typedef {import('../../../hooks/projects/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../../hooks/projects/types.js').RootEntry} RootEntry */
 /** @typedef {HTMLElementTagNameMap['acp-file-tree']} AcpFileTree */
 
 /**
  * @param {string} path
  * @param {boolean} isDir
- * @returns {WorkspaceEntry}
+ * @returns {RootEntry}
  */
 const entry = (path, isDir) => ({ name: path.split('/').pop() ?? path, path, isDir, ignored: false, size: 0, mtime: 0 });
 
-/** @type {Record<string, WorkspaceEntry[]>} */
+/** @type {Record<string, RootEntry[]>} */
 const LISTING = { '': [entry('src', true), entry('a.txt', false)], src: [entry('src/x.js', false)] };
 
 /** @param {string} _rootId @param {string} rel */

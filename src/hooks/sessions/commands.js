@@ -9,9 +9,9 @@ import { ipc } from '../ipc/ipc.js';
 /** @typedef {import('./types.js').SyncReport} SyncReport */
 /** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
 /** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../projects/types.js').WorkspaceSettings} WorkspaceSettings */
+/** @typedef {import('../projects/types.js').ProjectSettings} ProjectSettings */
 
-/** The Rust commands of sessions, their folders and the project's workspace settings. */
+/** The Rust commands of sessions, their folders and the project's settings. */
 
 /** @returns {Promise<Session[]>} The sessions as last stored or synced. */
 export function listSessions() {
@@ -238,7 +238,7 @@ export function sessionOpenLog(sessionId) {
 /**
  * The project's `.brama/workspace.json` settings; missing or invalid ones are the defaults.
  * @param {string} projectPath
- * @returns {Promise<WorkspaceSettings>}
+ * @returns {Promise<ProjectSettings>}
  */
 export function workspaceSettings(projectPath) {
   return ipc.invoke('project_settings', { projectPath });

@@ -44,7 +44,7 @@
  */
 
 /**
- * Streamed Find in Files message; mirrors `workspace::search::SearchEvent`.
+ * Streamed Find in Files message; mirrors `roots::search::SearchEvent`.
  * @typedef {{ kind: 'file', path: string, matches: LineMatch[] }
  *   | { kind: 'done', total: number, limitHit: boolean, cancelled: boolean }
  *   | { kind: 'error', message: string, source: SearchErrorSource }} SearchEvent

@@ -3,7 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
 import { $sessions, $sessionsLoaded } from '../../../stores/sessions/sessions.js';
@@ -110,7 +110,7 @@ describe('acp-app: search dialog', () => {
       calls.push({ cmd, args: a });
       return answer(cmd, a) ?? startupAnswer(cmd, a);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $projectSearch.setKey('/p', { ...STATE, recent: ['older'] });
     $hiddenColumns.set([]);
   });
@@ -118,7 +118,7 @@ describe('acp-app: search dialog', () => {
   afterEach(() => {
     for (const el of document.querySelectorAll('acp-app')) searchDialog(/** @type {AcpApp} */ (el))?.close();
     $projectSearch.setKey('/p', undefined);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -194,14 +194,14 @@ describe('acp-app: mark all as read', () => {
 
   beforeEach(() => {
     mockIPC((cmd, args) => startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {})));
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $hiddenColumns.set([]);
   });
 
   afterEach(() => {
     $sessions.set([]);
     for (const id of ['mine', 'other']) $sessionReads.setKey(id, undefined);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -256,12 +256,12 @@ describe('acp-app: project menu', () => {
       { id: '/p', name: 'p', path: '/p' },
       { id: '/q', name: 'q', path: '/q' },
     ]);
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     $projects.set([]);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -398,7 +398,7 @@ describe('acp-app: terminal panel layout', () => {
       commands.push(cmd);
       return cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}));
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $hiddenColumns.set([]);
   });
 
@@ -409,7 +409,7 @@ describe('acp-app: terminal panel layout', () => {
     $projectTerminalPanels.set({});
     $projectTerminalPanelHeights.setKey('/p', undefined);
     $hiddenColumns.set([]);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 

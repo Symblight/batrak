@@ -19,7 +19,7 @@ import styles from './code-view.css?inline';
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
 /** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
-/** @typedef {import('../../hooks/projects/types.js').WorkspaceEntry} WorkspaceEntry */
+/** @typedef {import('../../hooks/projects/types.js').RootEntry} RootEntry */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 
 /**
@@ -34,7 +34,7 @@ import styles from './code-view.css?inline';
  * @typedef {Object} FolderList
  * @property {string} folder Root-relative; `''` for the root.
  * @property {string} selected Root-relative: the entry on the file's path.
- * @property {WorkspaceEntry[]} entries
+ * @property {RootEntry[]} entries
  */
 
 /**

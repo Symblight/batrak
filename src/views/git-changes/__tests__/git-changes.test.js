@@ -3,7 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../git-changes.js';
 
 /** @typedef {import('../git-changes.js').AcpGitChanges} AcpGitChanges */
@@ -37,7 +37,7 @@ describe('acp-git-changes', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $gitChanges.set(CHANGES);
     $gitRepo.set(REPO);
   });
@@ -45,7 +45,7 @@ describe('acp-git-changes', () => {
   afterEach(() => {
     $commitSelection.set(new Set());
     $notices.set([]);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 

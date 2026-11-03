@@ -3,7 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns } from '../../../stores/agents/agents.js';
 import { $agentViews } from '../../../stores/session-views/session-views.js';
 import { $agentsReveal, AGENTS_TAB_ID, activateTab, closeAllTabs, openAgents, openSettings } from '../../../stores/editor/editor.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../agents-tab.js';
 
 /** @typedef {import('../agents-tab.js').AcpAgentsTab} AcpAgentsTab */
@@ -34,7 +34,7 @@ describe('acp-agents-tab', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
   });
 
   afterEach(() => {
@@ -46,7 +46,7 @@ describe('acp-agents-tab', () => {
     $agentsReveal.set(null);
     $agentsQuery.set({ query: '', filter: 'all' });
     $agentsPending.set({ updating: [], checking: false });
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 

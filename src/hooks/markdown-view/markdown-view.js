@@ -1,7 +1,7 @@
 import { $markdownModes, modeOf, setMode } from '../../stores/markdown-view/markdown-view.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $settings } from '../../stores/settings/settings.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { projects } from '../projects/projects.js';
 
 /** @typedef {import('../markdown/types.js').MarkdownMode} MarkdownMode */
@@ -13,7 +13,7 @@ import { projects } from '../projects/projects.js';
  * @returns {{ project: string, rel: string } | null} `null` outside the shown project.
  */
 function placeOf(path) {
-  const project = $workspace.get()?.path;
+  const project = $project.get()?.path;
   if (!project) return null;
   const rel = projects.rel(project, projects.projectPathOf($worktrees.get(), path));
   return rel === null ? null : { project, rel };

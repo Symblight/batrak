@@ -17,7 +17,7 @@ import {
   parseTabs,
   settingsRevealed,
 } from '../editor.js';
-import { $workspace } from '../../workspace/workspace.js';
+import { $project } from '../../project/project.js';
 import { terminalTabId } from '../../tab-ids/tab-ids.js';
 
 describe('editor', () => {
@@ -29,7 +29,7 @@ describe('editor', () => {
   });
 
   it('opens the Agents tab, with no project too, at its add form or an agent until it has shown it', () => {
-    $workspace.set(null);
+    $project.set(null);
     openAgents({ add: true });
     expect($activePath.get()).to.equal(AGENTS_TAB_ID);
     expect(parseTabId(AGENTS_TAB_ID)).to.deep.equal({ kind: 'agents', path: '' });
@@ -71,13 +71,13 @@ describe('editor', () => {
 
   describe('closeProjectTab', () => {
     afterEach(() => {
-      $workspace.set(null);
+      $project.set(null);
       $projectTabs.setKey('/a', undefined);
       $projectTabs.setKey('/b', undefined);
     });
 
     it('closes a tab of a project that isn’t shown and leaves the shown one’s alone', () => {
-      $workspace.set({ path: '/a', name: 'a', rootId: null });
+      $project.set({ path: '/a', name: 'a', rootId: null });
       const shared = terminalTabId('same');
       openTab('/a/x.js');
       openTab(shared);

@@ -6,7 +6,7 @@ import { sessions } from '../../../hooks/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $projectExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { $sessionRoot, $sessionRootOpening } from '../../../stores/session-root/session-root.js';
-import { $openingPath, $workspace } from '../../../stores/workspace/workspace.js';
+import { $openingPath, $project } from '../../../stores/project/project.js';
 import '../files-view.js';
 
 /** @typedef {import('../files-view.js').AcpFilesView} AcpFilesView */
@@ -50,7 +50,7 @@ describe('acp-files-view', () => {
       },
       { shouldMockEvents: true },
     );
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
@@ -58,7 +58,7 @@ describe('acp-files-view', () => {
     $sessionRoot.set(null);
     $sessionRootOpening.set(false);
     $openingPath.set(null);
-    $workspace.set(null);
+    $project.set(null);
     $notices.set([]);
     clearMocks();
   });
@@ -212,7 +212,7 @@ describe('acp-files-view', () => {
     // Act
     const refreshing = el.refresh();
     await until(() => calls.some((c) => c.cmd === 'rescan_root'));
-    $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
+    $project.set({ path: '/q', name: 'q', rootId: 'r2' });
     finishScan();
     await refreshing;
     // Assert

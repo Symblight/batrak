@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectTerminalPanels, $projectTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openTerminal } from '../../../stores/terminals/terminals.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import '../terminals-view.js';
 
@@ -16,7 +16,7 @@ async function until(done) {
 describe('acp-terminals-view', () => {
   beforeEach(() => {
     mockIPC((cmd) => (cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : null));
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
   });
 
   afterEach(() => {
@@ -24,7 +24,7 @@ describe('acp-terminals-view', () => {
     $projectTerminalTabs.set({});
     $projectTerminalPanels.set({});
     $terminalFocus.set(null);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -50,11 +50,11 @@ describe('acp-terminals-view', () => {
     expect(tabView(el).tabs.map((t) => t.kind)).to.deep.equal(['terminal', 'terminal']);
 
     // Act: another project, with a terminal of its own, then back
-    $workspace.set({ path: '/q', name: 'q', rootId: null });
+    $project.set({ path: '/q', name: 'q', rootId: null });
     const c = openTerminal('/q', '/q', 'c');
     await el.updateComplete;
     const other = mounted(el);
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     await el.updateComplete;
 
     // Assert

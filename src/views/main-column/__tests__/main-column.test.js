@@ -5,7 +5,7 @@ import { $activePath, closeAllTabs, openAgents, openChanges, openSettings, openT
 import { $gitChanges } from '../../../stores/git/git.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
 import { markdownView } from '../../../hooks/markdown-view/markdown-view.js';
 import { app } from '../../../hooks/app/app.js';
@@ -24,7 +24,7 @@ describe('acp-main-column', () => {
       if (cmd === 'agents_view') return { installed: [], userAgents: [], registry: [], counts: { all: 0, updates: 0, off: 0 }, defaultAgent: null, errors: [], registryState: { checkedAt: null, offline: false, checking: false } };
       return null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     $terminals.set({ t1: running });
   });
 
@@ -32,7 +32,7 @@ describe('acp-main-column', () => {
     closeAllTabs();
     $terminals.set({});
     $gitChanges.set({ files: [], loaded: false, loading: false, error: null });
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -91,7 +91,7 @@ describe('acp-main-column', () => {
   it('shows a file in its editor view, with a match selected, and reads the selection back', async () => {
     mockIPC((cmd) => (cmd === 'read_file' ? 'first\nsecond needle\n' : null));
     // Files are read only once the project's root is open.
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     const { el } = await render();
     el.openFile('/p/a.txt', { line: 2, column: 8, length: 6 });
     const started = Date.now();

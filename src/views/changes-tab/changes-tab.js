@@ -2,7 +2,7 @@ import { html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
 import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
 import '../../components/changes-review/changes-review.js';
@@ -19,7 +19,7 @@ export class AcpChangesTab extends ViewElement {
   #selection = new StoreController(this, { store: $commitSelection });
   #comments = new StoreController(this, { store: $comments });
   #commentFocus = new StoreController(this, { store: $commentFocus });
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-changes-review']>} */
   #reviewRef = createRef();
 
@@ -53,7 +53,7 @@ export class AcpChangesTab extends ViewElement {
       .selection=${this.#selection.value}
       .expanded=${this.#review.expanded}
       .diffs=${this.#review.diffs}
-      .root=${this.#workspace.value?.path ?? null}
+      .root=${this.#project.value?.path ?? null}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
       @acp-change-toggle=${byId((id) => this.#review.toggle(id))}

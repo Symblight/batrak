@@ -12,7 +12,7 @@ import collapseIcon from '@material-design-icons/svg/outlined/fullscreen_exit.sv
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../hooks/projects/types.js').Workspace} Workspace */
+/** @typedef {import('../../hooks/projects/types.js').OpenProject} OpenProject */
 
 /**
  * @tag acp-toolbar
@@ -24,7 +24,7 @@ import styles from './toolbar.css?inline';
  */
 export class AcpToolbar extends LitElement {
   static properties = {
-    workspace: { attribute: false },
+    project: { attribute: false },
     projects: { attribute: false },
     unread: { attribute: false },
     home: {},
@@ -39,8 +39,8 @@ export class AcpToolbar extends LitElement {
 
   constructor() {
     super();
-    /** @type {Workspace | null} */
-    this.workspace = null;
+    /** @type {OpenProject | null} */
+    this.project = null;
     /** @type {readonly import('../../hooks/projects/types.js').Project[]} The project menu's list. */
     this.projects = [];
     /** @type {Readonly<Record<string, number>>} Unread sessions by project id, for the menu's dots. */
@@ -117,16 +117,16 @@ export class AcpToolbar extends LitElement {
   }
 
   render() {
-    const workspace = this.workspace;
+    const project = this.project;
     return html`${this.#renderColumnToggle('session', 'sessions column', 'start')}
       <acp-project-menu
         .projects=${this.projects}
-        .currentId=${workspace?.path ?? null}
+        .currentId=${project?.path ?? null}
         .unread=${this.unread}
         .home=${this.home}
       ></acp-project-menu>
-      ${workspace && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
-      ${workspace ? this.#renderBranch(this.git) : nothing}
+      ${project && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
+      ${project ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
       ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;
   }

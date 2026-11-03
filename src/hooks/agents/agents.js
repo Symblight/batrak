@@ -3,7 +3,7 @@ import { notify } from '../../stores/notices/notices.js';
 import { cacheAgentOptions, hasAgentOptions, whileLoadingOptions } from '../../stores/composer/composer.js';
 import { openAgents, openTab } from '../../stores/editor/editor.js';
 import { openLoginTerminal } from '../../stores/terminals/terminals.js';
-import { $workspacePath } from '../../stores/workspace/workspace.js';
+import { $projectPath } from '../../stores/project/project.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import {
@@ -161,15 +161,15 @@ export const agents = Object.freeze({
    */
   start() {
     return unlistenAll([
-      $workspacePath.subscribe((path) => {
+      $projectPath.subscribe((path) => {
         refresh(path);
         agents.search();
       }),
       startTrust(),
       listen('agents://changed', 'Watching agents.json failed', (/** @type {{ projectPath: string | null }} */ { projectPath }) => {
         // `null`: the user's file, which every project merges, or the registry.
-        if (projectPath === null || projectPath === $workspacePath.get()) {
-          refresh($workspacePath.get());
+        if (projectPath === null || projectPath === $projectPath.get()) {
+          refresh($projectPath.get());
           agents.search();
         }
         trustOnChanged(projectPath);
@@ -178,7 +178,7 @@ export const agents = Object.freeze({
         noteSignIn(event);
         if (event.state === 'done' && event.message) notify('info', event.message);
         // Its row and the picker say "Needs sign-in" until it's signed in.
-        if (event.projectPath === $workspacePath.get()) {
+        if (event.projectPath === $projectPath.get()) {
           agents.search();
           agents.refresh();
         }
@@ -195,7 +195,7 @@ export const agents = Object.freeze({
    * @param {string | null} methodId
    */
   async signIn(agentId, methodId) {
-    const projectPath = $workspacePath.get();
+    const projectPath = $projectPath.get();
     try {
       /** @type {LoginTab | null} */
       const login = await ipc.invoke('agents_sign_in', { projectPath, agentId, methodId });
@@ -208,7 +208,7 @@ export const agents = Object.freeze({
   /** @param {string} agentId */
   async cancelSignIn(agentId) {
     try {
-      await ipc.invoke('agents_sign_in_cancel', { projectPath: $workspacePath.get(), agentId });
+      await ipc.invoke('agents_sign_in_cancel', { projectPath: $projectPath.get(), agentId });
     } catch (err) {
       app.reportError('Cancelling the sign-in failed', err);
     }
@@ -224,7 +224,7 @@ export const agents = Object.freeze({
     const current = ++searches;
     try {
       /** @type {AgentsView} */
-      const view = await ipc.invoke('agents_view', { projectPath: $workspacePath.get(), query: query.query, filter: query.filter });
+      const view = await ipc.invoke('agents_view', { projectPath: $projectPath.get(), query: query.query, filter: query.filter });
       if (current === searches) $agentsView.set(view);
     } catch (err) {
       if (current === searches) app.reportError('Loading agents failed', err);
@@ -237,7 +237,7 @@ export const agents = Object.freeze({
    */
   async updateVersion(agentId) {
     try {
-      await whileUpdating([agentId], () => ipc.invoke('agents_update_version', { projectPath: $workspacePath.get(), agentId }));
+      await whileUpdating([agentId], () => ipc.invoke('agents_update_version', { projectPath: $projectPath.get(), agentId }));
     } catch (err) {
       app.reportError(`Updating ${nameOf(agentId)} failed`, err);
     }
@@ -249,7 +249,7 @@ export const agents = Object.freeze({
   async updateAll() {
     const ids = ($agentsView.get()?.installed ?? []).filter((a) => a.update).map((a) => a.id);
     try {
-      await whileUpdating(ids, () => ipc.invoke('agents_update_all', { projectPath: $workspacePath.get() }));
+      await whileUpdating(ids, () => ipc.invoke('agents_update_all', { projectPath: $projectPath.get() }));
     } catch (err) {
       app.reportError('Updating agents failed', err);
     }
@@ -274,13 +274,13 @@ export const agents = Object.freeze({
    * @param {string} agentId
    */
   loadOptions(agentId) {
-    return probed.get(agentId) ?? probe($workspacePath.get(), agentId, true);
+    return probed.get(agentId) ?? probe($projectPath.get(), agentId, true);
   },
 
   /** Opens the project's agents.json (the user's without a project) in a tab, creating it if missing. */
   async openFile() {
     try {
-      openTab(await ipc.invoke('agents_config_file', { projectPath: $workspacePath.get() }));
+      openTab(await ipc.invoke('agents_config_file', { projectPath: $projectPath.get() }));
     } catch (err) {
       app.reportError('Opening agents.json failed', err);
     }
@@ -293,7 +293,7 @@ export const agents = Object.freeze({
    * @returns {Promise<string>} Its id; rejects with the reason it wasn't added.
    */
   async add(agent) {
-    const projectPath = $workspacePath.get();
+    const projectPath = $projectPath.get();
     /** @type {string} */
     const id = await ipc.invoke('agents_add', { projectPath, agent });
     app.log('info', `agent ${id} added`);
@@ -308,13 +308,13 @@ export const agents = Object.freeze({
    * @returns {Promise<void>} Rejects with the reason it wasn't saved.
    */
   async update(agentId, agent) {
-    await ipc.invoke('agents_update', { projectPath: $workspacePath.get(), agentId, agent });
+    await ipc.invoke('agents_update', { projectPath: $projectPath.get(), agentId, agent });
   },
 
   /** @param {string} agentId */
   async setDefault(agentId) {
     try {
-      await ipc.invoke('agents_set_default', { projectPath: $workspacePath.get(), agentId });
+      await ipc.invoke('agents_set_default', { projectPath: $projectPath.get(), agentId });
     } catch (err) {
       app.reportError('Setting the default agent failed', err);
     }
@@ -330,7 +330,7 @@ export const agents = Object.freeze({
     const name = nameOf(agentId);
     try {
       /** @type {number} */
-      const stopped = await ipc.invoke('agents_set_enabled', { projectPath: $workspacePath.get(), agentId, enabled });
+      const stopped = await ipc.invoke('agents_set_enabled', { projectPath: $projectPath.get(), agentId, enabled });
       if (stopped > 0) notify('info', `${name} off · ${stopped} ${stopped === 1 ? 'session' : 'sessions'} stopped`);
     } catch (err) {
       app.reportError(`Turning ${name} ${enabled ? 'on' : 'off'} failed`, err);
@@ -345,7 +345,7 @@ export const agents = Object.freeze({
     const name = nameOf(agentId);
     try {
       /** @type {{ token: number }} */
-      const { token } = await ipc.invoke('agents_remove', { projectPath: $workspacePath.get(), agentId });
+      const { token } = await ipc.invoke('agents_remove', { projectPath: $projectPath.get(), agentId });
       // Added again, it's probed again.
       probed.delete(agentId);
       notify('info', `${name} removed`, {
@@ -365,7 +365,7 @@ export const agents = Object.freeze({
    * @param {string[] | null} [agentIds] Only these; `null`: all of them.
    */
   async importUserAgents(agentIds = null) {
-    const projectPath = $workspacePath.get();
+    const projectPath = $projectPath.get();
     if (projectPath === null) return;
     try {
       /** @type {string[]} */
@@ -378,6 +378,6 @@ export const agents = Object.freeze({
 
   /** Re-reads the open project's agents (versions an agent reported since, too). */
   refresh() {
-    refresh($workspacePath.get());
+    refresh($projectPath.get());
   },
 });

@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import { $workspace } from '../workspace/workspace.js';
+import { $project } from '../project/project.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 /** @typedef {import('../../hooks/sessions/types.js').SessionRoot} SessionRoot */
@@ -12,10 +12,10 @@ export const $sessionRoot = atom(/** @type {SessionRoot | null} */ (null));
 export const $sessionRootOpening = atom(false);
 
 /** The folder the Files tree lists: the active worktree session's while it's open, else the project. */
-export const $treeRoot = computed([$sessionRoot, $workspace], (session, workspace) =>
+export const $treeRoot = computed([$sessionRoot, $project], (session, project) =>
   session
     ? /** @type {TreeRoot} */ ({ rootId: session.rootId, path: session.path, label: session.label })
-    : /** @type {TreeRoot} */ ({ rootId: workspace?.rootId ?? null, path: workspace?.path ?? null, label: null }),
+    : /** @type {TreeRoot} */ ({ rootId: project?.rootId ?? null, path: project?.path ?? null, label: null }),
 );
 
 /** @param {SessionRoot | null} root */

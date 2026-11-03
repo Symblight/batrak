@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../file-column.js';
 
 /** @typedef {import('../file-column.js').AcpFileColumn} AcpFileColumn */
@@ -27,12 +27,12 @@ describe('acp-file-column', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
       return cmd === 'list_dir' ? [] : null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
   });
 
   const render = async () => /** @type {AcpFileColumn} */ (await fixture(html`<acp-file-column></acp-file-column>`));

@@ -1,6 +1,6 @@
 /**
  * Payload of the `roots://changed` event. All paths are relative.
- * @typedef {Object} WorkspaceChanges
+ * @typedef {Object} RootChanges
  * @property {string} rootId
  * @property {string[]} dirs Directories whose child list changed (`''` = root).
  * @property {string[]} added

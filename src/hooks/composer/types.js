@@ -54,7 +54,7 @@
  *   (picked before it started, or on their way), by config option id.
  * @property {RunTarget} runTarget
  * @property {boolean} [runTargetPicked] The user picked the run target; until then a draft's is the
- *   project's default (`$workspaceSettings`).
+ *   project's default (`$projectSettings`).
  * @property {boolean} started After the first message: the agent and run target are fixed.
  */
 

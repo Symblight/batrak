@@ -8,7 +8,7 @@ import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAge
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $sessionReads, forgetRead } from '../../../stores/session-read/session-read.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 
 /** @typedef {import('../types.js').Session} Session */
 
@@ -42,7 +42,7 @@ describe('sessions views', () => {
     $draftSessions.set({});
     $sessions.set([]);
     $historyResets.set([]);
-    $workspace.set(null);
+    $project.set(null);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
     clearMocks();
   });
@@ -65,7 +65,7 @@ describe('sessions views', () => {
 
   it("opens a terminal in a session's folder and shows the session", async () => {
     // Arrange
-    $workspace.set({ path: '/p', name: 'p', rootId: 'root:/p' });
+    $project.set({ path: '/p', name: 'p', rootId: 'root:/p' });
     $sessions.set([session({ id: 's1' }), session({ id: 's2', folder: '/p/other' })]);
     // Act
     await sessions.openInTerminal('s2');

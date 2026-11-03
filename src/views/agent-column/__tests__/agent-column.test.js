@@ -7,7 +7,7 @@ import { $pendingInput, addToChat, hasPendingInput } from '../../../stores/chat/
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $sessionNotices, setSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
 import { $cliStarting, $terminals, addSessionTerminal, setCliStarting, terminalExited } from '../../../stores/terminals/terminals.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { $fileDropTarget } from '../../../stores/file-drop/file-drop.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
@@ -86,7 +86,7 @@ describe('acp-agent-column', () => {
       if (cmd === 'session_cli_busy') return false;
       return null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     $agentList.set({
       ...$agentList.get(),
       defaultAgent: 'claude',
@@ -118,7 +118,7 @@ describe('acp-agent-column', () => {
     $sessions.set([]);
     $draftSessions.set({});
     $agentViews.set({});
-    $workspace.set(null);
+    $project.set(null);
     $sessionNotices.set({});
     $pendingInput.set({});
     $cliStarting.set([]);
@@ -496,9 +496,9 @@ describe('acp-agent-column', () => {
 
     // Act: the project closes (the welcome screen shows), then opens again with the session
     $activeSessionId.set(null);
-    $workspace.set(null);
+    $project.set(null);
     await el.updateComplete;
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     $activeSessionId.set('d1');
     await el.updateComplete;
     await chat().updateComplete;

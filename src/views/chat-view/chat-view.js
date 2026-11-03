@@ -18,7 +18,7 @@ import { $gitRepo } from '../../stores/git/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
-import { $rootId, $workspace, $workspaceSettings } from '../../stores/workspace/workspace.js';
+import { $rootId, $project, $projectSettings } from '../../stores/project/project.js';
 
 /** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
@@ -39,7 +39,7 @@ export class AcpChatView extends ViewElement {
     branches: { state: true },
   };
 
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #composer = new StoreController(this, { store: $composer });
   #optionsStatus = new StoreController(this, { store: $composerOptionsStatus });
   #contextUsage = new StoreController(this, { store: $activeContextUsage });
@@ -52,7 +52,7 @@ export class AcpChatView extends ViewElement {
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
   #localShared = new StoreController(this, { store: $localShared });
-  #workspaceSettings = new StoreController(this, { store: $workspaceSettings });
+  #projectSettings = new StoreController(this, { store: $projectSettings });
   /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
   #signIns = new StoreController(this, { store: $signIns });
   /** Whether a login's terminal is this window's; `#loginHere()` reads it. */
@@ -136,7 +136,7 @@ export class AcpChatView extends ViewElement {
     else if (action === 'open-terminal') sessions.openInTerminal(id);
     else if (action === 'show-login') {
       const terminal = this.#signInRun()?.terminal;
-      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $workspace.get()?.path ?? null);
+      if (terminal && this.#loginHere()) openLoginTerminal(terminal, $project.get()?.path ?? null);
     }
     else if (action === 'restart') sessions.restart(id);
     else if (action === 'turn-on-agent') {
@@ -160,7 +160,7 @@ export class AcpChatView extends ViewElement {
   /** The sign-in running or failed for the active notice's agent. */
   #signInRun() {
     const agentId = this.#notice.value?.signIn?.agentId;
-    return agentId ? signInOf($workspace.get()?.path ?? null, agentId) : null;
+    return agentId ? signInOf($project.get()?.path ?? null, agentId) : null;
   }
 
   /** Whether the active notice's sign-in runs its login in this window's terminal. */
@@ -201,8 +201,8 @@ export class AcpChatView extends ViewElement {
   }
 
   render() {
-    const workspace = this.#workspace.value;
-    if (workspace === null) return html``;
+    const project = this.#project.value;
+    if (project === null) return html``;
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
     return html`<acp-chat
@@ -212,7 +212,7 @@ export class AcpChatView extends ViewElement {
       .adapter=${sessions.adapter}
       .userId=${sessions.USER_ID}
       .partElements=${this.#parts.partElements}
-      .root=${this.#activeFolder.value ?? workspace.path}
+      .root=${this.#activeFolder.value ?? project.path}
       .fileOptions=${this.fileOptions}
       .composer=${composer}
       .optionsStatus=${this.#optionsStatus.value}
@@ -222,7 +222,7 @@ export class AcpChatView extends ViewElement {
       .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}
       .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
       .localShared=${this.#localShared.value}
-      .localTurns=${this.#workspaceSettings.value.localTurns}
+      .localTurns=${this.#projectSettings.value.localTurns}
       .permission=${hasSession ? this.#permission.value : null}
       .notice=${hasSession ? this.#notice.value : null}
       .signInRun=${hasSession ? this.#signInRun() : null}

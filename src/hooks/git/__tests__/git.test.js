@@ -3,7 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { projects } from '../../projects/projects.js';
 
 /** @typedef {import('../types.js').GitFileStatus} GitFileStatus */
@@ -102,7 +102,7 @@ describe('git', () => {
       git_head: () => REPO,
       git_status: () => ({ version: 1, unchanged: false, status: { repo: REPO, files: [FILE] } }),
     };
-    $workspace.set(null);
+    $project.set(null);
     $gitRepo.set(NO_REPO);
     $notices.set([]);
     setCommitSelection([]);
@@ -120,7 +120,7 @@ describe('git', () => {
     stop?.();
     stop = null;
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
   });
 
   it('reads the branch when a project opens, once for a burst of changes, and again on focus; it stops when told', async () => {

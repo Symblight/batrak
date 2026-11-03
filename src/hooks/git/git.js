@@ -1,12 +1,12 @@
 import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
-import { $rootId } from '../../stores/workspace/workspace.js';
+import { $rootId } from '../../stores/project/project.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { remoteLine } from './branch.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
-/** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').RootChanges} RootChanges */
 /** @typedef {import('./types.js').GitChangesView} GitChangesView */
 /** @typedef {import('./types.js').GitRepoView} GitRepoView */
 /** @typedef {import('./types.js').GitCommitted} GitCommitted */

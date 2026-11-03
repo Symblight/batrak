@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { $sessionRoot, $treeRoot, keepRecent, sessionRootAction, setSessionRoot } from '../session-root.js';
-import { $workspace } from '../../workspace/workspace.js';
+import { $project } from '../../project/project.js';
 
 /** @typedef {import('../../../hooks/sessions/types.js').Session} Session */
 
@@ -22,16 +22,16 @@ const session = (fields) =>
 describe('session root', () => {
   afterEach(() => {
     setSessionRoot(null);
-    $workspace.set(null);
+    $project.set(null);
   });
 
   it("is the project's folder, unlabeled, without a session root", () => {
-    $workspace.set({ path: '/p', name: 'p', rootId: 'root-1' });
+    $project.set({ path: '/p', name: 'p', rootId: 'root-1' });
     expect($treeRoot.get()).to.deep.equal({ rootId: 'root-1', path: '/p', label: null });
   });
 
   it("is the worktree's folder, labeled with its name, while one is open", () => {
-    $workspace.set({ path: '/p', name: 'p', rootId: 'root-1' });
+    $project.set({ path: '/p', name: 'p', rootId: 'root-1' });
     setSessionRoot({ sessionId: 'w', rootId: 'root-2', path: '/data/worktrees/app-1/fix-login-3f2a91bc/sub', label: 'fix-login-3f2a91bc' });
     expect($sessionRoot.get()?.sessionId).to.equal('w');
     expect($treeRoot.get()).to.deep.equal({ rootId: 'root-2', path: '/data/worktrees/app-1/fix-login-3f2a91bc/sub', label: 'fix-login-3f2a91bc' });

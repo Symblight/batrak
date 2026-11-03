@@ -17,7 +17,7 @@ describe('acp-toolbar', () => {
   it('shows the project menu with the listed projects, and the GitHub slot as a component of its own, not titles', async () => {
     const projects = [{ id: '/work/app', name: 'app', path: '/work/app' }];
     const el = await fixture(html`<acp-toolbar
-      .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
+      .project=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .projects=${projects}
       .unread=${{ '/work/app': 1 }}
       .home=${'/work'}
@@ -50,7 +50,7 @@ describe('acp-toolbar', () => {
     /** @type {import('../../../hooks/github/types.js').GithubPrReply} */
     const found = { ...REPLY, pr: { number: 9, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null, failedChecks: [] } };
     // Act
-    const el = await fixture(html`<acp-toolbar .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }} .git=${GIT} .githubReply=${found}></acp-toolbar>`);
+    const el = await fixture(html`<acp-toolbar .project=${{ path: '/work/app', name: 'app', rootId: 'r1' }} .git=${GIT} .githubReply=${found}></acp-toolbar>`);
     // Assert
     const card = /** @type {ShadowRoot} */ (el.shadowRoot).querySelector('acp-branch-popover');
     expect([card?.repo, card?.pr]).to.deep.equal([REPO, found.pr]);
@@ -58,7 +58,7 @@ describe('acp-toolbar', () => {
 
   it('says why git is unavailable in a tooltip', async () => {
     const el = await fixture(html`<acp-toolbar
-      .workspace=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
+      .project=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .git=${{ repo: null, error: 'git not found' }}
     ></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);

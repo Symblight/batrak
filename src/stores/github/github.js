@@ -1,6 +1,6 @@
 import { atom, computed } from 'nanostores';
 import { $gitRepo } from '../git/git.js';
-import { $rootId } from '../workspace/workspace.js';
+import { $rootId } from '../project/project.js';
 
 /** @typedef {import('../../hooks/github/types.js').GithubAccount} GithubAccount */
 /** @typedef {import('../../hooks/github/types.js').GithubBranchPr} GithubBranchPr */

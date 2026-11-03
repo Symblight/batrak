@@ -3,7 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $gitRepo } from '../../../stores/git/git.js';
 import { $githubAccount, $pullRequestHere } from '../../../stores/github/github.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { github } from '../github.js';
 
@@ -28,7 +28,7 @@ describe('github', () => {
     answers = { github_account: () => ({ state: 'signedOut' }) };
     $githubAccount.set(null);
     $githubAccount.set(null);
-    $workspace.set(null);
+    $project.set(null);
     $gitRepo.set({ repo: null, error: null });
     $notices.set([]);
     mockIPC(
@@ -49,7 +49,7 @@ describe('github', () => {
     const repo = { branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: 'u1', remote: onGithub };
     const stop = github.start();
     await until(() => sent('github_account').length === 1);
-    $workspace.set({ path: '/work/a', name: 'a', rootId: 'r1' });
+    $project.set({ path: '/work/a', name: 'a', rootId: 'r1' });
 
     // Act: not signed in, then signed in
     $gitRepo.set({ repo, error: null });
@@ -100,7 +100,7 @@ describe('github', () => {
     const found = { status: 'ok', pr: { number: 8, title: 'T', url: 'u', state: 'OPEN', isDraft: false, reviewDecision: null, checks: null }, defaultBranch: 'main', message: null };
     answers.github_pull_request = () => found;
     const onGithub = { name: 'origin', url: 'https://github.com/a/b.git', github: { owner: 'a', repo: 'b' } };
-    $workspace.set({ path: '/work/a', name: 'a', rootId: 'r1' });
+    $project.set({ path: '/work/a', name: 'a', rootId: 'r1' });
     $gitRepo.set({ repo: { branch: 'feat', sha: 's', detached: false, upstream: 'origin/feat', ahead: 0, behind: 0, upstreamSha: 'u1', remote: onGithub }, error: null });
     $githubAccount.set({ state: 'signedIn', login: 'octo' });
     await github.refreshPullRequest();

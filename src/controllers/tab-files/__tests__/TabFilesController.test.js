@@ -4,7 +4,7 @@ import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { TabFilesController } from '../TabFilesController.js';
 import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -73,12 +73,12 @@ describe('TabFilesController', () => {
       }
       return null;
     }, { shouldMockEvents: true });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     closeAllTabs();
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -182,8 +182,8 @@ describe('TabFilesController', () => {
   });
 
   describe('switching projects', () => {
-    const away = () => $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
-    const back = () => $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    const away = () => $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+    const back = () => $project.set({ path: '/p', name: 'p', rootId: 'r' });
 
     it('keeps unsaved edits while another project is shown', async () => {
       const { files, tab } = await edited();

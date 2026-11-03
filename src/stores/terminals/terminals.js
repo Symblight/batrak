@@ -2,7 +2,7 @@ import { atom, computed, map } from 'nanostores';
 import { $projectTabs, closeProjectTab, moveTab, openProjectTab, openTab } from '../editor/editor.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
-import { $workspace } from '../workspace/workspace.js';
+import { $project } from '../project/project.js';
 import { terminalTabId } from '../tab-ids/tab-ids.js';
 
 /** @typedef {import('../../hooks/terminals/types.js').TerminalExit} TerminalExit */
@@ -21,15 +21,15 @@ export const $projectTerminalTabs = map(/** @type {Record<string, EditorTabs | u
 
 /** The shown project's terminal tabs; with no project, those opened with none. */
 export const $terminalTabs = computed(
-  [$projectTerminalTabs, $workspace],
-  (projects, workspace) => projects[workspace?.path ?? NO_PROJECT] ?? NO_TABS,
+  [$projectTerminalTabs, $project],
+  (projects, project) => projects[project?.path ?? NO_PROJECT] ?? NO_TABS,
 );
 
 /** The editor's tab rules, applied to the terminal group (a second group, not a second tab system). */
 export const terminalGroup = tabGroup({
   $projects: $projectTerminalTabs,
   $tabs: $terminalTabs,
-  shownKey: () => $workspace.get()?.path ?? NO_PROJECT,
+  shownKey: () => $project.get()?.path ?? NO_PROJECT,
 });
 
 /**
@@ -39,7 +39,7 @@ export const terminalGroup = tabGroup({
 export const $projectTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
 
 /** The shown project's panel. */
-export const $terminalPanel = computed([$projectTerminalPanels, $workspace], (panels, workspace) => panels[workspace?.path ?? NO_PROJECT] ?? { open: false });
+export const $terminalPanel = computed([$projectTerminalPanels, $project], (panels, project) => panels[project?.path ?? NO_PROJECT] ?? { open: false });
 
 /**
  * @param {string | null} root The project's path; `null`: no project.
@@ -61,8 +61,8 @@ export const $projectTerminalPanelHeights = persistentMapStore('brama:layout:ter
 
 /** The shown project's panel height; `null` until it was resized (the token's default applies). */
 export const $terminalPanelHeight = computed(
-  [$projectTerminalPanelHeights, $workspace],
-  (heights, workspace) => heights[workspace?.path ?? NO_PROJECT] ?? null,
+  [$projectTerminalPanelHeights, $project],
+  (heights, project) => heights[project?.path ?? NO_PROJECT] ?? null,
 );
 
 /** @param {number} px */
@@ -73,12 +73,12 @@ function clampHeight(px) {
 /** @param {number} px The shown project's panel height; kept within the limits. */
 export function setTerminalPanelHeight(px) {
   if (!Number.isFinite(px)) return;
-  $projectTerminalPanelHeights.setKey($workspace.get()?.path ?? NO_PROJECT, clampHeight(px));
+  $projectTerminalPanelHeights.setKey($project.get()?.path ?? NO_PROJECT, clampHeight(px));
 }
 
 /** The shown project's panel goes back to the default height. */
 export function clearTerminalPanelHeight() {
-  const key = $workspace.get()?.path ?? NO_PROJECT;
+  const key = $project.get()?.path ?? NO_PROJECT;
   if (key in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(key, undefined);
 }
 
@@ -136,7 +136,7 @@ function patch(id, patch) {
 export function openTerminal(cwd, fallback, label) {
   const id = addTerminal(cwd, fallback, label);
   terminalGroup.open(terminalTabId(id));
-  setTerminalPanelOpen($workspace.get()?.path ?? null, true);
+  setTerminalPanelOpen($project.get()?.path ?? null, true);
   return id;
 }
 
@@ -148,7 +148,7 @@ export function openTerminal(cwd, fallback, label) {
  */
 function addTerminal(cwd, fallback, label) {
   const id = crypto.randomUUID();
-  const projectPath = $workspace.get()?.path ?? null;
+  const projectPath = $project.get()?.path ?? null;
   $terminals.set({
     ...$terminals.get(),
     [id]: { cwd, fallback, label, title: null, projectPath, status: 'starting', exit: null, error: null, login: null },

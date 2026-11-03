@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { $activeSessionId, $sessions } from '../sessions/sessions.js';
 import { $agentList } from '../agents/agents.js';
-import { $workspaceSettings } from '../workspace/workspace.js';
+import { $projectSettings } from '../project/project.js';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../hooks/composer/types.js').ModeRisk} ModeRisk */
@@ -167,7 +167,7 @@ function freshState(agentId) {
     agentId,
     configOptions: withValues(options, chosen),
     chosen,
-    runTarget: { kind: $workspaceSettings.get().defaultMode, branch: null },
+    runTarget: { kind: $projectSettings.get().defaultMode, branch: null },
     started: false,
   };
 }
@@ -203,7 +203,7 @@ const $composers = atom(/** @type {Readonly<Record<string, ComposerState>>} */ (
 
 /** The active session's composer: agent, its ACP config options, where it runs. */
 export const $composer = computed(
-  [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $workspaceSettings, $lastPicks],
+  [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $projectSettings, $lastPicks],
   (_composers, id, _sessions, agentId) => (id === null ? freshState(agentId) : composerOf(id)),
 );
 
@@ -235,7 +235,7 @@ export function composerOf(id) {
  * @returns {ComposerState}
  */
 function withDefaultTarget(state) {
-  const kind = $workspaceSettings.get().defaultMode;
+  const kind = $projectSettings.get().defaultMode;
   if (state.started || state.runTargetPicked || state.runTarget.kind === kind) return state;
   return { ...state, runTarget: { ...state.runTarget, kind } };
 }

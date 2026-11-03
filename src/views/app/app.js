@@ -20,7 +20,7 @@ import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $unreadSessions, markProjectRead } from '../../stores/session-read/session-read.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $rootId, $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -124,7 +124,7 @@ export class AcpApp extends ViewElement {
   #columnWidths = new StoreController(this, { store: $columnWidths });
   #activePath = new StoreController(this, { store: $activePath });
   #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #projects = new StoreController(this, { store: $projects });
   #unread = new StoreController(this, { store: $unreadSessions });
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
@@ -184,7 +184,7 @@ export class AcpApp extends ViewElement {
       this.renderRoot.querySelector('acp-agent-column')?.toggleView();
     } else if (is('markProjectRead') && !AcpApp.#takesKeys(e)) {
       e.preventDefault();
-      const projectId = this.#workspace.value?.path;
+      const projectId = this.#project.value?.path;
       if (projectId) markProjectRead(projectId);
     } else if (is('settings')) {
       e.preventDefault();
@@ -508,7 +508,7 @@ export class AcpApp extends ViewElement {
     return html`<acp-panel variant="window">
       <acp-toolbar
         slot="header"
-        .workspace=${this.#workspace.value}
+        .project=${this.#project.value}
         .projects=${this.#projects.value}
         .unread=${projects.unreadByProject($sessions.get(), this.#unread.value)}
         .home=${this.home}

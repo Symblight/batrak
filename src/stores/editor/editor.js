@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { isRecord, persistentMapStore } from '../persistent/persistent.js';
 import { $sessionsLoaded, $worktrees } from '../sessions/sessions.js';
-import { $workspace } from '../workspace/workspace.js';
+import { $project } from '../project/project.js';
 import { isUserAgentsFile } from '../agents/rules.js';
 import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
 import { NO_PROJECT, NO_TABS, tabGroup, tabsOf } from '../tab-group/tab-group.js';
@@ -91,8 +91,8 @@ function migrateLegacyTabs() {
   try {
     const raw = JSON.parse(legacy);
     if (parseTabs(raw)) {
-      const workspace = JSON.parse(localStorage.getItem('brama:workspace') ?? 'null');
-      if (isRecord(workspace) && typeof workspace.path === 'string') entries = [[workspace.path, raw]];
+      const project = JSON.parse(localStorage.getItem('brama:project') ?? localStorage.getItem('brama:workspace') ?? 'null');
+      if (isRecord(project) && typeof project.path === 'string') entries = [[project.path, raw]];
     } else if (isRecord(raw)) {
       entries = Object.entries(raw);
     }
@@ -121,13 +121,13 @@ try {
 export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
 
 /**
- * Tabs of the active project (`$workspace`), only files inside it or its worktree sessions' folders;
+ * Tabs of the active project (`$project`), only files inside it or its worktree sessions' folders;
  * while no project is open, the tabs that show no file (Settings).
  */
 export const $editorTabs = computed(
-  [$projectTabs, $workspace, $worktrees, $sessionsLoaded],
-  (projects, workspace, worktrees, loaded) => {
-    const root = workspace?.path ?? NO_PROJECT;
+  [$projectTabs, $project, $worktrees, $sessionsLoaded],
+  (projects, project, worktrees, loaded) => {
+    const root = project?.path ?? NO_PROJECT;
     const tabs = projects[root];
     if (!tabs) return NO_TABS;
     const own = loaded ? worktrees.filter((w) => w.projectId === root) : null;
@@ -144,7 +144,7 @@ export const $editorTabs = computed(
 const group = tabGroup({
   $projects: $projectTabs,
   $tabs: $editorTabs,
-  shownKey: () => $workspace.get()?.path ?? NO_PROJECT,
+  shownKey: () => $project.get()?.path ?? NO_PROJECT,
 });
 
 export const {

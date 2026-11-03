@@ -3,19 +3,19 @@ import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 import { $settings } from '../../../stores/settings/settings.js';
 import { DEFAULT_SETTINGS } from '../../../stores/settings/rules.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { markdownView } from '../markdown-view.js';
 
 describe('markdownView', () => {
   beforeEach(() => {
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     $markdownModes.setKey('/p', undefined);
     $sessions.set([]);
     $settings.set(DEFAULT_SETTINGS);
-    $workspace.set(null);
+    $project.set(null);
   });
 
   describe('a file’s view', () => {
@@ -62,7 +62,7 @@ describe('markdownView', () => {
     });
 
     it('is the default with no project open', () => {
-      $workspace.set(null);
+      $project.set(null);
 
       markdownView.setMode('/p/a.md', 'split');
 

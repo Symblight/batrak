@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../chat-view.js';
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
@@ -28,7 +28,7 @@ describe('acp-chat-view', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $draftSessions.set({ d1: '/p' });
     $activeSessionId.set('d1');
   });
@@ -37,7 +37,7 @@ describe('acp-chat-view', () => {
     $activeSessionId.set(null);
     $draftSessions.set({});
     $sessions.set([]);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -75,7 +75,7 @@ describe('acp-chat-view', () => {
     expect(el.chat, 'the chat the column reaches').to.equal(chat());
 
     // Act
-    $workspace.set(null);
+    $project.set(null);
     await el.updateComplete;
 
     // Assert

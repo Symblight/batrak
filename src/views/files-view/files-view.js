@@ -4,12 +4,12 @@ import { projects } from '../../hooks/projects/projects.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $sessionRootOpening, $treeRoot } from '../../stores/session-root/session-root.js';
-import { $openingPath } from '../../stores/workspace/workspace.js';
+import { $openingPath } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/file-tree/file-tree.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
-/** @typedef {import('../../hooks/git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../hooks/git/types.js').RootChanges} RootChanges */
 
 /**
  * @tag acp-files-view
@@ -31,7 +31,7 @@ export class AcpFilesView extends ViewElement {
     return /** @type {HTMLElementTagNameMap['acp-file-tree'] | null} */ (this.renderRoot.querySelector('acp-file-tree'));
   }
 
-  #onFsChange = (/** @type {WorkspaceChanges} */ { rootId, dirs }) => {
+  #onFsChange = (/** @type {RootChanges} */ { rootId, dirs }) => {
     if (rootId === $treeRoot.get().rootId) this.#tree?.reload(dirs);
   };
 
