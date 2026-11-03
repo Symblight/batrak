@@ -52,7 +52,7 @@
 .acp-chat__attach-icon {
   font-size: var(--acp-icon-size-lg);
 }
-/* Agent composer: an outlined field on a tray that holds where the session runs. */
+/* Agent composer: an outlined field on a tray that holds its footer's notes. */
 .acp-chat__composer {
   box-sizing: border-box;
   width: 100%;
@@ -85,8 +85,45 @@
 .acp-chat__model-picker {
   min-width: 0;
 }
-.acp-chat__run-target {
+/* The footer's note: a mode with full access, at the end. */
+.acp-chat__note {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  margin-inline-start: auto;
+  padding-inline-end: var(--acp-space-1);
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  color: var(--acp-color-error);
+
+  /* The full-access note is the mode menu's description too; a narrow composer drops it. */
+  @container acp-composer (width <= 500px) {
+    display: none;
+  }
+}
+.acp-chat__note-icon {
+  font-size: var(--acp-icon-size-sm);
+}
+/* The composer can't send: why, and the action that fixes it. */
+.acp-chat__blocked {
+  display: flex;
   flex: 1;
+  align-items: center;
+  gap: var(--acp-space-1);
+  min-width: 0;
+  padding-inline-start: var(--acp-space-1);
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-chat__blocked-text {
+  flex: 1;
+  min-width: 0;
+}
+.acp-chat__blocked-action {
+  --md-button-font-size: var(--acp-font-size-sm);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
 /* A session with no message yet: only the composer, centered. */
 .acp-chat__chat_empty {

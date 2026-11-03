@@ -137,7 +137,7 @@ impl Sessions {
     pub fn create(&self, req: CreateSession, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
         let record = self.new_record(&req)?;
         let state = self.insert(record, Some((sink_key, sink)))?;
-        tracing::info!(session = %state.id, agent = %req.agent_id, mode = ?req.mode, branch = ?state.record().branch, "session created");
+        tracing::info!(session = %state.id, agent = %req.agent_id, workspace = ?req.workspace, branch = ?state.record().branch, "session created");
         self.inner.start_in_background(&state);
         Ok(state.page())
     }
@@ -165,27 +165,22 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
-        let mut workspace_id = req.workspace_id.clone();
-        let (mode, placed) = match &req.workspace_id {
-            Some(id) => {
+        let (mode, placed, workspace_id) = match &req.workspace {
+            WorkspaceChoice::Main => {
+                (Mode::Local, env::place(Mode::Local, &project, self.inner.data_dir(), &req.session_id, &req.title, None)?, None)
+            }
+            WorkspaceChoice::Existing { id } => {
                 let workspace = self.inner.workspaces.get(id)?;
                 if workspace.project_path != project {
                     return Err(format!("workspace {id} belongs to another project"));
                 }
-                (Mode::Worktree, workspace.placement())
+                (Mode::Worktree, workspace.placement(), Some(workspace.id))
             }
-            // Until the composer picks a workspace (spec Phase 3): a worktree session gets a
-            // workspace of its own, checked out at its start.
-            None if req.mode == Mode::Worktree => {
-                let placed = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, req.base_branch.as_deref())?;
-                let workspace = self.inner.workspaces.store().update(&placed.id, |w| w.made_for = Some(req.session_id.clone()))?;
-                workspace_id = Some(workspace.id.clone());
-                (Mode::Worktree, workspace.placement())
+            // A draft workspace's first message places it, named after the title.
+            WorkspaceChoice::New { base_branch } => {
+                let workspace = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, base_branch.as_deref())?;
+                (Mode::Worktree, workspace.placement(), Some(workspace.id))
             }
-            None => (
-                req.mode,
-                env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?,
-            ),
         };
         Ok(SessionRecord {
             session_id: req.session_id.clone(),
@@ -318,7 +313,6 @@ impl Sessions {
         .await
         .map_err(|e| e.to_string())?;
         tracing::info!(session = %id, "session removed");
-        self.drop_workspace_made_for(id).await;
         Ok(())
     }
 
@@ -555,7 +549,7 @@ use self::start::*;
 use self::state::*;
 use self::turn::*;
 pub use cli::{CliDraft, CliOpened, CliWindow};
-pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions};
+pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions, WorkspaceChoice};
 pub use sign_in::{Login, LoginExit, LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};
 pub use sync::SyncReport;

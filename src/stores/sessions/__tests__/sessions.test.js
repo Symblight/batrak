@@ -2,15 +2,14 @@ import { expect } from '@esm-bundle/chai';
 import {
   $activeSessionId,
   $draftSessions,
-  $localShared,
   $pinnedSessions,
   $sessions,
   newSession,
   removeSession,
   setProjectSessions,
   setSessionPinned,
-  showProject,
-  setSessionStatus,
+  showWorkspace,
+  workspaceOf,
   startSession,
   touchSession,
 } from '../sessions.js';
@@ -61,14 +60,14 @@ describe('sessions', () => {
     $activeSessionId.set('a');
     $sessions.set([]);
     $activeSessionId.set(null);
-    showProject('/p');
+    showWorkspace('/p', 'main', '/p');
     const draft = $activeSessionId.get();
     expect(draft !== null && draft in $draftSessions.get(), 'a draft meanwhile').to.equal(true);
     setProjectSessions('/p', [listed('a', '/p'), listed('b', '/p')]);
     expect($activeSessionId.get()).to.equal('a');
 
     $activeSessionId.set(null);
-    showProject('/r');
+    showWorkspace('/r', 'main', '/r');
     const chosen = newSession('/r');
     $sessions.set([...$sessions.get(), listed('c', '/r')]);
     $activeSessionId.set('c');
@@ -77,24 +76,36 @@ describe('sessions', () => {
     expect($activeSessionId.get(), 'a draft the user opened stays').to.equal(chosen);
   });
 
-  it("counts the other local sessions running in the active session's project", () => {
-    /** @param {string} project @param {'local' | 'worktree'} mode @param {import('../../../hooks/sessions/types.js').SessionStatus} status */
-    const add = (project, mode, status) => {
-      const id = newSession(project);
-      startSession(id, { title: 'T', agentId: 'a', config: {}, mode });
-      setSessionStatus(id, status);
-      return id;
-    };
-    add('/p', 'local', 'working');
-    add('/p', 'local', 'idle');
-    add('/p', 'local', 'stopped');
-    add('/p', 'worktree', 'working');
-    add('/q', 'local', 'working');
-    const draft = newSession('/p');
-    $activeSessionId.set(draft);
-    expect($localShared.get(), 'from a draft').to.equal(2);
-    $activeSessionId.set(add('/p', 'local', 'queued'));
-    expect($localShared.get(), 'not counting itself').to.equal(2);
+  it("shows a workspace's last shown chat, else its newest, else a new draft of it; its drafts stay its own", () => {
+    // Arrange
+    $sessions.set([
+      listed('main-old', '/p'),
+      listed('ws-old', '/p', { workspaceId: 'w1', folder: '/wt/w1', createdAt: '2026-01-01T00:00:00.000Z' }),
+      listed('ws-new', '/p', { workspaceId: 'w1', folder: '/wt/w1', createdAt: '2026-01-02T00:00:00.000Z' }),
+    ]);
+    $activeSessionId.set('ws-old');
+    $activeSessionId.set('main-old');
+
+    // Act
+    const shown = [];
+    showWorkspace('/p', 'w1', '/wt/w1');
+    shown.push($activeSessionId.get());
+    showWorkspace('/p', 'w1', '/wt/w1');
+    shown.push($activeSessionId.get());
+    $activeSessionId.set(null);
+    showWorkspace('/p', 'w1', null);
+    shown.push($activeSessionId.get());
+    showWorkspace('/p', 'w2', '/wt/w2');
+    const draft = /** @type {string} */ ($activeSessionId.get());
+    showWorkspace('/p', 'main', '/p');
+    shown.push($activeSessionId.get());
+    const reused = newSession('/p', 'w2');
+    const mainDraft = newSession('/p', 'main');
+
+    // Assert
+    expect(shown, 'its last, kept while shown, its newest, Main\'s last').to.deep.equal(['ws-old', 'ws-old', 'ws-new', 'main-old']);
+    expect([workspaceOf(draft), reused], "a draft of w2, reused for w2's next new chat").to.deep.equal(['w2', draft]);
+    expect([workspaceOf(mainDraft), mainDraft === draft], "Main's new chat is its own").to.deep.equal(['main', false]);
   });
 
   it('starts a session active as of its creation', () => {

@@ -2,7 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
-import { $workspaceOpening, $workspaces } from '../../../stores/workspaces/workspaces.js';
+import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../file-column.js';
 
 /** @typedef {import('../file-column.js').AcpFileColumn} AcpFileColumn */
@@ -34,6 +34,7 @@ describe('acp-file-column', () => {
 
   afterEach(() => {
     clearMocks();
+    setActiveWorkspace('/p', 'main');
     selectSession(null);
     $sessions.set([]);
     $workspaces.set([]);
@@ -151,12 +152,12 @@ describe('acp-file-column', () => {
         skeleton: root.querySelector('[role="status"][aria-label="Opening folder"]') !== null,
       };
     };
-    $workspaces.set([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one' })]);
+    setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one' })], '/p');
     $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c', projectId: '/p', workspaceId: 'w1' }])));
 
     // Act: switch to the workspace while its root scans
     $workspaceOpening.set('/wt/one');
-    selectSession('c');
+    setActiveWorkspace('/p', 'w1');
     await /** @type {HTMLElementTagNameMap['acp-files-view']} */ (el.querySelector('acp-files-view')).updateComplete;
     await tree.updateComplete;
 

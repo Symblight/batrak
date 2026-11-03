@@ -65,10 +65,11 @@ export const input = Object.freeze({
    * @returns {Promise<SendOutcome>}
    */
   async startTerminal(id, input, title) {
-    const { agentId, runTarget } = composerOf(id);
+    const { agentId } = composerOf(id);
     const name = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'The agent';
     // In a worktree, a path of the project stays absolute: it's the user's file, not the worktree's copy.
-    const root = runTarget.kind === 'local' ? ($draftSessions.get()[id] ?? null) : null;
+    const draft = $draftSessions.get()[id];
+    const root = draft?.workspaceId === 'main' ? draft.projectId : null;
     if (await controller.startInTerminal(id, title, cliPromptOf(input.parts, root))) return { taken: true };
     const reason = $sessionNotices.get()[id]?.message ?? `${name} didn't start`;
     setSessionNotice(id, { kind: 'error', message: reason });

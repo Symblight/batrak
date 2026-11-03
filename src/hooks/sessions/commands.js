@@ -7,8 +7,7 @@ import { ipc } from '../ipc/ipc.js';
 /** @typedef {import('./types.js').PromptInput} PromptInput */
 /** @typedef {import('./types.js').SyncReport} SyncReport */
 /** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
-/** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../projects/types.js').ProjectSettings} ProjectSettings */
+/** @typedef {import('../workspaces/types.js').WorkspaceChoice} WorkspaceChoice */
 
 /** The Rust commands of sessions, their folders and the project's settings. */
 
@@ -38,28 +37,26 @@ export function onSessionsSynced(callback) {
 }
 
 /**
- * A draft's first message: creates the session (under the draft's id) and starts its agent in the
- * background. Rejects when a worktree one has no repository or base to start from.
+ * A draft's first message: creates the session (under the draft's id) in its workspace and starts
+ * its agent in the background. Rejects when a new workspace has no repository or base to start from.
  * @param {Object} session
  * @param {string} session.sessionId
  * @param {string} session.projectPath
  * @param {string} session.agentId
- * @param {RunTargetKind} session.mode
  * @param {string} session.title
  * @param {Record<string, string>} session.config The agent's config options picked in the draft, by id.
- * @param {string | null} session.baseBranch `worktree`: the branch to start from; `null` for HEAD.
+ * @param {WorkspaceChoice} session.workspace
  * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
  * @returns {Promise<Session>}
  */
-export function sessionCreate({ sessionId, projectPath, agentId, mode, title, config, baseBranch }, onEvent) {
+export function sessionCreate({ sessionId, projectPath, agentId, title, config, workspace }, onEvent) {
   return ipc.invoke('session_create', {
     sessionId,
     projectPath,
     agentId,
-    mode,
     title,
     config,
-    baseBranch,
+    workspace,
     channel: channelOf(onEvent),
   });
 }
@@ -165,10 +162,9 @@ export function sessionRestart(sessionId) {
  * @typedef {Object} CliDraft
  * @property {string} projectPath
  * @property {string} agentId
- * @property {import('../composer/types.js').RunTargetKind} mode
  * @property {string} title
  * @property {Record<string, string>} [config]
- * @property {string | null} [baseBranch]
+ * @property {WorkspaceChoice} workspace
  * @property {string} [prompt] Its first message, which the CLI starts with.
  */
 
@@ -234,14 +230,6 @@ export function sessionOpenLog(sessionId) {
   return ipc.invoke('session_open_log', { sessionId });
 }
 
-/**
- * The project's `.brama/workspace.json` settings; missing or invalid ones are the defaults.
- * @param {string} projectPath
- * @returns {Promise<ProjectSettings>}
- */
-export function workspaceSettings(projectPath) {
-  return ipc.invoke('project_settings', { projectPath });
-}
 
 /**
  * A worktree session's changed files since it started (its commits and uncommitted work).

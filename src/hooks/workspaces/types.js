@@ -20,6 +20,26 @@
  */
 
 /**
+ * A workspace created without a name (`$draftWorkspaces`): in the page only until its first
+ * message places it, named after that message.
+ * @typedef {Object} DraftWorkspace
+ * @property {string} id `draft-…`
+ * @property {string} projectPath
+ * @property {string | null} baseBranch `null`: the project's base branch.
+ */
+
+/**
+ * Where a draft's first message creates its chat (`session_create`'s `workspace`): Main, a stored
+ * workspace, or a new one placed from a draft workspace.
+ * @typedef {{ kind: 'main' } | { kind: 'existing', id: string } | { kind: 'new', baseBranch: string | null }} WorkspaceChoice
+ */
+
+/**
+ * What a workspace's dot says: the strongest of its chats' states (`statusOf()`).
+ * @typedef {'waiting' | 'error' | 'working' | 'unread' | 'idle'} WorkspaceStatus
+ */
+
+/**
  * What deleting a workspace would touch (`workspace_delete_preview`).
  * @typedef {Object} DeletePreview
  * @property {number} uncommitted

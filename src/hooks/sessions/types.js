@@ -217,6 +217,14 @@
  */
 
 /**
+ * A new chat with no message yet (`$draftSessions`): its project and its workspace (`main`, a
+ * workspace's id or a draft workspace's).
+ * @typedef {Object} DraftSession
+ * @property {string} projectId
+ * @property {string} workspaceId
+ */
+
+/**
  * A worktree session's folder: its files open in tabs of the project, beside the project's own.
  * @typedef {Object} WorktreeFolder
  * @property {string} sessionId

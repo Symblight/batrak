@@ -126,7 +126,6 @@ pub fn run() {
             commands::agents::agents_update_version,
             commands::agents::agents_update_all,
             commands::agents::agents_view,
-            commands::agents::project_settings,
             commands::agents::agents_config_file,
             commands::agents::agents_probe_options,
             commands::agents::agents_sign_in,

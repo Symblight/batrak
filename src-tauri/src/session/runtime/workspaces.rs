@@ -6,8 +6,6 @@ impl Sessions {
     /// Deletes a workspace: each of its chats is removed as Remove session removes one (a running
     /// turn ends `cancelled`), then its folder (`Workspaces::discard`).
     pub async fn delete_workspace(&self, id: &str, keep_branch: bool) -> Result<(), String> {
-        // Its chats' removal leaves it to this delete (and its Keep branch).
-        self.inner.workspaces.store().update(id, |w| w.made_for = None)?;
         for chat in self.chats_of(id) {
             self.remove(&chat).await?;
         }
@@ -128,22 +126,27 @@ impl Sessions {
         tokio::task::spawn_blocking(move || workspaces.check_out(&id)).await.map_err(|e| e.to_string())?
     }
 
-    /// After a chat's removal: deletes the workspace made for it (`made_for`) once it has no
-    /// other chat, keeping its work on its branch, as removing a worktree session did. Goes with
-    /// the Phase 1 bridge.
-    pub(super) async fn drop_workspace_made_for(&self, chat: &str) {
-        let made = self.inner.workspaces.store().list(None).into_iter().find(|w| w.made_for.as_deref() == Some(chat));
-        let Some(workspace) = made.filter(|w| self.chats_of(&w.id).is_empty()) else { return };
-        let workspaces = self.inner.workspaces.clone();
-        let removed = tokio::task::spawn_blocking(move || workspaces.discard(&workspace.id, true)).await;
-        if let Err(e) = removed.map_err(|e| e.to_string()).and_then(|r| r) {
-            tracing::warn!(session = %chat, "deleting the chat's workspace failed: {e}");
-        }
-    }
-
     /// The ids of a workspace's chats.
     fn chats_of(&self, workspace: &str) -> Vec<String> {
         self.inner.known().into_iter().filter(|r| r.workspace_id.as_deref() == Some(workspace)).map(|r| r.session_id).collect()
+    }
+}
+
+impl Inner {
+    /// A workspace the agent names (`NameSource::Agent`) takes its first chat's agent title.
+    pub(super) fn name_workspace_after(&self, chat: &SessionRecord) {
+        let (Some(id), Some(title)) = (chat.workspace_id.as_deref(), chat.agent_title.as_deref()) else { return };
+        let first = self
+            .known()
+            .into_iter()
+            .filter(|r| r.workspace_id.as_deref() == Some(id))
+            .min_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
+        if first.is_none_or(|r| r.session_id != chat.session_id) {
+            return;
+        }
+        if let Err(e) = self.workspaces.follow_title(id, title) {
+            tracing::warn!(workspace = %id, "naming the workspace after its chat failed: {e}");
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+import { $draftWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { sessions } from '../sessions.js';
@@ -41,6 +42,7 @@ describe('sessions views', () => {
     $terminals.set({});
     $activeSessionId.set(null);
     $draftSessions.set({});
+    $draftWorkspaces.set({});
     $sessions.set([]);
     $historyResets.set([]);
     $project.set(null);
@@ -216,6 +218,7 @@ describe('sessions keeps the active session in its view', () => {
     $terminals.set({});
     $activeSessionId.set(null);
     $draftSessions.set({});
+    $draftWorkspaces.set({});
     $sessions.set([]);
     $historyResets.set([]);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
@@ -305,8 +308,69 @@ describe('sessions keeps the active session in its view', () => {
     expect($activeShownView.get()).to.equal('terminal');
   });
 
+  it("creates a draft's chat in its workspace: Main, a stored one, or a new one from a draft workspace", async () => {
+    /** @type {[string, unknown, string][]} */
+    const cases = [
+      ['main', { kind: 'main' }, 'local'],
+      ['w1', { kind: 'existing', id: 'w1' }, 'worktree'],
+      ['draft-1', { kind: 'new', baseBranch: 'dev' }, 'worktree'],
+    ];
+    for (const [workspaceId, workspace, mode] of cases) {
+      // Arrange
+      calls = [];
+      $draftWorkspaces.set({ 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: 'dev' } });
+      $draftSessions.set({ d1: { projectId: '/p', workspaceId } });
+      $activeSessionId.set('d1');
+      setAgentView('claude', 'chat');
+
+      // Act
+      sessions.start('d1', 'Fix the build');
+      await new Promise((r) => setTimeout(r, 0));
+
+      // Assert
+      const create = /** @type {Record<string, unknown> | undefined} */ (calls.find((c) => c.cmd === 'session_create')?.args);
+      expect(create?.workspace, workspaceId).to.deep.equal(workspace);
+      expect($sessions.get().find((s) => s.id === 'd1')?.mode, `${workspaceId}: listed meanwhile`).to.equal(mode);
+      $sessions.set([]);
+    }
+  });
+
+  it("puts a draft workspace's second chat in the workspace its first chat is placing, not a new one", async () => {
+    // Arrange: the first chat's create answers only when released
+    /** @type {(session: unknown) => void} */
+    let release = () => {};
+    mockIPC((cmd, args) => {
+      calls.push({ cmd, args });
+      if (cmd !== 'session_create') return null;
+      const { sessionId } = /** @type {{ sessionId: string }} */ (args);
+      const session = { id: sessionId, projectId: '/p', workspaceId: 'w9', folder: '/wt/w9', status: 'preparing', mode: 'worktree' };
+      return sessionId === 'd1' ? new Promise((resolve) => (release = resolve)).then(() => session) : session;
+    });
+    $draftWorkspaces.set({ 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: null } });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'draft-1' }, d2: { projectId: '/p', workspaceId: 'draft-1' } });
+    setAgentView('claude', 'chat');
+    $activeSessionId.set('d1');
+    sessions.start('d1', 'First');
+    $activeSessionId.set('d2');
+
+    /** @param {number} n */
+    const creates = async (n) => {
+      for (let i = 0; i < 50 && calls.filter((c) => c.cmd === 'session_create').length < n; i++) await new Promise((r) => setTimeout(r, 5));
+    };
+
+    // Act
+    sessions.start('d2', 'Second');
+    await creates(1);
+    release(null);
+    await creates(2);
+
+    // Assert
+    const workspaces = calls.filter((c) => c.cmd === 'session_create').map((c) => /** @type {{ workspace: unknown }} */ (c.args).workspace);
+    expect(workspaces).to.deep.equal([{ kind: 'new', baseBranch: null }, { kind: 'existing', id: 'w9' }]);
+  });
+
   it("shows a draft's composer even when its agent's sessions open in the terminal", async () => {
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     await sessions.reconcile();
@@ -316,7 +380,7 @@ describe('sessions keeps the active session in its view', () => {
   });
 
   it("starts a draft's CLI with its first message and the draft's choices", async () => {
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     await sessions.startInTerminal('d1', 'Fix the build', 'fix the build please');
@@ -325,16 +389,16 @@ describe('sessions keeps the active session in its view', () => {
     expect(/** @type {{ draft: Record<string, unknown> }} */ (open?.args).draft).to.include({
       projectPath: '/p',
       agentId: 'claude',
-      mode: 'local',
       title: 'Fix the build',
       prompt: 'fix the build please',
     });
+    expect(/** @type {{ draft: Record<string, unknown> }} */ (open?.args).draft.workspace, 'in Main').to.deep.equal({ kind: 'main' });
     expect($sessions.get().map((s) => s.id), 'listed').to.deep.equal(['d1']);
     expect($activeShownView.get()).to.equal('terminal');
   });
 
   it("answers whether a draft's CLI started: a refused one is a draft again", async () => {
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     cliFails = new Error('no npx');
@@ -351,7 +415,7 @@ describe('sessions keeps the active session in its view', () => {
     await sessions.remove('s1');
     expect($sessionReads.get().s1, 'removed').to.equal(undefined);
 
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     cliFails = new Error('no npx');
@@ -387,7 +451,7 @@ describe('sessions keeps the active session in its view', () => {
       ...$agentList.get(),
       agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: false } })],
     });
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     expect(sessions.startsInTerminal('d1')).to.equal(false);

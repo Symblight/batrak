@@ -1,0 +1,88 @@
+:host {
+  display: contents;
+}
+
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
+
+.acp-workspace-dialog__head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-1);
+}
+
+.acp-workspace-dialog__headline {
+  margin: 0;
+  font: var(--acp-dialog-headline-font);
+  color: var(--acp-color-on-surface);
+}
+
+.acp-workspace-dialog__subtitle {
+  margin: 0;
+  font: var(--acp-dialog-detail-font);
+  color: var(--acp-color-on-surface-variant);
+}
+
+/* Room above the first field's floating label. */
+.acp-workspace-dialog__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-3);
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding-block-start: var(--acp-space-2);
+}
+
+.acp-workspace-dialog__row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-1);
+  min-width: 0;
+}
+
+/* The app's dense field (shadow.css), the dialog's width. */
+.acp-workspace-dialog__field {
+  display: block;
+  width: 100%;
+}
+
+.acp-workspace-dialog__picker {
+  cursor: pointer;
+}
+
+.acp-workspace-dialog__leading {
+  display: inline-flex;
+  align-items: center;
+}
+
+.acp-workspace-dialog__icon {
+  font-size: var(--acp-icon-size-sm);
+}
+
+.acp-workspace-dialog__note {
+  min-height: 16px;
+  padding-inline: var(--acp-space-4);
+  font: 400 12px/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-workspace-dialog__mono,
+.acp-workspace-dialog__branch {
+  font-family: var(--acp-font-family-mono);
+}
+
+.acp-workspace-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--acp-space-2);
+  width: 100%;
+  padding-block-start: var(--acp-dialog-footer-space);
+}
+
+
+/* In the filled button's icon slot: its own text color, no fill of its own. */
+.acp-workspace-dialog__key {
+  --acp-shortcut-background: transparent;
+
+  font-size: var(--acp-font-size-xs);
+}

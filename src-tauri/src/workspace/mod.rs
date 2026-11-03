@@ -48,11 +48,6 @@ pub struct WorkspaceRecord {
     /// A turn of one of its chats started or ended.
     #[serde(default)]
     pub last_active_at: Option<String>,
-    /// The chat it was made for (a worktree session moved in, or the Worktree run target): it
-    /// goes when that chat is removed and it has no other. Until workspaces can be deleted in the
-    /// page (spec Phase 3), so Remove still cleans a worktree session up.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub made_for: Option<String>,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -210,7 +205,6 @@ impl Workspaces {
             base_branch,
             created_at: crate::session::iso_now(),
             last_active_at: None,
-            made_for: None,
         };
         self.inner.store.insert(record.clone())?;
         tracing::info!(workspace = %record.id, branch = %record.branch, "workspace created");
@@ -281,7 +275,6 @@ impl Workspaces {
             base_branch: None,
             created_at: session.created_at.clone(),
             last_active_at: session.last_activity_at.clone(),
-            made_for: Some(session.session_id.clone()),
         };
         self.inner.store.insert(record.clone())?;
         tracing::info!(workspace = %record.id, session = %session.session_id, "a worktree session became a workspace");
@@ -301,6 +294,27 @@ impl Workspaces {
         })?;
         self.changed(&record.project_path);
         Ok(record)
+    }
+
+    /// Takes `title` as its name while its chats name it (`NameSource::Agent`); the page hears
+    /// of a change.
+    pub fn follow_title(&self, id: &str, title: &str) -> Result<(), String> {
+        let follows = |r: &WorkspaceRecord| r.name_source == NameSource::Agent && r.name != title;
+        if !follows(&self.get(id)?) {
+            return Ok(());
+        }
+        let mut renamed = false;
+        let record = self.inner.store.update(id, |r| {
+            if follows(r) {
+                title.clone_into(&mut r.name);
+                renamed = true;
+            }
+        })?;
+        if renamed {
+            tracing::info!(workspace = %id, "the workspace took its chat's title");
+            self.changed(&record.project_path);
+        }
+        Ok(())
     }
 
     /// Deletes a workspace's folder and its record. Uncommitted work is first committed onto its

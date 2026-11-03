@@ -1,5 +1,5 @@
 import { app } from '../app/app.js';
-import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume, workspaceSettings } from './commands.js';
+import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume } from './commands.js';
 import { actions } from './actions.js';
 import { CLI_SIZE, openCli, restartCli, cliBusy, toChat } from './cli.js';
 import { cancelIdleStop, stopWhenIdle } from './idle.js';
@@ -26,7 +26,7 @@ import {
   selectSession,
   setListedSessions,
   setProjectSessions,
-  showProject,
+  showWorkspace,
   startSession,
   upsertSession,
 } from '../../stores/sessions/sessions.js';
@@ -34,7 +34,10 @@ import { $activePermission, setSessionNotice } from '../../stores/session-runtim
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
 import { forgetPendingInput } from '../../stores/chat/chat.js';
 import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
-import { $projectPath, setProjectSettings } from '../../stores/project/project.js';
+import { $projectPath } from '../../stores/project/project.js';
+import { $activeWorkspace, $activeWorkspaceId, $draftWorkspaces, MAIN } from '../../stores/workspaces/workspaces.js';
+import { choiceOf } from '../workspaces/rules.js';
+import { computed } from 'nanostores';
 
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
@@ -50,10 +53,42 @@ function onSessionEvent(event) {
   if (event.kind === 'sign-in') agents.refresh();
 }
 
+/**
+ * The shown project's workspace, with its folder (`null` for a draft workspace); `null` while its
+ * record loads.
+ */
+const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $activeWorkspace, $draftWorkspaces], (projectPath, id, workspace, drafts) => {
+  if (projectPath === null) return null;
+  if (id === MAIN) return { projectPath, id, folder: projectPath };
+  if (workspace !== null) return { projectPath, id, folder: workspace.folder };
+  return drafts[id] ? { projectPath, id, folder: null } : null;
+});
+
+/**
+ * Where a draft's chat is created, and the mode its record starts with.
+ * @param {string} id A draft's.
+ */
+function placeOf(id) {
+  const draft = $draftSessions.get()[id];
+  if (draft === undefined) return null;
+  const workspace = choiceOf(draft.workspaceId, $draftWorkspaces.get());
+  return {
+    projectPath: draft.projectId,
+    draftWorkspace: draft.workspaceId,
+    workspace,
+    mode: /** @type {'local' | 'worktree'} */ (workspace.kind === 'main' ? 'local' : 'worktree'),
+  };
+}
+
+/**
+ * Draft workspaces whose first chat is being created: their id → the id of the workspace placed for
+ * them (`null` when that failed), so a later chat of theirs joins it rather than placing another.
+ * @type {Map<string, Promise<string | null>>}
+ */
+const placing = new Map();
+
 /** @type {Set<string>} Sessions whose event channel this window opened. */
 const opened = new Set();
-/** Sequence of workspace.json reads; only the latest answer is kept. */
-let settingsLoad = 0;
 /** @type {string | null} The shown session once its agent's list is current: its view is acted on from then. */
 let ready = null;
 /** @type {Promise<boolean>} The last reconcile; the next waits for it. */
@@ -93,11 +128,17 @@ async function init() {
     show(id);
   });
   $projectPath.subscribe((path) => {
-    loadSettings(path);
     if (path === null) return;
     // Before showing: the shown session's one-agent sync then waits for this one.
     sync(path);
-    showProject(path);
+  });
+  // The shown workspace's chat: kept if it's one already, else its last, newest or a new draft.
+  let shownKey = '';
+  $shownWorkspace.subscribe((shown) => {
+    const key = shown === null ? '' : `${shown.projectPath}\n${shown.id}\n${shown.folder}`;
+    if (key === shownKey) return;
+    shownKey = key;
+    if (shown !== null) showWorkspace(shown.projectPath, shown.id, shown.folder);
   });
   // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
   // last time are asked now.
@@ -237,18 +278,17 @@ function startsInTerminal(id) {
  * @returns {Promise<boolean>} Its CLI started.
  */
 async function startInTerminal(id, title, prompt) {
-  const projectPath = $draftSessions.get()[id];
-  const { agentId, chosen: config, runTarget } = composerOf(id);
-  if (projectPath === undefined || agentId === null) return false;
-  const mode = runTarget.kind;
-  const baseBranch = mode === 'worktree' ? runTarget.branch : null;
+  const place = placeOf(id);
+  const { agentId, chosen: config } = composerOf(id);
+  if (place === null || agentId === null) return false;
+  const { projectPath, workspace, mode } = place;
   startComposer(id);
   startSession(id, { title, agentId, config, mode });
   setSessionNotice(id, null);
   setCliStarting(id, true);
   const label = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'Agent';
   try {
-    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, mode, title, config, baseBranch, prompt });
+    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, title, config, workspace, prompt });
     addSessionTerminal(terminalId, id, projectPath, label);
     const session = $sessions.get().find((s) => s.id === id);
     if (session) openAll([session]);
@@ -280,22 +320,6 @@ function openAll(sessions) {
       opened.delete(session.id);
       app.reportError(`Opening "${session.title}" failed`, err);
     });
-  }
-}
-
-/**
- * Reads the project's workspace.json: the run target its new sessions start with.
- * @param {string | null} path
- */
-async function loadSettings(path) {
-  const load = ++settingsLoad;
-  setProjectSettings(null);
-  if (path === null) return;
-  try {
-    const settings = await workspaceSettings(path);
-    if (load === settingsLoad) setProjectSettings(settings);
-  } catch (err) {
-    app.reportError('Reading .brama/workspace.json failed', err);
   }
 }
 
@@ -341,11 +365,12 @@ async function openInTerminal(id) {
 }
 
 /**
- * Shows an empty draft session in the project; the project itself is activated by the caller.
+ * Shows an empty draft session in a workspace of the project; the project itself is activated by the caller.
  * @param {string} projectId
+ * @param {string} [workspaceId] `main` (default) for Main.
  */
-function create(projectId) {
-  newSession(projectId);
+function create(projectId, workspaceId) {
+  newSession(projectId, workspaceId);
 }
 
 /**
@@ -358,22 +383,35 @@ function create(projectId) {
  * @returns {boolean} Whether the message goes: `false` keeps it in the composer.
  */
 function start(id, title) {
-  const projectPath = $draftSessions.get()[id];
-  if (projectPath === undefined) return true;
+  const place = placeOf(id);
+  if (place === null) return true;
   // Only what was picked in the draft: the values it shows otherwise are another session's.
-  const { agentId, chosen: config, runTarget } = composerOf(id);
+  const { agentId, chosen: config } = composerOf(id);
   if (agentId === null) {
     setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .brama/agents.json to start a session.' });
     return false;
   }
-  const mode = runTarget.kind;
-  const baseBranch = mode === 'worktree' ? runTarget.branch : null;
+  const { projectPath, draftWorkspace, workspace, mode } = place;
   // While it's a draft still: a listed session without a composer would get one from its record.
   startComposer(id);
   startSession(id, { title, agentId, config, mode });
   setSessionNotice(id, null);
-  const request = { sessionId: id, projectPath, agentId, mode, title, config, baseBranch };
-  const created = sessionCreate(request, onSessionEvent).then(
+  const placed = workspace.kind === 'new' ? placing.get(draftWorkspace) : undefined;
+  // A draft workspace's later chat joins the workspace its first chat is placing.
+  const choice = placed ? placed.then((wsId) => (wsId ? { kind: /** @type {const} */ ('existing'), id: wsId } : workspace)) : Promise.resolve(workspace);
+  const session = choice.then((chosen) => sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspace: chosen }, onSessionEvent));
+  if (workspace.kind === 'new' && !placed) {
+    placing.set(
+      draftWorkspace,
+      session
+        .then((s) => s.workspaceId ?? null)
+        .catch(() => {
+          placing.delete(draftWorkspace);
+          return null;
+        }),
+    );
+  }
+  const created = session.then(
     (session) => upsertSession(session),
     (err) => {
       revertDraft(id);

@@ -88,6 +88,7 @@ export class AcpConfirmDialog extends LitElement {
         'acp-confirm-dialog__dialog_top': options?.placement === 'top',
       })}
       role="alertdialog"
+      ?wide=${options?.placement === 'top'}
       @keydown=${this.#onKeydown}
     >
       <h2 slot="headline" class="acp-confirm-dialog__headline">${options?.headline ?? nothing}</h2>

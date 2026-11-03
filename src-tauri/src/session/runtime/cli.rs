@@ -33,14 +33,10 @@ pub struct CliOpened {
 pub struct CliDraft {
     pub project_path: String,
     pub agent_id: String,
-    pub mode: Mode,
     pub title: String,
     #[serde(default)]
     pub config: BTreeMap<String, String>,
-    #[serde(default)]
-    pub base_branch: Option<String>,
-    #[serde(default)]
-    pub workspace_id: Option<String>,
+    pub workspace: WorkspaceChoice,
     /// The draft's first message, which the CLI starts with.
     #[serde(default)]
     pub prompt: Option<String>,
@@ -85,12 +81,12 @@ impl Sessions {
     /// creates the session under its id (a UUID), which becomes its ACP id: the CLI starts it
     /// under that id (`newArgs`). A CLI already running is answered with its terminal.
     pub async fn open_cli(&self, id: &str, draft: Option<CliDraft>, window: CliWindow<'_>) -> Result<CliOpened, String> {
-        // A worktree draft with no workspace gets one of its own (`new_record`), gone with it.
+        // A draft workspace placed for it (`WorkspaceChoice::New`) goes with it.
         let mut own_workspace = false;
         let (created, start) = match draft {
             Some(mut draft) if self.get(id).is_err() => {
                 let prompt = draft.prompt.take();
-                own_workspace = draft.workspace_id.is_none() && draft.mode == Mode::Worktree;
+                own_workspace = matches!(draft.workspace, WorkspaceChoice::New { .. });
                 (Some(self.create_for_cli(id, draft).await?), CliStart::New { prompt })
             }
             _ => (None, CliStart::Resume),
@@ -128,7 +124,7 @@ impl Sessions {
     }
 
     /// Undoes a draft created for a CLI that didn't start: unlisted, its files gone, and the
-    /// workspace made for it (`own_workspace`) with its worktree and branch. The page never listed
+    /// draft workspace placed for it (`own_workspace`) with its worktree and branch. The page never listed
     /// it, so nothing is announced.
     async fn forget_failed_draft(&self, state: &Arc<SessionState>, own_workspace: bool) {
         lock(&self.inner.sessions).remove(&state.id);
@@ -169,11 +165,9 @@ impl Sessions {
             session_id: id.to_owned(),
             project_path: draft.project_path,
             agent_id: draft.agent_id,
-            mode: draft.mode,
             title: draft.title,
             config: draft.config,
-            base_branch: draft.base_branch,
-            workspace_id: draft.workspace_id,
+            workspace: draft.workspace,
         };
         let sessions = self.clone();
         let mut record = tokio::task::spawn_blocking(move || sessions.new_record(&request)).await.map_err(|e| e.to_string())??;

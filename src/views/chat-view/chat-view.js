@@ -1,4 +1,3 @@
-import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
@@ -11,24 +10,23 @@ import { agents } from '../../hooks/agents/agents.js';
 import { search } from '../../hooks/search/search.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
-import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
+import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent } from '../../stores/composer/composer.js';
 import { $activeContextUsage } from '../../stores/context-usage/context-usage.js';
 import { openAgents } from '../../stores/editor/editor.js';
-import { $gitRepo } from '../../stores/git/git.js';
-import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions/sessions.js';
+import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/sessions/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
-import { $project, $projectSettings } from '../../stores/project/project.js';
-import { $rootId } from '../../stores/workspaces/workspaces.js';
+import { $project } from '../../stores/project/project.js';
+import { $activeWorkspace } from '../../stores/workspaces/workspaces.js';
+import { workspaces } from '../../hooks/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
-/** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../components/session-banner/session-banner.js').SessionAction} SessionAction */
 /** @typedef {import('../../components/chat/chat.js').AcpChat} AcpChat */
 
 /**
  * @tag acp-chat-view
- * @summary The shown session's chat wired to its data: the conversation, the composer's agent, model and run target, the banner's permission, notice and sign-in, `@` file picks and branches.
+ * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), the banner's permission, notice and sign-in, `@` file picks.
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
@@ -37,7 +35,6 @@ export class AcpChatView extends ViewElement {
     concealed: { type: Boolean },
     dropping: { type: Boolean },
     fileOptions: { state: true },
-    branches: { state: true },
   };
 
   #project = new StoreController(this, { store: $project });
@@ -45,15 +42,12 @@ export class AcpChatView extends ViewElement {
   #optionsStatus = new StoreController(this, { store: $composerOptionsStatus });
   #contextUsage = new StoreController(this, { store: $activeContextUsage });
   #agents = new StoreController(this, { store: $agents });
-  #gitRepo = new StoreController(this, { store: $gitRepo });
-  #rootId = new StoreController(this, { store: $rootId });
+  #workspace = new StoreController(this, { store: $activeWorkspace });
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #permission = new StoreController(this, { store: $activePermission });
   #notice = new StoreController(this, { store: $activeNotice });
-  #localShared = new StoreController(this, { store: $localShared });
-  #projectSettings = new StoreController(this, { store: $projectSettings });
   /** Re-renders on a sign-in's change; `#signInRun()` reads it. */
   #signIns = new StoreController(this, { store: $signIns });
   /** Whether a login's terminal is this window's; `#loginHere()` reads it. */
@@ -75,8 +69,6 @@ export class AcpChatView extends ViewElement {
     this.dropping = false;
     /** @type {QuickOpenItem[]} */
     this.fileOptions = [];
-    /** @type {{ rootId: string, names: string[] } | null} The run target's branches, of the root they're from. */
-    this.branches = null;
   }
 
   /** @returns {AcpChat | null} */
@@ -107,17 +99,6 @@ export class AcpChatView extends ViewElement {
       this.fileOptions = items;
     } catch (err) {
       app.reportError('File search failed', err);
-    }
-  }
-
-  async #onBranchesQuery() {
-    const rootId = $rootId.get();
-    if (rootId === null) return;
-    try {
-      const names = await git.branches(rootId);
-      if (rootId === $rootId.get()) this.branches = { rootId, names };
-    } catch (err) {
-      app.reportError('Listing branches failed', err);
     }
   }
 
@@ -191,8 +172,9 @@ export class AcpChatView extends ViewElement {
   };
 
   /** @param {Event} e */
-  #onRunTargetChange(e) {
-    setRunTarget(/** @type {CustomEvent<{ patch: Partial<RunTarget> }>} */ (e).detail.patch);
+  #onWorkspaceRecreate(e) {
+    const { id } = /** @type {CustomEvent<{ id: string }>} */ (e).detail;
+    workspaces.recreate(id);
   }
 
   /** @param {Event} e */
@@ -206,6 +188,7 @@ export class AcpChatView extends ViewElement {
     if (project === null) return html``;
     const composer = this.#composer.value;
     const hasSession = this.#activeSessionId.value !== null;
+    const workspace = this.#workspace.value;
     return html`<acp-chat
       ?hidden=${this.concealed}
       .conversationId=${this.#session.conversationId}
@@ -220,10 +203,7 @@ export class AcpChatView extends ViewElement {
       .usage=${this.#contextUsage.value}
       .agents=${this.#agents.value}
       .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
-      .branches=${this.branches?.rootId === this.#rootId.value ? this.branches.names : []}
-      .currentBranch=${this.#gitRepo.value.repo?.branch ?? null}
-      .localShared=${this.#localShared.value}
-      .localTurns=${this.#projectSettings.value.localTurns}
+      .blocked=${workspace?.missing ? { message: 'Recreate the folder to continue', workspaceId: workspace.id } : null}
       .permission=${hasSession ? this.#permission.value : null}
       .notice=${hasSession ? this.#notice.value : null}
       .signInRun=${hasSession ? this.#signInRun() : null}
@@ -239,8 +219,7 @@ export class AcpChatView extends ViewElement {
       @acp-agents-manage=${() => openAgents()}
       @acp-agent-select=${this.#onAgentSelect}
       @acp-config-option=${this.#onConfigOption}
-      @acp-run-target-change=${this.#onRunTargetChange}
-      @acp-branches-query=${this.#onBranchesQuery}
+      @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-link-open=${this.#onLinkOpen}
     ></acp-chat>`;
   }

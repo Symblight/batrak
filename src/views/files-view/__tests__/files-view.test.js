@@ -6,7 +6,7 @@ import { $notices } from '../../../stores/notices/notices.js';
 import { $projectExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { $openRoots, $openingPath, $project } from '../../../stores/project/project.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
-import { $workspaceOpening, $workspaces } from '../../../stores/workspaces/workspaces.js';
+import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../files-view.js';
 
 /** @typedef {import('../files-view.js').AcpFilesView} AcpFilesView */
@@ -36,11 +36,11 @@ async function emitUntil(change, heard) {
 
 /** Shows a chat of workspace `/wt/s1`, whose root is `rootId` once open (`null`: scanning). @param {string | null} rootId */
 function showWorkspace(rootId) {
-  $workspaces.set([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1' })]);
+  setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1' })], '/p');
   $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c', projectId: '/p', workspaceId: 'w1' }])));
   $openRoots.set(rootId === null ? {} : { '/wt/s1': rootId });
   $workspaceOpening.set(rootId === null ? '/wt/s1' : null);
-  selectSession('c');
+  setActiveWorkspace('/p', 'w1');
 }
 
 /** @param {string} rootId @param {string[]} dirs */
@@ -64,6 +64,7 @@ describe('acp-files-view', () => {
 
   afterEach(() => {
     $projectExpandedFolders.setKey('/p', undefined);
+    setActiveWorkspace('/p', 'main');
     selectSession(null);
     $sessions.set([]);
     $workspaces.set([]);

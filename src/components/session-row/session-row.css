@@ -102,19 +102,7 @@
   --md-text-field-inline-end-space: var(--acp-space-1);
   --md-text-field-font-size: var(--acp-font-size-md);
   --md-text-field-line-height: 20px;
-  --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--acp-color-on-surface);
   --md-text-field-background-color: var(--acp-color-surface-container-lowest);
-  --md-text-field-border-color: var(--acp-color-outline);
-  --md-text-field-primary-color: var(--acp-color-primary);
-  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
-
-  caret-color: var(--acp-color-primary);
-}
-
-/* The library's focused outline is 3px; the spec asks for 2px. */
-.acp-session-row__rename:focus-within::part(indicator) {
-  border-width: 2px;
 }
 
 .acp-session-row__branch {

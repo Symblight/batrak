@@ -1,0 +1,111 @@
+import { expect } from '@esm-bundle/chai';
+import { choiceOf, orderWorkspaces, slugPreview, statusOf, statusesOf } from '../rules.js';
+
+/** @typedef {import('../types.js').Workspace} Workspace */
+/** @typedef {import('../../sessions/types.js').Session} Session */
+
+const NOW = Date.parse('2026-11-03T12:00:00.000Z');
+
+/** @param {Partial<Workspace>} extra */
+const workspace = (extra) =>
+  /** @type {Workspace} */ ({ id: 'w', name: 'Task', branch: 'brama/task', createdAt: '2026-11-01T00:00:00.000Z', lastActiveAt: null, creating: false, error: null, missing: false, ...extra });
+
+/** @param {Partial<Session>} extra */
+const chat = (extra) => /** @type {Session} */ ({ id: 's', status: 'stopped', lastActivityAt: '2026-11-01T00:00:00.000Z', ...extra });
+
+describe('workspaces rules', () => {
+  it("statusOf: the strongest of its chats' statuses, and its own create / missing state", () => {
+    /** @type {[Workspace | null, Session[], { pending?: string[], unread?: string[] }, string, string][]} */
+    const cases = [
+      [workspace({}), [], {}, 'idle', 'no chats'],
+      [workspace({}), [chat({ status: 'idle' })], { unread: ['s'] }, 'unread', 'an unread chat'],
+      [workspace({}), [chat({ id: 'a', status: 'working' }), chat({ id: 'b' })], { unread: ['b'] }, 'working', 'working beats unread'],
+      [workspace({}), [chat({ status: 'queued' })], {}, 'working', 'queued is working'],
+      [workspace({}), [chat({ activeElsewhereUntil: '2026-11-03T12:01:00.000Z' })], {}, 'working', 'active in another app'],
+      [workspace({ creating: true }), [], {}, 'working', 'its checkout runs'],
+      [workspace({}), [chat({ id: 'a', status: 'error' }), chat({ id: 'b', status: 'working' })], {}, 'error', 'error beats working'],
+      [workspace({ missing: true }), [], {}, 'error', 'folder missing'],
+      [workspace({ error: 'checkout failed' }), [], {}, 'error', 'failed create'],
+      [workspace({ missing: true }), [chat({ status: 'waiting' })], {}, 'waiting', 'waiting beats error'],
+      [workspace({}), [chat({ status: 'idle' })], { pending: ['s'] }, 'waiting', 'a pending permission request'],
+      [null, [chat({ status: 'working' })], {}, 'working', 'Main'],
+    ];
+    for (const [ws, chats, { pending = [], unread = [] }, expected, why] of cases) {
+      // Act
+      const status = statusOf(ws, chats, { pending: new Set(pending), unread: new Set(unread), now: NOW });
+
+      // Assert
+      expect(status, why).to.equal(expected);
+    }
+  });
+
+  it('orderWorkspaces: waiting, working, unread, idle, then the latest activity first', () => {
+    // Arrange
+    const list = [
+      workspace({ id: 'old-idle', createdAt: '2026-10-01T00:00:00.000Z' }),
+      workspace({ id: 'new-idle', createdAt: '2026-10-02T00:00:00.000Z' }),
+      workspace({ id: 'active-idle', createdAt: '2026-09-01T00:00:00.000Z', lastActiveAt: '2026-11-02T00:00:00.000Z' }),
+      workspace({ id: 'chatted-idle', createdAt: '2026-09-01T00:00:00.000Z' }),
+      workspace({ id: 'unread' }),
+      workspace({ id: 'error' }),
+      workspace({ id: 'working' }),
+      workspace({ id: 'waiting' }),
+    ];
+    /** @type {Record<string, import('../types.js').WorkspaceStatus>} */
+    const statuses = { 'old-idle': 'idle', 'new-idle': 'idle', 'active-idle': 'idle', 'chatted-idle': 'idle', unread: 'unread', error: 'error', working: 'working', waiting: 'waiting' };
+    const chats = [chat({ workspaceId: 'chatted-idle', lastActivityAt: '2026-11-03T00:00:00.000Z' })];
+
+    // Act
+    const ordered = orderWorkspaces(list, statuses, chats);
+
+    // Assert
+    expect(ordered.map((w) => w.id)).to.deep.equal(['waiting', 'error', 'working', 'unread', 'chatted-idle', 'active-idle', 'new-idle', 'old-idle']);
+  });
+
+  it("slugPreview: the branch a name gets, numbered past the project's taken branches", () => {
+    /** @type {[string, string[], string][]} */
+    const cases = [
+      ['Fix login', [], 'brama/fix-login'],
+      ['  Fix   the LOGIN!! ', [], 'brama/fix-the-login'],
+      ['Fix login', ['brama/fix-login'], 'brama/fix-login-2'],
+      ['Fix login', ['brama/fix-login', 'brama/fix-login-2'], 'brama/fix-login-3'],
+      ['Ünïcode ✓', [], 'brama/n-code'],
+      ['!!!', [], 'brama/workspace'],
+      ['a'.repeat(40), [], `brama/${'a'.repeat(32)}`],
+    ];
+    for (const [name, taken, expected] of cases) {
+      // Act
+      const branch = slugPreview(name, taken);
+
+      // Assert
+      expect(branch, name).to.equal(expected);
+    }
+  });
+
+  it('choiceOf: Main, a draft workspace placed from its base, or the stored workspace', () => {
+    // Arrange
+    const drafts = { 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: 'dev' } };
+
+    // Act
+    const choices = ['main', 'draft-1', 'w1'].map((id) => choiceOf(id, drafts));
+
+    // Assert
+    expect(choices).to.deep.equal([{ kind: 'main' }, { kind: 'new', baseBranch: 'dev' }, { kind: 'existing', id: 'w1' }]);
+  });
+
+  it("statusesOf: each workspace's and Main's status from the project's own chats", () => {
+    // Arrange
+    const list = [workspace({ id: 'w1' }), workspace({ id: 'w2' })];
+    const chats = [
+      chat({ id: 'a', projectId: '/p', status: 'working' }),
+      chat({ id: 'b', projectId: '/p', workspaceId: 'w1', status: 'waiting' }),
+      chat({ id: 'c', projectId: '/q', workspaceId: 'w2', status: 'error' }),
+    ];
+
+    // Act
+    const statuses = statusesOf('/p', list, chats, { pending: new Set(), unread: new Set(), now: NOW });
+
+    // Assert
+    expect(statuses).to.deep.equal({ main: 'working', w1: 'waiting', w2: 'idle' });
+  });
+});

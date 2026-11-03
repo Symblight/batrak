@@ -28,7 +28,7 @@ describe('sessionInput', () => {
       defaultAgent: 'claude',
       agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
     });
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
   });
 

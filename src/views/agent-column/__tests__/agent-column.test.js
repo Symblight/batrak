@@ -96,7 +96,7 @@ describe('acp-agent-column', () => {
 
   it("shows a new session's composer, and its first message starts the CLI when its agent's sessions open in the terminal", async () => {
     setAgentView('claude', 'terminal');
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     const { el, root } = await render();
     expect(/** @type {HTMLElement} */ (root.querySelector('acp-chat')).hidden, 'the composer').to.equal(false);
@@ -128,7 +128,7 @@ describe('acp-agent-column', () => {
 
   it("shows the model and permission pickers for a new session that starts in the terminal: its CLI starts with them", async () => {
     setAgentView('claude', 'terminal');
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     const { root } = await render();
     const chat = /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));
@@ -487,7 +487,7 @@ describe('acp-agent-column', () => {
 
   it("keeps a session's unsent composer text while its project is closed, and puts it back when it shows again", async () => {
     // Arrange
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
     const { el, root } = await render();
     const chat = () => /** @type {HTMLElementTagNameMap['acp-chat']} */ (root.querySelector('acp-chat'));

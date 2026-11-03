@@ -344,13 +344,16 @@ impl Inner {
         let mut sessions = lock(&self.sessions);
         let hidden = lock(&self.hidden);
         let mut seen = HashSet::new();
+        let mut titled = Vec::new();
         for item in listing.sessions.iter().filter(|s| in_folders(&s.cwd)) {
             if !seen.insert(item.session_id.clone()) {
                 continue;
             }
             let known = sessions.values().find(|s| lock(&s.record).acp_session_id.as_deref() == Some(&item.session_id)).cloned();
             if let Some(state) = known {
-                update_from_list(&state, item);
+                if update_from_list(&state, item) {
+                    titled.push(state);
+                }
                 continue;
             }
             if hidden.contains_key(&item.session_id) {
@@ -361,7 +364,9 @@ impl Inner {
                 continue;
             }
             let state = Arc::new(new_state(record));
-            update_from_list(&state, item);
+            if update_from_list(&state, item) {
+                titled.push(Arc::clone(&state));
+            }
             sessions.insert(state.id.clone(), state);
         }
         if listing.complete {
@@ -374,6 +379,10 @@ impl Inner {
                     && !state.turn_running.load(std::sync::atomic::Ordering::SeqCst);
                 !gone
             });
+        }
+        drop((sessions, hidden));
+        for state in titled {
+            self.name_workspace_after(&state.record());
         }
         seen.len()
     }
@@ -464,11 +473,13 @@ fn listed_record(project: &Path, workspace: Option<&WorkspaceRecord>, agent: &Ag
     }
 }
 
-/// The agent's title (unless the user named it) and its last activity.
-fn update_from_list(state: &SessionState, item: &ListedSession) {
+/// The agent's title (unless the user named it) and its last activity; `true` when the agent's
+/// title changed.
+fn update_from_list(state: &SessionState, item: &ListedSession) -> bool {
     let title = item.title.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
     let updated = item.updated_at.as_deref().and_then(parse_iso_millis);
     let mut record = lock(&state.record);
+    let retitled = title.is_some() && record.agent_title != title;
     if title.is_some() {
         record.agent_title.clone_from(&title);
     }
@@ -487,6 +498,7 @@ fn update_from_list(state: &SessionState, item: &ListedSession) {
         }
         *lock(&state.listed_activity) = Some(updated);
     }
+    retitled
 }
 
 /// A session as the page gets it: until when another app may be running it, when its agent saw

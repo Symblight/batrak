@@ -22,22 +22,6 @@ pub async fn agents_list(sessions: State<'_, crate::session::Sessions>, project_
     .await?
 }
 
-/// The project's `.brama/workspace.json` settings (how its sessions start). A `worktree` default
-/// counts only where a worktree can start (a repository with a commit): every project opened before
-/// the setting was read got it written, git or not.
-#[tauri::command]
-pub async fn project_settings(project_path: String) -> Result<crate::config::ProjectSettings, String> {
-    blocking(move || {
-        let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
-        let mut settings = crate::config::project_settings(&project);
-        if settings.default_mode == "worktree" && !crate::session::env::can_place(&project) {
-            settings.default_mode = "local".to_owned();
-        }
-        Ok(settings)
-    })
-    .await?
-}
-
 /// The agents.json "Add ACP agent…" opens: the project's `.brama/agents.json`, or the user's
 /// without a project; created with the defaults when missing. Absolute path.
 #[tauri::command]

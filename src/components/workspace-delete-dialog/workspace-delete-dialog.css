@@ -1,0 +1,55 @@
+:host {
+  display: contents;
+}
+
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
+
+.acp-workspace-delete-dialog__headline {
+  margin: 0;
+  font: var(--acp-dialog-headline-font);
+  color: var(--acp-color-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.acp-workspace-delete-dialog__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-3);
+  min-width: 0;
+}
+
+.acp-workspace-delete-dialog__note {
+  margin: 0;
+  padding: var(--acp-space-2) var(--acp-space-3);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-surface-container-highest);
+  font: var(--acp-dialog-text-font);
+}
+
+.acp-workspace-delete-dialog__working {
+  margin: 0;
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
+
+.acp-workspace-delete-dialog__keep {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  font-size: var(--acp-font-size-sm);
+}
+
+.acp-workspace-delete-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--acp-space-2);
+  width: 100%;
+  padding-block-start: var(--acp-dialog-footer-space);
+}
+
+
+/* As acp-confirm-dialog's destructive action. */
+.acp-workspace-delete-dialog__delete {
+  --md-button-background-color: var(--acp-color-error);
+  --md-button-foreground-color: var(--acp-color-on-error);
+}

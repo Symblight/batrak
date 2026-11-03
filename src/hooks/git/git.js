@@ -232,6 +232,17 @@ export const git = Object.freeze({
   },
 
   /**
+   * A root's checked-out branch (`null` when detached or outside a repository).
+   * @param {string} rootId
+   * @returns {Promise<string | null>}
+   */
+  async branchOf(rootId) {
+    /** @type {import('./types.js').GitRepoState | null} */
+    const repo = await ipc.invoke('git_head', { rootId });
+    return repo?.detached ? null : (repo?.branch ?? null);
+  },
+
+  /**
    * Message of the last commit, which Amend starts from.
    * @param {string} rootId
    * @returns {Promise<string | null>} `null` before the first commit.

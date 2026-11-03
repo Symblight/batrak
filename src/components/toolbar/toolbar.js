@@ -6,6 +6,7 @@ import '@symblight/wc-material/tooltip';
 import '../branch-popover/branch-popover.js';
 import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
+import '../workspace-picker/workspace-picker.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/fullscreen.svg?raw';
 import collapseIcon from '@material-design-icons/svg/outlined/fullscreen_exit.svg?raw';
@@ -16,7 +17,7 @@ import styles from './toolbar.css?inline';
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the project menu and git branch (a card with its remote and pull request), and the
+ * @summary Narrow app-wide bar above the columns: the project menu, the workspace picker and git branch (a card with its remote and pull request), and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-github-open `{ url }` From the GitHub slot and the branch card.
@@ -33,6 +34,10 @@ export class AcpToolbar extends LitElement {
     githubReply: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
+    workspaces: { attribute: false },
+    workspaceStatuses: { attribute: false },
+    workspaceId: { attribute: false },
+    workspacesEnabled: { type: Boolean, attribute: 'workspaces-enabled' },
   };
 
   static styles = styles;
@@ -57,6 +62,14 @@ export class AcpToolbar extends LitElement {
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
     this.expandable = false;
+    /** @type {readonly import('../../hooks/workspaces/types.js').Workspace[]} The picker's Active group, in order. */
+    this.workspaces = [];
+    /** @type {Readonly<Record<string, import('../../hooks/workspaces/types.js').WorkspaceStatus>>} By id, Main's under `main`. */
+    this.workspaceStatuses = {};
+    /** @type {string | null} The shown workspace; `null` for Main. */
+    this.workspaceId = null;
+    /** @type {boolean} The project can have workspaces: git with a commit. */
+    this.workspacesEnabled = false;
   }
 
   /** Button hiding the agent column, so the editor's tabs take the whole middle. */
@@ -125,6 +138,16 @@ export class AcpToolbar extends LitElement {
         .unread=${this.unread}
         .home=${this.home}
       ></acp-project-menu>
+      ${project
+        ? html`<acp-workspace-picker
+            .workspaces=${this.workspaces}
+            .statuses=${this.workspaceStatuses}
+            .currentId=${this.workspaceId}
+            .projectName=${project.name}
+            .projectPath=${project.path}
+            ?enabled=${this.workspacesEnabled}
+          ></acp-workspace-picker>`
+        : nothing}
       ${project && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
       ${project ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>

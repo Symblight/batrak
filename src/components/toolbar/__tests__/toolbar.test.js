@@ -38,11 +38,38 @@ describe('acp-toolbar', () => {
     expect(root.querySelector('[title]')).to.equal(null);
   });
 
-  it('offers the project menu with no project open, and no git beside it', async () => {
+  it('offers the project menu with no project open, and no git or workspaces beside it', async () => {
     const el = await fixture(html`<acp-toolbar></acp-toolbar>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(root.querySelector('acp-project-menu')?.currentId).to.equal(null);
     expect(root.querySelector('acp-branch-popover')).to.equal(null);
+    expect(root.querySelector('acp-workspace-picker')).to.equal(null);
+  });
+
+  it("hands the workspace picker the shown project's workspaces, their statuses and the shown one", async () => {
+    // Arrange
+    const list = [/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', name: 'Fix login' })];
+    const statuses = { w1: 'waiting', main: 'idle' };
+
+    // Act
+    const el = await fixture(html`<acp-toolbar
+      .project=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
+      .workspaces=${list}
+      .workspaceStatuses=${statuses}
+      .workspaceId=${'w1'}
+      workspaces-enabled
+    ></acp-toolbar>`);
+
+    // Assert
+    const picker = el.shadowRoot?.querySelector('acp-workspace-picker');
+    expect([picker?.workspaces, picker?.statuses, picker?.currentId, picker?.projectName, picker?.projectPath, picker?.enabled]).to.deep.equal([
+      list,
+      statuses,
+      'w1',
+      'app',
+      '/work/app',
+      true,
+    ]);
   });
 
   it('shows the branch in its card, with the pull request found for it', async () => {

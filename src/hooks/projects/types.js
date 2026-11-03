@@ -40,7 +40,6 @@
 /**
  * The open project's `.brama/workspace.json`.
  * @typedef {Object} ProjectSettings
- * @property {'local' | 'worktree'} defaultMode The run target a new session starts with.
  * @property {LocalTurns} localTurns
  */
 

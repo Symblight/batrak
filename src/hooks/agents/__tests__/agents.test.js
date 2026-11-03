@@ -180,7 +180,7 @@ describe('agents', () => {
       let command = './run';
       answers.agents_untrusted = () => [runs(command)];
       const agents = await started();
-      $draftSessions.set({ s1: '/work/a' });
+      $draftSessions.set({ s1: { projectId: '/work/a', workspaceId: 'main' } });
       // Act
       open('/work/a');
       await until(() => $trustPrompt.get() !== null);
@@ -206,7 +206,7 @@ describe('agents', () => {
       // Arrange
       answers.agents_untrusted = () => [runs('./run')];
       const agents = await started();
-      $draftSessions.set({ s1: '/work/a', s2: '/work/b' });
+      $draftSessions.set({ s1: { projectId: '/work/a', workspaceId: 'main' }, s2: { projectId: '/work/b', workspaceId: 'main' } });
       open('/work/a');
       await until(() => $trustPrompt.get() !== null);
       $awaitingTrust.set(['s2', 's1']);

@@ -1,10 +1,26 @@
 import { ipc } from '../ipc/ipc.js';
 import { $projectPath } from '../../stores/project/project.js';
-import { $activeWorkspace, $workspaceOpening, $workspaces, setWorkspaces } from '../../stores/workspaces/workspaces.js';
+import {
+  $activeWorkspace,
+  $activeWorkspaceId,
+  $draftWorkspaces,
+  $workspaceOpening,
+  $workspaces,
+  MAIN,
+  addDraftWorkspace,
+  dropDraftWorkspace,
+  setActiveWorkspace,
+  setWorkspaces,
+} from '../../stores/workspaces/workspaces.js';
+import { $activeSession, $sessions, dropDrafts } from '../../stores/sessions/sessions.js';
+import { selectAgent } from '../../stores/composer/composer.js';
+import { openSessionChanges } from '../../stores/editor/editor.js';
+import { notify } from '../../stores/notices/notices.js';
 import { app } from '../app/app.js';
 import { projects } from '../projects/projects.js';
 
 /** @typedef {import('./types.js').Workspace} Workspace */
+/** @typedef {import('./types.js').DeletePreview} DeletePreview */
 
 /** Numbers refreshes: only the latest one's reply is kept, whatever order replies come in. */
 let latest = 0;
@@ -23,9 +39,11 @@ async function refresh(projectPath) {
   try {
     /** @type {Workspace[]} */
     const list = await ipc.invoke('workspaces_list', { projectPath });
-    if (turn === latest) setWorkspaces(Array.isArray(list) ? list : []);
+    if (turn === latest) setWorkspaces(Array.isArray(list) ? list : [], projectPath);
   } catch (err) {
     app.reportError('Listing workspaces failed', err);
+    // Listed as none: a stored choice falls back to Main instead of waiting for a list that won't come.
+    if (turn === latest) setWorkspaces([], projectPath);
   }
 }
 
@@ -88,6 +106,38 @@ function closeGone(list) {
   }
 }
 
+/**
+ * The shown chat's workspace is the shown one: a chat of another workspace of the shown project
+ * (from a banner, a notice, or a draft workspace's first chat now placed) switches to it once its
+ * workspace is listed.
+ */
+function followChat() {
+  const session = $activeSession.get();
+  const project = $projectPath.get();
+  if (session === null || project === null || session.projectId !== project) return;
+  const id = session.workspaceId ?? MAIN;
+  if (id === $activeWorkspaceId.get()) return;
+  if (id !== MAIN && !(id in $draftWorkspaces.get()) && !$workspaces.get().some((w) => w.id === id)) return;
+  setActiveWorkspace(project, id);
+}
+
+/**
+ * Draft workspaces not shown go with their unsent drafts, unless a chat of theirs is being created
+ * (a refused create comes back to its draft); once that chat's workspace is placed, it goes too.
+ */
+function sweepDrafts() {
+  const shown = $activeWorkspaceId.get();
+  const chats = $sessions.get();
+  for (const id of Object.keys($draftWorkspaces.get())) {
+    if (id === shown || chats.some((s) => s.workspaceId === id)) continue;
+    dropDraftWorkspace(id);
+    dropDrafts(id);
+  }
+}
+
+/** @param {string} id */
+const recordOf = (id) => $workspaces.get().find((w) => w.id === id) ?? null;
+
 /** A project's workspaces (docs/specs/workspaces.md): the shown project's list and its actions. */
 export const workspaces = Object.freeze({
   /**
@@ -101,11 +151,163 @@ export const workspaces = Object.freeze({
     const listening = ipc.listen('workspaces://changed', (/** @type {{ projectPath: string }} */ { projectPath }) => {
       if (projectPath === $projectPath.get()) void refresh(projectPath);
     });
+    const chats = [
+      $activeSession.listen(followChat),
+      $workspaces.listen(followChat),
+      $activeWorkspaceId.listen(sweepDrafts),
+      $sessions.listen(sweepDrafts),
+    ];
     return () => {
       unsubscribe();
       following();
       listed();
+      for (const off of chats) off();
       void listening.then((off) => off()).catch(() => {});
     };
+  },
+
+  /**
+   * Shows a workspace of the shown project.
+   * @param {string} id `main` for Main.
+   */
+  select(id) {
+    const project = $projectPath.get();
+    if (project !== null) setActiveWorkspace(project, id);
+  },
+
+  /**
+   * New workspace: with a name, placed and checked out now; without, a draft until its first
+   * message. Either way it's shown with a new chat of `agentId`.
+   * @param {{ name: string | null, baseBranch: string | null, agentId: string | null }} request
+   */
+  async create({ name, baseBranch, agentId }) {
+    const project = $projectPath.get();
+    if (project === null) return;
+    let id;
+    if (name === null) id = addDraftWorkspace(project, baseBranch);
+    else {
+      try {
+        /** @type {Workspace} */
+        const created = await ipc.invoke('workspace_create', { projectPath: project, name, baseBranch });
+        if ($projectPath.get() !== project) return;
+        if (!$workspaces.get().some((w) => w.id === created.id)) setWorkspaces([...$workspaces.get(), created], project);
+        id = created.id;
+      } catch (err) {
+        app.reportError('Creating the workspace failed', err);
+        return;
+      }
+    }
+    setActiveWorkspace(project, id);
+    if (agentId !== null) selectAgent(agentId);
+  },
+
+  /**
+   * @param {string} id
+   * @param {string} name
+   */
+  async rename(id, name) {
+    try {
+      await ipc.invoke('workspace_rename', { id, name });
+    } catch (err) {
+      app.reportError('Renaming the workspace failed', err);
+    }
+  },
+
+  /**
+   * Delete workspace…: asks in `dialog` with what deleting would touch; the dialog's Delete fires
+   * `acp-workspace-delete`.
+   * @param {string} id
+   * @param {HTMLElementTagNameMap['acp-workspace-delete-dialog'] | null} dialog
+   */
+  async confirmDelete(id, dialog) {
+    const record = recordOf(id);
+    if (record === null || dialog === null) return;
+    try {
+      /** @type {DeletePreview} */
+      const preview = await ipc.invoke('workspace_delete_preview', { id });
+      await dialog.show(record, preview);
+    } catch (err) {
+      app.reportError('Checking the workspace failed', err);
+    }
+  },
+
+  /**
+   * Deletes a workspace with its chats (its uncommitted work saved as a commit on its branch); the
+   * window shows Main first, and nothing watches its folder while it goes.
+   * @param {string} id
+   * @param {boolean} keepBranch
+   */
+  async delete(id, keepBranch) {
+    const project = $projectPath.get();
+    const record = recordOf(id);
+    if (project !== null && $activeWorkspaceId.get() === id) setActiveWorkspace(project, MAIN);
+    if (record !== null) {
+      opened.delete(record.folder);
+      await projects.closeFolder(record.folder);
+    }
+    try {
+      await ipc.invoke('workspace_delete', { id, keepBranch });
+    } catch (err) {
+      app.reportError('Deleting the workspace failed', err);
+      return;
+    }
+    dropDrafts(id);
+  },
+
+  /**
+   * Checks a workspace's folder out again (a missing folder, a failed checkout).
+   * @param {string} id
+   */
+  async recreate(id) {
+    try {
+      await ipc.invoke('workspace_recreate', { id });
+    } catch (err) {
+      app.reportError('Recreating the folder failed', err);
+    }
+  },
+
+  /**
+   * Apply to Main: the workspace's work since its base, unstaged in the project's checkout.
+   * @param {string} id
+   */
+  async apply(id) {
+    const name = recordOf(id)?.name ?? 'the workspace';
+    try {
+      /** @type {import('../sessions/types.js').ApplyResult} */
+      const result = await ipc.invoke('workspace_apply_locally', { id });
+      if (result.outcome === 'conflicts') notify('warn', `Applied "${name}" with conflicts in ${result.conflicts.join(', ')}`);
+      else if (result.outcome === 'empty') notify('info', `"${name}" has no changes to apply`);
+      else notify('info', `Applied "${name}" to Main, unstaged`);
+    } catch (err) {
+      app.reportError('Applying the workspace failed', err);
+    }
+  },
+
+  /**
+   * Check out branch in Main: stops the workspace's chats and checks its branch out in the project.
+   * @param {string} id
+   */
+  async checkOut(id) {
+    const branch = recordOf(id)?.branch ?? 'the branch';
+    try {
+      await ipc.invoke('workspace_check_out_branch', { id });
+      notify('info', `Checked out ${branch} in Main`);
+    } catch (err) {
+      app.reportError(`Checking out ${branch} failed`, err);
+    }
+  },
+
+  /**
+   * Changes since base: the review tab of the workspace's oldest chat (its worktree is the
+   * workspace's), until the review is keyed by workspace.
+   * @param {string} id
+   */
+  changes(id) {
+    const chat = $sessions
+      .get()
+      .filter((s) => s.workspaceId === id)
+      .reduce((/** @type {import('../sessions/types.js').Session | null} */ a, s) => (a === null || s.createdAt < a.createdAt ? s : a), null);
+    if (chat === null) notify('info', 'Send a first message in this workspace to review its changes');
+    else openSessionChanges(chat.id);
   },
 });

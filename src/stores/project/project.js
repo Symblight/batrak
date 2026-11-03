@@ -2,7 +2,6 @@ import { atom, computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../hooks/projects/types.js').OpenProject} OpenProject */
-/** @typedef {import('../../hooks/projects/types.js').ProjectSettings} ProjectSettings */
 
 /** Moves the folder stored under the key used before workspaces were projects' tasks. */
 function migrateLegacyKey() {
@@ -46,13 +45,4 @@ export const $openRoots = atom(/** @type {Readonly<Record<string, string>>} */ (
 /** Notifies only when the opened folder changes. */
 export const $projectPath = computed($project, (project) => project?.path ?? null);
 
-/** @type {ProjectSettings} */
-const DEFAULT_SETTINGS = { defaultMode: 'local', localTurns: 'queue' };
 
-/** The opened folder's `.brama/workspace.json`, read when it opens; the defaults until then. */
-export const $projectSettings = atom(DEFAULT_SETTINGS);
-
-/** @param {ProjectSettings | null} settings `null`: the defaults. */
-export function setProjectSettings(settings) {
-  $projectSettings.set(settings ?? DEFAULT_SETTINGS);
-}

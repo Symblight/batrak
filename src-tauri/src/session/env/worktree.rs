@@ -59,12 +59,6 @@ impl WorktreeEnv {
     }
 }
 
-/// Whether a worktree session can start in `project`: it's in a repository with a commit. Blocking.
-pub fn can_place(project: &Path) -> bool {
-    let Ok(git) = binary::git() else { return false };
-    exec::run(git, project, &exec::args(&[&"rev-parse", &"--verify", &"--quiet", &"HEAD^{commit}"]), GitMode::Background).is_ok()
-}
-
 /// Where a new worktree session goes, checked against the repository: `base` (a branch or commit,
 /// `None` for the project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
 pub fn place(project: &Path, worktrees: &Path, session_id: &str, title: &str, base: Option<&str>) -> Result<Placement, String> {
@@ -296,19 +290,6 @@ fn fnv1a(bytes: &[u8]) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn a_worktree_needs_a_repository_with_a_commit() {
-        use crate::git::test_repo::{temp_dir, TestRepo};
-        let repo = TestRepo::with_commit("can-place");
-        assert!(can_place(&repo.path));
-        std::fs::create_dir_all(repo.path.join("sub")).unwrap();
-        assert!(can_place(&repo.path.join("sub")));
-        assert!(!can_place(&TestRepo::new("can-place-unborn").path));
-        let plain = temp_dir("can-place-plain");
-        assert!(!can_place(&plain));
-        std::fs::remove_dir_all(plain).unwrap();
-    }
 
     /// A checkout that finishes after Stop is undone: no worktree, no new branch.
     #[cfg(unix)]

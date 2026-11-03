@@ -16,7 +16,6 @@ fn record(id: &str) -> WorkspaceRecord {
         base_branch: Some("main".to_owned()),
         created_at: "2026-11-03T10:00:00.000Z".to_owned(),
         last_active_at: None,
-        made_for: None,
     }
 }
 

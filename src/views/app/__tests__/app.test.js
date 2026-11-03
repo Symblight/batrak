@@ -4,10 +4,10 @@ import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
-import { $workspaces } from '../../../stores/workspaces/workspaces.js';
+import { $activeRoot, $activeWorkspaceId, $draftWorkspaces, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
-import { $sessions, $sessionsLoaded, selectSession } from '../../../stores/sessions/sessions.js';
+import { $activeSessionId, $draftSessions, $sessions, $sessionsLoaded, selectSession } from '../../../stores/sessions/sessions.js';
 import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import {
   $projectTerminalPanelHeights,
@@ -182,7 +182,9 @@ describe('acp-app: the shown workspace', () => {
     mockIPC((cmd, args) => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
-      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', creating: false, missing: false }];
+      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'brama/task', creating: false, missing: false, error: null }];
+      if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: a.name, folder: '/wt/two', branch: 'brama/fix', creating: true, missing: false, error: null };
+      if (cmd === 'workspace_delete_preview') return { uncommitted: 0, commits: 1, working: [] };
       return startupAnswer(cmd, a);
     });
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
@@ -192,7 +194,10 @@ describe('acp-app: the shown workspace', () => {
 
   afterEach(() => {
     for (const el of document.querySelectorAll('acp-app')) searchDialog(/** @type {AcpApp} */ (el))?.close();
+    setActiveWorkspace('/p', 'main');
     selectSession(null);
+    $draftSessions.set({});
+    $draftWorkspaces.set({});
     $sessions.set([]);
     $workspaces.set([]);
     $openRoots.set({});
@@ -224,6 +229,155 @@ describe('acp-app: the shown workspace', () => {
     expect(asked('find_in_files')).to.deep.equal(['r-w']);
     expect(opened[0]?.[0], 'a match is its folder’s file').to.equal('/wt/one/src/a.ts');
     await until(() => asked('git_head').includes('r-w'));
+  });
+});
+
+describe('acp-app: switching, creating and deleting workspaces', () => {
+  /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
+  let calls;
+
+  beforeEach(() => {
+    calls = [];
+    mockIPC((cmd, args) => {
+      const a = /** @type {Record<string, unknown>} */ (args ?? {});
+      calls.push({ cmd, args: a });
+      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'brama/task', createdAt: '2026-01-01T00:00:00.000Z', creating: false, missing: false, error: null }];
+      if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: a.name, folder: '/wt/two', branch: 'brama/fix', createdAt: '2026-01-02T00:00:00.000Z', creating: true, missing: false, error: null };
+      if (cmd === 'workspace_delete_preview') return { uncommitted: 0, commits: 1, working: [] };
+      if (cmd === 'git_branches') return a.rootId === 'r' ? ['main', 'dev'] : ['brama/task'];
+      if (cmd === 'git_head') return { branch: a.rootId === 'r' ? 'main' : 'brama/task', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null };
+      return startupAnswer(cmd, a);
+    });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    $hiddenColumns.set([]);
+  });
+
+  afterEach(() => {
+    setActiveWorkspace('/p', 'main');
+    selectSession(null);
+    $draftSessions.set({});
+    $draftWorkspaces.set({});
+    $sessions.set([]);
+    $workspaces.set([]);
+    $project.set(null);
+    clearMocks();
+  });
+
+  /** The app with its workspaces listed, and a way to fire the toolbar's events. */
+  async function render() {
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $sessionsLoaded.get() && $workspaces.get().length === 1);
+    $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([
+      { id: 'm', projectId: '/p', workspaceId: null, folder: '/p', status: 'stopped', createdAt: '2026-01-01T00:00:00.000Z', lastActivityAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'c', projectId: '/p', workspaceId: 'w1', folder: '/wt/one', status: 'stopped', createdAt: '2026-01-01T00:00:00.000Z', lastActivityAt: '2026-01-01T00:00:00.000Z' },
+    ])));
+    selectSession('m');
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
+    /** @param {string} type @param {unknown} [detail] */
+    const fire = (type, detail = null) => toolbar.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    /** New workspace's Create, as the dialog fires it. @param {{ name: string | null, baseBranch: string | null, agentId: string | null }} detail */
+    const create = (detail) => app.querySelector('acp-workspace-dialog')?.dispatchEvent(new CustomEvent('acp-workspace-create', { detail, bubbles: true, composed: true }));
+    return { app, fire, create };
+  }
+
+  /** The workspace of the shown chat or draft. */
+  const shownChatWorkspace = () => {
+    const id = /** @type {string} */ ($activeSessionId.get());
+    return $sessions.get().find((s) => s.id === id)?.workspaceId ?? $draftSessions.get()[id]?.workspaceId ?? 'main';
+  };
+
+  it('switches the chat and the folder with the picked workspace, and back to Main', async () => {
+    // Arrange
+    const { fire } = await render();
+
+    // Act
+    fire('acp-workspace-select', { id: 'w1' });
+    const inWorkspace = [$activeSessionId.get(), $activeRoot.get().path];
+    fire('acp-workspace-select', { id: 'main' });
+
+    // Assert
+    expect(inWorkspace, "the workspace's chat and folder").to.deep.equal(['c', '/wt/one']);
+    expect([$activeSessionId.get(), $activeRoot.get().path], "Main's").to.deep.equal(['m', '/p']);
+  });
+
+  it('creates a named workspace and shows it with a new chat; an unnamed one is a draft until its first message', async () => {
+    // Arrange
+    const { create } = await render();
+
+    // Act
+    create({ name: 'Fix', baseBranch: 'dev', agentId: null });
+    await until(() => $activeWorkspaceId.get() === 'w2');
+    const named = [shownChatWorkspace(), (/** @type {string} */ ($activeSessionId.get())) in $draftSessions.get()];
+    create({ name: null, baseBranch: null, agentId: null });
+    const draft = $activeWorkspaceId.get();
+
+    // Assert
+    expect(calls.filter((c) => c.cmd === 'workspace_create').map((c) => c.args)).to.deep.equal([{ projectPath: '/p', name: 'Fix', baseBranch: 'dev' }]);
+    expect(named, 'a new chat of it').to.deep.equal(['w2', true]);
+    expect([draft in $draftWorkspaces.get(), shownChatWorkspace(), $activeRoot.get().path], 'a draft workspace, no folder yet').to.deep.equal([true, draft, null]);
+  });
+
+  it("drops a draft workspace left without a message", async () => {
+    // Arrange
+    const { fire, create } = await render();
+    create({ name: null, baseBranch: null, agentId: null });
+    const draft = $activeWorkspaceId.get();
+
+    // Act
+    fire('acp-workspace-select', { id: 'w1' });
+
+    // Assert
+    expect(Object.keys($draftWorkspaces.get()), 'the draft workspace').to.deep.equal([]);
+    expect(Object.values($draftSessions.get()).filter((d) => d.workspaceId === draft), 'its draft chat').to.deep.equal([]);
+  });
+
+  it('keeps a draft workspace left while its first chat is being created', async () => {
+    // Arrange: its first message sent, its chat listed while the backend places it
+    const { fire, create } = await render();
+    create({ name: null, baseBranch: null, agentId: null });
+    const draft = $activeWorkspaceId.get();
+    $sessions.set([...$sessions.get(), /** @type {import('../../../hooks/sessions/types.js').Session} */ (/** @type {unknown} */ ({ id: 'first', projectId: '/p', workspaceId: draft, folder: '/p', status: 'preparing', createdAt: '2026-01-03T00:00:00.000Z', lastActivityAt: '2026-01-03T00:00:00.000Z' }))]);
+
+    // Act
+    fire('acp-workspace-select', { id: 'w1' });
+
+    // Assert
+    expect(Object.keys($draftWorkspaces.get())).to.deep.equal([draft]);
+  });
+
+  it("bases New workspace on Main's branches and branch, whichever workspace is shown", async () => {
+    // Arrange: a workspace shown, its root open
+    const { app, fire } = await render();
+    $openRoots.set({ '/wt/one': 'r-w' });
+    fire('acp-workspace-select', { id: 'w1' });
+    const dialog = /** @type {HTMLElementTagNameMap['acp-workspace-dialog']} */ (app.querySelector('acp-workspace-dialog'));
+
+    // Act
+    dialog.dispatchEvent(new CustomEvent('acp-branches-query', { detail: {}, bubbles: true, composed: true }));
+    await until(() => dialog.currentBranch === 'main');
+
+    // Assert
+    expect(calls.filter((c) => c.cmd === 'git_branches').map((c) => c.args.rootId), "Main's root").to.deep.equal(['r']);
+    expect(dialog.branches).to.deep.equal(['main', 'dev']);
+    $openRoots.set({});
+  });
+
+  it('deletes the shown workspace after asking, and shows Main', async () => {
+    // Arrange
+    const { app, fire } = await render();
+    fire('acp-workspace-select', { id: 'w1' });
+    const dialog = /** @type {HTMLElementTagNameMap['acp-workspace-delete-dialog']} */ (app.querySelector('acp-workspace-delete-dialog'));
+
+    // Act
+    fire('acp-workspace-delete-request', { id: 'w1' });
+    await until(() => dialog.workspace !== null);
+    dialog.dispatchEvent(new CustomEvent('acp-workspace-delete', { detail: { id: 'w1', keepBranch: true }, bubbles: true, composed: true }));
+    await until(() => calls.some((c) => c.cmd === 'workspace_delete'));
+
+    // Assert
+    expect([dialog.workspace?.id, dialog.preview]).to.deep.equal(['w1', { uncommitted: 0, commits: 1, working: [] }]);
+    expect(calls.find((c) => c.cmd === 'workspace_delete')?.args).to.deep.equal({ id: 'w1', keepBranch: true });
+    expect([$activeWorkspaceId.get(), $activeSessionId.get()], 'Main again').to.deep.equal(['main', 'm']);
   });
 });
 

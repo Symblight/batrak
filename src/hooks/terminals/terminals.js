@@ -313,6 +313,14 @@ export const terminals = Object.freeze({
   },
 
   /**
+   * Open in → Terminal of a workspace or Main: a terminal in its folder.
+   * @param {string} path
+   */
+  openAt(path) {
+    openIn({ cwd: path, fallback: path });
+  },
+
+  /**
    * Streams a terminal into a view, starting its shell at the view's size the first time.
    * @type {TerminalConnect}
    */

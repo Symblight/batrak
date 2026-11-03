@@ -8,18 +8,22 @@ paths:
   - "src/stores/{sessions,session-sync,session-runtime,session-read,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
   - "src/views/chat-view/**"
-  - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
+  - "src/components/{chat,session-*,markdown,part-thinking,context-meter,mode-picker,agent-picker,model-picker}/**"
   - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input,session-read-state}.md"
 ---
 
 # Sessions over ACP
 
-**Sessions:** `stores/sessions/sessions.js` holds `$sessions` (listed), `$draftSessions` (id → project id: a
-"New session" with no message yet, not listed) and `$activeSessionId`, which is also the chat's
+**Sessions:** `stores/sessions/sessions.js` holds `$sessions` (listed), `$draftSessions` (id →
+`{ projectId, workspaceId }`: a new chat with no message yet, not listed) and `$activeSessionId`, which is also the chat's
 conversation id; `$activeSession` is `null` for a draft. The `sessions` hook keeps the active session in
-the opened project (`showProject()`: the project's last shown session (`brama:sessions:last:<project path>`, per window, so it
-survives a relaunch), its newest, or a new draft),
+the shown workspace (`showWorkspace()`: its last shown session (`brama:sessions:last:<folder>`, Main's
+the project path, per window, so it survives a relaunch), its newest, or a new draft of it), and the
+`workspaces` hook switches the shown workspace to the shown chat's when a chat of another one is
+shown (a banner, a draft workspace's first chat once placed). The Sessions column lists only the
+shown workspace's chats under `<acp-workspace-header>`; a draft workspace (`$draftWorkspaces`, no
+name given) left without a message is dropped with its drafts,
 `create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
 agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
@@ -75,8 +79,11 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`hooks/workspaces/`). A chat (`workspaceId`) runs in its workspace's folder (`mode: worktree`,
   the worktree fields copied); its env is `WorktreeEnv::shared()`: `prepare` only checks the
   folder (missing: "folder is missing", until `recreate_workspace`) and its branch, `discard` is a
-  no-op. Until the composer picks workspaces, a Worktree run target makes a workspace named after
-  the title (`new_record`). At load, a worktree session without a workspace gets one of its own
+  no-op. `session_create` takes the draft's `workspace` (`WorkspaceChoice`, `new_record`): `main`
+  (the project folder, `mode: local`, no git needed), `existing` `{ id }` (refused for another
+  project's) or `new` `{ baseBranch }` (a draft workspace's first message: placed named after the
+  title, `nameSource: agent`: it then takes its oldest chat's agent title, from
+  `session_info_update` or a listing, until renamed; `name_workspace_after`). Removing a chat never touches its workspace; only Delete workspace does. At load, a worktree session without a workspace gets one of its own
   (`workspaces::migrate`, idempotent). No repository, no commit or an unknown base refuses a
   workspace. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
@@ -103,8 +110,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
   notices live in `stores/session-runtime/session-runtime.js`, shown by `<acp-session-banner>` (a queued
   turn's names the session it waits for, with Show session, and says when that one waits for
-  your answer; the run-target picker's Local says how many local sessions share the checkout,
-  `$localShared`); `$agentList`
+  your answer); `$agentList`
   (the `agents` hook, `hooks/agents/agents.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (`markdown.render()` with the `reply` policy: markdown-it + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
   width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in
@@ -155,7 +161,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   as first learned), so a new session shows the real models before it starts. A new session starts
   with the user's last picks for its agent (`brama:agents:last-picks`; never a permission mode,
   category `mode`); a listed session without a composer this launch (after a reload) gets one
-  from its record: its agent, `config`, run target, started. An agent with nothing cached is probed once per launch
+  from its record: its agent, `config`, started. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
   `session/new`, no prompt, stopped), one at a time; an agent picked in the composer is probed at
   once (`agents.loadOptions()`, once per launch, cached or not). `$composerOptionsStatus`
@@ -197,9 +203,9 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   session. `trackSeen()` (`hooks/sessions/seen.js`) marks the shown session seen while the page is
   visible, the window focused and the agent column shown, and once more when that stops.
   `recordBaselines()` runs on each sync report. UI: a dot in the row's indent (in the pin's place),
-  a heavier title, a primary age; a collapsed project's counter; `● N new` beside Show more; Mark as
-  read / unread in the row menu, Mark all as read in the project menu and Mod+Shift+R
-  (`markProjectRead` in the shortcut table, handled by `<acp-app>`).
+  a heavier title, a primary age; `● N new` beside Show more; Mark as read / unread in the row menu,
+  Mark all as read of the shown workspace's chats on Mod+Shift+R (`markWorkspaceRead`;
+  `markProjectRead` in the shortcut table, handled by `<acp-app>`).
 - **Session input** (spec: `docs/specs/session-input.md`): what the user gives a session reaches it
   in Chat and Terminal alike, or is refused with a reason, never dropped. A composer send is read
   from its html (`inputOfComposer()`, `hooks/sessions/input-parts.js`), never its plain `value` (a chip

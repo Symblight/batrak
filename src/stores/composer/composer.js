@@ -1,14 +1,12 @@
 import { atom, computed } from 'nanostores';
 import { $activeSessionId, $sessions } from '../sessions/sessions.js';
 import { $agentList } from '../agents/agents.js';
-import { $projectSettings } from '../project/project.js';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../hooks/composer/types.js').ModeRisk} ModeRisk */
 /** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../../hooks/composer/types.js').ConfigOption} ConfigOption */
 /** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
-/** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
 /** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
@@ -167,13 +165,12 @@ function freshState(agentId) {
     agentId,
     configOptions: withValues(options, chosen),
     chosen,
-    runTarget: { kind: $projectSettings.get().defaultMode, branch: null },
     started: false,
   };
 }
 
 /**
- * A listed session's before its agent reports (after a reload): its own agent, values and run target.
+ * A listed session's before its agent reports (after a reload): its own agent and values.
  * @param {Session} session
  * @returns {ComposerState}
  */
@@ -182,7 +179,6 @@ function listedState(session) {
     agentId: session.agentId,
     configOptions: withValues(agentOf(session.agentId).configOptions, session.config),
     chosen: {},
-    runTarget: { kind: session.mode, branch: session.mode === 'worktree' ? session.branch : null },
     started: true,
   };
 }
@@ -201,9 +197,9 @@ const $newSessionAgentId = computed([$lastAgentId, $agentList], (last, list) => 
 /** Each session's composer by session id, once it differs from a fresh one. In memory. */
 const $composers = atom(/** @type {Readonly<Record<string, ComposerState>>} */ ({}));
 
-/** The active session's composer: agent, its ACP config options, where it runs. */
+/** The active session's composer: agent and its ACP config options. */
 export const $composer = computed(
-  [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $projectSettings, $lastPicks],
+  [$composers, $activeSessionId, $sessions, $newSessionAgentId, $agents, $lastPicks],
   (_composers, id, _sessions, agentId) => (id === null ? freshState(agentId) : composerOf(id)),
 );
 
@@ -214,30 +210,18 @@ export const $composer = computed(
 export function composerOf(id) {
   const stored = $composers.get()[id];
   // A draft whose agent is gone (none yet, removed from agents.json or turned off since) gets the
-  // one a new session would, keeping where it runs.
+  // one a new session would.
   const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId && !a.off);
   if (stored && gone && stored.agentId !== $newSessionAgentId.get()) {
-    return withDefaultTarget({ ...freshState($newSessionAgentId.get()), runTarget: stored.runTarget, runTargetPicked: stored.runTargetPicked });
+    return freshState($newSessionAgentId.get());
   }
   const session = $sessions.get().find((s) => s.id === id);
   // The backend moved the session to another id for its agent (removed and added again).
   if (stored?.started && session && session.agentId !== stored.agentId) {
     return { ...stored, agentId: session.agentId, configOptions: withValues(agentOf(session.agentId).configOptions, session.config) };
   }
-  if (stored) return withDefaultTarget(stored);
+  if (stored) return stored;
   return session ? listedState(session) : freshState($newSessionAgentId.get());
-}
-
-/**
- * A draft's run target is the project's default until the user picks one: `workspace.json` is read
- * after the draft may already have been written (the agent's options, a pick).
- * @param {ComposerState} state
- * @returns {ComposerState}
- */
-function withDefaultTarget(state) {
-  const kind = $projectSettings.get().defaultMode;
-  if (state.started || state.runTargetPicked || state.runTarget.kind === kind) return state;
-  return { ...state, runTarget: { ...state.runTarget, kind } };
 }
 
 /**
@@ -277,7 +261,7 @@ export function selectAgent(agentId) {
   const state = $composer.get();
   if (state.started || state.agentId === agentId) return;
   $lastAgentId.set(agentId);
-  updateActive((s) => ({ ...freshState(agentId), runTarget: s.runTarget, runTargetPicked: s.runTargetPicked }));
+  updateActive(() => freshState(agentId));
 }
 
 /**
@@ -355,17 +339,8 @@ export function applyAgentOptions(id, agentOptions) {
   return Object.entries(chosen).map(([configId, value]) => ({ configId, value }));
 }
 
-/** @param {Partial<RunTarget>} patch Ignored once the session started. */
-export function setRunTarget(patch) {
-  updateActive((state) =>
-    state.started
-      ? state
-      : { ...state, runTarget: { ...state.runTarget, ...patch }, runTargetPicked: state.runTargetPicked || patch.kind !== undefined || patch.branch !== undefined },
-  );
-}
-
 /**
- * The session's first message went out: its agent and run target are fixed from now on.
+ * The session's first message went out: its agent is fixed from now on.
  * @param {string} id
  */
 export function startComposer(id) {

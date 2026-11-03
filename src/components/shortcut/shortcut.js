@@ -6,7 +6,7 @@ import styles from './shortcut.css?inline';
 
 /**
  * @tag acp-shortcut
- * @summary A key chip: a table shortcut's hint, a group's, or else its slotted text (↑↓, Enter, Esc).
+ * @summary A key chip: a table shortcut's hint, a group's, or else its slotted text (↑↓, Enter, Esc). Its fill is `--acp-shortcut-background`, its text `--acp-shortcut-color` (the parent's by default).
  */
 export class AcpShortcut extends LitElement {
   static properties = {

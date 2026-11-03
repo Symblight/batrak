@@ -91,3 +91,49 @@ chx-message-row {
     transform: translateY(8px);
   }
 }
+
+/* Every dialog: one frame and one control size (the scale is in tokens.css). A dialog sets only
+   its content; `wide` dialogs (lists of launches, About's paths) take the wide width. */
+md-dialog {
+  --md-dialog-container-color: var(--acp-color-surface-container-high);
+  --md-dialog-container-radius: var(--acp-dialog-shape);
+
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+}
+md-dialog::part(dialog) {
+  width: min(var(--acp-dialog-width), calc(100vw - 32px));
+}
+md-dialog[wide]::part(dialog) {
+  width: min(var(--acp-dialog-width-wide), calc(100vw - 32px));
+  max-inline-size: none;
+}
+md-dialog md-button {
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+}
+
+/* Every text field and select (md-select's own field is an md-text-field in its shadow root): one
+   dense outlined field, 36px. A component sets only what differs (a mono font, an inline rename's
+   tighter box). */
+md-text-field {
+  --md-text-field-top-space: 8px;
+  --md-text-field-bottom-space: 8px;
+  --md-text-field-inline-start-space: var(--acp-space-4);
+  --md-text-field-inline-end-space: var(--acp-space-4);
+  --md-text-field-font-size: var(--acp-font-size-lg);
+  --md-text-field-label-size: var(--acp-font-size-lg);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
+
+  caret-color: var(--acp-color-primary);
+}
+/* The library's focused outline is 3px; MD3 asks for 2px. */
+md-text-field:focus-within::part(indicator) {
+  border-width: 2px;
+}

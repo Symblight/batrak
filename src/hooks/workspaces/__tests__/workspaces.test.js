@@ -2,7 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $project } from '../../../stores/project/project.js';
-import { $activeRoot, $workspaces } from '../../../stores/workspaces/workspaces.js';
+import { $activeRoot, $activeWorkspaceId, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { workspaces } from '../workspaces.js';
@@ -171,5 +171,24 @@ describe('workspaces hook', () => {
     selectSession(null);
     $sessions.set([]);
     $notices.set([]);
+  });
+
+  it("shows Main when the project's workspaces can't be listed, rather than waiting for its stored one", async () => {
+    // Arrange
+    mockIPC((cmd) => {
+      if (cmd === 'workspaces_list') throw new Error('store unreadable');
+      return null;
+    });
+    setActiveWorkspace('/work/a', 'w1');
+    stop = workspaces.start();
+
+    // Act
+    $project.set({ path: '/work/a', name: 'a', rootId: 'root-a' });
+    await until(() => $activeWorkspaceId.get() === 'main');
+
+    // Assert
+    expect($activeWorkspaceId.get()).to.equal('main');
+    expect($activeRoot.get().path, "Main's folder").to.equal('/work/a');
+    setActiveWorkspace('/work/a', 'main');
   });
 });

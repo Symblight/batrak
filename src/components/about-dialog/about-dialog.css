@@ -2,16 +2,7 @@
   display: contents;
 }
 
-.acp-about-dialog__dialog {
-  --md-dialog-container-color: var(--acp-color-surface-container-high);
-  --md-dialog-container-radius: 16px;
-
-  color: var(--acp-color-on-surface);
-  font-family: var(--acp-font-family);
-}
-.acp-about-dialog__dialog::part(dialog) {
-  width: min(440px, calc(100vw - 32px));
-}
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
 
 .acp-about-dialog__headline {
   display: grid;
@@ -25,11 +16,11 @@
   height: 40px;
 }
 .acp-about-dialog__title {
-  font: 500 20px/28px var(--acp-font-family);
+  font: var(--acp-dialog-headline-font);
   color: var(--acp-color-on-surface);
 }
 .acp-about-dialog__subtitle {
-  font: 400 13px/18px var(--acp-font-family);
+  font: var(--acp-dialog-detail-font);
   color: var(--acp-color-on-surface-variant);
 }
 
@@ -41,7 +32,7 @@
   grid-template-columns: auto 1fr;
   gap: var(--acp-space-1-5) var(--acp-space-4);
   margin: 0;
-  font: 400 13px/18px var(--acp-font-family);
+  font: var(--acp-dialog-detail-font);
 }
 .acp-about-dialog__label {
   color: var(--acp-color-on-surface-variant);
@@ -58,9 +49,6 @@
   align-items: center;
   gap: var(--acp-space-2);
   width: 100%;
-}
-.acp-about-dialog__action {
-  --md-button-font-size: var(--acp-font-size-md);
 }
 /* Show log files stays at the start; Close goes to the end. */
 .acp-about-dialog__action_close {

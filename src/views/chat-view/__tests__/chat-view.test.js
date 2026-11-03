@@ -2,6 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $project } from '../../../stores/project/project.js';
+import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../chat-view.js';
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
@@ -29,7 +30,7 @@ describe('acp-chat-view', () => {
       return answer(cmd);
     });
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
-    $draftSessions.set({ d1: '/p' });
+    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
   });
 
@@ -37,6 +38,8 @@ describe('acp-chat-view', () => {
     $activeSessionId.set(null);
     $draftSessions.set({});
     $sessions.set([]);
+    setActiveWorkspace('/p', MAIN);
+    setWorkspaces([]);
     $project.set(null);
     clearMocks();
   });
@@ -123,16 +126,32 @@ describe('acp-chat-view', () => {
     expect(calls.filter((c) => c.cmd === 'quick_open')).to.deep.equal([]);
   });
 
-  it("lists the project's branches for the run target when asked", async () => {
+  it("blocks the composer while the shown workspace's folder is missing, and recreates it when asked", async () => {
     // Arrange
+    /** @type {import('../../../hooks/workspaces/types.js').Workspace} */
+    const workspace = {
+      id: 'w1', projectPath: '/p', name: 'W', nameSource: 'user', folder: '/wt/w1', worktreePath: '/wt/w1', branch: 'brama/w',
+      baseCommit: 'c0', baseBranch: null, createdAt: '2026-01-01T00:00:00Z', lastActiveAt: null, creating: false, error: null, missing: true,
+    };
+    setWorkspaces([workspace], '/p');
+    setActiveWorkspace('/p', 'w1');
     const el = await render();
-    answer = (cmd) => (cmd === 'git_branches' ? ['main', 'dev'] : null);
-
-    // Act
-    fire(el, 'acp-branches-query', {});
-    await until(() => el.chat?.branches.length === 2);
 
     // Assert
-    expect(el.chat?.branches).to.deep.equal(['main', 'dev']);
+    expect(el.chat?.blocked).to.deep.equal({ message: 'Recreate the folder to continue', workspaceId: 'w1' });
+
+    // Act
+    fire(el, 'acp-workspace-recreate', { id: 'w1' });
+    await until(() => calls.some((c) => c.cmd === 'workspace_recreate'));
+
+    // Assert
+    expect(calls.find((c) => c.cmd === 'workspace_recreate')?.args).to.deep.equal({ id: 'w1' });
+
+    // Act: the folder is back
+    setWorkspaces([{ ...workspace, missing: false }], '/p');
+    await el.updateComplete;
+
+    // Assert
+    expect(el.chat?.blocked).to.equal(null);
   });
 });

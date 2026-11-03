@@ -10,7 +10,7 @@ mod runtime;
 
 pub use runtime::{
     CliDraft, CliOpened, DeletePreview, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
-    SessionsOptions, SyncReport,
+    SessionsOptions, SyncReport, WorkspaceChoice,
 };
 
 use std::collections::BTreeMap;

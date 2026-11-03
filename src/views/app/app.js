@@ -18,14 +18,20 @@ import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../sto
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
 import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
-import { $unreadSessions, markProjectRead } from '../../stores/session-read/session-read.js';
+import { $unreadSessions, markWorkspaceRead } from '../../stores/session-read/session-read.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $project } from '../../stores/project/project.js';
-import { $rootId } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspaceId, $draftWorkspaces, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $agentList } from '../../stores/agents/agents.js';
+import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
+import { $now } from '../../stores/clock/clock.js';
+import { orderWorkspaces, statusesOf } from '../../hooks/workspaces/rules.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/toolbar/toolbar.js';
+import '../../components/workspace-dialog/workspace-dialog.js';
+import '../../components/workspace-delete-dialog/workspace-delete-dialog.js';
 import '../session-column/session-column.js';
 import '../agent-column/agent-column.js';
 import '../main-column/main-column.js';
@@ -120,6 +126,8 @@ export class AcpApp extends ViewElement {
     sideView: { state: true },
     quickOpenFiles: { state: true },
     home: { state: true },
+    branches: { state: true },
+    mainBranch: { state: true },
   };
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
@@ -134,6 +142,13 @@ export class AcpApp extends ViewElement {
   #rootId = new StoreController(this, { store: $rootId });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #githubAccount = new StoreController(this, { store: $githubAccount });
+  #sessions = new StoreController(this, { store: $sessions });
+  #workspaces = new StoreController(this, { store: $workspaces });
+  #draftWorkspaces = new StoreController(this, { store: $draftWorkspaces });
+  #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
+  #permissions = new StoreController(this, { store: $permissionRequests });
+  #now = new StoreController(this, { store: $now });
+  #agentList = new StoreController(this, { store: $agentList });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
@@ -156,6 +171,77 @@ export class AcpApp extends ViewElement {
   #openProjectTerminal() {
     terminals.showPanel().catch((err) => app.reportError('Opening a terminal failed', err));
   }
+
+  /**
+   * The picker's Active group, in its order (a draft workspace as "New workspace"), and every
+   * workspace's status, Main's under `main`.
+   */
+  #workspacePicker() {
+    const path = this.#project.value?.path ?? null;
+    if (path === null) return { list: [], statuses: {} };
+    const drafts = Object.values(this.#draftWorkspaces.value)
+      .filter((d) => d.projectPath === path)
+      .map((d) => /** @type {import('../../hooks/workspaces/types.js').Workspace} */ (/** @type {unknown} */ ({ id: d.id, name: 'New workspace', createdAt: new Date().toISOString(), lastActiveAt: null, creating: false, missing: false, error: null })));
+    const all = [...this.#workspaces.value, ...drafts];
+    const facts = { pending: new Set(Object.keys(this.#permissions.value)), unread: new Set(this.#unread.value), now: this.#now.value };
+    const statuses = statusesOf(path, all, this.#sessions.value, facts);
+    return { list: orderWorkspaces(all, statuses, this.#sessions.value), statuses };
+  }
+
+  /** @param {Event} e */
+  #onWorkspaceEvent = (e) => {
+    const detail = /** @type {CustomEvent<{ id: string, name: string, keepBranch: boolean, path: string }>} */ (e).detail;
+    switch (e.type) {
+      case 'acp-workspace-select':
+        workspaces.select(detail.id);
+        break;
+      case 'acp-workspace-new':
+        void this.renderRoot.querySelector('acp-workspace-dialog')?.show();
+        break;
+      case 'acp-workspace-rename':
+        void workspaces.rename(detail.id, detail.name);
+        break;
+      case 'acp-workspace-delete-request':
+        void workspaces.confirmDelete(detail.id, this.renderRoot.querySelector('acp-workspace-delete-dialog'));
+        break;
+      case 'acp-workspace-changes':
+        workspaces.changes(detail.id);
+        break;
+      case 'acp-workspace-apply':
+        void workspaces.apply(detail.id);
+        break;
+      case 'acp-workspace-check-out':
+        void workspaces.checkOut(detail.id);
+        break;
+      case 'acp-open-terminal':
+        terminals.openAt(detail.path);
+        break;
+    }
+  };
+
+  /** @param {Event} e */
+  #onWorkspaceCreate = (e) => {
+    void workspaces.create(/** @type {CustomEvent<{ name: string | null, baseBranch: string | null, agentId: string | null }>} */ (e).detail);
+  };
+
+  /** @param {Event} e */
+  #onWorkspaceDelete = (e) => {
+    const { id, keepBranch } = /** @type {CustomEvent<{ id: string, keepBranch: boolean }>} */ (e).detail;
+    void workspaces.delete(id, keepBranch);
+  };
+
+  // A new workspace is based on Main's branches, whichever workspace is shown.
+  #onBranchesQuery = async () => {
+    const rootId = this.#project.value?.rootId ?? null;
+    if (rootId === null) return;
+    try {
+      const [branches, mainBranch] = await Promise.all([git.branches(rootId), git.branchOf(rootId)]);
+      this.branches = branches;
+      this.mainBranch = mainBranch;
+    } catch (err) {
+      app.reportError('Listing branches failed', err);
+    }
+  };
 
   /**
    * `searchInFiles`: the search dialog. `quickOpen`. `toggleSessionView`: the session in chat /
@@ -186,7 +272,7 @@ export class AcpApp extends ViewElement {
     } else if (is('markProjectRead') && !AcpApp.#takesKeys(e)) {
       e.preventDefault();
       const projectId = this.#project.value?.path;
-      if (projectId) markProjectRead(projectId);
+      if (projectId) markWorkspaceRead(projectId, $activeWorkspaceId.get());
     } else if (is('settings')) {
       e.preventDefault();
       this.#showSettings();
@@ -223,6 +309,10 @@ export class AcpApp extends ViewElement {
     this.quickOpenFiles = [];
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
+    /** @type {readonly string[]} The project's branches, for New workspace's Based on. */
+    this.branches = [];
+    /** @type {string | null} Main's checked-out branch, for New workspace's Based on. */
+    this.mainBranch = null;
   }
 
   connectedCallback() {
@@ -507,6 +597,9 @@ export class AcpApp extends ViewElement {
     // Expanded, the editor takes the agent column's room; with no tab open the agent column is shown anyway.
     const expanded = hasCode && hidden.includes('agent');
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
+    const picker = this.#workspacePicker();
+    const workspaceId = this.#workspaceId.value;
+    const agents = this.#agentList.value;
     return html`<acp-panel variant="window">
       <acp-toolbar
         slot="header"
@@ -519,6 +612,19 @@ export class AcpApp extends ViewElement {
         .githubReply=${this.#pullRequest.value?.reply ?? null}
         .hiddenColumns=${hidden}
         ?expandable=${hasCode}
+        .workspaces=${picker.list}
+        .workspaceStatuses=${picker.statuses}
+        .workspaceId=${workspaceId === MAIN ? null : workspaceId}
+        ?workspaces-enabled=${picker.list.length > 0 || Boolean(this.#gitRepo.value.repo?.sha)}
+        @acp-workspace-select=${this.#onWorkspaceEvent}
+        @acp-workspace-new=${this.#onWorkspaceEvent}
+        @acp-workspace-rename=${this.#onWorkspaceEvent}
+        @acp-workspace-delete-request=${this.#onWorkspaceEvent}
+        @acp-workspace-changes=${this.#onWorkspaceEvent}
+        @acp-workspace-apply=${this.#onWorkspaceEvent}
+        @acp-workspace-check-out=${this.#onWorkspaceEvent}
+        @acp-open-terminal=${this.#onWorkspaceEvent}
+        @acp-reveal-path=${this.#onRevealPath}
         @acp-column-toggle=${this.#onColumnToggle}
         @acp-project-select=${this.#onProjectSelect}
         @acp-project-open-folder=${this.#onProjectOpenFolder}
@@ -589,6 +695,16 @@ export class AcpApp extends ViewElement {
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
+      <acp-workspace-dialog
+        .branches=${this.branches}
+        .currentBranch=${this.mainBranch}
+        .taken=${this.#workspaces.value.map((w) => w.branch)}
+        .agents=${agents.agents.filter((a) => a.enabled)}
+        .agentId=${agents.defaultAgent}
+        @acp-branches-query=${this.#onBranchesQuery}
+        @acp-workspace-create=${this.#onWorkspaceCreate}
+      ></acp-workspace-dialog>
+      <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onWorkspaceDelete}></acp-workspace-delete-dialog>
       <acp-snackbars
         .notices=${this.#notices.value}
         @acp-notice-dismiss=${(/** @type {CustomEvent<{ id: number }>} */ e) => dismissNotice(e.detail.id)}

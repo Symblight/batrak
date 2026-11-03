@@ -21,6 +21,9 @@ function platformOf(userAgent) {
 
 const platform = platformOf(navigator.userAgent);
 
+/** What reveals a file in each OS's file manager. */
+const REVEAL_LABELS = Object.freeze({ mac: 'Show in Finder', windows: 'Show in Explorer', linux: 'Show in File Manager' });
+
 /** @type {Promise<void> | null} */
 let aboutLoading = null;
 
@@ -41,7 +44,10 @@ export const app = Object.freeze({
   platform,
 
   /** What reveals a file in this OS's file manager. */
-  revealLabel: { mac: 'Show in Finder', windows: 'Show in Explorer', linux: 'Show in File Manager' }[platform],
+  revealLabel: REVEAL_LABELS[platform],
+
+  /** `revealLabel` of each OS. */
+  revealLabels: REVEAL_LABELS,
 
   platformOf,
 

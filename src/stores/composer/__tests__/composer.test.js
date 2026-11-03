@@ -5,15 +5,12 @@ import {
   $composer,
   $composerOptionsStatus,
   agentInfo,
-  applyAgentOptions,
   normalizeOptions,
   selectAgent,
-  setRunTarget,
   startComposer,
   whileLoadingOptions,
 } from '../composer.js';
 import { $activeSessionId, $sessions, newSession, startSession, upsertSession } from '../../sessions/sessions.js';
-import { setProjectSettings } from '../../project/project.js';
 
 /**
  * @param {string} id
@@ -26,7 +23,6 @@ describe('composer', () => {
   afterEach(() => {
     $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     $activeSessionId.set(null);
-    setProjectSettings(null);
   });
 
   it('has no agent while the project configures none', () => {
@@ -41,27 +37,23 @@ describe('composer', () => {
     expect(agentInfo('b')?.name).to.equal('B');
   });
 
-  it('gives a draft changed before any agent existed the agent added later', () => {
+  it('gives a draft made before any agent existed the agent added later', () => {
     $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     newSession('/p');
-    setRunTarget({ kind: 'worktree' });
     expect($composer.get().agentId).to.equal(null);
 
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId).to.equal('a');
-    expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
   });
 
   it('moves a draft off an agent agents.json no longer has', () => {
     $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     newSession('/p');
     selectAgent('b');
-    setRunTarget({ kind: 'worktree' });
     expect($composer.get().agentId).to.equal('b');
 
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId, 'removed from the file').to.equal('a');
-    expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
     expect($agents.get().map((x) => x.id)).to.deep.equal(['a']);
   });
 
@@ -85,37 +77,11 @@ describe('composer', () => {
     expect(agentInfo('b')).to.include({ signIn: true });
   });
 
-  it("gives a draft the project's run target once workspace.json is read, until the user picks one", () => {
-    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
-    const id = newSession('/settings');
-    // The agent's options arrive before the project's workspace.json is read.
-    applyAgentOptions(id, []);
-    expect($composer.get().runTarget.kind).to.equal('local');
-
-    setProjectSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    expect($composer.get().runTarget.kind).to.equal('worktree');
-
-    setRunTarget({ kind: 'local' });
-    setProjectSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    expect($composer.get().runTarget.kind).to.equal('local', 'keeps what the user picked');
-  });
-
-  it('counts a base branch pick as picking the run target', () => {
-    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
-    setProjectSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    newSession('/branch-pick');
-    setRunTarget({ branch: 'dev' });
-
-    setProjectSettings({ defaultMode: 'local', localTurns: 'queue' });
-    expect($composer.get().runTarget).to.deep.equal({ kind: 'worktree', branch: 'dev' });
-  });
-
   it("follows a started session's agent to the id the backend moved it to", () => {
     $agentList.set({ agents: [agent('claude', 'Claude'), agent('claude-code', 'Claude Code')], defaultAgent: null, known: [], userAgents: [], errors: [] });
     const id = newSession('/started');
     $activeSessionId.set(id);
     selectAgent('claude');
-    setRunTarget({ kind: 'worktree' });
     startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
     startComposer(id);
     expect($composer.get().agentId).to.equal('claude');

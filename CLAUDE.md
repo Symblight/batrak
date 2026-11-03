@@ -137,8 +137,9 @@ Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops wh
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
 **Open roots:** the window shows one folder, `$activeRoot` (`stores/workspaces/`): the shown
-workspace's (until the picker, the shown chat's; `Roots::open_workspace`, `open_workspace_root`,
-opened by the `workspaces` hook) or the project's. `$rootId` follows it, so git, GitHub, Search,
+workspace's (`$activeWorkspaceId`, per window and project, picked in the toolbar's
+`<acp-workspace-picker>` or following the shown chat; `Roots::open_workspace`, `open_workspace_root`,
+opened by the `workspaces` hook) or the project's (Main). `$rootId` follows it, so git, GitHub, Search,
 Changes, Quick Open, the tree and `projects.absPath()` / `relPath()` do too. The `projects` hook's
 roots part (`hooks/projects/roots.js`, mirrored in `$openRoots`) keeps the last `KEEP_OPEN` (3)
 shown roots open, projects' and workspaces' together, never the shown project's; switching to one

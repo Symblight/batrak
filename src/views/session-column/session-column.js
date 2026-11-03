@@ -1,37 +1,35 @@
-import { projects } from '../../hooks/projects/projects.js';
-import { app } from '../../hooks/app/app.js';
 import { html } from 'lit';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/session-list/session-list.js';
+import '../../components/session-sync/session-sync.js';
+import '../../components/workspace-delete-dialog/workspace-delete-dialog.js';
+import '../../components/workspace-header/workspace-header.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
-import { $collapsedProjects, $projects, toggleProject } from '../../stores/projects/projects.js';
+import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
-import { $unreadSessions, markProjectRead, markRead, markUnread } from '../../stores/session-read/session-read.js';
+import { $unreadSessions, markRead, markUnread } from '../../stores/session-read/session-read.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
-import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded } from '../../stores/sessions/sessions.js';
-import { $openingPath, $project } from '../../stores/project/project.js';
+import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded, workspaceOfSession } from '../../stores/sessions/sessions.js';
+import { $projectPath } from '../../stores/project/project.js';
+import { $activeWorkspace, $activeWorkspaceId, MAIN } from '../../stores/workspaces/workspaces.js';
+
+/** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 
 /**
  * @tag acp-session-column
- * @summary The session list's container: projects and their sessions from the stores, the active project's sync, and what the list asks for (open, select, start, rename, reveal, remove, mark read or unread, resync).
+ * @summary The Sessions column's container: the shown workspace's header (name, New chat, the sync, its banners) and its chats from the stores, and what they ask for (select, new chat, rename, reveal, remove, mark read or unread, resync, recreate or delete the workspace).
  */
 export class AcpSessionColumn extends ViewElement {
-  static properties = {
-    home: { state: true },
-    failures: { state: true },
-  };
-
-  #projects = new StoreController(this, { store: $projects });
-  #collapsed = new StoreController(this, { store: $collapsedProjects });
   #sessions = new StoreController(this, { store: $sessions });
   #activeSession = new StoreController(this, { store: $activeSessionId });
-  #project = new StoreController(this, { store: $project });
-  #openingPath = new StoreController(this, { store: $openingPath });
+  #projectPath = new StoreController(this, { store: $projectPath });
+  #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
+  #workspace = new StoreController(this, { store: $activeWorkspace });
   #pinned = new StoreController(this, { store: $pinnedSessions });
   #unread = new StoreController(this, { store: $unreadSessions });
   #permissions = new StoreController(this, { store: $permissionRequests });
@@ -39,111 +37,23 @@ export class AcpSessionColumn extends ViewElement {
   #loaded = new StoreController(this, { store: $sessionsLoaded });
   #now = new StoreController(this, { store: $now });
   /** The list's rename, reveal and delete. */
-  #sessionActions = new SessionActionsController(this, { confirm: () => this.#dialog });
+  #sessionActions = new SessionActionsController(this, { confirm: () => this.renderRoot.querySelector('acp-confirm-dialog') });
 
-  constructor() {
-    super();
-    /** @type {string | null} Shown as `~` in project paths. */
-    this.home = null;
-    /** @type {Record<string, string>} Why a project's folder couldn't be opened, by project id. */
-    this.failures = {};
+  /** The shown workspace's header: its record, or a stand-in for a draft workspace (none: Main). */
+  get #headerWorkspace() {
+    const id = this.#workspaceId.value;
+    if (id === MAIN) return null;
+    return this.#workspace.value ?? /** @type {Workspace} */ (/** @type {unknown} */ ({ id, name: 'New workspace', creating: false, missing: false, error: null }));
   }
 
-  connectedCallback() {
-    super.connectedCallback();
-    projects.homeDir()
-      .then((home) => (this.home = home.replace(/[\\/]+$/, '')))
-      .catch(() => {});
-  }
-
-  /** @returns {HTMLElementTagNameMap['acp-confirm-dialog'] | null} */
-  get #dialog() {
-    return this.renderRoot.querySelector('acp-confirm-dialog');
-  }
-
-  /** @param {Event} e */
-  #projectIdOf(e) {
-    return /** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId;
-  }
-
-  /**
-   * Shows a project's workspace (tree, tabs) once its folder is scanned and watched.
-   * @param {string} id
-   */
-  async #activate(id) {
-    try {
-      await projects.activate(id);
-      this.#clearFailure(id);
-    } catch (err) {
-      app.reportError('Opening project failed', err);
-      this.failures = { ...this.failures, [id]: String(err) };
-    }
-  }
-
-  /** @param {string} id */
-  #clearFailure(id) {
-    if (!(id in this.failures)) return;
-    const { [id]: _cleared, ...rest } = this.failures;
-    this.failures = rest;
-  }
-
-  #onOpenFolder() {
-    projects.open().catch((err) => app.reportError('Opening folder failed', err));
-  }
-
-  /**
-   * A click on an inactive project switches to it and expands it; on the active one it toggles.
-   * @param {Event} e
-   */
-  #onProjectSelect(e) {
-    const id = this.#projectIdOf(e);
-    if (id === this.#project.value?.path) {
-      toggleProject(id);
-      return;
-    }
-    toggleProject(id, true);
-    this.#activate(id);
-  }
-
-  /** @param {Event} e */
-  #onProjectToggle(e) {
-    const { projectId, expanded } = /** @type {CustomEvent<{ projectId: string, expanded: boolean }>} */ (e).detail;
-    toggleProject(projectId, expanded);
-  }
-
-  /**
-   * Opens the project with an empty draft session in the chat.
-   * @param {Event} e
-   */
-  #onNewSession(e) {
-    const id = this.#projectIdOf(e);
-    sessions.create(id);
-    toggleProject(id, true);
-    this.#activate(id);
-  }
-
-  /** @param {Event} e */
-  #onProjectReveal(e) {
-    projects.reveal(this.#projectIdOf(e)).catch((err) => app.reportError('Revealing folder failed', err));
-  }
-
-  /**
-   * Asks first; the folder on disk stays either way.
-   * @param {Event} e
-   */
-  async #onProjectRemove(e) {
-    const id = this.#projectIdOf(e);
-    const dialog = this.#dialog;
-    if (dialog && (await projects.confirmRemove(id, dialog))) this.#clearFailure(id);
-  }
+  #onNewChat = () => {
+    const path = this.#projectPath.value;
+    if (path !== null) sessions.create(path, this.#workspaceId.value);
+  };
 
   /** @param {Event} e */
   #onSessionSelect(e) {
-    const { sessionId } = /** @type {CustomEvent<{ sessionId: string }>} */ (e).detail;
-    const session = this.#sessions.value.find((s) => s.id === sessionId);
-    if (!session) return;
-    this.#activate(session.projectId);
-    sessions.select(session.id);
+    sessions.select(/** @type {CustomEvent<{ sessionId: string }>} */ (e).detail.sessionId);
   }
 
   /** @param {Event} e */
@@ -153,51 +63,57 @@ export class AcpSessionColumn extends ViewElement {
     else markUnread(sessionId);
   }
 
+  #onResync = () => {
+    const path = this.#projectPath.value;
+    if (path) sessions.sync(path, { force: true });
+  };
+
   /** @param {Event} e */
-  #onProjectMarkRead(e) {
-    markProjectRead(this.#projectIdOf(e));
+  #onRecreate(e) {
+    void workspaces.recreate(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
   }
 
-  #onResync() {
-    const path = this.#project.value?.path;
-    if (path) sessions.sync(path, { force: true });
+  /** @param {Event} e */
+  #onDeleteRequest(e) {
+    void workspaces.confirmDelete(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id, this.renderRoot.querySelector('acp-workspace-delete-dialog'));
+  }
+
+  /** @param {Event} e */
+  #onDelete(e) {
+    const { id, keepBranch } = /** @type {CustomEvent<{ id: string, keepBranch: boolean }>} */ (e).detail;
+    void workspaces.delete(id, keepBranch);
   }
 
   render() {
-    const path = this.#project.value?.path ?? null;
+    const path = this.#projectPath.value;
+    const workspaceId = this.#workspaceId.value;
+    const chats = this.#sessions.value.filter((s) => s.projectId === path && workspaceOfSession(s) === workspaceId);
+    const loading = path !== null && sessions.loadingProjects([path], this.#loaded.value, this.#sync.value).includes(path);
     return html`<acp-panel>
+      <acp-workspace-header
+        slot="header"
+        .workspace=${this.#headerWorkspace}
+        @acp-workspace-new-chat=${this.#onNewChat}
+        @acp-workspace-recreate=${this.#onRecreate}
+        @acp-workspace-delete-request=${this.#onDeleteRequest}
+        @acp-session-resync=${this.#onResync}
+      >
+        <acp-session-sync .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}></acp-session-sync>
+      </acp-workspace-header>
       <acp-session-list
         class="acp-session-column__list"
-        .projects=${this.#projects.value}
-        .sessions=${this.#sessions.value}
-        .collapsed=${this.#collapsed.value}
-        .activeProjectId=${this.#project.value?.path ?? null}
+        .sessions=${chats}
         .activeSessionId=${this.#activeSession.value}
-        .openingProjectId=${this.#openingPath.value}
         .pinned=${this.#pinned.value}
         .unread=${this.#unread.value}
         .waiting=${Object.keys(this.#permissions.value)}
-        .failures=${this.failures}
-        .loading=${sessions.loadingProjects(
-          this.#projects.value.map((p) => p.id),
-          this.#loaded.value,
-          this.#sync.value,
-        )}
+        .loading=${loading}
         .now=${this.#now.value}
-        .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}
-        .home=${this.home}
-        @acp-project-open-folder=${this.#onOpenFolder}
-        @acp-project-select=${this.#onProjectSelect}
-        @acp-project-toggle=${this.#onProjectToggle}
-        @acp-project-new-session=${this.#onNewSession}
-        @acp-project-reveal=${this.#onProjectReveal}
-        @acp-project-remove=${this.#onProjectRemove}
-        @acp-project-mark-read=${this.#onProjectMarkRead}
         @acp-session-select=${this.#onSessionSelect}
         @acp-session-mark-read=${this.#onSessionMarkRead}
-        @acp-session-resync=${this.#onResync}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>
+      <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onDelete}></acp-workspace-delete-dialog>
     </acp-panel>`;
   }
 }

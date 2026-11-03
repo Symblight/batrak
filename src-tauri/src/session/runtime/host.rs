@@ -42,6 +42,9 @@ impl SessionHost {
             }
         }
         state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
+        if let Some(inner) = self.inner.upgrade() {
+            inner.name_workspace_after(&state.record());
+        }
     }
 
     /// The files a tool call changes, as the turn's: its diffs, and its locations unless its kind

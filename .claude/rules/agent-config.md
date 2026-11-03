@@ -14,11 +14,10 @@ paths:
 # Agents: config, registry, trust, sign-in
 
 - **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
-  `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`'s
-  `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
-  a commit, since older projects got it written whether git or not) is the run target a new session's
-  composer starts with (`$projectSettings`, read when the project opens); a worktree picks its
-  base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
+  `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
+  holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
+  chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local
+  branches, sessions' `brama/…` left out). A project's agents are its
   `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,

@@ -8,8 +8,7 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State, Window};
 
-use crate::session::env::Mode;
-use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
+use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport, WorkspaceChoice};
 
 use super::blocking;
 
@@ -55,9 +54,9 @@ pub async fn sessions_sync(
     Ok(report)
 }
 
-/// A draft's first message: creates the session under the draft's id and starts its workspace
-/// and agent in the background. Refused when a worktree one has no repository or `base_branch` to
-/// start from.
+/// A draft's first message: creates the session under the draft's id, in `workspace` (Main, an
+/// existing one, or a draft workspace placed now), and starts its folder and agent in the
+/// background. A new workspace is refused without a repository or `baseBranch` to start from.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn session_create(
@@ -66,15 +65,13 @@ pub async fn session_create(
     session_id: String,
     project_path: String,
     agent_id: String,
-    mode: Mode,
     title: String,
     config: Option<BTreeMap<String, String>>,
-    base_branch: Option<String>,
-    workspace_id: Option<String>,
+    workspace: WorkspaceChoice,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
     let config = config.unwrap_or_default();
-    let request = CreateSession { session_id, project_path, agent_id, mode, title, config, base_branch, workspace_id };
+    let request = CreateSession { session_id, project_path, agent_id, title, config, workspace };
     let sessions = sessions.inner().clone();
     let label = window.label().to_owned();
     blocking(move || sessions.create(request, &label, sink(channel))).await?
