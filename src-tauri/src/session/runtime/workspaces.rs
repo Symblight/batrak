@@ -122,6 +122,14 @@ impl Sessions {
         Ok(held)
     }
 
+    /// Checks a workspace's folder out again from its branch, after it was deleted outside Brama
+    /// (or its first checkout failed). Its chats start again from then on.
+    pub async fn recreate_workspace(&self, id: &str) -> Result<(), String> {
+        let workspaces = self.inner.workspaces.clone();
+        let id = id.to_owned();
+        tokio::task::spawn_blocking(move || workspaces.check_out(&id)).await.map_err(|e| e.to_string())?
+    }
+
     /// The ids of a workspace's chats.
     fn chats_of(&self, workspace: &str) -> Vec<String> {
         self.inner.known().into_iter().filter(|r| r.workspace_id.as_deref() == Some(workspace)).map(|r| r.session_id).collect()

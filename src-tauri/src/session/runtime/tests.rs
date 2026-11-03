@@ -3162,3 +3162,27 @@ async fn a_workspaces_git_actions_wait_for_none_of_its_chats_and_hold_them_all()
     assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), ws.branch);
     assert!(f.sessions.list().iter().all(|s| s.status == SessionStatus::Stopped));
 }
+
+#[tokio::test]
+async fn recreating_a_workspaces_deleted_folder_checks_it_out_from_its_branch() {
+    let f = git_fixture("ws-recreate");
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let (_, events) = f.create_in_workspace("c", &ws.id).unwrap();
+    events.wait_status("idle").await;
+    std::fs::write(ws.folder.join("work.txt"), "agent work\n").unwrap();
+    run_in(&ws.folder, &["add", "."]);
+    run_in(&ws.folder, &["commit", "-qm", "agent"]);
+    f.sessions.stop("c").await.unwrap();
+    std::fs::remove_dir_all(&ws.worktree_path).unwrap();
+    events.clear();
+    f.sessions.restart("c").await.unwrap();
+    let failed = events.wait_status("error").await;
+    assert!(failed.payload["message"].as_str().unwrap().contains("folder is missing"), "{failed:?}");
+
+    f.sessions.recreate_workspace(&ws.id).await.unwrap();
+
+    assert_eq!(std::fs::read_to_string(ws.folder.join("work.txt")).unwrap(), "agent work\n", "from its branch");
+    events.clear();
+    f.sessions.restart("c").await.unwrap();
+    events.wait_status("idle").await;
+}
