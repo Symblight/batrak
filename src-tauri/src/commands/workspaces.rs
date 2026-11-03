@@ -53,7 +53,8 @@ pub async fn workspace_create(
 
 #[tauri::command]
 pub async fn workspace_rename(sessions: State<'_, Sessions>, id: String, name: String) -> Result<(), String> {
-    sessions.workspaces().rename(&id, &name).map(drop)
+    let workspaces = sessions.workspaces().clone();
+    blocking(move || workspaces.rename(&id, &name).map(drop)).await?
 }
 
 /// What deleting would touch: uncommitted files, commits past the base, chats in a turn.
