@@ -8,13 +8,16 @@ const TASK = /** @type {Workspace} */ ({ id: 'w1', name: 'Fix login', creating: 
 
 /**
  * @param {Workspace | null} workspace
+ * @param {readonly string[]} [waiting] Other waiting workspaces' names.
  * @returns {Promise<{ el: AcpWorkspaceHeader, root: ShadowRoot, events: { type: string, detail: unknown }[] }>}
  */
-async function render(workspace) {
-  const el = /** @type {AcpWorkspaceHeader} */ (await fixture(html`<acp-workspace-header .workspace=${workspace}></acp-workspace-header>`));
+async function render(workspace, waiting = /** @type {readonly string[]} */ ([])) {
+  const el = /** @type {AcpWorkspaceHeader} */ (
+    await fixture(html`<acp-workspace-header .workspace=${workspace} .waiting=${waiting}></acp-workspace-header>`)
+  );
   /** @type {{ type: string, detail: unknown }[]} */
   const events = [];
-  for (const type of ['acp-workspace-new-chat', 'acp-workspace-recreate', 'acp-workspace-delete-request']) {
+  for (const type of ['acp-workspace-new-chat', 'acp-workspace-recreate', 'acp-workspace-delete-request', 'acp-workspace-next-waiting']) {
     el.addEventListener(type, (e) => events.push({ type, detail: /** @type {CustomEvent} */ (e).detail }));
   }
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot), events };
@@ -74,6 +77,27 @@ describe('acp-workspace-header', () => {
         { type: 'acp-workspace-recreate', detail: { id: 'w1' } },
         { type: 'acp-workspace-delete-request', detail: { id: 'w1' } },
       ]);
+    }
+  });
+
+  it('says which other workspaces wait, one by name, several by count, and goes to the next on click', async () => {
+    /** @type {[string[], string | null][]} */
+    const cases = [
+      [[], null],
+      [['Fix login'], 'Fix login is waiting for you'],
+      [['Fix login', 'Main'], '2 workspaces waiting'],
+    ];
+    for (const [waiting, text] of cases) {
+      // Arrange
+      const { root, events } = await render(null, waiting);
+      const strip = /** @type {HTMLElement | null} */ (root.querySelector('.acp-workspace-header__waiting'));
+
+      // Act
+      strip?.click();
+
+      // Assert
+      expect(strip?.textContent?.trim() ?? null, String(waiting)).to.equal(text);
+      expect(events, String(waiting)).to.deep.equal(text === null ? [] : [{ type: 'acp-workspace-next-waiting', detail: null }]);
     }
   });
 });

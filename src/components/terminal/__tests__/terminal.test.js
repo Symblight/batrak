@@ -166,6 +166,35 @@ describe('acp-terminal', () => {
     expect(reached.map((e) => e.key)).to.deep.equal(['p', '^']);
   });
 
+  it('on Windows and Linux leaves the workspace shortcuts to the app, Ctrl+N to the shell', async () => {
+    for (const platform of /** @type {const} */ (['windows', 'linux'])) {
+      // Arrange
+      const { el, calls } = await render();
+      el.platform = platform;
+      /** @type {string[]} */
+      const reached = [];
+      const listener = (/** @type {KeyboardEvent} */ e) => reached.push(e.code);
+      window.addEventListener('keydown', listener);
+      // Act
+      for (const [key, code, keyCode, shiftKey] of /** @type {const} */ ([
+        ['O', 'KeyO', 79, true],
+        ['J', 'KeyJ', 74, true],
+        ['N', 'KeyN', 78, true],
+        ['!', 'Digit1', 49, true],
+        // xterm sends Ctrl+@ (US Ctrl+Shift+2) as NUL.
+        ['@', 'Digit2', 50, true],
+        ['n', 'KeyN', 78, false],
+      ])) {
+        input(el).dispatchEvent(new KeyboardEvent('keydown', { key, code, keyCode, ctrlKey: true, shiftKey, bubbles: true, composed: true }));
+      }
+      window.removeEventListener('keydown', listener);
+      // Assert
+      expect(reached, `${platform}: reach the app`).to.deep.equal(['KeyO', 'KeyJ', 'KeyN', 'Digit1', 'Digit2']);
+      expect(calls.writes, `${platform}: Ctrl+N is the shell's`).to.deep.equal(['\x0e']);
+      el.remove();
+    }
+  });
+
   it('resizes the shell with its tab', async () => {
     const { el, calls } = await render();
     const before = calls.connects[0].cols;

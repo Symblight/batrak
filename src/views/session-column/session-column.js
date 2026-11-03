@@ -17,6 +17,7 @@ import { $sessionSync } from '../../stores/session-sync/session-sync.js';
 import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded, workspaceOfSession } from '../../stores/sessions/sessions.js';
 import { $projectPath } from '../../stores/project/project.js';
 import { $activeWorkspace, $activeWorkspaceId, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $waitingElsewhere } from '../../stores/workspace-status/workspace-status.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 
@@ -28,6 +29,7 @@ export class AcpSessionColumn extends ViewElement {
   #sessions = new StoreController(this, { store: $sessions });
   #activeSession = new StoreController(this, { store: $activeSessionId });
   #projectPath = new StoreController(this, { store: $projectPath });
+  #waitingElsewhere = new StoreController(this, { store: $waitingElsewhere });
   #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
   #workspace = new StoreController(this, { store: $activeWorkspace });
   #pinned = new StoreController(this, { store: $pinnedSessions });
@@ -78,6 +80,10 @@ export class AcpSessionColumn extends ViewElement {
     void workspaces.confirmDelete(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id, this.renderRoot.querySelector('acp-workspace-delete-dialog'));
   }
 
+  #onNextWaiting = () => {
+    workspaces.showNextWaiting();
+  };
+
   /** @param {Event} e */
   #onDelete(e) {
     const { id, keepBranch } = /** @type {CustomEvent<{ id: string, keepBranch: boolean }>} */ (e).detail;
@@ -93,6 +99,8 @@ export class AcpSessionColumn extends ViewElement {
       <acp-workspace-header
         slot="header"
         .workspace=${this.#headerWorkspace}
+        .waiting=${this.#waitingElsewhere.value}
+        @acp-workspace-next-waiting=${this.#onNextWaiting}
         @acp-workspace-new-chat=${this.#onNewChat}
         @acp-workspace-recreate=${this.#onRecreate}
         @acp-workspace-delete-request=${this.#onDeleteRequest}

@@ -12,7 +12,10 @@ import {
   setActiveWorkspace,
   setWorkspaces,
 } from '../../stores/workspaces/workspaces.js';
-import { $activeSession, $sessions, dropDrafts, forgetLastSession } from '../../stores/sessions/sessions.js';
+import { $activeSession, $sessions, dropDrafts, forgetLastSession, selectSession } from '../../stores/sessions/sessions.js';
+import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
+import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
+import { nextWaiting } from './rules.js';
 import { selectAgent } from '../../stores/composer/composer.js';
 import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
@@ -186,6 +189,29 @@ export const workspaces = Object.freeze({
   select(id) {
     const project = $projectPath.get();
     if (project !== null) setActiveWorkspace(project, id);
+  },
+
+  /**
+   * Shows workspace number `n` (its shortcut's): 1 is Main, 2…9 the stored ones by creation, oldest
+   * first; nothing when there's no such one.
+   * @param {number} n
+   */
+  selectNumber(n) {
+    const [id] = Object.entries($workspaceNumbers.get()).find(([, number]) => number === n) ?? [];
+    if (id !== undefined) workspaces.select(id);
+  },
+
+  /** Shows the next waiting workspace in the picker's order (`nextWaiting()`) with its waiting chat. */
+  showNextWaiting() {
+    const project = $projectPath.get();
+    const id = nextWaiting($pickerOrder.get(), $workspaceStatuses.get(), $activeWorkspaceId.get());
+    if (project === null || id === null) return;
+    const pending = $permissionRequests.get();
+    const chat = $sessions
+      .get()
+      .find((s) => s.projectId === project && (s.workspaceId ?? MAIN) === id && (s.status === 'waiting' || s.id in pending));
+    workspaces.select(id);
+    if (chat) selectSession(chat.id);
   },
 
   /**

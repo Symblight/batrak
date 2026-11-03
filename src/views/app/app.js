@@ -21,11 +21,9 @@ import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $unreadSessions, markWorkspaceRead } from '../../stores/session-read/session-read.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $project } from '../../stores/project/project.js';
-import { $activeWorkspaceId, $draftWorkspaces, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspaceId, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
 import { $agentList } from '../../stores/agents/agents.js';
-import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
-import { $now } from '../../stores/clock/clock.js';
-import { orderWorkspaces, statusesOf } from '../../hooks/workspaces/rules.js';
+import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -144,10 +142,10 @@ export class AcpApp extends ViewElement {
   #githubAccount = new StoreController(this, { store: $githubAccount });
   #sessions = new StoreController(this, { store: $sessions });
   #workspaces = new StoreController(this, { store: $workspaces });
-  #draftWorkspaces = new StoreController(this, { store: $draftWorkspaces });
   #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
-  #permissions = new StoreController(this, { store: $permissionRequests });
-  #now = new StoreController(this, { store: $now });
+  #pickerWorkspaces = new StoreController(this, { store: $pickerWorkspaces });
+  #workspaceStatuses = new StoreController(this, { store: $workspaceStatuses });
+  #workspaceNumbers = new StoreController(this, { store: $workspaceNumbers });
   #agentList = new StoreController(this, { store: $agentList });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #notices = new StoreController(this, { store: $notices });
@@ -170,22 +168,6 @@ export class AcpApp extends ViewElement {
 
   #openProjectTerminal() {
     terminals.showPanel().catch((err) => app.reportError('Opening a terminal failed', err));
-  }
-
-  /**
-   * The picker's Active group, in its order (a draft workspace as "New workspace"), and every
-   * workspace's status, Main's under `main`.
-   */
-  #workspacePicker() {
-    const path = this.#project.value?.path ?? null;
-    if (path === null) return { list: [], statuses: {} };
-    const drafts = Object.values(this.#draftWorkspaces.value)
-      .filter((d) => d.projectPath === path)
-      .map((d) => /** @type {import('../../hooks/workspaces/types.js').Workspace} */ (/** @type {unknown} */ ({ id: d.id, name: 'New workspace', createdAt: new Date().toISOString(), lastActiveAt: null, creating: false, missing: false, error: null })));
-    const all = [...this.#workspaces.value, ...drafts];
-    const facts = { pending: new Set(Object.keys(this.#permissions.value)), unread: new Set(this.#unread.value), now: this.#now.value };
-    const statuses = statusesOf(path, all, this.#sessions.value, facts);
-    return { list: orderWorkspaces(all, statuses, this.#sessions.value), statuses };
   }
 
   /** @param {Event} e */
@@ -276,8 +258,34 @@ export class AcpApp extends ViewElement {
     } else if (is('settings')) {
       e.preventDefault();
       this.#showSettings();
+    } else if (!AcpApp.#inDialog(e)) {
+      this.#onWorkspaceKey(e);
     }
   };
+
+  /**
+   * `openWorkspaces`: the picker. `workspace1`…`9`: that workspace. `nextWaitingWorkspace`.
+   * `newWorkspace`: its dialog, when the project can have workspaces. `newChat`: in the shown workspace.
+   * @param {KeyboardEvent} e
+   */
+  #onWorkspaceKey(e) {
+    const is = (/** @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId} */ id) => shortcuts.matches(id, e);
+    const project = this.#project.value?.path ?? null;
+    const number = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((n) => is(/** @type {`workspace${1}`} */ (`workspace${n}`)));
+    if (project === null) return;
+    if (number !== undefined) workspaces.selectNumber(number);
+    else if (is('openWorkspaces')) this.renderRoot.querySelector('acp-toolbar')?.showWorkspaces();
+    else if (is('nextWaitingWorkspace')) workspaces.showNextWaiting();
+    else if (is('newWorkspace') && this.#workspacesEnabled) void this.renderRoot.querySelector('acp-workspace-dialog')?.show();
+    else if (is('newChat')) sessions.create(project, $activeWorkspaceId.get());
+    else return;
+    e.preventDefault();
+  }
+
+  /** The project can have workspaces: it has some, or it's a git repository with a commit. */
+  get #workspacesEnabled() {
+    return this.#pickerWorkspaces.value.length > 0 || Boolean(this.#gitRepo.value.repo?.sha);
+  }
 
   /**
    * @param {KeyboardEvent} e
@@ -597,7 +605,7 @@ export class AcpApp extends ViewElement {
     // Expanded, the editor takes the agent column's room; with no tab open the agent column is shown anyway.
     const expanded = hasCode && hidden.includes('agent');
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
-    const picker = this.#workspacePicker();
+    const picker = { list: this.#pickerWorkspaces.value, statuses: this.#workspaceStatuses.value };
     const workspaceId = this.#workspaceId.value;
     const agents = this.#agentList.value;
     return html`<acp-panel variant="window">
@@ -614,8 +622,9 @@ export class AcpApp extends ViewElement {
         ?expandable=${hasCode}
         .workspaces=${picker.list}
         .workspaceStatuses=${picker.statuses}
+        .workspaceNumbers=${this.#workspaceNumbers.value}
         .workspaceId=${workspaceId === MAIN ? null : workspaceId}
-        ?workspaces-enabled=${picker.list.length > 0 || Boolean(this.#gitRepo.value.repo?.sha)}
+        ?workspaces-enabled=${this.#workspacesEnabled}
         @acp-workspace-select=${this.#onWorkspaceEvent}
         @acp-workspace-new=${this.#onWorkspaceEvent}
         @acp-workspace-rename=${this.#onWorkspaceEvent}

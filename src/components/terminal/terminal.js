@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
+import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
@@ -16,12 +17,27 @@ import styles from './terminal.css?inline';
 
 /** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
 const FULL_RESET = '\x1bc';
-const MAC = /Mac/.test(navigator.userAgent);
 /**
  * Ctrl shortcuts the terminal leaves to the app on Windows and Linux; every other Ctrl key is the shell's.
  * @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId[]}
  */
-const APP_KEYS = ['quickOpen', 'searchInFiles', 'toggleSessionView'];
+const APP_KEYS = [
+  'quickOpen',
+  'searchInFiles',
+  'toggleSessionView',
+  'openWorkspaces',
+  'nextWaitingWorkspace',
+  'newChat',
+  'workspace1',
+  'workspace2',
+  'workspace3',
+  'workspace4',
+  'workspace5',
+  'workspace6',
+  'workspace7',
+  'workspace8',
+  'workspace9',
+];
 const MONO = 'ui-monospace, Menlo, monospace';
 
 /**
@@ -41,6 +57,7 @@ export class AcpTerminal extends LitElement {
     fontFamily: { attribute: false },
     fontSize: { attribute: false },
     gpu: { attribute: false },
+    platform: { attribute: false },
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
     dropping: { type: Boolean, reflect: true },
     waiting: { type: Number },
@@ -82,6 +99,8 @@ export class AcpTerminal extends LitElement {
     this.fontSize = 13;
     /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
     this.gpu = true;
+    /** @type {import('../../hooks/app/types.js').Platform} Which keys are the app's and the shell's. */
+    this.platform = app.platform;
     /** @type {boolean} A session's CLI: once ended it offers Continue in chat next to Restart. */
     this.chatFallback = false;
     /** @type {boolean} Files dragged from the OS are over it: dropped, their paths are typed in. */
@@ -134,7 +153,7 @@ export class AcpTerminal extends LitElement {
     term.loadAddon(this.#fit);
     term.loadAddon(
       new WebLinksAddon((event, url) => {
-        if (MAC ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
+        if (this.platform === 'mac' ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
       }),
     );
     term.attachCustomKeyEventHandler(this.#onKey);
@@ -275,8 +294,8 @@ export class AcpTerminal extends LitElement {
     if (!term) return false;
     const key = e.key.toLowerCase();
     const down = e.type === 'keydown';
-    if (shortcuts.matches('newTerminal', e)) return false;
-    if (MAC) {
+    if (shortcuts.matches('newTerminal', e, this.platform)) return false;
+    if (this.platform === 'mac') {
       if (!e.metaKey) return true;
       if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
       else if (down && key === 'k') term.clear();
@@ -289,7 +308,7 @@ export class AcpTerminal extends LitElement {
       return false;
     }
     if (e.ctrlKey && e.shiftKey && key === 'v') return false;
-    return !APP_KEYS.some((id) => shortcuts.matches(id, e));
+    return !APP_KEYS.some((id) => shortcuts.matches(id, e, this.platform));
   };
 
   render() {

@@ -8,6 +8,15 @@ import { comboOf, keyMatches } from './keys.js';
 
 /** @typedef {keyof typeof TABLE} ShortcutId */
 
+/**
+ * A workspace number's row: ⌥⌘digit on macOS, Ctrl+Shift+digit elsewhere.
+ * @param {string} digit
+ * @returns {ShortcutRow}
+ */
+function workspaceRow(digit) {
+  return { mac: { mod: true, alt: true, key: digit }, other: { ctrl: true, shift: true, key: digit } };
+}
+
 /** Every shortcut the app owns; handlers check their keys with `matches()`. */
 const TABLE = Object.freeze(
   /** @satisfies {Record<string, ShortcutRow>} */ ({
@@ -27,6 +36,21 @@ const TABLE = Object.freeze(
     focusSelectionActions: { alt: true, key: 'F10' },
     // On macOS the menu's Settings… item has ⌘,.
     settings: { mac: { mod: true, key: ',', menu: true }, other: { ctrl: true, key: ',' } },
+    openWorkspaces: { mod: true, shift: true, key: 'O' },
+    nextWaitingWorkspace: { mod: true, shift: true, key: 'J' },
+    // In the terminal on Windows / Linux, Ctrl+N stays the shell's.
+    newWorkspace: { mod: true, key: 'N' },
+    newChat: { mod: true, shift: true, key: 'N' },
+    // ⇧⌘3/4/5 are screenshots on macOS; Ctrl+Alt+digit is AltGr elsewhere. 1 is Main.
+    workspace1: workspaceRow('1'),
+    workspace2: workspaceRow('2'),
+    workspace3: workspaceRow('3'),
+    workspace4: workspaceRow('4'),
+    workspace5: workspaceRow('5'),
+    workspace6: workspaceRow('6'),
+    workspace7: workspaceRow('7'),
+    workspace8: workspaceRow('8'),
+    workspace9: workspaceRow('9'),
   }),
 );
 

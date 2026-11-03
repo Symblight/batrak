@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { choiceOf, orderWorkspaces, slugPreview, statusOf, statusesOf } from '../rules.js';
+import { choiceOf, nextWaiting, orderWorkspaces, slugPreview, statusOf, statusesOf } from '../rules.js';
 
 /** @typedef {import('../types.js').Workspace} Workspace */
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -107,5 +107,22 @@ describe('workspaces rules', () => {
 
     // Assert
     expect(statuses).to.deep.equal({ main: 'working', w1: 'waiting', w2: 'idle' });
+  });
+
+  it("nextWaiting: the first waiting workspace after the shown one in the picker's order (Main last), wrapping, never the shown one", () => {
+    const order = ['w1', 'w2', 'w3', 'main'];
+    const cases = [
+      // [statuses, shown, next, why]
+      [{ w1: 'waiting', w3: 'waiting' }, 'w1', 'w3', 'after the shown one'],
+      [{ w1: 'waiting', w3: 'waiting' }, 'w3', 'w1', 'wraps around'],
+      [{ main: 'waiting' }, 'w2', 'main', 'Main is last'],
+      [{ w2: 'waiting' }, 'w2', null, 'only the shown one waits'],
+      [{ w1: 'working', w2: 'unread', main: 'error' }, 'w3', null, 'none waits'],
+      [{ w2: 'waiting' }, 'gone', 'w2', 'the shown one is not in the list'],
+    ];
+    for (const [statuses, shown, next, why] of cases) {
+      // Act + Assert
+      expect(nextWaiting(order, /** @type {Record<string, import('../types.js').WorkspaceStatus>} */ (statuses), /** @type {string} */ (shown)), /** @type {string} */ (why)).to.equal(next);
+    }
   });
 });

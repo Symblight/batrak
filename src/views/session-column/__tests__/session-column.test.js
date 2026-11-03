@@ -95,6 +95,23 @@ describe('acp-session-column', () => {
     expect($draftSessions.get()[active]).to.deep.equal({ projectId: '/p', workspaceId: 'w1' });
   });
 
+  it('tells the header which other workspaces wait, and goes to the waiting chat from its strip', async () => {
+    // Arrange: a chat of the workspace waits while Main is shown
+    $sessions.set($sessions.get().map((s) => (s.id === 'c' ? { ...s, status: 'waiting' } : s)));
+    const el = /** @type {AcpSessionColumn} */ (await fixture(html`<acp-session-column></acp-session-column>`));
+    const header = /** @type {HTMLElementTagNameMap['acp-workspace-header']} */ (el.querySelector('acp-workspace-header'));
+    const waiting = header.waiting;
+
+    // Act
+    header.dispatchEvent(new CustomEvent('acp-workspace-next-waiting', { detail: null, bubbles: true, composed: true }));
+    await el.updateComplete;
+
+    // Assert
+    expect(waiting, 'from Main').to.deep.equal(['Fix login']);
+    expect([$activeSessionId.get(), listed(el)], 'its waiting chat').to.deep.equal(['c', ['b', 'c']]);
+    expect(header.waiting, 'none waits elsewhere').to.deep.equal([]);
+  });
+
   it('marks a chat read or unread as its list asks', async () => {
     // Arrange
     const el = /** @type {AcpSessionColumn} */ (await fixture(html`<acp-session-column></acp-session-column>`));

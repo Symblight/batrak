@@ -36,6 +36,7 @@ export class AcpToolbar extends LitElement {
     expandable: { type: Boolean },
     workspaces: { attribute: false },
     workspaceStatuses: { attribute: false },
+    workspaceNumbers: { attribute: false },
     workspaceId: { attribute: false },
     workspacesEnabled: { type: Boolean, attribute: 'workspaces-enabled' },
   };
@@ -66,6 +67,8 @@ export class AcpToolbar extends LitElement {
     this.workspaces = [];
     /** @type {Readonly<Record<string, import('../../hooks/workspaces/types.js').WorkspaceStatus>>} By id, Main's under `main`. */
     this.workspaceStatuses = {};
+    /** @type {Readonly<Record<string, number>>} Each workspace's shortcut number by id, Main's under `main`. */
+    this.workspaceNumbers = {};
     /** @type {string | null} The shown workspace; `null` for Main. */
     this.workspaceId = null;
     /** @type {boolean} The project can have workspaces: git with a commit. */
@@ -129,6 +132,11 @@ export class AcpToolbar extends LitElement {
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
 
+  /** Opens the workspace picker's menu. */
+  showWorkspaces() {
+    this.renderRoot.querySelector('acp-workspace-picker')?.show();
+  }
+
   render() {
     const project = this.project;
     return html`${this.#renderColumnToggle('session', 'sessions column', 'start')}
@@ -142,6 +150,7 @@ export class AcpToolbar extends LitElement {
         ? html`<acp-workspace-picker
             .workspaces=${this.workspaces}
             .statuses=${this.workspaceStatuses}
+            .numbers=${this.workspaceNumbers}
             .currentId=${this.workspaceId}
             .projectName=${project.name}
             .projectPath=${project.path}

@@ -95,3 +95,17 @@ export function statusesOf(projectPath, list, sessions, facts) {
   for (const w of list) statuses[w.id] = statusOf(w, chats.filter((c) => c.workspaceId === w.id), facts);
   return statuses;
 }
+
+/**
+ * The workspace "next waiting" goes to: the first waiting one after the shown one in the picker's
+ * order (Active, then Main), wrapping around; `null` when no other one waits.
+ * @param {readonly string[]} order Workspace ids, Main's (`main`) among them.
+ * @param {Readonly<Record<string, WorkspaceStatus>>} statuses By workspace id.
+ * @param {string} shownId
+ * @returns {string | null}
+ */
+export function nextWaiting(order, statuses, shownId) {
+  const from = order.indexOf(shownId) + 1;
+  const rotated = [...order.slice(from), ...order.slice(0, from)];
+  return rotated.find((id) => id !== shownId && statuses[id] === 'waiting') ?? null;
+}

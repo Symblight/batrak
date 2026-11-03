@@ -6,6 +6,7 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/tooltip';
+import '../shortcut/shortcut.js';
 import '../workspace-menu/workspace-menu.js';
 import '../workspace-status/workspace-status.js';
 import { STATUS_LABELS } from '../workspace-status/workspace-status.js';
@@ -15,10 +16,12 @@ import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import layersIcon from '@material-design-icons/svg/outlined/layers.svg?raw';
 import moreIcon from '@material-design-icons/svg/outlined/more_horiz.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './workspace-picker.css?inline';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/workspaces/types.js').WorkspaceStatus} WorkspaceStatus */
+/** @typedef {import('../../hooks/shortcuts/shortcuts.js').ShortcutId} ShortcutId */
 
 /** Main's id in `statuses`, `currentId`'s stand-in and `acp-workspace-select`. */
 const MAIN = 'main';
@@ -45,6 +48,7 @@ export class AcpWorkspacePicker extends LitElement {
   static properties = {
     workspaces: { attribute: false },
     statuses: { attribute: false },
+    numbers: { attribute: false },
     currentId: { attribute: false },
     projectName: { attribute: false },
     projectPath: { attribute: false },
@@ -63,6 +67,8 @@ export class AcpWorkspacePicker extends LitElement {
     this.workspaces = [];
     /** @type {Readonly<Record<string, WorkspaceStatus>>} By workspace id, Main's under `main`; idle when absent. */
     this.statuses = {};
+    /** @type {Readonly<Record<string, number>>} Each row's shortcut number (`workspace<n>`) by id, Main's under `main`. */
+    this.numbers = {};
     /** @type {string | null} The shown workspace; `null` for Main. */
     this.currentId = null;
     /** @type {string} */
@@ -91,6 +97,11 @@ export class AcpWorkspacePicker extends LitElement {
 
   get #menu() {
     return /** @type {HTMLElementTagNameMap['md-menu'] | null} */ (this.renderRoot.querySelector('.acp-workspace-picker__menu'));
+  }
+
+  /** Opens its menu (Switch workspace's shortcut); nothing while there's no menu (only Main, no git). */
+  show() {
+    this.#menu?.show();
   }
 
   get #current() {
@@ -217,12 +228,14 @@ export class AcpWorkspacePicker extends LitElement {
     const status = this.#status(id);
     const current = id === this.#current;
     const renaming = id === this.renamingId;
+    const number = this.numbers[id];
     return html`<md-menu-item
       class="acp-workspace-picker__item acp-workspace-picker__row"
       value=${id}
       ?selected=${current}
       ?keep-open=${renaming}
       aria-label="${name}, ${STATUS_LABELS[status].toLowerCase()}"
+      aria-keyshortcuts=${number === undefined ? nothing : shortcuts.aria(/** @type {ShortcutId} */ (`workspace${number}`))}
     >
       ${current
         ? html`<md-icon slot="leading" class="acp-workspace-picker__check">${unsafeSVG(checkIcon)}</md-icon>`
@@ -237,6 +250,9 @@ export class AcpWorkspacePicker extends LitElement {
             @click=${(/** @type {Event} */ e) => e.stopPropagation()}
           />`
         : html`<span class="acp-workspace-picker__name">${name}</span>`}
+      ${number === undefined
+        ? nothing
+        : html`<acp-shortcut slot="trailing" class="acp-workspace-picker__number" .shortcut=${/** @type {ShortcutId} */ (`workspace${number}`)}></acp-shortcut>`}
       <md-icon-button
         slot="trailing"
         tabindex="-1"
@@ -286,7 +302,7 @@ export class AcpWorkspacePicker extends LitElement {
         <md-item-group>
           <md-menu-item class="acp-workspace-picker__item" value=${NEW}>
             <md-icon slot="leading" class="acp-workspace-picker__icon">${unsafeSVG(addIcon)}</md-icon>
-            New workspace
+            New workspace <span slot="trailing">${shortcuts.hint('newWorkspace')}</span>
           </md-menu-item>
         </md-item-group>
       </md-menu>
@@ -307,14 +323,24 @@ export class AcpWorkspacePicker extends LitElement {
         <md-tooltip for="acp-workspace-picker-disabled" show-delay="800" placement="bottom">Workspaces need a git repository</md-tooltip>`;
     }
     if (this.workspaces.length === 0) {
-      return html`<md-icon-button id="acp-workspace-picker-new" aria-label="New workspace" @click=${() => this.#emit('acp-workspace-new', null)}>
+      return html`<md-icon-button
+          id="acp-workspace-picker-new"
+          aria-label="New workspace"
+          aria-keyshortcuts=${shortcuts.aria('newWorkspace')}
+          @click=${() => this.#emit('acp-workspace-new', null)}>
           <md-icon class="acp-workspace-picker__icon">${unsafeSVG(addTaskIcon)}</md-icon>
         </md-icon-button>
-        <md-tooltip for="acp-workspace-picker-new" show-delay="800" placement="bottom">New workspace</md-tooltip>`;
+        <md-tooltip for="acp-workspace-picker-new" show-delay="800" placement="bottom">${shortcuts.labelled('New workspace', 'newWorkspace')}</md-tooltip>`;
     }
     const current = this.#current;
     const waiting = [...this.workspaces.map((w) => w.id), MAIN].filter((id) => id !== current && this.#status(id) === 'waiting').length;
-    return html`<md-button id=${BUTTON_ID} class="acp-workspace-picker__button" variant="text" aria-label="Workspace ${this.#nameOf(current)}">
+    return html`<md-button
+        id=${BUTTON_ID}
+        class="acp-workspace-picker__button"
+        variant="text"
+        aria-label="Workspace ${this.#nameOf(current)}"
+        aria-keyshortcuts=${shortcuts.aria('openWorkspaces')}
+      >
         <span class="acp-workspace-picker__label">
           <md-icon class="acp-workspace-picker__icon">${unsafeSVG(layersIcon)}</md-icon>
           <span class="acp-workspace-picker__name">${this.#nameOf(current)}</span>
@@ -322,7 +348,7 @@ export class AcpWorkspacePicker extends LitElement {
           <md-icon class="acp-workspace-picker__arrow ${this.open ? 'acp-workspace-picker__arrow_open' : ''}">${unsafeSVG(expandMoreIcon)}</md-icon>
         </span>
       </md-button>
-      <md-tooltip for=${BUTTON_ID} show-delay="800" placement="bottom">Switch workspace</md-tooltip>
+      <md-tooltip for=${BUTTON_ID} show-delay="800" placement="bottom">${shortcuts.labelled('Switch workspace', 'openWorkspaces')}</md-tooltip>
       <span class="acp-workspace-picker__live" aria-live="polite"
         >${waiting > 0
           ? html`<md-button class="acp-workspace-picker__badge" variant="tonal" @click=${() => void this.#menu?.show()}>${waiting} waiting</md-button>`

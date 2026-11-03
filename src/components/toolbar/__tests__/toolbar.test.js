@@ -46,25 +46,28 @@ describe('acp-toolbar', () => {
     expect(root.querySelector('acp-workspace-picker')).to.equal(null);
   });
 
-  it("hands the workspace picker the shown project's workspaces, their statuses and the shown one", async () => {
+  it("hands the workspace picker the shown project's workspaces, their statuses and numbers, and the shown one", async () => {
     // Arrange
     const list = [/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', name: 'Fix login' })];
     const statuses = { w1: 'waiting', main: 'idle' };
+    const numbers = { main: 1, w1: 2 };
 
     // Act
     const el = await fixture(html`<acp-toolbar
       .project=${{ path: '/work/app', name: 'app', rootId: 'r1' }}
       .workspaces=${list}
       .workspaceStatuses=${statuses}
+      .workspaceNumbers=${numbers}
       .workspaceId=${'w1'}
       workspaces-enabled
     ></acp-toolbar>`);
 
     // Assert
     const picker = el.shadowRoot?.querySelector('acp-workspace-picker');
-    expect([picker?.workspaces, picker?.statuses, picker?.currentId, picker?.projectName, picker?.projectPath, picker?.enabled]).to.deep.equal([
+    expect([picker?.workspaces, picker?.statuses, picker?.numbers, picker?.currentId, picker?.projectName, picker?.projectPath, picker?.enabled]).to.deep.equal([
       list,
       statuses,
+      numbers,
       'w1',
       'app',
       '/work/app',

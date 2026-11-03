@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { shortcuts } from '../../../hooks/shortcuts/shortcuts.js';
 import '../workspace-picker.js';
 
 /** @typedef {import('../workspace-picker.js').AcpWorkspacePicker} AcpWorkspacePicker */
@@ -73,7 +74,7 @@ describe('acp-workspace-picker', () => {
     // Assert
     expect(button.querySelector('.acp-workspace-picker__name')?.textContent?.trim()).to.equal('Fix login');
     expect(button.querySelector('acp-workspace-status')?.status).to.equal('working');
-    expect(tooltipOf(button)).to.equal('Switch workspace');
+    expect(tooltipOf(button)).to.equal(shortcuts.labelled('Switch workspace', 'openWorkspaces'));
     expect(menuOf(root).open, 'the menu opens').to.equal(true);
     expect(root.querySelector('[title]')).to.equal(null);
   });
@@ -91,7 +92,7 @@ describe('acp-workspace-picker', () => {
 
     // Assert
     expect(root.querySelector('md-menu'), 'no menu').to.equal(null);
-    expect([tooltipOf(add), add.getAttribute('aria-label')]).to.deep.equal(['New workspace', 'New workspace']);
+    expect([tooltipOf(add), add.getAttribute('aria-label')]).to.deep.equal([shortcuts.labelled('New workspace', 'newWorkspace'), 'New workspace']);
     expect(fired).to.deep.equal([null]);
     expect(disabled.disabled).to.equal(true);
     expect(tooltipOf(noGit.getElementById('acp-workspace-picker-disabled'))).to.equal('Workspaces need a git repository');
@@ -111,7 +112,17 @@ describe('acp-workspace-picker', () => {
       { label: 'Main', rows: ['Main, unread'] },
     ]);
     expect(['w1', 'w2', 'main'].map((id) => rowOf(root, id).selected)).to.deep.equal([true, false, false]);
-    expect(rowOf(root, 'new-workspace')?.textContent?.trim()).to.equal('New workspace');
+    expect(rowOf(root, 'new-workspace')?.textContent?.trim()).to.match(/^New workspace/);
+  });
+
+  it("shows each numbered row's shortcut, and New workspace's", async () => {
+    // Arrange + Act: w2 has no number (past 9)
+    const { root } = await render({ numbers: { main: 1, w1: 2 } });
+
+    // Assert
+    const chips = ['w1', 'w2', 'main'].map((id) => rowOf(root, id).querySelector('acp-shortcut')?.shortcut ?? null);
+    expect(chips).to.deep.equal(['workspace2', null, 'workspace1']);
+    expect(rowOf(root, 'new-workspace').textContent?.replace(/\s+/g, ' ').trim()).to.equal(`New workspace ${shortcuts.hint('newWorkspace')}`);
   });
 
   it('fires the picked workspace, or New workspace', async () => {

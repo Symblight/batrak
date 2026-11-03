@@ -379,6 +379,67 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     expect(calls.find((c) => c.cmd === 'workspace_delete')?.args).to.deep.equal({ id: 'w1', keepBranch: true });
     expect([$activeWorkspaceId.get(), $activeSessionId.get()], 'Main again').to.deep.equal(['main', 'm']);
   });
+  /**
+   * A workspace shortcut pressed anywhere in the window (or inside `from`).
+   * @param {'openWorkspaces' | 'nextWaitingWorkspace' | 'newWorkspace' | 'newChat' | `workspace${number}`} id
+   * @param {EventTarget} [from]
+   */
+  function press(id, from = window) {
+    const mac = appHook.platform === 'mac';
+    const digit = /^workspace(\d)$/.exec(id)?.[1];
+    const keys = { openWorkspaces: 'O', nextWaitingWorkspace: 'J', newWorkspace: 'N', newChat: 'N' };
+    const key = digit ?? keys[/** @type {keyof typeof keys} */ (id)];
+    const shiftKey = digit ? !mac : id !== 'newWorkspace';
+    const init = { ...modKey(key, { shiftKey, altKey: Boolean(digit) && mac }), ctrlKey: !mac, metaKey: mac };
+    from.dispatchEvent(new KeyboardEvent('keydown', init));
+  }
+
+  it('switches by number (1 is Main, 2 the oldest workspace) and to the next waiting workspace’s waiting chat', async () => {
+    // Arrange: a second chat of the workspace waits for an answer
+    await render();
+    $sessions.set([
+      ...$sessions.get(),
+      /** @type {import('../../../hooks/sessions/types.js').Session} */ (/** @type {unknown} */ ({ id: 'asks', projectId: '/p', workspaceId: 'w1', folder: '/wt/one', status: 'waiting', createdAt: '2026-01-01T00:00:00.000Z', lastActivityAt: '2025-12-01T00:00:00.000Z' })),
+    ]);
+
+    // Act
+    press('workspace2');
+    const second = $activeWorkspaceId.get();
+    press('workspace3');
+    const none = $activeWorkspaceId.get();
+    press('workspace1');
+    const first = $activeWorkspaceId.get();
+    press('nextWaitingWorkspace');
+
+    // Assert
+    expect([second, none, first], '2, 3 (none), 1').to.deep.equal(['w1', 'w1', 'main']);
+    expect([$activeWorkspaceId.get(), $activeSessionId.get()], 'the waiting chat').to.deep.equal(['w1', 'asks']);
+  });
+
+  it('opens the picker, New workspace and a new chat of the shown workspace by their shortcuts, not in a dialog', async () => {
+    // Arrange
+    const { app, fire } = await render();
+    fire('acp-workspace-select', { id: 'w1' });
+    const picker = /** @type {HTMLElementTagNameMap['acp-workspace-picker']} */ (app.querySelector('acp-toolbar')?.shadowRoot?.querySelector('acp-workspace-picker'));
+    await picker.updateComplete;
+    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (picker.shadowRoot?.querySelector('md-menu'));
+    const inDialog = document.body.appendChild(document.createElement('dialog'));
+    const drafts = () => Object.values($draftSessions.get()).filter((d) => d.workspaceId === 'w1').length;
+
+    // Act: in a dialog first, then anywhere
+    for (const id of /** @type {const} */ (['openWorkspaces', 'newWorkspace', 'newChat'])) press(id, inDialog);
+    const ignored = [menu.open, calls.some((c) => c.cmd === 'git_branches'), drafts()];
+    press('newChat');
+    press('newWorkspace');
+    await until(() => calls.some((c) => c.cmd === 'git_branches'));
+    press('openWorkspaces');
+    await until(() => menu.open);
+
+    // Assert
+    expect(ignored, 'nothing from a dialog').to.deep.equal([false, false, 0]);
+    expect(drafts(), 'a new chat in the workspace').to.equal(1);
+    inDialog.remove();
+  });
 });
 
 describe('acp-app: mark all as read', () => {

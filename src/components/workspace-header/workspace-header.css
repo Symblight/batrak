@@ -61,3 +61,28 @@
 .acp-workspace-header__action {
   --md-button-foreground-color: var(--acp-color-on-error-container);
 }
+
+.acp-workspace-header__waiting {
+  overflow: hidden;
+  margin: 0 var(--acp-space-2) var(--acp-space-2);
+  padding: var(--acp-space-1) var(--acp-space-3);
+  border: none;
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-tertiary-container);
+  color: var(--acp-color-on-tertiary-container);
+  font: inherit;
+  font-size: var(--acp-font-size-sm);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--acp-color-on-tertiary-container) 8%, var(--acp-color-tertiary-container));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-tertiary);
+    outline-offset: 1px;
+  }
+}
