@@ -3,10 +3,11 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
-import { $project } from '../../../stores/project/project.js';
+import { $openRoots, $project } from '../../../stores/project/project.js';
+import { $workspaces } from '../../../stores/workspaces/workspaces.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
-import { $sessions, $sessionsLoaded } from '../../../stores/sessions/sessions.js';
+import { $sessions, $sessionsLoaded, selectSession } from '../../../stores/sessions/sessions.js';
 import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import {
   $projectTerminalPanelHeights,
@@ -169,6 +170,60 @@ describe('acp-app: search dialog', () => {
     await app.updateComplete;
     expect(app.sideView).to.equal('search');
     expect(shown).to.deep.equal([{ ...STATE, query: 'bar' }]);
+  });
+});
+
+describe('acp-app: the shown workspace', () => {
+  /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
+  let calls;
+
+  beforeEach(() => {
+    calls = [];
+    mockIPC((cmd, args) => {
+      const a = /** @type {Record<string, unknown>} */ (args ?? {});
+      calls.push({ cmd, args: a });
+      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', creating: false, missing: false }];
+      return startupAnswer(cmd, a);
+    });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    $projectSearch.setKey('/p', { ...STATE, recent: [] });
+    $hiddenColumns.set([]);
+  });
+
+  afterEach(() => {
+    for (const el of document.querySelectorAll('acp-app')) searchDialog(/** @type {AcpApp} */ (el))?.close();
+    selectSession(null);
+    $sessions.set([]);
+    $workspaces.set([]);
+    $openRoots.set({});
+    $projectSearch.setKey('/p', undefined);
+    $project.set(null);
+    clearMocks();
+  });
+
+  it("queries its root in Quick Open and Find in Files, opens matches in its folder, and shows its branch", async () => {
+    // Arrange
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    await until(() => $workspaces.get().length === 1);
+    /** @type {unknown[][]} */
+    const opened = [];
+    mainColumn(app).openFile = (...args) => void opened.push(args);
+    const asked = (/** @type {string} */ cmd) => calls.filter((c) => c.cmd === cmd).map((c) => c.args.rootId);
+
+    // Act: show a chat of the workspace, whose root is open
+    $openRoots.set({ '/wt/one': 'r-w' });
+    $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c', projectId: '/p', workspaceId: 'w1', status: 'stopped' }])));
+    selectSession('c');
+    quickOpen(app).dispatchEvent(new CustomEvent('acp-quick-open-query', { detail: { query: 'a' }, bubbles: true, composed: true }));
+    shortcut('F', { shiftKey: true });
+    await until(() => asked('find_in_files').length > 0 && asked('quick_open').length > 0);
+    fire(app, 'acp-search-dialog-open', { path: 'src/a.ts', line: 1, column: 1, length: 1, state: STATE });
+
+    // Assert
+    expect(asked('quick_open')).to.deep.equal(['r-w']);
+    expect(asked('find_in_files')).to.deep.equal(['r-w']);
+    expect(opened[0]?.[0], 'a match is its folder’s file').to.equal('/wt/one/src/a.ts');
+    await until(() => asked('git_head').includes('r-w'));
   });
 });
 

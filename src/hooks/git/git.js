@@ -1,5 +1,5 @@
 import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
-import { $rootId } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { remoteLine } from './branch.js';

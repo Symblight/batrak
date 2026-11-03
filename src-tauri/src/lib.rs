@@ -154,7 +154,7 @@ pub fn run() {
             commands::workspaces::workspace_changes,
             commands::workspaces::workspace_file_at_base,
             commands::roots::open_root,
-            commands::roots::open_session_root,
+            commands::roots::open_workspace_root,
             commands::roots::close_root,
             commands::roots::close_window_roots,
             commands::roots::list_dir,

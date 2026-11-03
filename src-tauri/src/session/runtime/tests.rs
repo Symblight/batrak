@@ -1006,21 +1006,6 @@ async fn a_sessions_folder_contains_its_project_or_its_worktree_folder() {
 }
 
 #[tokio::test]
-async fn a_worktree_sessions_folder_is_given_only_once_checked_out() {
-    let f = git_fixture("wt-tree-folder");
-    let (local, events) = f.create("l", "fake").unwrap();
-    let (wt, other) = f.create_in("w", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    other.wait_status("idle").await;
-    assert_eq!(f.sessions.worktree_folder(&wt.id).unwrap(), PathBuf::from(&wt.folder));
-    assert!(f.sessions.worktree_folder(&local.id).is_err(), "a local session's folder is the project");
-    assert!(f.sessions.worktree_folder("nope").is_err());
-
-    std::fs::remove_dir_all(wt.worktree_path.as_ref().unwrap()).unwrap();
-    assert!(f.sessions.worktree_folder(&wt.id).is_err(), "deleted from disk");
-}
-
-#[tokio::test]
 async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks() {
     let f = git_fixture("wt-prompt");
     std::fs::write(f.project.join(".env"), "SECRET=1\n").unwrap();

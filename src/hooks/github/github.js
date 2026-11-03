@@ -1,4 +1,4 @@
-import { $rootId } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { $gitRepo } from '../../stores/git/git.js';
 import { $githubAccount, $pullRequest, $pullRequestKey } from '../../stores/github/github.js';
 import { app } from '../app/app.js';

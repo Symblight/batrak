@@ -3,7 +3,7 @@ import { StoreController } from '../store/StoreController.js';
 import { git } from '../../hooks/git/git.js';
 import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
 import { $gitChanges, $gitHead } from '../../stores/git/git.js';
-import { $rootId } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */

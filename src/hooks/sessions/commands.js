@@ -1,7 +1,6 @@
 import { ipc } from '../ipc/ipc.js';
 
 /** @typedef {import('./types.js').Session} Session */
-/** @typedef {import('../projects/types.js').OpenedRoot} OpenedRoot */
 /** @typedef {import('../git/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('./types.js').ApplyResult} ApplyResult */
 /** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
@@ -242,15 +241,6 @@ export function sessionOpenLog(sessionId) {
  */
 export function workspaceSettings(projectPath) {
   return ipc.invoke('project_settings', { projectPath });
-}
-
-/**
- * Scans a worktree session's folder for the Files tree and starts watching it.
- * @param {string} sessionId
- * @returns {Promise<OpenedRoot>}
- */
-export function openSessionRoot(sessionId) {
-  return ipc.invoke('open_session_root', { sessionId });
 }
 
 /**

@@ -8,7 +8,7 @@ import { git } from '../../hooks/git/git.js';
 import { $editorTabs, $projectTabs, parseTabId } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
-import { $rootId } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */

@@ -16,12 +16,12 @@ import { $gitRepo } from '../../stores/git/git.js';
 import { $columnWidths, $hiddenColumns, showColumn, toggleColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
-import { $treeRoot } from '../../stores/session-root/session-root.js';
 import { $sessions, $worktrees } from '../../stores/sessions/sessions.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $unreadSessions, markProjectRead } from '../../stores/session-read/session-read.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
-import { $rootId, $project } from '../../stores/project/project.js';
+import { $project } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -237,7 +237,6 @@ export class AcpApp extends ViewElement {
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
     github.start();
-    sessions.followRoot();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
     projects
       .homeDir()
@@ -455,12 +454,13 @@ export class AcpApp extends ViewElement {
   }
 
   /**
-   * @param {string} path Absolute; outside the project and its worktrees there's no row to show.
+   * @param {string} path Absolute; outside the shown folder and its twins there's no row to show.
    * @param {{ expand?: boolean }} [options] Expand a folder itself too.
    */
   async #revealInTree(path, options) {
-    // The tree lists a worktree's folder or the project; a path of the other is shown by its twin.
-    const rel = projects.rel($treeRoot.get().path, path) ?? projects.rel(projects.path(), projects.projectPathOf($worktrees.get(), path));
+    // The tree lists the shown folder (the project's or a workspace's); a path of the project or of
+    // another worktree is shown by its twin there.
+    const rel = projects.relPath(path) ?? projects.rel(projects.path(), projects.projectPathOf($worktrees.get(), path));
     if (rel === null) return;
     this.sideView = 'files';
     showColumn('side');

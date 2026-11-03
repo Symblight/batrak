@@ -18,7 +18,8 @@ import { $gitRepo } from '../../stores/git/git.js';
 import { $activeFolder, $activeSession, $activeSessionId, $localShared } from '../../stores/sessions/sessions.js';
 import { $activeNotice, $activePermission, $sessionNotices } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
-import { $rootId, $project, $projectSettings } from '../../stores/project/project.js';
+import { $project, $projectSettings } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../hooks/composer/types.js').RunTarget} RunTarget */

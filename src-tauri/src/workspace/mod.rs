@@ -155,6 +155,15 @@ impl Workspaces {
         self.inner.store.get(id)
     }
 
+    /// The folder of a workspace checked out and not checking out now: what a window opens as its root.
+    pub fn open_folder(&self, id: &str) -> Result<PathBuf, String> {
+        let record = self.get(id)?;
+        if lock(&self.inner.creating).contains(id) || !record.folder.is_dir() {
+            return Err(format!("{}: the workspace isn't checked out", record.folder.display()));
+        }
+        Ok(record.folder)
+    }
+
     /// Creates a workspace named `name` in a canonical `project` and checks its folder out.
     /// Blocking.
     #[cfg(test)]

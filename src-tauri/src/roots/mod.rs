@@ -1,4 +1,4 @@
-//! Root snapshots: one per opened root (today the project; later each session's
+//! Root snapshots: one per opened root (a project, or a workspace's
 //! git worktree). The file tree, Quick Open and Find in Files all read from here.
 
 pub mod quick_open;
@@ -55,24 +55,64 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// `.brama/agents.json` changed on disk: the project's agent list is re-read, and windows hear
-/// of it when it differs.
-fn agents_changed(app: &AppHandle, project: &Path) {
-    use tauri::Manager;
-    let Some(configs) = app.try_state::<crate::config::AgentConfigs>() else { return };
-    if configs.reload(project) {
-        crate::commands::agents::emit_changed(app, Some(project));
+/// What a root's change batches reach outside its snapshot.
+pub trait Host: Send + Sync + 'static {
+    /// `.brama/agents.json` of a project changed on disk.
+    fn agents_changed(&self, project: &Path);
+    /// Files changed in a folder that chats run in: running local turns there that both changed one hear of it.
+    fn files_changed(&self, folder: &Path, changed: &[String]);
+    /// Tells the windows, as [`CHANGED_EVENT`].
+    fn emit(&self, root_id: &str, changes: Changes);
+}
+
+impl Host for AppHandle {
+    fn agents_changed(&self, project: &Path) {
+        use tauri::Manager;
+        let Some(configs) = self.try_state::<crate::config::AgentConfigs>() else { return };
+        if configs.reload(project) {
+            crate::commands::agents::emit_changed(self, Some(project));
+        }
+    }
+
+    fn files_changed(&self, folder: &Path, changed: &[String]) {
+        use tauri::Manager;
+        if let Some(sessions) = self.try_state::<crate::session::Sessions>() {
+            sessions.note_changes(folder, changed);
+        }
+    }
+
+    fn emit(&self, root_id: &str, changes: Changes) {
+        let _ = Emitter::emit(self, CHANGED_EVENT, ChangedPayload { root_id, changes });
     }
 }
 
-/// Files changed in a project: running local turns that both changed one hear of it.
-fn sessions_changed(app: &AppHandle, project: &Path, changes: &Changes) {
-    use tauri::Manager;
-    let Some(sessions) = app.try_state::<crate::session::Sessions>() else { return };
+/// A project's folder, or a workspace's: a workspace's `.brama/` is its branch's copy and configures nothing.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum Kind {
+    Project,
+    Workspace,
+}
+
+impl Kind {
+    /// Cancel key of a window's scans of this kind: a project's and a workspace's don't cancel each other.
+    fn key(self, group: &str) -> String {
+        match self {
+            Kind::Project => group.to_owned(),
+            Kind::Workspace => format!("{group}:workspace"),
+        }
+    }
+}
+
+/// Hands a batch to `host`: agents reload for a project, the folder's chats hear of the files, windows of it all.
+fn hear(host: &impl Host, kind: Kind, root: &Root, changes: Changes) {
+    if kind == Kind::Project && changes.config {
+        host.agents_changed(&root.path);
+    }
     let changed: Vec<String> = changes.added.iter().chain(&changes.modified).chain(&changes.removed).cloned().collect();
     if !changed.is_empty() {
-        sessions.note_changes(project, &changed);
+        host.files_changed(&root.path, &changed);
     }
+    host.emit(&root.id, changes);
 }
 
 /// Hears a root's changed snapshot, on the watcher's thread or a rescan's.
@@ -83,8 +123,7 @@ pub struct Root {
     pub path: PathBuf,
     /// The window that opened it; its roots close with it.
     group: String,
-    /// A worktree session's folder for the Files tree, not a project: its `.brama/` configures nothing.
-    session: bool,
+    kind: Kind,
     pub snapshot: RwLock<Snapshot>,
     /// Hears every batch that changed the snapshot: the watcher's and a `rescan`'s.
     on_change: OnChange,
@@ -179,11 +218,6 @@ impl Root {
     }
 }
 
-/// Cancel key of a window's session-root scans, apart from its project scans.
-fn session_key(group: &str) -> String {
-    format!("{group}:session")
-}
-
 /// Error of an open whose scan was cancelled by a newer open in the same group.
 pub const SUPERSEDED: &str = "superseded by a newer open";
 
@@ -198,31 +232,23 @@ pub struct Roots {
 }
 
 impl Roots {
-    /// Scans `path` and starts watching it; changes go to the frontend as [`CHANGED_EVENT`].
+    /// Scans a project's folder and starts watching it; changes go to the frontend as [`CHANGED_EVENT`].
     /// A later open in the same `group` cancels this one's scan, which then fails with
     /// [`SUPERSEDED`]. Blocking: call off the main thread.
     pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
-        let cancel = self.begin_open(group);
-        let result = self.open_with(path, group, &cancel, false, move |root, changes| {
-            if changes.config {
-                agents_changed(&app, &root.path);
-            }
-            sessions_changed(&app, &root.path, &changes);
-            let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
-        });
-        self.end_open(group, &cancel);
-        result
+        self.open_kind(app, path, group, Kind::Project)
     }
 
-    /// Opens a worktree session's folder for the Files tree, in `group` so it closes with the
-    /// window. Its scan has its own cancel key: it neither cancels nor is cancelled by a project's.
-    /// Its `.brama/agents.json` is the branch's copy, so a change there reloads no agents. Blocking.
-    pub fn open_session(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
-        let key = session_key(group);
+    /// Opens a workspace's folder, in `group` so it closes with the window. Its scan neither cancels
+    /// nor is cancelled by a project's. Blocking.
+    pub fn open_workspace(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
+        self.open_kind(app, path, group, Kind::Workspace)
+    }
+
+    fn open_kind(&self, host: impl Host, path: &Path, group: &str, kind: Kind) -> Result<Arc<Root>, String> {
+        let key = kind.key(group);
         let cancel = self.begin_open(&key);
-        let result = self.open_with(path, group, &cancel, true, move |root, changes| {
-            let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
-        });
+        let result = self.open_with(path, group, &cancel, kind, move |root, changes| hear(&host, kind, root, changes));
         self.end_open(&key, &cancel);
         result
     }
@@ -249,7 +275,7 @@ impl Roots {
         path: &Path,
         group: &str,
         cancel: &AtomicBool,
-        session: bool,
+        kind: Kind,
         on_change: impl Fn(&Root, Changes) + Send + Sync + 'static,
     ) -> Result<Arc<Root>, String> {
         // FSEvents reports canonical paths (e.g. /private/var), so the root must be canonical too.
@@ -277,7 +303,7 @@ impl Roots {
             batch: Mutex::new(()),
             path,
             group: group.to_owned(),
-            session,
+            kind,
             watcher: Mutex::new(None),
             recent: Mutex::new(VecDeque::new()),
             quick_open_generation: AtomicU64::new(0),
@@ -322,9 +348,9 @@ impl Roots {
         lock(&self.roots).values().any(|root| path.starts_with(&root.path))
     }
 
-    /// Whether a canonical `path` lies inside an opened project, a session root left out.
+    /// Whether a canonical `path` lies inside an opened project, a workspace root left out.
     pub fn contains_project(&self, path: &Path) -> bool {
-        lock(&self.roots).values().any(|root| !root.session && path.starts_with(&root.path))
+        lock(&self.roots).values().any(|root| root.kind == Kind::Project && path.starts_with(&root.path))
     }
 }
 
@@ -349,14 +375,50 @@ mod tests {
     }
 
     #[test]
-    fn a_session_roots_scan_and_the_projects_dont_cancel_each_other() {
+    fn a_workspace_roots_scan_and_the_projects_dont_cancel_each_other() {
         let roots = Roots::default();
-        let project = roots.begin_open("main");
-        let session = roots.begin_open(&session_key("main"));
+        let project = roots.begin_open(&Kind::Project.key("main"));
+        let workspace = roots.begin_open(&Kind::Workspace.key("main"));
         assert!(!project.load(Ordering::Relaxed));
-        let newer = roots.begin_open(&session_key("main"));
-        assert!(session.load(Ordering::Relaxed), "a newer session root cancels the older one");
+        let newer = roots.begin_open(&Kind::Workspace.key("main"));
+        assert!(workspace.load(Ordering::Relaxed), "a newer workspace root cancels the older one");
         assert!(!project.load(Ordering::Relaxed) && !newer.load(Ordering::Relaxed));
+    }
+
+    /// Records what a root's change batches reach.
+    #[derive(Clone, Default)]
+    struct Recorder(Arc<Mutex<Vec<String>>>);
+
+    impl Host for Recorder {
+        fn agents_changed(&self, project: &Path) {
+            lock(&self.0).push(format!("agents {}", project.display()));
+        }
+        fn files_changed(&self, folder: &Path, changed: &[String]) {
+            lock(&self.0).push(format!("files {} {}", folder.display(), changed.join(",")));
+        }
+        fn emit(&self, _root_id: &str, _changes: Changes) {}
+    }
+
+    #[test]
+    fn a_workspace_roots_changes_reach_its_folders_chats_and_reload_no_agents() {
+        let base = std::env::temp_dir().join(format!("brama-workspace-batch-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join(".brama")).unwrap();
+        let host = Recorder::default();
+        let roots = Roots::default();
+        let root = roots.open_kind(host.clone(), &base, "main", Kind::Workspace).unwrap();
+
+        std::fs::write(base.join(".brama/agents.json"), "{}").unwrap();
+
+        let deadline = Instant::now() + std::time::Duration::from_secs(5);
+        while lock(&host.0).is_empty() {
+            assert!(Instant::now() < deadline, "the watcher's batch arrives");
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        let heard = lock(&host.0).clone();
+        assert_eq!(heard, [format!("files {} .brama/agents.json", root.path.display())]);
+        roots.close(&root.id);
+        std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
@@ -367,7 +429,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let roots = Roots::default();
         let root =
-            roots.open_with(&base, "main", &AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap()).unwrap();
+            roots.open_with(&base, "main", &AtomicBool::new(false), Kind::Project, move |_, changes| tx.send(changes).unwrap()).unwrap();
         // No watcher: every change from here on is one it missed.
         lock(&root.watcher).take();
         std::fs::write(base.join("src/missed.rs"), "").unwrap();
@@ -396,7 +458,7 @@ mod tests {
         let (tx, rx) = std::sync::mpsc::channel();
         let roots = Roots::default();
         let root = roots
-            .open_with(&base, "main", &AtomicBool::new(false), false, {
+            .open_with(&base, "main", &AtomicBool::new(false), Kind::Project, {
                 let base = base.clone();
                 move |root, _| {
                     if std::thread::current().id() != rescanning {
@@ -428,25 +490,26 @@ mod tests {
         let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
         std::fs::create_dir_all(base.join("src")).unwrap();
         let roots = Roots::default();
-        let err = roots.open_with(&base, "main", &AtomicBool::new(true), false, |_, _| {}).err();
+        let err = roots.open_with(&base, "main", &AtomicBool::new(true), Kind::Project, |_, _| {}).err();
         assert_eq!(err.as_deref(), Some(SUPERSEDED));
         assert!(!roots.contains(&dunce::canonicalize(&base).unwrap().join("src")));
         std::fs::remove_dir_all(&base).unwrap();
     }
 
     #[test]
-    fn a_session_root_is_no_project() {
-        let base = std::env::temp_dir().join(format!("brama-session-root-{}", std::process::id()));
+    fn a_workspace_root_is_no_project() {
+        let base = std::env::temp_dir().join(format!("brama-workspace-root-{}", std::process::id()));
         std::fs::create_dir_all(base.join("proj")).unwrap();
         std::fs::create_dir_all(base.join("worktree")).unwrap();
         let roots = Roots::default();
-        let project = roots.open_with(&base.join("proj"), "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
-        let session = roots.open_with(&base.join("worktree"), "main", &AtomicBool::new(false), true, |_, _| {}).unwrap();
+        let project = roots.open_kind(Recorder::default(), &base.join("proj"), "main", Kind::Project).unwrap();
+        let workspace = roots.open_kind(Recorder::default(), &base.join("worktree"), "main", Kind::Workspace).unwrap();
 
         let agents = |root: &Root| root.path.join(".brama/agents.json");
         assert!(roots.contains_project(&agents(&project)));
-        assert!(roots.contains(&agents(&session)), "its files are readable");
-        assert!(!roots.contains_project(&agents(&session)), "but it isn't a project");
+        assert!(roots.contains(&agents(&workspace)), "its files are readable");
+        assert!(!roots.contains_project(&agents(&workspace)), "but it isn't a project");
+        roots.close_group("main");
         std::fs::remove_dir_all(&base).unwrap();
     }
 
@@ -457,7 +520,7 @@ mod tests {
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(base.join("a.txt"), "needle\n").unwrap();
         let roots = Roots::default();
-        let root = roots.open_with(&base, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let root = roots.open_with(&base, "main", &AtomicBool::new(false), Kind::Project, |_, _| {}).unwrap();
         let done = |cancel: &AtomicBool| {
             let options = search::SearchOptions {
                 query: "needle".into(),
@@ -509,7 +572,7 @@ mod tests {
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
         let roots = Roots::default();
-        let opened = roots.open_with(&root, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
+        let opened = roots.open_with(&root, "main", &AtomicBool::new(false), Kind::Project, |_, _| {}).unwrap();
 
         assert!(roots.contains(&opened.path.join("src/main.rs")));
         assert!(!roots.contains(&opened.path.with_file_name("proj-other").join("x")));
@@ -527,7 +590,7 @@ mod tests {
         std::fs::create_dir_all(base.join("b")).unwrap();
         let roots = Roots::default();
         let open = |dir: &str, group: &str| {
-            roots.open_with(&base.join(dir), group, &AtomicBool::new(false), false, |_, _| {}).unwrap()
+            roots.open_with(&base.join(dir), group, &AtomicBool::new(false), Kind::Project, |_, _| {}).unwrap()
         };
         let (a1, b1, a2) = (open("a", "main"), open("b", "main"), open("a", "second"));
 

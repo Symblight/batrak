@@ -59,6 +59,7 @@
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
  * @property {string} folder Where the agent works: the project, or the project's folder in its worktree.
+ * @property {string | null} [workspaceId] Its workspace; `null` or absent for Main.
  * @property {string | null} worktreePath `worktree` only: its root.
  * @property {string | null} branch `worktree` only: the session's own branch.
  * @property {string | null} baseCommit `worktree` only: the commit it started from.
@@ -223,23 +224,6 @@
  * @property {string} folder The project's folder in the worktree (`Session.folder`).
  * @property {string} branch
  * @property {string} title The session's.
- */
-
-/**
- * A worktree session's folder, open as a backend root for the Files tree.
- * @typedef {Object} SessionRoot
- * @property {string} sessionId
- * @property {string} rootId
- * @property {string} path Canonical; the session's folder (`Session.folder`).
- * @property {string} label The worktree's folder name, the tree's root row.
- */
-
-/**
- * The folder the Files tree lists.
- * @typedef {Object} TreeRoot
- * @property {string | null} rootId `null` while none is open.
- * @property {string | null} path
- * @property {string | null} label A root row's: the worktree's name; `null` for the project (no row).
  */
 
 /**

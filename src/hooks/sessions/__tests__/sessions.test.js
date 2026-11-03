@@ -9,6 +9,7 @@ import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/ses
 import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $sessionReads, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $project } from '../../../stores/project/project.js';
+import { projects } from '../../projects/projects.js';
 
 /** @typedef {import('../types.js').Session} Session */
 
@@ -144,6 +145,33 @@ describe('sessions views', () => {
     $terminals.set({ ...$terminals.get(), 't-cli': { ...$terminals.get()['t-cli'], status: 'exited', exit: { code: 0, signal: null } } });
     await sessions.remove('s1');
     expect(sent('terminal_close').map((c) => c.args)).to.deep.equal([{ ids: ['t-cli'] }]);
+  });
+
+  it("closes a workspace's root before removing its last chat, whose workspace goes with it", async () => {
+    // Arrange: the backend closes the root only when the test says so
+    /** @type {() => void} */
+    let closeDone = () => {};
+    answer = (cmd) => (cmd === 'close_root' ? new Promise((resolve) => (closeDone = () => resolve(null))) : null);
+    projects.showRoot('/wt/one', 'r-w');
+    $sessions.set([
+      session({ id: 'a', mode: 'worktree', workspaceId: 'w1', folder: '/wt/one' }),
+      session({ id: 'b', mode: 'worktree', workspaceId: 'w1', folder: '/wt/one' }),
+    ]);
+
+    // Act
+    await sessions.remove('a');
+    const afterFirst = sent('close_root').length;
+    const removing = sessions.remove('b');
+    await new Promise((r) => setTimeout(r, 20));
+    const beforeClosed = sent('session_remove').length;
+    closeDone();
+    await removing;
+
+    // Assert
+    expect(afterFirst, 'another chat still runs there').to.equal(0);
+    expect(sent('close_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r-w' }]);
+    expect(beforeClosed, 'the folder is removed only once nothing watches it').to.equal(1);
+    expect(sent('session_remove')).to.have.length(2);
   });
 
   it('starts an exited CLI again on Restart', async () => {

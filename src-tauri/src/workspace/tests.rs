@@ -209,3 +209,22 @@ fn a_name_placed_but_not_checked_out_yet_is_taken() {
     assert_eq!((first.branch.as_str(), second.branch.as_str()), ("brama/fix-login", "brama/fix-login-2"));
     std::fs::remove_dir_all(data).unwrap();
 }
+
+#[test]
+fn a_workspaces_folder_opens_only_while_checked_out() {
+    use crate::git::test_repo::TestRepo;
+    let repo = TestRepo::with_commit("ws-open-folder");
+    let data = temp_dir("ws-open-folder-data");
+    let workspaces = Workspaces::new(&data);
+    let ws = workspaces.place(&repo.path, "Task", NameSource::User, None).unwrap();
+    assert!(workspaces.open_folder(&ws.id).is_err(), "placed, not checked out yet");
+
+    workspaces.check_out(&ws.id).unwrap();
+    assert_eq!(workspaces.open_folder(&ws.id), Ok(ws.folder.clone()));
+
+    std::fs::remove_dir_all(&ws.worktree_path).unwrap();
+    assert!(workspaces.open_folder(&ws.id).is_err(), "deleted outside Brama");
+    assert!(workspaces.open_folder("nope").is_err());
+    workspaces.discard(&ws.id, false).unwrap();
+    std::fs::remove_dir_all(data).unwrap();
+}

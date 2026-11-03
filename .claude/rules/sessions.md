@@ -5,7 +5,7 @@ paths:
   - "src-tauri/src/agents/**"
   - "src-tauri/src/commands/sessions.rs"
   - "src/hooks/{sessions,chat,composer}/**"
-  - "src/stores/{sessions,session-sync,session-runtime,session-read,session-root,composer,context-usage,clock,chat}/**"
+  - "src/stores/{sessions,session-sync,session-runtime,session-read,composer,context-usage,clock,chat}/**"
   - "src/views/agent-column/**"
   - "src/views/chat-view/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,run-target,mode-picker,agent-picker,model-picker}/**"
@@ -60,7 +60,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
   locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
   are its `touched`, and a watcher batch of a folder (`Sessions::note_changes(folder, …)`, from
-  `Roots::open`'s callback; none for a project whose root isn't open) naming one that two
+  a root's `Host::files_changed`, a project's or a workspace's; none for a folder whose root isn't open) naming one that two
   turns touched, running or ended less than `overlap_grace` (1 s) ago, sends each running one an
   `overlap` (once per file per turn; a banner notice until the turn ends, over an `info` /
   `outdated` one that comes back then). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
@@ -134,11 +134,10 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`folderOf()`, `$activeFolder`). A worktree session's files open as tabs of its project
   (`$worktrees`; `read_file` reads its folder through `Sessions::contains`), marked with a branch
   icon, no diff gutter, re-read when its turn ends; its folder refs
-  reveal the project's same folder. While a worktree session is active, the Files tree lists its
-  folder under a root row named after the worktree (`$treeRoot`, `stores/session-root/session-root.js`): the
-  session root (`open_session_root`, its own scan and watcher, at most one per window) that
-  `sessions.followRoot()` keeps open; Search, Changes and Quick Open stay on the project
-  (spec: `docs/specs/worktree-default.md`). A prompt path that is relative is the session's own copy; an
+  reveal the project's same folder. While a chat of a workspace is shown, the window shows that
+  workspace's folder (`$activeRoot`, see CLAUDE.md "Open roots"): Files, Search, Changes, Quick Open
+  and the branch follow it; removing a workspace's last chat closes its root first (its folder may
+  go with it). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
   A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
   `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no

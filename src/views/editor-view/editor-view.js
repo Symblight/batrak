@@ -14,7 +14,8 @@ import { $markdownSplit, setMarkdownSplit } from '../../stores/layout/layout.js'
 import { notify } from '../../stores/notices/notices.js';
 import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $settings, setMarkdownScrollSync } from '../../stores/settings/settings.js';
-import { $rootId, $project } from '../../stores/project/project.js';
+import { $project } from '../../stores/project/project.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 

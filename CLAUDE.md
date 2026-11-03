@@ -96,7 +96,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
 - **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor/editor.js`) or, when they
   call the backend, in a service that writes the store (`projects.open()` / `restore()` (`hooks/projects/`) →
   `$project`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
-- **Narrow with `computed`.** `$rootId` (from `$project`) and `$activePath` (from `$editorTabs`) notify
+- **Narrow with `computed`.** `$rootId` (from `$activeRoot`, `stores/workspaces/`) and `$activePath` (from `$editorTabs`) notify
   only when their slice changes, so subscribe to the narrowest store you need.
 - **Container components subscribe with `StoreController`** (`src/controllers/store/`):
   `#project = new StoreController(this, { store: $project })`, read `this.#project.value` in
@@ -136,9 +136,14 @@ Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops wh
 `projects` ignores) or when its root closes. The editor reads only the active tab; other
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
-**Open projects:** the `projects` hook keeps the backend roots (snapshot + watcher) of the last
-`KEEP_OPEN` (3) active projects; activating one of them only switches `$project`, no scan. Older
-ones are closed and scanned again when activated. Only the active root's changes reach the frontend
+**Open roots:** the window shows one folder, `$activeRoot` (`stores/workspaces/`): the shown
+workspace's (until the picker, the shown chat's; `Roots::open_workspace`, `open_workspace_root`,
+opened by the `workspaces` hook) or the project's. `$rootId` follows it, so git, GitHub, Search,
+Changes, Quick Open, the tree and `projects.absPath()` / `relPath()` do too. The `projects` hook's
+roots part (`hooks/projects/roots.js`, mirrored in `$openRoots`) keeps the last `KEEP_OPEN` (3)
+shown roots open, projects' and workspaces' together, never the shown project's; switching to one
+of them needs no scan. Older ones are closed and scanned again when shown; meanwhile the tree hides
+and shows a skeleton after 150 ms. Only the active root's changes reach the frontend
 (`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
 root (the `git` hook's stores and commit picks, the Changes tab's expanded files, the file tree's
 expanded folders) save their state on switch and restore it, re-checking what may have changed. A

@@ -27,4 +27,12 @@
  * @property {string[]} working Titles of its chats in a turn.
  */
 
+/**
+ * The folder the window shows (the active workspace's, or the project's) and its backend root.
+ * @typedef {Object} ActiveRoot
+ * @property {string | null} path
+ * @property {string | null} rootId `null` until its root is open.
+ * @property {boolean} opening Its root is being scanned.
+ */
+
 export {};

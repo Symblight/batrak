@@ -8,7 +8,6 @@ import { agents } from '../agents/agents.js';
 import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
 import { composerOf, forgetComposer, startComposer } from '../../stores/composer/composer.js';
-import { root } from './root.js';
 import { trackSeen } from './seen.js';
 import { poll, sync, syncAgentOf } from './sync.js';
 import { inTurn, isActiveElsewhere } from './rules.js';
@@ -395,8 +394,12 @@ function start(id, title) {
  */
 async function remove(id) {
   const worktree = $sessions.get().find((s) => s.id === id && s.mode === 'worktree')?.folder ?? null;
-  // Nothing may watch the worktree while it's deleted (Windows refuses a watched folder).
-  await root.forget(id);
+  const workspaceId = $sessions.get().find((s) => s.id === id)?.workspaceId ?? null;
+  // Its workspace may go with its last chat: nothing may watch the folder while it's deleted
+  // (Windows refuses a watched folder).
+  if (worktree !== null && workspaceId && !$sessions.get().some((s) => s.id !== id && s.workspaceId === workspaceId)) {
+    await projects.closeFolder(worktree);
+  }
   try {
     await sessionRemove(id);
   } catch (err) {

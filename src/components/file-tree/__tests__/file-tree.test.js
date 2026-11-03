@@ -38,27 +38,14 @@ describe('acp-file-tree', () => {
     window.onerror = onerror;
   });
 
-  it("lists the root's entries at the top level without a root label", async () => {
+  it("lists the root's entries at the top level", async () => {
     /** @type {AcpFileTree} */
     const el = await fixture(html`<acp-file-tree .rootId=${'root-1'} .root=${'/p'} .listDir=${listDir}></acp-file-tree>`);
     await until(() => treeOf(el).nodes.getChildIds().length > 0);
     expect(treeOf(el).nodes.getChildIds()).to.deep.equal(['src', 'a.txt']);
   });
 
-  it('puts them under one expanded root row named by the label', async () => {
-    /** @type {AcpFileTree} */
-    const el = await fixture(
-      html`<acp-file-tree .rootId=${'root-2'} .root=${'/wt/fix-login'} .rootLabel=${'fix-login'} .listDir=${listDir}></acp-file-tree>`,
-    );
-    const tree = treeOf(el);
-    await until(() => tree.nodes.getChildIds('/').length > 0);
-    expect(tree.nodes.getChildIds()).to.deep.equal(['/']);
-    expect(/** @type {{ label: string }} */ (tree.nodes.getItem('/')).label).to.equal('fix-login');
-    expect(tree.expansion.isExpanded('/')).to.equal(true);
-    expect(tree.nodes.getChildIds('/')).to.deep.equal(['src', 'a.txt']);
-  });
-
-  it('reveals a nested file under the root row, never storing the root row as expanded', async () => {
+  it('reveals a nested file, storing the folders it expanded', async () => {
     /** @type {string[][]} */
     const sent = [];
     /** @type {AcpFileTree} */
@@ -66,7 +53,6 @@ describe('acp-file-tree', () => {
       html`<acp-file-tree
         .rootId=${'root-3'}
         .root=${'/wt/fix-login'}
-        .rootLabel=${'fix-login'}
         .listDir=${listDir}
         @acp-expanded-change=${(/** @type {CustomEvent<{ paths: string[] }>} */ e) => {
           sent.push(e.detail.paths);
@@ -75,29 +61,9 @@ describe('acp-file-tree', () => {
       ></acp-file-tree>`,
     );
     const tree = treeOf(el);
-    await until(() => tree.nodes.getChildIds('/').length > 0);
+    await until(() => tree.nodes.getChildIds().length > 0);
     el.reveal('src/x.js');
     await until(() => tree.selection.get().has('src/x.js'));
     expect(sent.at(-1)).to.deep.equal(['src']);
-    expect(sent.some((paths) => paths.includes('/'))).to.equal(false);
-  });
-
-  it('opens nothing when the root row is selected', async () => {
-    let opened = 0;
-    /** @type {AcpFileTree} */
-    const el = await fixture(
-      html`<acp-file-tree
-        .rootId=${'root-4'}
-        .root=${'/wt/fix-login'}
-        .rootLabel=${'fix-login'}
-        .listDir=${listDir}
-        @acp-file-open=${() => opened++}
-      ></acp-file-tree>`,
-    );
-    const tree = treeOf(el);
-    await until(() => tree.nodes.getChildIds('/').length > 0);
-    tree.selection.set(['/']);
-    tree.dispatchEvent(new CustomEvent('tvx-selection-change', { detail: { selectedItems: new Set(['/']) } }));
-    expect(opened).to.equal(0);
   });
 });

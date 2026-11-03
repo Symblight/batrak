@@ -3,19 +3,6 @@
 use super::*;
 
 impl Sessions {
-    /// A worktree session's folder (its agent's cwd), once it's checked out; the Files tree lists it.
-    pub fn worktree_folder(&self, id: &str) -> Result<PathBuf, String> {
-        let state = self.get(id)?;
-        let record = lock(&state.record);
-        if record.mode != Mode::Worktree {
-            return Err(format!("session {id} doesn't run in a worktree"));
-        }
-        if !record.agent_cwd.is_dir() {
-            return Err(format!("{}: the worktree isn't checked out", record.agent_cwd.display()));
-        }
-        Ok(record.agent_cwd.clone())
-    }
-
     /// Applies the work of a chat's workspace to the project (`workspace_apply_locally`).
     pub async fn apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
         self.workspace_apply_locally(&self.workspace_of_chat(id)?).await

@@ -6,7 +6,8 @@ import { $notices } from '../../../stores/notices/notices.js';
 import { $fileLanguages, setFileLanguage } from '../../../stores/editor/editor.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { $settings } from '../../../stores/settings/settings.js';
-import { $rootId, $project } from '../../../stores/project/project.js';
+import { $project } from '../../../stores/project/project.js';
+import { $rootId } from '../../../stores/workspaces/workspaces.js';
 import '../editor-view.js';
 
 /** @typedef {import('../editor-view.js').AcpEditorView} AcpEditorView */

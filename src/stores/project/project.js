@@ -37,8 +37,11 @@ export const $project = persistentStore('brama:project', /** @type {OpenProject 
  */
 export const $openingPath = atom(/** @type {string | null} */ (null));
 
-/** Notifies only when the backend root changes, not on every `$project` write. */
-export const $rootId = computed($project, (project) => project?.rootId ?? null);
+/**
+ * Every backend root this window keeps open, projects' and workspaces' folders alike: folder path →
+ * root id. Written by the `projects` hook's roots part.
+ */
+export const $openRoots = atom(/** @type {Readonly<Record<string, string>>} */ ({}));
 
 /** Notifies only when the opened folder changes. */
 export const $projectPath = computed($project, (project) => project?.path ?? null);

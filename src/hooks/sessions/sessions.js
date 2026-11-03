@@ -5,7 +5,6 @@ import { controller } from './controller.js';
 import { input } from './input.js';
 import { inputOfComposer } from './input-parts.js';
 import { promptOf } from './prompt.js';
-import { root } from './root.js';
 import * as rules from './rules.js';
 
 /**
@@ -33,7 +32,4 @@ export const sessions = Object.freeze({
   /** A worktree session's file at the commit it started from. */
   fileAtBase: sessionFileAtBase,
 
-  /** Starts keeping the active worktree session's folder open for the Files tree. */
-  followRoot: root.start,
-  onRootFsChange: root.onFsChange,
 });
