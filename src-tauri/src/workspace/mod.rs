@@ -67,6 +67,8 @@ struct Inner {
     worktrees: PathBuf,
     /// Held while a workspace's folder is checked out; a chat's start waits on it.
     gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Held while a new workspace's name is chosen and stored.
+    placing: Mutex<()>,
     /// Workspaces whose checkout runs.
     creating: Mutex<HashSet<String>>,
     /// Why a workspace's last checkout failed.
@@ -100,6 +102,7 @@ impl Workspaces {
                 store: Store::open(data_dir.join("workspaces.json")),
                 worktrees: data_dir.join("worktrees"),
                 gates: Mutex::default(),
+                placing: Mutex::default(),
                 creating: Mutex::default(),
                 failed: Mutex::default(),
                 on_change: Mutex::default(),
@@ -169,7 +172,14 @@ impl Workspaces {
             None => default_base(git, project),
         };
         let stem = env::slug(name, "workspace");
-        let placed = env::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref())
+        // One placement at a time: a name is taken once stored, before its checkout makes it.
+        let _placing = lock(&self.inner.placing);
+        let stored = self.inner.store.list(None);
+        // A branch is taken within one repository: the worktrees of one group folder.
+        let reserved = |root: &Path, branch: &str| {
+            stored.iter().any(|w| w.worktree_path == root || (w.worktree_path.parent() == root.parent() && w.branch == branch))
+        };
+        let placed = env::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)
             .map_err(|e| e.replace("worktree sessions need", "workspaces need"))?;
         let (Some(worktree_path), Some(branch), Some(base_commit)) = (placed.worktree_path, placed.branch, placed.base_commit) else {
             return Err("a worktree placement without a worktree".to_owned());

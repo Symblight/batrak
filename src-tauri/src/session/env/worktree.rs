@@ -68,13 +68,20 @@ pub fn can_place(project: &Path) -> bool {
 /// Where a new worktree session goes, checked against the repository: `base` (a branch or commit,
 /// `None` for the project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
 pub fn place(project: &Path, worktrees: &Path, session_id: &str, title: &str, base: Option<&str>) -> Result<Placement, String> {
-    place_named(project, worktrees, &format!("{}-{}", slug(title, "session"), short_id(session_id)), base)
+    place_named(project, worktrees, &format!("{}-{}", slug(title, "session"), short_id(session_id)), base, &|_, _| false)
 }
 
 /// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on `brama/<stem>`,
-/// `-2`, `-3`… when the folder or the branch is taken. `base` (a branch or commit, `None` for the
+/// `-2`, `-3`… when the folder or the branch is taken, on disk or by `reserved` (a worktree root
+/// and branch placed but not checked out yet). `base` (a branch or commit, `None` for the
 /// project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
-pub fn place_named(project: &Path, worktrees: &Path, stem: &str, base: Option<&str>) -> Result<Placement, String> {
+pub fn place_named(
+    project: &Path,
+    worktrees: &Path,
+    stem: &str,
+    base: Option<&str>,
+    reserved: &dyn Fn(&Path, &str) -> bool,
+) -> Result<Placement, String> {
     let git = binary::git()?;
     let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| exec::run(git, project, &exec::args(args), GitMode::Background);
     let top = run(&[&"rev-parse", &"--show-toplevel"])
@@ -97,7 +104,9 @@ pub fn place_named(project: &Path, worktrees: &Path, stem: &str, base: Option<&s
 
     // The folder is named like the branch, `brama/` left out; both must be free.
     let taken = |leaf: &str| {
-        group.join(leaf).exists() || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/brama/{leaf}")]).is_ok()
+        reserved(&group.join(leaf), &format!("brama/{leaf}"))
+            || group.join(leaf).exists()
+            || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/brama/{leaf}")]).is_ok()
     };
     let leaf = std::iter::once(stem.to_owned())
         .chain((2..100).map(|n| format!("{stem}-{n}")))

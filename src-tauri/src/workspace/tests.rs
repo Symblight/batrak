@@ -193,3 +193,18 @@ fn a_chat_start_does_the_first_checkout_after_a_failed_one_or_a_relaunch() {
     assert!(failed.folder.join("README.md").is_file(), "retried");
     std::fs::remove_dir_all(data).unwrap();
 }
+
+#[test]
+fn a_name_placed_but_not_checked_out_yet_is_taken() {
+    use crate::git::test_repo::TestRepo;
+    let repo = TestRepo::with_commit("ws-reserved");
+    let data = temp_dir("ws-reserved-data");
+    let workspaces = Workspaces::new(&data);
+
+    let first = workspaces.place(&repo.path, "Fix login", NameSource::User, None).unwrap();
+    let second = workspaces.place(&repo.path, "Fix login", NameSource::User, None).unwrap();
+
+    assert_ne!(first.worktree_path, second.worktree_path);
+    assert_eq!((first.branch.as_str(), second.branch.as_str()), ("brama/fix-login", "brama/fix-login-2"));
+    std::fs::remove_dir_all(data).unwrap();
+}
