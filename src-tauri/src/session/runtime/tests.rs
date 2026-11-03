@@ -210,7 +210,7 @@ impl agent_api::Agent for FakeKind {
         config.get("model").map(|m| vec!["--model".to_owned(), m.clone()]).unwrap_or_default()
     }
 
-    /// Two subagents of every session, named after its ACP id.
+    /// Subagents of every session in each state, named after its ACP id.
     fn subagents(&self, session_id: &str) -> Vec<agent_api::SubagentRecord> {
         let record = |id: &str, state| agent_api::SubagentRecord {
             id: id.to_owned(),
@@ -219,7 +219,12 @@ impl agent_api::Agent for FakeKind {
             state,
             started_at: Some("2026-11-03T10:00:00Z".to_owned()),
         };
-        vec![record("done", agent_api::SubagentState::Done), record("stopped", agent_api::SubagentState::Stopped)]
+        vec![
+            record("done", agent_api::SubagentState::Done),
+            record("running", agent_api::SubagentState::Running),
+            record("stopped", agent_api::SubagentState::Stopped),
+            record("stale", agent_api::SubagentState::Unknown),
+        ]
     }
 }
 
@@ -648,7 +653,7 @@ async fn a_chats_subagents_reach_the_page_as_one_list_before_the_update_that_cha
 }
 
 #[tokio::test]
-async fn a_cli_run_chats_subagents_reach_the_page_from_its_agents_records() {
+async fn a_cli_run_chats_running_subagents_reach_the_page_from_its_agents_records_as_its_cli_shows_them() {
     // Arrange
     let f = fixture("subagent-cli", FakeAgentOptions::default());
     f.give_cli_agents();
@@ -661,9 +666,9 @@ async fn a_cli_run_chats_subagents_reach_the_page_from_its_agents_records() {
     assert_eq!(
         subagent_lists(&events)[0],
         json!([
-            { "id": "done", "title": format!("done of {acp}"), "description": "Explore", "state": "idle", "stopReason": "end_turn", "cancellable": false, "announcedAt": "2026-11-03T10:00:00Z" },
-            { "id": "stopped", "title": format!("stopped of {acp}"), "description": "Explore", "state": "idle", "stopReason": "cancelled", "cancellable": false, "announcedAt": "2026-11-03T10:00:00Z" },
-        ])
+            { "id": "running", "title": format!("running of {acp}"), "description": "Explore", "state": "running", "stopReason": null, "cancellable": false, "announcedAt": "2026-11-03T10:00:00Z" },
+        ]),
+        "done, stopped and stale ones are gone from its CLI too"
     );
 }
 

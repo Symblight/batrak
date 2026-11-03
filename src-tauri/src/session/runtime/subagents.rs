@@ -1,6 +1,7 @@
 //! A session's subagents as the page gets them: one list (`subagents` event), whatever tells of
 //! them. A chat's agent announces and patches them over ACP (`subagent_update`); a CLI-run
-//! session's agent keeps records of them, read while its CLI runs (`Agent::subagents`).
+//! session's agent keeps records of them, read while its CLI runs (`Agent::subagents`), of which
+//! the running ones are listed, as the CLI shows them.
 
 use super::*;
 
@@ -66,27 +67,20 @@ pub(super) fn apply_update(list: &mut Vec<Subagent>, update: &Value, now: &str) 
     known.is_none() || *subagent != before
 }
 
-/// An agent's records of its subagents as the page's list.
+/// An agent's records of its subagents as the page's list: the running ones, as its CLI shows them
+/// (a finished, stopped or stale one is gone from it).
 pub(super) fn of_records(records: Vec<agent_api::SubagentRecord>) -> Vec<Subagent> {
-    use agent_api::SubagentState;
     records
         .into_iter()
-        .map(|record| {
-            let (state, stop_reason) = match record.state {
-                SubagentState::Running => ("running", None),
-                SubagentState::Done => ("idle", Some("end_turn")),
-                SubagentState::Stopped => ("idle", Some("cancelled")),
-                SubagentState::Unknown => ("unknown", None),
-            };
-            Subagent {
-                id: record.id,
-                title: record.title,
-                description: record.kind,
-                state: Some(state.to_owned()),
-                stop_reason: stop_reason.map(str::to_owned),
-                cancellable: false,
-                announced_at: record.started_at.unwrap_or_default(),
-            }
+        .filter(|record| record.state == agent_api::SubagentState::Running)
+        .map(|record| Subagent {
+            id: record.id,
+            title: record.title,
+            description: record.kind,
+            state: Some("running".to_owned()),
+            stop_reason: None,
+            cancellable: false,
+            announced_at: record.started_at.unwrap_or_default(),
         })
         .collect()
 }
