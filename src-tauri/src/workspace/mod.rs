@@ -165,6 +165,19 @@ impl Workspaces {
         result
     }
 
+    /// Names a workspace (trimmed, not empty); its chats' titles no longer rename it. Folder and
+    /// branch stay.
+    pub fn rename(&self, id: &str, name: &str) -> Result<WorkspaceRecord, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a workspace's name can't be empty".to_owned());
+        }
+        self.inner.store.update(id, |record| {
+            record.name = name.to_owned();
+            record.name_source = NameSource::User;
+        })
+    }
+
     /// Waits for a checkout of the workspace that is running. Blocking.
     pub fn wait_ready(&self, id: &str) {
         drop(lock(&self.gate(id)));

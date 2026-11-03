@@ -75,3 +75,20 @@ fn a_workspace_needs_a_repository_with_a_commit() {
     std::fs::remove_dir_all(data).unwrap();
     std::fs::remove_dir_all(plain).unwrap();
 }
+
+#[test]
+fn renaming_changes_the_name_only() {
+    use crate::git::test_repo::TestRepo;
+    let repo = TestRepo::with_commit("ws-rename");
+    let data = temp_dir("ws-rename-data");
+    let workspaces = Workspaces::new(&data);
+    let ws = workspaces.place(&repo.path, "First", NameSource::Agent, None).unwrap();
+
+    let renamed = workspaces.rename(&ws.id, "  Second  ").unwrap();
+
+    assert_eq!((renamed.name.as_str(), renamed.name_source), ("Second", NameSource::User));
+    assert_eq!((&renamed.folder, &renamed.branch), (&ws.folder, &ws.branch), "folder and branch stay");
+    assert!(workspaces.rename(&ws.id, " ").is_err(), "empty is refused");
+    assert_eq!(Workspaces::new(&data).get(&ws.id).unwrap().name, "Second", "stored");
+    std::fs::remove_dir_all(data).unwrap();
+}
