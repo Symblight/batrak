@@ -7,7 +7,7 @@ mod local;
 mod worktree;
 
 pub use local::LocalEnv;
-pub use worktree::{can_place, remove_orphan, WorktreeEnv};
+pub use worktree::{can_place, place_named, remove_orphan, slug, WorktreeEnv};
 
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
