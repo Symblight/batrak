@@ -11,6 +11,7 @@ mod session;
 mod storage;
 mod terminal;
 mod roots;
+mod workspace;
 
 use tauri::Manager;
 
