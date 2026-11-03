@@ -72,6 +72,8 @@ pub(super) struct SessionState {
     pub(super) held: Mutex<Option<oneshot::Sender<bool>>>,
     /// Its agent's CLI holds it, in a terminal (`cli`): the agent isn't started here meanwhile.
     pub(super) cli: Mutex<Option<CliHeld>>,
+    /// Its subagents as the page last heard of them (`subagents` event; `subagents.rs`).
+    pub(super) subagents: Mutex<Vec<subagents::Subagent>>,
 }
 
 impl SessionState {
@@ -123,6 +125,11 @@ impl SessionState {
         let mut sinks = lock(&self.sinks);
         let pending = self.conn().map(|conn| conn.pending_permissions()).unwrap_or_default();
         let replay = lock(&self.replay).as_ref().map(|log| (log.updates().to_vec(), log.permissions_in(&pending)));
+        // Its subagents first: the snapshot's cards name them.
+        let subagents = lock(&self.subagents).clone();
+        if !subagents.is_empty() && !sink.send(&self.envelope("subagents", serde_json::json!({ "subagents": subagents }))) {
+            return;
+        }
         if let Some((updates, permissions)) = replay {
             let events = std::iter::once(("snapshot", serde_json::json!({ "updates": updates })))
                 .chain(permissions.into_iter().map(|request| ("permission-request", request)));
@@ -175,6 +182,7 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         sign_in: Mutex::default(),
         held: Mutex::default(),
         cli: Mutex::default(),
+        subagents: Mutex::default(),
         agent: Mutex::default(),
         id: record.session_id.clone(),
         record: Mutex::new(record),

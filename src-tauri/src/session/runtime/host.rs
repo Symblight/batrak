@@ -139,6 +139,10 @@ impl ClientHost for SessionHost {
             state.emit("update", update);
             return;
         }
+        // The page's list of them first: the update's card names its subagent.
+        if update["sessionUpdate"] == "subagent_update" && subagents::apply_update(&mut lock(&state.subagents), &update, &iso_now()) {
+            state.emit_subagents();
+        }
         let options = state.conn().and_then(|conn| conn.note_update(&update));
         if update["sessionUpdate"] == "session_info_update" {
             if let Some(title) = update.get("title") {

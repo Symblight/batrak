@@ -535,6 +535,7 @@ mod sign_in;
 mod slots;
 mod start;
 mod state;
+mod subagents;
 mod sync;
 #[cfg(test)]
 mod tests;

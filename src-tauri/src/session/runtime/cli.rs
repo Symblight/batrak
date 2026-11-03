@@ -278,13 +278,19 @@ impl Inner {
         if let Some(prompt) = pasted {
             window.terminals.paste_when_ready(terminal_id, &prompt, FIRST_PROMPT_WAIT);
         }
-        let kept = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
+        let gone = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
             Some(held) => {
                 held.terminals = Some(window.terminals.clone());
-                true
+                Some(held.gone.subscribe())
             }
-            None => false,
+            None => None,
         };
+        let kept = gone.is_some();
+        // A CLI tells nothing over ACP: its agent's records tell its subagents.
+        if let Some(gone) = gone {
+            let kind = Arc::clone(self.opts.agents.shared_for_launch(&crate::agents::launch_of(&agent)));
+            self.watch_cli_subagents(state, kind, gone);
+        }
         // Closed while it started (or already exited): its terminal goes too.
         if !kept {
             window.terminals.close(&[terminal_id.to_owned()]);
@@ -343,3 +349,4 @@ fn is_uuid(id: &str) -> bool {
     let groups: Vec<&str> = id.split('-').collect();
     groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12]) && groups.iter().all(|g| g.bytes().all(|b| b.is_ascii_hexdigit()))
 }
+

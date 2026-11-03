@@ -209,6 +209,18 @@ impl agent_api::Agent for FakeKind {
     fn cli_args(&self, config: &BTreeMap<String, String>) -> Vec<String> {
         config.get("model").map(|m| vec!["--model".to_owned(), m.clone()]).unwrap_or_default()
     }
+
+    /// Two subagents of every session, named after its ACP id.
+    fn subagents(&self, session_id: &str) -> Vec<agent_api::SubagentRecord> {
+        let record = |id: &str, state| agent_api::SubagentRecord {
+            id: id.to_owned(),
+            kind: Some("Explore".to_owned()),
+            title: Some(format!("{id} of {session_id}")),
+            state,
+            started_at: Some("2026-11-03T10:00:00Z".to_owned()),
+        };
+        vec![record("done", agent_api::SubagentState::Done), record("stopped", agent_api::SubagentState::Stopped)]
+    }
 }
 
 /// An agent that, started signed out, signs in in the browser on its own (as Antigravity does):
@@ -594,12 +606,65 @@ async fn a_subagents_updates_and_permission_request_reach_the_page_tagged_with_i
     let expected = [pair("-", "subagent_update"), pair("child-1", "session_info_update"), pair("child-1", "tool_call"), pair("child-1", "agent_message_chunk")];
     let live: Vec<Value> = lock(&events.events).iter().filter(|e| e.kind == "update").map(|e| e.payload.clone()).collect();
     assert_eq!(tagged_updates(live.iter()), expected);
-    let snapshot = lock(&page.events)[0].clone();
+    let snapshot = lock(&page.events).iter().find(|e| e.kind == "snapshot").cloned().unwrap();
     assert_eq!(tagged_updates(snapshot.payload["updates"].as_array().unwrap().iter().filter(|u| u["sessionUpdate"] != "user_message_chunk")), expected);
     assert_ne!(f.sessions.get("p").unwrap().record().title, "child title", "a subagent's title isn't the chat's");
     let id = request.payload["requestId"].as_str().unwrap();
     f.sessions.respond_permission("p", id, Some("allow".to_owned())).unwrap();
     assert_eq!(events.wait_turn_end().await, "end_turn");
+}
+
+/// The `subagents` events' lists, in order.
+fn subagent_lists(events: &Recorder) -> Vec<Value> {
+    lock(&events.events).iter().filter(|e| e.kind == "subagents").map(|e| e.payload["subagents"].clone()).collect()
+}
+
+#[tokio::test]
+async fn a_chats_subagents_reach_the_page_as_one_list_before_the_update_that_changed_it() {
+    // Arrange
+    let f = fixture("subagent-list", FakeAgentOptions::default());
+    let (_, events) = f.create("p", "fake").unwrap();
+    events.wait_status("idle").await;
+    // Act
+    f.sessions.send_prompt("p", text("subagent")).unwrap();
+    let request = events.wait_for("permission request", |e| e.kind == "permission-request").await;
+    let page = attach_page(&f.sessions, "p", "reloaded");
+    f.sessions.respond_permission("p", request.payload["requestId"].as_str().unwrap(), Some("allow".to_owned())).unwrap();
+    events.wait_turn_end().await;
+    // Assert
+    let order: Vec<&str> = lock(&events.events)
+        .iter()
+        .filter(|e| e.kind == "subagents" || (e.kind == "update" && e.payload["sessionUpdate"] == "subagent_update"))
+        .map(|e| e.kind)
+        .collect();
+    assert_eq!(order, ["subagents", "update", "subagents", "update"], "each list before its update");
+    let lists = subagent_lists(&events);
+    let mut first = lists[0][0].clone();
+    assert!(first["announcedAt"].as_str().is_some_and(|at| !at.is_empty()));
+    first["announcedAt"] = json!("");
+    assert_eq!(first, json!({ "id": "child-1", "title": "find usages", "description": "Explore", "state": "running", "stopReason": null, "cancellable": true, "announcedAt": "" }));
+    assert_eq!((&lists[1][0]["state"], &lists[1][0]["stopReason"], &lists[1][0]["cancellable"]), (&json!("idle"), &json!("end_turn"), &json!(true)), "patched, not replaced");
+    assert_eq!(lock(&page.events)[0].kind, "subagents", "an attaching page gets them before the snapshot");
+}
+
+#[tokio::test]
+async fn a_cli_run_chats_subagents_reach_the_page_from_its_agents_records() {
+    // Arrange
+    let f = fixture("subagent-cli", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let (acp, events) = f.started_then_stopped("s1", "fake").await;
+    // Act
+    f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    events.wait_for("subagents", |e| e.kind == "subagents").await;
+    // Assert
+    assert_eq!(
+        subagent_lists(&events)[0],
+        json!([
+            { "id": "done", "title": format!("done of {acp}"), "description": "Explore", "state": "idle", "stopReason": "end_turn", "cancellable": false, "announcedAt": "2026-11-03T10:00:00Z" },
+            { "id": "stopped", "title": format!("stopped of {acp}"), "description": "Explore", "state": "idle", "stopReason": "cancelled", "cancellable": false, "announcedAt": "2026-11-03T10:00:00Z" },
+        ])
+    );
 }
 
 #[tokio::test]

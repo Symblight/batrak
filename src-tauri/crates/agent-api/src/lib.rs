@@ -158,6 +158,30 @@ pub struct Command {
     pub args: Vec<String>,
 }
 
+/// What a subagent is doing, as its agent's own records tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubagentState {
+    Running,
+    Done,
+    /// The user stopped it.
+    Stopped,
+    /// Neither done nor heard from lately: it may have died with its session.
+    Unknown,
+}
+
+/// A subagent of a session, from the agent's own records: what a session run by its CLI (no ACP
+/// stream) has of its subagents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubagentRecord {
+    pub id: String,
+    /// What kind it is (`Explore`, `Plan`, …).
+    pub kind: Option<String>,
+    pub title: Option<String>,
+    pub state: SubagentState,
+    /// ISO 8601, when it started.
+    pub started_at: Option<String>,
+}
+
 /// One kind of agent. Default methods are plain ACP with no CLI; a crate overrides what its agent
 /// does differently. The app's hub picks the crate for a launch and calls only this.
 pub trait Agent: Send + Sync + 'static {
@@ -195,6 +219,11 @@ pub trait Agent: Send + Sync + 'static {
     }
     /// The composer's picks (option id → value) as the CLI's flags; those it doesn't know left out.
     fn cli_args(&self, _config: &BTreeMap<String, String>) -> Vec<String> {
+        Vec::new()
+    }
+    /// The subagents of its session `session_id` (its ACP id), from its own records, oldest first;
+    /// none for an agent that keeps none. Reads files: call off the async runtime.
+    fn subagents(&self, _session_id: &str) -> Vec<SubagentRecord> {
         Vec::new()
     }
 }
