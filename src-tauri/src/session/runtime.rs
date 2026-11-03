@@ -335,7 +335,7 @@ impl Sessions {
     /// Starts a stopped session's agent, continuing its ACP session where the agent supports
     /// `session/load`; a running or starting one is left as it is. `false`, quietly, when it
     /// can't start where it is: the project has its worktree's branch checked out (Restart then
-    /// says why).
+    /// says why), or its agent starts only when the user acts on it (`Agent::starts_in_background`).
     pub async fn resume(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
         if lock(&state.cli).is_some() {
@@ -344,6 +344,10 @@ impl Sessions {
         let record = state.record();
         if record.status != SessionStatus::Stopped {
             return Ok(record.status.is_active());
+        }
+        let merged = self.inner.opts.configs.merged(Some(&record.project_path));
+        if merged.agent(&record.agent_id).is_some_and(|agent| !self.inner.starts_in_background(agent)) {
+            return Ok(false);
         }
         let env = env::for_session(&record)?;
         let held = tokio::task::spawn_blocking(move || env.held_elsewhere()).await.map_err(|e| e.to_string())??;

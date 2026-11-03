@@ -71,7 +71,10 @@ paths:
     runs its archive's program (`cmd`'s file name, `agy_acp_server.par`) from PATH
     (`Launch::Program`, this platform's args): the user installs and updates it, Brama never
     downloads an agent; a start that doesn't find it says so with the archive's link
-    (`registry::not_installed`). An installed agent
+    (`registry::not_installed`). Antigravity is never started in the background
+    (`Agent::starts_in_background` false: signed out, its `session/new` / `load` opens Google's
+    sign-in in the browser): no probe (it fails), no sync (`unsupported`), and `session_resume` on
+    show leaves it stopped; a message, Restart, Retry or Sign in start it. An installed agent
     is matched by what it runs (`match_launch`: that program's name, or `npx` running the entry's
     package, its first `-p` / `--package` value or first non-flag argument, with or without
     `@version`), not by id;
@@ -123,7 +126,8 @@ paths:
   needing one (`AgentRow.status: signIn`). A prompt sent meanwhile is held (`held`), not failed:
   Stop, cancel or the agent leaving drop it (`prompt-returned`, back into the composer). The banner
   offers the agent's `agent` methods and Retry (`agents_sign_in`, `methodId: null` only checks, for
-  a login done in a terminal); once a sign-in, Retry or probe works, every session waiting on that
+  a login done in a terminal); a launch noted so isn't probed (started) again, since an agent may
+  open the browser at each start signed out (Antigravity does); once a sign-in, Retry or probe works, every session waiting on that
   launch starts again and sends its held prompt. A `terminal` / `command` method (`agent-acp`'s `auth.rs`
   `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd

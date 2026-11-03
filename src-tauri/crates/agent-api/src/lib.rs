@@ -178,6 +178,13 @@ pub trait Agent: Send + Sync + 'static {
     }
     /// Whether this crate drives an agent with this launch.
     fn matches(&self, launch: &Launch) -> bool;
+
+    /// Whether Brama may start it without the user acting on it (an options probe, a session
+    /// sync, resuming a session shown at launch). `false` for one that, started signed out, signs
+    /// in in the browser on its own: it then starts only for a message, Restart, Retry or Sign in.
+    fn starts_in_background(&self) -> bool {
+        true
+    }
     /// Its CLI, if it has one: how to resume a session and start one under our id.
     fn cli(&self, _launch: &Launch) -> Option<CliSpec> {
         None

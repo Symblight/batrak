@@ -115,6 +115,16 @@ impl Sessions {
     /// that answers AuthRequired is noted as needing a sign-in ([`Probed::SignIn`]).
     pub async fn probe_options(&self, project: Option<&Path>, agent_id: &str) -> Result<Probed, String> {
         let agent = self.inner.startable(project, agent_id)?;
+        if !self.inner.starts_in_background(&agent) {
+            return Err(format!("{} starts only when you use it", agent.name));
+        }
+        // Waiting for a sign-in, it isn't started again (one may open the browser at each start
+        // while signed out); a sign-in or Retry clears that.
+        let key = LaunchKey::of(&agent);
+        if self.inner.waits_for_sign_in(&key) {
+            let methods = lock(&self.inner.sign_ins_needed).get(&key).map(|need| need.methods.clone());
+            return Ok(Probed::SignIn { sign_in: methods.unwrap_or_default() });
+        }
         match self.inner.scratch_start(&agent, None).await {
             Ok(started) => {
                 if let Some(version) = &started.agent_version {

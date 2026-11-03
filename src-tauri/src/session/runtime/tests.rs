@@ -211,9 +211,27 @@ impl agent_api::Agent for FakeKind {
     }
 }
 
+/// An agent that, started signed out, signs in in the browser on its own (as Antigravity does):
+/// started only when the user acts on it.
+struct InteractiveKind;
+
+impl agent_api::Agent for InteractiveKind {
+    fn kind(&self) -> &'static str {
+        "interactive"
+    }
+
+    fn matches(&self, launch: &agent_api::Launch) -> bool {
+        launch.command == "interactive-agent"
+    }
+
+    fn starts_in_background(&self) -> bool {
+        false
+    }
+}
+
 fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
     SessionsOptions {
-        agents: Arc::new(crate::agents::AgentHub::of(vec![Arc::new(FakeKind)])),
+        agents: Arc::new(crate::agents::AgentHub::of(vec![Arc::new(FakeKind), Arc::new(InteractiveKind)])),
         data_dir: dir.join("data"),
         configs: AgentConfigs::new(Some(dir.join("config/agents.json")), Some(dir.join("data/trusted-agents.json")))
             .with_registry(crate::config::registry::Registry::of(crate::config::registry::tests::FIXTURE)),
@@ -2243,6 +2261,54 @@ async fn a_probe_that_asks_to_sign_in_says_so_and_the_tab_shows_it() {
 }
 
 #[tokio::test]
+async fn an_agent_waiting_for_a_sign_in_isnt_started_again_by_a_probe() {
+    // An agent may open the browser whenever it's started signed out: a page reload's probe
+    // mustn't start it again until the user signs in or presses Retry.
+    let options = needing_sign_in();
+    let signed_in = Arc::clone(&options.signed_in);
+    let f = fixture("sign-in-probe-again", options);
+    assert!(matches!(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap(), Probed::SignIn { .. }));
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1);
+
+    let Probed::SignIn { sign_in } = f.sessions.probe_options(Some(&f.project), "fake").await.unwrap() else {
+        panic!("options without a sign-in")
+    };
+    assert_eq!(sign_in.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["browser"], "the noted methods");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "not started again");
+
+    signed_in.store(true, Ordering::SeqCst);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await, SignInEnd::Done);
+    assert!(matches!(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap(), Probed::Options(_)), "probed once signed in");
+}
+
+#[tokio::test]
+async fn an_agent_that_signs_in_on_its_own_starts_only_when_the_user_acts() {
+    use super::sync::SyncOutcome;
+    let f = fixture("interactive", FakeAgentOptions { load_session: true, ..listing() });
+    f.set_agents(&f.project, r#"{"version":1,"agents":{"agy":{"name":"Agy","command":"interactive-agent"}}}"#);
+    let configs = &f.sessions.inner.opts.configs;
+    configs.trust(&f.project, &configs.untrusted(&f.project).into_iter().map(|u| u.launch).collect::<Vec<_>>()).unwrap();
+    let launches = || f.launcher.launches.load(Ordering::SeqCst);
+
+    // Probe and sync: no user asked.
+    assert!(f.sessions.probe_options(Some(&f.project), "agy").await.is_err(), "not probed");
+    let agy = Some(&["agy".to_owned()][..]);
+    assert_eq!(outcomes(&f.sessions.sync(&f.project, agy).await), [("agy", SyncOutcome::Unsupported, None)]);
+    assert_eq!(launches(), 0, "neither started it");
+
+    // A session the user made, stopped: showing it doesn't start it, a message does.
+    let (_, events) = f.create("s", "agy").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.stop("s").await.unwrap();
+    events.wait_status("stopped").await;
+    assert!(!f.sessions.resume("s").await.unwrap(), "stays stopped when shown");
+    assert_eq!(launches(), 1);
+    f.sessions.send_prompt("s", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+    assert_eq!(launches(), 2);
+}
+
+#[tokio::test]
 async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
     let options = needing_sign_in();
     let signed_in = Arc::clone(&options.signed_in);
@@ -2287,20 +2353,6 @@ async fn a_cancelled_sign_in_ends_cancelled_and_keeps_the_prompt_held() {
     assert!(!state.pending && state.methods.len() == 1, "it still needs one");
     tokio::time::sleep(Duration::from_millis(50)).await;
     assert_eq!(event_count(&events, "prompt-returned") + event_count(&events, "turn-end"), 0, "still held");
-}
-
-#[tokio::test]
-async fn a_probe_that_finds_the_agent_signed_in_brings_back_its_waiting_sessions() {
-    let options = needing_sign_in();
-    let signed_in = Arc::clone(&options.signed_in);
-    let f = fixture("sign-in-probe-back", options);
-    let (_, events) = f.create("s", "fake").unwrap();
-    events.wait_status("error").await;
-    signed_in.store(true, Ordering::SeqCst);
-    events.clear();
-    options_of(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap());
-    events.wait_status("idle").await;
-    assert!(f.sessions.sign_in_state(Some(&f.project), "fake").is_none(), "the tab no longer asks");
 }
 
 #[tokio::test]

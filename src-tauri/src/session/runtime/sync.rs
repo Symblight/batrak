@@ -182,6 +182,9 @@ impl Inner {
                 Some(SyncOutcome::Untrusted)
             } else if self.waits_for_sign_in(&LaunchKey::of(agent)) {
                 Some(SyncOutcome::SignIn)
+            } else if !self.starts_in_background(agent) {
+                // Listing would start it: only its sessions here show.
+                Some(SyncOutcome::Unsupported)
             } else {
                 None
             };
@@ -233,7 +236,7 @@ impl Inner {
         report
     }
 
-    fn waits_for_sign_in(&self, key: &LaunchKey) -> bool {
+    pub(super) fn waits_for_sign_in(&self, key: &LaunchKey) -> bool {
         lock(&self.sign_ins_needed).contains_key(key) || lock(&self.signing_in).contains_key(key)
     }
 

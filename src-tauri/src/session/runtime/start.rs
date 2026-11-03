@@ -170,6 +170,12 @@ impl Inner {
         Ok(agent)
     }
 
+    /// Whether the agent's crate lets Brama start it without the user acting on it
+    /// (`Agent::starts_in_background`).
+    pub(super) fn starts_in_background(&self, agent: &AgentConfig) -> bool {
+        self.opts.agents.for_launch(&crate::agents::launch_of(agent)).starts_in_background()
+    }
+
     /// A spawn's error; an agent's program on PATH that isn't there says how to install it.
     fn launch_error(&self, agent: &AgentConfig, error: String) -> String {
         // `os error 2`: not found, on unix (ENOENT) and Windows (ERROR_FILE_NOT_FOUND) alike.
