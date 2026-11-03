@@ -268,4 +268,28 @@ describe('acp-session-row', () => {
     }
     expect(renames, 'nothing more was saved').to.have.length(1);
   });
+
+  it('is the root of its subagents: a chevron and aria-expanded only with some, which asks to open or close them without selecting', async () => {
+    // Arrange
+    const plain = await render();
+    const { el, row, root } = await render({ subagents: 3, expanded: false });
+    const toggles = record(el, 'acp-session-row-toggle');
+    const selects = record(el, 'acp-session-select');
+    const chevron = /** @type {HTMLElement} */ (root.querySelector('.acp-session-row__toggle'));
+    // Act
+    chevron.click();
+    el.expanded = true;
+    await el.updateComplete;
+    chevron.click();
+    // Assert
+    expect(plain.row.hasAttribute('aria-expanded'), 'no subagents: a leaf').to.equal(false);
+    expect(plain.root.querySelector('.acp-session-row__toggle')).to.equal(null);
+    expect(row.getAttribute('aria-expanded')).to.equal('true');
+    expect(chevron.getAttribute('aria-label')).to.equal('Hide 3 subagents');
+    expect(toggles.map((e) => e.detail)).to.deep.equal([
+      { sessionId: 'a', expanded: true },
+      { sessionId: 'a', expanded: false },
+    ]);
+    expect(selects, 'the chevron only toggles').to.have.length(0);
+  });
 });

@@ -43,6 +43,13 @@ export class AcpSessionColumn extends ViewElement {
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.renderRoot.querySelector('acp-confirm-dialog') });
 
+  /** The shown workspace's chats. */
+  get #chats() {
+    const path = this.#projectPath.value;
+    const workspaceId = this.#workspaceId.value;
+    return this.#sessions.value.filter((s) => s.projectId === path && workspaceOfSession(s) === workspaceId);
+  }
+
   /** The shown workspace's header: its record, or a stand-in while it loads (none: Main). */
   get #headerWorkspace() {
     const id = this.#workspaceId.value;
@@ -102,8 +109,7 @@ export class AcpSessionColumn extends ViewElement {
 
   render() {
     const path = this.#projectPath.value;
-    const workspaceId = this.#workspaceId.value;
-    const chats = this.#sessions.value.filter((s) => s.projectId === path && workspaceOfSession(s) === workspaceId);
+    const chats = this.#chats;
     const loading = path !== null && sessions.loadingProjects([path], this.#loaded.value, this.#sync.value).includes(path);
     return html`<acp-panel>
       <acp-workspace-header

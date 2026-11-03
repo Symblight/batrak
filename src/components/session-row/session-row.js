@@ -6,6 +6,8 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
 import branchIcon from '@material-design-icons/svg/outlined/fork_right.svg?raw';
+import collapseIcon from '@material-design-icons/svg/outlined/expand_less.svg?raw';
+import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
 import pinIcon from '@material-design-icons/svg/outlined/push_pin.svg?raw';
 import '../agent-icon/agent-icon.js';
@@ -19,6 +21,7 @@ import styles from './session-row.css?inline';
 /**
  * @tag acp-session-row
  * @summary A session in the list: its agent, title (F2 or a double-click renames it in place), worktree branch, age and status, a dot in the indent while unread, swapped for a menu button while hovered or focused.
+ * @fires acp-session-row-toggle `{ sessionId, expanded }` Its chevron: show or hide its subagents.
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-row-menu `{ session, x, y }` or `{ session, anchor }` Its menu is wanted: at the pointer or under the focused row (`x`, `y`), or under its menu button (`anchor`).
@@ -31,6 +34,8 @@ export class AcpSessionRow extends LitElement {
     unread: { type: Boolean },
     waiting: { type: Boolean },
     menuOpen: { type: Boolean, attribute: 'menu-open' },
+    subagents: { type: Number },
+    expanded: { type: Boolean },
     tabStop: { type: Boolean },
     now: { attribute: false },
     renaming: { state: true },
@@ -54,6 +59,10 @@ export class AcpSessionRow extends LitElement {
     this.waiting = false;
     /** @type {boolean} Its menu is open: the menu button stays. */
     this.menuOpen = false;
+    /** @type {number} How many subagents it has: with any it's their tree's root. */
+    this.subagents = 0;
+    /** @type {boolean} Its subagents show under it. */
+    this.expanded = false;
     /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
     this.tabStop = true;
     /** @type {number} The time, ms: a session active in another app shows so until its time is up. */
@@ -172,6 +181,26 @@ export class AcpSessionRow extends LitElement {
       .join(', ');
   }
 
+  /**
+   * Opens or closes its subagents under it, without selecting it.
+   * @param {Session} session
+   */
+  #renderToggle(session) {
+    const label = `${this.expanded ? 'Hide' : 'Show'} ${this.subagents} subagent${this.subagents === 1 ? '' : 's'}`;
+    return html`<md-icon-button
+        id="acp-session-row-toggle"
+        class="acp-session-row__toggle"
+        aria-label=${label}
+        @click=${(/** @type {Event} */ e) => {
+          e.stopPropagation();
+          this.#emit('acp-session-row-toggle', { sessionId: session.id, expanded: !this.expanded });
+        }}
+      >
+        <md-icon class="acp-session-row__toggle-icon">${unsafeSVG(this.expanded ? collapseIcon : expandIcon)}</md-icon>
+      </md-icon-button>
+      <md-tooltip for="acp-session-row-toggle" show-delay="800">${label}</md-tooltip>`;
+  }
+
   render() {
     const session = this.session;
     if (!session) return nothing;
@@ -189,6 +218,7 @@ export class AcpSessionRow extends LitElement {
         tabindex=${this.tabStop ? 0 : -1}
         aria-level="2"
         aria-selected=${this.selected ? 'true' : 'false'}
+        aria-expanded=${this.subagents > 0 ? String(this.expanded) : nothing}
         @click=${() => this.#emit('acp-session-select', { sessionId: session.id })}
         @dblclick=${() => this.startRename()}
         @keydown=${this.#onKeydown}
@@ -226,6 +256,7 @@ export class AcpSessionRow extends LitElement {
           ? html`<md-icon id="acp-session-row-branch" class="acp-session-row__branch" aria-label="Worktree">${unsafeSVG(branchIcon)}</md-icon>`
           : nothing}
         <acp-datetime class="acp-session-row__age ${this.unread ? 'acp-session-row__age_unread' : ''}" .value=${session.lastActivityAt} .now=${this.now} format="compact"></acp-datetime>
+        ${this.subagents > 0 ? this.#renderToggle(session) : nothing}
         ${showMore
           ? html`<md-icon-button
               id="acp-session-row-more"

@@ -16,7 +16,7 @@ import {
   dismissSessionNotice,
   forgetSubagents,
   setSessionNotice,
-  upsertSubagent,
+  setSubagents,
 } from '../../stores/session-runtime/session-runtime.js';
 import { awaitTrust } from '../../stores/trust/trust.js';
 
@@ -241,8 +241,8 @@ function endSubagentChat(conversationId) {
 
 /**
  * Takes an update about the session's subagents, live or in a snapshot: a subagent's own (its
- * conversation), one announcing or patching a subagent (`$subagents`, its card), and the work
- * handed to one (its card).
+ * conversation), one announcing or patching a subagent (the backend's `subagents` list tells), and
+ * the work handed to one (its card).
  * @param {string} sessionId
  * @param {AcpSessionUpdate} update
  * @returns {boolean} It was one: the chat itself shows nothing of it.
@@ -252,12 +252,8 @@ function takeSubagentUpdate(sessionId, update) {
     subagentUpdate(sessionId, update.subagentId, update);
     return true;
   }
-  if (update.sessionUpdate === 'subagent_update' && update.sessionId) {
-    upsertSubagent(sessionId, update);
-    if (update.state !== undefined) updateSubagentCard(sessionId, update.sessionId);
-    if (update.state?.state === 'idle') endSubagentChat(subagentConversationId(sessionId, update.sessionId));
-    return true;
-  }
+  // The backend folds it into the session's `subagents` list.
+  if (update.sessionUpdate === 'subagent_update') return true;
   if (update.sessionUpdate === 'session_message' && update.recipientSessionId) {
     showSubagentCard(sessionId, update.recipientSessionId);
     return true;
@@ -297,6 +293,16 @@ export function handleSessionEvent(event) {
         for (const chunk of turn.builder.chunks(event.payload)) enqueue(sessionId, chunk);
       } else {
         replay(sessionId, event.payload);
+      }
+      return;
+    }
+    case 'subagents': {
+      // Whatever told the backend (ACP, a CLI's records): its cards and chats follow.
+      const { subagents } = event.payload;
+      setSubagents(sessionId, subagents);
+      for (const subagent of subagents) {
+        updateSubagentCard(sessionId, subagent.id);
+        if (subagent.state === 'idle') endSubagentChat(subagentConversationId(sessionId, subagent.id));
       }
       return;
     }

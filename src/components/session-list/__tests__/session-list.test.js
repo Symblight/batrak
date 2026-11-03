@@ -271,23 +271,41 @@ describe('acp-session-list', () => {
     });
   });
 
-  it("shows a chat's subagents under its row; the arrows inside them stay out of the list's own", async () => {
+  it("roots a chat's subagents in its row: open as they appear, closed and opened by its chevron or the arrows, and kept closed once the user closed it", async () => {
     // Arrange
-    /** @type {import('../../../hooks/sessions/types.js').Subagent} */
-    const sub = { id: 'c1', title: 'Find usages', description: 'Explore', state: 'running', stopReason: null, cancellable: true, announcedAt: '2026-01-01T00:00:00.000Z' };
-    const { el, root } = await render({ subagents: { a: [sub] } });
-    const tree = /** @type {HTMLElementTagNameMap['acp-subagent-tree']} */ (root.querySelector('acp-subagent-tree'));
+    /** @param {string} id @returns {import('../../../hooks/sessions/types.js').Subagent} */
+    const sub = (id) => ({ id, title: 'Find usages', description: 'Explore', state: 'running', stopReason: null, cancellable: true, announcedAt: '2026-01-01T00:00:00.000Z' });
+    const { el, root } = await render({ subagents: { a: [sub('c1')] } });
+    const rowA = row(root, 'Session a');
+    const tree = () => /** @type {HTMLElementTagNameMap['acp-subagent-tree'] | null} */ (root.querySelector('acp-subagent-tree'));
+    /** @param {string} key */
+    const press = async (key) => {
+      rowA.shadowRoot?.querySelector('[role="treeitem"]')?.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true, cancelable: true }));
+      await el.updateComplete;
+    };
     const keys = record(el, 'keydown');
-    // Act
-    tree.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
-    // Assert
+    // Assert: open as they appeared, under its row
     const order = [...root.querySelectorAll('acp-session-row, acp-subagent-tree')].map((n) =>
-      n instanceof HTMLElement && n.localName === 'acp-subagent-tree' ? `subagents of ${tree.sessionId}` : /** @type {HTMLElementTagNameMap['acp-session-row']} */ (n).session?.title,
+      n.localName === 'acp-subagent-tree' ? 'subagents' : /** @type {HTMLElementTagNameMap['acp-session-row']} */ (n).session?.title,
     );
-    expect(order)
-      .to.deep.equal(['Session b', 'Session a', 'subagents of a', 'Session c']);
-    expect(tree.subagents).to.deep.equal([sub]);
+    expect(order).to.deep.equal(['Session b', 'Session a', 'subagents', 'Session c']);
+    expect([rowA.subagents, rowA.expanded, row(root, 'Session b').subagents]).to.deep.equal([1, true, 0]);
+    // Act + Assert: a key inside them stays theirs
+    tree()?.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
     expect(keys, 'not walked by the list').to.have.length(0);
+    // Act + Assert: its chevron closes it, Right opens it, Left closes it
+    rowA.dispatchEvent(new CustomEvent('acp-session-row-toggle', { detail: { sessionId: 'a', expanded: false }, bubbles: true, composed: true }));
+    await el.updateComplete;
+    expect(tree()).to.equal(null);
+    rowA.focusRow();
+    await press('ArrowRight');
+    expect(tree()).to.not.equal(null);
+    await press('ArrowLeft');
+    expect(tree()).to.equal(null);
+    // Act + Assert: closed by the user, it stays closed as more appear
+    el.subagents = { a: [sub('c1'), sub('c2')] };
+    await el.updateComplete;
+    expect([rowA.subagents, tree()]).to.deep.equal([2, null]);
   });
 
   describe('as a tree', () => {

@@ -296,23 +296,24 @@ describe('acp-adapter', () => {
       forgetContextUsage(id);
     });
 
-    it('lists the subagents the agent announces, patched by its later updates', () => {
+    /** @param {Partial<import('../types.js').Subagent>} [fields] */
+    const subagent = (fields = {}) => ({ id: 'c1', title: 'Find usages', description: 'Explore', state: /** @type {const} */ ('running'), stopReason: null, cancellable: true, announcedAt: '2026-11-03T10:00:00Z', ...fields });
+
+    it("keeps the session's subagents as the backend lists them; a raw subagent_update shows nothing", () => {
       // Arrange
-      const announce = { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', capabilities: { cancel: {} }, state: { state: 'running' } };
-      // Act
-      send('update', announce);
-      send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', capabilities: null, state: { state: 'idle', stopReason: 'end_turn' } });
-      // Assert
-      const [subagent] = $subagents.get()[id];
-      expect({ ...subagent, announcedAt: typeof subagent.announcedAt }).to.deep.equal({
-        id: 'c1',
-        title: 'Find usages',
-        description: 'Explore',
-        state: 'idle',
-        stopReason: 'end_turn',
-        cancellable: false,
-        announcedAt: 'string',
-      });
+      /** @type {unknown[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(c), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('subagents', { subagents: [subagent()] });
+        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'idle', stopReason: 'end_turn' } });
+        // Assert
+        expect($subagents.get()[id]).to.deep.equal([subagent()]);
+        expect(chunks, 'the backend folds it into its list').to.deep.equal([]);
+      } finally {
+        unsubscribe?.();
+      }
     });
 
     it("shows a subagent's own updates in its own conversation, never in the chat or its context usage", () => {
@@ -322,7 +323,7 @@ describe('acp-adapter', () => {
       const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
       try {
         // Act
-        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'running' } });
+        send('subagents', { subagents: [subagent()] });
         send('update', { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }], subagentId: 'c1' });
         send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' });
         send('update', { sessionUpdate: 'usage_update', used: 10, size: 100, subagentId: 'c1' });
@@ -343,10 +344,10 @@ describe('acp-adapter', () => {
       const chunks = [];
       const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
       try {
-        // Act: a page attaches mid-run
+        // Act: a page attaches mid-run: the backend sends its subagents before the snapshot
+        send('subagents', { subagents: [subagent()] });
         send('snapshot', {
           updates: [
-            { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', state: { state: 'running' } },
             { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look' }] },
             { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' },
           ],
@@ -368,9 +369,9 @@ describe('acp-adapter', () => {
       const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
       try {
         // Act
-        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', title: 'Find usages', description: 'Explore', state: { state: 'running' } });
+        send('subagents', { subagents: [subagent()] });
         send('update', { sessionUpdate: 'session_message', messageId: 'm1', senderSessionId: 'acp-parent', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }] });
-        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'idle', stopReason: 'end_turn' } });
+        send('subagents', { subagents: [subagent({ state: 'idle', stopReason: 'end_turn' })] });
         // Assert
         const cards = chunks.filter((c) => c.conversationId === id && c.partType === 'tool_call').map((c) => c.delta);
         expect(cards.map((d) => [d?.label, d?.status, d?.data?.subagentId])).to.deep.equal([

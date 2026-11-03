@@ -75,6 +75,7 @@ import type { AcpSessionHeader } from './components/session-header/session-heade
 import type { AcpProjectMenu } from './components/project-menu/project-menu.js';
 import type { AcpSessionRow } from './components/session-row/session-row.js';
 import type { AcpSessionList } from './components/session-list/session-list.js';
+import type { AcpSubagentStatus } from './components/subagent-status/subagent-status.js';
 import type { AcpSubagentTree } from './components/subagent-tree/subagent-tree.js';
 import type { AcpSubagentBar } from './components/subagent-bar/subagent-bar.js';
 import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
@@ -168,6 +169,7 @@ declare global {
     'acp-session-row': AcpSessionRow;
     'acp-session-list': AcpSessionList;
     'acp-subagent-bar': AcpSubagentBar;
+    'acp-subagent-status': AcpSubagentStatus;
     'acp-subagent-tree': AcpSubagentTree;
     'acp-session-menu': AcpSessionMenu;
     'acp-session-status': AcpSessionStatus;

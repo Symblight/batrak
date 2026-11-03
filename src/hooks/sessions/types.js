@@ -106,9 +106,10 @@
  */
 
 /**
- * A subagent of a chat: an ACP subagent session the chat's agent announced (`subagent_update`).
- * Runtime state of its chat, known only for chats that streamed or replayed this launch; not a
- * chat itself (spec: `docs/specs/workspaces.md` §2.12).
+ * A subagent of a chat, as the backend's `subagents` event lists them (`Subagent` in
+ * `session/runtime/subagents.rs`), whatever told it: the chat's agent over ACP, or the records of a
+ * CLI-run chat's agent. Runtime state of its chat; not a chat itself (spec:
+ * `docs/specs/workspaces.md` §2.12).
  * @typedef {Object} Subagent
  * @property {string} id Its ACP session id.
  * @property {string | null} title
@@ -136,6 +137,7 @@
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
  *   | { kind: 'permission-request',
  *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[], subagentId?: string } }
+ *   | { kind: 'subagents', payload: { subagents: Subagent[] } }
  *   | { kind: 'turn-start', payload: Record<string, never> }
  *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
  *   | { kind: 'overlap', payload: { path: string, other: { id: string, title: string } } }

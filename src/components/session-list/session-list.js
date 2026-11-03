@@ -19,7 +19,7 @@ const { SESSIONS_PAGE, orderSessions, unreadIn, visibleSessions } = sessions;
 
 /**
  * @tag acp-session-list
- * @summary One workspace's chats (each with its subagents' tree under it), pinned first, then by last activity (five, and five more with each Show more, which counts the unread behind it; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
+ * @summary One workspace's chats (a chat with subagents is their tree's root: they show under it as they appear, until its chevron or Left hides them; Right shows them again), pinned first, then by last activity (five, and five more with each Show more, which counts the unread behind it; skeleton rows while they load) with their status, branch and age; a row's menu button, right-click or Shift+F10 opens the session menu, F2 or a double-click renames it in place.
  * @fires acp-session-select `{ sessionId }`
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-mark-read `{ sessionId, read }` Mark as read (`read: true`) or as unread.
@@ -41,6 +41,7 @@ export class AcpSessionList extends LitElement {
     loading: { type: Boolean },
     now: { attribute: false },
     limit: { state: true },
+    closed: { state: true },
   };
 
   static styles = styles;
@@ -52,12 +53,15 @@ export class AcpSessionList extends LitElement {
     onSelect: () => {},
   });
 
-  /** A flat tree: one Tab stop, the arrows walk the rows. */
+  /** The chats' rows: one Tab stop, the arrows walk them; Right and Left open and close a chat's subagents. */
   #tree = new TreeNavigationController(this, {
     nodes: () =>
       [...this.renderRoot.querySelectorAll('acp-session-row')].flatMap((row) =>
-        row.session ? [{ key: row.session.id, el: row, label: row.session.title, parent: null, expanded: null }] : [],
+        row.session
+          ? [{ key: row.session.id, el: row, label: row.session.title, parent: null, expanded: row.subagents > 0 ? row.expanded : null }]
+          : [],
       ),
+    toggle: (node, expanded) => this.#setOpen(node.key, expanded),
   });
 
   constructor() {
@@ -82,6 +86,8 @@ export class AcpSessionList extends LitElement {
     this.now = Date.now();
     /** @type {number} How many chats show (`SESSIONS_PAGE` until Show more). */
     this.limit = SESSIONS_PAGE;
+    /** @type {ReadonlySet<string>} Chats whose subagents the user closed: those stay hidden; the others show as they appear. */
+    this.closed = new Set();
   }
 
   /**
@@ -90,6 +96,29 @@ export class AcpSessionList extends LitElement {
    */
   #emit(type, detail = null) {
     this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /**
+   * @param {string} sessionId
+   * @param {boolean} open
+   */
+  #setOpen(sessionId, open) {
+    const next = new Set(this.closed);
+    if (open) next.delete(sessionId);
+    else next.add(sessionId);
+    this.closed = next;
+  }
+
+  /** @param {string} sessionId Its subagents show under it. */
+  #isOpen(sessionId) {
+    return !this.closed.has(sessionId);
+  }
+
+  /** @param {Event} e A row's chevron. */
+  #onRowToggle(e) {
+    e.stopPropagation();
+    const { sessionId, expanded } = /** @type {CustomEvent<{ sessionId: string, expanded: boolean }>} */ (e).detail;
+    this.#setOpen(sessionId, expanded);
   }
 
   /** @param {Event} e A row wants its menu: at a point, or under its button. */
@@ -170,7 +199,10 @@ export class AcpSessionList extends LitElement {
       .waiting=${this.waiting.includes(session.id)}
       .menuOpen=${this.#sessionMenu.target?.id === session.id}
       .now=${this.now}
+      .subagents=${this.subagents[session.id]?.length ?? 0}
+      .expanded=${this.#isOpen(session.id)}
       @acp-session-row-menu=${this.#onSessionRowMenu}
+      @acp-session-row-toggle=${this.#onRowToggle}
     ></acp-session-row>${this.#renderSubagents(session)}`;
   }
 
@@ -180,7 +212,7 @@ export class AcpSessionList extends LitElement {
    */
   #renderSubagents(session) {
     const subagents = this.subagents[session.id];
-    if (!subagents?.length) return nothing;
+    if (!subagents?.length || !this.#isOpen(session.id)) return nothing;
     /** @param {Event} e */
     const ownKeys = (e) => e.stopPropagation();
     return html`<acp-subagent-tree

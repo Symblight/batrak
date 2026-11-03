@@ -4,7 +4,6 @@ import { $activeSessionId } from '../sessions/sessions.js';
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
-/** @typedef {import('../../hooks/sessions/types.js').AcpSessionUpdate} AcpSessionUpdate */
 
 /** Permission requests waiting for the user, by session id, oldest first. Written by the ACP adapter. */
 export const $permissionRequests = atom(/** @type {Readonly<Record<string, readonly PermissionRequest[]>>} */ ({}));
@@ -103,43 +102,21 @@ export function dismissSessionNotice(sessionId) {
   setSessionNotice(sessionId, $sessionNotices.get()[sessionId]?.under ?? null);
 }
 
-/**
- * A `subagent_update` upserts its subagent: the first announces it, later ones patch it (an
- * omitted field stays, `null` clears it).
- * @param {readonly Subagent[]} subagents
- * @param {AcpSessionUpdate} update
- * @param {string} now ISO time, for a new one.
- * @returns {readonly Subagent[]}
- */
-export function applySubagentUpdate(subagents, update, now) {
-  const id = update.sessionId;
-  if (!id) return subagents;
-  const known = subagents.find((s) => s.id === id);
-  /** @type {Subagent} */
-  const next = { ...(known ?? { id, title: null, description: null, state: null, stopReason: null, cancellable: false, announcedAt: now }) };
-  if (update.title !== undefined) next.title = update.title;
-  if (update.description !== undefined) next.description = update.description;
-  if (update.capabilities !== undefined) next.cancellable = Boolean(update.capabilities?.cancel);
-  if (update.state !== undefined) {
-    next.state = update.state?.state ?? null;
-    const reason = update.state?.stopReason;
-    next.stopReason = reason == null ? null : typeof reason === 'string' ? reason : 'error';
-  }
-  return known ? subagents.map((s) => (s === known ? next : s)) : [...subagents, next];
-}
-
-/**
- * @param {string} sessionId
- * @param {AcpSessionUpdate} update A `subagent_update` of the session's.
- */
-export function upsertSubagent(sessionId, update) {
-  const all = $subagents.get();
-  const next = applySubagentUpdate(all[sessionId] ?? [], update, new Date().toISOString());
-  if (next !== all[sessionId]) $subagents.set({ ...all, [sessionId]: next });
-}
-
 /** @param {string} sessionId */
 export function forgetSubagents(sessionId) {
   const { [sessionId]: dropped, ...rest } = $subagents.get();
   if (dropped) $subagents.set(rest);
+}
+
+/**
+ * The session's subagents as the backend lists them (`subagents` event); a list equal to the one
+ * held changes nothing.
+ * @param {string} sessionId
+ * @param {readonly Subagent[]} subagents
+ */
+export function setSubagents(sessionId, subagents) {
+  const all = $subagents.get();
+  const held = all[sessionId] ?? [];
+  if (JSON.stringify(held) === JSON.stringify(subagents)) return;
+  $subagents.set({ ...all, [sessionId]: subagents });
 }
