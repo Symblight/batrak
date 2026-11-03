@@ -37,7 +37,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `docs/specs/session-sync.md`). `Sessions::sync` (`session/runtime/sync.rs`, `sessions_sync` →
   `sessions://synced` to every window) asks each agent of a project that's on, trusted and not
   waiting for a sign-in for its sessions there (`acp::Catalog`: `initialize` + `session/list` of
-  the project and its worktree folders, scratch process in `<app data>/probe`, two at a time, 15 s
+  the project and its workspaces' folders, a session first seen in a workspace's folder landing in that workspace, scratch process in `<app data>/probe`, two at a time, 15 s
   each; one that listed is kept up for the next sync, stopped after 90 s unused) and makes them the list (`SyncReport`: `listed` / `unsupported` / `off` / `untrusted` /
   `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has. A
   session first seen in a list gets the id `<agent id>~<acp id>`. `sessions.json` in app data
@@ -50,36 +50,47 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   with the working spinner while it doesn't run here. Showing a session waits for its agent's
   sync before resuming, and doesn't resume one active elsewhere (the banner's Resume does). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
-  has its worktree's branch). Any number of `local` sessions of a project run; their turns share
-  the checkout through a turn slot (`session/runtime/slots.rs`, spec:
+  has its workspace's branch). Any number of chats of a folder (Main's, or one workspace's) run;
+  their turns share it through a turn slot keyed by the folder (`session/runtime/slots.rs`, spec:
   `docs/specs/parallel-sessions.md`): a turn takes it after `ensure_started` and holds it until it
   returns, a prompt sent meanwhile is `queued` (a `queued { holder }` event; saved as `idle`)
   and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
-  agents.json drop it from the queue (cancelled, never reaching the agent). Worktree sessions
-  never queue, and neither do local ones with `.brama/workspace.json` `"localTurns":
+  agents.json drop it from the queue (cancelled, never reaching the agent). A turn in Main never
+  waits for one in a workspace; no turn queues with the project's `.brama/workspace.json` `"localTurns":
   "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
   locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
-  are its `touched`, and a watcher batch of the project (`Sessions::note_changes`, from
+  are its `touched`, and a watcher batch of a folder (`Sessions::note_changes(folder, …)`, from
   `Roots::open`'s callback; none for a project whose root isn't open) naming one that two
   turns touched, running or ended less than `overlap_grace` (1 s) ago, sends each running one an
   `overlap` (once per file per turn; a banner notice until the turn ends, over an `info` /
   `outdated` one that comes back then). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
   `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
-  builds its env. A `worktree` session gets `<app data>/worktrees/<repo>-<hash>/<session id>` on
-  branch `brama/<title slug>-<short id>` from `base_branch` (or HEAD), checked out in `prepare`
-  (again from the branch if the folder was deleted; Stop mid-checkout, which git can't be
-  interrupted in, sets `prepare_cancel` and `prepare` undoes it); its cwd is the project's folder in it. No
-  repository, no commit or an unknown base refuses the create. Every agent path goes through
+  builds its env. **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
+  `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
+  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `brama/<slug>` (`-2`… when taken) from
+  its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by
+  `check_out` (in the background from `workspace_create`) or at its first chat's start
+  (`Workspaces::ready`, which every chat start waits on); commands in `commands/workspaces.rs`,
+  every change `workspaces://changed` (`{ projectPath }`), the page's `$workspaces`
+  (`hooks/workspaces/`). A chat (`workspaceId`) runs in its workspace's folder (`mode: worktree`,
+  the worktree fields copied); its env is `WorktreeEnv::shared()`: `prepare` only checks the
+  folder (missing: "folder is missing", until `recreate_workspace`) and its branch, `discard` is a
+  no-op. Until the composer picks workspaces, a Worktree run target makes a workspace named after
+  the title (`new_record`). At load, a worktree session without a workspace gets one of its own
+  (`workspaces::migrate`, idempotent). No repository, no commit or an unknown base refuses a
+  workspace. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
   `HOOK(git)` comments in `try_turn` (`session/runtime/turn.rs`) mark the checkpoint points. `Sessions::remove` (session row
   menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or
   keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
-  (its log) and calls `SessionEnv::discard`: a no-op for `local`; `worktree` first commits
-  uncommitted work onto its branch (`archive` → `git::apply::snapshot_commit`: scratch index, no
-  hooks, CAS `update-ref`, Brama's identity when git has none), removes the worktree, and deletes
-  the branch only when it has no commits past the base. A detached worktree (Check Out Branch)
-  with uncommitted work is kept (a warning). At launch `Sessions::tidy_worktrees` (background)
-  prunes worktree metadata and removes app-data worktrees no session owns, unless dirty (a
+  (its log); its folder stays. `Sessions::delete_workspace` removes each of its chats that way,
+  then `Workspaces::discard` (`WorktreeEnv::remove_with`) commits uncommitted work onto the branch
+  (`git::apply::snapshot_commit`: scratch index, no hooks, CAS `update-ref`, Brama's identity when
+  git has none), removes the worktree, and deletes the branch unless Keep branch and it has
+  commits past the base. A detached worktree (Check out branch) with uncommitted work is kept (a
+  warning). Apply to Main / Check out branch / Changes act per workspace and hold every chat's
+  turn slot, all or none (`hold_workspace`). At launch `Sessions::tidy_worktrees` (background)
+  prunes worktree metadata and removes app-data worktrees no workspace owns, unless dirty (a
   warning); branches stay.
 - **ACP host** (`src-tauri/crates/agent-acp/`, the app's `crate::acp`): the only crate using `agent-client-protocol` (pinned). One
   process per session in its own process group (stopped as a group; `process::stop_all` on app
