@@ -30,6 +30,7 @@ use crate::config::env::SecretStore;
 use crate::config::view::SignInState;
 use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, LocalTurns, Merged};
 use crate::storage::JsonFile;
+use crate::workspace::NameSource;
 
 /// The most of a file an agent read (or a selection) holds; larger files are read in parts (`line` / `limit`).
 const MAX_READ: u64 = 16 * 1024 * 1024;
@@ -165,12 +166,20 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
+        let mut workspace_id = req.workspace_id.clone();
         let (mode, placed) = match &req.workspace_id {
             Some(id) => {
                 let workspace = self.inner.workspaces.get(id)?;
                 if workspace.project_path != project {
                     return Err(format!("workspace {id} belongs to another project"));
                 }
+                (Mode::Worktree, workspace.placement())
+            }
+            // Until the composer picks a workspace (spec Phase 3): a worktree session gets a
+            // workspace of its own, checked out at its start.
+            None if req.mode == Mode::Worktree => {
+                let workspace = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, req.base_branch.as_deref())?;
+                workspace_id = Some(workspace.id.clone());
                 (Mode::Worktree, workspace.placement())
             }
             None => (
@@ -198,7 +207,7 @@ impl Sessions {
             launch: None,
             agent_name: Some(agent_name),
             hidden: false,
-            workspace_id: req.workspace_id.clone(),
+            workspace_id,
         })
     }
 

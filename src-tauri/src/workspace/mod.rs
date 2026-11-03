@@ -148,10 +148,26 @@ impl Workspaces {
     }
 
     /// Checks a workspace's folder out (again from its branch when it was deleted). Chats
-    /// starting meanwhile wait (`wait_ready`). Blocking.
+    /// starting meanwhile wait (`ready`). Blocking.
     pub fn check_out(&self, id: &str) -> Result<(), String> {
         let gate = self.gate(id);
         let _held = lock(&gate);
+        self.check_out_held(id)
+    }
+
+    /// Before a chat of the workspace starts: waits for a checkout that runs, or runs the first
+    /// one of a workspace placed but never checked out. Blocking.
+    pub fn ready(&self, id: &str) -> Result<(), String> {
+        let gate = self.gate(id);
+        let _held = lock(&gate);
+        if lock(&self.inner.creating).contains(id) {
+            return self.check_out_held(id);
+        }
+        Ok(())
+    }
+
+    /// `check_out` with the workspace's gate held.
+    fn check_out_held(&self, id: &str) -> Result<(), String> {
         lock(&self.inner.creating).insert(id.to_owned());
         let result = self.get(id).and_then(|record| record.env().prepare(&AtomicBool::new(false)));
         lock(&self.inner.creating).remove(id);
@@ -250,11 +266,6 @@ impl Workspaces {
         let range = format!("{}..refs/heads/{}", record.base_commit, record.branch);
         let commits = run(&[&"rev-list", &"--count", &range]).map(|o| String::from_utf8_lossy(&o).trim().parse().unwrap_or(0)).unwrap_or(0);
         Ok((uncommitted, commits))
-    }
-
-    /// Waits for a checkout of the workspace that is running. Blocking.
-    pub fn wait_ready(&self, id: &str) {
-        drop(lock(&self.gate(id)));
     }
 
     fn gate(&self, id: &str) -> Arc<Mutex<()>> {

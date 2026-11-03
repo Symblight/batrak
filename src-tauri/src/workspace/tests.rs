@@ -126,3 +126,20 @@ fn deleting_saves_uncommitted_work_and_keeps_or_deletes_the_branch() {
     assert!(run_in(&repo.path, &["status", "--porcelain"]).is_empty(), "the project is untouched");
     std::fs::remove_dir_all(data).unwrap();
 }
+
+#[test]
+fn a_detached_worktree_with_uncommitted_work_is_kept_on_delete() {
+    use crate::git::test_repo::{run_in, TestRepo};
+    let repo = TestRepo::with_commit("ws-delete-detached");
+    let data = temp_dir("ws-delete-detached-data");
+    let workspaces = Workspaces::new(&data);
+    let ws = workspaces.create(&repo.path, "Handed", None).unwrap();
+    run_in(&ws.folder, &["switch", "-q", "--detach"]);
+    std::fs::write(ws.folder.join("README.md"), "unsaved").unwrap();
+
+    workspaces.discard(&ws.id, true).unwrap();
+
+    assert_eq!(std::fs::read_to_string(ws.folder.join("README.md")).unwrap(), "unsaved", "kept");
+    assert!(workspaces.get(&ws.id).is_err(), "the record goes");
+    std::fs::remove_dir_all(data).unwrap();
+}

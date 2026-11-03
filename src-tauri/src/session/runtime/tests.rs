@@ -1238,57 +1238,6 @@ async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder(
 }
 
 #[tokio::test]
-async fn removing_a_worktree_session_deletes_a_clean_worktree_and_keeps_work() {
-    let f = git_fixture("wt-remove");
-    let branches = || run_in(&f.project, &["branch", "--format=%(refname:short)"]);
-
-    // Nothing done: the folder and the branch go.
-    let (unused, events) = f.create_in("u", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    f.sessions.remove("u").await.unwrap();
-    assert!(!Path::new(&unused.worktree_path.unwrap()).exists());
-    assert!(!branches().contains(&unused.branch.unwrap()));
-
-    // Committed work: the folder goes, the branch with the commits stays.
-    let (committed, events) = f.create_in("c", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    let wt = PathBuf::from(committed.worktree_path.unwrap());
-    std::fs::write(wt.join("x.txt"), "x").unwrap();
-    run_in(&wt, &["add", "."]);
-    run_in(&wt, &["commit", "-qm", "agent"]);
-    f.sessions.remove("c").await.unwrap();
-    assert!(!wt.exists());
-    assert!(branches().contains(&committed.branch.unwrap()));
-
-    // Uncommitted work is committed onto the branch first, then the folder goes.
-    let (dirty, events) = f.create_in("d", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    let wt = PathBuf::from(dirty.worktree_path.unwrap());
-    let branch = dirty.branch.unwrap();
-    std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
-    std::fs::write(wt.join("new.txt"), "untracked").unwrap();
-    f.sessions.remove("d").await.unwrap();
-    assert!(f.sessions.list().is_empty());
-    assert!(!wt.exists());
-    assert_eq!(run_in(&f.project, &["show", &format!("{branch}:a.txt")]), "unsaved");
-    assert_eq!(run_in(&f.project, &["show", &format!("{branch}:new.txt")]), "untracked");
-    assert!(run_in(&f.project, &["log", "-1", "--format=%s", &branch]).contains("Session d"));
-    assert!(run_in(&f.project, &["status", "--porcelain"]).is_empty(), "the project is untouched");
-}
-
-#[tokio::test]
-async fn a_detached_worktree_with_uncommitted_work_is_kept_on_remove() {
-    let f = git_fixture("wt-remove-detached");
-    let (session, events) = f.create_in("x", "fake", Mode::Worktree, None).unwrap();
-    events.wait_status("idle").await;
-    let wt = PathBuf::from(session.worktree_path.unwrap());
-    run_in(&wt, &["switch", "-q", "--detach"]);
-    std::fs::write(wt.join("a.txt"), "unsaved").unwrap();
-    f.sessions.remove("x").await.unwrap();
-    assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "unsaved");
-}
-
-#[tokio::test]
 async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work() {
     let f = git_fixture("wt-tidy");
     let (kept, events) = f.create_in("k", "fake", Mode::Worktree, None).unwrap();
@@ -3127,4 +3076,20 @@ async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main
     reopened.shutdown();
     let again = Sessions::new(options_for(&f.dir, &f.launcher));
     assert_eq!(again.workspaces().list(&f.project), workspaces, "loading twice adds nothing");
+}
+
+#[tokio::test]
+async fn a_worktree_session_without_a_workspace_makes_one_named_after_its_title() {
+    let f = git_fixture("ws-bridge");
+
+    let (chat, events) = f.create_in("b", "fake", Mode::Worktree, Some("main")).unwrap();
+    events.wait_status("idle").await;
+
+    let workspaces = f.sessions.workspaces().list(&f.project);
+    assert_eq!(workspaces.len(), 1);
+    let ws = &workspaces[0];
+    assert_eq!((ws.name.as_str(), ws.base_branch.as_deref()), ("Session b", Some("main")));
+    assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
+    assert_eq!(PathBuf::from(&chat.folder), ws.folder);
+    assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");
 }

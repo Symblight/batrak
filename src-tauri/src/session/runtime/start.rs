@@ -254,9 +254,9 @@ impl Inner {
         state.start_replay();
         self.set_status(&state, SessionStatus::Preparing, None);
         if let Some(id) = record.workspace_id.clone() {
-            // Its workspace's checkout, while one runs.
+            // Its workspace's checkout: the first, or one that runs.
             let workspaces = self.workspaces.clone();
-            tokio::task::spawn_blocking(move || workspaces.wait_ready(&id)).await.map_err(|e| e.to_string())?;
+            tokio::task::spawn_blocking(move || workspaces.ready(&id)).await.map_err(|e| e.to_string())??;
         }
         let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(&record)?);
         let preparing = Arc::clone(&env);

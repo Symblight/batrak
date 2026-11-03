@@ -85,9 +85,12 @@ impl Sessions {
     /// creates the session under its id (a UUID), which becomes its ACP id: the CLI starts it
     /// under that id (`newArgs`). A CLI already running is answered with its terminal.
     pub async fn open_cli(&self, id: &str, draft: Option<CliDraft>, window: CliWindow<'_>) -> Result<CliOpened, String> {
+        // A worktree draft with no workspace gets one of its own (`new_record`), gone with it.
+        let mut own_workspace = false;
         let (created, start) = match draft {
             Some(mut draft) if self.get(id).is_err() => {
                 let prompt = draft.prompt.take();
+                own_workspace = draft.workspace_id.is_none() && draft.mode == Mode::Worktree;
                 (Some(self.create_for_cli(id, draft).await?), CliStart::New { prompt })
             }
             _ => (None, CliStart::Resume),
@@ -98,7 +101,7 @@ impl Sessions {
         };
         let opened = self.inner.open_cli(&state, start, window).await;
         if opened.is_err() && created.is_some() {
-            self.forget_failed_draft(&state).await;
+            self.forget_failed_draft(&state, own_workspace).await;
         }
         opened
     }
@@ -124,16 +127,19 @@ impl Sessions {
         Ok(recent || !terminals.busy(&[terminal_id]).is_empty())
     }
 
-    /// Undoes a draft created for a CLI that didn't start: unlisted, its worktree and branch (if
-    /// prepared) and its files gone. The page never listed it, so nothing is announced.
-    async fn forget_failed_draft(&self, state: &Arc<SessionState>) {
+    /// Undoes a draft created for a CLI that didn't start: unlisted, its files gone, and the
+    /// workspace made for it (`own_workspace`) with its worktree and branch. The page never listed
+    /// it, so nothing is announced.
+    async fn forget_failed_draft(&self, state: &Arc<SessionState>, own_workspace: bool) {
         lock(&self.inner.sessions).remove(&state.id);
         self.inner.persist();
         let record = state.record();
         let dir = self.inner.data_dir().join("sessions").join(&state.id);
+        let workspaces = self.inner.workspaces.clone();
         let discarded = tokio::task::spawn_blocking(move || {
-            if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
-                tracing::warn!(session = %record.session_id, "discarding a draft's folder failed: {e}");
+            let workspace = record.workspace_id.as_deref().filter(|_| own_workspace);
+            if let Err(e) = workspace.map_or(Ok(()), |id| workspaces.discard(id, true)) {
+                tracing::warn!(session = %record.session_id, "discarding a draft's workspace failed: {e}");
             }
             let _ = std::fs::remove_dir_all(&dir);
         })
@@ -246,7 +252,13 @@ impl Inner {
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Preparing, None);
         }
-        let prepared = tokio::task::spawn_blocking(move || env.prepare(&AtomicBool::new(false))).await;
+        let workspaces = self.workspaces.clone();
+        let workspace = record.workspace_id.clone();
+        let prepared = tokio::task::spawn_blocking(move || {
+            workspace.map_or(Ok(()), |id| workspaces.ready(&id))?;
+            env.prepare(&AtomicBool::new(false))
+        })
+        .await;
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Stopped, None);
         }
