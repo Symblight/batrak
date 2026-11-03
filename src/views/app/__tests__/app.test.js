@@ -21,6 +21,8 @@ import {
   setTerminalPanelHeight,
   setTerminalPanelOpen,
 } from '../../../stores/terminals/terminals.js';
+import { app as appHook } from '../../../hooks/app/app.js';
+import { codeOf } from '../../../hooks/shortcuts/keys.js';
 import '../app.js';
 
 /** @typedef {import('../app.js').AcpApp} AcpApp */
@@ -41,13 +43,25 @@ async function until(pred) {
   }
 }
 
+/** The platform's Mod (⌘ on macOS, Ctrl elsewhere), and the modifier that is not it. */
+const MOD = appHook.platform === 'mac' ? 'metaKey' : 'ctrlKey';
+const NOT_MOD = MOD === 'metaKey' ? 'ctrlKey' : 'metaKey';
+
+/**
+ * A key with Mod held, at its US position.
+ * @param {string} key
+ * @param {KeyboardEventInit} [init]
+ * @returns {KeyboardEventInit}
+ */
+const modKey = (key, init = {}) => ({ key, code: codeOf(key) ?? '', [MOD]: true, bubbles: true, composed: true, cancelable: true, ...init });
+
 /**
  * A shortcut pressed anywhere in the window.
  * @param {string} key
  * @param {KeyboardEventInit} [init]
  */
 function shortcut(key, init = {}) {
-  window.dispatchEvent(new KeyboardEvent('keydown', { key, metaKey: true, bubbles: true, cancelable: true, ...init }));
+  window.dispatchEvent(new KeyboardEvent('keydown', modKey(key, init)));
 }
 
 /** @param {AcpApp} app */
@@ -211,7 +225,7 @@ describe('acp-app: mark all as read', () => {
     app.append(input, dialog);
     /** @param {Element} from */
     const pressIn = (from) =>
-      from.dispatchEvent(new KeyboardEvent('keydown', { key: 'R', metaKey: true, shiftKey: true, bubbles: true, composed: true, cancelable: true }));
+      from.dispatchEvent(new KeyboardEvent('keydown', modKey('R', { shiftKey: true })));
 
     // Act + Assert: ignored where the key belongs to something else
     for (const [from, why] of /** @type {const} */ ([[input, 'a text field'], [inDialog, 'a dialog']])) {
@@ -315,7 +329,7 @@ describe('acp-app: add project shortcut', () => {
     app.append(dialog);
 
     // Act + Assert: a dialog keeps the key
-    inDialog.dispatchEvent(new KeyboardEvent('keydown', { key: 'o', metaKey: true, bubbles: true, composed: true, cancelable: true }));
+    inDialog.dispatchEvent(new KeyboardEvent('keydown', modKey('o')));
     await new Promise((r) => setTimeout(r, 20));
     expect(commands).to.not.include('plugin:dialog|open');
 
@@ -323,6 +337,41 @@ describe('acp-app: add project shortcut', () => {
     shortcut('o');
     // Assert
     await until(() => commands.includes('plugin:dialog|open'));
+  });
+});
+
+describe('acp-app: shortcuts', () => {
+  beforeEach(() => mockIPC((cmd, args) => startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}))));
+
+  afterEach(() => {
+    closeAllTabs();
+    clearMocks();
+  });
+
+  it('opens Quick Open on Mod+P by position on a non-Latin layout, not on the modifier that is not Mod', async () => {
+    // Arrange
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    const isOpen = () => quickOpen(app).shadowRoot?.querySelector('dialog')?.open ?? false;
+
+    // Act + Assert: the other modifier
+    shortcut('з', { code: 'KeyP', [MOD]: false, [NOT_MOD]: true });
+    await app.updateComplete;
+    expect(isOpen(), 'the modifier that is not Mod').to.equal(false);
+
+    // Act
+    shortcut('з', { code: 'KeyP' });
+    // Assert
+    await until(isOpen);
+  });
+
+  it('opens Settings on Ctrl+, on Windows and Linux; on macOS the menu’s ⌘, does', async () => {
+    // Arrange
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    // Act
+    shortcut(',', { metaKey: false, ctrlKey: false, [MOD]: true });
+    await app.updateComplete;
+    // Assert
+    expect($editorTabs.get().paths.includes('view:settings')).to.equal(appHook.platform !== 'mac');
   });
 });
 

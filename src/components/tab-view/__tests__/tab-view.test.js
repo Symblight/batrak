@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { app } from '../../../hooks/app/app.js';
 import '../tab-view.js';
 import '../../code-view/code-view.js';
 import '../../markdown-view/markdown-view.js';
@@ -205,7 +206,7 @@ describe('acp-tab-view', () => {
         root
           .querySelector('acp-code-view')
           ?.shadowRoot?.querySelector('cdx-code-editor')
-          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', metaKey: true, bubbles: true, composed: true }));
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', [app.platform === 'mac' ? 'metaKey' : 'ctrlKey']: true, bubbles: true, composed: true }));
       return { el, fired, click, save };
     }
 

@@ -52,7 +52,7 @@ const TOP_ITEMS = [
 const BOTTOM_ITEMS = [
   { name: 'notifications', label: 'Notifications', icon: notificationsIcon, selectedIcon: notificationsFilledIcon },
   { name: 'terminal', label: 'Terminal', icon: terminalIcon, shortcut: 'newTerminal', event: 'acp-open-terminal' },
-  { name: 'settings', label: 'Settings', icon: settingsIcon, event: 'acp-show-settings' },
+  { name: 'settings', label: 'Settings', icon: settingsIcon, shortcut: 'settings', event: 'acp-show-settings' },
 ];
 
 /**

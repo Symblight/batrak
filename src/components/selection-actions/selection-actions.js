@@ -4,10 +4,8 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon';
 import chatIcon from '@material-design-icons/svg/outlined/chat_bubble_outline.svg?raw';
 import addCommentIcon from '@material-design-icons/svg/outlined/add_comment.svg?raw';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './selection-actions.css?inline';
-
-/** Moves focus from the editor into the actions (the ARIA "go to toolbar" key). */
-export const FOCUS_SHORTCUT = 'Alt+F10';
 
 /**
  * @tag acp-selection-actions
@@ -77,7 +75,7 @@ export class AcpSelectionActions extends LitElement {
       role="toolbar"
       aria-label="Selection actions"
       aria-orientation="horizontal"
-      aria-keyshortcuts=${FOCUS_SHORTCUT}
+      aria-keyshortcuts=${shortcuts.aria('focusSelectionActions')}
       @keydown=${this.#onKeydown}
     >
       <md-button

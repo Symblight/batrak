@@ -1,5 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { html, nothing } from 'lit';
 import { sessions } from '../../hooks/sessions/sessions.js';
@@ -156,38 +157,38 @@ export class AcpApp extends ViewElement {
   }
 
   /**
-   * Cmd/Ctrl+P: Quick Open. Cmd/Ctrl+Shift+F: the search dialog. Cmd/Ctrl+Shift+T: the session in chat /
-   * terminal. Cmd/Ctrl+O: add a project, unless a dialog has the key. Cmd/Ctrl+Shift+R: mark the active project's sessions read, unless a dialog or a text field has the
-   * key. Ctrl+`: New Terminal. While the search dialog is open, only Cmd/Ctrl+Shift+F.
+   * `searchInFiles`: the search dialog. `quickOpen`. `toggleSessionView`: the session in chat /
+   * terminal. `openFolder`: add a project, unless a dialog has the key. `markProjectRead`: the active
+   * project's sessions, unless a dialog or a text field has the key. `newTerminal`. `settings` (Windows
+   * and Linux; the menu's on macOS). While the search dialog is open, only `searchInFiles`.
    */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
-    const mod = (e.metaKey || e.ctrlKey) && !e.altKey;
-    if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
+    const is = (/** @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId} */ id) => shortcuts.matches(id, e);
+    if (is('searchInFiles')) {
       e.preventDefault();
       this.#showSearchDialog();
       return;
     }
     if (this.#searchView?.open) return;
-    if (e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.code === 'Backquote') {
+    if (is('newTerminal')) {
       e.preventDefault();
       this.#newTerminal();
-      return;
-    }
-    if (!mod) return;
-    const key = e.key.toLowerCase();
-    if (key === 'p' && !e.shiftKey) {
+    } else if (is('quickOpen')) {
       e.preventDefault();
       this.#showQuickOpen();
-    } else if (key === 'o' && !e.shiftKey && !AcpApp.#inDialog(e)) {
+    } else if (is('openFolder') && !AcpApp.#inDialog(e)) {
       e.preventDefault();
       this.#onProjectOpenFolder();
-    } else if (key === 't' && e.shiftKey) {
+    } else if (is('toggleSessionView')) {
       e.preventDefault();
       this.renderRoot.querySelector('acp-agent-column')?.toggleView();
-    } else if (key === 'r' && e.shiftKey && !AcpApp.#takesKeys(e)) {
+    } else if (is('markProjectRead') && !AcpApp.#takesKeys(e)) {
       e.preventDefault();
       const projectId = this.#workspace.value?.path;
       if (projectId) markProjectRead(projectId);
+    } else if (is('settings')) {
+      e.preventDefault();
+      this.#showSettings();
     }
   };
 

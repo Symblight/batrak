@@ -117,13 +117,6 @@
     display: none;
   }
 }
-.acp-search-dialog__key {
-  padding: 0 var(--acp-space-1);
-  border-radius: var(--acp-shape-corner-extra-small);
-  background: var(--acp-color-surface-container-highest);
-  font-family: inherit;
-}
-
 /* Read out, not shown. */
 .acp-search-dialog__status {
   position: absolute;

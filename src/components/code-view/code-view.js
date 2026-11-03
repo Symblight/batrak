@@ -11,6 +11,7 @@ import { SelectionActionsController } from '../../controllers/selection-actions/
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../file-icon/file-icon.js';
 import { agents } from '../../hooks/agents/agents.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './code-view.css?inline';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
@@ -150,7 +151,7 @@ export class AcpCodeView extends LitElement {
    * @param {KeyboardEvent} e
    */
   #onKeydown(tab, e) {
-    if (!(e.metaKey || e.ctrlKey) || e.altKey || e.key.toLowerCase() !== 's') return;
+    if (!shortcuts.matches('save', e)) return;
     e.preventDefault();
     this.#emit(tab.changedOnDisk ? 'acp-tab-conflict' : 'acp-tab-save', { id: tab.id });
   }

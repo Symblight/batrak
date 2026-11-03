@@ -3,6 +3,7 @@ import { flip, hide, offset, shift } from '@floating-ui/dom';
 import '../../components/selection-actions/selection-actions.js';
 import { FloatingController } from '../floating/FloatingController.js';
 import { comments } from '../../hooks/comments/comments.js';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 
 /** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -111,12 +112,12 @@ export class SelectionActionsController {
     if (this.#pending) this.#show();
   };
 
-  /** In the shown editor: Escape closes the actions, Alt+F10 (`FOCUS_SHORTCUT`) moves focus into them. */
+  /** In the shown editor: Escape closes the actions, `focusSelectionActions` (Alt+F10) moves focus into them. */
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
     const shown = this.#shown;
     if (!shown || comments.editorOf(e, this.#host.renderRoot) !== shown.editor) return;
     if (e.key === 'Escape') this.#hide();
-    else if (e.altKey && e.key === 'F10') {
+    else if (shortcuts.matches('focusSelectionActions', e)) {
       e.preventDefault();
       this.#popover?.focus();
     }

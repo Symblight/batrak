@@ -174,7 +174,7 @@ export class AcpAgentsView extends LitElement {
 
   /** ⌘F / Ctrl+F while the tab shows: the search. */
   #onDocumentKeydown = (/** @type {KeyboardEvent} */ e) => {
-    if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey || e.key.toLowerCase() !== 'f') return;
+    if (!shortcuts.matches('find', e)) return;
     if (!this.isConnected || !this.checkVisibility()) return;
     e.preventDefault();
     this.#input?.focus();

@@ -4,7 +4,7 @@ import '@symblight/wc-material/progress-linear';
 import '../search-bar/search-bar.js';
 import '../search-empty/search-empty.js';
 import '../search-filters/search-filters.js';
-import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
+import '../shortcut/shortcut.js';
 import '../search-header/search-header.js';
 import '../search-recent/search-recent.js';
 import '../search-results/search-results.js';
@@ -24,6 +24,8 @@ import styles from './search-dialog.css?inline';
 const DEBOUNCE_MS = 150;
 /** Rows PgUp / PgDn move. */
 const PAGE = 10;
+/** @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId[]} The options' keys, shown as one hint. */
+const OPTION_SHORTCUTS = ['matchCase', 'wholeWord', 'regex'];
 
 /** The focused element, looking into shadow roots. */
 function deepActiveElement() {
@@ -488,10 +490,10 @@ export class AcpSearchDialog extends LitElement {
         ${this.#renderFilters()}
         <div class="acp-search-dialog__body">${this.#renderBody()}</div>
         <div class="acp-search-dialog__hints">
-          <span><kbd class="acp-search-dialog__key">↑↓</kbd> Navigate</span>
-          <span><kbd class="acp-search-dialog__key">Enter</kbd> Open</span>
-          <span><kbd class="acp-search-dialog__key">${shortcuts.group(['matchCase', 'wholeWord', 'regex'])}</kbd> Options</span>
-          <span><kbd class="acp-search-dialog__key">Esc</kbd> Close</span>
+          <span><acp-shortcut>↑↓</acp-shortcut> Navigate</span>
+          <span><acp-shortcut>Enter</acp-shortcut> Open</span>
+          <span><acp-shortcut .shortcut=${OPTION_SHORTCUTS}></acp-shortcut> Options</span>
+          <span><acp-shortcut>Esc</acp-shortcut> Close</span>
         </div>
         <div class="acp-search-dialog__status" aria-live="polite">${this.status}</div>
       </div>

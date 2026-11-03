@@ -1,16 +1,22 @@
-/** @typedef {'caseSensitive' | 'wholeWord' | 'regex'} SearchOptionKey */
+import { shortcuts } from '../shortcuts/shortcuts.js';
 
-/** @type {Record<string, SearchOptionKey>} */
-const OPTION_KEYS = { KeyC: 'caseSensitive', KeyW: 'wholeWord', KeyR: 'regex' };
+/** @typedef {'caseSensitive' | 'wholeWord' | 'regex'} SearchOptionKey */
+/** @typedef {import('../shortcuts/shortcuts.js').KeyPress} KeyPress */
+
+/** @type {[import('../shortcuts/shortcuts.js').ShortcutId, SearchOptionKey][]} */
+const OPTIONS = [
+  ['matchCase', 'caseSensitive'],
+  ['wholeWord', 'wholeWord'],
+  ['regex', 'regex'],
+];
 
 /**
- * The search option Alt+C / Alt+W / Alt+R toggles, read from `code` (Alt+C types `ç` on macOS).
- * @param {Pick<KeyboardEvent, 'code' | 'altKey' | 'metaKey' | 'ctrlKey'>} e
+ * The search option `matchCase` / `wholeWord` / `regex` (Alt+C / W / R) toggles.
+ * @param {KeyPress} e
  * @returns {SearchOptionKey | null}
  */
 export function optionForKey(e) {
-  if (!e.altKey || e.metaKey || e.ctrlKey) return null;
-  return OPTION_KEYS[e.code] ?? null;
+  return OPTIONS.find(([id]) => shortcuts.matches(id, e))?.[1] ?? null;
 }
 
 /** The longest selection a search starts from. */

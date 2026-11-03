@@ -5,6 +5,7 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
+import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
 
@@ -16,6 +17,11 @@ import styles from './terminal.css?inline';
 /** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
 const FULL_RESET = '\x1bc';
 const MAC = /Mac/.test(navigator.userAgent);
+/**
+ * Ctrl shortcuts the terminal leaves to the app on Windows and Linux; every other Ctrl key is the shell's.
+ * @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId[]}
+ */
+const APP_KEYS = ['quickOpen', 'searchInFiles', 'toggleSessionView'];
 const MONO = 'ui-monospace, Menlo, monospace';
 
 /**
@@ -269,7 +275,7 @@ export class AcpTerminal extends LitElement {
     if (!term) return false;
     const key = e.key.toLowerCase();
     const down = e.type === 'keydown';
-    if (e.ctrlKey && !e.metaKey && e.key === '`') return false;
+    if (shortcuts.matches('newTerminal', e)) return false;
     if (MAC) {
       if (!e.metaKey) return true;
       if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
@@ -282,9 +288,8 @@ export class AcpTerminal extends LitElement {
       if (down && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
       return false;
     }
-    if (e.ctrlKey && e.shiftKey && (key === 'v' || key === 'f' || key === 't')) return false;
-    if (e.ctrlKey && !e.shiftKey && key === 'p') return false;
-    return true;
+    if (e.ctrlKey && e.shiftKey && key === 'v') return false;
+    return !APP_KEYS.some((id) => shortcuts.matches(id, e));
   };
 
   render() {
