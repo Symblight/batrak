@@ -9,7 +9,15 @@ import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/ses
 import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $sessionReads, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $project } from '../../../stores/project/project.js';
+import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { projects } from '../../projects/projects.js';
+import { composerOf, selectAgent, setRunTarget } from '../../../stores/composer/composer.js';
+import { composer } from '../../composer/composer.js';
+import { $notices } from '../../../stores/notices/notices.js';
+import { $gitRepo, NO_REPO } from '../../../stores/git/git.js';
+import { $sessionNotices } from '../../../stores/session-runtime/session-runtime.js';
+import { $projectExpandedFolders } from '../../../stores/file-tree/file-tree.js';
+import { $activeWorkspaceId, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../types.js').Session} Session */
 
@@ -208,9 +216,12 @@ describe('sessions keeps the active session in its view', () => {
       defaultAgent: 'claude',
       agents: [/** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })],
     });
+    // A repository with a commit: the project can have workspaces.
+    $gitRepo.set({ repo: /** @type {import('../../git/types.js').GitRepoState} */ ({ sha: 'abc' }), error: null });
   });
 
   afterEach(() => {
+    $gitRepo.set(NO_REPO);
     for (const id of Object.keys($sessionViews.get())) forgetSessionView(id);
     $agentViews.set({});
     $terminals.set({});
@@ -305,29 +316,215 @@ describe('sessions keeps the active session in its view', () => {
     expect($activeShownView.get()).to.equal('terminal');
   });
 
-  it("creates a draft's chat in its workspace: Main or a stored one", async () => {
-    /** @type {[string, unknown, string][]} */
+  it("creates a draft's chat where its footer says: its own workspace by default, or Main (Local), which the window then shows", async () => {
+    /** @type {[string, import('../../composer/types.js').RunTarget | null, unknown, string, string][]} */
     const cases = [
-      ['main', { kind: 'main' }, 'local'],
-      ['w1', { kind: 'existing', id: 'w1' }, 'worktree'],
+      // [the draft's workspace, picked place, session_create's workspace, mode, shown workspace]
+      ['main', null, { kind: 'main' }, 'local', 'main'],
+      ['w1', null, { kind: 'existing', id: 'w1' }, 'worktree', 'w1'],
+      ['w1', { kind: 'local' }, { kind: 'main' }, 'local', 'main'],
     ];
-    for (const [workspaceId, workspace, mode] of cases) {
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    for (const [workspaceId, target, workspace, mode, shown] of cases) {
       // Arrange
       calls = [];
-      $draftSessions.set({ d1: { projectId: '/p', workspaceId } });
-      $activeSessionId.set('d1');
+      const id = crypto.randomUUID();
+      $draftSessions.set({ [id]: { projectId: '/p', workspaceId } });
+      $activeSessionId.set(id);
+      setActiveWorkspace('/p', workspaceId);
+      if (target) setRunTarget(id, target);
       setAgentView('claude', 'chat');
 
       // Act
-      sessions.start('d1', 'Fix the build');
+      sessions.start(id, 'Fix the build');
+      const listed = $sessions.get().find((s) => s.id === id);
+      const shownMeanwhile = $activeWorkspaceId.get();
       await new Promise((r) => setTimeout(r, 0));
 
       // Assert
+      const why = `${workspaceId}, ${target?.kind ?? 'default'}`;
       const create = /** @type {Record<string, unknown> | undefined} */ (calls.find((c) => c.cmd === 'session_create')?.args);
-      expect(create?.workspace, workspaceId).to.deep.equal(workspace);
-      expect($sessions.get().find((s) => s.id === 'd1')?.mode, `${workspaceId}: listed meanwhile`).to.equal(mode);
+      expect(create?.workspace, why).to.deep.equal(workspace);
+      expect([listed?.mode, listed?.workspaceId ?? 'main'], `${why}: listed meanwhile`).to.deep.equal([mode, shown]);
+      expect(shownMeanwhile, `${why}: shown`).to.equal(shown);
       $sessions.set([]);
     }
+    setActiveWorkspace('/p', 'main');
+  });
+
+  it("creates a New worktree draft's workspace first, unnamed, from its base (Main's default when none was picked), then its chat in it, shown; in chat or its CLI, also while the repository is loading", async () => {
+    /** @type {['chat' | 'terminal', string | null, string, boolean][]} */
+    const cases = [
+      // [how it starts, picked base, the base sent, the repository known (else the pick holds while it loads)]
+      ['chat', 'dev', 'dev', true],
+      ['terminal', null, 'origin/main', true],
+      ['chat', 'dev', 'dev', false],
+    ];
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    for (const [view, base, sentBase, known] of cases) {
+      // Arrange
+      calls = [];
+      if (!known) $gitRepo.set(NO_REPO);
+      mockIPC((cmd, args) => {
+        calls.push({ cmd, args });
+        if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace-2', creating: true, missing: false, error: null };
+        if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [{ remote: 'origin', branches: ['origin/main'] }], default: 'origin/main' };
+        if (cmd === 'git_head') return { branch: 'dev', detached: false };
+        if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
+        // The backend's record never comes: what's listed is the chat as moved here.
+        if (cmd === 'session_create') return new Promise(() => {});
+        return null;
+      });
+      const id = crypto.randomUUID();
+      $draftSessions.set({ [id]: { projectId: '/p', workspaceId: 'main' } });
+      $activeSessionId.set(id);
+      setRunTarget(id, { kind: 'worktree', base });
+      setAgentView('claude', view);
+
+      // Act
+      if (view === 'chat') sessions.start(id, 'Fix the build');
+      else void sessions.startInTerminal(id, 'Fix the build', 'fix it');
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Assert
+      const sent = calls.map((c) => c.cmd).filter((c) => c === 'workspace_create' || c === 'session_create' || c === 'session_open_cli');
+      expect(sent, `${view}: the workspace first`).to.deep.equal(['workspace_create', view === 'chat' ? 'session_create' : 'session_open_cli']);
+      expect(calls.find((c) => c.cmd === 'workspace_create')?.args, view).to.deep.equal({ projectPath: '/p', name: null, baseBranch: sentBase });
+      const args = /** @type {Record<string, any>} */ (calls.find((c) => c.cmd === 'session_create' || c.cmd === 'session_open_cli')?.args);
+      expect((args.draft ?? args).workspace, `${view}: its chat in it`).to.deep.equal({ kind: 'existing', id: 'w2' });
+      expect($workspaces.get().map((w) => w.id), `${view}: listed at once`).to.deep.equal(['w2']);
+      const listed = $sessions.get().find((s) => s.id === id);
+      expect([listed?.workspaceId, listed?.folder], `${view}: the chat is the workspace's`).to.deep.equal(['w2', '/wt/two']);
+      expect([$activeWorkspaceId.get(), $activeSessionId.get()], `${view}: shown`).to.deep.equal(['w2', id]);
+      $sessions.set([]);
+      setWorkspaces([]);
+      setActiveWorkspace('/p', 'main');
+    }
+  });
+
+  it("keeps a New worktree draft when its workspace can't be created, says why, and lets its agent be picked again", async () => {
+    // Arrange
+    $agentList.set({
+      ...$agentList.get(),
+      agents: [
+        ...$agentList.get().agents,
+        /** @type {import('../../agents/types.js').AgentSummary} */ ({ id: 'codex', name: 'Codex', enabled: true }),
+      ],
+    });
+    mockIPC((cmd, args) => {
+      calls.push({ cmd, args });
+      if (cmd === 'workspace_create') throw new Error('no commit yet');
+      return null;
+    });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    const id = crypto.randomUUID();
+    $draftSessions.set({ [id]: { projectId: '/p', workspaceId: 'main' } });
+    $activeSessionId.set(id);
+    setRunTarget(id, { kind: 'worktree', base: 'dev' });
+    setAgentView('claude', 'chat');
+
+    // Act
+    const goes = sessions.start(id, 'Fix the build');
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Assert
+    expect(goes, 'the send goes, and fails when the workspace does').to.equal(true);
+    expect($draftSessions.get()[id], 'a draft again').to.deep.equal({ projectId: '/p', workspaceId: 'main' });
+    expect(calls.map((c) => c.cmd), 'no chat created').not.to.include('session_create');
+    expect($notices.get().map((n) => n.message)).to.include('Creating the workspace failed: no commit yet');
+    expect($sessionNotices.get()[id] ?? null, 'only the snackbar').to.equal(null);
+    selectAgent('codex');
+    expect(composerOf(id).agentId, 'its agent is no longer fixed').to.equal('codex');
+    $notices.set([]);
+  });
+
+  it("removes a chat while its New worktree workspace is being created: the new workspace is deleted, no chat or prompt follows, Main's folders stay, in chat or its CLI", async () => {
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    for (const view of /** @type {const} */ (['chat', 'terminal'])) {
+      // Arrange
+      calls = [];
+      /** @type {(value: unknown) => void} */
+      let answer = () => {};
+      /** @type {Set<unknown>} The backend's sessions. */
+      const known = new Set();
+      mockIPC((cmd, args) => {
+        calls.push({ cmd, args });
+        const { sessionId } = /** @type {{ sessionId?: string }} */ (args ?? {});
+        if (cmd === 'workspace_create') return new Promise((r) => (answer = r));
+        if (cmd === 'session_create' || cmd === 'session_open_cli') known.add(sessionId);
+        if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
+        if (cmd === 'session_remove' && !known.has(sessionId)) throw new Error(`unknown session ${sessionId}`);
+        return null;
+      });
+      $projectExpandedFolders.setKey('/p', ['src']);
+      const id = crypto.randomUUID();
+      $draftSessions.set({ [id]: { projectId: '/p', workspaceId: 'main' } });
+      $activeSessionId.set(id);
+      setRunTarget(id, { kind: 'worktree', base: 'dev' });
+      setAgentView('claude', view);
+      /** @type {Promise<unknown> | undefined} */
+      let send;
+      if (view === 'chat') {
+        sessions.start(id, 'Fix the build');
+        send = sessions.adapter.sendMessage?.(
+          /** @type {Parameters<NonNullable<typeof sessions.adapter.sendMessage>>[0]} */ (
+            /** @type {unknown} */ ({ id: 'm', conversationId: id, parts: [{ type: 'text', text: 'fix it' }] })
+          ),
+          { signal: new AbortController().signal },
+        );
+      } else void sessions.startInTerminal(id, 'Fix the build', 'fix it');
+      await new Promise((r) => setTimeout(r, 0));
+      const confirm = sessions.removeSessionConfirm(/** @type {Session} */ ($sessions.get().find((s) => s.id === id)));
+
+      // Act
+      await sessions.remove(id);
+      answer({ id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace-2', creating: true, missing: false, error: null });
+      const sendFailed = await send?.then(
+        () => false,
+        () => true,
+      );
+      await new Promise((r) => setTimeout(r, 20));
+
+      // Assert
+      const sent = calls.map((c) => c.cmd);
+      expect(sent, view).to.include('workspace_create');
+      expect(calls.filter((c) => c.cmd === 'workspace_delete').map((c) => c.args), `${view}: its new workspace deleted`).to.deep.equal([{ id: 'w2', keepBranch: false }]);
+      expect(sent.filter((c) => c === 'session_create' || c === 'session_open_cli' || c === 'session_send_prompt'), `${view}: no backend session or prompt for it`).to.deep.equal([]);
+      if (view === 'chat') expect(sendFailed, 'its send fails').to.equal(true);
+      expect([$sessions.get().some((s) => s.id === id), id in $draftSessions.get()], `${view}: gone`).to.deep.equal([false, false]);
+      expect($notices.get().map((n) => n.message), `${view}: no failure`).to.deep.equal([]);
+      expect($projectExpandedFolders.get()['/p'], `${view}: Main's expanded folders stay`).to.deep.equal(['src']);
+      expect(confirm.detail, `${view}: nothing of a worktree to delete yet`).to.equal('Files the agent changed in the project stay as they are.');
+      expect($activeWorkspaceId.get(), `${view}: the window stays`).to.equal('main');
+      setWorkspaces([]);
+      $draftSessions.set({});
+      $notices.set([]);
+    }
+  });
+
+  it('shows the agent column again when a new chat is opened while the editor is expanded', () => {
+    // Arrange
+    $hiddenColumns.set(['agent', 'side']);
+
+    // Act
+    sessions.create('/p', 'main');
+
+    // Assert
+    expect($hiddenColumns.get(), 'only the agent column comes back').to.deep.equal(['side']);
+    $hiddenColumns.set([]);
+  });
+
+  it('opens New chat at its default place after New workspace set the same draft to New worktree', () => {
+    // Arrange
+    sessions.create('/p', 'main', { kind: 'worktree', base: null });
+
+    // Act
+    sessions.create('/p', 'main');
+
+    // Assert
+    const id = /** @type {string} */ ($activeSessionId.get());
+    expect(Object.keys($draftSessions.get()), 'the same draft').to.deep.equal([id]);
+    expect(composer.runTargetOf(composerOf(id).runTarget, 'main')).to.deep.equal({ kind: 'local' });
   });
 
   it("shows a draft's composer even when its agent's sessions open in the terminal", async () => {
@@ -363,10 +560,10 @@ describe('sessions keeps the active session in its view', () => {
     $activeSessionId.set('d1');
     setAgentView('claude', 'terminal');
     cliFails = new Error('no npx');
-    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(false);
+    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal('reported');
     expect($draftSessions.get()).to.have.property('d1');
     cliFails = null;
-    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(true);
+    expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal('started');
   });
 
   it("forgets the read mark of a removed session and of one whose start was refused", async () => {
@@ -382,7 +579,7 @@ describe('sessions keeps the active session in its view', () => {
     cliFails = new Error('no npx');
     $sessionReads.setKey('d1', seen);
     try {
-      expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal(false);
+      expect(await sessions.startInTerminal('d1', 'T', 'go')).to.equal('reported');
       expect($sessionReads.get().d1, 'a draft again').to.equal(undefined);
     } finally {
       forgetRead('d1');

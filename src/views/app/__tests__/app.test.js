@@ -24,6 +24,7 @@ import {
 } from '../../../stores/terminals/terminals.js';
 import { app as appHook } from '../../../hooks/app/app.js';
 import { codeOf } from '../../../hooks/shortcuts/keys.js';
+import { composerOf } from '../../../stores/composer/composer.js';
 import '../app.js';
 
 /** @typedef {import('../app.js').AcpApp} AcpApp */
@@ -272,9 +273,7 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
     /** @param {string} type @param {unknown} [detail] */
     const fire = (type, detail = null) => toolbar.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-    /** Create workspace's Create, as the dialog fires it. @param {{ mode: 'isolated' | 'project', baseBranch: string | null, name: string | null }} detail */
-    const create = (detail) => app.querySelector('acp-workspace-dialog')?.dispatchEvent(new CustomEvent('acp-workspace-create', { detail, bubbles: true, composed: true }));
-    return { app, fire, create };
+    return { app, fire };
   }
 
   /** The workspace of the shown chat or draft. */
@@ -297,73 +296,18 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     expect([$activeSessionId.get(), $activeRoot.get().path], "Main's").to.deep.equal(['m', '/p']);
   });
 
-  it('creates an isolated workspace in the backend and shows it in the picker with a new chat, kept when left without one; or a new chat in the project folder', async () => {
+  it('opens a new chat of the shown workspace set to New worktree from New workspace, and creates nothing before its first message', async () => {
     // Arrange
-    const { app, fire, create } = await render();
-
-    // Act
-    create({ mode: 'isolated', baseBranch: 'dev', name: 'Fix login' });
-    await until(() => $activeWorkspaceId.get() === 'w2');
-    const isolated = [shownChatWorkspace(), /** @type {string} */ ($activeSessionId.get()) in $draftSessions.get()];
-    const picker = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
-    await picker.updateComplete;
-    const listed = picker.workspaces.map((w) => w.name);
+    const { fire } = await render();
     fire('acp-workspace-select', { id: 'w1' });
-    const leftWithoutChat = $workspaces.get().map((w) => w.id);
-    create({ mode: 'project', baseBranch: null, name: null });
-    const projectChat = /** @type {string} */ ($activeSessionId.get());
-
-    // Assert
-    expect(calls.filter((c) => c.cmd === 'workspace_create').map((c) => c.args)).to.deep.equal([{ projectPath: '/p', name: 'Fix login', baseBranch: 'dev' }]);
-    expect(isolated, 'a new chat of it').to.deep.equal(['w2', true]);
-    expect(listed, 'in the picker at once').to.include('Workspace');
-    expect(leftWithoutChat, 'still listed once another is shown').to.include('w2');
-    expect([$activeWorkspaceId.get(), projectChat in $draftSessions.get(), projectChat !== 'm'], 'a new chat in Main').to.deep.equal(['main', true, true]);
-  });
-
-  it("bases Create workspace on Main's branches and branch, whichever workspace is shown, and fetches them before its branch menu opens", async () => {
-    // Arrange: a workspace shown, its root open
-    const { app, fire } = await render();
-    $openRoots.set({ '/wt/one': 'r-w' });
-    fire('acp-workspace-select', { id: 'w1' });
-    const dialog = /** @type {HTMLElementTagNameMap['acp-workspace-dialog']} */ (app.querySelector('acp-workspace-dialog'));
 
     // Act
-    dialog.dispatchEvent(new CustomEvent('acp-branches-query', { detail: {}, bubbles: true, composed: true }));
-    await until(() => dialog.mainBranch === 'main');
-    await dialog.fetchBranches?.();
+    fire('acp-workspace-new');
 
     // Assert
-    expect(calls.filter((c) => c.cmd === 'git_fetch' || c.cmd === 'git_branches').map((c) => [c.cmd, c.args.rootId]), "Main's root, fetched before the branch menu opens").to.deep.equal([
-      ['git_branches', 'r'],
-      ['git_fetch', 'r'],
-      ['git_branches', 'r'],
-    ]);
-    expect(dialog.branches).to.deep.equal({ local: ['main', 'dev'], remotes: [], default: null });
-    $openRoots.set({});
-  });
-
-  it("drops an answer for the branches of a project no longer shown", async () => {
-    // Arrange: the branches of `r` answer late
-    const { app } = await render();
-    /** @type {(list: unknown) => void} */
-    let answer = () => {};
-    const late = new Promise((resolve) => (answer = resolve));
-    mockIPC((cmd, args) => {
-      if (cmd === 'git_branches') return late;
-      return startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {}));
-    });
-    const dialog = /** @type {HTMLElementTagNameMap['acp-workspace-dialog']} */ (app.querySelector('acp-workspace-dialog'));
-
-    // Act
-    dialog.dispatchEvent(new CustomEvent('acp-branches-query', { detail: {}, bubbles: true, composed: true }));
-    $project.set({ path: '/q', name: 'q', rootId: 'r-q' });
-    answer({ local: ['old'], remotes: [], default: null });
-    await new Promise((r) => setTimeout(r, 20));
-
-    // Assert
-    expect(dialog.branches.local).to.deep.equal([]);
-    $openRoots.set({});
+    const id = /** @type {string} */ ($activeSessionId.get());
+    expect([shownChatWorkspace(), id in $draftSessions.get(), composerOf(id).runTarget]).to.deep.equal(['w1', true, { kind: 'worktree', base: null }]);
+    expect(calls.filter((c) => c.cmd === 'workspace_create'), 'nothing created').to.deep.equal([]);
   });
 
   it('deletes the shown workspace after asking, and shows Main', async () => {
@@ -420,7 +364,7 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     expect([$activeWorkspaceId.get(), $activeSessionId.get()], 'the waiting chat').to.deep.equal(['w1', 'asks']);
   });
 
-  it('opens the picker, New workspace and a new chat of the shown workspace by their shortcuts, not in a dialog', async () => {
+  it('opens the picker, a new chat set to New worktree and a plain new chat of the shown workspace by their shortcuts, not in a dialog', async () => {
     // Arrange
     const { app, fire } = await render();
     fire('acp-workspace-select', { id: 'w1' });
@@ -432,16 +376,18 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
 
     // Act: in a dialog first, then anywhere
     for (const id of /** @type {const} */ (['openWorkspaces', 'newWorkspace', 'newChat'])) press(id, inDialog);
-    const ignored = [menu.open, calls.some((c) => c.cmd === 'git_branches'), drafts()];
+    const ignored = [menu.open, drafts()];
     press('newChat');
+    const plain = composerOf(/** @type {string} */ ($activeSessionId.get())).runTarget;
     press('newWorkspace');
-    await until(() => calls.some((c) => c.cmd === 'git_branches'));
+    const worktree = composerOf(/** @type {string} */ ($activeSessionId.get())).runTarget;
     press('openWorkspaces');
     await until(() => menu.open);
 
     // Assert
-    expect(ignored, 'nothing from a dialog').to.deep.equal([false, false, 0]);
+    expect(ignored, 'nothing from a dialog').to.deep.equal([false, 0]);
     expect(drafts(), 'a new chat in the workspace').to.equal(1);
+    expect([plain, worktree], 'New chat: its workspace; New workspace: New worktree').to.deep.equal([undefined, { kind: 'worktree', base: null }]);
     inDialog.remove();
   });
 });

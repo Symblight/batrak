@@ -103,6 +103,24 @@ describe('acp-chat', () => {
     expect(note(untagged)?.textContent ?? null, 'a name alone says nothing').to.equal(null);
   });
 
+  it("hands a draft's footer where it runs, beside the full-access note; a started session has none", async () => {
+    // Arrange
+    const load = async () => {};
+    const place = { target: { kind: 'worktree', base: null }, workspaceName: 'Fix login', branches: { local: ['main'], remotes: [], default: null }, base: 'main', load };
+    const footerOf = (/** @type {AcpChat} */ el) => /** @type {HTMLElementTagNameMap['acp-run-target'] | null} */ (el.renderRoot.querySelector('acp-run-target'));
+
+    // Act
+    const draft = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .place=${place}></acp-chat>`));
+    const started = /** @type {AcpChat} */ (await fixture(html`<acp-chat .place=${place}></acp-chat>`));
+
+    // Assert
+    const footer = footerOf(draft);
+    expect([footer?.slot, footer?.target, footer?.workspaceName, footer?.branches, footer?.base, footer?.loadBranches]).to.deep.equal([
+      'footer', place.target, 'Fix login', place.branches, 'main', load,
+    ]);
+    expect(footerOf(started), 'none once started').to.equal(null);
+  });
+
   it("disables the composer while blocked, says why and offers to recreate the workspace's folder", async () => {
     // Arrange
     const chat = /** @type {AcpChat} */ (

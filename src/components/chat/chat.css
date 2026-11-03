@@ -198,3 +198,7 @@
 :host([hidden]) {
   display: none;
 }
+/* A draft's place, at the footer's start. */
+.acp-chat__run-target {
+  min-width: 0;
+}

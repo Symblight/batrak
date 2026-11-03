@@ -79,7 +79,7 @@ import type { AcpSessionMenu } from './components/session-menu/session-menu.js';
 import type { AcpWorkspaceStatus } from './components/workspace-status/workspace-status.js';
 import type { AcpWorkspacePicker } from './components/workspace-picker/workspace-picker.js';
 import type { AcpWorkspaceMenu } from './components/workspace-menu/workspace-menu.js';
-import type { AcpWorkspaceDialog } from './components/workspace-dialog/workspace-dialog.js';
+import type { AcpRunTarget } from './components/run-target/run-target.js';
 import type { AcpWorkspaceDeleteDialog } from './components/workspace-delete-dialog/workspace-delete-dialog.js';
 import type { AcpWorkspaceHeader } from './components/workspace-header/workspace-header.js';
 import type { AcpSessionStatus } from './components/session-status/session-status.js';
@@ -170,7 +170,7 @@ declare global {
     'acp-workspace-status': AcpWorkspaceStatus;
     'acp-workspace-picker': AcpWorkspacePicker;
     'acp-workspace-menu': AcpWorkspaceMenu;
-    'acp-workspace-dialog': AcpWorkspaceDialog;
+    'acp-run-target': AcpRunTarget;
     'acp-branch-picker': AcpBranchPicker;
     'acp-workspace-delete-dialog': AcpWorkspaceDeleteDialog;
     'acp-workspace-header': AcpWorkspaceHeader;

@@ -232,7 +232,7 @@ export const git = Object.freeze({
   },
 
   /**
-   * Fetches every remote of the root's repository, pruning deleted branches (Create workspace's refresh).
+   * Fetches every remote of the root's repository, pruning deleted branches (New worktree's base menu refreshes with it).
    * @param {string} rootId
    * @returns {Promise<void>}
    */

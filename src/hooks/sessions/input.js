@@ -1,5 +1,5 @@
 import { cliPromptOf } from './cli-input.js';
-import { controller } from './controller.js';
+import { controller, placeOf } from './controller.js';
 import { $agentList } from '../../stores/agents/agents.js';
 import { composerOf } from '../../stores/composer/composer.js';
 import { $sessionNotices, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
@@ -67,12 +67,14 @@ export const input = Object.freeze({
   async startTerminal(id, input, title) {
     const { agentId } = composerOf(id);
     const name = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'The agent';
-    // In a worktree, a path of the project stays absolute: it's the user's file, not the worktree's copy.
-    const draft = $draftSessions.get()[id];
-    const root = draft?.workspaceId === 'main' ? draft.projectId : null;
-    if (await controller.startInTerminal(id, title, cliPromptOf(input.parts, root))) return { taken: true };
+    // Run in a worktree, a path of the project stays absolute: it's the user's file, not the worktree's copy.
+    const place = placeOf(id);
+    const root = place?.target.kind === 'local' ? place.projectPath : null;
+    const started = await controller.startInTerminal(id, title, cliPromptOf(input.parts, root));
+    if (started === 'started') return { taken: true };
     const reason = $sessionNotices.get()[id]?.message ?? `${name} didn't start`;
-    setSessionNotice(id, { kind: 'error', message: reason });
+    // Said already: above its composer, or in a snackbar (a New worktree's workspace refused).
+    if (started === 'refused') setSessionNotice(id, { kind: 'error', message: reason });
     return { taken: false, reason };
   },
 });

@@ -23,7 +23,18 @@ the project path, per window, so it survives a relaunch), its newest, or a new d
 `workspaces` hook switches the shown workspace to the shown chat's when a chat of another one is
 shown (a banner). The Sessions column lists only the
 shown workspace's chats under `<acp-workspace-header>`,
-`create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
+`create()`s drafts and `start()`s one on its first message. Where a draft's chat goes is its
+composer footer's pick (`<acp-run-target>`, `ComposerState.runTarget`, default
+`composer.runTargetOf()`: This workspace in a worktree workspace, Local in Main; or New worktree
+from a base of Main's branches, which `<acp-chat-view>` lists at each opening of the base menu and
+fetches once per draft; offered only where `$workspacesEnabled`, `stores/workspace-status/`, but a
+pick of it holds at send (the backend refuses where it can't be)):
+`start()` / `startInTerminal()` list it there (Local: Main's, the window shows Main), and New
+worktree first calls `workspaces.create()` (`workspace_create`, unnamed, listed at once), moves the
+chat into it (`moveSession()`) and shows it; a refused create is a snackbar and a draft again (New
+chat then reuses the shown draft of the workspace, else the last added); a chat removed meanwhile
+deletes the new workspace.
+New workspace (picker, Mod+N) is `sessions.create(…, { kind: 'worktree' })`. Showing a session resumes its stopped
 agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
 (messages cached per id, a hidden session's reply keeps streaming), bound by `ChatSessionController`
@@ -78,7 +89,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`hooks/workspaces/`). A chat (`workspaceId`) runs in its workspace's folder (`mode: worktree`,
   the worktree fields copied); its env is `WorktreeEnv::shared()`: `prepare` only checks the
   folder (missing: "folder is missing", until `recreate_workspace`) and its branch, `discard` is a
-  no-op. `session_create` takes the draft's `workspace` (`WorkspaceChoice`, `new_record`): `main`
+  no-op. `session_create` takes the chat's `workspace` (`WorkspaceChoice`, `new_record`): `main`
   (the project folder, `mode: local`, no git needed), or `existing` `{ id }` (refused for another
   project's). `workspace_create` stores a workspace at once (`Workspaces::place`); one created
   without a name is called after its branch ("Workspace 2"), `nameSource: agent`: its first chat's

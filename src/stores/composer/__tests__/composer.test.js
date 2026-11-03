@@ -7,6 +7,7 @@ import {
   agentInfo,
   normalizeOptions,
   selectAgent,
+  setRunTarget,
   startComposer,
   whileLoadingOptions,
 } from '../composer.js';
@@ -69,6 +70,29 @@ describe('composer', () => {
     newSession('/p');
     expect($composer.get().agentId, 'the last pick is off: not for a new session').to.equal('a');
     expect(agentInfo('b')).to.include({ name: 'B', off: true });
+  });
+
+  it("keeps each draft's picked place, through switching drafts and agents, and the agent it was picked with when that goes", () => {
+    // Arrange
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    const first = newSession('/p');
+    const second = newSession('/p', 'w1');
+
+    // Act
+    setRunTarget(first, { kind: 'worktree', base: 'dev' });
+    $activeSessionId.set(first);
+    selectAgent('b');
+    const afterAgent = $composer.get().runTarget;
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    const afterGone = $composer.get().runTarget;
+    $activeSessionId.set(second);
+
+    // Assert
+    expect([afterAgent, afterGone], 'kept through an agent pick, and its agent going').to.deep.equal([
+      { kind: 'worktree', base: 'dev' },
+      { kind: 'worktree', base: 'dev' },
+    ]);
+    expect($composer.get().runTarget, "the other draft's: none picked").to.equal(undefined);
   });
 
   it('says which agent asks to sign in', () => {

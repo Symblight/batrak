@@ -213,7 +213,7 @@ export function composerOf(id) {
   // one a new session would.
   const gone = stored && !stored.started && !$agents.get().some((a) => a.id === stored.agentId && !a.off);
   if (stored && gone && stored.agentId !== $newSessionAgentId.get()) {
-    return freshState($newSessionAgentId.get());
+    return withRunTarget(freshState($newSessionAgentId.get()), stored);
   }
   const session = $sessions.get().find((s) => s.id === id);
   // The backend moved the session to another id for its agent (removed and added again).
@@ -261,7 +261,31 @@ export function selectAgent(agentId) {
   const state = $composer.get();
   if (state.started || state.agentId === agentId) return;
   $lastAgentId.set(agentId);
-  updateActive(() => freshState(agentId));
+  updateActive((s) => withRunTarget(freshState(agentId), s));
+}
+
+/**
+ * A draft's fresh state keeps where it runs.
+ * @param {ComposerState} state
+ * @param {ComposerState} from
+ * @returns {ComposerState}
+ */
+function withRunTarget(state, from) {
+  return from.runTarget ? { ...state, runTarget: from.runTarget } : state;
+}
+
+/**
+ * Where a draft's first message creates its chat (its composer footer's pick).
+ * @param {string} id A draft's.
+ * @param {import('../../hooks/composer/types.js').RunTarget | null} target `null`: none picked, its workspace's default.
+ */
+export function setRunTarget(id, target) {
+  updateComposer(id, (state) => {
+    if (target !== null) return { ...state, runTarget: target };
+    if (state.runTarget === undefined) return state;
+    const { runTarget: _, ...rest } = state;
+    return rest;
+  });
 }
 
 /**
@@ -345,6 +369,14 @@ export function applyAgentOptions(id, agentOptions) {
  */
 export function startComposer(id) {
   updateComposer(id, (state) => (state.started ? state : { ...state, started: true }));
+}
+
+/**
+ * The session's start was refused, and it's a draft again: its agent can be picked again.
+ * @param {string} id
+ */
+export function reopenComposer(id) {
+  updateComposer(id, (state) => (state.started ? { ...state, started: false } : state));
 }
 
 /**

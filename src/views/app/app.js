@@ -22,12 +22,11 @@ import { $unreadSessions, markWorkspaceRead } from '../../stores/session-read/se
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $project } from '../../stores/project/project.js';
 import { $activeWorkspaceId, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
-import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
+import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses, $workspacesEnabled } from '../../stores/workspace-status/workspace-status.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/toolbar/toolbar.js';
-import '../../components/workspace-dialog/workspace-dialog.js';
 import '../../components/workspace-delete-dialog/workspace-delete-dialog.js';
 import '../session-column/session-column.js';
 import '../agent-column/agent-column.js';
@@ -123,8 +122,6 @@ export class AcpApp extends ViewElement {
     sideView: { state: true },
     quickOpenFiles: { state: true },
     home: { state: true },
-    branches: { state: true },
-    mainBranch: { state: true },
   };
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
@@ -143,6 +140,7 @@ export class AcpApp extends ViewElement {
   #workspaces = new StoreController(this, { store: $workspaces });
   #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
   #pickerWorkspaces = new StoreController(this, { store: $pickerWorkspaces });
+  #workspacesEnabled = new StoreController(this, { store: $workspacesEnabled });
   #workspaceStatuses = new StoreController(this, { store: $workspaceStatuses });
   #workspaceNumbers = new StoreController(this, { store: $workspaceNumbers });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
@@ -176,7 +174,7 @@ export class AcpApp extends ViewElement {
         workspaces.select(detail.id);
         break;
       case 'acp-workspace-new':
-        void this.renderRoot.querySelector('acp-workspace-dialog')?.show();
+        this.#newWorktreeChat();
         break;
       case 'acp-workspace-rename':
         void workspaces.rename(detail.id, detail.name);
@@ -199,44 +197,16 @@ export class AcpApp extends ViewElement {
     }
   };
 
-  /** @param {Event} e */
-  #onWorkspaceCreate = (e) => {
-    void workspaces.create(/** @type {CustomEvent<import('../../hooks/workspaces/types.js').CreateRequest>} */ (e).detail);
-  };
+  /** New workspace: a new chat of the shown workspace, set to run in a new worktree (created on its first message). */
+  #newWorktreeChat() {
+    const project = this.#project.value?.path ?? null;
+    if (project !== null) sessions.create(project, $activeWorkspaceId.get(), { kind: 'worktree', base: null });
+  }
 
   /** @param {Event} e */
   #onWorkspaceDelete = (e) => {
     const { id, keepBranch } = /** @type {CustomEvent<{ id: string, keepBranch: boolean }>} */ (e).detail;
     void workspaces.delete(id, keepBranch);
-  };
-
-  // A new workspace is based on Main's branches, whichever workspace is shown.
-  // Before Create workspace's branch menu opens: fetch Main's repository, then list again.
-  #fetchBranches = async () => {
-    const rootId = this.#project.value?.rootId ?? null;
-    if (rootId === null) return;
-    try {
-      await git.fetch(rootId);
-    } catch (err) {
-      app.reportError('Fetching branches failed', err);
-    }
-    await this.#onBranchesQuery();
-  };
-
-  #onBranchesQuery = async () => {
-    const rootId = this.#project.value?.rootId ?? null;
-    if (rootId === null) return;
-    // Never another project's: what was listed goes, and an answer for a project no longer shown is dropped.
-    this.branches = { local: [], remotes: [], default: null };
-    this.mainBranch = null;
-    try {
-      const [branches, mainBranch] = await Promise.all([git.branches(rootId), git.branchOf(rootId)]);
-      if (this.#project.value?.rootId !== rootId) return;
-      this.branches = branches;
-      this.mainBranch = mainBranch;
-    } catch (err) {
-      app.reportError('Listing branches failed', err);
-    }
   };
 
   /**
@@ -279,7 +249,8 @@ export class AcpApp extends ViewElement {
 
   /**
    * `openWorkspaces`: the picker. `workspace1`…`9`: that workspace. `nextWaitingWorkspace`.
-   * `newWorkspace`: its dialog, when the project can have workspaces. `newChat`: in the shown workspace.
+   * `newWorkspace`: a new chat set to New worktree, when the project can have workspaces. `newChat`: a
+   * new chat of the shown workspace.
    * @param {KeyboardEvent} e
    */
   #onWorkspaceKey(e) {
@@ -290,15 +261,10 @@ export class AcpApp extends ViewElement {
     if (number !== undefined) workspaces.selectNumber(number);
     else if (is('openWorkspaces')) this.renderRoot.querySelector('acp-toolbar')?.showWorkspaces();
     else if (is('nextWaitingWorkspace')) workspaces.showNextWaiting();
-    else if (is('newWorkspace') && this.#workspacesEnabled) void this.renderRoot.querySelector('acp-workspace-dialog')?.show();
+    else if (is('newWorkspace') && this.#workspacesEnabled.value) this.#newWorktreeChat();
     else if (is('newChat')) sessions.create(project, $activeWorkspaceId.get());
     else return;
     e.preventDefault();
-  }
-
-  /** The project can have workspaces: it has some, or it's a git repository with a commit. */
-  get #workspacesEnabled() {
-    return this.#pickerWorkspaces.value.length > 0 || Boolean(this.#gitRepo.value.repo?.sha);
   }
 
   /**
@@ -331,10 +297,6 @@ export class AcpApp extends ViewElement {
     this.quickOpenFiles = [];
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
-    /** @type {import('../../hooks/git/types.js').BranchList} The project's branches, for Create workspace's From. */
-    this.branches = { local: [], remotes: [], default: null };
-    /** @type {string | null} Main's checked-out branch, for Create workspace's From. */
-    this.mainBranch = null;
   }
 
   connectedCallback() {
@@ -637,7 +599,7 @@ export class AcpApp extends ViewElement {
         .workspaceStatuses=${picker.statuses}
         .workspaceNumbers=${this.#workspaceNumbers.value}
         .workspaceId=${workspaceId === MAIN ? null : workspaceId}
-        ?workspaces-enabled=${this.#workspacesEnabled}
+        ?workspaces-enabled=${this.#workspacesEnabled.value}
         @acp-workspace-select=${this.#onWorkspaceEvent}
         @acp-workspace-new=${this.#onWorkspaceEvent}
         @acp-workspace-rename=${this.#onWorkspaceEvent}
@@ -717,16 +679,6 @@ export class AcpApp extends ViewElement {
       <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-confirm-dialog class="acp-app__confirm"></acp-confirm-dialog>
-      <acp-workspace-dialog
-        .projects=${this.#projects.value}
-        .projectPath=${this.#project.value?.path ?? null}
-        .branches=${this.branches}
-        .mainBranch=${this.mainBranch}
-        .fetchBranches=${this.#fetchBranches}
-        @acp-branches-query=${this.#onBranchesQuery}
-        @acp-project-select=${this.#onProjectSelect}
-        @acp-workspace-create=${this.#onWorkspaceCreate}
-      ></acp-workspace-dialog>
       <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onWorkspaceDelete}></acp-workspace-delete-dialog>
       <acp-snackbars
         .notices=${this.#notices.value}

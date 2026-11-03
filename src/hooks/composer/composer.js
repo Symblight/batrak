@@ -1,4 +1,5 @@
 import { configOf, currentName } from './options.js';
+import { runTargetOf } from './run-target.js';
 
-/** The rules about the options an agent offers for the composer: model and mode. */
-export const composer = Object.freeze({ configOf, currentName });
+/** The rules about the composer: the options an agent offers (model and mode), and where a draft runs. */
+export const composer = Object.freeze({ configOf, currentName, runTargetOf });

@@ -158,14 +158,17 @@ export function selectSession(id) {
 }
 
 /**
- * Opens a draft session in a project's workspace, reusing any draft of that workspace (New chat).
+ * Opens a draft session in a project's workspace, reusing a draft of that workspace (New chat): the
+ * shown one, else the last added (a refused chat back as a draft beside one opened meanwhile).
  * @param {string} projectId
  * @param {string} [workspaceId] `main` (default) for Main.
  * @returns {string} The draft's id.
  */
 export function newSession(projectId, workspaceId = MAIN) {
   const drafts = $draftSessions.get();
-  let id = Object.keys(drafts).find((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId);
+  const ours = Object.keys(drafts).filter((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId);
+  const active = $activeSessionId.get();
+  let id = active !== null && ours.includes(active) ? active : ours.at(-1);
   if (id === undefined) {
     id = crypto.randomUUID();
     $draftSessions.set({ ...drafts, [id]: { projectId, workspaceId } });
@@ -213,11 +216,13 @@ export function dropDrafts(workspaceId) {
  * A draft's first message: it becomes a listed session, `preparing` until the backend reports.
  * @param {string} id
  * @param {Pick<Session, 'title' | 'agentId' | 'config' | 'mode'>} fields
+ * @param {string} [workspaceId] Where it's created, when not in the draft's own workspace (`main` for Main).
  */
-export function startSession(id, fields) {
-  const { [id]: draft, ...drafts } = $draftSessions.get();
-  if (draft === undefined) return;
-  const { projectId, workspaceId } = draft;
+export function startSession(id, fields, workspaceId) {
+  const { [id]: found, ...drafts } = $draftSessions.get();
+  if (found === undefined) return;
+  const draft = { ...found, workspaceId: workspaceId ?? found.workspaceId };
+  const { projectId } = draft;
   $draftSessions.set(drafts);
   const now = new Date().toISOString();
   /** @type {Session} */
@@ -226,7 +231,7 @@ export function startSession(id, fields) {
     projectId,
     status: 'preparing',
     folder: draftFolder(draft, $workspaces.get()),
-    workspaceId: workspaceId === MAIN ? null : workspaceId,
+    workspaceId: draft.workspaceId === MAIN ? null : draft.workspaceId,
     worktreePath: null,
     branch: null,
     baseCommit: null,
@@ -250,7 +255,21 @@ export function upsertSession(session) {
 }
 
 /**
- * The backend refused to create a started session: it's a draft of its project again.
+ * A started session goes into the workspace created for it (New worktree) before the backend has it;
+ * a worktree chat from then on.
+ * @param {string} id
+ * @param {Pick<import('../../hooks/workspaces/types.js').Workspace, 'id' | 'folder' | 'branch'>} workspace
+ */
+export function moveSession(id, workspace) {
+  const sessions = $sessions.get();
+  if (!sessions.some((s) => s.id === id)) return;
+  const { id: workspaceId, folder, branch } = workspace;
+  $sessions.set(sessions.map((s) => (s.id === id ? { ...s, workspaceId, folder, branch, mode: 'worktree' } : s)));
+}
+
+/**
+ * The backend refused to create a started session: it's a draft of its project again, also beside a
+ * draft its workspace got meanwhile (it holds the user's text; `newSession()` then prefers it).
  * @param {string} id
  */
 export function revertToDraft(id) {

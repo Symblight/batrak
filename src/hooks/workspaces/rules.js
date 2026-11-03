@@ -96,3 +96,14 @@ export function noticesOf(before, after) {
   for (const w of before) if (!kept.has(w.id)) notices.push(`Deleted workspace "${w.name}"`);
   return notices;
 }
+
+/**
+ * The branch a new workspace starts from when none was picked: the remote's default, else Main's
+ * checked-out branch, else the first local one.
+ * @param {import('../git/types.js').BranchList} list Main's branches.
+ * @param {string | null} mainBranch
+ * @returns {string | null}
+ */
+export function defaultBase(list, mainBranch) {
+  return list.default ?? mainBranch ?? list.local[0] ?? null;
+}

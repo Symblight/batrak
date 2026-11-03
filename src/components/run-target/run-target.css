@@ -1,0 +1,39 @@
+:host {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-0-5);
+  min-width: 0;
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+}
+
+.acp-run-target__button {
+  --md-button-font-size: var(--acp-font-size-sm);
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+  --md-button-foreground-color: var(--acp-color-on-surface-variant);
+  /* The text variant sets its inline padding (12px) on these, not on the public tokens. */
+  --_btn-container-space-left: 8px;
+  --_btn-container-space-right: 4px;
+}
+
+.acp-run-target__icon,
+.acp-run-target__arrow {
+  font-size: var(--acp-icon-size-sm);
+}
+
+.acp-run-target__arrow {
+  vertical-align: middle;
+}
+
+.acp-run-target__base {
+  min-width: 0;
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-run-target__menu {
+  --md-menu-min-width: 15rem;
+}

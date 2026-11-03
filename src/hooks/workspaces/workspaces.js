@@ -1,5 +1,5 @@
 import { ipc } from '../ipc/ipc.js';
-import { $projectPath } from '../../stores/project/project.js';
+import { $project, $projectPath } from '../../stores/project/project.js';
 import {
   $activeWorkspace,
   $activeWorkspaceId,
@@ -10,10 +10,11 @@ import {
   setActiveWorkspace,
   setWorkspaces,
 } from '../../stores/workspaces/workspaces.js';
-import { $activeSession, $sessions, dropDrafts, forgetLastSession, newSession, selectSession } from '../../stores/sessions/sessions.js';
+import { $activeSession, $sessions, dropDrafts, forgetLastSession, selectSession } from '../../stores/sessions/sessions.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
-import { nextWaiting, noticesOf } from './rules.js';
+import { defaultBase, nextWaiting, noticesOf } from './rules.js';
+import { git } from '../git/git.js';
 import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
@@ -140,6 +141,23 @@ function followChat() {
   setActiveWorkspace(project, id);
 }
 
+/**
+ * The default base of a new workspace of the shown project (`defaultBase()` of Main's branches);
+ * `null`, the backend's own default, when they can't be listed.
+ * @param {string} projectPath
+ * @returns {Promise<string | null>}
+ */
+async function defaultBaseOf(projectPath) {
+  const project = $project.get();
+  if (project?.path !== projectPath || !project.rootId) return null;
+  try {
+    const [list, mainBranch] = await Promise.all([git.branches(project.rootId), git.branchOf(project.rootId)]);
+    return defaultBase(list, mainBranch);
+  } catch {
+    return null;
+  }
+}
+
 /** @param {string} id */
 const recordOf = (id) => $workspaces.get().find((w) => w.id === id) ?? null;
 
@@ -202,31 +220,26 @@ export const workspaces = Object.freeze({
   },
 
   /**
-   * Create workspace: an isolated one is created now (named after its branch until its first chat
-   * names it; its folder checks out meanwhile); the project folder is Main. Either way it's shown
-   * with a new chat.
-   * @param {import('./types.js').CreateRequest} request
+   * A New worktree chat's workspace: created now, unnamed (its first chat's message names it; its
+   * folder checks out meanwhile), from `baseBranch` (`null`: Main's default, `defaultBase()`), and
+   * listed at once. Rejects when the backend refuses it.
+   * @param {string} projectPath
+   * @param {string | null} baseBranch
+   * @returns {Promise<Workspace>}
    */
-  async create({ mode, baseBranch, name }) {
-    const project = $projectPath.get();
-    if (project === null) return;
-    let id = MAIN;
-    if (mode === 'isolated') {
-      try {
-        /** @type {Workspace} */
-        const created = await ipc.invoke('workspace_create', { projectPath: project, name, baseBranch });
-        if ($projectPath.get() !== project) return;
-        // Listed now, before `workspaces://changed` brings it.
-        if (!$workspaces.get().some((w) => w.id === created.id)) setWorkspaces([...$workspaces.get(), created], project);
-        id = created.id;
-      } catch (err) {
-        app.reportError('Creating the workspace failed', err);
-        return;
-      }
+  async create(projectPath, baseBranch) {
+    const base = baseBranch ?? (await defaultBaseOf(projectPath));
+    /** @type {Workspace} */
+    const created = await ipc.invoke('workspace_create', { projectPath, name: null, baseBranch: base });
+    // Listed now, before `workspaces://changed` brings it.
+    if ($projectPath.get() === projectPath && !$workspaces.get().some((w) => w.id === created.id)) {
+      setWorkspaces([...$workspaces.get(), created], projectPath);
     }
-    setActiveWorkspace(project, id);
-    newSession(project, id);
+    return created;
   },
+
+  /** Main's branches, which a new workspace starts from, and the default one. */
+  defaultBase,
 
   /**
    * @param {string} id

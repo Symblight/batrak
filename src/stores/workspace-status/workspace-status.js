@@ -4,6 +4,7 @@ import { $projectPath } from '../project/project.js';
 import { $permissionRequests } from '../session-runtime/session-runtime.js';
 import { $unreadSessions } from '../session-read/session-read.js';
 import { $sessions } from '../sessions/sessions.js';
+import { $gitRepo } from '../git/git.js';
 import { $activeWorkspaceId, $workspaces, $workspacesProject, MAIN } from '../workspaces/workspaces.js';
 import { orderWorkspaces, statusesOf } from '../../hooks/workspaces/rules.js';
 
@@ -12,6 +13,9 @@ import { orderWorkspaces, statusesOf } from '../../hooks/workspaces/rules.js';
 
 /** The shown project's workspaces; none with no project. */
 const $listed = computed([$projectPath, $workspaces], (path, list) => (path === null ? [] : list));
+
+/** The shown project can have workspaces: it has some, or it's a git repository with a commit. */
+export const $workspacesEnabled = computed([$listed, $gitRepo], (list, { repo }) => list.length > 0 || Boolean(repo?.sha));
 
 /** The status of each workspace of the shown project and of Main (`main`); empty with no project. */
 export const $workspaceStatuses = computed(

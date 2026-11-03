@@ -40,12 +40,20 @@
  */
 
 /**
+ * Where a draft's first message creates its chat: the worktree workspace it's a draft of, a new
+ * worktree workspace from `base` (`null`: Main's default branch), or Main (Local).
+ * @typedef {{ kind: 'workspace' } | { kind: 'worktree', base: string | null } | { kind: 'local' }} RunTarget
+ */
+
+/**
  * The agent composer's state for the chat (`$composer`).
  * @typedef {Object} ComposerState
  * @property {string | null} agentId `null` while the project configures no agent; a started session's is set.
  * @property {ConfigOption[]} configOptions The agent's, as it last reported them (shown with `chosen` applied).
  * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
  *   (picked before it started, or on their way), by config option id.
+ * @property {RunTarget} [runTarget] A draft's place, once picked; until then its workspace's
+ *   (`composer.runTargetOf()`).
  * @property {boolean} started After the first message: the agent is fixed.
  */
 

@@ -115,11 +115,11 @@ export class AcpBranchPicker extends LitElement {
       >
         <span class="acp-branch-picker__label">
           ${this.loading
-            ? html`<md-progress-circular class="acp-branch-picker__spinner" aria-label="Loading branches"></md-progress-circular>`
-            : html`<md-icon class="acp-branch-picker__icon">${unsafeSVG(branchIcon)}</md-icon>`}
+            ? html`<md-progress-circular class="acp-branch-picker__button-icon" aria-label="Loading branches"></md-progress-circular>`
+            : html`<md-icon class="acp-branch-picker__button-icon">${unsafeSVG(branchIcon)}</md-icon>`}
           <span class="acp-branch-picker__from">From</span>
           <span class="acp-branch-picker__name">${this.value ?? ''}</span>
-          <md-icon class="acp-branch-picker__icon">${unsafeSVG(expandMoreIcon)}</md-icon>
+          <md-icon class="acp-branch-picker__button-icon">${unsafeSVG(expandMoreIcon)}</md-icon>
         </span>
       </md-button>
       <md-menu

@@ -6,6 +6,7 @@ import {
   $sessions,
   newSession,
   removeSession,
+  revertToDraft,
   setProjectSessions,
   setSessionPinned,
   showWorkspace,
@@ -106,6 +107,27 @@ describe('sessions', () => {
     expect(shown, 'its last, kept while shown, its newest, Main\'s last').to.deep.equal(['ws-old', 'ws-old', 'ws-new', 'main-old']);
     expect([workspaceOf(draft), reused], "a draft of w2, reused for w2's next new chat").to.deep.equal(['w2', draft]);
     expect([workspaceOf(mainDraft), mainDraft === draft], "Main's new chat is its own").to.deep.equal(['main', false]);
+  });
+
+  it("brings a refused chat back as a draft beside one New chat opened meanwhile; New chat keeps the shown one, else takes the refused one", () => {
+    // Arrange
+    const refused = newSession('/p');
+    startSession(refused, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    const opened = newSession('/p');
+    $activeSessionId.set(refused);
+
+    // Act
+    revertToDraft(refused);
+    const whileShown = newSession('/p');
+    $activeSessionId.set(null);
+    const withNoneShown = newSession('/p');
+    $activeSessionId.set(null);
+    showWorkspace('/p', 'main', '/p');
+
+    // Assert
+    expect(Object.keys($draftSessions.get()).sort(), 'both drafts kept').to.deep.equal([refused, opened].sort());
+    expect(whileShown, 'the shown draft stays').to.equal(refused);
+    expect([withNoneShown, $activeSessionId.get()], 'the refused one, holding the text').to.deep.equal([refused, refused]);
   });
 
   it('starts a session active as of its creation', () => {

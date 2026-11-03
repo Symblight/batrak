@@ -21,6 +21,7 @@ import '../context-meter/context-meter.js';
 import '../mode-picker/mode-picker.js';
 import '../model-picker/model-picker.js';
 import '../part-thinking/part-thinking.js';
+import '../run-target/run-target.js';
 import '../session-banner/session-banner.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
@@ -36,6 +37,16 @@ import '../session-banner/session-banner.js';
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
+/**
+ * A draft's footer: where its first message creates the chat (`<acp-run-target>`'s data).
+ * @typedef {Object} ChatPlace
+ * @property {import('../../hooks/composer/types.js').RunTarget} target
+ * @property {string | null} workspaceName The worktree workspace the draft is of; `null` in Main.
+ * @property {boolean} worktrees New worktree is offered: the project can have workspaces.
+ * @property {import('../../hooks/git/types.js').BranchList} branches Main's.
+ * @property {string | null} base New worktree's, as shown.
+ * @property {() => Promise<void>} load Before the base menu opens.
+ */
 /** @typedef {{ message: string, workspaceId: string }} ChatBlock Why the composer can't send, and the workspace whose folder fixes it. */
 
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
@@ -71,6 +82,8 @@ export class AcpChat extends LitElement {
     optionsStatus: { attribute: false },
     /** The composer can't send: its workspace's folder is missing. */
     blocked: { attribute: false },
+    /** A draft's: where it runs. */
+    place: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
@@ -115,6 +128,8 @@ export class AcpChat extends LitElement {
     this.optionsStatus = null;
     /** @type {ChatBlock | null} */
     this.blocked = null;
+    /** @type {ChatPlace | null} */
+    this.place = null;
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
@@ -250,7 +265,7 @@ export class AcpChat extends LitElement {
     if (this.blocked) this.#emit('acp-workspace-recreate', { id: this.blocked.workspaceId });
   };
 
-  /** What the footer says: why the composer can't send, or that the mode reaches past the workspace. */
+  /** What the footer says: why the composer can't send, or a draft's place and whether its mode reaches past the workspace. */
   #renderFooter() {
     if (this.blocked) {
       return html`<div slot="footer" class="acp-chat__blocked" role="status">
@@ -259,13 +274,28 @@ export class AcpChat extends LitElement {
         <md-button class="acp-chat__blocked-action" variant="text" @click=${this.#onRecreate}>Recreate folder</md-button>
       </div>`;
     }
-    // A draft's only; its risk, which the backend tagged it with (the agent's crate knows its modes).
-    const mode = this.empty ? composer.configOf(this.composer?.configOptions ?? [], 'mode') : null;
-    if (mode?.options.find((v) => v.value === mode.currentValue)?.risk !== 'full') return nothing;
-    return html`<span slot="footer" class="acp-chat__note">
-      <md-icon class="acp-chat__note-icon">${unsafeSVG(publicIcon)}</md-icon>
-      Network and files outside the workspace
-    </span>`;
+    if (!this.empty) return nothing;
+    // Its risk, which the backend tagged it with (the agent's crate knows its modes).
+    const mode = composer.configOf(this.composer?.configOptions ?? [], 'mode');
+    const place = this.place;
+    return html`${place
+      ? html`<acp-run-target
+          slot="footer"
+          class="acp-chat__run-target"
+          .target=${place.target}
+          .workspaceName=${place.workspaceName}
+          .worktrees=${place.worktrees}
+          .branches=${place.branches}
+          .base=${place.base}
+          .loadBranches=${place.load}
+        ></acp-run-target>`
+      : nothing}
+    ${mode?.options.find((v) => v.value === mode.currentValue)?.risk === 'full'
+      ? html`<span slot="footer" class="acp-chat__note">
+          <md-icon class="acp-chat__note-icon">${unsafeSVG(publicIcon)}</md-icon>
+          Network and files outside the workspace
+        </span>`
+      : nothing}`;
   }
 
   render() {
