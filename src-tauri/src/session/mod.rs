@@ -9,7 +9,7 @@ pub mod env;
 mod runtime;
 
 pub use runtime::{
-    CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
+    CliDraft, CliOpened, DeletePreview, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
     SessionsOptions, SyncReport,
 };
 

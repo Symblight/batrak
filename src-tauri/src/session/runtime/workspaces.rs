@@ -1,8 +1,5 @@
 //! Workspaces' chats: what a workspace does to the sessions that run in it.
 
-// Until the workspace commands use it (spec Phase 1 step 14).
-#![allow(dead_code)]
-
 use super::*;
 
 impl Sessions {

@@ -95,7 +95,6 @@ impl Sessions {
     }
 
     /// The projects' workspaces.
-    #[allow(dead_code)] // Until the workspace commands (spec Phase 1 step 14).
     pub fn workspaces(&self) -> &crate::workspace::Workspaces {
         &self.inner.workspaces
     }
@@ -554,3 +553,4 @@ pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInpu
 pub use sign_in::{Login, LoginExit, LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};
 pub use sync::SyncReport;
+pub use workspaces::DeletePreview;

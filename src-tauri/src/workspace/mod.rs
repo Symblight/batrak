@@ -2,8 +2,6 @@
 //! worktree in app data on branch `brama/<slug>`, and chats (sessions) that run in its folder.
 //! Main, the project's own folder, is not stored.
 
-// Wired up step by step (spec Phase 1); goes once the commands use every part.
-#![allow(dead_code, unused_imports)]
 
 mod store;
 
@@ -73,6 +71,25 @@ struct Inner {
     creating: Mutex<HashSet<String>>,
     /// Why a workspace's last checkout failed.
     failed: Mutex<HashMap<String, String>>,
+    /// Told the project of every change (the app: `workspaces://changed` to every window).
+    on_change: Mutex<Option<OnChange>>,
+}
+
+/// Told a project's workspaces changed.
+pub type OnChange = Arc<dyn Fn(&Path) + Send + Sync>;
+
+/// A workspace as the page lists it: its record and what this launch knows of its folder.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    #[serde(flatten)]
+    pub record: WorkspaceRecord,
+    /// Its checkout runs.
+    pub creating: bool,
+    /// Why its last checkout failed.
+    pub error: Option<String>,
+    /// Its folder is gone (deleted outside Brama); Recreate checks it out again.
+    pub missing: bool,
 }
 
 impl Workspaces {
@@ -85,8 +102,36 @@ impl Workspaces {
                 gates: Mutex::default(),
                 creating: Mutex::default(),
                 failed: Mutex::default(),
+                on_change: Mutex::default(),
             }),
         }
+    }
+
+    /// Calls `f` with the project of each change from now on.
+    pub fn on_change(&self, f: OnChange) {
+        *lock(&self.inner.on_change) = Some(f);
+    }
+
+    fn changed(&self, project: &Path) {
+        let f = lock(&self.inner.on_change).clone();
+        if let Some(f) = f {
+            f(project);
+        }
+    }
+
+    /// A project's workspaces as the page lists them. Blocking (looks for each folder).
+    pub fn pages(&self, project: &Path) -> Vec<Workspace> {
+        let creating = lock(&self.inner.creating).clone();
+        let failed = lock(&self.inner.failed).clone();
+        self.list(project)
+            .into_iter()
+            .map(|record| Workspace {
+                creating: creating.contains(&record.id),
+                error: failed.get(&record.id).cloned(),
+                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists(),
+                record,
+            })
+            .collect()
     }
 
     pub fn store(&self) -> &Store {
@@ -104,6 +149,7 @@ impl Workspaces {
 
     /// Creates a workspace named `name` in a canonical `project` and checks its folder out.
     /// Blocking.
+    #[cfg(test)]
     pub fn create(&self, project: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceRecord, String> {
         let record = self.place(project, name, NameSource::User, base)?;
         self.check_out(&record.id)?;
@@ -144,6 +190,7 @@ impl Workspaces {
         lock(&self.inner.creating).insert(record.id.clone());
         self.inner.store.insert(record.clone())?;
         tracing::info!(workspace = %record.id, branch = %record.branch, "workspace created");
+        self.changed(project);
         Ok(record)
     }
 
@@ -168,9 +215,13 @@ impl Workspaces {
 
     /// `check_out` with the workspace's gate held.
     fn check_out_held(&self, id: &str) -> Result<(), String> {
-        lock(&self.inner.creating).insert(id.to_owned());
-        let result = self.get(id).and_then(|record| record.env().prepare(&AtomicBool::new(false)));
+        let record = self.get(id)?;
+        if lock(&self.inner.creating).insert(id.to_owned()) {
+            self.changed(&record.project_path);
+        }
+        let result = record.env().prepare(&AtomicBool::new(false));
         lock(&self.inner.creating).remove(id);
+        self.changed(&record.project_path);
         match &result {
             Ok(()) => drop(lock(&self.inner.failed).remove(id)),
             Err(e) => {
@@ -218,10 +269,12 @@ impl Workspaces {
         if name.is_empty() {
             return Err("a workspace's name can't be empty".to_owned());
         }
-        self.inner.store.update(id, |record| {
+        let record = self.inner.store.update(id, |record| {
             record.name = name.to_owned();
             record.name_source = NameSource::User;
-        })
+        })?;
+        self.changed(&record.project_path);
+        Ok(record)
     }
 
     /// Deletes a workspace's folder and its record. Uncommitted work is first committed onto its
@@ -241,6 +294,7 @@ impl Workspaces {
         lock(&self.inner.gates).remove(id);
         lock(&self.inner.failed).remove(id);
         tracing::info!(workspace = %id, "workspace deleted");
+        self.changed(&record.project_path);
         Ok(())
     }
 

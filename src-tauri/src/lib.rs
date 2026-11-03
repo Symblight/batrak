@@ -65,6 +65,7 @@ pub fn run() {
                 std::sync::Arc::new(config::update::NpmPrefetch { dir: data_dir.join("npm") }),
                 std::sync::Arc::new(move |project: Option<&std::path::Path>| commands::agents::emit_changed(&emitter, project)),
             ));
+            commands::workspaces::announce(app.handle().clone(), &sessions);
             app.manage(sessions);
             app.manage(configs);
             app.manage(terminal::Terminals::new(terminal::TerminalsOptions {
@@ -142,6 +143,16 @@ pub fn run() {
             commands::fs::reveal_path,
             commands::fs::open_url,
             commands::log::write_log,
+            commands::workspaces::workspaces_list,
+            commands::workspaces::workspace_create,
+            commands::workspaces::workspace_rename,
+            commands::workspaces::workspace_delete_preview,
+            commands::workspaces::workspace_delete,
+            commands::workspaces::workspace_recreate,
+            commands::workspaces::workspace_apply_locally,
+            commands::workspaces::workspace_check_out_branch,
+            commands::workspaces::workspace_changes,
+            commands::workspaces::workspace_file_at_base,
             commands::roots::open_root,
             commands::roots::open_session_root,
             commands::roots::close_root,

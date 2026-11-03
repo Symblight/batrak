@@ -2,6 +2,7 @@ import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { agents } from '../../hooks/agents/agents.js';
+import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { html, nothing } from 'lit';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { git } from '../../hooks/git/git.js';
@@ -232,6 +233,7 @@ export class AcpApp extends ViewElement {
     this.#menuListener = app.onMenuAction(this.#onMenuAction);
     this.#menuListener.catch((err) => app.log('warn', `menu bar not connected: ${err}`));
     agents.start();
+    workspaces.start();
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
     github.start();

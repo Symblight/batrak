@@ -143,3 +143,30 @@ fn a_detached_worktree_with_uncommitted_work_is_kept_on_delete() {
     assert!(workspaces.get(&ws.id).is_err(), "the record goes");
     std::fs::remove_dir_all(data).unwrap();
 }
+
+#[test]
+fn every_change_is_announced_with_its_project_and_the_page_sees_creating_and_missing() {
+    use crate::git::test_repo::TestRepo;
+    use std::sync::{Arc, Mutex};
+    let repo = TestRepo::with_commit("ws-announce");
+    let data = temp_dir("ws-announce-data");
+    let workspaces = Workspaces::new(&data);
+    let heard = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
+    let sink = Arc::clone(&heard);
+    workspaces.on_change(Arc::new(move |project: &std::path::Path| sink.lock().unwrap().push(project.to_path_buf())));
+
+    let ws = workspaces.place(&repo.path, "Task", NameSource::User, None).unwrap();
+    assert!(workspaces.pages(&repo.path)[0].creating, "placed, not checked out yet");
+    workspaces.check_out(&ws.id).unwrap();
+    let page = &workspaces.pages(&repo.path)[0];
+    assert!(!page.creating && !page.missing && page.error.is_none());
+    workspaces.rename(&ws.id, "Renamed").unwrap();
+    std::fs::remove_dir_all(&ws.worktree_path).unwrap();
+    assert!(workspaces.pages(&repo.path)[0].missing, "deleted outside Brama");
+    workspaces.discard(&ws.id, true).unwrap();
+
+    let heard = heard.lock().unwrap();
+    assert!(heard.len() >= 4, "place, checkout, rename, delete: {heard:?}");
+    assert!(heard.iter().all(|p| *p == repo.path));
+    std::fs::remove_dir_all(data).unwrap();
+}
