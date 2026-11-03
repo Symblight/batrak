@@ -296,4 +296,10 @@
 }
 .acp-settings__switch {
   flex: none;
+  /* Compact, as on the agent card. */
+  --md-switch-track-width: 2.25rem;
+  --md-switch-track-height: 1.25rem;
+  --md-switch-state-layer-size: 1.25rem;
+  --md-switch-unselected-handle-size: 0.625rem;
+  --md-switch-selected-handle-size: 0.875rem;
 }
