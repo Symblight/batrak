@@ -1,4 +1,3 @@
-import { $draftWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { sessions } from '../sessions.js';
@@ -42,7 +41,6 @@ describe('sessions views', () => {
     $terminals.set({});
     $activeSessionId.set(null);
     $draftSessions.set({});
-    $draftWorkspaces.set({});
     $sessions.set([]);
     $historyResets.set([]);
     $project.set(null);
@@ -218,7 +216,6 @@ describe('sessions keeps the active session in its view', () => {
     $terminals.set({});
     $activeSessionId.set(null);
     $draftSessions.set({});
-    $draftWorkspaces.set({});
     $sessions.set([]);
     $historyResets.set([]);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
@@ -308,17 +305,15 @@ describe('sessions keeps the active session in its view', () => {
     expect($activeShownView.get()).to.equal('terminal');
   });
 
-  it("creates a draft's chat in its workspace: Main, a stored one, or a new one from a draft workspace", async () => {
+  it("creates a draft's chat in its workspace: Main or a stored one", async () => {
     /** @type {[string, unknown, string][]} */
     const cases = [
       ['main', { kind: 'main' }, 'local'],
       ['w1', { kind: 'existing', id: 'w1' }, 'worktree'],
-      ['draft-1', { kind: 'new', baseBranch: 'dev' }, 'worktree'],
     ];
     for (const [workspaceId, workspace, mode] of cases) {
       // Arrange
       calls = [];
-      $draftWorkspaces.set({ 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: 'dev' } });
       $draftSessions.set({ d1: { projectId: '/p', workspaceId } });
       $activeSessionId.set('d1');
       setAgentView('claude', 'chat');
@@ -333,40 +328,6 @@ describe('sessions keeps the active session in its view', () => {
       expect($sessions.get().find((s) => s.id === 'd1')?.mode, `${workspaceId}: listed meanwhile`).to.equal(mode);
       $sessions.set([]);
     }
-  });
-
-  it("puts a draft workspace's second chat in the workspace its first chat is placing, not a new one", async () => {
-    // Arrange: the first chat's create answers only when released
-    /** @type {(session: unknown) => void} */
-    let release = () => {};
-    mockIPC((cmd, args) => {
-      calls.push({ cmd, args });
-      if (cmd !== 'session_create') return null;
-      const { sessionId } = /** @type {{ sessionId: string }} */ (args);
-      const session = { id: sessionId, projectId: '/p', workspaceId: 'w9', folder: '/wt/w9', status: 'preparing', mode: 'worktree' };
-      return sessionId === 'd1' ? new Promise((resolve) => (release = resolve)).then(() => session) : session;
-    });
-    $draftWorkspaces.set({ 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: null } });
-    $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'draft-1' }, d2: { projectId: '/p', workspaceId: 'draft-1' } });
-    setAgentView('claude', 'chat');
-    $activeSessionId.set('d1');
-    sessions.start('d1', 'First');
-    $activeSessionId.set('d2');
-
-    /** @param {number} n */
-    const creates = async (n) => {
-      for (let i = 0; i < 50 && calls.filter((c) => c.cmd === 'session_create').length < n; i++) await new Promise((r) => setTimeout(r, 5));
-    };
-
-    // Act
-    sessions.start('d2', 'Second');
-    await creates(1);
-    release(null);
-    await creates(2);
-
-    // Assert
-    const workspaces = calls.filter((c) => c.cmd === 'session_create').map((c) => /** @type {{ workspace: unknown }} */ (c.args).workspace);
-    expect(workspaces).to.deep.equal([{ kind: 'new', baseBranch: null }, { kind: 'existing', id: 'w9' }]);
   });
 
   it("shows a draft's composer even when its agent's sessions open in the terminal", async () => {

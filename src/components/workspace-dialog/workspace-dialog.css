@@ -47,6 +47,11 @@
   --md-segmented-button-icon-size: var(--acp-icon-size-sm);
 }
 
+.acp-workspace-dialog__name {
+  display: block;
+  width: 100%;
+}
+
 .acp-workspace-dialog__row {
   display: flex;
   flex-wrap: wrap;
@@ -121,17 +126,6 @@
   color: var(--acp-color-on-surface);
   font: inherit;
   outline: none;
-}
-
-.acp-workspace-dialog__prompt {
-  display: block;
-  width: 100%;
-
-  /* The library's textarea grows from 4 to 10 lines with its text; here it starts as a big box. */
-  &::part(input) {
-    min-height: 8lh;
-    max-height: 16lh;
-  }
 }
 
 .acp-workspace-dialog__footer {

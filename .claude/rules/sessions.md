@@ -21,9 +21,8 @@ conversation id; `$activeSession` is `null` for a draft. The `sessions` hook kee
 the shown workspace (`showWorkspace()`: its last shown session (`brama:sessions:last:<folder>`, Main's
 the project path, per window, so it survives a relaunch), its newest, or a new draft of it), and the
 `workspaces` hook switches the shown workspace to the shown chat's when a chat of another one is
-shown (a banner, a draft workspace's first chat once placed). The Sessions column lists only the
-shown workspace's chats under `<acp-workspace-header>`; a draft workspace (`$draftWorkspaces`, no
-name given) left without a message is dropped with its drafts,
+shown (a banner). The Sessions column lists only the
+shown workspace's chats under `<acp-workspace-header>`,
 `create()`s drafts and `start()`s one on its first message. Showing a session resumes its stopped
 agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The composer's state is per session
 (`$composer` is the active session's entry). One `<chx-chat>` holds every session as a conversation
@@ -80,12 +79,19 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   the worktree fields copied); its env is `WorktreeEnv::shared()`: `prepare` only checks the
   folder (missing: "folder is missing", until `recreate_workspace`) and its branch, `discard` is a
   no-op. `session_create` takes the draft's `workspace` (`WorkspaceChoice`, `new_record`): `main`
-  (the project folder, `mode: local`, no git needed), `existing` `{ id }` (refused for another
-  project's) or `new` `{ baseBranch }` (a draft workspace's first message: placed named after the
-  title, `nameSource: agent`: it then takes its oldest chat's agent title, from
-  `session_info_update` or a listing, until renamed; `name_workspace_after`). Removing a chat never touches its workspace; only Delete workspace does. At load, a worktree session without a workspace gets one of its own
+  (the project folder, `mode: local`, no git needed), or `existing` `{ id }` (refused for another
+  project's). `workspace_create` stores a workspace at once (`Workspaces::place`); one created
+  without a name is called after its branch ("Workspace 2"), `nameSource: agent`: its first chat's
+  message names it, then it takes its oldest chat's agent title, from `session_info_update` or a
+  listing, until renamed (`name_workspace_after`). Removing a chat never touches its workspace; only Delete workspace does. At load, a worktree session without a workspace gets one of its own
   (`workspaces::migrate`, idempotent). No repository, no commit or an unknown base refuses a
-  workspace. Every agent path goes through
+  workspace; a base resolves as a local branch, then a remote-tracking one (`origin/main`), then
+  any other name, and the new branch never tracks it. A workspace lists `creating` from its first
+  announcement until its checkout ends, and `missing` whenever its folder isn't checked out (also
+  one never checked out, after a relaunch or a failed checkout), so Recreate folder runs it. Delete
+  stops a running checkout (`Workspaces` keeps a cancel flag per workspace; git is stopped like a
+  timeout, `exec::Options.cancel`) and undoes it. An empty folder an interrupted checkout left is
+  replaced; one with files is named in the error. Every agent path goes through
   `to_host_path` + `confine` (no `..`, no symlink out, nothing in `.git`); writes are atomic.
   `HOOK(git)` comments in `try_turn` (`session/runtime/turn.rs`) mark the checkpoint points. `Sessions::remove` (session row
   menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or

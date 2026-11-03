@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use tauri::{AppHandle, Emitter, State};
 
 use crate::session::{DeletePreview, Sessions};
-use crate::workspace::{NameSource, Workspace};
+use crate::workspace::Workspace;
 
 use super::blocking;
 
@@ -30,19 +30,20 @@ pub async fn workspaces_list(sessions: State<'_, Sessions>, project_path: String
     blocking(move || Ok(workspaces.pages(&canonical(&project_path)?))).await?
 }
 
-/// Creates a named workspace from `base_branch` (default: the project's base branch) and checks
-/// its folder out in the background (`creating` until then); its chats' starts wait for it.
+/// Creates a workspace from `base_branch` (default: the project's base branch) and checks its
+/// folder out in the background (`creating` until then); its chats' starts wait for it. Without a
+/// `name` it's called after its branch until its first chat names it.
 #[tauri::command]
 pub async fn workspace_create(
     sessions: State<'_, Sessions>,
     project_path: String,
-    name: String,
+    name: Option<String>,
     base_branch: Option<String>,
 ) -> Result<Workspace, String> {
     let workspaces = sessions.workspaces().clone();
     blocking(move || {
         let project = canonical(&project_path)?;
-        let record = workspaces.place(&project, &name, NameSource::User, base_branch.as_deref())?;
+        let record = workspaces.place(&project, name.as_deref(), base_branch.as_deref())?;
         let checkout = workspaces.clone();
         let id = record.id.clone();
         tauri::async_runtime::spawn_blocking(move || checkout.check_out(&id));

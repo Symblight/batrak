@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { choiceOf, nextWaiting, noticesOf, orderWorkspaces, statusesOf, statusOf } from '../rules.js';
+import { nextWaiting, noticesOf, orderWorkspaces, statusOf, statusesOf } from '../rules.js';
 
 /** @typedef {import('../types.js').Workspace} Workspace */
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -60,17 +60,6 @@ describe('workspaces rules', () => {
 
     // Assert
     expect(ordered.map((w) => w.id)).to.deep.equal(['waiting', 'error', 'working', 'unread', 'chatted-idle', 'active-idle', 'new-idle', 'old-idle']);
-  });
-
-  it('choiceOf: Main, a draft workspace placed from its base, or the stored workspace', () => {
-    // Arrange
-    const drafts = { 'draft-1': { id: 'draft-1', projectPath: '/p', baseBranch: 'dev' } };
-
-    // Act
-    const choices = ['main', 'draft-1', 'w1'].map((id) => choiceOf(id, drafts));
-
-    // Assert
-    expect(choices).to.deep.equal([{ kind: 'main' }, { kind: 'new', baseBranch: 'dev' }, { kind: 'existing', id: 'w1' }]);
   });
 
   it("statusesOf: each workspace's and Main's status from the project's own chats", () => {

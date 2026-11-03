@@ -4,19 +4,14 @@ import { $projectPath } from '../project/project.js';
 import { $permissionRequests } from '../session-runtime/session-runtime.js';
 import { $unreadSessions } from '../session-read/session-read.js';
 import { $sessions } from '../sessions/sessions.js';
-import { $activeWorkspaceId, $draftWorkspaces, $workspaces, $workspacesProject, MAIN } from '../workspaces/workspaces.js';
+import { $activeWorkspaceId, $workspaces, $workspacesProject, MAIN } from '../workspaces/workspaces.js';
 import { orderWorkspaces, statusesOf } from '../../hooks/workspaces/rules.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/workspaces/types.js').WorkspaceStatus} WorkspaceStatus */
 
-/** The shown project's workspaces, a draft one as "New workspace" (it has no record yet). */
-const $listed = computed([$projectPath, $workspaces, $draftWorkspaces], (path, list, drafts) => {
-  const placeholders = Object.values(drafts)
-    .filter((d) => d.projectPath === path)
-    .map((d) => /** @type {Workspace} */ (/** @type {unknown} */ ({ id: d.id, name: 'New workspace', createdAt: new Date().toISOString(), lastActiveAt: null, creating: false, missing: false, error: null })));
-  return path === null ? [] : [...list, ...placeholders];
-});
+/** The shown project's workspaces; none with no project. */
+const $listed = computed([$projectPath, $workspaces], (path, list) => (path === null ? [] : list));
 
 /** The status of each workspace of the shown project and of Main (`main`); empty with no project. */
 export const $workspaceStatuses = computed(

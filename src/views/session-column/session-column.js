@@ -41,7 +41,7 @@ export class AcpSessionColumn extends ViewElement {
   /** The list's rename, reveal and delete. */
   #sessionActions = new SessionActionsController(this, { confirm: () => this.renderRoot.querySelector('acp-confirm-dialog') });
 
-  /** The shown workspace's header: its record, or a stand-in for a draft workspace (none: Main). */
+  /** The shown workspace's header: its record, or a stand-in while it loads (none: Main). */
   get #headerWorkspace() {
     const id = this.#workspaceId.value;
     if (id === MAIN) return null;

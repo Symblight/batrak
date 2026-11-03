@@ -38,7 +38,7 @@ export function onSessionsSynced(callback) {
 
 /**
  * A draft's first message: creates the session (under the draft's id) in its workspace and starts
- * its agent in the background. Rejects when a new workspace has no repository or base to start from.
+ * its agent in the background. Rejects when its workspace is another project's or unknown.
  * @param {Object} session
  * @param {string} session.sessionId
  * @param {string} session.projectPath

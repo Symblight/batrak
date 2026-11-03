@@ -54,10 +54,7 @@ export class AcpChatView extends ViewElement {
   #terminals = new StoreController(this, { store: $terminals });
 
   /** @type {ChatSessionController} */
-  #session = new ChatSessionController(this, {
-    chat: () => this.chat?.chat ?? null,
-    send: async (text) => (await this.chat?.send(text)) ?? false,
-  });
+  #session = new ChatSessionController(this, { chat: () => this.chat?.chat ?? null });
   /** @type {ChatPartsController} */
   #parts = new ChatPartsController(this, { attachments: () => /** @type {AcpChat} */ (this.chat).attachments });
 

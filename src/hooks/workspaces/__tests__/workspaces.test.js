@@ -205,6 +205,41 @@ describe('workspaces hook', () => {
     $notices.set([]);
   });
 
+  it('opens no folder for a workspace whose checkout failed, however often its list changes', async () => {
+    // Arrange
+    clearMocks();
+    /** @type {string[]} */
+    const opens = [];
+    mockIPC(
+      (cmd) => {
+        if (cmd === 'workspaces_list') return [{ id: 'w8', projectPath: '/work/b', name: 'Task', folder: '/wt/eight', creating: false, missing: false, error: 'checkout failed' }];
+        if (cmd !== 'open_workspace_root') return null;
+        opens.push(cmd);
+        throw new Error("/wt/eight: the workspace isn't checked out");
+      },
+      { shouldMockEvents: true },
+    );
+    $notices.set([]);
+    stop = workspaces.start();
+    $project.set({ path: '/work/b', name: 'b', rootId: 'r-b' });
+    await until(() => $workspaces.get().length === 1);
+    $sessions.set(/** @type {import('../../sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c8', projectId: '/work/b', workspaceId: 'w8' }])));
+
+    // Act
+    selectSession('c8');
+    await emit('workspaces://changed', { projectPath: '/work/b' });
+    await emit('workspaces://changed', { projectPath: '/work/b' });
+    await new Promise((r) => setTimeout(r, 50));
+
+    // Assert
+    expect($activeWorkspaceId.get(), 'shown').to.equal('w8');
+    expect(opens, 'never opened').to.deep.equal([]);
+    expect($notices.get(), 'no snackbar').to.deep.equal([]);
+    expect($activeRoot.get()).to.deep.equal({ path: '/wt/eight', rootId: null, opening: false });
+    selectSession(null);
+    $sessions.set([]);
+  });
+
   it("shows Main when the project's workspaces can't be listed, rather than waiting for its stored one", async () => {
     // Arrange
     mockIPC((cmd) => {

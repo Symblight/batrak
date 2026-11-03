@@ -35,8 +35,7 @@ import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '.
 import { forgetPendingInput } from '../../stores/chat/chat.js';
 import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
 import { $projectPath } from '../../stores/project/project.js';
-import { $activeWorkspace, $activeWorkspaceId, $draftWorkspaces, MAIN } from '../../stores/workspaces/workspaces.js';
-import { choiceOf } from '../workspaces/rules.js';
+import { $activeWorkspace, $activeWorkspaceId, MAIN } from '../../stores/workspaces/workspaces.js';
 import { computed } from 'nanostores';
 
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
@@ -53,15 +52,11 @@ function onSessionEvent(event) {
   if (event.kind === 'sign-in') agents.refresh();
 }
 
-/**
- * The shown project's workspace, with its folder (`null` for a draft workspace); `null` while its
- * record loads.
- */
-const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $activeWorkspace, $draftWorkspaces], (projectPath, id, workspace, drafts) => {
+/** The shown project's workspace, with its folder; `null` while its record loads. */
+const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $activeWorkspace], (projectPath, id, workspace) => {
   if (projectPath === null) return null;
   if (id === MAIN) return { projectPath, id, folder: projectPath };
-  if (workspace !== null) return { projectPath, id, folder: workspace.folder };
-  return drafts[id] ? { projectPath, id, folder: null } : null;
+  return workspace !== null ? { projectPath, id, folder: workspace.folder } : null;
 });
 
 /**
@@ -71,21 +66,14 @@ const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $activeWorks
 function placeOf(id) {
   const draft = $draftSessions.get()[id];
   if (draft === undefined) return null;
-  const workspace = choiceOf(draft.workspaceId, $draftWorkspaces.get());
+  /** @type {import('../workspaces/types.js').WorkspaceChoice} */
+  const workspace = draft.workspaceId === MAIN ? { kind: 'main' } : { kind: 'existing', id: draft.workspaceId };
   return {
     projectPath: draft.projectId,
-    draftWorkspace: draft.workspaceId,
     workspace,
     mode: /** @type {'local' | 'worktree'} */ (workspace.kind === 'main' ? 'local' : 'worktree'),
   };
 }
-
-/**
- * Draft workspaces whose first chat is being created: their id → the id of the workspace placed for
- * them (`null` when that failed), so a later chat of theirs joins it rather than placing another.
- * @type {Map<string, Promise<string | null>>}
- */
-const placing = new Map();
 
 /** @type {Set<string>} Sessions whose event channel this window opened. */
 const opened = new Set();
@@ -391,26 +379,12 @@ function start(id, title) {
     setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .brama/agents.json to start a session.' });
     return false;
   }
-  const { projectPath, draftWorkspace, workspace, mode } = place;
+  const { projectPath, workspace, mode } = place;
   // While it's a draft still: a listed session without a composer would get one from its record.
   startComposer(id);
   startSession(id, { title, agentId, config, mode });
   setSessionNotice(id, null);
-  const placed = workspace.kind === 'new' ? placing.get(draftWorkspace) : undefined;
-  // A draft workspace's later chat joins the workspace its first chat is placing.
-  const choice = placed ? placed.then((wsId) => (wsId ? { kind: /** @type {const} */ ('existing'), id: wsId } : workspace)) : Promise.resolve(workspace);
-  const session = choice.then((chosen) => sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspace: chosen }, onSessionEvent));
-  if (workspace.kind === 'new' && !placed) {
-    placing.set(
-      draftWorkspace,
-      session
-        .then((s) => s.workspaceId ?? null)
-        .catch(() => {
-          placing.delete(draftWorkspace);
-          return null;
-        }),
-    );
-  }
+  const session = sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspace }, onSessionEvent);
   const created = session.then(
     (session) => upsertSession(session),
     (err) => {

@@ -48,9 +48,15 @@ const NO_BRANCHES = { local: [], remotes: [], default: null };
 const stopSelect = (e) => e.stopPropagation();
 
 /**
+ * Mod+Enter: Create.
+ * @param {KeyboardEvent} e
+ */
+const isCreateKey = (e) => e.key === 'Enter' && (app.platform === 'mac' ? e.metaKey : e.ctrlKey);
+
+/**
  * @tag acp-workspace-dialog
- * @summary Create workspace: an isolated workspace (its own branch from a picked one) or the project folder, in a picked project, with an optional first message; Create (or Mod+Enter) works at once.
- * @fires acp-workspace-create `{ mode, baseBranch, prompt }` `baseBranch` is `null` in the project folder, `prompt` when nothing was typed.
+ * @summary Create workspace: an isolated workspace (an optional name, its own branch from a picked one) or the project folder, in a picked project; Create (or Mod+Enter) works at once and shows a new chat of it.
+ * @fires acp-workspace-create `{ mode, baseBranch, name }` `baseBranch` and `name` are `null` in the project folder, `name` too when none was typed.
  * @fires acp-branches-query `{}` As it opens and once another project is shown; answered through `branches`.
  * @fires acp-project-select `{ projectId }` Another project picked: the container shows it.
  */
@@ -63,8 +69,9 @@ export class AcpWorkspaceDialog extends LitElement {
     fetchBranches: { attribute: false },
     mode: { state: true },
     base: { state: true },
-    prompt: { state: true },
+    name: { state: true },
     projectFilter: { state: true },
+    pickedProject: { state: true },
   };
 
   static styles = styles;
@@ -93,9 +100,11 @@ export class AcpWorkspaceDialog extends LitElement {
     /** @type {string | null} The picked branch; `null` until the branches say the default. */
     this.base = null;
     /** @type {string} */
-    this.prompt = '';
-    /** @type {string} */
     this.projectFilter = '';
+    /** @type {string} An isolated workspace's name; empty: named after its branch until its first chat names it. */
+    this.name = '';
+    /** @type {string | null} The project picked in its menu; Create waits until it's the shown one. */
+    this.pickedProject = null;
   }
 
   /** @returns {HTMLElementTagNameMap['md-dialog']} */
@@ -115,14 +124,14 @@ export class AcpWorkspaceDialog extends LitElement {
   async show() {
     this.mode = 'isolated';
     this.base = null;
-    this.prompt = '';
+    this.name = '';
+    this.pickedProject = null;
     this.#open = true;
     this.#fetched = false;
     this.#picked = false;
     this.#emit('acp-branches-query', {});
     await this.updateComplete;
     await this.#dialog.show();
-    /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-workspace-dialog__prompt'))?.focus();
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
@@ -143,20 +152,25 @@ export class AcpWorkspaceDialog extends LitElement {
     void this.#dialog.close();
   }
 
+  /** A picked project is shown, and an isolated workspace has a branch to start from. */
+  get #ready() {
+    const shown = this.pickedProject === null || this.pickedProject === this.projectPath;
+    return shown && (this.mode !== 'isolated' || this.base !== null);
+  }
+
   #create() {
-    const prompt = this.prompt.trim();
+    if (!this.#ready) return;
     const isolated = this.mode === 'isolated';
     this.#emit('acp-workspace-create', {
       mode: this.mode,
       baseBranch: isolated ? this.base : null,
-      prompt: prompt === '' ? null : prompt,
+      name: isolated && this.name.trim() !== '' ? this.name.trim() : null,
     });
     this.#close();
   }
 
   #onKeydown = (/** @type {KeyboardEvent} */ e) => {
-    const mod = app.platform === 'mac' ? e.metaKey : e.ctrlKey;
-    if (e.key !== 'Enter' || !mod) return;
+    if (!isCreateKey(e)) return;
     e.preventDefault();
     this.#create();
   };
@@ -176,12 +190,14 @@ export class AcpWorkspaceDialog extends LitElement {
   #onProjectPick = (/** @type {Event} */ e) => {
     if (e.target !== e.currentTarget) return;
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    this.pickedProject = value;
     if (value !== this.projectPath) this.#emit('acp-project-select', { projectId: value });
   };
 
-  // The field keeps its typing; ArrowDown goes to the first row, the menu's arrows from there.
+  // The field keeps its typing; ArrowDown goes to the first row, the menu's arrows from there; Escape
+  // and Mod+Enter (Create) go on to the dialog.
   #onProjectFilterKeydown = (/** @type {KeyboardEvent} */ e) => {
-    if (e.key === 'Escape') return;
+    if (e.key === 'Escape' || isCreateKey(e)) return;
     e.stopPropagation();
     if (e.key !== 'ArrowDown') return;
     e.preventDefault();
@@ -252,6 +268,16 @@ export class AcpWorkspaceDialog extends LitElement {
             </md-segmented-button>`,
           )}
         </md-segmented-button-group>
+        ${this.mode === 'isolated'
+          ? html`<md-text-field
+              class="acp-workspace-dialog__name"
+              variant="outlined"
+              label="Name (optional)"
+              spellcheck="false"
+              .value=${this.name}
+              @input=${(/** @type {Event} */ e) => (this.name = /** @type {HTMLInputElement} */ (e.target).value)}
+            ></md-text-field>`
+          : nothing}
         <div class="acp-workspace-dialog__row">
           ${this.#renderProjects()}
           ${this.mode === 'isolated'
@@ -263,20 +289,11 @@ export class AcpWorkspaceDialog extends LitElement {
               ></acp-branch-picker>`
             : nothing}
         </div>
-        <md-text-field
-          class="acp-workspace-dialog__prompt"
-          variant="outlined"
-          multiline
-          aria-label="What do you want to work on?"
-          placeholder="What do you want to work on?"
-          .value=${this.prompt}
-          @input=${(/** @type {Event} */ e) => (this.prompt = /** @type {HTMLInputElement} */ (e.target).value)}
-        ></md-text-field>
       </div>
       <div slot="footer" class="acp-workspace-dialog__footer">
         <span class="acp-workspace-dialog__spacer"></span>
         <md-button class="acp-workspace-dialog__action acp-workspace-dialog__cancel" variant="text" @click=${() => this.#close()}>Cancel</md-button>
-        <md-button class="acp-workspace-dialog__action acp-workspace-dialog__create" variant="filled" trailing-icon @click=${() => this.#create()}>
+        <md-button class="acp-workspace-dialog__action acp-workspace-dialog__create" variant="filled" trailing-icon ?disabled=${!this.#ready} @click=${() => this.#create()}>
           Create
           <acp-shortcut slot="icon" class="acp-workspace-dialog__key">${mac ? '⌘↵' : 'Ctrl+↵'}</acp-shortcut>
         </md-button>

@@ -201,7 +201,7 @@ export class AcpApp extends ViewElement {
 
   /** @param {Event} e */
   #onWorkspaceCreate = (e) => {
-    workspaces.create(/** @type {CustomEvent<import('../../hooks/workspaces/types.js').CreateRequest>} */ (e).detail);
+    void workspaces.create(/** @type {CustomEvent<import('../../hooks/workspaces/types.js').CreateRequest>} */ (e).detail);
   };
 
   /** @param {Event} e */

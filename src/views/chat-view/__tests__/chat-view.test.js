@@ -3,7 +3,6 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
 import { $project } from '../../../stores/project/project.js';
 import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
-import { queueFirstPrompt } from '../../../stores/chat/chat.js';
 import '../chat-view.js';
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
@@ -60,28 +59,6 @@ describe('acp-chat-view', () => {
   function fire(el, type, detail) {
     el.chat?.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
-
-  it("sends a draft's queued first message from its composer once it's up", async () => {
-    // Arrange: Create workspace's text waits for the shown draft
-    queueFirstPrompt('d1', 'Fix the login form');
-    /** @type {string[]} */
-    const sent = [];
-    const listener = (/** @type {Event} */ e) => {
-      sent.push(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value);
-      // Seen, not started: no agent here.
-      e.stopPropagation();
-      e.preventDefault();
-    };
-    document.addEventListener('chx-send-message', listener, { capture: true });
-
-    // Act
-    await render();
-    await until(() => sent.length > 0);
-    document.removeEventListener('chx-send-message', listener, { capture: true });
-
-    // Assert
-    expect(sent).to.deep.equal(['Fix the login form']);
-  });
 
   it('shows the chat of an opened project: hidden when concealed, marked while files are dragged over it, none without a project', async () => {
     // Arrange

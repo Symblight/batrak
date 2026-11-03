@@ -47,19 +47,6 @@ export function orderWorkspaces(list, statuses, chats) {
 }
 
 /**
- * Where a draft of workspace `workspaceId` creates its chat: Main, a draft workspace's new one
- * (placed from its base), or the stored one.
- * @param {string} workspaceId `main`, a stored workspace's id or a draft workspace's.
- * @param {Readonly<Record<string, import('./types.js').DraftWorkspace>>} drafts Draft workspaces by id.
- * @returns {import('./types.js').WorkspaceChoice}
- */
-export function choiceOf(workspaceId, drafts) {
-  if (workspaceId === 'main') return { kind: 'main' };
-  const draft = drafts[workspaceId];
-  return draft ? { kind: 'new', baseBranch: draft.baseBranch } : { kind: 'existing', id: workspaceId };
-}
-
-/**
  * The status of each workspace of a project and of Main (`main`), from its chats (`statusOf()`).
  * @param {string} projectPath
  * @param {readonly Workspace[]} list The project's workspaces.

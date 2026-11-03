@@ -4,11 +4,10 @@ import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
-import { $activeRoot, $activeWorkspaceId, $draftWorkspaces, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
+import { $activeRoot, $activeWorkspaceId, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { $sessionReads, $unreadSessions } from '../../../stores/session-read/session-read.js';
 import { $activeSessionId, $draftSessions, $sessions, $sessionsLoaded, selectSession } from '../../../stores/sessions/sessions.js';
-import { $firstPrompts } from '../../../stores/chat/chat.js';
 import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import {
   $projectTerminalPanelHeights,
@@ -197,7 +196,6 @@ describe('acp-app: the shown workspace', () => {
     setActiveWorkspace('/p', 'main');
     selectSession(null);
     $draftSessions.set({});
-    $draftWorkspaces.set({});
     $sessions.set([]);
     $workspaces.set([]);
     $openRoots.set({});
@@ -242,6 +240,7 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
       if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'brama/task', createdAt: '2026-01-01T00:00:00.000Z', creating: false, missing: false, error: null }];
+      if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace', createdAt: '2026-01-02T00:00:00.000Z', creating: true, missing: false, error: null };
       if (cmd === 'workspace_delete_preview') return { uncommitted: 0, commits: 1, working: [] };
       if (cmd === 'git_branches') return { local: a.rootId === 'r' ? ['main', 'dev'] : ['brama/task'], remotes: [], default: null };
       if (cmd === 'git_head') return { branch: a.rootId === 'r' ? 'main' : 'brama/task', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null };
@@ -255,7 +254,6 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     setActiveWorkspace('/p', 'main');
     selectSession(null);
     $draftSessions.set({});
-    $draftWorkspaces.set({});
     $sessions.set([]);
     $workspaces.set([]);
     $project.set(null);
@@ -274,7 +272,7 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
     /** @param {string} type @param {unknown} [detail] */
     const fire = (type, detail = null) => toolbar.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
-    /** Create workspace's Create, as the dialog fires it. @param {{ mode: 'isolated' | 'project', baseBranch: string | null, prompt: string | null }} detail */
+    /** Create workspace's Create, as the dialog fires it. @param {{ mode: 'isolated' | 'project', baseBranch: string | null, name: string | null }} detail */
     const create = (detail) => app.querySelector('acp-workspace-dialog')?.dispatchEvent(new CustomEvent('acp-workspace-create', { detail, bubbles: true, composed: true }));
     return { app, fire, create };
   }
@@ -299,55 +297,28 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     expect([$activeSessionId.get(), $activeRoot.get().path], "Main's").to.deep.equal(['m', '/p']);
   });
 
-  it('creates an isolated workspace as a draft with a new chat, or a new chat in the project folder, the typed text waiting as its first message', async () => {
+  it('creates an isolated workspace in the backend and shows it in the picker with a new chat, kept when left without one; or a new chat in the project folder', async () => {
     // Arrange
-    const { create } = await render();
+    const { app, fire, create } = await render();
 
     // Act
-    create({ mode: 'isolated', baseBranch: 'dev', prompt: 'Fix the login form' });
-    const draft = $activeWorkspaceId.get();
-    const isolatedChat = /** @type {string} */ ($activeSessionId.get());
-    const isolated = [draft in $draftWorkspaces.get(), $draftWorkspaces.get()[draft]?.baseBranch, shownChatWorkspace(), $activeRoot.get().path];
-    create({ mode: 'project', baseBranch: null, prompt: null });
+    create({ mode: 'isolated', baseBranch: 'dev', name: 'Fix login' });
+    await until(() => $activeWorkspaceId.get() === 'w2');
+    const isolated = [shownChatWorkspace(), /** @type {string} */ ($activeSessionId.get()) in $draftSessions.get()];
+    const picker = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
+    await picker.updateComplete;
+    const listed = picker.workspaces.map((w) => w.name);
+    fire('acp-workspace-select', { id: 'w1' });
+    const leftWithoutChat = $workspaces.get().map((w) => w.id);
+    create({ mode: 'project', baseBranch: null, name: null });
     const projectChat = /** @type {string} */ ($activeSessionId.get());
-    create({ mode: 'project', baseBranch: null, prompt: 'Explain the build' });
-    const promptChat = /** @type {string} */ ($activeSessionId.get());
 
     // Assert
-    expect(isolated, 'a draft workspace from its base, no folder yet').to.deep.equal([true, 'dev', draft, null]);
-    expect($firstPrompts.get(), 'the text waits for its chat only').to.deep.equal({ [isolatedChat]: 'Fix the login form', [promptChat]: 'Explain the build' });
-    expect(promptChat, "a text never goes into a draft that may hold the user's own").to.not.equal(projectChat);
+    expect(calls.filter((c) => c.cmd === 'workspace_create').map((c) => c.args)).to.deep.equal([{ projectPath: '/p', name: 'Fix login', baseBranch: 'dev' }]);
+    expect(isolated, 'a new chat of it').to.deep.equal(['w2', true]);
+    expect(listed, 'in the picker at once').to.include('Workspace');
+    expect(leftWithoutChat, 'still listed once another is shown').to.include('w2');
     expect([$activeWorkspaceId.get(), projectChat in $draftSessions.get(), projectChat !== 'm'], 'a new chat in Main').to.deep.equal(['main', true, true]);
-    expect(calls.some((c) => c.cmd === 'workspace_create'), 'nothing placed before its first message').to.equal(false);
-    $firstPrompts.set({});
-  });
-
-  it("drops a draft workspace left without a message", async () => {
-    // Arrange
-    const { fire, create } = await render();
-    create({ mode: 'isolated', baseBranch: null, prompt: null });
-    const draft = $activeWorkspaceId.get();
-
-    // Act
-    fire('acp-workspace-select', { id: 'w1' });
-
-    // Assert
-    expect(Object.keys($draftWorkspaces.get()), 'the draft workspace').to.deep.equal([]);
-    expect(Object.values($draftSessions.get()).filter((d) => d.workspaceId === draft), 'its draft chat').to.deep.equal([]);
-  });
-
-  it('keeps a draft workspace left while its first chat is being created', async () => {
-    // Arrange: its first message sent, its chat listed while the backend places it
-    const { fire, create } = await render();
-    create({ mode: 'isolated', baseBranch: null, prompt: null });
-    const draft = $activeWorkspaceId.get();
-    $sessions.set([...$sessions.get(), /** @type {import('../../../hooks/sessions/types.js').Session} */ (/** @type {unknown} */ ({ id: 'first', projectId: '/p', workspaceId: draft, folder: '/p', status: 'preparing', createdAt: '2026-01-03T00:00:00.000Z', lastActivityAt: '2026-01-03T00:00:00.000Z' }))]);
-
-    // Act
-    fire('acp-workspace-select', { id: 'w1' });
-
-    // Assert
-    expect(Object.keys($draftWorkspaces.get())).to.deep.equal([draft]);
   });
 
   it("bases Create workspace on Main's branches and branch, whichever workspace is shown, and fetches them before its branch menu opens", async () => {

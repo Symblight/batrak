@@ -82,12 +82,19 @@ pub fn place_named(
         .map_err(|_| format!("{}: worktree sessions need a git repository", project.display()))?;
     let top = exec::canonical(Path::new(String::from_utf8_lossy(&top).trim()));
     let inside = project.strip_prefix(&top).map_err(|_| format!("{}: not inside {}", project.display(), top.display()))?;
-    // `--end-of-options`: a base is a name, never an option.
-    let base_rev = format!("{}^{{commit}}", base.unwrap_or("HEAD"));
-    let base_commit = run(&[&"rev-parse", &"--verify", &"--quiet", &"--end-of-options", &base_rev]).map_err(|_| match base {
-        None => format!("{}: the repository has no commit yet", project.display()),
-        Some(base) => format!("{base}: no such branch or commit"),
-    })?;
+    // A branch first, then a remote branch (`origin/main`), then any name git takes (a tag, a
+    // commit): git's own order puts tags first. `--end-of-options`: a base is a name, never an option.
+    let names = match base {
+        None => vec!["HEAD".to_owned()],
+        Some(base) => vec![format!("refs/heads/{base}"), format!("refs/remotes/{base}"), base.to_owned()],
+    };
+    let base_commit = names
+        .iter()
+        .find_map(|name| run(&[&"rev-parse", &"--verify", &"--quiet", &"--end-of-options", &format!("{name}^{{commit}}")]).ok())
+        .ok_or_else(|| match base {
+            None => format!("{}: the repository has no commit yet", project.display()),
+            Some(base) => format!("{base}: no such branch or commit"),
+        })?;
     let base_commit = String::from_utf8_lossy(&base_commit).trim().to_owned();
 
     let name = top.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
@@ -102,8 +109,9 @@ pub fn place_named(
             || group.join(leaf).exists()
             || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/brama/{leaf}")]).is_ok()
     };
+    // Kept branches never free their numbers: the search goes on past them.
     let leaf = std::iter::once(stem.to_owned())
-        .chain((2..100).map(|n| format!("{stem}-{n}")))
+        .chain((2..1_000_000).map(|n| format!("{stem}-{n}")))
         .find(|leaf| !taken(leaf))
         .ok_or_else(|| format!("brama/{stem}: every branch name is taken"))?;
     let branch = format!("brama/{leaf}");
@@ -135,17 +143,17 @@ impl SessionEnv for WorktreeEnv {
                 return Err("cancelled".to_owned());
             }
             let existing = self.tip(git).is_some();
-            if existing {
-                worktree::attach(git, &self.project, &self.root, &self.branch)?;
+            let checked_out = if existing {
+                worktree::attach(git, &self.project, &self.root, &self.branch, cancel)
             } else {
-                worktree::add(git, &self.project, &self.root, &self.branch, &self.base_commit)?;
-            }
-            // Stopped while git checked out (it can't be interrupted): undone, the new branch too.
+                worktree::add(git, &self.project, &self.root, &self.branch, &self.base_commit, cancel)
+            };
+            // Stopped while git checked out (git stopped, or done meanwhile): undone, the new branch too.
             if cancel.load(Ordering::SeqCst) {
-                let cleanup = if existing { worktree::BranchCleanup::Keep } else { worktree::BranchCleanup::Delete };
-                worktree::remove(git, &self.project, &self.root, Some(&self.branch), cleanup)?;
+                self.undo_checkout(git, existing)?;
                 return Err("cancelled".to_owned());
             }
+            checked_out?;
             tracing::info!(path = %self.root.display(), branch = %self.branch, "worktree checked out");
         }
         if !self.on_branch(git) {
@@ -202,6 +210,24 @@ impl SessionEnv for WorktreeEnv {
 }
 
 impl WorktreeEnv {
+    /// Removes a checkout just made or stopped midway (git removed its files then) and, unless
+    /// the branch was `existing` before, its branch. What its hooks wrote goes with it.
+    fn undo_checkout(&self, git: &Path, existing: bool) -> Result<(), String> {
+        if self.root.join(".git").exists() {
+            // A checkout killed outright (Windows has no gentle stop) leaves it locked, which
+            // `remove --force` refuses. Only a locked one: a failed git call is a user-visible warn.
+            let admin = fs::read_to_string(self.root.join(".git")).ok();
+            let locked = admin.as_deref().and_then(|a| a.trim().strip_prefix("gitdir: ")).is_some_and(|dir| Path::new(dir).join("locked").exists());
+            if locked {
+                exec::run(git, &self.project, &exec::args(&[&"worktree", &"unlock", &self.root]), GitMode::Local)?;
+            }
+            worktree::remove_saved(git, &self.project, &self.root)?;
+        }
+        let cleanup = if existing { worktree::BranchCleanup::Keep } else { worktree::BranchCleanup::Delete };
+        let branch = self.tip(git).is_some().then_some(self.branch.as_str());
+        worktree::remove(git, &self.project, &self.root, branch, cleanup)
+    }
+
     /// Commits the uncommitted work onto the branch with `message`.
     fn snapshot(&self, message: &str) -> Result<(), String> {
         let git = binary::git()?;
@@ -319,6 +345,27 @@ mod tests {
         std::fs::remove_dir_all(home).unwrap();
     }
 
+    /// On Windows a cancelled checkout is killed outright: git leaves the worktree locked
+    /// (`initializing`), and a plain `worktree remove --force` refuses a locked one.
+    #[test]
+    fn undoing_a_checkout_left_locked_removes_it_and_its_branch() {
+        use crate::git::test_repo::{temp_dir, TestRepo};
+        let repo = TestRepo::with_commit("undo-locked");
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let home = temp_dir("undo-locked-home");
+        let root = home.join("s");
+        let git = binary::git().unwrap();
+        worktree::add(git, &repo.path, &root, "brama/locked", &base, &AtomicBool::new(false)).unwrap();
+        repo.git(&["worktree", "lock", "--reason", "initializing", root.to_str().unwrap()]);
+        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/locked".into(), base, "t".into());
+
+        env.undo_checkout(git, false).unwrap();
+
+        assert!(!root.exists(), "no folder");
+        assert!(repo.git(&["branch", "--list", "brama/locked"]).is_empty(), "no branch");
+        std::fs::remove_dir_all(home).unwrap();
+    }
+
     #[test]
     fn a_worktree_is_named_after_its_session() {
         use crate::git::test_repo::{temp_dir, TestRepo};
@@ -334,6 +381,23 @@ mod tests {
         let next = place(&repo.path, &worktrees, "3f2a91bc-77d0", "Fix the login", None).unwrap();
         assert_eq!(next.worktree_path.unwrap().file_name().unwrap(), "fix-the-login-3f2a91bc-2");
         assert_eq!(next.branch.as_deref(), Some("brama/fix-the-login-3f2a91bc-2"));
+        std::fs::remove_dir_all(worktrees).unwrap();
+    }
+
+    #[test]
+    fn a_name_finds_a_free_number_past_a_hundred_taken() {
+        use crate::git::test_repo::{temp_dir, TestRepo};
+        let repo = TestRepo::with_commit("place-many");
+        let worktrees = temp_dir("place-many-worktrees");
+        // Kept branches never free their numbers: `workspace` … `workspace-150` are taken.
+        let taken = |root: &Path, _: &str| {
+            let leaf = root.file_name().unwrap().to_string_lossy().into_owned();
+            leaf == "workspace" || leaf.strip_prefix("workspace-").and_then(|n| n.parse::<u32>().ok()).is_some_and(|n| n <= 150)
+        };
+
+        let placed = place_named(&repo.path, &worktrees, "workspace", None, &taken).unwrap();
+
+        assert_eq!(placed.branch.as_deref(), Some("brama/workspace-151"));
         std::fs::remove_dir_all(worktrees).unwrap();
     }
 

@@ -30,7 +30,6 @@ use crate::config::env::SecretStore;
 use crate::config::view::SignInState;
 use crate::config::{AgentConfig, AgentConfigs, LaunchConfig, LocalTurns, Merged};
 use crate::storage::JsonFile;
-use crate::workspace::NameSource;
 
 /// The most of a file an agent read (or a selection) holds; larger files are read in parts (`line` / `limit`).
 const MAX_READ: u64 = 16 * 1024 * 1024;
@@ -174,11 +173,12 @@ impl Sessions {
                 if workspace.project_path != project {
                     return Err(format!("workspace {id} belongs to another project"));
                 }
-                (Mode::Worktree, workspace.placement(), Some(workspace.id))
-            }
-            // A draft workspace's first message places it, named after the title.
-            WorkspaceChoice::New { base_branch } => {
-                let workspace = self.inner.workspaces.place(&project, &req.title, NameSource::Agent, base_branch.as_deref())?;
+                // An unnamed workspace takes its first chat's first message.
+                if !self.inner.known().iter().any(|r| r.workspace_id.as_deref() == Some(id)) {
+                    if let Err(e) = self.inner.workspaces.follow_title(id, &req.title) {
+                        tracing::warn!(workspace = %id, "naming the workspace after its first chat failed: {e}");
+                    }
+                }
                 (Mode::Worktree, workspace.placement(), Some(workspace.id))
             }
         };

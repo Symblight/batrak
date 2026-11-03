@@ -323,11 +323,6 @@ impl Fixture {
     }
 }
 
-/// A draft workspace placed by the first message, from `base` (`None`: HEAD).
-fn new_workspace(base: Option<&str>) -> WorkspaceChoice {
-    WorkspaceChoice::New { base_branch: base.map(str::to_owned) }
-}
-
 fn text(s: &str) -> Vec<PromptInput> {
     vec![PromptInput::Text { text: s.to_owned() }]
 }
@@ -525,7 +520,7 @@ async fn a_worktree_session_never_queues_behind_a_local_one() {
     let f = git_fixture("slot-worktree");
     let (_, local) = f.create("local", "fake").unwrap();
     local.wait_status("idle").await;
-    let (_, tree) = f.create_in("tree", "fake", new_workspace(None)).unwrap();
+    let (_, tree) = f.create_in("tree", "fake", f.new_workspace(None)).unwrap();
     tree.wait_status("idle").await;
     f.sessions.send_prompt("local", text("sleep 500")).unwrap();
     local.wait_for("turn-start", |e| e.kind == "turn-start").await;
@@ -914,7 +909,7 @@ async fn resume_starts_a_local_session_while_another_runs_in_the_project() {
 #[tokio::test]
 async fn resume_leaves_a_worktree_session_stopped_while_the_project_has_its_branch() {
     let f = git_fixture("resume-wt");
-    let (_, events) = f.create_in("c", "fake", new_workspace(None)).unwrap();
+    let (_, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     f.sessions.check_out_branch("c").await.unwrap();
 
@@ -962,8 +957,8 @@ async fn unknown_agents_are_refused() {
 async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
     let f = git_fixture("wt");
     let head = run_in(&f.project, &["rev-parse", "HEAD"]).trim().to_owned();
-    let (one, events) = f.create_in("w1", "fake", new_workspace(None)).unwrap();
-    let (two, other) = f.create_in("w2", "fake", new_workspace(None)).unwrap();
+    let (one, events) = f.create_in("w1", "fake", f.new_workspace(None)).unwrap();
+    let (two, other) = f.create_in("w2", "fake", f.new_workspace(None)).unwrap();
     let (_, local) = f.create("l", "fake").unwrap();
     for recorder in [&events, &other, &local] {
         recorder.wait_status("idle").await;
@@ -972,7 +967,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
     assert_eq!(one.mode, Mode::Worktree);
     assert_eq!(one.base_commit.as_deref(), Some(head.as_str()));
     let branch = one.branch.clone().unwrap();
-    assert!(branch.starts_with("brama/session-w1"), "{branch}");
+    assert!(branch.starts_with("brama/workspace"), "{branch}");
     assert_ne!(two.branch, one.branch);
     let wt = PathBuf::from(one.worktree_path.clone().unwrap());
     assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
@@ -996,7 +991,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable() {
     let f = git_fixture("wt-folder");
     let (local, events) = f.create("l", "fake").unwrap();
-    let (wt, other) = f.create_in("w", "fake", new_workspace(None)).unwrap();
+    let (wt, other) = f.create_in("w", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     other.wait_status("idle").await;
     assert_eq!(local.folder, f.project.to_string_lossy());
@@ -1015,7 +1010,7 @@ async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable()
 async fn a_sessions_folder_contains_its_project_or_its_worktree_folder() {
     let f = git_fixture("contains-folder");
     let (_local, events) = f.create("l", "fake").unwrap();
-    let (wt, other) = f.create_in("w", "fake", new_workspace(None)).unwrap();
+    let (wt, other) = f.create_in("w", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     other.wait_status("idle").await;
     assert!(f.sessions.contains_folder(&f.project), "a local session's folder is its project");
@@ -1030,7 +1025,7 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
     let f = git_fixture("wt-prompt");
     std::fs::write(f.project.join(".env"), "SECRET=1\n").unwrap();
     std::fs::write(f.project.join("a.txt"), "user one\nuser two\n").unwrap();
-    let (session, events) = f.create_in("p", "fake", new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("p", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let env = lock(&f.sessions.get("p").unwrap().env).clone().unwrap();
     let wt = PathBuf::from(session.folder);
@@ -1057,7 +1052,7 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
 #[tokio::test]
 async fn a_worktree_sessions_changes_are_listed_against_its_base() {
     let f = git_fixture("wt-changes");
-    let (session, events) = f.create_in("c", "fake", new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
     let (_, local) = f.create("l", "fake").unwrap();
     events.wait_status("idle").await;
     local.wait_status("idle").await;
@@ -1077,7 +1072,7 @@ async fn a_worktree_sessions_changes_are_listed_against_its_base() {
 #[tokio::test]
 async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_over() {
     let f = git_fixture("wt-checkout");
-    let (session, events) = f.create_in("c", "fake", new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let wt = PathBuf::from(&session.folder);
     let branch = session.branch.clone().unwrap();
@@ -1114,36 +1109,12 @@ async fn a_worktree_session_starts_from_the_chosen_branch() {
     let feature = run_in(&f.project, &["rev-parse", "HEAD"]).trim().to_owned();
     run_in(&f.project, &["switch", "-q", "main"]);
 
-    let (session, events) = f.create_in("b", "fake", new_workspace(Some("feature"))).unwrap();
+    let (session, events) = f.create_in("b", "fake", f.new_workspace(Some("feature"))).unwrap();
     events.wait_status("idle").await;
     assert_eq!(session.base_commit.as_deref(), Some(feature.as_str()));
     let wt = PathBuf::from(session.worktree_path.unwrap());
     assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "feature\n");
     assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), "main", "the checkout stays");
-}
-
-#[tokio::test]
-async fn worktree_sessions_need_a_repository_with_a_commit_and_a_real_base() {
-    let plain = fixture("wt-plain", FakeAgentOptions::default());
-    std::fs::remove_dir_all(plain.project.join(".git")).unwrap();
-    let err = plain.create_in("p", "fake", new_workspace(None)).unwrap_err();
-    assert!(err.contains("git repository"), "{err}");
-
-    let unborn = fixture("wt-unborn", FakeAgentOptions::default());
-    std::fs::remove_dir_all(unborn.project.join(".git")).unwrap();
-    run_in(&unborn.project, &["init", "-q", "-b", "main"]);
-    let err = unborn.create_in("u", "fake", new_workspace(None)).unwrap_err();
-    assert!(err.contains("no commit"), "{err}");
-
-    let f = git_fixture("wt-nobase");
-    let err = f.create_in("n", "fake", new_workspace(Some("nope"))).unwrap_err();
-    assert!(err.contains("nope"), "{err}");
-    let err = f.create_in("o", "fake", new_workspace(Some("--output=x"))).unwrap_err();
-    assert!(err.contains("--output=x"), "{err}");
-    assert!(!f.project.join("x").exists(), "a base is never an option");
-    for sessions in [&plain.sessions, &unborn.sessions, &f.sessions] {
-        assert!(sessions.list().is_empty(), "nothing listed");
-    }
 }
 
 #[tokio::test]
@@ -1157,7 +1128,7 @@ async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree()
     f.project = app;
     f.give_agents(&f.project);
 
-    let (session, events) = f.create_in("s", "fake", new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("s", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let wt = PathBuf::from(session.worktree_path.unwrap());
     assert_eq!(session.project_id, f.project.to_string_lossy());
@@ -1170,7 +1141,7 @@ async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree()
 #[tokio::test]
 async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder() {
     let f = git_fixture("wt-restart");
-    let (session, events) = f.create_in("r", "fake", new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("r", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let wt = PathBuf::from(session.worktree_path.clone().unwrap());
     std::fs::write(wt.join("work.txt"), "agent work\n").unwrap();
@@ -1193,14 +1164,14 @@ async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder(
 #[tokio::test]
 async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work() {
     let f = git_fixture("wt-tidy");
-    let (kept, events) = f.create_in("k", "fake", new_workspace(None)).unwrap();
+    let (kept, events) = f.create_in("k", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let kept = PathBuf::from(kept.worktree_path.unwrap());
     let group = kept.parent().unwrap().to_path_buf();
     let git = crate::git::test_repo::git_bin();
     let (orphan, dirty) = (group.join("orphan"), group.join("dirty"));
-    crate::git::worktree::add(&git, &f.project, &orphan, "brama/orphan", "main").unwrap();
-    crate::git::worktree::add(&git, &f.project, &dirty, "brama/dirty", "main").unwrap();
+    crate::git::worktree::add(&git, &f.project, &orphan, "brama/orphan", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
+    crate::git::worktree::add(&git, &f.project, &dirty, "brama/dirty", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
     std::fs::write(dirty.join("work.txt"), "w").unwrap();
     std::fs::create_dir_all(f.dir.join("data/worktrees/empty-group")).unwrap();
 
@@ -1511,7 +1482,7 @@ async fn agents_json_losing_a_sessions_agent_stops_it_and_getting_it_back_restor
     let f = git_fixture("sync");
     let (_, running) = f.create("s", "fake").unwrap();
     running.wait_status("idle").await;
-    let (_, stopped) = f.create_in("t", "fake", new_workspace(None)).unwrap();
+    let (_, stopped) = f.create_in("t", "fake", f.new_workspace(None)).unwrap();
     stopped.wait_status("idle").await;
     f.sessions.stop("t").await.unwrap();
     let launched = f.launcher.launches.load(Ordering::SeqCst);
@@ -2887,34 +2858,13 @@ async fn a_worktree_sessions_cli_runs_in_its_checked_out_folder() {
     f.give_cli_agents();
     let terminals = terminals();
     let id = "2cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let opened = f.sessions.open_cli(id, Some(f.draft("fake", new_workspace(None))), window(&terminals)).await.unwrap();
+    let opened = f.sessions.open_cli(id, Some(f.draft("fake", f.new_workspace(None))), window(&terminals)).await.unwrap();
     let folder = listed(&f, id).folder;
     assert_ne!(folder, f.project.to_string_lossy());
     assert!(Path::new(&folder).join("a.txt").is_file(), "checked out before the CLI starts");
     let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
     assert!(shown.contains(&format!("PWD:{folder}")), "{shown}");
     terminals.close(&[opened.terminal_id]);
-}
-
-#[tokio::test]
-async fn a_draft_whose_cli_fails_to_start_leaves_no_worktree_or_branch() {
-    let f = git_fixture("cli-draft-fails");
-    f.give_cli_agents();
-    let terminals = terminals();
-    let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let refused = f.sessions.open_cli(id, Some(f.draft("missing", new_workspace(None))), window(&terminals)).await.unwrap_err();
-    assert!(!refused.is_empty());
-    assert!(f.sessions.list().is_empty(), "not listed");
-    let worktrees = f.dir.join("data/worktrees");
-    let left: Vec<_> = walk_dirs(&worktrees).into_iter().filter(|p| p.ends_with(id)).collect();
-    assert!(left.is_empty(), "its worktree is removed: {left:?}");
-    let branches = std::process::Command::new("git").args(["branch", "--list", "brama/*"]).current_dir(&f.project).output().unwrap();
-    assert_eq!(String::from_utf8_lossy(&branches.stdout).trim(), "", "its branch is deleted");
-}
-
-fn walk_dirs(dir: &Path) -> Vec<PathBuf> {
-    let Ok(entries) = std::fs::read_dir(dir) else { return Vec::new() };
-    entries.flatten().filter(|e| e.path().is_dir()).flat_map(|e| std::iter::once(e.path()).chain(walk_dirs(&e.path()))).collect()
 }
 
 #[tokio::test]
@@ -2962,9 +2912,41 @@ async fn removing_the_session_or_turning_its_agent_off_closes_its_cli() {
 
 impl Fixture {
     /// A chat created in a workspace.
+    /// A new workspace of the project, unnamed (its first chat names it), from `base` (`None`:
+    /// the project's base branch); checked out at its first chat's start.
+    fn new_workspace(&self, base: Option<&str>) -> WorkspaceChoice {
+        let ws = self.sessions.workspaces().place(&self.project, None, base).unwrap();
+        WorkspaceChoice::Existing { id: ws.id }
+    }
+
     fn create_in_workspace(&self, id: &str, workspace: &str) -> Result<(Session, Arc<Recorder>), String> {
         self.create_in(id, "fake", WorkspaceChoice::Existing { id: workspace.to_owned() })
     }
+}
+
+#[tokio::test]
+async fn the_first_chat_of_an_unnamed_workspace_names_it_after_its_first_message() {
+    let f = git_fixture("ws-unnamed-chat");
+    let ws = f.sessions.workspaces().place(&f.project, None, None).unwrap();
+
+    f.create_in_workspace("first", &ws.id).unwrap();
+    let named = f.sessions.workspaces().get(&ws.id).unwrap().name;
+    f.create_in_workspace("second", &ws.id).unwrap();
+
+    assert_eq!(named, "Session first");
+    assert_eq!(f.sessions.workspaces().get(&ws.id).unwrap().name, "Session first", "a later chat doesn't rename it");
+}
+
+#[tokio::test]
+async fn a_chat_is_created_in_an_unnamed_workspace_even_when_renaming_it_fails() {
+    let f = git_fixture("ws-rename-fails");
+    let ws = f.sessions.workspaces().place(&f.project, None, None).unwrap();
+    // `workspaces.json` can't be written: its temp file's name is taken by a folder.
+    std::fs::create_dir_all(f.dir.join("data/workspaces.json.tmp/x")).unwrap();
+
+    let created = f.create_in_workspace("first", &ws.id);
+
+    assert!(created.is_ok(), "{:?}", created.err());
 }
 
 #[tokio::test]
@@ -3028,7 +3010,7 @@ async fn a_delete_preview_counts_uncommitted_files_and_commits_and_names_working
 #[tokio::test]
 async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main() {
     let f = git_fixture("ws-migrate");
-    let (tree, events) = f.create_in("t", "fake", new_workspace(None)).unwrap();
+    let (tree, events) = f.create_in("t", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
     let (_, local) = f.create("l", "fake").unwrap();
     local.wait_status("idle").await;
@@ -3062,16 +3044,16 @@ async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main
 }
 
 #[tokio::test]
-async fn a_new_workspace_is_named_after_the_title_and_outlives_its_only_chat() {
+async fn a_workspace_outlives_its_only_chat() {
     let f = git_fixture("ws-new");
 
-    let (chat, events) = f.create_in("b", "fake", new_workspace(Some("main"))).unwrap();
+    let (chat, events) = f.create_in("b", "fake", f.new_workspace(Some("main"))).unwrap();
     events.wait_status("idle").await;
 
     let workspaces = f.sessions.workspaces().list(&f.project);
     assert_eq!(workspaces.len(), 1);
     let ws = &workspaces[0];
-    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "brama/session-b", Some("main")));
+    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "brama/workspace", Some("main")));
     assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
     assert_eq!(PathBuf::from(&chat.folder), ws.folder, "its agent works in the workspace's folder");
     assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");
@@ -3254,7 +3236,7 @@ async fn a_new_workspace_follows_its_first_chats_agent_title_until_renamed() {
     let told = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
     let sink = Arc::clone(&told);
     f.sessions.workspaces().on_change(Arc::new(move |project: &Path| lock(&sink).push(project.to_path_buf())));
-    let (first, events) = f.create_in("a", "fake", new_workspace(None)).unwrap();
+    let (first, events) = f.create_in("a", "fake", f.new_workspace(None)).unwrap();
     let ws = first.workspace_id.unwrap();
     let (_, second) = f.create_in_workspace("b", &ws).unwrap();
     events.wait_status("idle").await;

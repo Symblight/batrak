@@ -29,7 +29,7 @@ function quote(path, platform) {
 
 /**
  * Where New Terminal and the rail's first terminal start: the shown folder (Main's or the
- * workspace's), else the project (a draft workspace has no folder yet), with the project as
+ * workspace's), else the project (while the workspace's list loads), with the project as
  * fallback; with no project, the home folder.
  * @param {{ folder: string | null, project: string | null, home: string }} where
  * @returns {TerminalFolder}

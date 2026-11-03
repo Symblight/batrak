@@ -20,18 +20,9 @@
  */
 
 /**
- * A workspace created without a name (`$draftWorkspaces`): in the page only until its first
- * message places it, named after that message.
- * @typedef {Object} DraftWorkspace
- * @property {string} id `draft-…`
- * @property {string} projectPath
- * @property {string | null} baseBranch `null`: the project's base branch.
- */
-
-/**
- * Where a draft's first message creates its chat (`session_create`'s `workspace`): Main, a stored
- * workspace, or a new one placed from a draft workspace.
- * @typedef {{ kind: 'main' } | { kind: 'existing', id: string } | { kind: 'new', baseBranch: string | null }} WorkspaceChoice
+ * Where a draft's first message creates its chat (`session_create`'s `workspace`): Main or a stored
+ * workspace.
+ * @typedef {{ kind: 'main' } | { kind: 'existing', id: string }} WorkspaceChoice
  */
 
 /**
@@ -57,11 +48,11 @@
 
 /**
  * Create workspace's Create (`acp-workspace-create`): an isolated workspace from `baseBranch`, or a
- * chat in the project folder (Main); `prompt` is its first message, `null` when nothing was typed.
+ * chat in the project folder (Main).
  * @typedef {Object} CreateRequest
  * @property {'isolated' | 'project'} mode
  * @property {string | null} baseBranch `null` in the project folder.
- * @property {string | null} prompt
+ * @property {string | null} name An isolated workspace's; `null`: named after its branch until its first chat names it.
  */
 
 export {};

@@ -3,7 +3,6 @@ import { persistentMapStore } from '../persistent/persistent.js';
 import { $openRoots, $project, $projectPath } from '../project/project.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
-/** @typedef {import('../../hooks/workspaces/types.js').DraftWorkspace} DraftWorkspace */
 /** @typedef {import('../../hooks/workspaces/types.js').ActiveRoot} ActiveRoot */
 
 /** Main's id: the project's own folder, never stored as a workspace. */
@@ -24,30 +23,6 @@ export function setWorkspaces(list, projectPath = null) {
   $workspacesProject.set(projectPath);
 }
 
-/**
- * Workspaces created without a name, by id: in the page only until their first message places one
- * (named after it). Dropped when left without a message.
- */
-export const $draftWorkspaces = atom(/** @type {Readonly<Record<string, DraftWorkspace>>} */ ({}));
-
-/**
- * A draft workspace in a project, based on `baseBranch`.
- * @param {string} projectPath
- * @param {string | null} baseBranch
- * @returns {string} Its id.
- */
-export function addDraftWorkspace(projectPath, baseBranch) {
-  const id = `draft-${crypto.randomUUID()}`;
-  $draftWorkspaces.set({ ...$draftWorkspaces.get(), [id]: { id, projectPath, baseBranch } });
-  return id;
-}
-
-/** @param {string} id */
-export function dropDraftWorkspace(id) {
-  const { [id]: dropped, ...rest } = $draftWorkspaces.get();
-  if (dropped !== undefined) $draftWorkspaces.set(rest);
-}
-
 /** The workspace shown per project path (`main` for Main). Per window, so each window keeps its own. */
 const $activeWorkspaceIds = persistentMapStore('brama:workspaces:active:', (raw) => (typeof raw === 'string' ? raw : null));
 
@@ -65,17 +40,16 @@ export function setActiveWorkspace(projectPath, id) {
  * choice waits (unchanged) while the project's list loads.
  */
 export const $activeWorkspaceId = computed(
-  [$projectPath, $activeWorkspaceIds, $workspaces, $workspacesProject, $draftWorkspaces],
-  (project, ids, list, listedFor, drafts) => {
+  [$projectPath, $activeWorkspaceIds, $workspaces, $workspacesProject],
+  (project, ids, list, listedFor) => {
     const id = project === null ? undefined : ids[project];
     if (id === undefined || id === MAIN) return MAIN;
-    if (drafts[id]?.projectPath === project) return id;
     if (listedFor !== project) return id;
     return list.some((w) => w.id === id) ? id : MAIN;
   },
 );
 
-/** The shown workspace's record; `null` for Main, a draft workspace or one still loading. */
+/** The shown workspace's record; `null` for Main or one still loading. */
 export const $activeWorkspace = computed([$workspaces, $activeWorkspaceId], (list, id) => list.find((w) => w.id === id) ?? null);
 
 /** The folder of the workspace whose root is being scanned; `null` when none is. */
@@ -88,22 +62,20 @@ export const $activeRoot = computed(
     if (id === MAIN) {
       return /** @type {ActiveRoot} */ ({ path: project?.path ?? null, rootId: project?.rootId ?? null, opening: false });
     }
-    // A draft workspace has no folder yet; a listed one still loading is on its way.
-    if (workspace === null) return /** @type {ActiveRoot} */ ({ path: null, rootId: null, opening: !id.startsWith('draft-') });
+    // A listed one still loading is on its way.
+    if (workspace === null) return /** @type {ActiveRoot} */ ({ path: null, rootId: null, opening: true });
     const rootId = open[workspace.folder] ?? null;
-    return /** @type {ActiveRoot} */ ({ path: workspace.folder, rootId, opening: rootId === null && opening === workspace.folder });
+    // One still checking out shows the skeleton until its root opens.
+    const pending = workspace.creating === true || opening === workspace.folder;
+    return /** @type {ActiveRoot} */ ({ path: workspace.folder, rootId, opening: rootId === null && pending });
   },
 );
 
 /**
  * The shown folder (the active root's path): the key of what's kept per folder (editor tabs,
- * terminals). A draft workspace's are Main's (the project path), where its terminals run until it
- * has a folder; `null` with no project or a list still loading.
+ * terminals); `null` with no project or a list still loading.
  */
-export const $shownFolder = computed(
-  [$activeRoot, $activeWorkspaceId, $projectPath],
-  (root, id, project) => root.path ?? (id.startsWith('draft-') ? project : null),
-);
+export const $shownFolder = computed($activeRoot, (root) => root.path);
 
 /** The active root's backend id; notifies only when it changes. */
 export const $rootId = computed($activeRoot, (root) => root.rootId);

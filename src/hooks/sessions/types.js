@@ -217,8 +217,8 @@
  */
 
 /**
- * A new chat with no message yet (`$draftSessions`): its project and its workspace (`main`, a
- * workspace's id or a draft workspace's).
+ * A new chat with no message yet (`$draftSessions`): its project and its workspace (`main` or a
+ * workspace's id).
  * @typedef {Object} DraftSession
  * @property {string} projectId
  * @property {string} workspaceId

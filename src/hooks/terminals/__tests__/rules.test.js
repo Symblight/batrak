@@ -19,7 +19,7 @@ describe('terminals: rules', () => {
     const cases = [
       ['new, in a workspace', newTerminalFolder({ folder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
       ['new, in Main', newTerminalFolder({ folder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['new, in a draft workspace', newTerminalFolder({ folder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, while the workspace loads', newTerminalFolder({ folder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
       ['new, with no project', newTerminalFolder({ folder: null, project: null, home }), { cwd: home, fallback: null }],
       ['a worktree session’s', sessionTerminalFolder(wt), { cwd: '/wt/s1/app', fallback: '/p' }],
       ['a local session’s', sessionTerminalFolder(session({})), { cwd: '/p', fallback: '/p' }],

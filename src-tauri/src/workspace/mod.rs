@@ -7,7 +7,7 @@ mod store;
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::git::exec::{self, Mode as GitMode};
@@ -73,6 +73,8 @@ struct Inner {
     creating: Mutex<HashSet<String>>,
     /// Why a workspace's last checkout failed.
     failed: Mutex<HashMap<String, String>>,
+    /// Set by Delete: its checkout stops and undoes itself.
+    cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// Told the project of every change (the app: `workspaces://changed` to every window).
     on_change: Mutex<Option<OnChange>>,
 }
@@ -105,6 +107,7 @@ impl Workspaces {
                 placing: Mutex::default(),
                 creating: Mutex::default(),
                 failed: Mutex::default(),
+                cancels: Mutex::default(),
                 on_change: Mutex::default(),
             }),
         }
@@ -122,7 +125,9 @@ impl Workspaces {
         }
     }
 
-    /// A project's workspaces as the page lists them. Blocking (looks for each folder).
+    /// A project's workspaces as the page lists them: a folder not checked out while no checkout
+    /// runs is missing (deleted, never checked out before a relaunch, or its checkout failed), and
+    /// Recreate checks it out. Blocking (looks for each folder).
     pub fn pages(&self, project: &Path) -> Vec<Workspace> {
         let creating = lock(&self.inner.creating).clone();
         let failed = lock(&self.inner.failed).clone();
@@ -131,7 +136,7 @@ impl Workspaces {
             .map(|record| Workspace {
                 creating: creating.contains(&record.id),
                 error: failed.get(&record.id).cloned(),
-                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists() && !record.never_checked_out(),
+                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists(),
                 record,
             })
             .collect()
@@ -163,16 +168,19 @@ impl Workspaces {
     /// Blocking.
     #[cfg(test)]
     pub fn create(&self, project: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceRecord, String> {
-        let record = self.place(project, name, NameSource::User, base)?;
+        let record = self.place(project, Some(name), base)?;
         self.check_out(&record.id)?;
         Ok(record)
     }
 
-    /// Stores a new workspace placed from `base` (default: the project's base branch), its
-    /// checkout still to run (`check_out`). Refuses a project without git or a commit. Blocking.
-    pub fn place(&self, project: &Path, name: &str, name_source: NameSource, base: Option<&str>) -> Result<WorkspaceRecord, String> {
-        let name = name.trim();
-        if name.is_empty() {
+    /// Stores a new workspace placed from `base` (default: the project's base branch), listed as
+    /// `creating` from the start: the caller runs its checkout (`check_out`) next. Without a `name` it's called after its branch
+    /// (`brama/workspace-2`: "Workspace 2") and its first chat names it (`NameSource::Agent`); a
+    /// given name is the user's.
+    /// Refuses a project without git or a commit. Blocking.
+    pub fn place(&self, project: &Path, name: Option<&str>, base: Option<&str>) -> Result<WorkspaceRecord, String> {
+        let name = name.map(str::trim);
+        if name == Some("") {
             return Err("a workspace's name can't be empty".to_owned());
         }
         let git = crate::git::binary::git()?;
@@ -180,7 +188,7 @@ impl Workspaces {
             Some(base) => Some(base.to_owned()),
             None => default_base(git, project),
         };
-        let stem = env::slug(name, "workspace");
+        let stem = name.map_or_else(|| "workspace".to_owned(), |n| env::slug(n, "workspace"));
         // One placement at a time: a name is taken once stored, before its checkout makes it.
         let _placing = lock(&self.inner.placing);
         let stored = self.inner.store.list(None);
@@ -196,8 +204,8 @@ impl Workspaces {
         let record = WorkspaceRecord {
             id: new_id(),
             project_path: project.to_path_buf(),
-            name: name.to_owned(),
-            name_source,
+            name: name.map_or_else(|| placeholder_name(&branch), str::to_owned),
+            name_source: if name.is_some() { NameSource::User } else { NameSource::Agent },
             folder: placed.agent_cwd,
             worktree_path,
             branch,
@@ -206,7 +214,11 @@ impl Workspaces {
             created_at: crate::session::iso_now(),
             last_active_at: None,
         };
-        self.inner.store.insert(record.clone())?;
+        lock(&self.inner.creating).insert(record.id.clone());
+        if let Err(e) = self.inner.store.insert(record.clone()) {
+            lock(&self.inner.creating).remove(&record.id);
+            return Err(e);
+        }
         tracing::info!(workspace = %record.id, branch = %record.branch, "workspace created");
         self.changed(project);
         Ok(record)
@@ -238,11 +250,13 @@ impl Workspaces {
         if lock(&self.inner.creating).insert(id.to_owned()) {
             self.changed(&record.project_path);
         }
-        let result = record.env().prepare(&AtomicBool::new(false));
+        let cancel = self.cancel_flag(id);
+        let result = record.env().prepare(&cancel);
         lock(&self.inner.creating).remove(id);
         self.changed(&record.project_path);
         match &result {
             Ok(()) => drop(lock(&self.inner.failed).remove(id)),
+            Err(_) if cancel.load(Ordering::SeqCst) => tracing::info!(workspace = %id, "the workspace's checkout was stopped"),
             Err(e) => {
                 tracing::warn!(workspace = %id, "checking the workspace out failed: {e}");
                 lock(&self.inner.failed).insert(id.to_owned(), e.clone());
@@ -320,8 +334,10 @@ impl Workspaces {
     /// Deletes a workspace's folder and its record. Uncommitted work is first committed onto its
     /// branch; the branch stays when `keep_branch` and it has commits past the base, else it's
     /// deleted. Its chats are the caller's (`Sessions::delete_workspace`). Blocking.
+    /// A checkout that runs is stopped first, and undoes itself.
     pub fn discard(&self, id: &str, keep_branch: bool) -> Result<(), String> {
         let record = self.get(id)?;
+        self.cancel_flag(id).store(true, Ordering::SeqCst);
         let gate = self.gate(id);
         let _held = lock(&gate);
         let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Brama when the workspace was deleted.", record.name);
@@ -333,6 +349,9 @@ impl Workspaces {
         self.inner.store.remove(id)?;
         lock(&self.inner.gates).remove(id);
         lock(&self.inner.failed).remove(id);
+        lock(&self.inner.cancels).remove(id);
+        // Deleted before its checkout began: nothing else clears it.
+        lock(&self.inner.creating).remove(id);
         tracing::info!(workspace = %id, "workspace deleted");
         self.changed(&record.project_path);
         Ok(())
@@ -364,6 +383,11 @@ impl Workspaces {
 
     fn gate(&self, id: &str) -> Arc<Mutex<()>> {
         Arc::clone(lock(&self.inner.gates).entry(id.to_owned()).or_default())
+    }
+
+    /// Never cleared once set: only Delete sets it, and the workspace goes.
+    fn cancel_flag(&self, id: &str) -> Arc<AtomicBool> {
+        Arc::clone(lock(&self.inner.cancels).entry(id.to_owned()).or_default())
     }
 }
 
@@ -401,20 +425,32 @@ impl WorkspaceRecord {
     }
 }
 
-/// The project's base branch: `origin/HEAD`'s, else `main`, else `master`, else HEAD's; `None`
-/// when there is none (a detached HEAD). Blocking.
+/// The project's base branch: `origin/HEAD`'s target (`origin/main`) when it resolves, else
+/// `main`, else `master`, else HEAD's; `None` when there is none (a detached HEAD). Blocking.
 fn default_base(git: &Path, project: &Path) -> Option<String> {
     let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| {
         exec::run(git, project, &exec::args(args), GitMode::Background).ok().map(|o| String::from_utf8_lossy(&o).trim().to_owned())
     };
-    let exists = |branch: &str| run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/{branch}")]).is_some();
-    let origin = run(&[&"symbolic-ref", &"-q", &"--short", &"refs/remotes/origin/HEAD"])
-        .and_then(|r| r.strip_prefix("origin/").map(str::to_owned));
-    origin
-        .into_iter()
-        .chain(["main".to_owned(), "master".to_owned()])
-        .find(|b| exists(b))
-        .or_else(|| run(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]).filter(|b| exists(b)))
+    let resolves = |r: &str| run(&[&"rev-parse", &"--verify", &"--quiet", &"--end-of-options", &format!("{r}^{{commit}}")]).is_some();
+    let exists = |branch: &str| resolves(&format!("refs/heads/{branch}"));
+    let origin = run(&[&"symbolic-ref", &"-q", &"refs/remotes/origin/HEAD"])
+        .filter(|r| resolves(r))
+        .and_then(|r| r.strip_prefix("refs/remotes/").map(str::to_owned));
+    origin.or_else(|| {
+        ["main", "master"]
+            .into_iter()
+            .map(str::to_owned)
+            .find(|b| exists(b))
+            .or_else(|| run(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]).filter(|b| exists(b)))
+    })
+}
+
+/// An unnamed workspace's name, from its branch: `brama/workspace-2` → "Workspace 2".
+fn placeholder_name(branch: &str) -> String {
+    match branch.rsplit_once('-') {
+        Some((_, n)) if n.chars().all(|c| c.is_ascii_digit()) => format!("Workspace {n}"),
+        _ => "Workspace".to_owned(),
+    }
 }
 
 /// A new workspace id: time and a counter, unique in this app data.

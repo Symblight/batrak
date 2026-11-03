@@ -3,18 +3,14 @@ import { $projectPath } from '../../stores/project/project.js';
 import {
   $activeWorkspace,
   $activeWorkspaceId,
-  $draftWorkspaces,
   $workspaceOpening,
   $workspaces,
   $workspacesProject,
   MAIN,
-  addDraftWorkspace,
-  dropDraftWorkspace,
   setActiveWorkspace,
   setWorkspaces,
 } from '../../stores/workspaces/workspaces.js';
 import { $activeSession, $sessions, dropDrafts, forgetLastSession, newSession, selectSession } from '../../stores/sessions/sessions.js';
-import { queueFirstPrompt } from '../../stores/chat/chat.js';
 import { $permissionRequests } from '../../stores/session-runtime/session-runtime.js';
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { nextWaiting, noticesOf } from './rules.js';
@@ -65,11 +61,12 @@ let openTurn = 0;
 
 /**
  * Opens the shown workspace's folder as a backend root (`$activeRoot` follows it), or shows it at
- * once while it's still open. A workspace still checking out, or missing, opens nothing.
+ * once while it's still open. A workspace still checking out, missing, or whose checkout failed
+ * (its banner offers Retry) opens nothing.
  * @param {Workspace | null} workspace
  */
 async function follow(workspace) {
-  if (workspace === null || workspace.creating || workspace.missing) {
+  if (workspace === null || workspace.creating || workspace.missing || workspace.error) {
     openTurn++;
     $workspaceOpening.set(null);
     return;
@@ -130,7 +127,7 @@ function closeGone(list) {
 
 /**
  * The shown chat's workspace is the shown one: a chat of another workspace of the shown project
- * (from a banner, a notice, or a draft workspace's first chat now placed) switches to it once its
+ * (from a banner or a notice) switches to it once its
  * workspace is listed.
  */
 function followChat() {
@@ -139,22 +136,8 @@ function followChat() {
   if (session === null || project === null || session.projectId !== project) return;
   const id = session.workspaceId ?? MAIN;
   if (id === $activeWorkspaceId.get()) return;
-  if (id !== MAIN && !(id in $draftWorkspaces.get()) && !$workspaces.get().some((w) => w.id === id)) return;
+  if (id !== MAIN && !$workspaces.get().some((w) => w.id === id)) return;
   setActiveWorkspace(project, id);
-}
-
-/**
- * Draft workspaces not shown go with their unsent drafts, unless a chat of theirs is being created
- * (a refused create comes back to its draft); once that chat's workspace is placed, it goes too.
- */
-function sweepDrafts() {
-  const shown = $activeWorkspaceId.get();
-  const chats = $sessions.get();
-  for (const id of Object.keys($draftWorkspaces.get())) {
-    if (id === shown || chats.some((s) => s.workspaceId === id)) continue;
-    dropDraftWorkspace(id);
-    dropDrafts(id);
-  }
 }
 
 /** @param {string} id */
@@ -176,8 +159,6 @@ export const workspaces = Object.freeze({
     const chats = [
       $activeSession.listen(followChat),
       $workspaces.listen(followChat),
-      $activeWorkspaceId.listen(sweepDrafts),
-      $sessions.listen(sweepDrafts),
     ];
     return () => {
       unsubscribe();
@@ -221,19 +202,30 @@ export const workspaces = Object.freeze({
   },
 
   /**
-   * Create workspace: an isolated one is a draft until its first message (placed then, named after
-   * it); the project folder is Main. Either way a new chat is shown, `prompt` waiting as its first
-   * message.
+   * Create workspace: an isolated one is created now (named after its branch until its first chat
+   * names it; its folder checks out meanwhile); the project folder is Main. Either way it's shown
+   * with a new chat.
    * @param {import('./types.js').CreateRequest} request
    */
-  create({ mode, baseBranch, prompt }) {
+  async create({ mode, baseBranch, name }) {
     const project = $projectPath.get();
     if (project === null) return;
-    const id = mode === 'isolated' ? addDraftWorkspace(project, baseBranch) : MAIN;
+    let id = MAIN;
+    if (mode === 'isolated') {
+      try {
+        /** @type {Workspace} */
+        const created = await ipc.invoke('workspace_create', { projectPath: project, name, baseBranch });
+        if ($projectPath.get() !== project) return;
+        // Listed now, before `workspaces://changed` brings it.
+        if (!$workspaces.get().some((w) => w.id === created.id)) setWorkspaces([...$workspaces.get(), created], project);
+        id = created.id;
+      } catch (err) {
+        app.reportError('Creating the workspace failed', err);
+        return;
+      }
+    }
     setActiveWorkspace(project, id);
-    // A text goes into a draft of its own: a reused one may hold what the user typed there.
-    const chat = newSession(project, id, prompt === null);
-    if (prompt !== null) queueFirstPrompt(chat, prompt);
+    newSession(project, id);
   },
 
   /**

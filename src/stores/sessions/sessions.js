@@ -69,7 +69,7 @@ export const $draftSessions = atom(/** @type {Readonly<Record<string, DraftSessi
 export const workspaceOfSession = (session) => session.workspaceId ?? MAIN;
 
 /**
- * Where a draft's agent will work: its workspace's folder (a draft workspace has none yet: its project).
+ * Where a draft's agent will work: its workspace's folder (its project while the list loads).
  * @param {DraftSession} draft
  * @param {readonly import('../../hooks/workspaces/types.js').Workspace[]} workspaces
  */
@@ -158,15 +158,14 @@ export function selectSession(id) {
 }
 
 /**
- * Opens a draft session in a project's workspace; a draft of it that's still empty is reused.
+ * Opens a draft session in a project's workspace, reusing any draft of that workspace (New chat).
  * @param {string} projectId
  * @param {string} [workspaceId] `main` (default) for Main.
- * @param {boolean} [reuse] `false`: always a new draft (one with text of its own to send).
  * @returns {string} The draft's id.
  */
-export function newSession(projectId, workspaceId = MAIN, reuse = true) {
+export function newSession(projectId, workspaceId = MAIN) {
   const drafts = $draftSessions.get();
-  let id = reuse ? Object.keys(drafts).find((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId) : undefined;
+  let id = Object.keys(drafts).find((d) => drafts[d].projectId === projectId && drafts[d].workspaceId === workspaceId);
   if (id === undefined) {
     id = crypto.randomUUID();
     $draftSessions.set({ ...drafts, [id]: { projectId, workspaceId } });
@@ -180,7 +179,7 @@ export function newSession(projectId, workspaceId = MAIN, reuse = true) {
  * newest, or a new draft.
  * @param {string} projectId
  * @param {string} workspaceId `main` for Main.
- * @param {string | null} folder Its folder (Main's: the project's); `null` for a draft workspace.
+ * @param {string | null} folder Its folder (Main's: the project's).
  */
 export function showWorkspace(projectId, workspaceId, folder) {
   /** @param {string} id */
@@ -201,7 +200,7 @@ export function showWorkspace(projectId, workspaceId, folder) {
 }
 
 /**
- * Forgets the drafts of a workspace that's gone (a draft workspace left, a workspace deleted).
+ * Forgets the drafts of a workspace that's gone (deleted).
  * @param {string} workspaceId
  */
 export function dropDrafts(workspaceId) {

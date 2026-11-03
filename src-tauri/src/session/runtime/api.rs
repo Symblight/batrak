@@ -122,9 +122,6 @@ pub enum WorkspaceChoice {
     Main,
     /// A workspace of the project.
     Existing { id: String },
-    /// A draft workspace, placed now: named after the title, from `base_branch` (`None`: the
-    /// project's HEAD).
-    New { base_branch: Option<String> },
 }
 
 /// A prompt piece from the page. Paths are relative to the session's folder; the backend maps and

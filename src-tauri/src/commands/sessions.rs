@@ -54,9 +54,8 @@ pub async fn sessions_sync(
     Ok(report)
 }
 
-/// A draft's first message: creates the session under the draft's id, in `workspace` (Main, an
-/// existing one, or a draft workspace placed now), and starts its folder and agent in the
-/// background. A new workspace is refused without a repository or `baseBranch` to start from.
+/// A draft's first message: creates the session under the draft's id, in `workspace` (Main or a
+/// stored one of the project), and starts its folder and agent in the background.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn session_create(
