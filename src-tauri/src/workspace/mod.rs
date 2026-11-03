@@ -165,6 +165,36 @@ impl Workspaces {
         result
     }
 
+    /// The workspace of an older version's worktree session: its folder, worktree, branch and
+    /// base as they are, named after it. The one already made for that worktree when there is one
+    /// (idempotent).
+    pub fn adopt(&self, session: &crate::session::SessionRecord) -> Result<WorkspaceRecord, String> {
+        let (Some(worktree_path), Some(branch), Some(base_commit)) =
+            (session.worktree_path.clone(), session.branch.clone(), session.base_commit.clone())
+        else {
+            return Err(format!("session {}: its worktree is missing from its record", session.session_id));
+        };
+        if let Some(found) = self.inner.store.list(None).into_iter().find(|w| w.worktree_path == worktree_path) {
+            return Ok(found);
+        }
+        let record = WorkspaceRecord {
+            id: format!("ws-{}", session.session_id),
+            project_path: session.project_path.clone(),
+            name: session.title.clone(),
+            name_source: if session.title_source == crate::session::TitleSource::User { NameSource::User } else { NameSource::Agent },
+            folder: session.agent_cwd.clone(),
+            worktree_path,
+            branch,
+            base_commit,
+            base_branch: None,
+            created_at: session.created_at.clone(),
+            last_active_at: session.last_activity_at.clone(),
+        };
+        self.inner.store.insert(record.clone())?;
+        tracing::info!(workspace = %record.id, session = %session.session_id, "a worktree session became a workspace");
+        Ok(record)
+    }
+
     /// Names a workspace (trimmed, not empty); its chats' titles no longer rename it. Folder and
     /// branch stay.
     pub fn rename(&self, id: &str, name: &str) -> Result<WorkspaceRecord, String> {

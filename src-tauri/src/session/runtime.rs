@@ -69,10 +69,11 @@ impl Sessions {
     /// Lists the sessions as last stored, all `stopped`, until a sync asks their agents (`sync`).
     pub fn new(opts: SessionsOptions) -> Sessions {
         let store = JsonFile::new(opts.data_dir.join("sessions.json"));
-        let (records, hidden) = sync::load(&store, &opts.data_dir);
-        let sessions = records.into_iter().map(|record| (record.session_id.clone(), Arc::new(new_state(record)))).collect();
+        let (mut records, hidden) = sync::load(&store, &opts.data_dir);
         let workspaces = crate::workspace::Workspaces::new(&opts.data_dir);
-        Sessions {
+        let migrated = workspaces::migrate(&workspaces, &mut records);
+        let sessions = records.into_iter().map(|record| (record.session_id.clone(), Arc::new(new_state(record)))).collect();
+        let sessions = Sessions {
             inner: Arc::new(Inner {
                 opts,
                 store,
@@ -85,7 +86,11 @@ impl Sessions {
                 next_login: AtomicU64::new(0),
                 workspaces,
             }),
+        };
+        if migrated {
+            sessions.inner.persist();
         }
+        sessions
     }
 
     /// The projects' workspaces.

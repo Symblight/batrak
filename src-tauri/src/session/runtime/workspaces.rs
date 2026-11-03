@@ -58,3 +58,19 @@ pub(super) fn in_turn(status: SessionStatus) -> bool {
         SessionStatus::Preparing | SessionStatus::Starting | SessionStatus::Working | SessionStatus::Waiting | SessionStatus::Queued
     )
 }
+
+/// Gives each worktree session without a workspace one of its own (`Workspaces::adopt`), at
+/// every load, so it's idempotent. `true` when a record changed.
+pub(super) fn migrate(workspaces: &crate::workspace::Workspaces, records: &mut [SessionRecord]) -> bool {
+    let mut changed = false;
+    for record in records.iter_mut().filter(|r| r.mode == Mode::Worktree && r.workspace_id.is_none()) {
+        match workspaces.adopt(record) {
+            Ok(workspace) => {
+                record.workspace_id = Some(workspace.id);
+                changed = true;
+            }
+            Err(e) => tracing::warn!("moving a worktree session into a workspace failed: {e}"),
+        }
+    }
+    changed
+}

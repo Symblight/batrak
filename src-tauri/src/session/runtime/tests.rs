@@ -1215,7 +1215,7 @@ async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree()
 }
 
 #[tokio::test]
-async fn a_worktree_session_comes_back_after_a_restart_even_without_its_folder() {
+async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder() {
     let f = git_fixture("wt-restart");
     let (session, events) = f.create_in("r", "fake", Mode::Worktree, None).unwrap();
     events.wait_status("idle").await;
@@ -1232,10 +1232,9 @@ async fn a_worktree_session_comes_back_after_a_restart_even_without_its_folder()
     assert_eq!(listed.base_commit, session.base_commit);
     let events = Arc::new(Recorder::default());
     sessions.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
-    sessions.send_prompt("r", text(&format!("read {}", wt.join("work.txt").display()))).unwrap();
-    events.wait_turn_end().await;
-    assert_eq!(events.texts().join(""), "read:agent work\n", "checked out again from its branch");
-    assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), session.branch.unwrap());
+    sessions.send_prompt("r", text("hello")).unwrap();
+    let failed = events.wait_status("error").await;
+    assert!(failed.payload["message"].as_str().unwrap().contains("folder is missing"), "{failed:?}");
 }
 
 #[tokio::test]
@@ -3092,4 +3091,40 @@ async fn a_delete_preview_counts_uncommitted_files_and_commits_and_names_working
     assert_eq!((preview.uncommitted, preview.commits), (2, 1));
     assert_eq!(preview.working, vec!["Session busy".to_owned()]);
     f.sessions.cancel("busy").ok();
+}
+
+#[tokio::test]
+async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main() {
+    let f = git_fixture("ws-migrate");
+    let (tree, events) = f.create_in("t", "fake", Mode::Worktree, None).unwrap();
+    events.wait_status("idle").await;
+    let (_, local) = f.create("l", "fake").unwrap();
+    local.wait_status("idle").await;
+    f.sessions.shutdown();
+    // As an older version stored them: no workspaces, no workspace ids.
+    let _ = std::fs::remove_file(f.dir.join("data/workspaces.json"));
+    let path = f.dir.join("data/sessions.json");
+    let mut stored: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
+    for record in &mut stored {
+        record.as_object_mut().unwrap().remove("workspaceId");
+    }
+    std::fs::write(&path, serde_json::to_string(&stored).unwrap()).unwrap();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+
+    let workspaces = reopened.workspaces().list(&f.project);
+    assert_eq!(workspaces.len(), 1);
+    let ws = &workspaces[0];
+    assert_eq!(ws.name, "Session t");
+    assert_eq!(Some(ws.folder.to_string_lossy().into_owned()), Some(tree.folder.clone()), "folder unchanged");
+    assert_eq!(Some(ws.branch.clone()), tree.branch, "branch unchanged");
+    assert_eq!(Some(ws.base_commit.clone()), tree.base_commit);
+    let listed = reopened.list();
+    let workspace_of = |id: &str| listed.iter().find(|s| s.id == id).unwrap().workspace_id.clone();
+    assert_eq!(workspace_of("t").as_deref(), Some(ws.id.as_str()));
+    assert_eq!(workspace_of("l"), None, "local sessions are Main's");
+
+    reopened.shutdown();
+    let again = Sessions::new(options_for(&f.dir, &f.launcher));
+    assert_eq!(again.workspaces().list(&f.project), workspaces, "loading twice adds nothing");
 }
