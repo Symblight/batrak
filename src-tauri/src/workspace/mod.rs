@@ -178,6 +178,26 @@ impl Workspaces {
         })
     }
 
+    /// Deletes a workspace's folder and its record. Uncommitted work is first committed onto its
+    /// branch; the branch stays when `keep_branch` and it has commits past the base, else it's
+    /// deleted. Its chats are the caller's (`Sessions::delete_workspace`). Blocking.
+    pub fn discard(&self, id: &str, keep_branch: bool) -> Result<(), String> {
+        let record = self.get(id)?;
+        let gate = self.gate(id);
+        let _held = lock(&gate);
+        let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Brama when the workspace was deleted.", record.name);
+        let removed = record.env().remove_with(&message, keep_branch);
+        if let Err(e) = &removed {
+            // Kept on disk (a detached worktree with work): the record goes all the same.
+            tracing::warn!(workspace = %id, "removing the workspace's folder failed: {e}");
+        }
+        self.inner.store.remove(id)?;
+        lock(&self.inner.gates).remove(id);
+        lock(&self.inner.failed).remove(id);
+        tracing::info!(workspace = %id, "workspace deleted");
+        Ok(())
+    }
+
     /// Waits for a checkout of the workspace that is running. Blocking.
     pub fn wait_ready(&self, id: &str) {
         drop(lock(&self.gate(id)));

@@ -92,3 +92,37 @@ fn renaming_changes_the_name_only() {
     assert_eq!(Workspaces::new(&data).get(&ws.id).unwrap().name, "Second", "stored");
     std::fs::remove_dir_all(data).unwrap();
 }
+
+#[test]
+fn deleting_saves_uncommitted_work_and_keeps_or_deletes_the_branch() {
+    use crate::git::test_repo::{run_in, TestRepo};
+    let repo = TestRepo::with_commit("ws-delete");
+    let data = temp_dir("ws-delete-data");
+    let workspaces = Workspaces::new(&data);
+    let branches = || run_in(&repo.path, &["branch", "--format=%(refname:short)"]);
+
+    // Nothing done: the branch goes, whatever Keep branch says.
+    let unused = workspaces.create(&repo.path, "Unused", None).unwrap();
+    workspaces.discard(&unused.id, true).unwrap();
+    assert!(!unused.worktree_path.exists());
+    assert!(!branches().contains("brama/unused"));
+    assert!(workspaces.get(&unused.id).is_err(), "the record goes");
+
+    // Uncommitted work: a snapshot commit on the branch, which stays.
+    let dirty = workspaces.create(&repo.path, "Dirty", None).unwrap();
+    std::fs::write(dirty.folder.join("README.md"), "unsaved").unwrap();
+    workspaces.discard(&dirty.id, true).unwrap();
+    assert!(!dirty.worktree_path.exists());
+    assert_eq!(run_in(&repo.path, &["show", "brama/dirty:README.md"]), "unsaved");
+    assert!(run_in(&repo.path, &["log", "-1", "--format=%B", "brama/dirty"]).contains("Work in progress from workspace \"Dirty\""));
+
+    // Commits, Keep branch off: the branch goes.
+    let done = workspaces.create(&repo.path, "Done", None).unwrap();
+    std::fs::write(done.folder.join("x.txt"), "x").unwrap();
+    run_in(&done.folder, &["add", "."]);
+    run_in(&done.folder, &["commit", "-qm", "work"]);
+    workspaces.discard(&done.id, false).unwrap();
+    assert!(!branches().contains("brama/done"));
+    assert!(run_in(&repo.path, &["status", "--porcelain"]).is_empty(), "the project is untouched");
+    std::fs::remove_dir_all(data).unwrap();
+}

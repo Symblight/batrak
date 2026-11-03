@@ -186,45 +186,53 @@ impl SessionEnv for WorktreeEnv {
         Ok(agent_path.to_path_buf())
     }
 
-    /// Commits the uncommitted work onto the session's branch (see `git::apply::snapshot_commit`).
-    fn archive(&self) -> Result<(), String> {
-        if self.shared {
-            return Ok(());
-        }
-        let git = binary::git()?;
-        let message = format!("Work in progress from session \"{}\"\n\nSaved by Brama when the session was removed.", self.title);
-        if let Some(sha) = crate::git::apply::snapshot_commit(git, &self.root, &self.branch, &message)? {
-            tracing::info!(branch = %self.branch, %sha, "saved the worktree's uncommitted work");
-        }
-        Ok(())
-    }
-
-    /// Removes the worktree, its uncommitted work first committed onto its branch (`archive`), and
+    /// Removes the worktree, its uncommitted work first committed onto its branch (a snapshot), and
     /// the branch when it has no commits of its own. A detached worktree with uncommitted work is
     /// kept: its branch is the project's then.
     fn discard(&self) -> Result<(), String> {
         if self.shared {
             return Ok(());
         }
+        let message = format!("Work in progress from session \"{}\"\n\nSaved by Brama when the session was removed.", self.title);
+        self.remove_with(&message, true)
+    }
+}
+
+impl WorktreeEnv {
+    /// Commits the uncommitted work onto the branch with `message`.
+    fn snapshot(&self, message: &str) -> Result<(), String> {
+        let git = binary::git()?;
+        if let Some(sha) = crate::git::apply::snapshot_commit(git, &self.root, &self.branch, message)? {
+            tracing::info!(branch = %self.branch, %sha, "saved the worktree's uncommitted work");
+        }
+        Ok(())
+    }
+
+    /// Removes the worktree. `keep_work`: uncommitted work is first committed onto the branch with
+    /// `message`, and the branch stays when it has commits past the base; else it's deleted. A
+    /// detached worktree with uncommitted work is kept (an error): its branch is the project's
+    /// then. A branch checked out elsewhere is never deleted (git refuses). Blocking.
+    pub fn remove_with(&self, message: &str, keep_work: bool) -> Result<(), String> {
         let git = binary::git()?;
         if self.root.exists() && worktree::is_dirty(git, &self.root)? {
             if !self.on_branch(git) {
                 return Err(format!("{}: has uncommitted changes and isn't on its branch, so it was kept", self.root.display()));
             }
-            self.archive()?;
+            if keep_work {
+                self.snapshot(message)?;
+            }
             worktree::remove_saved(git, &self.project, &self.root)?;
         }
         let tip = self.tip(git);
-        // A branch checked out elsewhere can't be deleted (git refuses); it's the project's now.
-        let unused = tip.as_deref() == Some(self.base_commit.as_str()) && !self.checked_out_elsewhere(git)?;
-        let cleanup = if unused {
+        let unused = !keep_work || tip.as_deref() == Some(self.base_commit.as_str());
+        let cleanup = if unused && !self.checked_out_elsewhere(git)? {
             worktree::BranchCleanup::Delete
         } else {
             worktree::BranchCleanup::Keep
         };
         worktree::remove(git, &self.project, &self.root, tip.is_some().then_some(self.branch.as_str()), cleanup)?;
         if let Some(group) = self.root.parent() {
-            // Only when empty: the project's other sessions keep theirs.
+            // Only when empty: the project's other worktrees keep theirs.
             let _ = fs::remove_dir(group);
         }
         tracing::info!(path = %self.root.display(), branch = %self.branch, ?cleanup, "worktree removed");

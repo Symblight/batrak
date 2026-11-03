@@ -526,6 +526,7 @@ mod sync;
 #[cfg(test)]
 mod tests;
 mod turn;
+mod workspaces;
 mod worktree;
 
 use self::agents::*;

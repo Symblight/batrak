@@ -181,7 +181,11 @@ fn listed_version(f: &Fixture, agent: &str) -> Option<String> {
 
 /// A fixture whose project is a real repository: `a.txt` and `.brama/` committed on `main`.
 fn git_fixture(name: &str) -> Fixture {
-    let f = fixture(name, listing());
+    git_fixture_with(name, listing())
+}
+
+fn git_fixture_with(name: &str, options: FakeAgentOptions) -> Fixture {
+    let f = fixture(name, options);
     std::fs::remove_dir_all(f.project.join(".git")).unwrap();
     for args in [&["init", "-q", "-b", "main"][..], &["add", "."], &["commit", "-qm", "init"]] {
         run_in(&f.project, args);
@@ -3046,4 +3050,23 @@ async fn a_chat_in_a_workspace_runs_in_its_folder_and_removing_it_leaves_the_fol
     f.sessions.remove("c").await.unwrap();
     assert!(ws.folder.join("a.txt").is_file(), "the folder stays");
     assert!(run_in(&f.project, &["branch", "--list", &ws.branch]).contains(&ws.branch), "the branch stays");
+}
+
+#[tokio::test]
+async fn deleting_a_workspace_removes_its_chats_and_its_folder() {
+    let options = FakeAgentOptions { delete_session: true, ..listing() };
+    let f = git_fixture_with("ws-delete-chats", options.clone());
+    let ws = f.sessions.workspaces().create(&f.project, "Fix login", None).unwrap();
+    let (_, events) = f.create_in_workspace("c", &ws.id).unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("c", text("slow")).unwrap();
+    events.wait_for("first chunk", |e| e.kind == "update").await;
+
+    f.sessions.delete_workspace(&ws.id, true).await.unwrap();
+
+    assert_eq!(events.wait_turn_end().await, "cancelled", "the running turn ends");
+    assert!(f.sessions.list().is_empty(), "its chats are gone");
+    assert!(options.stored.lock().unwrap().is_empty(), "deleted in the agent");
+    assert!(!ws.worktree_path.exists());
+    assert!(f.sessions.workspaces().list(&f.project).is_empty());
 }

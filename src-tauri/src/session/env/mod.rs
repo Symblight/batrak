@@ -59,8 +59,6 @@ pub trait SessionEnv: Send + Sync {
     fn spawn_agent(&self, launch: Launch) -> Result<(AgentProcess, AgentPipes), String>;
     /// Maps a path the agent sent to the host. Doesn't check it: [`confine`] does.
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String>;
-    /// Keeps the session's work when it's closed for good (a worktree's final snapshot).
-    fn archive(&self) -> Result<(), String>;
     /// Throws the session's directory away (never the project's own).
     fn discard(&self) -> Result<(), String>;
 }

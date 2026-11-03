@@ -50,11 +50,6 @@ impl SessionEnv for LocalEnv {
         Ok(agent_path.to_path_buf())
     }
 
-    /// The work is the project's own: nothing to keep apart.
-    fn archive(&self) -> Result<(), String> {
-        Ok(())
-    }
-
     /// Never deletes the project.
     fn discard(&self) -> Result<(), String> {
         Ok(())
