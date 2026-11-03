@@ -114,6 +114,9 @@ pub struct CreateSession {
     /// `worktree`: the branch or commit to start from; `None` for the project's HEAD.
     #[serde(default)]
     pub base_branch: Option<String>,
+    /// The workspace it runs in, for life; `None`: Main (or `mode` decides, until Phase 3).
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 /// A prompt piece from the page. Paths are relative to the session's folder; the backend maps and

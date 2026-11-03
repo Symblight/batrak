@@ -280,6 +280,7 @@ impl Fixture {
             title: format!("Session {id}"),
             config: BTreeMap::new(),
             base_branch: base.map(str::to_owned),
+            workspace_id: None,
         }
     }
 
@@ -1958,6 +1959,7 @@ async fn real_claude_agent_end_to_end() {
         title: "real".to_owned(),
         config: BTreeMap::new(),
         base_branch: None,
+        workspace_id: None,
     };
     sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     let wait = |what: &'static str, secs: u64, pred: Box<dyn Fn(&Envelope) -> bool + Send>| {
@@ -2821,6 +2823,7 @@ impl Fixture {
             title: "New session".to_owned(),
             config: BTreeMap::new(),
             base_branch: None,
+            workspace_id: None,
             prompt: None,
         }
     }
@@ -3020,4 +3023,27 @@ async fn removing_the_session_or_turning_its_agent_off_closes_its_cli() {
     f.sessions.sync_agents(&f.project).await;
     assert!(!terminals.owns("main", "cli-b"));
     assert!(!listed(&f, "b").in_terminal);
+}
+
+impl Fixture {
+    /// A chat created in a workspace.
+    fn create_in_workspace(&self, id: &str, workspace: &str) -> Result<(Session, Arc<Recorder>), String> {
+        self.create_from(CreateSession { workspace_id: Some(workspace.to_owned()), ..self.request(id, "fake", Mode::Local, None) })
+    }
+}
+
+#[tokio::test]
+async fn a_chat_in_a_workspace_runs_in_its_folder_and_removing_it_leaves_the_folder() {
+    let f = git_fixture("ws-chat");
+    let ws = f.sessions.workspaces().create(&f.project, "Fix login", None).unwrap();
+
+    let (chat, events) = f.create_in_workspace("c", &ws.id).unwrap();
+    events.wait_status("idle").await;
+
+    assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
+    assert_eq!(PathBuf::from(&chat.folder), ws.folder, "its agent works in the workspace's folder");
+    assert_eq!(chat.branch.as_deref(), Some(ws.branch.as_str()));
+    f.sessions.remove("c").await.unwrap();
+    assert!(ws.folder.join("a.txt").is_file(), "the folder stays");
+    assert!(run_in(&f.project, &["branch", "--list", &ws.branch]).contains(&ws.branch), "the branch stays");
 }

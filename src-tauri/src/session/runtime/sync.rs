@@ -454,6 +454,7 @@ fn listed_record(project: &Path, agent: &AgentConfig, item: &ListedSession) -> S
         launch: None,
         agent_name: Some(agent.name.clone()),
         hidden: false,
+        workspace_id: None,
     }
 }
 

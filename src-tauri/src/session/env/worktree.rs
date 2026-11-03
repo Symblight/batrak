@@ -10,6 +10,9 @@ use crate::acp::process::{AgentPipes, AgentProcess};
 use crate::git::exec::{self, Mode as GitMode};
 use crate::git::{binary, worktree};
 
+/// Why a workspace's chat doesn't start: its folder was deleted outside Brama.
+pub const FOLDER_MISSING: &str = "the workspace's folder is missing; recreate it to go on";
+
 pub struct WorktreeEnv {
     /// Canonical project root: the main checkout, or a folder in it.
     project: PathBuf,
@@ -21,11 +24,19 @@ pub struct WorktreeEnv {
     base_commit: String,
     /// The session's, for its snapshot commit.
     title: String,
+    /// A workspace's chat: the workspace checks the folder out and removes it, never the chat.
+    shared: bool,
 }
 
 impl WorktreeEnv {
     pub fn new(project: PathBuf, root: PathBuf, dir: PathBuf, branch: String, base_commit: String, title: String) -> WorktreeEnv {
-        WorktreeEnv { project, root, dir, branch, base_commit, title }
+        WorktreeEnv { project, root, dir, branch, base_commit, title, shared: false }
+    }
+
+    /// The same worktree as a workspace's chat sees it: `prepare` checks no folder out and
+    /// `archive` / `discard` leave it.
+    pub fn shared(self) -> WorktreeEnv {
+        WorktreeEnv { shared: true, ..self }
     }
 
     /// Whether the worktree has its branch checked out (not detached by Check Out Branch).
@@ -112,6 +123,9 @@ impl SessionEnv for WorktreeEnv {
             return Err(format!("{}: the project folder is gone", self.project.display()));
         }
         let git = binary::git()?;
+        if self.shared && !self.root.join(".git").exists() {
+            return Err(format!("{}: {FOLDER_MISSING}", self.root.display()));
+        }
         if !self.root.join(".git").exists() {
             worktree::prune(git, &self.project)?;
             if cancel.load(Ordering::SeqCst) {
@@ -174,6 +188,9 @@ impl SessionEnv for WorktreeEnv {
 
     /// Commits the uncommitted work onto the session's branch (see `git::apply::snapshot_commit`).
     fn archive(&self) -> Result<(), String> {
+        if self.shared {
+            return Ok(());
+        }
         let git = binary::git()?;
         let message = format!("Work in progress from session \"{}\"\n\nSaved by Brama when the session was removed.", self.title);
         if let Some(sha) = crate::git::apply::snapshot_commit(git, &self.root, &self.branch, &message)? {
@@ -186,6 +203,9 @@ impl SessionEnv for WorktreeEnv {
     /// the branch when it has no commits of its own. A detached worktree with uncommitted work is
     /// kept: its branch is the project's then.
     fn discard(&self) -> Result<(), String> {
+        if self.shared {
+            return Ok(());
+        }
         let git = binary::git()?;
         if self.root.exists() && worktree::is_dirty(git, &self.root)? {
             if !self.on_branch(git) {

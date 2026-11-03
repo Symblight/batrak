@@ -107,6 +107,9 @@ pub struct SessionRecord {
     /// Removed where its agent can't delete sessions: never listed again.
     #[serde(default)]
     pub hidden: bool,
+    /// The workspace it runs in (its folder and branch are the workspace's); `None`: Main.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -142,6 +145,7 @@ pub struct Session {
     pub worktree_path: Option<String>,
     pub branch: Option<String>,
     pub base_commit: Option<String>,
+    pub workspace_id: Option<String>,
     pub created_at: String,
     /// The last prompt or turn end, else `created_at`; the list's order.
     pub last_activity_at: String,
@@ -169,6 +173,7 @@ impl Session {
             worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
             branch: r.branch.clone(),
             base_commit: r.base_commit.clone(),
+            workspace_id: r.workspace_id.clone(),
             created_at: r.created_at.clone(),
             last_activity_at: r.last_activity_at.clone().unwrap_or_else(|| r.created_at.clone()),
         }

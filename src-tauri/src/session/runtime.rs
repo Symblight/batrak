@@ -61,6 +61,8 @@ struct Inner {
     signing_in: Mutex<HashMap<LaunchKey, SignInRun>>,
     /// Numbers login terminals (`sign-in-<n>`).
     next_login: AtomicU64,
+    /// The projects' workspaces, whose folders chats run in.
+    workspaces: crate::workspace::Workspaces,
 }
 
 impl Sessions {
@@ -69,6 +71,7 @@ impl Sessions {
         let store = JsonFile::new(opts.data_dir.join("sessions.json"));
         let (records, hidden) = sync::load(&store, &opts.data_dir);
         let sessions = records.into_iter().map(|record| (record.session_id.clone(), Arc::new(new_state(record)))).collect();
+        let workspaces = crate::workspace::Workspaces::new(&opts.data_dir);
         Sessions {
             inner: Arc::new(Inner {
                 opts,
@@ -80,8 +83,15 @@ impl Sessions {
                 sign_ins_needed: Mutex::default(),
                 signing_in: Mutex::default(),
                 next_login: AtomicU64::new(0),
+                workspaces,
             }),
         }
+    }
+
+    /// The projects' workspaces.
+    #[allow(dead_code)] // Until the workspace commands (spec Phase 1 step 14).
+    pub fn workspaces(&self) -> &crate::workspace::Workspaces {
+        &self.inner.workspaces
     }
 
     /// How many of the project's sessions run `agent_id` now (or are about to).
@@ -150,13 +160,24 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
-        let placed =
-            env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?;
+        let (mode, placed) = match &req.workspace_id {
+            Some(id) => {
+                let workspace = self.inner.workspaces.get(id)?;
+                if workspace.project_path != project {
+                    return Err(format!("workspace {id} belongs to another project"));
+                }
+                (Mode::Worktree, workspace.placement())
+            }
+            None => (
+                req.mode,
+                env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?,
+            ),
+        };
         Ok(SessionRecord {
             session_id: req.session_id.clone(),
             acp_session_id: None,
             agent_id: req.agent_id.clone(),
-            mode: req.mode,
+            mode,
             agent_cwd: placed.agent_cwd,
             project_path: project,
             title: req.title.clone(),
@@ -172,6 +193,7 @@ impl Sessions {
             launch: None,
             agent_name: Some(agent_name),
             hidden: false,
+            workspace_id: req.workspace_id.clone(),
         })
     }
 

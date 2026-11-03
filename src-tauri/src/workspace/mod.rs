@@ -189,6 +189,16 @@ impl Workspaces {
 }
 
 impl WorkspaceRecord {
+    /// Where its chats run.
+    pub fn placement(&self) -> env::Placement {
+        env::Placement {
+            agent_cwd: self.folder.clone(),
+            worktree_path: Some(self.worktree_path.clone()),
+            branch: Some(self.branch.clone()),
+            base_commit: Some(self.base_commit.clone()),
+        }
+    }
+
     /// Its worktree as a session environment that checks it out.
     pub fn env(&self) -> env::WorktreeEnv {
         env::WorktreeEnv::new(

@@ -70,10 +70,11 @@ pub async fn session_create(
     title: String,
     config: Option<BTreeMap<String, String>>,
     base_branch: Option<String>,
+    workspace_id: Option<String>,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
     let config = config.unwrap_or_default();
-    let request = CreateSession { session_id, project_path, agent_id, mode, title, config, base_branch };
+    let request = CreateSession { session_id, project_path, agent_id, mode, title, config, base_branch, workspace_id };
     let sessions = sessions.inner().clone();
     let label = window.label().to_owned();
     blocking(move || sessions.create(request, &label, sink(channel))).await?

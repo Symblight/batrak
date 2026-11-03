@@ -96,14 +96,16 @@ pub fn for_session(record: &SessionRecord) -> Result<Box<dyn SessionEnv>, String
             let (Some(root), Some(branch), Some(base)) = (&record.worktree_path, &record.branch, &record.base_commit) else {
                 return Err(format!("session {}: its worktree is missing from its record", record.session_id));
             };
-            Ok(Box::new(WorktreeEnv::new(
+            let env = WorktreeEnv::new(
                 record.project_path.clone(),
                 root.clone(),
                 record.agent_cwd.clone(),
                 branch.clone(),
                 base.clone(),
                 record.title.clone(),
-            )))
+            );
+            // A workspace's chat: the workspace checks the folder out and removes it.
+            Ok(Box::new(if record.workspace_id.is_some() { env.shared() } else { env }))
         }
         Mode::Docker => Err("Docker sessions are not available yet; use Local or Worktree".to_owned()),
     }
