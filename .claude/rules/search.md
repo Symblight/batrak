@@ -7,7 +7,7 @@ paths:
   - "src/controllers/find-in-files/**"
   - "src/hooks/search/**"
   - "src/stores/search/search.js"
-  - "src-tauri/src/workspace/search.rs"
+  - "src-tauri/src/roots/search.rs"
   - "docs/specs/search-dialog.md"
 ---
 

@@ -60,7 +60,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
   locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
   are its `touched`, and a watcher batch of the project (`Sessions::note_changes`, from
-  `Workspaces::open`'s callback; none for a project whose root isn't open) naming one that two
+  `Roots::open`'s callback; none for a project whose root isn't open) naming one that two
   turns touched, running or ended less than `overlap_grace` (1 s) ago, sends each running one an
   `overlap` (once per file per turn; a banner notice until the turn ends, over an `info` /
   `outdated` one that comes back then). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,

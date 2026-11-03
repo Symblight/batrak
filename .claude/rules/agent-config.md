@@ -17,7 +17,7 @@ paths:
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`'s
   `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
   a commit, since older projects got it written whether git or not) is the run target a new session's
-  composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
+  composer starts with (`$projectSettings`, read when the project opens); a worktree picks its
   base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
   `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no

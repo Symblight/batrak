@@ -17,7 +17,7 @@ paths:
 # Persisted state and tabs
 
 - Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$hiddenColumns`
-  (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$workspace` (`brama:workspace`, reopened
+  (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$project` (`brama:project`, reopened
   on launch by `projects.restore()`), `$projectTabs` (`brama:editor:tabs:<project path>`; the
   active project's entry is `$editorTabs`, which shows only files inside it; a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
