@@ -25,7 +25,13 @@ md-menu {
 /* On the group itself: its `:host` sets the line height, so one inherited from the menu never lands. */
 md-menu-group,
 md-option-group {
-  --md-menu-group-label-line-height: 1.75rem;
+  --md-menu-group-label-line-height: 1.25rem;
+}
+/* The label's block padding is fixed inside the group's shadow root (no property); a `:host()` rule
+   outranks the library's own class. `md-option-group` extends `md-menu-group`, same template. */
+:host(md-menu-group) .md-menu-group__label,
+:host(md-option-group) .md-menu-group__label {
+  padding-block: 0.25rem 0.125rem;
 }
 md-menu-item,
 md-option {
@@ -38,10 +44,10 @@ md-option {
   margin-inline: 0.25rem;
 }
 
-/* Every snackbar: compact, a 2rem line. The library fixes its padding, its 3rem minimum height and the
-   close button's size inside its shadow root, where only a rule of this specificity reaches them. */
+/* Every snackbar: a 3.4rem minimum height (the library's is 3rem). The library fixes its padding, its minimum
+   height and the close button's size inside its shadow root, where only a rule of this specificity reaches them. */
 :host(md-snackbar) .md-snackbar {
-  min-block-size: 2rem;
+  min-block-size: 3.4rem;
   padding-block: 0.25rem;
   padding-inline: 0.75rem 0.25rem;
 }
