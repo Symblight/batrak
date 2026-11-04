@@ -374,7 +374,7 @@ export function handleSessionEvent(event) {
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
       return;
     case 'session':
-      // The agent named it (`session_info_update`).
+      // The agent named it (`session_info_update`), or its CLI opened, closed or changed activity.
       upsertSession(event.payload);
       return;
     case 'untrusted':

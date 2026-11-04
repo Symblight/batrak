@@ -3008,6 +3008,7 @@ async fn a_cli_run_chat_shows_what_its_agent_says_it_is_doing() {
 
     record_activity(&acp, Idle);
     events.wait_for("idle", |e| e.kind == "session" && e.payload["activity"] == "idle").await;
+    assert!(!f.sessions.cli_busy("s1").unwrap(), "at its prompt");
 
     f.sessions.close_cli("s1").await.unwrap();
     assert_eq!(listed(&f, "s1").activity, None, "no CLI, nothing to tell");
@@ -3031,12 +3032,50 @@ async fn its_agents_list_never_reads_as_activity_of_a_chat_its_cli_runs_nor_righ
     // Assert
     let session = listed(&f, id);
     assert_eq!((session.active_elsewhere_until, session.activity), (None, None), "the agent keeps no records of it");
+    assert!(f.sessions.cli_busy(id).unwrap(), "it can't tell, so closing it asks first");
 
     // Act: the CLI's own writes aren't another app's once it's gone.
     f.sessions.close_cli(id).await.unwrap();
 
     // Assert
     assert_eq!(listed(&f, id).active_elsewhere_until, None);
+}
+
+#[tokio::test]
+async fn continuing_a_failed_chat_in_its_cli_leaves_the_failure_behind() {
+    // Arrange
+    let f = fixture("cli-after-crash", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let (_, events) = f.create("c", "fake").unwrap();
+    events.wait_status("idle").await;
+    f.sessions.send_prompt("c", text("crash")).unwrap();
+    events.wait_status("error").await;
+
+    // Act
+    f.sessions.open_cli("c", None, window(&terminals)).await.unwrap();
+
+    // Assert
+    assert_eq!(listed(&f, "c").status, SessionStatus::Stopped, "an error would hide what its CLI is doing");
+}
+
+#[tokio::test]
+async fn a_cli_that_didnt_start_doesnt_hide_another_apps_activity() {
+    // Arrange
+    let options = listing();
+    let f = fixture("cli-refused", options.clone());
+    let now = crate::session::iso_now();
+    stored_in(&options, &[("busy", &f.project, None, Some(now.as_str()))]);
+    f.sessions.sync(&f.project, None).await;
+    let terminals = terminals();
+    let until = listed(&f, "fake~busy").active_elsewhere_until;
+    assert!(until.is_some());
+
+    // Act
+    f.sessions.open_cli("fake~busy", None, window(&terminals)).await.unwrap_err();
+
+    // Assert
+    assert_eq!(listed(&f, "fake~busy").active_elsewhere_until, until);
 }
 
 #[tokio::test]

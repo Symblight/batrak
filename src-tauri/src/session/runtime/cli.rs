@@ -110,8 +110,8 @@ impl Sessions {
         Ok(())
     }
 
-    /// Whether closing the CLI would stop work: its agent says a turn runs, or a program it runs is
-    /// in the terminal's foreground.
+    /// Whether closing the CLI may stop work: its agent doesn't say it's at its prompt, or a program
+    /// it runs is in the terminal's foreground.
     pub fn cli_busy(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
         let Some((terminals, terminal_id, activity)) =
@@ -119,8 +119,8 @@ impl Sessions {
         else {
             return Ok(false);
         };
-        let in_turn = matches!(activity, Some(agent_api::SessionActivity::Running | agent_api::SessionActivity::WaitingForUser));
-        Ok(in_turn || !terminals.busy(&[terminal_id]).is_empty())
+        let at_prompt = activity == Some(agent_api::SessionActivity::Idle);
+        Ok(!at_prompt || !terminals.busy(&[terminal_id]).is_empty())
     }
 
     /// Undoes a draft created for a CLI that didn't start: unlisted, its files gone (its workspace
@@ -195,6 +195,10 @@ impl Inner {
         }
         match self.start_cli(state, start, token, &terminal_id, &window).await {
             Ok(()) => {
+                // A failure of the chat's agent would hide what its CLI is doing.
+                if state.status() == SessionStatus::Error {
+                    self.set_status(state, SessionStatus::Stopped, None);
+                }
                 state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
                 Ok(CliOpened { terminal_id })
             }
@@ -326,7 +330,9 @@ impl Inner {
         };
         if let Some(held) = held {
             // What its agent lists from now on, up to the slack, is this CLI's last writes.
-            *lock(&state.active_here) = parse_iso_millis(&iso_now());
+            if held.terminals.is_some() {
+                *lock(&state.active_here) = parse_iso_millis(&iso_now());
+            }
             held.gone.send_replace(true);
             // Exited on its own: its terminal (and its output kept for a reattach) goes too; the
             // page keeps what it shows.
