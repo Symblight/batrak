@@ -64,6 +64,7 @@ export class AcpTerminal extends LitElement {
     fontFamily: { attribute: false },
     fontSize: { attribute: false },
     colors: { attribute: false },
+    windowsBuild: { attribute: false },
     gpu: { attribute: false },
     platform: { attribute: false },
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
@@ -119,6 +120,8 @@ export class AcpTerminal extends LitElement {
     this.fontSize = 13;
     /** @type {import('../../hooks/settings/types.js').TerminalColors | null} Its own colors; `null` for the app's. */
     this.colors = null;
+    /** @type {number | null} The Windows build its ConPTY comes with: how xterm must read line wrapping; `null` elsewhere. */
+    this.windowsBuild = null;
     /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
     this.gpu = true;
     /** @type {import('../../hooks/app/types.js').Platform} Which keys are the app's and the shell's. */
@@ -153,6 +156,11 @@ export class AcpTerminal extends LitElement {
     const tokens = { background: token('--acp-color-surface'), foreground: token('--acp-color-on-surface'), primary: token('--acp-color-primary') };
     const dark = document.documentElement.dataset.theme === 'dark';
     return terminalTheme(tokens, dark, dark ? this.colors?.dark : this.colors?.light);
+  }
+
+  /** @param {Terminal} term */
+  #applyWindowsPty(term) {
+    term.options.windowsPty = this.windowsBuild === null ? {} : { backend: 'conpty', buildNumber: this.windowsBuild };
   }
 
   /** @param {Terminal} term */
@@ -240,6 +248,7 @@ export class AcpTerminal extends LitElement {
     });
     this.#term = term;
     this.#applyTheme(term);
+    this.#applyWindowsPty(term);
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
     term.loadAddon(new WebLinksAddon(this.#openLink));
@@ -299,6 +308,7 @@ export class AcpTerminal extends LitElement {
       this.#scheduleFit();
     }
     if (changed.get('colors') !== undefined) this.#applyTheme(term);
+    if (changed.has('windowsBuild')) this.#applyWindowsPty(term);
     if (changed.has('fontFamily') || changed.has('fontSize')) {
       term.options.fontFamily = this.#font();
       term.options.fontSize = this.fontSize;

@@ -130,6 +130,7 @@ pub fn run() {
             commands::agents::agents_trust,
             commands::agents::agents_untrusted,
             commands::about::about,
+            commands::about::windows_build,
             commands::fonts::list_fonts,
             commands::fs::read_file,
             commands::fs::read_file_bytes,

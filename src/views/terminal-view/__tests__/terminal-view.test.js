@@ -7,7 +7,7 @@ import { $settings } from '../../../stores/settings/settings.js';
 import { DEFAULT_SETTINGS, TERMINAL_PALETTE } from '../../../stores/settings/rules.js';
 import { $pendingInput, addDrop } from '../../../stores/chat/chat.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
-import { $terminalFocus, $terminals, addSessionTerminal, focusTerminal } from '../../../stores/terminals/terminals.js';
+import { $terminalFocus, $terminals, $windowsBuild, addSessionTerminal, focusTerminal } from '../../../stores/terminals/terminals.js';
 import { AcpTerminal } from '../../../components/terminal/terminal.js';
 import '../terminal-view.js';
 
@@ -101,6 +101,13 @@ describe('acp-terminal-view', () => {
     expect([terminal.terminalId, terminal.info, terminal.connect === terminals.connect]).to.deep.equal(['t1', running, true]);
     expect([terminal.fontFamily, terminal.fontSize]).to.deep.equal(['Mono X', 15]);
     expect(terminal.colors, 'the app’s').to.equal(null);
+    expect(terminal.windowsBuild, 'not on Windows').to.equal(null);
+    // Act
+    $windowsBuild.set(19045);
+    await el.updateComplete;
+    // Assert
+    expect(terminal.windowsBuild).to.equal(19045);
+    $windowsBuild.set(null);
     // Act
     $settings.set({ ...$settings.get(), terminalTheme: 'custom', terminalColors: { light: TERMINAL_PALETTE, dark: TERMINAL_PALETTE } });
     await el.updateComplete;

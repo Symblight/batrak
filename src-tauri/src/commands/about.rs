@@ -53,3 +53,34 @@ fn os_version() -> Option<String> {
     let name = release.lines().find_map(|line| line.strip_prefix("PRETTY_NAME="))?;
     Some(format!("{} ({})", name.trim_matches('"'), std::env::consts::OS))
 }
+
+/// The Windows build the app runs on, which the terminal's reflow depends on; `None` elsewhere.
+#[tauri::command]
+pub async fn windows_build() -> Result<Option<u32>, String> {
+    #[cfg(windows)]
+    {
+        super::blocking(|| os_version().and_then(|version| build_of(&version))).await
+    }
+    #[cfg(not(windows))]
+    {
+        Ok(None)
+    }
+}
+
+/// The build in what `ver` prints: `Microsoft Windows [Version 10.0.26100.1]`.
+#[cfg(any(windows, test))]
+fn build_of(version: &str) -> Option<u32> {
+    version.split("Version ").nth(1)?.split(['.', ']']).nth(2)?.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_of;
+
+    #[test]
+    fn the_windows_build_is_read_from_what_ver_prints() {
+        assert_eq!(build_of("Microsoft Windows [Version 10.0.26100.1]"), Some(26100));
+        assert_eq!(build_of("Microsoft Windows [Version 10.0.19045.3803]"), Some(19045));
+        assert_eq!(build_of("macOS 26.1"), None);
+    }
+}

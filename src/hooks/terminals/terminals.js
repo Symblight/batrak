@@ -6,6 +6,7 @@ import {
   $terminalPanel,
   $terminalTabs,
   $terminals,
+  $windowsBuild,
   closeTerminalTab,
   focusTerminal,
   forgetTerminal,
@@ -245,6 +246,10 @@ export const terminals = Object.freeze({
    */
   start() {
     previousClosed();
+    ipc
+      .invoke('windows_build')
+      .then((build) => $windowsBuild.set(/** @type {number | null} */ (build)))
+      .catch((err) => app.log('warn', `Reading the Windows build failed: ${err}`));
     // A terminal's tab is in its project's editor tabs or in its terminal panel's.
     const releaseGone = () => {
       const editor = $folderTabs.get();

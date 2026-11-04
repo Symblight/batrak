@@ -150,11 +150,12 @@ describe('terminals', () => {
     expect($terminalPanel.get()).to.deep.equal({ open: true });
   });
 
-  it('closes the previous page load’s shells as soon as it starts, before any view connects', async () => {
+  it('closes the previous page load’s shells as soon as it starts, before any view connects, and asks which Windows it runs on', async () => {
     // Act
     await started();
     // Assert
     expect(sent('close_window_terminals')).to.have.length(1);
+    expect(sent('windows_build')).to.have.length(1);
   });
 
   it('works with its methods passed on by themselves, and starts a failed shell again on Restart', async () => {

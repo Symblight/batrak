@@ -86,6 +86,9 @@ export function clearTerminalPanelHeight() {
   if (key in $folderTerminalPanelHeights.get()) $folderTerminalPanelHeights.setKey(key, undefined);
 }
 
+/** The Windows build the app runs on, which xterm's reflow depends on; `null` elsewhere and until it's known. */
+export const $windowsBuild = atom(/** @type {number | null} */ (null));
+
 /** A request to focus a terminal's screen, until its view has. */
 export const $terminalFocus = atom(/** @type {{ terminalId: string } | null} */ (null));
 

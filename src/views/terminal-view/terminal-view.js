@@ -7,7 +7,7 @@ import { terminals } from '../../hooks/terminals/terminals.js';
 import { $pendingInput } from '../../stores/chat/chat.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $terminalColors, $terminalFontFamily, $terminalFontSize } from '../../stores/settings/settings.js';
-import { $terminalFocus, $terminals, setTerminalTitle, terminalFocused } from '../../stores/terminals/terminals.js';
+import { $terminalFocus, $terminals, $windowsBuild, setTerminalTitle, terminalFocused } from '../../stores/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/terminal/terminal.js';
@@ -30,6 +30,7 @@ export class AcpTerminalView extends ViewElement {
   #fontFamily = new StoreController(this, { store: $terminalFontFamily });
   #fontSize = new StoreController(this, { store: $terminalFontSize });
   #colors = new StoreController(this, { store: $terminalColors });
+  #windowsBuild = new StoreController(this, { store: $windowsBuild });
   #dropTarget = new StoreController(this, { store: $fileDropTarget });
   #pending = new StoreController(this, { store: $pendingInput });
   #focusRequest = new StoreController(this, { store: $terminalFocus });
@@ -125,6 +126,7 @@ export class AcpTerminalView extends ViewElement {
         .fontFamily=${this.#fontFamily.value}
         .fontSize=${this.#fontSize.value}
         .colors=${this.#colors.value}
+        .windowsBuild=${this.#windowsBuild.value}
         .waiting=${this.#waiting}
         ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
         @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}
