@@ -33,12 +33,12 @@ describe('acp-terminals-view', () => {
     return /** @type {AcpTerminalsView} */ (await fixture(html`<acp-terminals-view></acp-terminals-view>`));
   }
 
-  const tabView = (/** @type {AcpTerminalsView} */ el) => /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view'));
+  const tabView = (/** @type {AcpTerminalsView} */ el) => /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view:not([hidden])'));
   /** The terminal views the tab view mounted, in tab order. */
   const views = (/** @type {AcpTerminalsView} */ el) => [...(tabView(el).shadowRoot?.querySelectorAll('acp-terminal-view') ?? [])];
   const mounted = (/** @type {AcpTerminalsView} */ el) => views(el).map((v) => v.getAttribute('terminal-id'));
 
-  it('shows the shown project’s terminals, every one mounted and the active one in front, and swaps them with the project', async () => {
+  it('shows the shown project’s terminals, every one mounted and the active one in front, and keeps the others mounted behind it', async () => {
     // Arrange
     const a = openTerminal('/p', '/p', 'a');
     const b = openTerminal('/p', '/p', 'b');
@@ -48,6 +48,8 @@ describe('acp-terminals-view', () => {
     expect(mounted(el)).to.deep.equal([a, b]);
     expect(tabView(el).active).to.equal(tabs.terminalId(b));
     expect(tabView(el).tabs.map((t) => t.kind)).to.deep.equal(['terminal', 'terminal']);
+
+    const [viewA] = views(el);
 
     // Act: another project, with a terminal of its own, then back
     $project.set({ path: '/q', name: 'q', rootId: null });
@@ -60,6 +62,7 @@ describe('acp-terminals-view', () => {
     // Assert
     expect(other).to.deep.equal([c]);
     expect(mounted(el), 'as it was').to.deep.equal([a, b]);
+    expect(views(el)[0] === viewA, 'the same terminal, its scrollback with it').to.equal(true);
     expect(tabView(el).active).to.equal(tabs.terminalId(b));
   });
 

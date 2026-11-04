@@ -35,8 +35,8 @@ logged. Keep it portable: unix-only parts behind `cfg(unix)` with a Windows path
 `ChildKiller`). Frontend: `$terminals` (`stores/terminals/terminals.js`, in
 memory; `$folderTabs`' `parse` drops terminal tabs) and the `terminals` hook
 (`hooks/terminals/terminals.js`, its pure rules in `rules.js`): `connect()` (passed by `<acp-terminal-view>`) starts a shell when its
-tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
-while its tab, workspace or project isn't shown; a terminal's shell is closed once its tab is in neither its
+tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer only while shown and where available, else the DOM one; a moved one, as a tab reorder moves it, keeps its screen); a shell keeps running,
+and its screen stays mounted (`<acp-terminals-view>` has a tab view per folder, the shown one's in front), while its tab, workspace or project isn't shown; a terminal's shell is closed once its tab is in neither its
 folder's terminal group nor its editor tabs (any close, its project removed: `removeProjectTerminals()`, which also closes the project's terminals in its workspaces' folders, `TerminalInfo.projectPath`); a workspace's are closed, their shells awaited, before it is deleted (`terminals.closeFolder()`);
 exit 0 closes the tab (`closeTerminalTab()`, in whichever group holds it), any other exit
 keeps it with Restart. The previous page load's shells are closed (`close_window_terminals`) by `terminals.start()`, first thing in `<acp-app>`, and before any attach or close. "Open in → Terminal" is `sessions.openInTerminal()` (a hook may not import a controller). `paste(text)` pastes as the user would (bracketed when the program asked for it, else line
