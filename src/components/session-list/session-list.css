@@ -5,49 +5,51 @@
   color: var(--acp-color-on-surface);
 }
 
-.acp-session-list__list {
+.acp-session-list__tree {
   flex: 1;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
-  gap: var(--acp-space-0-5);
-  overflow: auto;
-  padding: var(--acp-space-0-5) var(--acp-space-1) var(--acp-space-2);
-}
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
+  --tvx-tree-item-indent: var(--acp-space-4);
+  --tvx-tree-item-inset: var(--acp-space-1);
+  --tvx-tree-item-padding-start: var(--acp-space-2);
+  --tvx-tree-item-padding-end: var(--acp-space-2);
+  --tvx-tree-item-shape: var(--acp-shape-corner-small);
+  --tvx-tree-item-icon-size: var(--acp-icon-size-xs);
+  --tvx-tree-item-selected-background-color: var(--acp-color-secondary-container);
+  --tvx-tree-item-selected-color: var(--acp-color-on-secondary-container);
 
-.acp-session-list__more {
-  display: flex;
-  align-items: center;
-  padding-inline-end: var(--acp-space-3);
-}
+  /* A folder's chevron follows its count, a chat's is among its row's buttons. */
+  &::part(chevron) {
+    display: none;
+  }
 
-.acp-session-list__show-more {
-  margin-inline-start: 22px;
-  --md-button-block-start-space: var(--acp-button-block-space-compact);
-  --md-button-block-end-space: var(--acp-button-block-space-compact);
-}
+  /* The open row's fill (z-index: -1) stays above the row's background, below its content. */
+  &::part(row) {
+    isolation: isolate;
+  }
 
-.acp-session-list__show-more-new {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--acp-space-1);
-  margin-inline-start: auto;
-  font-size: var(--acp-font-size-xs);
-  font-variant-numeric: tabular-nums;
-  color: var(--acp-color-primary);
-}
+  /* Custom properties go down to what the row holds, past the tree's shadow root and the row's. */
+  &::part(row):hover {
+    --_acp-session-list-folder-chevron: 1;
+    --acp-session-row-trailing-rest: none;
+    --acp-session-row-trailing-actions: flex;
+  }
 
-.acp-session-list__show-more-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: var(--acp-shape-corner-full);
-  background: var(--acp-color-primary);
+  &::part(trailing) {
+    font-size: var(--acp-font-size-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--acp-color-on-surface-variant);
+  }
 }
 
 .acp-session-list__loading {
   display: flex;
   flex-direction: column;
   gap: var(--acp-space-0-5);
+  padding: var(--acp-space-0-5) var(--acp-space-1) var(--acp-space-2);
 }
 
 .acp-session-list__skeleton-row {

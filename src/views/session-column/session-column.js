@@ -13,7 +13,7 @@ import { $activeSubagent, $permissionRequests, $subagents, showSubagent } from '
 import { $unreadSessions, markRead, markUnread } from '../../stores/session-read/session-read.js';
 import { $now } from '../../stores/clock/clock.js';
 import { $sessionSync } from '../../stores/session-sync/session-sync.js';
-import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded, workspaceOfSession } from '../../stores/sessions/sessions.js';
+import { $activeSessionId, $pinnedSessions, $sessions, $sessionsLoaded, setSessionPinned, workspaceOfSession } from '../../stores/sessions/sessions.js';
 import { $projectPath } from '../../stores/project/project.js';
 import { $activeWorkspace, $activeWorkspaceId, MAIN } from '../../stores/workspaces/workspaces.js';
 import { $waitingElsewhere } from '../../stores/workspace-status/workspace-status.js';
@@ -22,7 +22,7 @@ import { $waitingElsewhere } from '../../stores/workspace-status/workspace-statu
 
 /**
  * @tag acp-session-column
- * @summary The Sessions column's container: the shown workspace's header (name, New chat, the sync, its banners) and its chats from the stores, and what they ask for (select, open a subagent, new chat, rename, reveal, remove, mark read or unread, resync, recreate or delete the workspace).
+ * @summary The Sessions column's container: the shown workspace's header (name, New chat, the sync, its banners) and its chats from the stores, and what they ask for (select, open a subagent, new chat, rename, reveal, remove, mark read or unread, pin, resync, recreate or delete the workspace).
  */
 export class AcpSessionColumn extends ViewElement {
   #sessions = new StoreController(this, { store: $sessions });
@@ -81,6 +81,12 @@ export class AcpSessionColumn extends ViewElement {
     else markUnread(sessionId);
   }
 
+  /** @param {Event} e */
+  #onSessionPin(e) {
+    const { sessionId, pinned } = /** @type {CustomEvent<{ sessionId: string, pinned: boolean }>} */ (e).detail;
+    setSessionPinned(sessionId, pinned);
+  }
+
   #onResync = () => {
     const path = this.#projectPath.value;
     if (path) sessions.sync(path, { force: true });
@@ -125,6 +131,7 @@ export class AcpSessionColumn extends ViewElement {
         @acp-session-select=${this.#onSessionSelect}
         @acp-subagent-open=${this.#onSubagentOpen}
         @acp-session-mark-read=${this.#onSessionMarkRead}
+        @acp-session-pin=${this.#onSessionPin}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>
     </acp-panel>`;

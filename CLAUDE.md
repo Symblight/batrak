@@ -87,7 +87,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   Search pane, and `<acp-search-view>`, for the search dialog; one backend slot each).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
-  `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`, `TreeNavigationController` (the roving Tab stop and WAI-ARIA keys of a tree whose rows are elements: session list, Changes review),
+  `SelectionActionsController` fires `acp-chat-add`; `FloatingController`, `SortableController`, `TreeNavigationController` (the roving Tab stop and WAI-ARIA keys of a tree whose rows are elements: Changes review),
   `ContextMenuController`, `TabContentController`. Shared pure helpers are rules of a hook
   (`composer.configOf()`), not of a store module.
 

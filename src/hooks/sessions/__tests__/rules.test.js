@@ -10,7 +10,7 @@ import {
   removeSessionConfirm,
   sessionIndicator,
   syncSummary,
-  unreadIn,
+  splitByRead,
   viewDisabledReason,
   viewOf,
   visibleSessions,
@@ -94,12 +94,11 @@ describe('sessions model', () => {
     }
   });
 
-  it('counts a project\'s unread sessions, and those past the ones its list shows', () => {
+  it('splits a list by read state, keeping its order', () => {
     const list = ['a', 'b', 'c', 'd'].map((id) => ({ ...SESSION, id }));
-    expect(unreadIn(list, ['b', 'd', 'other'], 2)).to.deep.equal({ count: 2, hidden: 1 });
-    expect(unreadIn(list, ['a', 'b'], 2), 'all shown unread').to.deep.equal({ count: 2, hidden: 0 });
-    expect(unreadIn(list, ['d']), 'nothing hidden without a limit').to.deep.equal({ count: 1, hidden: 0 });
-    expect(unreadIn([], ['a'])).to.deep.equal({ count: 0, hidden: 0 });
+    const ids = (/** @type {readonly { id: string }[]} */ l) => l.map((s) => s.id);
+    const { unread, read } = splitByRead(list, ['d', 'b', 'other']);
+    expect([ids(unread), ids(read)]).to.deep.equal([['b', 'd'], ['a', 'c']]);
   });
 
   it('words a session\'s age for its accessible name, like the compact age of the row', () => {

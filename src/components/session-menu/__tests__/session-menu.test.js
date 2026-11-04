@@ -131,6 +131,22 @@ describe('acp-session-menu', () => {
     expect(root.querySelectorAll('md-menu-item[value^="mark-"]')).to.have.length(1);
   });
 
+  it('offers Pin or Unpin as asked, and neither by default', async () => {
+    // Arrange
+    const el = /** @type {HTMLElementTagNameMap['acp-session-menu']} */ (await fixture(html`<acp-session-menu></acp-session-menu>`));
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const values = () => [...root.querySelectorAll('md-menu-item[value$="pin"]')].map((item) => item.getAttribute('value'));
+    // Assert
+    expect(values(), 'the header passes none').to.deep.equal([]);
+    for (const pin of /** @type {('pin' | 'unpin')[]} */ (['pin', 'unpin'])) {
+      // Act
+      el.pin = pin;
+      await el.updateComplete;
+      // Assert
+      expect(values()).to.deep.equal([pin]);
+    }
+  });
+
   it('offers Reset to agent title only when asked to', async () => {
     const { el } = await render(html`<acp-session-menu></acp-session-menu>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);

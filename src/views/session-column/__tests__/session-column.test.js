@@ -124,6 +124,24 @@ describe('acp-session-column', () => {
     expect($unreadSessions.get(), 'a unread again').to.have.members(ids);
   });
 
+  it('pins and unpins what the list asks for, and hands it the pins', async () => {
+    // Arrange
+    const el = /** @type {AcpSessionColumn} */ (await fixture(html`<acp-session-column></acp-session-column>`));
+    const list = /** @type {HTMLElementTagNameMap['acp-session-list']} */ (el.querySelector('acp-session-list'));
+    /** @param {boolean} pinned */
+    const ask = (pinned) => list.dispatchEvent(new CustomEvent('acp-session-pin', { detail: { sessionId: 'a', pinned }, bubbles: true, composed: true }));
+    // Act
+    ask(true);
+    await el.updateComplete;
+    // Assert
+    expect(list.pinned).to.deep.equal(['a']);
+    // Act
+    ask(false);
+    await el.updateComplete;
+    // Assert
+    expect(list.pinned).to.deep.equal([]);
+  });
+
   it("hands the list each chat's subagents; one picked there is shown, its chat's row goes back to the chat", async () => {
     // Arrange
     /** @type {import('../../../hooks/sessions/types.js').Subagent} */

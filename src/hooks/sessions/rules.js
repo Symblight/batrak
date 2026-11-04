@@ -77,16 +77,14 @@ export function isUnread(session, read, baseline) {
 }
 
 /**
- * A project's unread sessions, and how many of them are past the first `shown` (Show more's hidden ones).
- * @param {readonly Session[]} sessions The project's, in list order.
+ * The session list's two folders, each in the list's order.
+ * @param {readonly Session[]} sessions
  * @param {readonly string[]} unread Unread session ids (`$unreadSessions`).
- * @param {number} [shown] How many lead the list; default: all.
- * @returns {{ count: number, hidden: number }}
+ * @returns {{ unread: Session[], read: Session[] }}
  */
-export function unreadIn(sessions, unread, shown = sessions.length) {
+export function splitByRead(sessions, unread) {
   const ids = new Set(unread);
-  const flags = sessions.map((s) => ids.has(s.id));
-  return { count: flags.filter(Boolean).length, hidden: flags.slice(shown).filter(Boolean).length };
+  return { unread: sessions.filter((s) => ids.has(s.id)), read: sessions.filter((s) => !ids.has(s.id)) };
 }
 
 /**

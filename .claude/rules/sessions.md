@@ -45,6 +45,7 @@ Statuses come from the backend's session events. A draft shows only the composer
 list appears with the first message. Replies come over ACP (see below and `agent-config.md`); messages live only
 in the chat element and the agent, which replays them (`session/load`) when it starts again.
 
+- **The list** (`<acp-session-list>`): one `tvx-tree-view`: Unread and Read folders (`splitByRead()`), chats under them, a chat's subagents under it, Show more as Read's last row (the sessions are in memory; it reveals the next `SESSIONS_PAGE` and moves focus to the first). A click selects, a double-click or Enter opens (`acp-session-select`, `acp-subagent-open`), and the open row keeps a lighter fill of its own while another is selected, since the tree highlights only the selected row); F2 or the menu renames (the tree's editing). `::part(row):hover` sets custom properties that reach what the row holds, which swaps `<acp-session-row-trailing>`'s age and status for Mark as read (unread only), Pin and the menu button, and shows a folder's chevron; the tree's own chevrons are hidden. Folder and subagent open state isn't persisted.
 - **Sessions** (`src-tauri/src/session/`; `runtime.rs` holds `Sessions` and the lifecycle calls,
   `runtime/` one module per concern, each adding to `Sessions` / `Inner`: `api`, `state`, `start`,
   `turn`, `sign_in`, `agents`, `host`, `worktree`, `sync`, `slots`): the agents own the sessions (spec:
@@ -56,7 +57,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has, never one its CLI runs (a new CLI's session isn't listed yet). A
   session first seen in a list gets the id `<agent id>~<acp id>`. `sessions.json` in app data
   stores the list as last seen (no messages, all `stopped` after a restart) so it shows at once; a
-  sync runs at launch, when a project is shown (5 min stale), when a session is clicked (its agent,
+  sync runs at launch, when a project is shown (5 min stale), when a session is opened (its agent,
   every 30 s at most), for agents that didn't list once `$agentList` changes, on Resync
   (`<acp-session-sync>` in the session list), and every 20 s for the shown project's listing agents
   (quiet, window visible). `Session.activeElsewhereUntil`: its agent saw activity that wasn't
