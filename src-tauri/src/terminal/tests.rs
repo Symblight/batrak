@@ -195,7 +195,7 @@ fn the_shells_exit_code_is_reported() {
     assert_eq!(out.wait_exit(), TerminalEvent::Exit { code: Some(3), signal: None });
 
     let out = f.start("u");
-    f.run("u", "exit");
+    f.run("u", "exit 0");
     assert_eq!(out.wait_exit(), TerminalEvent::Exit { code: Some(0), signal: None });
     let late = Arc::new(Recorder::default());
     f.terminals.attach("u", late.clone()).unwrap();
