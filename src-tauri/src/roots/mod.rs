@@ -203,6 +203,15 @@ impl Root {
         }
     }
 
+    /// Patches the snapshot from the given directories on disk, read with no lock held: a big batch
+    /// (a checkout, a new folder scanned whole) doesn't stop the tree and Quick Open. Only the watcher
+    /// calls it, under `batch`, so nothing else patches these directories in between. Blocking.
+    fn reconcile(&self, dirs: impl IntoIterator<Item = String>, changes: &mut Changes) {
+        let plan = self.read().plan(dirs);
+        let readings = snapshot::read_planned(&self.path, plan, &self.closed);
+        self.write().apply_readings(readings, changes);
+    }
+
     /// Scans the whole root again (the Files column's Refresh), for changes the watcher missed,
     /// and reports them as the watcher would. Blocking.
     pub fn rescan(&self) {
@@ -481,6 +490,40 @@ mod tests {
             assert!(Instant::now() < deadline, "the watcher's batch applies after the rescan");
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
+        roots.close(&root.id);
+        std::fs::remove_dir_all(&base).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_batch_reading_the_disk_keeps_the_snapshot_free() {
+        let base = std::env::temp_dir().join(format!("brama-batch-unlocked-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&base);
+        std::fs::create_dir_all(base.join("sub")).unwrap();
+        let roots = Roots::default();
+        let root = roots.open_with(&base, "main", &AtomicBool::new(false), Kind::Project, |_, _| {}).unwrap();
+        lock(&root.watcher).take();
+        // The walk opens `.gitignore`, which waits here until something writes to the FIFO.
+        let fifo = base.join("sub/.gitignore");
+        assert!(std::process::Command::new("mkfifo").arg(&fifo).status().unwrap().success());
+        std::fs::write(base.join("sub/new.rs"), "").unwrap();
+
+        let batch = std::thread::spawn({
+            let root = Arc::clone(&root);
+            move || {
+                let mut changes = Changes::default();
+                root.reconcile(["sub".to_owned()], &mut changes);
+                changes
+            }
+        });
+        std::thread::sleep(std::time::Duration::from_millis(300));
+        let free = root.snapshot.try_write().is_ok();
+        std::fs::write(&fifo, "").unwrap(); // lets the batch go on, whatever the check said
+        let changes = batch.join().unwrap();
+
+        assert!(free, "the tree and Quick Open keep answering while the disk is read");
+        assert!(changes.added.contains(&"sub/new.rs".to_owned()), "{changes:?}");
+        assert!(root.read().get("sub/new.rs").is_some());
         roots.close(&root.id);
         std::fs::remove_dir_all(&base).unwrap();
     }

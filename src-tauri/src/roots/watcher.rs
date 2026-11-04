@@ -97,7 +97,7 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
         let Some(fresh) = Snapshot::scan_until(&root.path, &root.closed) else { return changes };
         root.write().replace_with(fresh, &mut changes);
     } else if !dirs.is_empty() {
-        root.write().reconcile(dirs, &mut changes);
+        root.reconcile(dirs, &mut changes);
     }
     // After the disk changed, before anyone hears of it: a result cached at an older epoch may
     // predate this batch. Changes inside ignored folders (a build's output) leave it alone, as git

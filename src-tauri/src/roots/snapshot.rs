@@ -67,6 +67,40 @@ pub struct Snapshot {
 /// One directory as read from disk: its path and its children.
 type Listing = (String, Vec<Entry>);
 
+/// A loaded directory a batch is to read again.
+pub struct PlannedDir {
+    dir: String,
+    ignored: bool,
+    /// Its non-ignored child folders, scanned already; any other it holds now is new and scanned whole.
+    scanned: HashSet<String>,
+}
+
+/// A planned directory as read from disk, waiting to be applied.
+pub struct DirReading {
+    dir: String,
+    entries: Vec<Entry>,
+    /// Listings of the new non-ignored folders in it.
+    scans: Vec<Listing>,
+}
+
+/// Reads the planned directories (one level each, new non-ignored folders whole). Blocking; call
+/// with no lock held. A directory that's gone is left out: its parent's reading removes it.
+pub fn read_planned(root: &Path, plan: Vec<PlannedDir>, cancel: &AtomicBool) -> Vec<DirReading> {
+    plan.into_iter()
+        .filter_map(|PlannedDir { dir, ignored, scanned }| {
+            let abs = if dir.is_empty() { root.to_path_buf() } else { root.join(&dir) };
+            let not_ignored = if ignored { HashSet::new() } else { not_ignored_children(&abs) };
+            let entries = read_children(&abs, &dir, &not_ignored).ok()?;
+            let scans = entries
+                .iter()
+                .filter(|e| e.is_dir && !e.ignored && !scanned.contains(&e.path))
+                .flat_map(|e| scan_subtree(root, &e.path, cancel).unwrap_or_default())
+                .collect();
+            Some(DirReading { dir, entries, scans })
+        })
+        .collect()
+}
+
 impl Snapshot {
     /// Scans the whole root. Blocking; runs the walk on all cores.
     #[cfg(test)]
@@ -86,6 +120,13 @@ impl Snapshot {
             snapshot.apply_listing(listing);
         }
         Some(snapshot)
+    }
+
+    /// A whole batch at once, holding the snapshot throughout.
+    #[cfg(test)]
+    pub fn reconcile(&mut self, dirs: impl IntoIterator<Item = String>, changes: &mut Changes) {
+        let readings = read_planned(&self.root, self.plan(dirs), &NEVER);
+        self.apply_readings(readings, changes);
     }
 
     pub fn abs(&self, rel: &str) -> PathBuf {
@@ -142,40 +183,51 @@ impl Snapshot {
         Ok(())
     }
 
-    /// Re-reads the given directories from disk (one level each) and patches the snapshot.
-    /// New non-ignored subdirectories are scanned whole.
-    pub fn reconcile(&mut self, dirs: impl IntoIterator<Item = String>, changes: &mut Changes) {
+    /// Which of `dirs` a batch reads again, parents first, so a removed parent drops its subtree
+    /// before its children are patched. Directories not loaded are left out.
+    pub fn plan(&self, dirs: impl IntoIterator<Item = String>) -> Vec<PlannedDir> {
         let mut dirs: Vec<String> = dirs.into_iter().collect();
-        // Parents first, so a removed parent drops its subtree before we look inside it.
         dirs.sort_by_key(|d| (d.matches('/').count() + usize::from(!d.is_empty()), d.clone()));
         dirs.dedup();
-        for dir in dirs {
-            self.reconcile_dir(&dir, changes);
+        dirs.into_iter()
+            .filter_map(|dir| {
+                let scanned = self
+                    .children
+                    .get(&dir)?
+                    .iter()
+                    .filter(|path| self.entries.get(*path).is_some_and(|e| e.is_dir && !e.ignored))
+                    .cloned()
+                    .collect();
+                let ignored = self.entries.get(&dir).is_some_and(|e| e.ignored);
+                Some(PlannedDir { dir, ignored, scanned })
+            })
+            .collect()
+    }
+
+    /// Patches the snapshot with what a batch read from disk. No disk access: the caller holds the
+    /// write lock, which the tree and Quick Open wait for.
+    pub fn apply_readings(&mut self, readings: Vec<DirReading>, changes: &mut Changes) {
+        for reading in readings {
+            self.apply_reading(reading, changes);
         }
     }
 
-    fn reconcile_dir(&mut self, rel: &str, changes: &mut Changes) {
-        let Some(old_children) = self.children.get(rel).cloned() else {
-            return; // never loaded, or removed earlier in this batch
+    fn apply_reading(&mut self, DirReading { dir, entries, scans }: DirReading, changes: &mut Changes) {
+        let Some(old_children) = self.children.get(&dir).cloned() else {
+            return; // removed earlier in this batch
         };
-        let abs = self.abs(rel);
-        let ignored_dir = self.entries.get(rel).is_some_and(|e| e.ignored);
-        let not_ignored = if ignored_dir { HashSet::new() } else { not_ignored_children(&abs) };
-        let Ok(fresh) = read_children(&abs, rel, &not_ignored) else {
-            return; // gone; the parent's reconcile removes it
-        };
-        let fresh_paths: BTreeSet<String> = fresh.iter().map(|e| e.path.clone()).collect();
+        let fresh_paths: BTreeSet<String> = entries.iter().map(|e| e.path.clone()).collect();
 
         for path in old_children.difference(&fresh_paths) {
             self.remove_subtree(path);
             changes.removed.push(path.clone());
-            changes.dirs.insert(rel.to_owned());
+            changes.dirs.insert(dir.clone());
         }
-        for entry in fresh {
+        for entry in entries {
             match self.entries.get(&entry.path) {
                 None => {
                     changes.added.push(entry.path.clone());
-                    changes.dirs.insert(rel.to_owned());
+                    changes.dirs.insert(dir.clone());
                     self.insert_new(entry);
                 }
                 Some(old) if old.is_dir != entry.is_dir || old.ignored != entry.ignored => {
@@ -183,7 +235,7 @@ impl Snapshot {
                     self.remove_subtree(&entry.path);
                     changes.removed.push(entry.path.clone());
                     changes.added.push(entry.path.clone());
-                    changes.dirs.insert(rel.to_owned());
+                    changes.dirs.insert(dir.clone());
                     self.insert_new(entry);
                 }
                 Some(old) if !entry.is_dir && (old.size != entry.size || old.mtime != entry.mtime) => {
@@ -192,6 +244,9 @@ impl Snapshot {
                 }
                 Some(_) => {}
             }
+        }
+        for listing in scans {
+            self.apply_listing(listing);
         }
     }
 
@@ -236,14 +291,8 @@ impl Snapshot {
 
     fn insert_new(&mut self, entry: Entry) {
         let path = entry.path.clone();
-        let scan = entry.is_dir && !entry.ignored;
         self.children.entry(parent_of(&path).to_owned()).or_default().insert(path.clone());
-        self.entries.insert(path.clone(), entry);
-        if scan {
-            for listing in scan_subtree(&self.root, &path, &NEVER).unwrap_or_default() {
-                self.apply_listing(listing);
-            }
-        }
+        self.entries.insert(path, entry);
     }
 
     fn remove_subtree(&mut self, rel: &str) {
@@ -346,6 +395,7 @@ fn read_children(abs: &Path, rel: &str, not_ignored: &HashSet<String>) -> std::i
 }
 
 /// Cancel flag of scans nobody cancels.
+#[cfg(test)]
 static NEVER: AtomicBool = AtomicBool::new(false);
 
 /// Parallel scan of a non-ignored directory: one listing per non-ignored directory in it,
@@ -564,6 +614,29 @@ mod tests {
 
         snap.load_ignored_dir("node_modules").unwrap();
         assert_eq!(snap.list_dir("node_modules").unwrap()[0].name, "pkg");
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_folder_removed_after_the_read_goes_with_the_next_batch() {
+        let root = temp_root("removed-after-read");
+        fs::create_dir_all(root.join("src/nested")).unwrap();
+        fs::write(root.join("src/nested/a.rs"), "").unwrap();
+        fs::write(root.join("src/b.rs"), "").unwrap();
+        let mut snap = Snapshot::scan(&root);
+        fs::remove_file(root.join("src/b.rs")).unwrap();
+
+        let dirs = ["src/nested".to_owned(), "src".to_owned()];
+        let readings = read_planned(&root, snap.plan(dirs.clone()), &NEVER);
+        fs::remove_dir_all(root.join("src/nested")).unwrap();
+        let mut changes = Changes::default();
+        snap.apply_readings(readings, &mut changes);
+        assert_eq!(changes.removed, ["src/b.rs"], "what the read saw");
+
+        let mut changes = Changes::default();
+        snap.reconcile(dirs, &mut changes);
+        assert_eq!(changes.removed, ["src/nested"]);
+        assert!(!snap.files().any(|e| e.path.starts_with("src/nested")));
         fs::remove_dir_all(root).unwrap();
     }
 
