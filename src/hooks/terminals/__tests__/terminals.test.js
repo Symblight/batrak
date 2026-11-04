@@ -330,13 +330,17 @@ describe('terminals', () => {
       const [first] = panelTerminals();
       terminals.hidePanel();
       const hidden = [$terminalPanel.get().open, panelTerminals()];
+      $terminalFocus.set(null);
       await terminals.showPanel();
       const shownAgain = [$terminalPanel.get().open, panelTerminals()];
+      const focusOnShow = $terminalFocus.get();
+      $terminalFocus.set(null);
       await terminals.showPanel();
       // Assert
       expect($terminals.get()[first].cwd, 'the project’s folder').to.equal('/p');
       expect(hidden, 'hiding stops no shell and forgets nothing').to.deep.equal([false, [first]]);
       expect(shownAgain, 'the same terminal, as it was').to.deep.equal([true, [first]]);
+      expect(focusOnShow, 'shown by the rail: takes the keyboard').to.deep.equal({ terminalId: first });
       expect(panelTerminals(), 'a click while shown adds none').to.deep.equal([first]);
       expect($terminalFocus.get(), 'but focuses the active one').to.deep.equal({ terminalId: first });
       expect(sent('terminal_close')).to.have.length(0);

@@ -3,7 +3,7 @@ import { createRef, ref } from 'lit/directives/ref.js';
 import { app } from '../../hooks/app/app.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
-import { $terminalFocus, $terminalTabs, $terminals, terminalFocused, terminalGroup } from '../../stores/terminals/terminals.js';
+import { $terminalTabs, $terminals, focusTerminal, terminalGroup } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -24,24 +24,11 @@ export class AcpTerminalsView extends ViewElement {
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #terminals = new StoreController(this, { store: $terminals });
   #project = new StoreController(this, { store: $project });
-  #focus = new StoreController(this, { store: $terminalFocus, onChange: (request) => request && this.#focusTerminal(request) });
 
-  /** @type {Map<string, HTMLElementTagNameMap['acp-terminal-view']>} The terminals mounted, by terminal id. */
-  #mounted = new Map();
   /** @type {readonly string[] | null} The ids `#tabs` was made from. */
   #tabsFor = null;
   /** @type {readonly EditorTab[]} */
   #tabs = [];
-
-  /**
-   * Focuses the terminal a request names, if it is mounted, and answers the request.
-   * @param {{ terminalId: string }} request
-   */
-  async #focusTerminal(request) {
-    await this.updateComplete;
-    this.#mounted.get(request.terminalId)?.focus();
-    terminalFocused(request);
-  }
 
   /** @param {readonly string[]} paths @returns {readonly EditorTab[]} The same array until the tabs change, as the tab strip re-measures on a new one. */
   #tabsOf(paths) {
@@ -52,14 +39,11 @@ export class AcpTerminalsView extends ViewElement {
     return this.#tabs;
   }
 
-  /**
-   * @param {string} id
-   * @param {Element | undefined} view
-   */
-  #track(id, view) {
-    if (view) this.#mounted.set(id, /** @type {HTMLElementTagNameMap['acp-terminal-view']} */ (view));
-    else this.#mounted.delete(id);
-  }
+  /** A tab clicked is shown and takes the keyboard. */
+  #onTabActivate = (/** @type {CustomEvent<{ id: string }>} */ e) => {
+    terminalGroup.activate(e.detail.id);
+    focusTerminal(tabs.terminalOf(e.detail.id) ?? '');
+  };
 
   /** @param {Event} e */
   #onTabClose(e) {
@@ -76,8 +60,7 @@ export class AcpTerminalsView extends ViewElement {
 
   /** @param {EditorTab} tab */
   #renderTerminal = (tab) => {
-    const id = tabs.terminalOf(tab.id) ?? '';
-    return html`<acp-terminal-view terminal-id=${id} ${ref((view) => this.#track(id, view))}></acp-terminal-view>`;
+    return html`<acp-terminal-view terminal-id=${tabs.terminalOf(tab.id) ?? ''}></acp-terminal-view>`;
   };
 
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} A ref: a tab's view can hold a dialog of its own. */
@@ -97,7 +80,7 @@ export class AcpTerminalsView extends ViewElement {
         .confirmDialog=${this.#confirmDialog}
         .renderContent=${this.#renderTerminal}
         .dropTo=${tabs.editorDrop}
-        @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => terminalGroup.activate(e.detail.id)}
+        @acp-tab-activate=${this.#onTabActivate}
         @acp-tab-close=${this.#onTabClose}
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) => terminalGroup.setPinned(e.detail.id, e.detail.pinned)}
         @acp-tab-move=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) => terminalGroup.move(e.detail.id, e.detail.index)}

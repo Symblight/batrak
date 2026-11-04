@@ -145,6 +145,7 @@ export function openTerminal(cwd, fallback, label) {
   const id = addTerminal(cwd, fallback, label);
   terminalGroup.open(terminalTabId(id));
   setTerminalPanelOpen($shownFolder.get(), true);
+  focusTerminal(id);
   return id;
 }
 
@@ -177,6 +178,7 @@ export function addSessionTerminal(id, sessionId, cwd, label) {
     ...$terminals.get(),
     [id]: { cwd, fallback: null, label, title: null, folder: null, projectPath: null, status: 'running', exit: null, error: null, login: null, sessionId },
   });
+  focusTerminal(id);
 }
 
 /** Sessions whose CLI is starting (`session_open_cli` asked, no answer yet). */
@@ -225,6 +227,7 @@ export function openLoginTerminal({ terminalId, title, commandLine }, folder) {
     });
   }
   const root = known ? known.folder : folder;
+  focusTerminal(terminalId);
   // Moved to the editor's tabs: shown there.
   if ($folderTabs.get()[root ?? NO_PROJECT]?.paths.includes(terminalTabId(terminalId))) {
     openFolderTab(root, terminalTabId(terminalId));
@@ -246,6 +249,7 @@ export function moveTerminalToEditor(terminalId, index) {
   openTab(tab);
   moveTab(tab, index);
   terminalGroup.close(tab);
+  focusTerminal(terminalId);
 }
 
 /**

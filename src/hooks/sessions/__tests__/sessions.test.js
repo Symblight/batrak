@@ -6,7 +6,7 @@ import { $agentList } from '../../../stores/agents/agents.js';
 import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
-import { $cliStarting, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
+import { $cliStarting, $terminalFocus, $terminals, addSessionTerminal, sessionTerminalOf } from '../../../stores/terminals/terminals.js';
 import { $sessionReads, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $project } from '../../../stores/project/project.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
@@ -68,8 +68,11 @@ describe('sessions views', () => {
     expect($terminals.get()['t-cli']).to.include({ status: 'running', sessionId: 's1', cwd: '/p/sub', label: 'Claude Code' });
     expect($sessionViews.get()).to.deep.equal({ s1: 'terminal' });
     expect($cliStarting.get(), 'no longer starting').to.deep.equal([]);
+    $terminalFocus.set(null);
     await sessions.continueInTerminal('s1');
     expect(sent('session_open_cli'), 'a CLI that runs is left alone').to.have.length(1);
+    expect($terminalFocus.get(), 'but takes the keyboard').to.deep.equal({ terminalId: 't-cli' });
+    $terminalFocus.set(null);
   });
 
   it("opens a terminal in a session's folder and shows the session", async () => {

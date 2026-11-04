@@ -244,6 +244,18 @@ describe('terminals', () => {
       expect($terminalTabs.get().paths).to.deep.equal([]);
     });
 
+    it('asks to focus a terminal opened, a login shown, a CLI added or one moved to the editor', () => {
+      const asked = () => $terminalFocus.get()?.terminalId;
+      const opened = openTerminal('/p', '/p', 'a');
+      expect(asked(), 'opened').to.equal(opened);
+      openLoginTerminal({ terminalId: 'sign-in-2', title: 'Sign in', commandLine: 'x login' }, null);
+      expect(asked(), 'login').to.equal('sign-in-2');
+      addSessionTerminal('cli-s', 's', '/p', 'Agent');
+      expect(asked(), 'CLI').to.equal('cli-s');
+      moveTerminalToEditor(opened, 0);
+      expect(asked(), 'moved').to.equal(opened);
+    });
+
     it('asks to focus a terminal until the view has', () => {
       focusTerminal('t1');
       const first = /** @type {NonNullable<ReturnType<typeof $terminalFocus.get>>} */ ($terminalFocus.get());

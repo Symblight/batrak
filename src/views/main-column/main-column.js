@@ -38,7 +38,7 @@ import {
   focusComment,
   sendToChat,
 } from '../../stores/comments/comments.js';
-import { $terminals, moveTerminalToEditor } from '../../stores/terminals/terminals.js';
+import { $terminals, focusTerminal, moveTerminalToEditor } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
 import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import '../../components/tab-view/tab-view.js';
@@ -215,6 +215,13 @@ export class AcpMainColumn extends ViewElement {
     if (path !== null) this.#tabView.revealLine(path, line);
   }
 
+  /** A tab clicked is shown; a terminal's takes the keyboard. */
+  #onTabActivate = (/** @type {CustomEvent<{ id: string }>} */ e) => {
+    activateTab(e.detail.id);
+    const terminal = tabs.terminalOf(e.detail.id);
+    if (terminal !== null) focusTerminal(terminal);
+  };
+
   /** @param {Event} e */
   #onTabClose(e) {
     const { id, scope } = /** @type {CustomEvent<{ id: string, scope: CloseScope }>} */ (e).detail;
@@ -283,7 +290,7 @@ export class AcpMainColumn extends ViewElement {
         .acceptsDrop=${tabs.isTerminal}
         @acp-tab-receive=${(/** @type {CustomEvent<{ id: string, index: number }>} */ e) =>
           moveTerminalToEditor(tabs.terminalOf(e.detail.id) ?? '', e.detail.index)}
-        @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => activateTab(e.detail.id)}
+        @acp-tab-activate=${this.#onTabActivate}
         @acp-tab-close=${this.#onTabClose}
         @acp-tab-pin=${(/** @type {CustomEvent<{ id: string, pinned: boolean }>} */ e) =>
           setTabPinned(e.detail.id, e.detail.pinned)}

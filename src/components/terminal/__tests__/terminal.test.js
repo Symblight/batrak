@@ -237,6 +237,30 @@ describe('acp-terminal', () => {
     expect(calls.writes).to.deep.equal(['\x1b[1;3R']);
   });
 
+  it('takes the keyboard only when asked, waiting until it is shown', async () => {
+    // Arrange
+    const { el } = await render();
+    const settled = () => new Promise((resolve) => setTimeout(resolve, 50));
+    const focused = () => el.shadowRoot?.activeElement === input(el);
+    await settled();
+    expect(focused(), 'not for appearing').to.equal(false);
+    // Act
+    el.style.display = 'none';
+    await settled();
+    el.style.display = 'flex';
+    await settled();
+    // Assert
+    expect(focused(), 'not for being shown again').to.equal(false);
+    // Act
+    el.style.display = 'none';
+    await settled();
+    el.focus();
+    el.style.display = 'flex';
+    await settled();
+    // Assert
+    expect(focused(), 'asked while hidden').to.equal(true);
+  });
+
   it('keeps a paste until its shell is connected', async () => {
     const { calls, connect } = fakeConnect();
     const el = /** @type {AcpTerminal} */ (

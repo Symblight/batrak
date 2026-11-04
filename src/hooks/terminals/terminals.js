@@ -286,6 +286,7 @@ export const terminals = Object.freeze({
       focusTerminal(tabs.terminalOf(active) ?? '');
     } else if (paths.length) {
       setTerminalPanelOpen($shownFolder.get(), true);
+      if (active !== null) focusTerminal(tabs.terminalOf(active) ?? '');
     } else {
       await terminals.newTerminal();
     }

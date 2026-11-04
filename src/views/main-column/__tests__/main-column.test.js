@@ -3,7 +3,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { $activePath, closeAllTabs, openAgents, openChanges, openSettings, openTab } from '../../../stores/editor/editor.js';
 import { $gitChanges } from '../../../stores/git/git.js';
-import { $terminals } from '../../../stores/terminals/terminals.js';
+import { $terminalFocus, $terminals } from '../../../stores/terminals/terminals.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import { $project } from '../../../stores/project/project.js';
 import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
@@ -42,6 +42,21 @@ describe('acp-main-column', () => {
     await tabView.updateComplete;
     return { el, tabView };
   }
+
+  it('gives the keyboard to a terminal whose tab is clicked, and asks nothing for a file', async () => {
+    // Arrange
+    const { tabView } = await render();
+    const click = (/** @type {string} */ id) => tabView.dispatchEvent(new CustomEvent('acp-tab-activate', { detail: { id }, bubbles: true, composed: true }));
+    // Act
+    click('/p/a.js');
+    // Assert
+    expect($terminalFocus.get(), 'a file').to.equal(null);
+    // Act
+    click(tabs.terminalId('t1'));
+    // Assert
+    expect($terminalFocus.get()).to.deep.equal({ terminalId: 't1' });
+    $terminalFocus.set(null);
+  });
 
   it('hands its tab view a dialog of its own to ask in', async () => {
     // Arrange + Act

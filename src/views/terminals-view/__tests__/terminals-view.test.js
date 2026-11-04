@@ -101,6 +101,7 @@ describe('acp-terminals-view', () => {
     // Act + Assert
     send('acp-tab-activate', { id: ta });
     expect($terminalTabs.get().active).to.equal(ta);
+    expect($terminalFocus.get(), 'a tab clicked takes the keyboard').to.deep.equal({ terminalId: a });
     send('acp-tab-move', { id: ta, index: 2 });
     expect($terminalTabs.get().paths).to.deep.equal([tb, tc, ta]);
     send('acp-tab-pin', { id: tc, pinned: true });
@@ -111,22 +112,5 @@ describe('acp-terminals-view', () => {
     expect($terminalTabs.get().paths, 'the pinned stay').to.deep.equal([tc, ta]);
     send('acp-tab-close', { id: tc, scope: 'all' });
     expect($terminalTabs.get().paths).to.deep.equal([tc]);
-  });
-
-  it('focuses the terminal a request names, once it is mounted, and answers it', async () => {
-    // Arrange
-    const id = openTerminal('/p', '/p', 'a');
-    const el = await render();
-    const view = views(el)[0];
-    /** @type {string[]} */
-    const focused = [];
-    view.focus = () => focused.push(/** @type {string} */ (view.getAttribute('terminal-id')));
-
-    // Act
-    focusTerminal(id);
-    await until(() => $terminalFocus.get() === null);
-
-    // Assert
-    expect(focused).to.deep.equal([id]);
   });
 });

@@ -36,7 +36,7 @@ import {
 import { $activePermission, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
 import { forgetPendingInput } from '../../stores/chat/chat.js';
-import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
+import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, focusTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
 import { $projectPath } from '../../stores/project/project.js';
 import { $activeWorkspaceId, $shownFolder, MAIN, setActiveWorkspace } from '../../stores/workspaces/workspaces.js';
 import { computed } from 'nanostores';
@@ -290,6 +290,8 @@ async function continueInTerminal(id) {
   setSessionView(id, 'terminal');
   if ($activeSessionId.get() === id) await reconcile({ force: true });
   else await openCli(id);
+  const terminal = sessionTerminalOf(id);
+  if (terminal !== null) focusTerminal(terminal);
 }
 
 /**

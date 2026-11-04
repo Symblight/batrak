@@ -81,6 +81,8 @@ export class AcpTerminal extends LitElement {
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #frame;
   #visible = false;
+  /** Asked to take the keyboard while not shown: it does once shown. */
+  #focusWhenShown = false;
   /** Pasted before the shell was connected: sent once it is. */
   #pending = '';
   /** @type {string} The terminal `#link` is to (`terminalId` may already name the next). */
@@ -263,13 +265,14 @@ export class AcpTerminal extends LitElement {
       } else if (term.cols !== cols || term.rows !== rows) {
         this.#link?.resize(term.cols, term.rows);
       }
-      if (shown) term.focus();
+      if (shown && this.#focusWhenShown) this.focus();
     }, 16);
   }
 
   /** Puts the keyboard in the terminal. */
   focus() {
-    this.#term?.focus();
+    this.#focusWhenShown = !this.#visible;
+    if (this.#visible) this.#term?.focus();
   }
 
   /**
@@ -287,7 +290,7 @@ export class AcpTerminal extends LitElement {
       this.#pending += text;
       this.#pendingId = this.terminalId;
     }
-    term?.focus();
+    this.focus();
   }
 
   /**
@@ -296,7 +299,7 @@ export class AcpTerminal extends LitElement {
    */
   pasteLines(text) {
     this.#term?.paste(safePaste(text));
-    this.#term?.focus();
+    this.focus();
   }
 
   /**

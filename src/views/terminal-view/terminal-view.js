@@ -7,7 +7,7 @@ import { terminals } from '../../hooks/terminals/terminals.js';
 import { $pendingInput } from '../../stores/chat/chat.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $settings } from '../../stores/settings/settings.js';
-import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
+import { $terminalFocus, $terminals, setTerminalTitle, terminalFocused } from '../../stores/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/terminal/terminal.js';
@@ -30,6 +30,7 @@ export class AcpTerminalView extends ViewElement {
   #settings = new StoreController(this, { store: $settings });
   #dropTarget = new StoreController(this, { store: $fileDropTarget });
   #pending = new StoreController(this, { store: $pendingInput });
+  #focusRequest = new StoreController(this, { store: $terminalFocus });
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-terminal']>} */
   #terminalRef = createRef();
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} */
@@ -55,9 +56,12 @@ export class AcpTerminalView extends ViewElement {
     super.disconnectedCallback();
   }
 
-  /** Puts the keyboard in the terminal. */
-  focus() {
-    this.#terminalRef.value?.focus();
+  updated() {
+    const request = this.#focusRequest.value;
+    const terminal = this.#terminalRef.value;
+    if (request?.terminalId !== this.terminalId || !terminal) return;
+    terminal.focus();
+    terminalFocused(request);
   }
 
   /** Files dropped from the OS on a running terminal: their paths are typed in, as a native terminal does. A session's CLI gets them through the session's input, which keeps them until it runs. */

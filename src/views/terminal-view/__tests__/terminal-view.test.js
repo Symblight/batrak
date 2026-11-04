@@ -6,7 +6,7 @@ import { terminals } from '../../../hooks/terminals/terminals.js';
 import { $settings } from '../../../stores/settings/settings.js';
 import { $pendingInput, addDrop } from '../../../stores/chat/chat.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
-import { $terminals, addSessionTerminal } from '../../../stores/terminals/terminals.js';
+import { $terminalFocus, $terminals, addSessionTerminal, focusTerminal } from '../../../stores/terminals/terminals.js';
 import { AcpTerminal } from '../../../components/terminal/terminal.js';
 import '../terminal-view.js';
 
@@ -49,6 +49,7 @@ describe('acp-terminal-view', () => {
     navigator.clipboard.writeText = clipboardWrite;
     fileDrop.handle({ type: 'leave' });
     $terminals.set({});
+    $terminalFocus.set(null);
     $pendingInput.set({});
     $sessions.set([]);
     clearMocks();
@@ -72,15 +73,23 @@ describe('acp-terminal-view', () => {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
-  it('puts the keyboard in its terminal when asked to focus', async () => {
+  it('answers a request to focus its terminal, and leaves another terminal\'s', async () => {
     // Arrange
     const { el, terminal } = await render();
     let focused = 0;
     terminal.focus = () => focused++;
     // Act
-    el.focus();
+    focusTerminal('other');
+    await el.updateComplete;
+    // Assert
+    expect(focused, 'not its terminal').to.equal(0);
+    expect($terminalFocus.get(), 'waits for its view').to.deep.equal({ terminalId: 'other' });
+    // Act
+    focusTerminal('t1');
+    await el.updateComplete;
     // Assert
     expect(focused).to.equal(1);
+    expect($terminalFocus.get(), 'answered').to.equal(null);
   });
 
   it('shows the terminal its id names, in the editor’s font, and nothing once the terminal is gone', async () => {
