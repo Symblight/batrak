@@ -1,5 +1,7 @@
+import { atom, computed } from 'nanostores';
 import { SPLIT_DEFAULT, SPLIT_MAX, SPLIT_MIN, clampSplit } from '../../hooks/markdown/split.js';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
+import { $project } from '../project/project.js';
 
 /** @typedef {import('../../hooks/settings/types.js').ColumnWidths} ColumnWidths */
 /** @typedef {import('../../hooks/settings/types.js').HiddenColumns} HiddenColumns */
@@ -20,19 +22,30 @@ export const $hiddenColumns = persistentStore('brama:layout:hidden-columns', /**
   parse: (raw) => (Array.isArray(raw) ? raw.filter((name) => typeof name === 'string') : null),
 });
 
+/** The columns hidden while this window shows no project (the welcome view). Not stored, and apart from `$hiddenColumns`: what's opened here leaves the project layout alone. */
+const $welcomeHiddenColumns = atom(/** @type {HiddenColumns} */ (['session', 'side']));
+
+/** The columns hidden right now: the saved layout, or the welcome view's while no project is shown. */
+export const $shownHiddenColumns = computed([$project, $hiddenColumns, $welcomeHiddenColumns], (project, hidden, welcome) => (project ? hidden : welcome));
+
+/** @returns {typeof $hiddenColumns | typeof $welcomeHiddenColumns} The store a show or hide changes now. */
+const hiddenColumnsNow = () => ($project.get() ? $hiddenColumns : $welcomeHiddenColumns);
+
 /**
  * Shows a hidden column, hides a shown one.
  * @param {string} name Column name, as in `$columnWidths`.
  */
 export function toggleColumn(name) {
-  const hidden = $hiddenColumns.get();
-  $hiddenColumns.set(hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name]);
+  const store = hiddenColumnsNow();
+  const hidden = store.get();
+  store.set(hidden.includes(name) ? hidden.filter((n) => n !== name) : [...hidden, name]);
 }
 
 /** @param {string} name */
 export function showColumn(name) {
-  const hidden = $hiddenColumns.get();
-  if (hidden.includes(name)) $hiddenColumns.set(hidden.filter((n) => n !== name));
+  const store = hiddenColumnsNow();
+  const hidden = store.get();
+  if (hidden.includes(name)) store.set(hidden.filter((n) => n !== name));
 }
 
 /** Limits of the markdown split's editor share, in percent. */

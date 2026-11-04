@@ -11,7 +11,7 @@ import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
 import { $activePath } from '../../stores/editor/editor.js';
-import { $columnWidths, $hiddenColumns, showColumn } from '../../stores/layout/layout.js';
+import { $columnWidths, $shownHiddenColumns, showColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
 import { $terminalPanel, $terminalPanelHeight, $terminalTabs, TERMINAL_PANEL_MAX_HEIGHT, TERMINAL_PANEL_MIN_HEIGHT, clearTerminalPanelHeight, setTerminalPanelHeight } from '../../stores/terminals/terminals.js';
 import { $trustPrompt } from '../../stores/trust/trust.js';
@@ -121,7 +121,7 @@ export class AcpApp extends ViewElement {
 
   #columnWidths = new StoreController(this, { store: $columnWidths });
   #activePath = new StoreController(this, { store: $activePath });
-  #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
+  #hiddenColumns = new StoreController(this, { store: $shownHiddenColumns });
   #terminalPanel = new StoreController(this, { store: $terminalPanel });
   #terminalTabs = new StoreController(this, { store: $terminalTabs });
   #panelHeight = new StoreController(this, { store: $terminalPanelHeight });

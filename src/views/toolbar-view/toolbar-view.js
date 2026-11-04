@@ -8,7 +8,7 @@ import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $gitRepo } from '../../stores/git/git.js';
 import { $githubAccount, $pullRequestHere } from '../../stores/github/github.js';
-import { $hiddenColumns, toggleColumn } from '../../stores/layout/layout.js';
+import { $shownHiddenColumns, toggleColumn } from '../../stores/layout/layout.js';
 import { $project } from '../../stores/project/project.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $unreadSessions } from '../../stores/session-read/session-read.js';
@@ -35,7 +35,7 @@ export class AcpToolbarView extends ViewElement {
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #githubAccount = new StoreController(this, { store: $githubAccount });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
-  #hiddenColumns = new StoreController(this, { store: $hiddenColumns });
+  #hiddenColumns = new StoreController(this, { store: $shownHiddenColumns });
   #activePath = new StoreController(this, { store: $activePath });
   #workspaceId = new StoreController(this, { store: $activeWorkspaceId });
   #pickerWorkspaces = new StoreController(this, { store: $pickerWorkspaces });

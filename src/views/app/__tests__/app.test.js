@@ -675,3 +675,48 @@ describe('acp-app: terminal panel layout', () => {
     expect($terminals.get()[terminalId], 'its terminal is still known').to.not.equal(undefined);
   });
 });
+
+describe('acp-app: the columns on the welcome view', () => {
+  beforeEach(() => {
+    mockIPC((cmd, args) => startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args ?? {})));
+    $project.set(null);
+    $hiddenColumns.set([]);
+  });
+
+  afterEach(() => {
+    $project.set(null);
+    clearMocks();
+  });
+
+  const isHidden = (/** @type {AcpApp} */ app, /** @type {string} */ tag) => /** @type {HTMLElement} */ (app.querySelector(tag)?.assignedSlot?.parentElement).hidden;
+
+  it('starts with the sessions and file columns hidden, opens them on request, and gives way to the saved layout once a project opens', async () => {
+    // Arrange
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    const split = /** @type {HTMLElement & { updateComplete: Promise<boolean> }} */ (app.querySelector('acp-column-split'));
+    const toolbar = () => /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (app.querySelector('acp-toolbar'));
+    await split.updateComplete;
+    const atWelcome = { session: isHidden(app, 'acp-session-column'), side: isHidden(app, 'acp-file-column'), toggles: [...toolbar().hiddenColumns] };
+
+    // Act: the rail's Search on the welcome view
+    app.querySelector('acp-nav-rail')?.dispatchEvent(new CustomEvent('acp-find-in-files', { detail: null, bubbles: true, composed: true }));
+    await app.updateComplete;
+    await split.updateComplete;
+    const afterSearch = { side: isHidden(app, 'acp-file-column'), saved: [...$hiddenColumns.get()] };
+
+    // Act: the same column hidden again from the toolbar, then a project opens
+    toolbar().dispatchEvent(new CustomEvent('acp-column-toggle', { detail: { column: 'side' }, bubbles: true, composed: true }));
+    await app.updateComplete;
+    await split.updateComplete;
+    const afterToggle = isHidden(app, 'acp-file-column');
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    await app.updateComplete;
+    await split.updateComplete;
+
+    // Assert
+    expect(atWelcome).to.deep.equal({ session: true, side: true, toggles: ['session', 'side'] });
+    expect(afterSearch, 'shown here, the saved layout untouched').to.deep.equal({ side: false, saved: [] });
+    expect(afterToggle, 'the toolbar hides it again').to.equal(true);
+    expect([isHidden(app, 'acp-session-column'), isHidden(app, 'acp-file-column')], 'the saved layout').to.deep.equal([false, false]);
+  });
+});
