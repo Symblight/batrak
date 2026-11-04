@@ -356,6 +356,56 @@ describe('acp-terminal', () => {
     }
   });
 
+  it('tells the shell its size once, after a drag settles', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    // Act: widths as a drag goes through them, a frame or so apart
+    for (const width of [560, 520, 480, 440]) {
+      el.style.width = `${width}px`;
+      await new Promise((resolve) => setTimeout(resolve, 30));
+    }
+    await until(() => calls.resizes.length > 0);
+    await new Promise((resolve) => setTimeout(resolve, 150));
+    // Assert
+    expect(calls.resizes.length, JSON.stringify(calls.resizes)).to.equal(1);
+    expect(calls.resizes[0][0], 'the last width').to.be.lessThan(calls.connects[0].cols);
+  });
+
+  it('holds a WebGL context only while it is shown', async () => {
+    // Arrange
+    /** @type {HTMLCanvasElement[]} */
+    const contexts = [];
+    const { getContext } = HTMLCanvasElement.prototype;
+    HTMLCanvasElement.prototype.getContext = /** @type {typeof getContext} */ (
+      /** @this {HTMLCanvasElement} */
+      function spy(/** @type {string} */ type, /** @type {CanvasRenderingContext2DSettings} */ options) {
+        const context = getContext.call(this, type, options);
+        if (type === 'webgl2' && context) contexts.push(this);
+        return context;
+      }
+    );
+    const held = () => contexts.filter((canvas) => canvas.isConnected).length;
+    try {
+      const { calls, connect } = fakeConnect();
+      const el = /** @type {AcpTerminal} */ (
+        await fixture(html`<acp-terminal style="display: flex; width: 600px; height: 300px" terminal-id="t1" .connect=${connect} .info=${running}></acp-terminal>`)
+      );
+      await until(() => calls.sink !== null);
+      // Assert
+      expect(held(), 'shown').to.equal(1);
+      // Act
+      el.style.display = 'none';
+      // Assert
+      await until(() => held() === 0);
+      // Act
+      el.style.display = 'flex';
+      // Assert
+      await until(() => held() === 1);
+    } finally {
+      HTMLCanvasElement.prototype.getContext = getContext;
+    }
+  });
+
   it('resizes the shell with its tab', async () => {
     const { el, calls } = await render();
     const before = calls.connects[0].cols;

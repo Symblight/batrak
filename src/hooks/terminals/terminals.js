@@ -34,7 +34,7 @@ import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths, term
 /**
  * A terminal view's stream, from its `connect()` until its `dispose()`.
  * @typedef {Object} Route
- * @property {TerminalSink} sink
+ * @property {TerminalSink | null} sink `null` once disposed: the backend keeps the channel until the next attach, which mustn't keep the screen.
  * @property {{ cols: number, rows: number }} size The view's last.
  * @property {boolean} disposed
  * @property {number} undrawn Bytes handed to the view that it hasn't drawn yet.
@@ -206,10 +206,12 @@ async function attach(id, route) {
   if (route.disposed || !$terminals.get()[id]) return;
   const { cols, rows } = route.size;
   if ($terminals.get()[id]?.status === 'running') await ipc.invoke('terminal_resize', { id, cols, rows }).catch(() => {});
+  // Disposed meanwhile: attaching would take the stream from a newer view.
+  if (route.disposed) return;
   try {
     const output = ipc.channel((/** @type {ArrayBuffer} */ buffer) => {
       const bytes = new Uint8Array(buffer);
-      if (route.disposed) {
+      if (!route.sink) {
         ack(id, bytes.length);
         return;
       }
@@ -221,7 +223,7 @@ async function attach(id, route) {
       });
     });
     const events = ipc.channel((/** @type {{ kind: 'exit', code: number | null, signal: string | null }} */ { code, signal }) => {
-      if (!route.disposed) route.sink.exit({ code, signal });
+      route.sink?.exit({ code, signal });
       exited(id, { code, signal });
     });
     await ipc.invoke('terminal_attach', { id, output, events });
@@ -340,6 +342,7 @@ export const terminals = Object.freeze({
       },
       dispose: () => {
         route.disposed = true;
+        route.sink = null;
         if (routes.get(id) === route) routes.delete(id);
         // A disposed screen never draws the rest.
         ack(id, route.undrawn, true);
@@ -359,7 +362,7 @@ export const terminals = Object.freeze({
     const route = routes.get(id);
     terminalRestarting(id);
     if (!route) return; // its view starts it when shown
-    route.sink.reset();
+    route.sink?.reset();
     // A failed terminal was never attached; an exited one keeps its attachment across the restart.
     if (info.status === 'failed') attach(id, route);
     else if (await open(id, route.size)) flush(id);

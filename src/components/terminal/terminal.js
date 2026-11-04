@@ -17,6 +17,8 @@ import styles from './terminal.css?inline';
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalLink} TerminalLink */
 
+/** How long after a resize settles the shell is told, in ms: each size makes a full-screen program redraw. */
+const PTY_RESIZE_DELAY = 100;
 /** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
 const FULL_RESET = '\x1bc';
 /**
@@ -80,6 +82,10 @@ export class AcpTerminal extends LitElement {
   #themes = null;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #frame;
+  /** @type {ReturnType<typeof setTimeout> | undefined} */
+  #ptyResize;
+  /** @type {WebglAddon | null} Only while shown: a page's WebGL contexts are few. */
+  #webgl = null;
   #visible = false;
   /** Asked to take the keyboard while not shown: it does once shown. */
   #focusWhenShown = false;
@@ -190,7 +196,6 @@ export class AcpTerminal extends LitElement {
     term.onBinary((data) => this.#link?.write(Uint8Array.from(data, (c) => c.charCodeAt(0))));
     term.onTitleChange((title) => this.#emit('acp-terminal-title', { terminalId: this.terminalId, title }));
     term.open(screen);
-    if (this.gpu) this.#loadWebgl(term);
     this.#resizes = new ResizeObserver(() => this.#scheduleFit());
     this.#resizes.observe(this);
     this.#themes = new MutationObserver(() => {
@@ -201,14 +206,21 @@ export class AcpTerminal extends LitElement {
 
   /** @param {Terminal} term */
   #loadWebgl(term) {
+    if (!this.gpu || this.#webgl) return;
     try {
       const webgl = new WebglAddon();
-      // Too many contexts, or the GPU reset: back to the DOM renderer.
-      webgl.onContextLoss(() => webgl.dispose());
+      // The GPU reset: back to the DOM renderer, until it is next shown.
+      webgl.onContextLoss(() => this.#unloadWebgl());
       term.loadAddon(webgl);
+      this.#webgl = webgl;
     } catch {
       // No WebGL2: the DOM renderer stays.
     }
+  }
+
+  #unloadWebgl() {
+    this.#webgl?.dispose();
+    this.#webgl = null;
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
@@ -244,6 +256,8 @@ export class AcpTerminal extends LitElement {
 
   #tearDown() {
     clearTimeout(this.#frame);
+    clearTimeout(this.#ptyResize);
+    this.#webgl = null;
     this.#resizes?.disconnect();
     this.#themes?.disconnect();
     this.#link?.dispose();
@@ -266,8 +280,10 @@ export class AcpTerminal extends LitElement {
       if (!term || !fit) return;
       const visible = this.offsetWidth > 0 && this.offsetHeight > 0;
       const shown = visible && !this.#visible;
+      if (this.#visible && !visible) this.#unloadWebgl();
       this.#visible = visible;
       if (!visible) return;
+      if (shown) this.#loadWebgl(term);
       const { cols, rows } = term;
       fit.fit();
       if (!this.#link && this.connect) {
@@ -282,7 +298,8 @@ export class AcpTerminal extends LitElement {
         this.#pending = '';
         if (pending) this.#paste(term, pending);
       } else if (term.cols !== cols || term.rows !== rows) {
-        this.#link?.resize(term.cols, term.rows);
+        clearTimeout(this.#ptyResize);
+        this.#ptyResize = setTimeout(() => this.#link?.resize(term.cols, term.rows), PTY_RESIZE_DELAY);
       }
       if (shown && this.#focusWhenShown) this.focus();
     }, 16);
