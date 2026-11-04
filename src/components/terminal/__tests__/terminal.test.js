@@ -148,14 +148,37 @@ describe('acp-terminal', () => {
     expect(calls.writes).to.deep.equal(['\r']);
   });
 
-  it('connects again with a fresh screen when it is moved, as a tab reorder does', async () => {
-    const { el, calls } = await render();
-    el.parentElement?.append(el);
-    await until(() => calls.connects.length === 2);
-    await show(calls.sink, 'still here\r\n');
-    await until(() => text(el).includes('still here'));
-    input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
-    expect(calls.writes).to.deep.equal(['\r']);
+  it('keeps its screen and shell when moved, as a tab reorder does, and lets go only once removed', async () => {
+    // Arrange
+    /** @type {string[]} */
+    const disposed = [];
+    /** @type {TerminalSink | null} */
+    let sink = null;
+    let connects = 0;
+    /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
+    const connect = (_id, _size, s) => {
+      connects++;
+      sink = s;
+      return { write: () => {}, resize: () => {}, clear: () => {}, dispose: () => disposed.push(_id) };
+    };
+    const el = /** @type {AcpTerminal} */ (
+      await fixture(html`<acp-terminal style="display: flex; width: 600px; height: 300px" terminal-id="t1" .connect=${connect} .info=${running} .gpu=${false}></acp-terminal>`)
+    );
+    await until(() => connects === 1);
+    await show(sink, 'kept through the move\r\n');
+    const parent = /** @type {HTMLElement} */ (el.parentElement);
+    // Act
+    parent.append(el);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    // Assert
+    expect(connects, 'not connected again').to.equal(1);
+    expect(disposed).to.deep.equal([]);
+    expect(text(el)).to.include('kept through the move');
+    // Act
+    el.remove();
+    await Promise.resolve();
+    // Assert
+    expect(disposed).to.deep.equal(['t1']);
   });
 
   it('sends a mouse report far right as bytes, not as text', async () => {

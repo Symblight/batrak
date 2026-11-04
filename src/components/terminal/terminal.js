@@ -159,7 +159,7 @@ export class AcpTerminal extends LitElement {
 
   connectedCallback() {
     super.connectedCallback();
-    // Moved (a tab reorder moves its panel): disconnecting disposed the screen.
+    // Removed for a while, then put back.
     if (this.hasUpdated && !this.#term) this.#setUp();
   }
 
@@ -236,6 +236,13 @@ export class AcpTerminal extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
+    // A move (a tab reorder moves its panel) is back by then, with its screen and scrollback.
+    queueMicrotask(() => {
+      if (!this.isConnected) this.#tearDown();
+    });
+  }
+
+  #tearDown() {
     clearTimeout(this.#frame);
     this.#resizes?.disconnect();
     this.#themes?.disconnect();
