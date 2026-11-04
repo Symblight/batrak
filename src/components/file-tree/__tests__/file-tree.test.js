@@ -38,6 +38,22 @@ describe('acp-file-tree', () => {
     window.onerror = onerror;
   });
 
+  it('asks for a project only while there is none, not while one is on its way', async () => {
+    const cases = [
+      // [root, opening, shown, why]
+      [null, false, true, 'no project'],
+      [null, true, false, 'the first project is opening'],
+      ['/p', false, false, 'a restored project whose root is not open yet'],
+    ];
+    for (const [root, opening, shown, why] of /** @type {[string | null, boolean, boolean, string][]} */ (cases)) {
+      // Arrange + Act
+      const el = /** @type {AcpFileTree} */ (await fixture(html`<acp-file-tree .root=${root} .opening=${opening}></acp-file-tree>`));
+
+      // Assert
+      expect(el.shadowRoot?.textContent?.includes('Add a project to see its files') ?? false, why).to.equal(shown);
+    }
+  });
+
   it("lists the root's entries at the top level", async () => {
     /** @type {AcpFileTree} */
     const el = await fixture(html`<acp-file-tree .rootId=${'root-1'} .root=${'/p'} .listDir=${listDir}></acp-file-tree>`);

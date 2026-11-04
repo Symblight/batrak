@@ -329,6 +329,7 @@ export class AcpFileTree extends LitElement {
 
   render() {
     const opening = this.opening;
+    const empty = this.root === null && !opening;
     // Hidden rather than removed while a folder opens, so a new `rootId` can still reload it, and
     // so the previous folder's files are never shown as this one's.
     return html`
@@ -337,11 +338,12 @@ export class AcpFileTree extends LitElement {
             ${Array.from({ length: SKELETON_ROWS }, () => html`<span class="acp-file-tree__skeleton-row"></span>`)}
           </div>`
         : nothing}
+      ${empty ? html`<p class="acp-file-tree__empty">Add a project to see its files</p>` : nothing}
       <tvx-tree-view
         compact
         expansion-trigger="icon"
         class="acp-file-tree__tree"
-        ?hidden=${opening}
+        ?hidden=${opening || empty}
         .dataSource=${this.#dataSource}
         .renderItemLeading=${this.#renderLeading}
         .renderItemLabel=${this.#renderLabel}

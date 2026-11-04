@@ -19,6 +19,17 @@
     display: none;
   }
 }
+.acp-file-tree__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--acp-space-4);
+  font-size: var(--acp-font-size-sm);
+  text-align: center;
+  color: var(--acp-color-on-surface-variant);
+}
 .acp-file-tree__skeleton {
   display: flex;
   flex-direction: column;
