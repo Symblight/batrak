@@ -2,14 +2,16 @@ import { LitElement, html, nothing } from 'lit';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
 import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
-import { fontStack, oneLine, runsLines, safePaste } from '../../hooks/terminals/rules.js';
-import { terminalTheme } from './terminal-theme.js';
+import { fontStack, oneLine, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
+import '../terminal-find/terminal-find.js';
+import { FIND_DECORATIONS, terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
 
 /** @typedef {import('../../hooks/terminals/types.js').TerminalConnect} TerminalConnect */
@@ -66,6 +68,10 @@ export class AcpTerminal extends LitElement {
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
     dropping: { type: Boolean, reflect: true },
     waiting: { type: Number },
+    findOpen: { state: true },
+    findQuery: { state: true },
+    findOptions: { state: true },
+    findResult: { state: true },
   };
 
   static styles = [xtermStyles, styles];
@@ -84,6 +90,8 @@ export class AcpTerminal extends LitElement {
   #frame;
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #ptyResize;
+  /** @type {SearchAddon | null} */
+  #search = null;
   /** @type {WebglAddon | null} Only while shown: a page's WebGL contexts are few. */
   #webgl = null;
   #visible = false;
@@ -120,6 +128,14 @@ export class AcpTerminal extends LitElement {
     this.dropping = false;
     /** @type {number} A session's ended CLI: how many inputs (code, drops) wait for Restart or Continue in chat. */
     this.waiting = 0;
+    /** @type {boolean} Its find bar is shown. */
+    this.findOpen = false;
+    /** @type {string} */
+    this.findQuery = '';
+    /** @type {{ caseSensitive: boolean, wholeWord: boolean, regex: boolean }} */
+    this.findOptions = { caseSensitive: false, wholeWord: false, regex: false };
+    /** @type {{ index: number, total: number } | null} */
+    this.findResult = null;
   }
 
   /**
@@ -191,6 +207,9 @@ export class AcpTerminal extends LitElement {
     term.loadAddon(this.#fit);
     term.loadAddon(new WebLinksAddon(this.#openLink));
     term.loadAddon(new Unicode11Addon());
+    this.#search = new SearchAddon();
+    this.#search.onDidChangeResults(({ resultIndex, resultCount }) => (this.findResult = { index: resultIndex, total: resultCount }));
+    term.loadAddon(this.#search);
     term.unicode.activeVersion = '11';
     term.attachCustomKeyEventHandler(this.#onKey);
     term.onData((data) => this.#link?.write(data));
@@ -238,6 +257,7 @@ export class AcpTerminal extends LitElement {
       // Behind what xterm still has to draw of the last terminal, so none of it lands on this one.
       term.write(FULL_RESET);
       this.#visible = false;
+      this.findOpen = false;
       this.#scheduleFit();
     }
     if (changed.get('colors') !== undefined) this.#applyTheme(term);
@@ -260,6 +280,8 @@ export class AcpTerminal extends LitElement {
     clearTimeout(this.#frame);
     clearTimeout(this.#ptyResize);
     this.#webgl = null;
+    this.#search = null;
+    this.findOpen = false;
     this.#resizes?.disconnect();
     this.#themes?.disconnect();
     this.#link?.dispose();
@@ -306,6 +328,53 @@ export class AcpTerminal extends LitElement {
       if (shown && this.#focusWhenShown) this.focus();
     }, 16);
   }
+
+  async #openFind() {
+    this.findOpen = true;
+    await this.updateComplete;
+    await this.renderRoot.querySelector('acp-terminal-find')?.focusInput();
+  }
+
+  #closeFind = () => {
+    this.findOpen = false;
+    this.#search?.clearDecorations();
+    this.focus();
+  };
+
+  /**
+   * @param {boolean} [previous] Moves back; else on from the match shown.
+   * @param {boolean} [incremental] Stays on the match shown while it still matches: the query or an option changed.
+   */
+  #find(previous = false, incremental = false) {
+    const options = { ...this.findOptions, incremental, decorations: FIND_DECORATIONS };
+    if (!this.findQuery || !validFind(this.findQuery, this.findOptions.regex)) {
+      this.#search?.clearDecorations();
+      this.findResult = null;
+    } else if (previous) this.#search?.findPrevious(this.findQuery, options);
+    else this.#search?.findNext(this.findQuery, options);
+  }
+
+  #onFindInput = (/** @type {Event} */ e) => {
+    this.findQuery = /** @type {CustomEvent<{ value: string }>} */ (e).detail.value;
+    this.#find(false, true);
+  };
+
+  #onFindClear = () => {
+    this.findQuery = '';
+    this.#find();
+  };
+
+  #onFindOption = (/** @type {Event} */ e) => {
+    const { option } = /** @type {CustomEvent<{ option: 'caseSensitive' | 'wholeWord' | 'regex' }>} */ (e).detail;
+    this.findOptions = { ...this.findOptions, [option]: !this.findOptions[option] };
+    // The addon compares the options with themselves, so it counts again only for a new query.
+    this.#search?.clearDecorations();
+    this.#find(false, true);
+  };
+
+  #onFindStep = (/** @type {Event} */ e) => {
+    this.#find(/** @type {CustomEvent<{ direction: 'next' | 'previous' }>} */ (e).detail.direction === 'previous');
+  };
 
   /** Puts the keyboard in the terminal. */
   focus() {
@@ -371,6 +440,13 @@ export class AcpTerminal extends LitElement {
     const key = e.key.toLowerCase();
     const down = e.type === 'keydown';
     if (shortcuts.matches('newTerminal', e, this.platform)) return false;
+    if (shortcuts.matches('find', e, this.platform)) {
+      if (down) {
+        e.preventDefault();
+        this.#openFind();
+      }
+      return false;
+    }
     if (this.platform === 'mac') {
       if (!e.metaKey) return true;
       if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
@@ -397,6 +473,22 @@ export class AcpTerminal extends LitElement {
         ? html`<div class="acp-terminal__error" role="alert">${info.error}</div>`
         : nothing}
       <div class="acp-terminal__screen"></div>
+      ${this.findOpen
+        ? html`<acp-terminal-find
+            class="acp-terminal__find"
+            .query=${this.findQuery}
+            .invalid=${!validFind(this.findQuery, this.findOptions.regex)}
+            .caseSensitive=${this.findOptions.caseSensitive}
+            .wholeWord=${this.findOptions.wholeWord}
+            .regex=${this.findOptions.regex}
+            .result=${this.findResult}
+            @acp-search-bar-input=${this.#onFindInput}
+            @acp-search-bar-clear=${this.#onFindClear}
+            @acp-search-option-toggle=${this.#onFindOption}
+            @acp-terminal-find-step=${this.#onFindStep}
+            @acp-terminal-find-close=${this.#closeFind}
+          ></acp-terminal-find>`
+        : nothing}
       ${ended
         ? html`<div class="acp-terminal__actions">
             ${this.waiting > 0 ? html`<span class="acp-terminal__waiting">${this.waiting} waiting to be sent</span>` : nothing}

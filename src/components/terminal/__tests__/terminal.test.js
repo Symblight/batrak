@@ -301,6 +301,78 @@ describe('acp-terminal', () => {
     expect(cell.style.color, 'drawn lighter than the default text').to.not.equal('');
   });
 
+  describe('find', () => {
+    const bar = (/** @type {AcpTerminal} */ el) => el.shadowRoot?.querySelector('acp-terminal-find') ?? null;
+    const count = (/** @type {AcpTerminal} */ el) => bar(el)?.shadowRoot?.querySelector('.acp-terminal-find__count')?.textContent?.trim();
+    const press = (/** @type {AcpTerminal} */ el, /** @type {KeyboardEventInit} */ key) =>
+      input(el).dispatchEvent(new KeyboardEvent('keydown', { keyCode: 70, code: 'KeyF', key: 'f', bubbles: true, composed: true, ...key }));
+    /** @param {AcpTerminal} el @param {string} value */
+    function type(el, value) {
+      bar(el)?.dispatchEvent(new CustomEvent('acp-search-bar-input', { detail: { value }, bubbles: true, composed: true }));
+    }
+
+    it('opens on the platform’s key, and the shell gets no key for it', async () => {
+      for (const [platform, key] of /** @type {const} */ ([['mac', { metaKey: true }], ['windows', { ctrlKey: true }], ['linux', { ctrlKey: true }]])) {
+        // Arrange
+        const { el, calls } = await render();
+        el.platform = platform;
+        // Act
+        press(el, key);
+        await el.updateComplete;
+        // Assert
+        expect(bar(el), platform).to.not.equal(null);
+        expect(calls.writes, platform).to.deep.equal([]);
+      }
+    });
+
+    it('counts matches in the scrollback, moves between them, and closes back to the shell', async () => {
+      // Arrange
+      const { el, calls } = await render();
+      el.platform = 'mac';
+      await show(calls.sink, 'needle one\r\nhay\r\nneedle two\r\n');
+      press(el, { metaKey: true });
+      await el.updateComplete;
+      const keydown = (/** @type {KeyboardEventInit} */ key) => bar(el)?.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, composed: true, ...key }));
+      // Act + Assert
+      type(el, 'needle');
+      await until(() => count(el) === '1 of 2');
+      keydown({ key: 'Enter' });
+      await until(() => count(el) === '2 of 2');
+      keydown({ key: 'Enter', shiftKey: true });
+      await until(() => count(el) === '1 of 2');
+      type(el, 'nothing like it');
+      await until(() => count(el) === 'No results');
+      keydown({ key: 'Escape' });
+      await el.updateComplete;
+      expect(bar(el), 'closed').to.equal(null);
+      expect(el.shadowRoot?.activeElement, 'back to the shell').to.equal(input(el));
+    });
+
+    it('takes the match options, and says when a regular expression is invalid', async () => {
+      // Arrange
+      const { el, calls } = await render();
+      el.platform = 'mac';
+      await show(calls.sink, 'Needle needle\r\n');
+      press(el, { metaKey: true });
+      await el.updateComplete;
+      const toggle = (/** @type {string} */ option) => bar(el)?.dispatchEvent(new CustomEvent('acp-search-option-toggle', { detail: { option }, bubbles: true, composed: true }));
+      const searchBar = () => /** @type {HTMLElementTagNameMap['acp-search-bar']} */ (bar(el)?.shadowRoot?.querySelector('acp-search-bar'));
+      // Act + Assert
+      type(el, 'needle');
+      await until(() => count(el) === '1 of 2');
+      toggle('caseSensitive');
+      await until(() => count(el) === '1 of 1');
+      toggle('caseSensitive');
+      toggle('regex');
+      type(el, '(');
+      await until(() => searchBar().invalid);
+      expect(count(el), 'no count for it').to.equal('');
+      type(el, 'n.+e needle');
+      await until(() => count(el) === 'No results' || count(el) === '1 of 1');
+      expect(searchBar().invalid).to.equal(false);
+    });
+  });
+
   it('keeps a paste until its shell is connected', async () => {
     const { calls, connect } = fakeConnect();
     const el = /** @type {AcpTerminal} */ (

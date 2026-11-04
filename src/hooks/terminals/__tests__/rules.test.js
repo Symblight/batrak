@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, fontStack, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths } from '../rules.js';
+import { folderLabel, fontStack, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths, validFind } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -111,5 +111,11 @@ describe('terminals: rules', () => {
     for (const [picked, mono, stack] of cases) {
       expect(fontStack(picked, /** @type {string} */ (mono)), JSON.stringify([picked, mono])).to.equal(stack);
     }
+  });
+
+  it('takes any text as a find, and only a well-formed regular expression', () => {
+    expect(validFind('(', false)).to.equal(true);
+    expect(validFind('(', true)).to.equal(false);
+    expect(validFind('(a)', true)).to.equal(true);
   });
 });

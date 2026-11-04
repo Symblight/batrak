@@ -41,6 +41,17 @@ const ANSI_DARK = {
 };
 
 /**
+ * How find marks its matches; xterm's decorations take `#rrggbb` only.
+ * @type {import('@xterm/addon-search').ISearchDecorationOptions}
+ */
+export const FIND_DECORATIONS = {
+  matchBackground: '#FFD33D',
+  matchOverviewRuler: '#FFD33D',
+  activeMatchBackground: '#FF9632',
+  activeMatchColorOverviewRuler: '#FF9632',
+};
+
+/**
  * @param {string} color `#rrggbb` or `rgb(r, g, b)`; anything else is returned as is.
  * @param {number} alpha 0–1.
  */

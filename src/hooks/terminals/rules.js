@@ -71,6 +71,21 @@ export function shellPaths(paths, platform) {
 }
 
 /**
+ * @param {string} query
+ * @param {boolean} regex It is a regular expression.
+ * @returns {boolean} It can be searched for.
+ */
+export function validFind(query, regex) {
+  if (!regex) return true;
+  try {
+    new RegExp(query);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * What xterm draws with; it needs the names themselves, not a `var()`.
  * @param {string | null} family The font picked; `null` for none.
  * @param {string} mono The app's monospace stack, resolved; `''` when it has none.

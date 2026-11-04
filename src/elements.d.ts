@@ -190,6 +190,7 @@ declare global {
     'acp-agents-view': AcpAgentsView;
     'acp-snackbars': AcpSnackbars;
     'acp-terminal': AcpTerminal;
+    'acp-terminal-find': import('./components/terminal-find/terminal-find.js').AcpTerminalFind;
     'acp-toolbar': AcpToolbar;
     'acp-toolbar-view': AcpToolbarView;
     'acp-view-placeholder': AcpViewPlaceholder;
