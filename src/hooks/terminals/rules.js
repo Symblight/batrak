@@ -71,6 +71,31 @@ export function shellPaths(paths, platform) {
 }
 
 /**
+ * What was copied can't drive the terminal: without ESC it can't end a bracketed paste and run what follows.
+ * @param {string} text
+ */
+export function safePaste(text) {
+  return text.replaceAll('\x1b', '');
+}
+
+/**
+ * @param {string} text
+ * @returns {string} On one line: a program not reading a bracketed paste takes a line break as Enter.
+ */
+export function oneLine(text) {
+  return text.replace(/\r\n|\r|\n/g, ' ');
+}
+
+/**
+ * @param {string} text
+ * @param {boolean} bracketed The program reads bracketed pastes.
+ * @returns {boolean} Pasting it would run what comes before a line break.
+ */
+export function runsLines(text, bracketed) {
+  return !bracketed && /[\r\n]/.test(text);
+}
+
+/**
  * @param {string} id A terminal's tab id.
  * @returns {EditorTab} The tab as a tab view takes it: a view, with no file behind it.
  */

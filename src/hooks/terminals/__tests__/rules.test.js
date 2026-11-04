@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
+import { folderLabel, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -81,6 +81,22 @@ describe('terminals: rules', () => {
     for (const [paths, expected] of cases) {
       // Act + Assert
       expect(shellPaths(/** @type {string[]} */ (paths), 'windows'), JSON.stringify(paths)).to.equal(expected);
+    }
+  });
+
+  it('takes control over a paste away from what was copied', () => {
+    expect(safePaste('a\x1b[201~b\x1b'), 'no ESC').to.equal('a[201~b');
+    const lines = [
+      // [text, one line, its line breaks would run in a plain program]
+      ['ls', 'ls', false],
+      ['a\nb', 'a b', true],
+      ['a\r\nb', 'a b', true],
+      ['a\rb', 'a b', true],
+    ];
+    for (const [text, line, runs] of lines) {
+      expect(oneLine(/** @type {string} */ (text)), JSON.stringify(text)).to.equal(line);
+      expect(runsLines(/** @type {string} */ (text), false), JSON.stringify(text)).to.equal(runs);
+      expect(runsLines(/** @type {string} */ (text), true), 'a bracketed paste runs nothing').to.equal(false);
     }
   });
 });

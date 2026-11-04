@@ -9,6 +9,7 @@ import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
 import { $settings } from '../../stores/settings/settings.js';
 import { $terminals, setTerminalTitle } from '../../stores/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/terminal/terminal.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
@@ -16,7 +17,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
  * @tag acp-terminal-view
- * @summary A terminal wired to its data: the shell's state, the editor's font, copy, links, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
+ * @summary A terminal wired to its data: the shell's state, the editor's font, copy, links, asking before a paste runs lines, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
  * @fires acp-session-view `{ sessionId, view }` the way back to the chat, from a session's ended CLI
  */
 export class AcpTerminalView extends ViewElement {
@@ -31,6 +32,8 @@ export class AcpTerminalView extends ViewElement {
   #pending = new StoreController(this, { store: $pendingInput });
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-terminal']>} */
   #terminalRef = createRef();
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} */
+  #confirmRef = createRef();
   /** Stops listening to files dropped from the OS. */
   #stopFileDrop = () => {};
 
@@ -67,6 +70,21 @@ export class AcpTerminalView extends ViewElement {
   };
 
   /**
+   * Lines pasted into a program that would run each one: only if the user agrees.
+   * @param {string} text
+   */
+  async #pasteLines(text) {
+    const lines = text.split(/\r\n|\r|\n/).length;
+    const agreed = await this.#confirmRef.value?.confirm({
+      headline: `Paste ${lines} lines?`,
+      message: 'Each line break runs what comes before it, as if you pressed Enter.',
+      confirmLabel: 'Paste',
+    });
+    if (agreed) this.#terminalRef.value?.pasteLines(text);
+    else this.#terminalRef.value?.focus();
+  }
+
+  /**
    * A listener for an event handled here: it goes no further, and `act` gets its detail.
    * @template D
    * @param {(detail: D) => unknown} act
@@ -92,22 +110,24 @@ export class AcpTerminalView extends ViewElement {
     const { editorFont, editorFontSize } = this.#settings.value;
     const on = AcpTerminalView.#on;
     const session = this.sessionId;
-    return html`<acp-terminal
-      ${ref(this.#terminalRef)}
-      terminal-id=${this.terminalId}
-      ?chat-fallback=${session !== ''}
-      .connect=${terminals.connect}
-      .info=${info ?? null}
-      .fontFamily=${editorFont}
-      .fontSize=${editorFontSize}
-      .waiting=${this.#waiting}
-      ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
-      @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}
-      @acp-link-open=${on((/** @type {{ url: string }} */ d) => app.openUrl(d.url).catch((err) => app.reportError('Opening the link failed', err)))}
-      @acp-terminal-restart=${on((/** @type {{ terminalId: string }} */ d) => (session ? sessions.restartCli(session) : terminals.restart(d.terminalId)))}
-      @acp-terminal-title=${session ? nothing : on((/** @type {{ terminalId: string, title: string }} */ d) => setTerminalTitle(d.terminalId, d.title))}
-      @acp-terminal-chat=${session ? on(() => this.dispatchEvent(new CustomEvent('acp-session-view', { detail: { sessionId: session, view: 'chat' }, bubbles: true, composed: true }))) : nothing}
-    ></acp-terminal>`;
+    return html`<acp-confirm-dialog ${ref(this.#confirmRef)}></acp-confirm-dialog>
+      <acp-terminal
+        ${ref(this.#terminalRef)}
+        terminal-id=${this.terminalId}
+        ?chat-fallback=${session !== ''}
+        .connect=${terminals.connect}
+        .info=${info ?? null}
+        .fontFamily=${editorFont}
+        .fontSize=${editorFontSize}
+        .waiting=${this.#waiting}
+        ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
+        @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}
+        @acp-link-open=${on((/** @type {{ url: string }} */ d) => app.openUrl(d.url).catch((err) => app.reportError('Opening the link failed', err)))}
+        @acp-terminal-paste-lines=${on((/** @type {{ text: string }} */ d) => this.#pasteLines(d.text))}
+        @acp-terminal-restart=${on((/** @type {{ terminalId: string }} */ d) => (session ? sessions.restartCli(session) : terminals.restart(d.terminalId)))}
+        @acp-terminal-title=${session ? nothing : on((/** @type {{ terminalId: string, title: string }} */ d) => setTerminalTitle(d.terminalId, d.title))}
+        @acp-terminal-chat=${session ? on(() => this.dispatchEvent(new CustomEvent('acp-session-view', { detail: { sessionId: session, view: 'chat' }, bubbles: true, composed: true }))) : nothing}
+      ></acp-terminal>`;
   }
 }
 

@@ -7,6 +7,7 @@ import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
 import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
+import { oneLine, runsLines, safePaste } from '../../hooks/terminals/rules.js';
 import { terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
 
@@ -47,6 +48,7 @@ const MONO = 'ui-monospace, Menlo, monospace';
  * @fires acp-terminal-restart `{ terminalId }`
  * @fires acp-terminal-chat `{ terminalId }` Continue in chat, for a session's CLI that ended.
  * @fires acp-terminal-title `{ terminalId, title }` A title the shell set.
+ * @fires acp-terminal-paste-lines `{ text }` The user pasted lines that would each run: `pasteLines()` if they agree.
  * @fires acp-link-open `{ url }` A link ⌘-clicked (Ctrl-clicked elsewhere).
  */
 export class AcpTerminal extends LitElement {
@@ -150,6 +152,8 @@ export class AcpTerminal extends LitElement {
   #setUp() {
     const screen = /** @type {HTMLElement} */ (this.renderRoot.querySelector('.acp-terminal__screen'));
     screen.replaceChildren();
+    // Captured, or xterm's own listener would paste it as it is.
+    screen.addEventListener('paste', this.#onPaste, { capture: true });
     const term = new Terminal({
       fontFamily: this.#font(),
       fontSize: this.fontSize,
@@ -282,13 +286,33 @@ export class AcpTerminal extends LitElement {
   }
 
   /**
+   * Pastes lines the user agreed to run, and focuses the terminal.
+   * @param {string} text
+   */
+  pasteLines(text) {
+    this.#term?.paste(safePaste(text));
+    this.#term?.focus();
+  }
+
+  /**
    * A program that didn't turn on bracketed paste would take a line break as Enter: it gets spaces.
    * @param {Terminal} term
    * @param {string} text
    */
   #paste(term, text) {
-    term.paste(term.modes.bracketedPasteMode ? text : text.replace(/\r?\n/g, ' '));
+    term.paste(safePaste(term.modes.bracketedPasteMode ? text : oneLine(text)));
   }
+
+  /** What the user pastes (⌘V, the Edit menu): sent, unless its lines would each run. */
+  #onPaste = (/** @type {ClipboardEvent} */ e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const term = this.#term;
+    const text = e.clipboardData?.getData('text/plain');
+    if (!term || !text) return;
+    if (runsLines(text, term.modes.bracketedPasteMode)) this.#emit('acp-terminal-paste-lines', { text });
+    else term.paste(safePaste(text));
+  };
 
   /**
    * Keys for the shell, except the app's shortcuts (they bubble on) and copy, paste, clear, select all.

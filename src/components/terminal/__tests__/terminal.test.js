@@ -188,10 +188,44 @@ describe('acp-terminal', () => {
     for (const [why, mode, written] of cases) {
       const { el, calls } = await render();
       if (mode) await show(calls.sink, mode);
-      el.paste('@a.js#L1 Why?\nIt looks unused');
+      el.paste('@a.js#L1 \x1bWhy?\nIt looks unused');
       expect(calls.writes, why).to.deep.equal([written]);
       expect(el.shadowRoot?.activeElement, `${why}: focused`).to.equal(input(el));
     }
+  });
+
+  it('sends what the user pastes without ESC, and asks first when its lines would each run', async () => {
+    const cases = [
+      { why: 'a bracketed paste cannot end itself', mode: '\x1b[?2004h', text: 'a\x1b[201~\nrm -rf x\n', written: ['\x1b[200~a[201~\rrm -rf x\r\x1b[201~'], asked: [] },
+      { why: 'one plain line', mode: '', text: 'ls\x1b[0m', written: ['ls[0m'], asked: [] },
+      { why: 'plain lines wait for the answer', mode: '', text: 'ls\nrm x', written: [], asked: ['ls\nrm x'] },
+      { why: 'a lone carriage return runs too', mode: '', text: 'rm x\r', written: [], asked: ['rm x\r'] },
+    ];
+    for (const { why, mode, text: pasted, written, asked } of cases) {
+      // Arrange
+      const { el, calls } = await render();
+      if (mode) await show(calls.sink, mode);
+      /** @type {string[]} */
+      const heard = [];
+      el.addEventListener('acp-terminal-paste-lines', (e) => heard.push(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text));
+      const clipboardData = new DataTransfer();
+      clipboardData.setData('text/plain', pasted);
+      // Act
+      input(el).dispatchEvent(new ClipboardEvent('paste', { clipboardData, bubbles: true, composed: true, cancelable: true }));
+      // Assert
+      expect(calls.writes, why).to.deep.equal(written);
+      expect(heard, why).to.deep.equal(asked);
+    }
+  });
+
+  it('sends lines the user agreed to as lines, without ESC, and takes focus', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    // Act
+    el.pasteLines('ls\x1b[0m\nrm x');
+    // Assert
+    expect(calls.writes).to.deep.equal(['ls[0m\rrm x']);
+    expect(el.shadowRoot?.activeElement).to.equal(input(el));
   });
 
   it('keeps a paste until its shell is connected', async () => {

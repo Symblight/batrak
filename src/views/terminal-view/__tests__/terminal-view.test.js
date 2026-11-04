@@ -97,6 +97,27 @@ describe('acp-terminal-view', () => {
     expect(el.querySelector('acp-terminal')).to.equal(null);
   });
 
+  it('asks before pasting lines that would each run, and pastes them only on yes', async () => {
+    for (const [answer, sent] of /** @type {[boolean, string[]][]} */ ([[true, ['ls\nrm x']], [false, []]])) {
+      // Arrange
+      const { el, terminal } = await render();
+      /** @type {string[]} */
+      const lines = [];
+      terminal.pasteLines = (text) => lines.push(text);
+      /** @type {import('../../../hooks/app/types.js').ConfirmOptions[]} */
+      const asked = [];
+      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+      dialog.confirm = async (options) => (asked.push(options), answer);
+      // Act
+      fire(terminal, 'acp-terminal-paste-lines', { text: 'ls\nrm x' });
+      await Promise.resolve();
+      await Promise.resolve();
+      // Assert
+      expect(asked[0].headline).to.include('2 lines');
+      expect(lines, `answered ${answer}`).to.deep.equal(sent);
+    }
+  });
+
   it('copies, opens links, restarts and titles on the terminal’s asks, and none leaves the view', async () => {
     // Arrange
     $terminals.set({ t1: { ...running, status: 'exited', exit: { code: 0, signal: null } } });
