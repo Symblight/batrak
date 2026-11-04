@@ -67,7 +67,7 @@
   /* Default column widths: shares of the window beside the nav rail (resized widths are stored in px) */
   --acp-session-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.2);
   --acp-file-tree-width: calc((100vw - var(--acp-nav-rail-width)) * 0.2);
-  --acp-agent-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.6);
+  --acp-agent-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.3);
   --acp-column-gap: var(--acp-space-1);
   /* The terminal panel under the agent and editor columns: its default height, and the room the columns above it keep */
   --acp-terminal-panel-height: 280px;
