@@ -314,7 +314,8 @@ fn not_ignored_children(dir: &Path) -> HashSet<String> {
 }
 
 /// Reads one directory level. A child is ignored unless its name is in `not_ignored`.
-/// Symlinks are not followed, so the scan cannot loop.
+/// Symlinks are left out: the only place entries come from, so the tree, Quick Open and Find in Files
+/// never show one, and the scan cannot loop.
 fn read_children(abs: &Path, rel: &str, not_ignored: &HashSet<String>) -> std::io::Result<Vec<Entry>> {
     let mut entries = Vec::new();
     for item in fs::read_dir(abs)? {
@@ -324,6 +325,9 @@ fn read_children(abs: &Path, rel: &str, not_ignored: &HashSet<String>) -> std::i
             continue;
         }
         let Ok(meta) = item.metadata() else { continue };
+        if meta.file_type().is_symlink() {
+            continue;
+        }
         let mtime = meta
             .modified()
             .ok()
@@ -472,6 +476,49 @@ mod tests {
         let snap = Snapshot::scan(&root);
         let names: Vec<_> = snap.list_dir("sub").unwrap().into_iter().map(|e| e.name).collect();
         assert_eq!(names, ["alpha", "Zeta", "A.txt", "b.txt", "C.txt"]);
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinks_are_hidden_wherever_a_folder_is_read() {
+        use std::os::unix::fs::symlink;
+        let link_all = |dir: &Path| {
+            symlink(dir.join("real.txt"), dir.join("to-file")).unwrap();
+            symlink(dir.join("real-dir"), dir.join("to-dir")).unwrap();
+            symlink(dir.join("nothing"), dir.join("dangling")).unwrap();
+        };
+        let names = |snap: &Snapshot, rel: &str| -> Vec<String> {
+            snap.list_dir(rel).unwrap().into_iter().map(|e| e.name).collect()
+        };
+        let root = temp_root("symlinks");
+        for dir in ["src", "node_modules/pkg"] {
+            fs::write(root.join(dir).join("real.txt"), "").unwrap();
+            fs::create_dir_all(root.join(dir).join("real-dir")).unwrap();
+        }
+        link_all(&root.join("src"));
+        link_all(&root.join("node_modules/pkg"));
+
+        let mut snap = Snapshot::scan(&root);
+        assert_eq!(names(&snap, "src"), ["real-dir", "main.rs", "real.txt"], "a scan");
+        assert!(snap.files().all(|e| !e.path.contains("to-")), "Quick Open and Find in Files");
+
+        snap.load_ignored_dir("node_modules").unwrap();
+        snap.load_ignored_dir("node_modules/pkg").unwrap();
+        assert_eq!(names(&snap, "node_modules/pkg"), ["real-dir", "index.js", "real.txt"], "an ignored folder");
+
+        symlink(root.join("src/real.txt"), root.join("src/new-link")).unwrap();
+        fs::write(root.join("src/new.txt"), "").unwrap();
+        let mut changes = Changes::default();
+        snap.reconcile(["src".to_owned()], &mut changes);
+        assert_eq!(changes.added, ["src/new.txt"], "a watcher batch");
+        assert!(!names(&snap, "src").contains(&"new-link".to_owned()));
+
+        fs::remove_file(root.join("src/new.txt")).unwrap();
+        symlink(root.join("src/real.txt"), root.join("src/new.txt")).unwrap();
+        let mut changes = Changes::default();
+        snap.reconcile(["src".to_owned()], &mut changes);
+        assert_eq!(changes.removed, ["src/new.txt"], "a file replaced by a link is gone");
         fs::remove_dir_all(root).unwrap();
     }
 
