@@ -1,5 +1,5 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { activateTab, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
@@ -38,7 +38,7 @@ describe('acp-workspace-changes-tab', () => {
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       if (cmd === 'workspace_changes') return FILES;
-      if (cmd === 'read_file') return 'new text';
+      if (cmd === 'read_file') return fileBytes('new text');
       if (cmd === 'workspace_file_at_base') return 'old text';
       if (cmd === 'workspace_apply_locally') return { outcome: 'clean' };
       return null;

@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect } from '@esm-bundle/chai';
+import { fileBytes } from '../../../../test/fixture.js';
 import { projects } from '../projects.js';
 
 describe('projects files', () => {
@@ -10,7 +11,7 @@ describe('projects files', () => {
     calls = [];
     mockIPC((cmd, args) => {
       calls.push({ cmd, args });
-      return cmd === 'read_file' ? 'text' : null;
+      return cmd === 'read_file' ? fileBytes('\uFEFFtext') : null;
     });
   });
 
@@ -30,6 +31,6 @@ describe('projects files', () => {
       await call();
       expect(calls, cmd).to.deep.equal([{ cmd, args }]);
     }
-    expect(await projects.readFile('/p/a.js')).to.equal('text');
+    expect(await projects.readFile('/p/a.js'), 'a BOM stays, so a save keeps it').to.equal('\uFEFFtext');
   });
 });

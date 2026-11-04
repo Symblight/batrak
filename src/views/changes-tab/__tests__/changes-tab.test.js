@@ -1,5 +1,5 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
@@ -38,7 +38,7 @@ describe('acp-changes-tab', () => {
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       if (cmd === 'git_status') return { version: 1, unchanged: true, status: null };
-      if (cmd === 'read_file') return 'new text';
+      if (cmd === 'read_file') return fileBytes('new text');
       if (cmd === 'git_file_at_head') return 'old text';
       return null;
     });

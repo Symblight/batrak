@@ -31,6 +31,14 @@ export async function fixture(template) {
 }
 
 /**
+ * What the backend's `read_file` replies with.
+ * @param {string} text
+ */
+export function fileBytes(text) {
+  return new TextEncoder().encode(text).buffer;
+}
+
+/**
  * The text of the `md-tooltip` anchored to `el` (by its id, in `el`'s root), or null.
  * @param {Element | null | undefined} el
  */

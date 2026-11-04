@@ -14,13 +14,18 @@ function writeFile(path, content) {
   return ipc.invoke('write_file', { path, content });
 }
 
+/** Keeps a BOM in the text: a save writes back what was read. */
+const utf8 = new TextDecoder('utf-8', { ignoreBOM: true });
+
 /**
- * Text content of a file (UTF-8).
+ * Text content of a file (UTF-8), at most 16 MB.
  * @param {string} path Absolute.
  * @returns {Promise<string>}
  */
-function readFile(path) {
-  return ipc.invoke('read_file', { path });
+async function readFile(path) {
+  /** @type {ArrayBuffer} */
+  const bytes = await ipc.invoke('read_file', { path });
+  return utf8.decode(bytes);
 }
 
 /**

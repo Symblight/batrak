@@ -1,7 +1,7 @@
 import { LitElement, html as litHtml } from 'lit';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { TabFilesController } from '../TabFilesController.js';
 import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
 import { $project } from '../../../stores/project/project.js';
@@ -66,7 +66,7 @@ describe('TabFilesController', () => {
         await readGate;
         if (readError) throw new Error(readError);
         if (!(path in disk)) throw new Error(`${path}: not found`);
-        return disk[path];
+        return fileBytes(disk[path]);
       }
       if (cmd === 'write_file') {
         disk[path] = content;
@@ -184,7 +184,7 @@ describe('TabFilesController', () => {
       if (cmd === 'read_file') {
         // The second save's check reads only after the first save wrote.
         if (++reads === 2) await until(() => writes.length > 0);
-        return disk[path];
+        return fileBytes(disk[path]);
       }
       if (cmd === 'write_file') {
         disk[path] = content;
@@ -202,7 +202,7 @@ describe('TabFilesController', () => {
 
   it("asks before saving over a file it can't read", async () => {
     const { files, tab } = await edited();
-    readError = `${PATH}: stream did not contain valid UTF-8`;
+    readError = `${PATH}: not UTF-8 text`;
     expect(await files.save(PATH)).to.equal(false);
     expect(writes).to.deep.equal([]);
     expect(tab().changedOnDisk).to.equal(true);

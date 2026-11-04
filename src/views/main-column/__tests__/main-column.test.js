@@ -1,6 +1,6 @@
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { $activePath, closeAllTabs, openAgents, openChanges, openSettings, openTab } from '../../../stores/editor/editor.js';
 import { $gitChanges } from '../../../stores/git/git.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
@@ -99,7 +99,7 @@ describe('acp-main-column', () => {
   });
 
   it('shows a file in its editor view, with a match selected, and reads the selection back', async () => {
-    mockIPC((cmd) => (cmd === 'read_file' ? 'first\nsecond needle\n' : null));
+    mockIPC((cmd) => (cmd === 'read_file' ? fileBytes('first\nsecond needle\n') : null));
     // Files are read only once the project's root is open.
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
     const { el } = await render();
