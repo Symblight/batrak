@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths } from '../rules.js';
+import { folderLabel, fontStack, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -97,6 +97,19 @@ describe('terminals: rules', () => {
       expect(oneLine(/** @type {string} */ (text)), JSON.stringify(text)).to.equal(line);
       expect(runsLines(/** @type {string} */ (text), false), JSON.stringify(text)).to.equal(runs);
       expect(runsLines(/** @type {string} */ (text), true), 'a bracketed paste runs nothing').to.equal(false);
+    }
+  });
+
+  it('stacks a picked font on the app’s monospace fonts, which are the default', () => {
+    const cases = [
+      // [picked, the app's stack, the stack xterm gets]
+      ['Fira Code', 'Google Sans Code, monospace', '"Fira Code", Google Sans Code, monospace'],
+      [null, 'Google Sans Code, monospace', 'Google Sans Code, monospace'],
+      [null, '', 'monospace'],
+      ['Fira Code', '', '"Fira Code", monospace'],
+    ];
+    for (const [picked, mono, stack] of cases) {
+      expect(fontStack(picked, /** @type {string} */ (mono)), JSON.stringify([picked, mono])).to.equal(stack);
     }
   });
 });

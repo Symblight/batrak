@@ -71,6 +71,16 @@ export function shellPaths(paths, platform) {
 }
 
 /**
+ * What xterm draws with; it needs the names themselves, not a `var()`.
+ * @param {string | null} family The font picked; `null` for none.
+ * @param {string} mono The app's monospace stack, resolved; `''` when it has none.
+ */
+export function fontStack(family, mono) {
+  const stack = mono || 'monospace';
+  return family ? `"${family}", ${stack}` : stack;
+}
+
+/**
  * What was copied can't drive the terminal: without ESC it can't end a bracketed paste and run what follows.
  * @param {string} text
  */

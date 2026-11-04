@@ -8,7 +8,7 @@ import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
 import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
-import { oneLine, runsLines, safePaste } from '../../hooks/terminals/rules.js';
+import { fontStack, oneLine, runsLines, safePaste } from '../../hooks/terminals/rules.js';
 import { terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
 
@@ -40,7 +40,6 @@ const APP_KEYS = [
   'workspace8',
   'workspace9',
 ];
-const MONO = 'ui-monospace, Menlo, monospace';
 
 /**
  * @tag acp-terminal
@@ -98,7 +97,7 @@ export class AcpTerminal extends LitElement {
     this.connect = null;
     /** @type {TerminalInfo | null} */
     this.info = null;
-    /** @type {string | null} The code editor's font family; `null` for the monospace stack. */
+    /** @type {string | null} The font family picked; `null` for the app's monospace stack, as the code editor. */
     this.fontFamily = null;
     /** @type {number} px */
     this.fontSize = 13;
@@ -130,7 +129,7 @@ export class AcpTerminal extends LitElement {
   }
 
   #font() {
-    return this.fontFamily ? `"${this.fontFamily}", ${MONO}` : MONO;
+    return fontStack(this.fontFamily, getComputedStyle(this).getPropertyValue('--acp-font-family-mono').trim());
   }
 
   /**
