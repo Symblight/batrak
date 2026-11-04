@@ -162,6 +162,9 @@ export class SortableController {
   /** No native drag (an image, a selection) may start from an item: the page's would be swallowed. */
   #onDragstart = (/** @type {Event} */ e) => e.preventDefault();
 
+  /** Pointer Events don't stop the browser selecting text as the mouse moves: a drag would select the page. */
+  #onSelectstart = (/** @type {Event} */ e) => e.preventDefault();
+
   /** @param {PointerEvent} e */
   #onPointerdown = (e) => {
     // The main button only; Control-click is the context menu on macOS.
@@ -178,6 +181,7 @@ export class SortableController {
     window.addEventListener('pointerup', this.#onPointerup, true);
     window.addEventListener('pointercancel', this.#onPointercancel, true);
     window.addEventListener('keydown', this.#onKeydown, true);
+    window.addEventListener('selectstart', this.#onSelectstart, true);
     window.addEventListener('blur', this.#cancel);
   };
 
@@ -250,6 +254,7 @@ export class SortableController {
     window.removeEventListener('pointerup', this.#onPointerup, true);
     window.removeEventListener('pointercancel', this.#onPointercancel, true);
     window.removeEventListener('keydown', this.#onKeydown, true);
+    window.removeEventListener('selectstart', this.#onSelectstart, true);
     window.removeEventListener('blur', this.#cancel);
     if (this.#drag) this.#finish(false);
     this.#press = null;
