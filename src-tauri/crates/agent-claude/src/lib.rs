@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, SubagentRecord, SubagentState, Update, ID, PROMPT};
+use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, SessionActivity, SubagentRecord, SubagentState, Update, ID, PROMPT};
 
 /// The adapter's npm package.
 pub const PACKAGE: &str = "@agentclientprotocol/claude-agent-acp";
@@ -20,6 +20,10 @@ impl Agent for Claude {
 
     fn subagents(&self, session_id: &str) -> Vec<SubagentRecord> {
         config_dir().map(|dir| subagents_in(&dir, session_id, SystemTime::now())).unwrap_or_default()
+    }
+
+    fn session_activity(&self, session_id: &str) -> Option<SessionActivity> {
+        activity_in(&config_dir()?, session_id, is_live)
     }
 
     fn registry_id(&self) -> Option<&'static str> {
@@ -116,6 +120,62 @@ pub fn subagents_in(config: &Path, session_id: &str, now: SystemTime) -> Vec<Sub
     found
 }
 
+/// What session `session_id` is doing, from the records its live CLIs keep under `config`
+/// (`sessions/<pid>.json`). A CLI in a turn decides over an idle one of the same session; an SDK-driven
+/// CLI keeps `busy` after its turn, so it tells nothing. `is_live` checks a record's pid and recorded
+/// start.
+pub fn activity_in(config: &Path, session_id: &str, mut is_live: impl FnMut(u32, Option<&str>) -> bool) -> Option<SessionActivity> {
+    let entries = std::fs::read_dir(config.join("sessions")).ok()?;
+    entries
+        .flatten()
+        .filter_map(|entry| {
+            let name = entry.file_name().into_string().ok()?;
+            let pid: u32 = name.strip_suffix(".json")?.parse().ok()?;
+            let record: serde_json::Value = serde_json::from_slice(&std::fs::read(entry.path()).ok()?).ok()?;
+            let text = |key: &str| record.get(key).and_then(serde_json::Value::as_str);
+            if text("sessionId") != Some(session_id)
+                || record.get("pid").and_then(serde_json::Value::as_u64) != Some(u64::from(pid))
+                || text("kind") != Some("interactive")
+                || text("entrypoint").is_none_or(|e| e.starts_with("sdk-"))
+            {
+                return None;
+            }
+            let activity = match text("status")? {
+                "busy" | "shell" => SessionActivity::Running,
+                "waiting" => SessionActivity::WaitingForUser,
+                "idle" => SessionActivity::Idle,
+                _ => return None,
+            };
+            is_live(pid, text("procStart")).then_some(activity)
+        })
+        .max_by_key(|activity| match activity {
+            SessionActivity::Idle => 0,
+            SessionActivity::Running => 1,
+            SessionActivity::WaitingForUser => 2,
+        })
+}
+
+/// Whether `pid` runs, and is the process started at `recorded_start` (a pid can be reused), which
+/// Claude Code writes as `LC_ALL=C TZ=UTC ps -o lstart=` prints it.
+#[cfg(unix)]
+fn is_live(pid: u32, recorded_start: Option<&str>) -> bool {
+    let words = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
+    let output = std::process::Command::new("ps").args(["-o", "lstart=", "-p", &pid.to_string()]).env("LC_ALL", "C").env("TZ", "UTC").output();
+    let Ok(output) = output else { return false };
+    let started = words(&String::from_utf8_lossy(&output.stdout));
+    !started.is_empty() && recorded_start.is_none_or(|recorded| words(recorded) == started)
+}
+
+/// Whether `pid` runs. Windows has no `ps`, and Claude Code's start time isn't compared there.
+#[cfg(windows)]
+fn is_live(pid: u32, _recorded_start: Option<&str>) -> bool {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    let filter = format!("PID eq {pid}");
+    let output = std::process::Command::new("tasklist").args(["/FI", &filter, "/NH", "/FO", "CSV"]).creation_flags(CREATE_NO_WINDOW).output();
+    output.is_ok_and(|output| String::from_utf8_lossy(&output.stdout).contains(&format!("\"{pid}\"")))
+}
+
 /// How long the file hasn't changed.
 fn quiet_since(path: &Path, now: SystemTime) -> Option<Duration> {
     now.duration_since(std::fs::metadata(path).ok()?.modified().ok()?).ok()
@@ -137,6 +197,115 @@ mod tests {
     #[test]
     fn keeps_the_agent_contract() {
         agent_api::conformance::check(&Claude);
+    }
+
+    /// A Claude config dir whose live registry holds these files (name, content).
+    fn registry(name: &str, files: &[(&str, String)]) -> PathBuf {
+        let root = std::env::temp_dir().join(format!("brama-claude-activity-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(root.join("sessions")).unwrap();
+        for (file, content) in files {
+            std::fs::write(root.join("sessions").join(file), content).unwrap();
+        }
+        root
+    }
+
+    /// A CLI's record, as Claude Code 2.1.316 writes it.
+    fn cli_record(pid: u32, session: &str, status: &str) -> String {
+        serde_json::json!({ "pid": pid, "sessionId": session, "kind": "interactive", "entrypoint": "cli", "procStart": "Wed Nov  4 07:35:05 2026", "status": status, "statusUpdatedAt": 1 }).to_string()
+    }
+
+    #[test]
+    fn a_live_clis_status_tells_what_its_session_is_doing() {
+        // Arrange
+        let cases = [("busy", Some(SessionActivity::Running)), ("shell", Some(SessionActivity::Running)), ("waiting", Some(SessionActivity::WaitingForUser)), ("idle", Some(SessionActivity::Idle)), ("new-status", None)];
+        for (status, expected) in cases {
+            let root = registry("status", &[("7.json", cli_record(7, "s", status))]);
+            // Act + Assert
+            assert_eq!(activity_in(&root, "s", |_, _| true), expected, "{status}");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn of_several_live_clis_of_a_session_the_one_in_a_turn_decides() {
+        // Arrange
+        let cases = [
+            (("idle", "busy"), SessionActivity::Running),
+            (("busy", "idle"), SessionActivity::Running),
+            (("busy", "waiting"), SessionActivity::WaitingForUser),
+            (("idle", "idle"), SessionActivity::Idle),
+        ];
+        for ((first, second), expected) in cases {
+            let root = registry("several", &[("7.json", cli_record(7, "s", first)), ("8.json", cli_record(8, "s", second))]);
+            // Act + Assert
+            assert_eq!(activity_in(&root, "s", |_, _| true), Some(expected), "{first}, {second}");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn a_record_that_doesnt_tell_of_a_live_cli_is_left_out() {
+        // Arrange
+        let with = |key: &str, value: &str| {
+            let mut record: serde_json::Value = serde_json::from_str(&cli_record(7, "s", "busy")).unwrap();
+            record[key] = value.into();
+            record.to_string()
+        };
+        let cases = [
+            ("another session", "7.json", cli_record(7, "other", "busy")),
+            ("an SDK-driven CLI stays busy", "7.json", with("entrypoint", "sdk-cli")),
+            ("not interactive", "7.json", with("kind", "print")),
+            ("another pid's file", "8.json", cli_record(7, "s", "busy")),
+            ("not a record's name", "7.abc.key", cli_record(7, "s", "busy")),
+            ("not JSON", "7.json", "{ cut off".to_owned()),
+        ];
+        for (why, file, content) in cases {
+            let root = registry("left-out", &[(file, content)]);
+            // Act + Assert
+            assert_eq!(activity_in(&root, "s", |_, _| true), None, "{why}");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn a_cli_that_died_or_whose_pid_was_reused_tells_nothing() {
+        // Arrange
+        let root = registry("dead", &[("7.json", cli_record(7, "s", "busy"))]);
+        // Act
+        let mut asked = None;
+        let answer = activity_in(&root, "s", |pid, start| {
+            asked = Some((pid, start.map(str::to_owned)));
+            false
+        });
+        // Assert
+        assert_eq!(answer, None);
+        assert_eq!(asked, Some((7, Some("Wed Nov  4 07:35:05 2026".to_owned()))), "its pid and recorded start are checked");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_process_is_live_only_while_it_runs_and_only_as_the_one_recorded() {
+        // Arrange
+        let own = std::process::id();
+        let mut ended = std::process::Command::new("true").spawn().unwrap();
+        let gone = ended.id();
+        ended.wait().unwrap();
+        // Act + Assert
+        assert!(is_live(own, None), "no recorded start to compare");
+        assert!(!is_live(own, Some("Thu Jan  1 00:00:00 1970")), "a reused pid");
+        assert!(!is_live(gone, None), "it ended");
+    }
+
+    /// What this machine's records say of session `$BRAMA_CLAUDE_SESSION`: `cargo test -p agent-claude real_session_activity -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn real_session_activity() {
+        let session = std::env::var("BRAMA_CLAUDE_SESSION").expect("BRAMA_CLAUDE_SESSION");
+        let answer = Claude.session_activity(&session);
+        eprintln!("{session}: {answer:?}");
+        assert!(answer.is_some(), "no live CLI of {session} told");
     }
 
     /// A Claude config dir with one session's subagents: (id, meta JSON, first transcript line's timestamp, transcript age).
