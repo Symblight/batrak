@@ -28,9 +28,6 @@ pub(super) const SYNC_CONCURRENCY: usize = 2;
 const MAX_LISTED: usize = 500;
 /// Activity an agent reports marks a session not running here as active elsewhere for this long.
 const ELSEWHERE_MS: i64 = 2 * 60_000;
-/// The same for a session its CLI runs here: it reads as working only while its agent keeps writing,
-/// so past the page's next poll (20 s) and clock tick (10 s), no longer.
-const CLI_WORKING_MS: i64 = 30_000;
 /// An agent kept up for listing is stopped once no sync used it for this long.
 const CATALOG_IDLE: Duration = Duration::from_secs(90);
 /// Activity the agent reports up to this long after Brama's own is Brama's own.
@@ -509,17 +506,20 @@ fn update_from_list(state: &SessionState, item: &ListedSession) -> bool {
     retitled
 }
 
-/// A session as the page gets it: until when another app may be running it, when its agent saw
-/// activity in it that wasn't Brama's own, and whether its CLI holds it. Takes the record's lock:
-/// call it with none held.
+/// A session as the page gets it: whether its CLI holds it and what that CLI is doing, else until
+/// when another app may be running it, when its agent saw activity in it that wasn't Brama's own.
+/// Takes the record's lock: call it with none held.
 pub(super) fn listed(state: &SessionState) -> Session {
     let mut session = Session::of_record(&lock(&state.record));
     let ours = *lock(&state.active_here);
-    session.in_terminal = lock(&state.cli).is_some();
-    let window = if session.in_terminal { CLI_WORKING_MS } else { ELSEWHERE_MS };
+    if let Some(held) = lock(&state.cli).as_ref() {
+        session.in_terminal = true;
+        session.activity = held.activity;
+        return session;
+    }
     session.active_elsewhere_until = lock(&state.listed_activity)
         .filter(|at| ours.is_none_or(|ours| *at > ours + OWN_ACTIVITY_SLACK_MS))
-        .map(|at| iso_from_millis(at + window));
+        .map(|at| iso_from_millis(at + ELSEWHERE_MS));
     session
 }
 

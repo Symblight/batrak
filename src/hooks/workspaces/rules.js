@@ -20,9 +20,9 @@ const WORKING = new Set(['preparing', 'starting', 'working', 'queued']);
  * @returns {WorkspaceStatus}
  */
 export function statusOf(workspace, chats, { pending, unread, now }) {
-  if (chats.some((c) => c.status === 'waiting' || pending.has(c.id))) return 'waiting';
+  if (chats.some((c) => c.status === 'waiting' || c.activity === 'waitingForUser' || pending.has(c.id))) return 'waiting';
   if (workspace?.missing || workspace?.error || chats.some((c) => c.status === 'error')) return 'error';
-  if (workspace?.creating || chats.some((c) => WORKING.has(c.status) || isActiveElsewhere(c, now))) return 'working';
+  if (workspace?.creating || chats.some((c) => WORKING.has(c.status) || c.activity === 'running' || isActiveElsewhere(c, now))) return 'working';
   if (chats.some((c) => unread.has(c.id))) return 'unread';
   return 'idle';
 }

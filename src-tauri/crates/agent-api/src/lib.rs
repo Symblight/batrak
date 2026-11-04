@@ -183,7 +183,8 @@ pub struct SubagentRecord {
 }
 
 /// What a session is doing, as its agent's own records tell (spec: `docs/specs/session-activity.md`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub enum SessionActivity {
     /// A turn is in progress now.
     Running,

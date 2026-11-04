@@ -5,9 +5,6 @@
 
 use super::*;
 
-/// How often a running CLI's subagents are read from its agent's records.
-const CLI_POLL: Duration = Duration::from_secs(3);
-
 /// A subagent as the page shows it (`Subagent` in `hooks/sessions/types.js`).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -93,7 +90,7 @@ impl SessionState {
     }
 
     /// Takes `list` as the session's subagents; the page hears of it only when it changed.
-    fn set_subagents(&self, list: Vec<Subagent>) {
+    pub(super) fn set_subagents(&self, list: Vec<Subagent>) {
         {
             let mut held = lock(&self.subagents);
             if *held == list {
@@ -102,26 +99,5 @@ impl SessionState {
             *held = list;
         }
         self.emit_subagents();
-    }
-}
-
-impl Inner {
-    /// While the session's CLI runs (until `gone`), reads its subagents from its agent's records.
-    pub(super) fn watch_cli_subagents(&self, state: &Arc<SessionState>, agent: Arc<dyn agent_api::Agent>, mut gone: watch::Receiver<bool>) {
-        let Some(acp_id) = state.record().acp_session_id else { return };
-        let state = Arc::downgrade(state);
-        tokio::spawn(async move {
-            loop {
-                let (agent, id) = (Arc::clone(&agent), acp_id.clone());
-                let Ok(records) = tokio::task::spawn_blocking(move || agent.subagents(&id)).await else { return };
-                let Some(state) = state.upgrade() else { return };
-                state.set_subagents(of_records(records));
-                drop(state);
-                tokio::select! {
-                    _ = tokio::time::sleep(CLI_POLL) => {}
-                    _ = gone.wait_for(|gone| *gone) => return,
-                }
-            }
-        });
     }
 }

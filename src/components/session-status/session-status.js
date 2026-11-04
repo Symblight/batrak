@@ -54,6 +54,7 @@ export class AcpSessionStatus extends LitElement {
           this.permissionPending,
           sessions.isActiveElsewhere(session, this.now ?? Date.now()),
           session.inTerminal === true,
+          session.activity,
         )
       : null;
     this.indicator = this.quiet && indicator === 'terminal' ? null : indicator;

@@ -135,9 +135,10 @@ pub struct Session {
     /// Until when another app may be running it: its agent saw activity in it that wasn't Brama's
     /// (2 min after that). Counts only while it doesn't run here.
     pub active_elsewhere_until: Option<String>,
-    /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`): activity its agent
-    /// reports meanwhile is that CLI's, not another app's.
+    /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`).
     pub in_terminal: bool,
+    /// What that CLI is doing, as its agent's records tell; `None`: no CLI, or its agent can't tell.
+    pub activity: Option<agent_api::SessionActivity>,
     pub config: BTreeMap<String, String>,
     /// Where the agent works: the project, or its folder in the worktree.
     pub folder: String,
@@ -164,6 +165,7 @@ impl Session {
             acp_session_id: r.acp_session_id.clone(),
             active_elsewhere_until: None,
             in_terminal: false,
+            activity: None,
             config: r.config.clone(),
             folder: r.agent_cwd.to_string_lossy().into_owned(),
             branch: r.branch.clone(),

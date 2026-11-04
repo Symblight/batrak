@@ -5,6 +5,7 @@ export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../store
 
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
 /** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('./types.js').SessionActivity} SessionActivity */
 /** @typedef {import('./types.js').SessionIndicator} SessionIndicator */
 /** @typedef {import('./types.js').SessionRead} SessionRead */
 /** @typedef {import('./types.js').SessionStatus} SessionStatus */
@@ -36,15 +37,16 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
  * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
- * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal: activity elsewhere is that CLI's.
+ * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal.
+ * @param {SessionActivity | null} [activity] What that CLI is doing, as its agent tells.
  * @returns {SessionIndicator | null}
  */
-export function sessionIndicator(status, permissionPending, activeElsewhere = false, inTerminal = false) {
-  if (permissionPending || status === 'waiting') return 'permission';
+export function sessionIndicator(status, permissionPending, activeElsewhere = false, inTerminal = false, activity = null) {
+  if (permissionPending || status === 'waiting' || activity === 'waitingForUser') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
   if (status === 'queued') return 'queued';
-  if (inTerminal) return activeElsewhere ? 'terminal-working' : 'terminal';
+  if (inTerminal) return activity === 'running' ? 'terminal-working' : 'terminal';
   if (activeElsewhere) return 'elsewhere';
   return null;
 }

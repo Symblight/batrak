@@ -167,6 +167,7 @@ export class AcpSessionRow extends LitElement {
       this.waiting,
       sessions.isActiveElsewhere(session, now),
       session.inTerminal === true,
+      session.activity,
     );
     return [
       session.title,

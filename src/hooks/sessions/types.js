@@ -15,6 +15,11 @@
  */
 
 /**
+ * What a CLI-run session is doing, as its agent tells (spec: `docs/specs/session-activity.md`).
+ * @typedef {'running' | 'waitingForUser' | 'idle'} SessionActivity
+ */
+
+/**
  * Where a session's title comes from (`TitleSource` in src-tauri/src/session/mod.rs): the first
  * prompt's words until the agent names it (`session_info_update`), or the user's rename, which the
  * agent no longer changes.
@@ -53,7 +58,9 @@
  * @property {string | null} [activeElsewhereUntil] Until when another app (a terminal) may be running it:
  *   its agent saw activity in it that wasn't Brama's. Counts only while it doesn't run here
  *   (`isActiveElsewhere()`).
- * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal; activity it reports is that CLI's.
+ * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal.
+ * @property {SessionActivity | null} [activity] What that CLI is doing, as its agent tells; `null`: no
+ *   CLI, or its agent can't tell.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
  * @property {string} folder Where the agent works: the project, or the project's folder in its workspace.

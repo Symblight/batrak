@@ -193,6 +193,13 @@ fn git_fixture_with(name: &str, options: FakeAgentOptions) -> Fixture {
     f
 }
 
+/// What the fake agent's records say of a session, by its ACP id.
+static RECORDED_ACTIVITY: Mutex<BTreeMap<String, agent_api::SessionActivity>> = Mutex::new(BTreeMap::new());
+
+fn record_activity(acp_id: &str, activity: agent_api::SessionActivity) {
+    lock(&RECORDED_ACTIVITY).insert(acp_id.to_owned(), activity);
+}
+
 /// The fake agent's kind: its CLI is agents.json's `cli`; it maps `model` to `--model`, as a real
 /// agent crate maps the composer's picks to its CLI's flags.
 struct FakeKind;
@@ -225,6 +232,10 @@ impl agent_api::Agent for FakeKind {
             record("stopped", agent_api::SubagentState::Stopped),
             record("stale", agent_api::SubagentState::Unknown),
         ]
+    }
+
+    fn session_activity(&self, session_id: &str) -> Option<agent_api::SessionActivity> {
+        lock(&RECORDED_ACTIVITY).get(session_id).copied()
     }
 }
 
@@ -2976,7 +2987,35 @@ async fn a_running_cli_chat_stays_listed_though_its_agent_doesnt_list_it_yet() {
 }
 
 #[tokio::test]
-async fn a_running_clis_activity_reads_as_working_only_briefly() {
+async fn a_cli_run_chat_shows_what_its_agent_says_it_is_doing() {
+    // Arrange
+    use agent_api::SessionActivity::{Idle, Running, WaitingForUser};
+    let f = fixture("cli-activity", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let (acp, events) = f.started_then_stopped("s1", "fake").await;
+    record_activity(&acp, Running);
+
+    // Act + Assert: from its first read, then as the records change.
+    f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    events.wait_for("running", |e| e.kind == "session" && e.payload["activity"] == "running").await;
+    assert_eq!(listed(&f, "s1").status, SessionStatus::Stopped, "no ACP status");
+    assert!(f.sessions.cli_busy("s1").unwrap(), "closing it would stop a turn");
+
+    record_activity(&acp, WaitingForUser);
+    events.wait_for("waiting", |e| e.kind == "session" && e.payload["activity"] == "waitingForUser").await;
+    assert!(f.sessions.cli_busy("s1").unwrap(), "closing it would stop a turn");
+
+    record_activity(&acp, Idle);
+    events.wait_for("idle", |e| e.kind == "session" && e.payload["activity"] == "idle").await;
+
+    f.sessions.close_cli("s1").await.unwrap();
+    assert_eq!(listed(&f, "s1").activity, None, "no CLI, nothing to tell");
+}
+
+#[tokio::test]
+async fn its_agents_list_never_reads_as_activity_of_a_chat_its_cli_runs_nor_right_after() {
+    // Arrange: the agent's list says the session changed just now, as an idle CLI's writes do.
     let options = listing();
     let f = fixture("cli-working", options.clone());
     f.give_cli_agents();
@@ -2986,11 +3025,18 @@ async fn a_running_clis_activity_reads_as_working_only_briefly() {
     let now = crate::session::iso_now();
     stored_in(&options, &[(id, &f.project, None, Some(now.as_str()))]);
 
+    // Act
     f.sessions.sync(&f.project, None).await;
 
-    let now_ms = crate::session::parse_iso_millis(&now).unwrap();
-    let until = listed(&f, id).active_elsewhere_until;
-    assert_eq!(until, Some(crate::session::iso_from_millis(now_ms + 30_000)), "past the next poll and clock tick, no longer");
+    // Assert
+    let session = listed(&f, id);
+    assert_eq!((session.active_elsewhere_until, session.activity), (None, None), "the agent keeps no records of it");
+
+    // Act: the CLI's own writes aren't another app's once it's gone.
+    f.sessions.close_cli(id).await.unwrap();
+
+    // Assert
+    assert_eq!(listed(&f, id).active_elsewhere_until, None);
 }
 
 #[tokio::test]
