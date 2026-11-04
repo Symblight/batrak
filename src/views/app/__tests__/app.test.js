@@ -153,6 +153,18 @@ describe('acp-app: search dialog', () => {
     expect(quickOpen(app).shadowRoot?.querySelector('dialog')?.open ?? false).to.equal(false);
   });
 
+  it('opens a file named in a panel terminal in its tab', async () => {
+    // Arrange
+    const app = await render();
+    /** @type {unknown[][]} */
+    const opened = [];
+    mainColumn(app).openFile = (...args) => void opened.push(args);
+    // Act
+    app.querySelector('acp-terminals-view')?.dispatchEvent(new CustomEvent('acp-file-open', { detail: { path: '/p/a.js', line: 12 }, bubbles: true, composed: true }));
+    // Assert
+    expect(opened).to.deep.equal([['/p/a.js', 12]]);
+  });
+
   it('opens a match from the dialog in its tab, selected', async () => {
     const app = await render();
     /** @type {unknown[][]} */

@@ -1,3 +1,5 @@
+import { splitFileRefs } from '../chat/file-refs.js';
+
 /** @typedef {import('../app/types.js').Platform} Platform */
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('../tabs/types.js').EditorTab} EditorTab */
@@ -68,6 +70,32 @@ export function folderLabel(folder, workspaces) {
  */
 export function shellPaths(paths, platform) {
   return paths.map((path) => `${quote(path, platform)} `).join('');
+}
+
+/**
+ * A file named in a line of a terminal's output.
+ * @typedef {Object} FileLink
+ * @property {string} path As written: relative or absolute.
+ * @property {number | null} line
+ * @property {{ x: number, y: number }} start Its first cell, 1-based, in rows of the line.
+ * @property {{ x: number, y: number }} end Its last cell.
+ */
+
+/**
+ * @param {string} text A line of output, its wrapped rows joined: every row but the last `cols` long.
+ * @param {number} cols
+ * @returns {FileLink[]} The files it names.
+ */
+export function fileLinks(text, cols) {
+  const cell = (/** @type {number} */ at) => ({ x: (at % cols) + 1, y: Math.floor(at / cols) + 1 });
+  /** @type {FileLink[]} */
+  const links = [];
+  let at = 0;
+  for (const { text: written, ref } of splitFileRefs(text)) {
+    if (ref && !ref.folder) links.push({ path: ref.path, line: ref.fromLine, start: cell(at), end: cell(at + written.length - 1) });
+    at += written.length;
+  }
+  return links;
 }
 
 /**

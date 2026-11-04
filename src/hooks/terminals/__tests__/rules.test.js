@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, fontStack, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths, validFind } from '../rules.js';
+import { fileLinks, folderLabel, fontStack, newTerminalFolder, oneLine, runsLines, safePaste, sessionTerminalFolder, shellPaths, validFind } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -117,5 +117,24 @@ describe('terminals: rules', () => {
     expect(validFind('(', false)).to.equal(true);
     expect(validFind('(', true)).to.equal(false);
     expect(validFind('(a)', true)).to.equal(true);
+  });
+
+  it('finds files named in a line of output, with the cells they take across its rows', () => {
+    const cases = [
+      // [why, text, cols, links as [path, line, startX, startY, endX, endY], 1-based and inclusive]
+      ['with a line', 'at src/a.js:12 now', 80, [['src/a.js', 12, 4, 1, 14, 1]]],
+      ['with no line', 'see src/a.js.', 80, [['src/a.js', null, 5, 1, 12, 1]]],
+      ['absolute', '/p/a.js:3', 80, [['/p/a.js', 3, 1, 1, 9, 1]]],
+      ['across rows', 'xxxxx src/long/a.js:7', 10, [['src/long/a.js', 7, 7, 1, 1, 3]]],
+      ['two', 'a/b.js c/d.js:1', 80, [['a/b.js', null, 1, 1, 6, 1], ['c/d.js', 1, 8, 1, 15, 1]]],
+      ['a web address is not a file', 'https://a.test/x.js', 80, []],
+      ['a word is not a file', 'and/or 1.2.3 app.js', 80, []],
+      ['a folder is not a file', '@src/', 80, []],
+    ];
+    for (const [why, text, cols, links] of cases) {
+      const found = fileLinks(/** @type {string} */ (text), /** @type {number} */ (cols));
+      const shape = found.map(({ path, line, start, end }) => [path, line, start.x, start.y, end.x, end.y]);
+      expect(shape, /** @type {string} */ (why)).to.deep.equal(links);
+    }
   });
 });

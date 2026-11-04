@@ -539,7 +539,7 @@ export class AcpApp extends ViewElement {
             ></acp-agent-column>
             <acp-main-column slot="main" @acp-file-reveal=${this.#onFileReveal}></acp-main-column>
           </acp-column-split>
-          <acp-terminals-view slot="terminals"></acp-terminals-view>
+          <acp-terminals-view slot="terminals" @acp-file-open=${this.#onChatFileOpen}></acp-terminals-view>
         </acp-column-split>
         <acp-file-column
           slot="side"

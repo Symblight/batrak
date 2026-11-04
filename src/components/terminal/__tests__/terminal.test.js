@@ -87,12 +87,13 @@ const input = (el) => /** @type {HTMLTextAreaElement} */ (el.shadowRoot?.querySe
  * @param {AcpTerminal} el
  * @param {number} row
  * @param {MouseEventInit} modifier
+ * @param {number} [left] px into the row.
  */
-async function clickCell(el, row, modifier) {
+async function clickCell(el, row, modifier, left = 2) {
   const screen = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-screen'));
   const rows = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-rows')?.children[row]);
   const box = rows.getBoundingClientRect();
-  const init = { clientX: box.left + 2, clientY: box.top + box.height / 2, bubbles: true, composed: true, ...modifier };
+  const init = { clientX: box.left + left, clientY: box.top + box.height / 2, bubbles: true, composed: true, ...modifier };
   screen.dispatchEvent(new MouseEvent('mousemove', init));
   await new Promise((resolve) => setTimeout(resolve, 30));
   screen.dispatchEvent(new MouseEvent('mousedown', { ...init, button: 0 }));
@@ -101,6 +102,32 @@ async function clickCell(el, row, modifier) {
 }
 
 describe('acp-terminal', () => {
+  it('opens a file named in the output, from the shell’s folder and at its line, on the platform’s modifier click', async () => {
+    // Arrange
+    const { el, calls } = await render({ ...running, cwd: '/p' }, 300);
+    el.platform = 'mac';
+    /** @type {unknown[]} */
+    const opened = [];
+    el.addEventListener('acp-file-open', (e) => opened.push(/** @type {CustomEvent} */ (e).detail));
+    await show(calls.sink, 'src/a.js:12\r\n/q/b.js\r\n');
+    // Long enough to wrap: its second row opens it too.
+    await show(calls.sink, `src/${'long/'.repeat(12)}c.js:3\r\n`);
+    // Act
+    await clickCell(el, 0, {});
+    // Assert
+    expect(opened, 'no modifier').to.deep.equal([]);
+    // Act
+    await clickCell(el, 0, { metaKey: true });
+    await clickCell(el, 1, { metaKey: true });
+    await clickCell(el, 3, { metaKey: true });
+    // Assert
+    expect(opened).to.deep.equal([
+      { path: '/p/src/a.js', line: 12 },
+      { path: '/q/b.js', line: null },
+      { path: `/p/src/${'long/'.repeat(12)}c.js`, line: 3 },
+    ]);
+  });
+
   it('opens a link, written out or as OSC 8, only on the platform’s modifier click, and never asks through a browser dialog', async () => {
     // Arrange
     const { el, calls } = await render();

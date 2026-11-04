@@ -8,8 +8,9 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
 import { app } from '../../hooks/app/app.js';
+import { absoluteRefPath } from '../../hooks/chat/file-refs.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
-import { fontStack, oneLine, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
+import { fileLinks, fontStack, oneLine, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
 import '../terminal-find/terminal-find.js';
 import { FIND_DECORATIONS, terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
@@ -54,6 +55,7 @@ const APP_KEYS = [
  * @fires acp-terminal-title `{ terminalId, title }` A title the shell set.
  * @fires acp-terminal-paste-lines `{ text }` The user pasted lines that would each run: `pasteLines()` if they agree.
  * @fires acp-link-open `{ url }` A link ⌘-clicked (Ctrl-clicked elsewhere).
+ * @fires acp-file-open `{ path, line }` A file named in the output ⌘-clicked (Ctrl-clicked elsewhere).
  */
 export class AcpTerminal extends LitElement {
   static properties = {
@@ -172,8 +174,44 @@ export class AcpTerminal extends LitElement {
    * @param {string} url
    */
   #openLink = (event, url) => {
-    if (this.platform === 'mac' ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
+    if (this.#isOpenClick(event)) this.#emit('acp-link-open', { url });
   };
+
+  /** @param {MouseEvent} event */
+  #isOpenClick(event) {
+    return this.platform === 'mac' ? event.metaKey : event.ctrlKey;
+  }
+
+  /**
+   * The files named on a buffer line, a wrapped line taken whole, relative ones from the folder the shell started in.
+   * @param {Terminal} term
+   * @param {number} y 1-based.
+   * @returns {import('@xterm/xterm').ILink[]}
+   */
+  #fileLinksAt(term, y) {
+    const buffer = term.buffer.active;
+    let first = y - 1;
+    while (first > 0 && buffer.getLine(first)?.isWrapped) first--;
+    let last = first;
+    while (buffer.getLine(last + 1)?.isWrapped) last++;
+    let text = '';
+    for (let row = first; row <= last; row++) text += buffer.getLine(row)?.translateToString(row === last) ?? '';
+    return fileLinks(text, term.cols)
+      .filter(({ start, end }) => first + start.y <= y && y <= first + end.y)
+      .flatMap(({ path, line, start, end }) => {
+        const absolute = absoluteRefPath(path, this.info?.cwd || null);
+        if (absolute === null) return [];
+        return [
+          {
+            text: path,
+            range: { start: { x: start.x, y: first + start.y }, end: { x: end.x, y: first + end.y } },
+            activate: (/** @type {MouseEvent} */ event) => {
+              if (this.#isOpenClick(event)) this.#emit('acp-file-open', { path: absolute, line });
+            },
+          },
+        ];
+      });
+  }
 
   firstUpdated() {
     this.#setUp();
@@ -206,6 +244,7 @@ export class AcpTerminal extends LitElement {
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
     term.loadAddon(new WebLinksAddon(this.#openLink));
+    term.registerLinkProvider({ provideLinks: (y, done) => done(this.#fileLinksAt(term, y)) });
     term.loadAddon(new Unicode11Addon());
     this.#search = new SearchAddon();
     this.#search.onDidChangeResults(({ resultIndex, resultCount }) => (this.findResult = { index: resultIndex, total: resultCount }));
