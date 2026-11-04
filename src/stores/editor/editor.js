@@ -60,14 +60,15 @@ function belongsTo(id, folder, workspaces) {
 const OLD_TERMINAL_TAB_ID = 'view:terminal';
 
 /**
- * Stored tabs; terminal tabs are dropped, since their shells didn't outlive the page.
+ * Stored tabs. A terminal's stays: its shell starts again when shown; `terminals.start()` closes it
+ * if its terminal wasn't saved.
  * @param {unknown} raw
  * @returns {EditorTabs | null}
  */
 export function parseTabs(raw) {
   if (!isRecord(raw) || !Array.isArray(raw.paths)) return null;
   const paths = [...new Set(raw.paths)].filter(
-    (path) => typeof path === 'string' && path !== OLD_TERMINAL_TAB_ID && terminalOfTab(path) === null,
+    (path) => typeof path === 'string' && path !== OLD_TERMINAL_TAB_ID,
   );
   const pinned = Array.isArray(raw.pinned) ? raw.pinned.filter((id) => typeof id === 'string') : [];
   return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null, pinned);

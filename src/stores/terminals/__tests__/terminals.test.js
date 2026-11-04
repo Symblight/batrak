@@ -11,7 +11,10 @@ import {
   TERMINAL_PANEL_MAX_HEIGHT,
   TERMINAL_PANEL_MIN_HEIGHT,
   $terminals,
+  $savedTerminals,
   addSessionTerminal,
+  parseSavedTerminal,
+  restoredTerminals,
   closeTerminalTab,
   focusTerminal,
   forgetTerminal,
@@ -254,6 +257,42 @@ describe('terminals', () => {
       expect(asked(), 'CLI').to.equal('cli-s');
       moveTerminalToEditor(opened, 0);
       expect(asked(), 'moved').to.equal(opened);
+    });
+
+    it('saves terminals opened in tabs, not a session’s CLI or a login, and forgets those closed', () => {
+      // Act
+      const id = openTerminal('/p', '/q', 'a');
+      addSessionTerminal('cli-s', 's', '/p', 'Agent');
+      openLoginTerminal({ terminalId: 'sign-in-3', title: 'Sign in', commandLine: 'x login' }, null);
+      terminalStarted(id, { shell: 'zsh', cwd: '/p' }, 'zsh — p');
+      // Assert
+      expect($savedTerminals.get()[id]).to.deep.equal({ cwd: '/p', fallback: '/q', label: 'zsh — p', folder: $terminals.get()[id].folder, projectPath: $terminals.get()[id].projectPath });
+      expect($savedTerminals.get()['cli-s'], 'a CLI').to.equal(undefined);
+      expect($savedTerminals.get()['sign-in-3'], 'a login').to.equal(undefined);
+      // Act
+      forgetTerminal(id);
+      // Assert
+      expect($savedTerminals.get()[id]).to.equal(undefined);
+    });
+
+    it('comes back from storage in a new page, with its terminal yet to start', async () => {
+      // Arrange
+      const saved = { cwd: '/p', fallback: null, label: 'zsh — p', folder: '/p', projectPath: '/p' };
+      localStorage.setItem('brama:terminals:back', JSON.stringify(saved));
+      // Act: the module as a page loads it
+      const page = await import(`../terminals.js?page=${Date.now()}`);
+      const restored = page.$terminals.get().back;
+      // Assert
+      localStorage.removeItem('brama:terminals:back');
+      expect(restored).to.include({ cwd: '/p', status: 'starting', label: 'zsh — p' });
+    });
+
+    it('brings saved terminals back as shells yet to start, and refuses what isn’t one', () => {
+      const saved = { cwd: '/p', fallback: null, label: 'zsh — p', folder: '/p', projectPath: '/p' };
+      expect(restoredTerminals({ a: saved })).to.deep.equal({ a: { ...saved, title: null, status: 'starting', exit: null, error: null, login: null } });
+      expect(parseSavedTerminal(saved)).to.deep.equal(saved);
+      expect(parseSavedTerminal({ ...saved, cwd: 3 })).to.equal(null);
+      expect(parseSavedTerminal('x')).to.equal(null);
     });
 
     it('asks to focus a terminal until the view has', () => {

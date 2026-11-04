@@ -32,8 +32,7 @@ first), pausing once `FLOW_PAUSE_AT` is sent and not yet drawn (the page acknowl
 a background job that still holds the PTY. Input goes as raw bytes (`terminal_write`, id in the
 `terminal-id` header), so xterm's binary mouse reports arrive intact. Input and output are never
 logged. Keep it portable: unix-only parts behind `cfg(unix)` with a Windows path (ConPTY,
-`ChildKiller`). Frontend: `$terminals` (`stores/terminals/terminals.js`, in
-memory; `$folderTabs`' `parse` drops terminal tabs) and the `terminals` hook
+`ChildKiller`). Frontend: `$terminals` (`stores/terminals/terminals.js`; a tab's terminal is saved, `$savedTerminals`, and comes back with a new shell once shown, its output gone) and the `terminals` hook
 (`hooks/terminals/terminals.js`, its pure rules in `rules.js`): `connect()` (passed by `<acp-terminal-view>`) starts a shell when its
 tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer only while shown and where available, else the DOM one; a moved one, as a tab reorder moves it, keeps its screen); a shell keeps running,
 and its screen stays mounted (`<acp-terminals-view>` has a tab view per folder, the shown one's in front), while its tab, workspace or project isn't shown; a terminal's shell is closed once its tab is in neither its

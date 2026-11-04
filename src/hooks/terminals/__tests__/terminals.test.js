@@ -150,6 +150,20 @@ describe('terminals', () => {
     expect($terminalPanel.get()).to.deep.equal({ open: true });
   });
 
+  it('closes tabs whose terminal wasn’t saved, as it starts: a login’s, say', async () => {
+    // Arrange
+    const kept = openTerminal('/p', '/p', 'kept');
+    const panel = $folderTerminalTabs.get();
+    const [folder] = Object.keys(panel);
+    const tabs = /** @type {NonNullable<typeof panel[string]>} */ (panel[folder]);
+    $folderTerminalTabs.setKey(folder, { ...tabs, paths: [...tabs.paths, 'view:terminal:gone'] });
+    // Act
+    await started();
+    // Assert
+    expect($folderTerminalTabs.get()[folder]?.paths, 'the saved one stays').to.deep.equal(tabs.paths);
+    expect($terminals.get()[kept]).to.exist;
+  });
+
   it('closes the previous page load’s shells as soon as it starts, before any view connects, and asks which Windows it runs on', async () => {
     // Act
     await started();

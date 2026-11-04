@@ -37,8 +37,7 @@ paths:
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
   `$folderTerminalPanelHeights` (`brama:layout:terminal-panel:<folder>`, per window like the tabs,
   one item per folder through `setKey()`: the terminal panel's height in px, clamped when read; the
-  panel's tabs (`$folderTerminalTabs`) and whether it is open (`$folderTerminalPanels`) are in memory
-  only, since shells don't outlive the page),
+  panel's tabs (`$folderTerminalTabs`, `brama:terminal-panel:tabs:<folder>`), whether it is open (`$folderTerminalPanels`, `brama:terminal-panel:open:<folder>`) and each terminal tab's terminal (`$savedTerminals`, `brama:terminals:<id>`: where it starts, no session's CLI or login): the tabs come back, each with a new shell once shown),
   `$folderExpandedFolders` (`brama:file-tree:expanded:<folder>`, per window like the tabs; the
   shown folder's entry is `$expandedFolders` (a workspace with none of its own shows its project's), root-relative folders the file tree is controlled by: it
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands

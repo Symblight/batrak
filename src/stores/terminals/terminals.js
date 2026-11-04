@@ -1,6 +1,6 @@
-import { atom, computed, map } from 'nanostores';
-import { $folderTabs, closeFolderTab, moveTab, openFolderTab, openTab } from '../editor/editor.js';
-import { persistentMapStore } from '../persistent/persistent.js';
+import { atom, computed } from 'nanostores';
+import { $folderTabs, closeFolderTab, moveTab, openFolderTab, openTab, parseTabs } from '../editor/editor.js';
+import { isRecord, persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $shownFolder } from '../workspaces/workspaces.js';
 import { $projectPath } from '../project/project.js';
@@ -11,14 +11,60 @@ import { terminalTabId } from '../tab-ids/tab-ids.js';
 /** @typedef {import('../../hooks/terminals/types.js').TerminalOpened} TerminalOpened */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
 
-/** Every terminal tab's shell, by terminal id. In memory: shells don't outlive the page. */
-export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>} */ ({}));
+/**
+ * What a terminal needs to start again in a new page: shells don't outlive one, their tabs do.
+ * @typedef {Pick<TerminalInfo, 'cwd' | 'fallback' | 'label' | 'folder' | 'projectPath'>} SavedTerminal
+ */
 
 /**
- * The terminal panel's tabs by folder (`$shownFolder`'s keys): terminal tabs only, in memory (shells
- * don't outlive the page, so neither does a tab), written through `terminalGroup`.
+ * @param {unknown} raw
+ * @returns {SavedTerminal | null}
  */
-export const $folderTerminalTabs = map(/** @type {Record<string, EditorTabs | undefined>} */ ({}));
+export function parseSavedTerminal(raw) {
+  if (!isRecord(raw) || typeof raw.cwd !== 'string' || typeof raw.label !== 'string') return null;
+  const { cwd, fallback, label, folder, projectPath } = raw;
+  const stringOrNull = (/** @type {unknown} */ value) => typeof value === 'string' || value === null;
+  if (!stringOrNull(fallback) || !stringOrNull(folder) || !stringOrNull(projectPath)) return null;
+  return /** @type {SavedTerminal} */ ({ cwd, fallback, label, folder, projectPath });
+}
+
+/** Terminals of terminal tabs, by id, one storage item each; per window, like the tabs. Written from `$terminals`. */
+export const $savedTerminals = persistentMapStore('brama:terminals:', parseSavedTerminal);
+
+/**
+ * @param {Readonly<Record<string, SavedTerminal | undefined>>} saved
+ * @returns {Record<string, TerminalInfo>} Shells yet to start, each when its tab is first shown.
+ */
+export function restoredTerminals(saved) {
+  /** @type {Record<string, TerminalInfo>} */
+  const terminals = {};
+  for (const [id, terminal] of Object.entries(saved)) {
+    if (terminal) terminals[id] = { ...terminal, title: null, status: 'starting', exit: null, error: null, login: null };
+  }
+  return terminals;
+}
+
+/** Every terminal tab's shell, by terminal id. */
+export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>} */ (restoredTerminals($savedTerminals.get())));
+
+// A session's CLI and a login belong to what started them, which starts them again.
+$terminals.listen((terminals) => {
+  const saved = $savedTerminals.get();
+  for (const id of Object.keys(saved)) {
+    if (!terminals[id]) $savedTerminals.setKey(id, undefined);
+  }
+  for (const [id, { cwd, fallback, label, folder, projectPath, sessionId, login }] of Object.entries(terminals)) {
+    if (sessionId || login) continue;
+    const terminal = { cwd, fallback, label, folder, projectPath };
+    if (JSON.stringify(saved[id]) !== JSON.stringify(terminal)) $savedTerminals.setKey(id, terminal);
+  }
+});
+
+/**
+ * The terminal panel's tabs by folder (`$shownFolder`'s keys): terminal tabs only, one storage item
+ * each, written through `terminalGroup`.
+ */
+export const $folderTerminalTabs = persistentMapStore('brama:terminal-panel:tabs:', parseTabs);
 
 /** The shown folder's key in the per-folder maps; `NO_PROJECT` with none shown. */
 const shownKey = () => $shownFolder.get() ?? NO_PROJECT;
@@ -37,10 +83,12 @@ export const terminalGroup = tabGroup({
 });
 
 /**
- * Whether each folder's terminal panel is shown, by folder (`NO_PROJECT` for none). In memory, like
- * the shells; only a panel with terminals is ever open (the hook hides it with its last one).
+ * Whether each folder's terminal panel is shown, by folder (`NO_PROJECT` for none), one storage item
+ * each; only a panel with terminals is ever open (the hook hides it with its last one).
  */
-export const $folderTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
+export const $folderTerminalPanels = persistentMapStore('brama:terminal-panel:open:', (raw) =>
+  isRecord(raw) && typeof raw.open === 'boolean' ? { open: raw.open } : null,
+);
 
 /** The shown folder's panel. */
 export const $terminalPanel = computed([$folderTerminalPanels, $shownFolder], (panels, folder) => panels[folder ?? NO_PROJECT] ?? { open: false });

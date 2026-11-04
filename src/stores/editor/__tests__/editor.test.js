@@ -67,9 +67,9 @@ describe('editor', () => {
     expect($settingsReveal.get()).to.equal(null);
   });
 
-  it('forgets terminal tabs a stored project had, whose shells are gone', () => {
-    const stored = { paths: ['/p/a.js', terminalTabId('t1'), 'view:terminal'], active: terminalTabId('t1'), pinned: [terminalTabId('t1')] };
-    expect(parseTabs(stored)).to.deep.equal({ paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
+  it('keeps a stored project’s terminal tabs, and drops the old one with no terminal', () => {
+    const stored = { paths: ['/p/a.js', terminalTabId('t1'), 'view:terminal'], active: terminalTabId('t1'), pinned: [] };
+    expect(parseTabs(stored)).to.deep.equal({ paths: ['/p/a.js', terminalTabId('t1')], active: terminalTabId('t1'), pinned: [] });
   });
 
   describe('per workspace', () => {

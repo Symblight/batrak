@@ -279,6 +279,14 @@ export const terminals = Object.freeze({
         }
       }),
     ];
+    // From the last page load: a tab whose terminal wasn't saved (a login's), and a terminal with no tab.
+    for (const [root, group] of [...Object.entries($folderTabs.get()), ...Object.entries($folderTerminalTabs.get())]) {
+      for (const tab of group?.paths ?? []) {
+        const id = tabs.terminalOf(tab);
+        if (id !== null && !$terminals.get()[id]) closeTerminalTab(root, id);
+      }
+    }
+    releaseGone();
     return () => stops.forEach((stop) => stop());
   },
 
