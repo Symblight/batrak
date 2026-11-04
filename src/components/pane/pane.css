@@ -14,6 +14,17 @@
   display: none;
 }
 
+/* Custom properties inherit: without this, a pane nested in this one takes this one's size and limits. */
+.acp-pane__content {
+  --acp-pane-flex: initial;
+  --acp-pane-width: initial;
+  --acp-pane-min-width: initial;
+  --acp-pane-max-width: initial;
+  --acp-pane-height: initial;
+  --acp-pane-min-height: initial;
+  --acp-pane-max-height: initial;
+}
+
 /* Showing or hiding a pane with an edge: it grows from, or collapses to, nothing, its gap with it,
    so the panes beside it slide instead of jumping. Shown by an animation (to the inline width, from
    nothing) and hidden by a transition that only the hidden state declares, so a drag or a window

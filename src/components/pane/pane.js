@@ -19,7 +19,7 @@ export class AcpPane extends LitElement {
   }
 
   render() {
-    return html`<slot></slot>`;
+    return html`<slot class="acp-pane__content"></slot>`;
   }
 }
 
