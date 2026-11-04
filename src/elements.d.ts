@@ -92,6 +92,7 @@ import type { AcpSessionSync } from './components/session-sync/session-sync.js';
 import type { AcpSessionColumn } from './views/session-column/session-column.js';
 import type { AcpTerminal } from './components/terminal/terminal.js';
 import type { AcpToolbar } from './components/toolbar/toolbar.js';
+import type { AcpToolbarView } from './views/toolbar-view/toolbar-view.js';
 import type { AcpViewPlaceholder } from './components/view-placeholder/view-placeholder.js';
 import type { AcpWelcome } from './components/welcome/welcome.js';
 
@@ -190,6 +191,7 @@ declare global {
     'acp-snackbars': AcpSnackbars;
     'acp-terminal': AcpTerminal;
     'acp-toolbar': AcpToolbar;
+    'acp-toolbar-view': AcpToolbarView;
     'acp-view-placeholder': AcpViewPlaceholder;
     'acp-welcome': AcpWelcome;
   }
