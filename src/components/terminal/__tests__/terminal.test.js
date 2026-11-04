@@ -424,6 +424,46 @@ describe('acp-terminal', () => {
     await until(() => !text(el).includes('old output'));
   });
 
+  it('on Windows, Ctrl+V pastes and Ctrl+C copies a selection, else interrupts; elsewhere both are the shell’s', async () => {
+    const key = (/** @type {AcpTerminal} */ el, /** @type {string} */ letter) =>
+      input(el).dispatchEvent(new KeyboardEvent('keydown', { key: letter, code: `Key${letter.toUpperCase()}`, keyCode: letter.toUpperCase().charCodeAt(0), ctrlKey: true, bubbles: true, composed: true }));
+    const cases = [
+      { platform: 'windows', paste: [], copy: [], copied: ['word'] },
+      { platform: 'linux', paste: ['\x16'], copy: ['\x03'], copied: [] },
+    ];
+    for (const { platform, paste, copy, copied } of cases) {
+      // Arrange
+      const { el, calls } = await render();
+      el.platform = /** @type {import('../../../hooks/app/types.js').Platform} */ (platform);
+      /** @type {string[]} */
+      const heard = [];
+      el.addEventListener('acp-terminal-copy', (e) => heard.push(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text));
+      await show(calls.sink, 'word\r\n');
+      await until(() => text(el).includes('word'));
+      const row = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-rows')?.children[0]);
+      const box = row.getBoundingClientRect();
+      const at = { clientX: box.left + 3, clientY: box.top + box.height / 2, button: 0, bubbles: true, composed: true };
+      const screen = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-screen'));
+      // Act
+      key(el, 'v');
+      // Assert
+      expect(calls.writes, `${platform}: Ctrl+V`).to.deep.equal(paste);
+      calls.writes.length = 0;
+      // Act: a double click selects the word
+      screen.dispatchEvent(new MouseEvent('mousedown', { ...at, detail: 2 }));
+      screen.dispatchEvent(new MouseEvent('mouseup', { ...at, detail: 2 }));
+      key(el, 'c');
+      // Assert
+      expect(calls.writes, `${platform}: Ctrl+C on a selection`).to.deep.equal(copy);
+      expect(heard, platform).to.deep.equal(copied);
+      calls.writes.length = 0;
+      // Act: with none selected it interrupts
+      key(el, 'c');
+      // Assert
+      expect(calls.writes, `${platform}: Ctrl+C with no selection`).to.deep.equal(['\x03']);
+    }
+  });
+
   it('leaves the app’s shortcuts to the app', async () => {
     const { el, calls } = await render();
     /** @type {KeyboardEvent[]} */

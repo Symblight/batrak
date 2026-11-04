@@ -1,4 +1,4 @@
-import { splitFileRefs } from '../chat/file-refs.js';
+import { absoluteRefPath, splitFileRefs } from '../chat/file-refs.js';
 
 /** @typedef {import('../app/types.js').Platform} Platform */
 /** @typedef {import('../sessions/types.js').Session} Session */
@@ -82,20 +82,57 @@ export function shellPaths(paths, platform) {
  */
 
 /**
+ * A file in Windows output: a drive or folders, either slash, or a bare name with a line; `:12` or a compiler's `(12,3)`.
+ * Not inside a longer word or a web address.
+ */
+const WINDOWS_FILE = /(?<![\w./\\:-])((?:[A-Za-z]:[\\/])?(?:[\w.-]+[\\/])+[\w.-]*\.[A-Za-z]\w*|[\w.-]*\.[A-Za-z]\w*(?=:\d|\(\d))(?::(\d+)|\((\d+)(?:,\d+)?\))?/g;
+
+/**
  * @param {string} text A line of output, its wrapped rows joined: every row but the last `cols` long.
  * @param {number} cols
+ * @param {Platform} platform
  * @returns {FileLink[]} The files it names.
  */
-export function fileLinks(text, cols) {
+export function fileLinks(text, cols, platform) {
   const cell = (/** @type {number} */ at) => ({ x: (at % cols) + 1, y: Math.floor(at / cols) + 1 });
   /** @type {FileLink[]} */
   const links = [];
+  if (platform === 'windows') {
+    for (const match of text.matchAll(WINDOWS_FILE)) {
+      const line = match[2] ?? match[3];
+      const start = /** @type {number} */ (match.index);
+      links.push({ path: match[1], line: line === undefined ? null : Number(line), start: cell(start), end: cell(start + match[0].length - 1) });
+    }
+    return links;
+  }
   let at = 0;
   for (const { text: written, ref } of splitFileRefs(text)) {
     if (ref && !ref.folder) links.push({ path: ref.path, line: ref.fromLine, start: cell(at), end: cell(at + written.length - 1) });
     at += written.length;
   }
   return links;
+}
+
+/**
+ * @param {string} path As written.
+ * @param {string | null | undefined} cwd The folder a relative one is from.
+ * @param {Platform} platform
+ * @returns {string | null} Absolute, `.` and `..` resolved; `null` when it can't be told or goes above the root.
+ */
+export function resolveFile(path, cwd, platform) {
+  if (platform !== 'windows') return absoluteRefPath(path, cwd || null);
+  const drive = /^[A-Za-z]:[\\/]/;
+  const full = drive.test(path) ? path : /^[\\/]/.test(path) || !cwd ? null : `${cwd}\\${path}`;
+  if (full === null) return null;
+  const [root, ...rest] = full.split(/[\\/]+/);
+  /** @type {string[]} */
+  const parts = [];
+  for (const segment of rest) {
+    if (segment === '' || segment === '.') continue;
+    if (segment !== '..') parts.push(segment);
+    else if (parts.pop() === undefined) return null;
+  }
+  return `${root}\\${parts.join('\\')}`;
 }
 
 /**

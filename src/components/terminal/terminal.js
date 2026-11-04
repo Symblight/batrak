@@ -8,9 +8,8 @@ import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
 import { app } from '../../hooks/app/app.js';
-import { absoluteRefPath } from '../../hooks/chat/file-refs.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
-import { fileLinks, fontStack, oneLine, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
+import { fileLinks, fontStack, oneLine, resolveFile, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
 import '../terminal-find/terminal-find.js';
 import { FIND_DECORATIONS, terminalTheme } from './terminal-theme.js';
 import styles from './terminal.css?inline';
@@ -196,10 +195,10 @@ export class AcpTerminal extends LitElement {
     while (buffer.getLine(last + 1)?.isWrapped) last++;
     let text = '';
     for (let row = first; row <= last; row++) text += buffer.getLine(row)?.translateToString(row === last) ?? '';
-    return fileLinks(text, term.cols)
+    return fileLinks(text, term.cols, this.platform)
       .filter(({ start, end }) => first + start.y <= y && y <= first + end.y)
       .flatMap(({ path, line, start, end }) => {
-        const absolute = absoluteRefPath(path, this.info?.cwd || null);
+        const absolute = resolveFile(path, this.info?.cwd, this.platform);
         if (absolute === null) return [];
         return [
           {
@@ -496,6 +495,17 @@ export class AcpTerminal extends LitElement {
       else if (down && key === 'a') term.selectAll();
       if (down && (key === 'k' || key === 'a')) e.preventDefault();
       return false;
+    }
+    // As Windows' own terminals: Ctrl+V reaches the webview as a paste, Ctrl+C interrupts unless text is selected.
+    if (this.platform === 'windows' && e.ctrlKey && !e.shiftKey && !e.altKey) {
+      if (key === 'v') return false;
+      if (key === 'c' && term.hasSelection()) {
+        if (down) {
+          this.#emit('acp-terminal-copy', { text: term.getSelection() });
+          term.clearSelection();
+        }
+        return false;
+      }
     }
     if (e.ctrlKey && e.shiftKey && key === 'c') {
       if (down && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
