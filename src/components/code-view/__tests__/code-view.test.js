@@ -303,4 +303,139 @@ describe('acp-code-view', () => {
       expect(editor.selection.getCursor()?.line).to.equal(3);
     });
   });
+
+  describe('trying to edit a read-only file', () => {
+    /** @param {string} [path] */
+    async function render(path = '/p/a.js') {
+      /** @type {EditorTab} */
+      const tab = { ...fileTab(path), loaded: true, content: 'one\ntwo\nthree\n' };
+      const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'}></acp-code-view>`));
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (root.querySelector('cdx-code-editor'));
+      await until(() => !!editor.view);
+      const view = /** @type {import('@codemirror/view').EditorView} */ (editor.view);
+      const hint = () => /** @type {HTMLElementTagNameMap['md-rich-tooltip'] | null} */ (root.querySelector('md-rich-tooltip'));
+      const isOpen = () => hint()?.matches(':popover-open') ?? false;
+      return { el, root, editor, view, hint, isOpen };
+    }
+    /**
+     * @param {HTMLElement} target
+     * @param {string} type
+     */
+    const fire = (target, type) => target.dispatchEvent(new Event(type, { bubbles: true, composed: true, cancelable: true }));
+    const settle = () => new Promise((r) => setTimeout(r, 50));
+
+    it('says why, for what counts as an edit and nothing else', async () => {
+      /** @type {[string, boolean, (view: import('@codemirror/view').EditorView, editor: HTMLElement) => void][]} */
+      const cases = [
+        ['beforeinput', true, (view) => fire(view.contentDOM, 'beforeinput')],
+        ['paste', true, (view) => fire(view.contentDOM, 'paste')],
+        ['cut', true, (view) => fire(view.contentDOM, 'cut')],
+        ['drop', true, (view) => fire(view.contentDOM, 'drop')],
+        ...['Backspace', 'Delete'].map((key) => /** @type {[string, boolean, (view: import('@codemirror/view').EditorView) => void]} */ ([
+          key,
+          true,
+          (view) => {
+            view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, composed: true }));
+          },
+        ])),
+        ['copy', false, (view) => fire(view.contentDOM, 'copy')],
+        ['a key that only moves', false, (view) => {
+          view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true, composed: true }));
+        }],
+        ['typing in a field inside the editor', false, (_view, editor) => {
+          const field = editor.appendChild(document.createElement('textarea'));
+          fire(field, 'beforeinput');
+        }],
+      ];
+      for (const [name, shown, act] of cases) {
+        // Arrange
+        const { root, editor, view, hint, isOpen } = await render();
+        // Act
+        act(view, editor);
+        await settle();
+        // Assert
+        expect(isOpen(), name).to.equal(shown);
+        expect(view.state.doc.toString(), name).to.equal('one\ntwo\nthree\n');
+        if (shown) {
+          expect(hint()?.querySelector('[slot="subhead"]')?.textContent, name).to.equal('This file is read-only');
+          expect(hint()?.textContent, name).to.contain('Ask the agent to make this change.');
+          expect(root.querySelector('[role="status"]')?.textContent, name).to.contain('Ask the agent to make this change.');
+        }
+      }
+    });
+
+    it('says nothing in a file that can be edited', async () => {
+      // Arrange
+      const { view, isOpen } = await render('/p/.brama/agents.json');
+      // Act
+      fire(view.contentDOM, 'beforeinput');
+      await settle();
+      // Assert
+      expect(isOpen()).to.equal(false);
+    });
+
+    it('moves to the caret on another try, one hint announced once', async () => {
+      // Arrange
+      const { root, editor, view, hint, isOpen } = await render();
+      const status = /** @type {Element} */ (root.querySelector('[role="status"]'));
+      fire(view.contentDOM, 'beforeinput');
+      await settle();
+      const firstTop = hint()?.getBoundingClientRect().top ?? 0;
+      /** @type {MutationRecord[]} */
+      const changes = [];
+      const watcher = new MutationObserver((records) => changes.push(...records));
+      watcher.observe(status, { childList: true, characterData: true, subtree: true });
+      // Act: the caret moves, which closes it, then two tries, as key repeat would
+      editor.navigation.goToLine(3);
+      await settle();
+      expect(isOpen(), 'closed by the caret').to.equal(false);
+      fire(view.contentDOM, 'beforeinput');
+      await settle();
+      const secondTop = hint()?.getBoundingClientRect().top ?? 0;
+      const announcements = changes.length;
+      fire(view.contentDOM, 'beforeinput');
+      await settle();
+      watcher.disconnect();
+      // Assert
+      expect(isOpen()).to.equal(true);
+      expect(root.querySelectorAll('md-rich-tooltip')).to.have.length(1);
+      expect(secondTop, 'a line lower').to.be.greaterThan(firstTop);
+      expect(changes.length, 'the repeat says nothing new').to.equal(announcements);
+    });
+
+    it('closes on Escape, on focus leaving the editor and by itself', async () => {
+      /** @type {[string, (t: { view: import('@codemirror/view').EditorView, hint: () => HTMLElement | null, runTimer: () => void }) => void | Promise<void>, boolean][]} */
+      const cases = [
+        ['Escape', ({ view }) => { view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, composed: true })); }, false],
+        ['focus leaving', ({ view }) => {
+          const other = document.body.appendChild(document.createElement('button'));
+          view.contentDOM.focus();
+          other.focus();
+          other.remove();
+        }, false],
+        ['its time', ({ runTimer }) => runTimer(), false],
+      ];
+      for (const [name, act, open] of cases) {
+        // Arrange
+        const realSetTimeout = window.setTimeout;
+        /** @type {(() => void) | undefined} */
+        let closeTimer;
+        window.setTimeout = /** @type {typeof setTimeout} */ ((/** @type {() => void} */ fn, /** @type {number} */ ms, /** @type {unknown[]} */ ...rest) => {
+          if (ms === 6000) closeTimer = fn;
+          return realSetTimeout(fn, ms === 6000 ? 1e7 : ms, ...rest);
+        });
+        const { view, hint, isOpen } = await render();
+        fire(view.contentDOM, 'beforeinput');
+        await settle();
+        expect(isOpen(), `${name}: open first`).to.equal(true);
+        // Act
+        await act({ view, hint, runTimer: () => closeTimer?.() });
+        await settle();
+        window.setTimeout = realSetTimeout;
+        // Assert
+        expect(isOpen(), name).to.equal(open);
+      }
+    });
+  });
 });

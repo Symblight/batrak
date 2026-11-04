@@ -9,6 +9,7 @@ import { codeEditor } from './code-editor.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
 import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
+import { ReadOnlyHintController } from '../../controllers/read-only-hint/ReadOnlyHintController.js';
 import '../file-icon/file-icon.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
@@ -69,6 +70,7 @@ export class AcpCodeView extends LitElement {
     focus: () => this.commentFocus,
   });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
+  #readOnlyHint = new ReadOnlyHintController(this, { readOnly: () => this.tab !== null && !agents.isAgentsFile(this.tab.path) });
   /** @type {ContextMenuController<FooterTarget>} */
   #fileMenu = new ContextMenuController(this, {
     menu: () => this.renderRoot.querySelector('.acp-code-view__file-menu'),
@@ -345,7 +347,7 @@ export class AcpCodeView extends LitElement {
         <cdx-footer slot="footer" path=${this.#footerPath(tab.path)}></cdx-footer>
       </cdx-code-editor>
       ${this.#renderFileMenu()} ${this.#renderFolderMenu()} ${this.#renderLanguageMenu()}
-      ${this.#selectionActions.render()}`;
+      ${this.#selectionActions.render()} ${this.#readOnlyHint.render()}`;
   }
 }
 

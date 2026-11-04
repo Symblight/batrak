@@ -27,6 +27,21 @@
   color: var(--acp-color-on-surface);
   font-size: var(--acp-font-size-sm);
 }
+/* Where the read-only hint points: a point at the caret. */
+.acp-code-view__caret-anchor {
+  position: fixed;
+}
+.acp-code-view__hint::part(surface) {
+  padding: var(--acp-space-2) var(--acp-space-3);
+}
+/* Read by assistive technology only: the hint it announces is on screen. */
+.acp-code-view__status {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}
 /* The footer's menus: dense rows, like the IDE's breadcrumb popups. */
 .acp-code-view__menu {
   --md-menu-min-width: 8rem;
