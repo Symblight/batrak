@@ -14,7 +14,7 @@ import { $markdownSplit, setMarkdownSplit } from '../../stores/layout/layout.js'
 import { notify } from '../../stores/notices/notices.js';
 import { $settings, setMarkdownScrollSync } from '../../stores/settings/settings.js';
 import { $project } from '../../stores/project/project.js';
-import { $rootId, $worktrees } from '../../stores/workspaces/workspaces.js';
+import { $rootId, $workspaces } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -34,7 +34,7 @@ export class AcpEditorView extends ViewElement {
 
   #project = new StoreController(this, { store: $project });
   #rootId = new StoreController(this, { store: $rootId });
-  #worktrees = new StoreController(this, { store: $worktrees });
+  #workspaces = new StoreController(this, { store: $workspaces });
   #languages = new StoreController(this, { store: $fileLanguages });
   #settings = new StoreController(this, { store: $settings });
   #comments = new StoreController(this, { store: $comments });
@@ -96,7 +96,7 @@ export class AcpEditorView extends ViewElement {
       .language=${this.#languages.value[tab.path] ?? ''}
       .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
-      .worktrees=${this.#worktrees.value}
+      .workspaces=${this.#workspaces.value}
       .listDir=${projects.listDir}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
@@ -135,7 +135,7 @@ export class AcpEditorView extends ViewElement {
       .language=${this.#languages.value[tab.path] ?? ''}
       .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
-      .worktrees=${this.#worktrees.value}
+      .workspaces=${this.#workspaces.value}
       .listDir=${projects.listDir}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}

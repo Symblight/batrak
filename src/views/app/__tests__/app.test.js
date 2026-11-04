@@ -310,6 +310,21 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     expect(calls.filter((c) => c.cmd === 'workspace_create'), 'nothing created').to.deep.equal([]);
   });
 
+  it("asks in the window's one dialog when the session column's header requests a delete", async () => {
+    // Arrange
+    const { app, fire } = await render();
+    fire('acp-workspace-select', { id: 'w1' });
+    const dialogs = app.querySelectorAll('acp-workspace-delete-dialog');
+
+    // Act
+    app.querySelector('acp-workspace-header')?.dispatchEvent(new CustomEvent('acp-workspace-delete-request', { detail: { id: 'w1' }, bubbles: true, composed: true }));
+    await until(() => dialogs[0].workspace !== null);
+
+    // Assert
+    expect(dialogs.length).to.equal(1);
+    expect(dialogs[0].workspace?.id).to.equal('w1');
+  });
+
   it('deletes the shown workspace after asking, and shows Main', async () => {
     // Arrange
     const { app, fire } = await render();

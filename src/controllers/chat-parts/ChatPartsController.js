@@ -3,7 +3,7 @@ import { buildChipElement } from '@symblight/chat';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { chat } from '../../hooks/chat/chat.js';
 import { $activeSessionId, folderOf } from '../../stores/sessions/sessions.js';
-import { $worktrees } from '../../stores/workspaces/workspaces.js';
+import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 
@@ -334,7 +334,7 @@ export class ChatPartsController {
     const root = folderOf($activeSessionId.get() ?? '') ?? projects.path();
     const absolute = chat.absoluteRefPath(path, root);
     if (!absolute) return;
-    const inProject = projects.projectPathOf($worktrees.get(), absolute);
+    const inProject = projects.projectPathOf($workspaces.get(), absolute);
     const isDir = folder || (await isFolder(inProject));
     const detail = isDir ? { path: inProject } : { path: absolute, line };
     this.#host.dispatchEvent(

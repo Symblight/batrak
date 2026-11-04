@@ -305,10 +305,10 @@ describe('sessions keeps the active session in its view', () => {
   it("creates a draft's chat where its footer says: its own workspace by default, or Main (Local), which the window then shows", async () => {
     /** @type {[string, import('../../composer/types.js').RunTarget | null, unknown, string][]} */
     const cases = [
-      // [the draft's workspace, picked place, session_create's workspace, shown workspace]
-      ['main', null, { kind: 'main' }, 'main'],
-      ['w1', null, { kind: 'existing', id: 'w1' }, 'w1'],
-      ['w1', { kind: 'local' }, { kind: 'main' }, 'main'],
+      // [the draft's workspace, picked place, session_create's workspaceId, shown workspace]
+      ['main', null, null, 'main'],
+      ['w1', null, 'w1', 'w1'],
+      ['w1', { kind: 'local' }, null, 'main'],
     ];
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
     for (const [workspaceId, target, workspace, shown] of cases) {
@@ -330,7 +330,7 @@ describe('sessions keeps the active session in its view', () => {
       // Assert
       const why = `${workspaceId}, ${target?.kind ?? 'default'}`;
       const create = /** @type {Record<string, unknown> | undefined} */ (calls.find((c) => c.cmd === 'session_create')?.args);
-      expect(create?.workspace, why).to.deep.equal(workspace);
+      expect(create?.workspaceId, why).to.equal(workspace);
       expect(listed?.workspaceId ?? 'main', `${why}: listed meanwhile`).to.equal(shown);
       expect(shownMeanwhile, `${why}: shown`).to.equal(shown);
       $sessions.set([]);
@@ -377,7 +377,7 @@ describe('sessions keeps the active session in its view', () => {
       expect(sent, `${view}: the workspace first`).to.deep.equal(['workspace_create', view === 'chat' ? 'session_create' : 'session_open_cli']);
       expect(calls.find((c) => c.cmd === 'workspace_create')?.args, view).to.deep.equal({ projectPath: '/p', name: null, baseBranch: sentBase });
       const args = /** @type {Record<string, any>} */ (calls.find((c) => c.cmd === 'session_create' || c.cmd === 'session_open_cli')?.args);
-      expect((args.draft ?? args).workspace, `${view}: its chat in it`).to.deep.equal({ kind: 'existing', id: 'w2' });
+      expect((args.draft ?? args).workspaceId, `${view}: its chat in it`).to.equal('w2');
       expect($workspaces.get().map((w) => w.id), `${view}: listed at once`).to.deep.equal(['w2']);
       const listed = $sessions.get().find((s) => s.id === id);
       expect([listed?.workspaceId, listed?.folder], `${view}: the chat is the workspace's`).to.deep.equal(['w2', '/wt/two']);
@@ -536,7 +536,7 @@ describe('sessions keeps the active session in its view', () => {
       title: 'Fix the build',
       prompt: 'fix the build please',
     });
-    expect(/** @type {{ draft: Record<string, unknown> }} */ (open?.args).draft.workspace, 'in Main').to.deep.equal({ kind: 'main' });
+    expect(/** @type {{ draft: Record<string, unknown> }} */ (open?.args).draft.workspaceId, 'in Main').to.equal(null);
     expect($sessions.get().map((s) => s.id), 'listed').to.deep.equal(['d1']);
     expect($activeShownView.get()).to.equal('terminal');
   });

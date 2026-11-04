@@ -54,7 +54,7 @@ export class AcpCodeView extends LitElement {
     language: { attribute: false },
     root: { attribute: false },
     rootId: { attribute: false },
-    worktrees: { attribute: false },
+    workspaces: { attribute: false },
     listDir: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
@@ -104,7 +104,7 @@ export class AcpCodeView extends LitElement {
     /** @type {string | null} The project's snapshot id, for `listDir`; `null` while none is open. */
     this.rootId = null;
     /** @type {readonly WorktreeFolder[]} Workspaces' folders. */
-    this.worktrees = [];
+    this.workspaces = [];
     /** @type {ListDir} Lists a project folder for a footer crumb. */
     this.listDir = async () => [];
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
@@ -161,7 +161,7 @@ export class AcpCodeView extends LitElement {
    * @param {FooterTarget} target
    */
   #onFileMenuSelect(value, { path, folder }) {
-    if (value === 'reveal') this.#emit('acp-file-reveal', { path: projects.projectPathOf(this.worktrees, path), expand: folder });
+    if (value === 'reveal') this.#emit('acp-file-reveal', { path: projects.projectPathOf(this.workspaces, path), expand: folder });
     else if (value === 'copy-path') this.#emit('acp-copy-path', { path });
     else if (value === 'copy-relative-path') this.#emit('acp-copy-path', { path: this.#pathOf(path) });
   }
@@ -198,7 +198,7 @@ export class AcpCodeView extends LitElement {
 
   /** @param {string} path Absolute. */
   #pathOf(path) {
-    return projects.shownPath(this.root, this.worktrees, path);
+    return projects.shownPath(this.root, this.workspaces, path);
   }
 
   /**
@@ -207,7 +207,7 @@ export class AcpCodeView extends LitElement {
    * @param {string} path Absolute.
    */
   #listedRel(path) {
-    return projects.worktreeOf(this.worktrees, path) ? null : projects.rel(this.root, path);
+    return projects.worktreeOf(this.workspaces, path) ? null : projects.rel(this.root, path);
   }
 
   /**

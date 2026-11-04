@@ -23,7 +23,7 @@ use crate::workspace::WorkspaceRecord;
 /// How long one agent may take to start and list its sessions.
 pub(super) const SYNC_TIMEOUT: Duration = Duration::from_secs(15);
 /// Agents asked at once.
-const SYNC_CONCURRENCY: usize = 2;
+pub(super) const SYNC_CONCURRENCY: usize = 2;
 /// The most sessions taken from one agent.
 const MAX_LISTED: usize = 500;
 /// Activity an agent reports marks a session not running here as active elsewhere for this long.
@@ -339,7 +339,7 @@ impl Inner {
     /// An agent's list becomes its sessions of the project: each one known here is brought up to
     /// date, each new one listed (unless hidden); when the list is complete, a
     /// session it no longer has goes unless it runs here. Returns how many it listed.
-    fn apply_listing(&self, project: &Path, agent: &AgentConfig, folders: &[PathBuf], listing: Listing) -> usize {
+    fn apply_listing(self: &Arc<Self>, project: &Path, agent: &AgentConfig, folders: &[PathBuf], listing: Listing) -> usize {
         let canonical = |cwd: &Path| dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
         let in_folders = |cwd: &Path| folders.iter().any(|f| f == cwd) || folders.contains(&canonical(cwd));
         let workspaces = self.workspaces.list(project);
@@ -393,7 +393,7 @@ impl Inner {
         }
         drop((sessions, hidden));
         for state in titled {
-            self.name_workspace_after(&state.record());
+            self.name_workspace_after(state);
         }
         seen.len()
     }

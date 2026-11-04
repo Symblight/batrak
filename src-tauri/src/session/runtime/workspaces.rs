@@ -3,13 +3,19 @@
 use super::*;
 
 impl Sessions {
-    /// Deletes a workspace: each of its chats is removed as Remove session removes one (a running
-    /// turn ends `cancelled`), then its folder (`Workspaces::discard`).
+    /// Deletes a workspace: its chats are removed as Remove session removes one (a running turn
+    /// ends `cancelled`), a few at a time since each may start its agent to delete it there, then
+    /// its folder (`Workspaces::discard`). One that fails keeps the workspace, for a retry; the
+    /// others go all the same.
     pub async fn delete_workspace(&self, id: &str, keep_branch: bool) -> Result<(), String> {
+        use futures::StreamExt;
         let _deleting = self.inner.workspaces.deleting(id);
-        for chat in self.chats_of(id) {
-            self.remove(&chat).await?;
-        }
+        let removals = self.chats_of(id).into_iter().map(|chat| {
+            let sessions = self.clone();
+            async move { sessions.remove(&chat).await }
+        });
+        let removed: Vec<_> = futures::stream::iter(removals).buffer_unordered(sync::SYNC_CONCURRENCY).collect().await;
+        removed.into_iter().collect::<Result<(), String>>()?;
         let workspaces = self.inner.workspaces.clone();
         let id = id.to_owned();
         tokio::task::spawn_blocking(move || workspaces.discard(&id, keep_branch)).await.map_err(|e| e.to_string())?
@@ -135,19 +141,25 @@ impl Sessions {
 
 impl Inner {
     /// A workspace the agent names (`NameSource::Agent`) takes its first chat's agent title.
-    pub(super) fn name_workspace_after(&self, chat: &SessionRecord) {
-        let (Some(id), Some(title)) = (chat.workspace_id.as_deref(), chat.agent_title.as_deref()) else { return };
-        let first = self
-            .known()
-            .into_iter()
-            .filter(|r| r.workspace_id.as_deref() == Some(id))
-            .min_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
-        if first.is_none_or(|r| r.session_id != chat.session_id) {
-            return;
-        }
-        if let Err(e) = self.workspaces.follow_title(id, title) {
-            tracing::warn!(workspace = %id, "naming the workspace after its chat failed: {e}");
-        }
+    pub(super) fn name_workspace_after(self: &Arc<Self>, chat: Arc<SessionState>) {
+        // In the background: its callers include the ACP dispatch loop, which never waits, and it
+        // writes `workspaces.json`.
+        let inner = Arc::clone(self);
+        tokio::task::spawn_blocking(move || {
+            let record = chat.record();
+            let Some(id) = record.workspace_id.as_deref() else { return };
+            let first = inner
+                .known()
+                .into_iter()
+                .filter(|r| r.workspace_id.as_deref() == Some(id))
+                .min_by(|a, b| (&a.created_at, &a.session_id).cmp(&(&b.created_at, &b.session_id)));
+            if first.is_none_or(|r| r.session_id != record.session_id) {
+                return;
+            }
+            if let Err(e) = inner.workspaces.follow_title(id, || chat.record().agent_title) {
+                tracing::warn!(workspace = %id, "naming the workspace after its chat failed: {e}");
+            }
+        });
     }
 }
 

@@ -303,21 +303,21 @@ impl Fixture {
     }
 
     fn create(&self, id: &str, agent: &str) -> Result<(Session, Arc<Recorder>), String> {
-        self.create_in(id, agent, WorkspaceChoice::Main)
+        self.create_in(id, agent, None)
     }
 
-    fn create_in(&self, id: &str, agent: &str, workspace: WorkspaceChoice) -> Result<(Session, Arc<Recorder>), String> {
-        self.create_from(self.request(id, agent, workspace))
+    fn create_in(&self, id: &str, agent: &str, workspace_id: Option<String>) -> Result<(Session, Arc<Recorder>), String> {
+        self.create_from(self.request(id, agent, workspace_id))
     }
 
-    fn request(&self, id: &str, agent: &str, workspace: WorkspaceChoice) -> CreateSession {
+    fn request(&self, id: &str, agent: &str, workspace_id: Option<String>) -> CreateSession {
         CreateSession {
             session_id: id.to_owned(),
             project_path: self.project.to_string_lossy().into_owned(),
             agent_id: agent.to_owned(),
             title: format!("Session {id}"),
             config: BTreeMap::new(),
-            workspace,
+            workspace_id,
         }
     }
 
@@ -417,7 +417,7 @@ async fn queued_turns_start_in_the_order_they_were_sent() {
     let f = fixture("slot-order", FakeAgentOptions::default());
     let events = Arc::new(Recorder::default());
     for id in ["a", "b", "c"] {
-        f.sessions.create(f.request(id, "fake", WorkspaceChoice::Main), "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
+        f.sessions.create(f.request(id, "fake", None), "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     }
     for id in ["a", "b", "c"] {
         events.wait_for("idle", |e| e.session_id == id && e.kind == "status" && e.payload["status"] == "idle").await;
@@ -1081,12 +1081,11 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
         recorder.wait_status("idle").await;
     }
 
-    assert_eq!(one.mode, Mode::Worktree);
-    assert_eq!(one.base_commit.as_deref(), Some(head.as_str()));
+    assert_eq!(f.sessions.workspaces().get(one.workspace_id.as_deref().unwrap()).unwrap().base_commit, head);
     let branch = one.branch.clone().unwrap();
     assert!(branch.starts_with("brama/workspace"), "{branch}");
     assert_ne!(two.branch, one.branch);
-    let wt = PathBuf::from(one.worktree_path.clone().unwrap());
+    let wt = PathBuf::from(one.folder.clone());
     assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
     assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), branch);
     assert_eq!(run_in(&wt, &["rev-parse", "HEAD"]).trim(), head);
@@ -1096,12 +1095,12 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
     assert_eq!(f.ask("w1", &events, &format!("write {} mine", file.display())).await, "written");
     assert_eq!(std::fs::read_to_string(&file).unwrap(), "mine");
     assert_eq!(std::fs::read_to_string(f.project.join("a.txt")).unwrap(), "one\ntwo\nthree\n");
-    let two_file = PathBuf::from(two.worktree_path.unwrap()).join("a.txt");
+    let two_file = PathBuf::from(two.folder).join("a.txt");
     assert_eq!(std::fs::read_to_string(two_file).unwrap(), "one\ntwo\nthree\n");
     let reply = f.ask("w1", &events, &format!("read {}", f.path("a.txt"))).await;
     assert!(reply.contains("outside the session"), "{reply}");
     let listed = f.sessions.list().into_iter().find(|s| s.id == "w1").unwrap();
-    assert_eq!(listed.worktree_path, one.worktree_path);
+    assert_eq!(listed.folder, one.folder);
 }
 
 #[tokio::test]
@@ -1112,7 +1111,6 @@ async fn a_sessions_folder_is_where_its_agent_works_and_its_workspaces_folder_is
     events.wait_status("idle").await;
     other.wait_status("idle").await;
     assert_eq!(local.folder, f.project.to_string_lossy());
-    assert_eq!(Some(&wt.folder), wt.worktree_path.as_ref());
 
     let root = PathBuf::from(&wt.folder);
     assert!(f.sessions.contains(&root.join("a.txt")));
@@ -1230,8 +1228,8 @@ async fn a_worktree_session_starts_from_the_chosen_branch() {
 
     let (session, events) = f.create_in("b", "fake", f.new_workspace(Some("feature"))).unwrap();
     events.wait_status("idle").await;
-    assert_eq!(session.base_commit.as_deref(), Some(feature.as_str()));
-    let wt = PathBuf::from(session.worktree_path.unwrap());
+    assert_eq!(f.sessions.workspaces().get(session.workspace_id.as_deref().unwrap()).unwrap().base_commit, feature);
+    let wt = PathBuf::from(session.folder);
     assert_eq!(std::fs::read_to_string(wt.join("a.txt")).unwrap(), "feature\n");
     assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), "main", "the checkout stays");
 }
@@ -1249,7 +1247,7 @@ async fn a_project_inside_a_repository_runs_in_the_same_folder_of_its_worktree()
 
     let (session, events) = f.create_in("s", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
-    let wt = PathBuf::from(session.worktree_path.unwrap());
+    let wt = f.sessions.workspaces().get(session.workspace_id.as_deref().unwrap()).unwrap().worktree_path;
     assert_eq!(session.project_id, f.project.to_string_lossy());
     let reply = f.ask("s", &events, &format!("read {}", wt.join("app/main.rs").display())).await;
     assert_eq!(reply, "read:fn main() {}\n");
@@ -1262,7 +1260,7 @@ async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder(
     let f = git_fixture("wt-restart");
     let (session, events) = f.create_in("r", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
-    let wt = PathBuf::from(session.worktree_path.clone().unwrap());
+    let wt = PathBuf::from(session.folder.clone());
     std::fs::write(wt.join("work.txt"), "agent work\n").unwrap();
     run_in(&wt, &["add", "."]);
     run_in(&wt, &["commit", "-qm", "agent"]);
@@ -1272,7 +1270,6 @@ async fn a_worktree_session_comes_back_after_a_restart_and_waits_for_its_folder(
     let sessions = f.reopen().await;
     let listed = sessions.list().into_iter().find(|s| s.id == "r").unwrap();
     assert_eq!(listed.branch, session.branch);
-    assert_eq!(listed.base_commit, session.base_commit);
     let events = Arc::new(Recorder::default());
     sessions.attach("r", "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     sessions.send_prompt("r", text("hello")).unwrap();
@@ -1285,7 +1282,7 @@ async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work()
     let f = git_fixture("wt-tidy");
     let (kept, events) = f.create_in("k", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
-    let kept = PathBuf::from(kept.worktree_path.unwrap());
+    let kept = PathBuf::from(kept.folder);
     let group = kept.parent().unwrap().to_path_buf();
     let git = crate::git::test_repo::git_bin();
     let (orphan, dirty) = (group.join("orphan"), group.join("dirty"));
@@ -1401,7 +1398,7 @@ async fn config_options_arrive_at_start_and_follow_a_change() {
 #[tokio::test]
 async fn a_sessions_config_options_come_back_when_its_agent_starts_again() {
     let f = fixture("keep-options", FakeAgentOptions { load_session: true, ..listing() });
-    let mut req = f.request("k", "fake", WorkspaceChoice::Main);
+    let mut req = f.request("k", "fake", None);
     // Picked in the draft; the fake refuses any effort, which doesn't stop the start.
     req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned()), ("effort".to_owned(), "low".to_owned())]);
     let (_, events) = f.create_from(req).unwrap();
@@ -1438,7 +1435,7 @@ async fn a_sessions_config_options_come_back_when_its_agent_starts_again() {
 #[tokio::test]
 async fn an_agent_that_never_answers_a_config_option_neither_holds_up_its_start_nor_stop() {
     let f = fixture("hang-options", FakeAgentOptions { hang_set_config: true, ..listing() });
-    let mut req = f.request("h", "fake", WorkspaceChoice::Main);
+    let mut req = f.request("h", "fake", None);
     req.config = BTreeMap::from([("model".to_owned(), "fast".to_owned())]);
     let (_, events) = f.create_from(req).unwrap();
     events.wait_for("the agent asked", |_| f.launcher.launches.load(Ordering::SeqCst) == 1).await;
@@ -1958,7 +1955,7 @@ async fn real_claude_agent_end_to_end() {
         agent_id: "claude".to_owned(),
         title: "real".to_owned(),
         config: BTreeMap::new(),
-        workspace: WorkspaceChoice::Main,
+        workspace_id: None,
     };
     sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     let wait = |what: &'static str, secs: u64, pred: Box<dyn Fn(&Envelope) -> bool + Send>| {
@@ -2082,7 +2079,7 @@ async fn real_claude_subagents() {
         agent_id: "claude".to_owned(),
         title: "real".to_owned(),
         config: BTreeMap::new(),
-        workspace: WorkspaceChoice::Main,
+        workspace_id: None,
     };
     sessions.create(req, "main", Arc::clone(&events) as Arc<dyn EventSink>).unwrap();
     events.wait_status("idle").await;
@@ -2633,7 +2630,7 @@ async fn a_sync_lists_the_agents_sessions_of_the_project_and_says_how_each_agent
         ("fake~t1", "From a terminal", SessionStatus::Stopped, "2026-10-20T10:00:00.000Z"),
     ]);
     assert_eq!(listed[0].acp_session_id.as_deref(), Some("t2"));
-    assert_eq!((listed[0].mode, listed[0].folder.as_str()), (Mode::Local, f.project.to_str().unwrap()));
+    assert_eq!((listed[0].workspace_id.as_deref(), listed[0].folder.as_str()), (None, f.project.to_str().unwrap()));
 }
 
 #[tokio::test]
@@ -2904,13 +2901,13 @@ impl Fixture {
         (listed(self, id).acp_session_id.unwrap(), events)
     }
 
-    fn draft(&self, agent: &str, workspace: WorkspaceChoice) -> CliDraft {
+    fn draft(&self, agent: &str, workspace_id: Option<String>) -> CliDraft {
         CliDraft {
             project_path: self.project.to_string_lossy().into_owned(),
             agent_id: agent.to_owned(),
             title: "New session".to_owned(),
             config: BTreeMap::new(),
-            workspace,
+            workspace_id,
             prompt: None,
         }
     }
@@ -2966,7 +2963,7 @@ async fn a_running_cli_chat_stays_listed_though_its_agent_doesnt_list_it_yet() {
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
     let terminals = terminals();
     let id = "2cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let workspace = WorkspaceChoice::Existing { id: ws.id.clone() };
+    let workspace = Some(ws.id.clone());
     f.sessions.open_cli(id, Some(f.draft("fake", workspace)), window(&terminals)).await.unwrap();
 
     f.sessions.sync(&f.project, None).await;
@@ -2985,7 +2982,7 @@ async fn a_running_clis_activity_reads_as_working_only_briefly() {
     f.give_cli_agents();
     let terminals = terminals();
     let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    f.sessions.open_cli(id, Some(f.draft("fake", WorkspaceChoice::Main)), window(&terminals)).await.unwrap();
+    f.sessions.open_cli(id, Some(f.draft("fake", None)), window(&terminals)).await.unwrap();
     let now = crate::session::iso_now();
     stored_in(&options, &[(id, &f.project, None, Some(now.as_str()))]);
 
@@ -3002,7 +2999,7 @@ async fn a_draft_starts_in_the_cli_under_its_own_id() {
     f.give_cli_agents();
     let terminals = terminals();
     let id = "0cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let opened = f.sessions.open_cli(id, Some(f.draft("fake", WorkspaceChoice::Main)), window(&terminals)).await.unwrap();
+    let opened = f.sessions.open_cli(id, Some(f.draft("fake", None)), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} PWD:")), "no prompt, nothing after the id: {shown}");
     let session = listed(&f, id);
@@ -3011,11 +3008,11 @@ async fn a_draft_starts_in_the_cli_under_its_own_id() {
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "no ACP agent");
 
     let other = "1cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let refused = f.sessions.open_cli(other, Some(f.draft("quitter", WorkspaceChoice::Main)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli(other, Some(f.draft("quitter", None)), window(&terminals)).await.unwrap_err();
     assert!(refused.contains("can't start a session"), "{refused}");
-    let refused = f.sessions.open_cli(other, Some(f.draft("plain", WorkspaceChoice::Main)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli(other, Some(f.draft("plain", None)), window(&terminals)).await.unwrap_err();
     assert!(refused.contains("no terminal mode"), "{refused}");
-    let refused = f.sessions.open_cli("not-a-uuid", Some(f.draft("fake", WorkspaceChoice::Main)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli("not-a-uuid", Some(f.draft("fake", None)), window(&terminals)).await.unwrap_err();
     assert!(refused.contains("UUID"), "{refused}");
     assert!(f.sessions.list().iter().all(|s| s.id == id), "nothing created for a refusal");
     terminals.close(&[opened.terminal_id]);
@@ -3027,7 +3024,7 @@ async fn a_draft_sent_to_the_cli_starts_it_with_its_first_prompt() {
     f.give_cli_agents();
     let terminals = terminals();
     let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let draft = CliDraft { prompt: Some("fix the build".into()), ..f.draft("fake", WorkspaceChoice::Main) };
+    let draft = CliDraft { prompt: Some("fix the build".into()), ..f.draft("fake", None) };
     let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} fix the build")), "{shown}");
@@ -3041,7 +3038,7 @@ async fn a_first_prompt_too_long_for_the_command_line_is_pasted_once_the_cli_rea
     let terminals = terminals();
     let id = "4cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let prompt = format!("fix {}", "x".repeat(agent_api::MAX_ARG_PROMPT));
-    let draft = CliDraft { prompt: Some(prompt), ..f.draft("reader", WorkspaceChoice::Main) };
+    let draft = CliDraft { prompt: Some(prompt), ..f.draft("reader", None) };
     let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("END").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} READY")), "not on the command line: {shown}");
@@ -3056,7 +3053,7 @@ async fn a_cli_starts_with_the_model_picked_in_the_composer() {
     let terminals = terminals();
     let id = "5cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let config = BTreeMap::from([("model".to_owned(), "opus".to_owned())]);
-    let draft = CliDraft { prompt: Some("fix it".into()), config, ..f.draft("fake", WorkspaceChoice::Main) };
+    let draft = CliDraft { prompt: Some("fix it".into()), config, ..f.draft("fake", None) };
     let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
     assert!(shown.contains(&format!("ARGS:--session-id {id} --model opus fix it")), "{shown}");
@@ -3092,7 +3089,7 @@ async fn a_workspace_chats_cli_is_refused_while_its_folder_is_missing() {
     let terminals = terminals();
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
     let id = "5d0c1a52-1b8e-4f43-9a51-6a8c2e0f7b11";
-    let draft = f.draft("fake", WorkspaceChoice::Existing { id: ws.id.clone() });
+    let draft = f.draft("fake", Some(ws.id.clone()));
     f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
     f.sessions.close_cli(id).await.unwrap();
     std::fs::remove_dir_all(&ws.worktree_path).unwrap();
@@ -3151,13 +3148,13 @@ impl Fixture {
     /// A chat created in a workspace.
     /// A new workspace of the project, unnamed (its first chat names it), from `base` (`None`:
     /// the project's base branch); checked out at its first chat's start.
-    fn new_workspace(&self, base: Option<&str>) -> WorkspaceChoice {
+    fn new_workspace(&self, base: Option<&str>) -> Option<String> {
         let ws = self.sessions.workspaces().place(&self.project, None, base).unwrap();
-        WorkspaceChoice::Existing { id: ws.id }
+        Some(ws.id)
     }
 
     fn create_in_workspace(&self, id: &str, workspace: &str) -> Result<(Session, Arc<Recorder>), String> {
-        self.create_in(id, "fake", WorkspaceChoice::Existing { id: workspace.to_owned() })
+        self.create_in(id, "fake", Some(workspace.to_owned()))
     }
 }
 
@@ -3200,6 +3197,23 @@ async fn a_chat_in_a_workspace_runs_in_its_folder_and_removing_it_leaves_the_fol
     f.sessions.remove("c").await.unwrap();
     assert!(ws.folder.join("a.txt").is_file(), "the folder stays");
     assert!(run_in(&f.project, &["branch", "--list", &ws.branch]).contains(&ws.branch), "the branch stays");
+}
+
+#[tokio::test]
+async fn deleting_a_workspace_deletes_its_chats_two_at_a_time() {
+    let options = FakeAgentOptions { delete_session: true, ..listing() };
+    let f = git_fixture_with("ws-delete-parallel", options.clone());
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    for id in ["a", "b", "c"] {
+        let (_, events) = f.create_in_workspace(id, &ws.id).unwrap();
+        events.wait_status("idle").await;
+    }
+
+    f.sessions.delete_workspace(&ws.id, false).await.unwrap();
+
+    assert_eq!(options.deletes_peak.load(Ordering::SeqCst), 2);
+    assert!(f.sessions.list().is_empty());
+    assert!(f.sessions.workspaces().list(&f.project).is_empty());
 }
 
 #[tokio::test]
@@ -3249,6 +3263,7 @@ async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main
     let f = git_fixture("ws-migrate");
     let (tree, events) = f.create_in("t", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
+    let stored_base = f.sessions.workspaces().list(&f.project)[0].base_commit.clone();
     let (_, local) = f.create("l", "fake").unwrap();
     local.wait_status("idle").await;
     f.sessions.shutdown();
@@ -3269,7 +3284,7 @@ async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main
     assert_eq!(ws.name, "Session t");
     assert_eq!(Some(ws.folder.to_string_lossy().into_owned()), Some(tree.folder.clone()), "folder unchanged");
     assert_eq!(Some(ws.branch.clone()), tree.branch, "branch unchanged");
-    assert_eq!(Some(ws.base_commit.clone()), tree.base_commit);
+    assert_eq!(ws.base_commit, stored_base);
     let listed = reopened.list();
     let workspace_of = |id: &str| listed.iter().find(|s| s.id == id).unwrap().workspace_id.clone();
     assert_eq!(workspace_of("t").as_deref(), Some(ws.id.as_str()));
@@ -3344,7 +3359,7 @@ async fn main_runs_in_the_project_folder_without_git_and_another_projects_worksp
     std::fs::remove_dir_all(plain.project.join(".git")).unwrap();
     let (chat, events) = plain.create("m", "fake").unwrap();
     events.wait_status("idle").await;
-    assert_eq!((chat.mode, chat.workspace_id, chat.folder), (Mode::Local, None, plain.project.to_string_lossy().into_owned()));
+    assert_eq!((chat.workspace_id, chat.folder), (None, plain.project.to_string_lossy().into_owned()));
 
     let f = git_fixture("ws-existing-refused");
     let other = f.dir.join("other");
@@ -3425,7 +3440,7 @@ async fn a_session_listed_in_a_workspaces_folder_lands_in_that_workspace() {
     let in_ws = by_title("In the workspace");
     assert_eq!(in_ws.workspace_id.as_deref(), Some(ws.id.as_str()));
     assert_eq!(PathBuf::from(&in_ws.folder), ws.folder, "its folder is its cwd");
-    assert_eq!((in_ws.mode, in_ws.branch.as_deref()), (Mode::Worktree, Some(ws.branch.as_str())));
+    assert_eq!(in_ws.branch.as_deref(), Some(ws.branch.as_str()));
     assert_eq!(by_title("In Main").workspace_id, None);
 }
 
@@ -3517,14 +3532,19 @@ async fn a_new_workspace_follows_its_first_chats_agent_title_until_renamed() {
     second.wait_status("idle").await;
     let name = || f.sessions.workspaces().get(&ws).unwrap().name;
 
+    // Saved in the background: off the ACP dispatch loop.
+    let settle = || tokio::time::sleep(Duration::from_millis(100));
     f.ask("a", &events, "title Tree view gaps").await;
+    settle().await;
     assert_eq!(name(), "Tree view gaps");
     assert!(lock(&told).contains(&f.project), "the page hears of it");
 
     f.ask("b", &second, "title Something else").await;
+    settle().await;
     assert_eq!(name(), "Tree view gaps", "only its first chat names it");
 
     f.sessions.workspaces().rename(&ws, "Mine").unwrap();
     f.ask("a", &events, "title Later").await;
+    settle().await;
     assert_eq!(name(), "Mine", "a user's name stays");
 }

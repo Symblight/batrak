@@ -4,7 +4,6 @@ import '../../components/panel/panel.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/session-list/session-list.js';
 import '../../components/session-sync/session-sync.js';
-import '../../components/workspace-delete-dialog/workspace-delete-dialog.js';
 import '../../components/workspace-header/workspace-header.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { SessionActionsController } from '../../controllers/session-actions/SessionActionsController.js';
@@ -92,29 +91,9 @@ export class AcpSessionColumn extends ViewElement {
     void workspaces.recreate(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
   }
 
-  /**
-   * Delete workspace…: asks with what deleting would touch; the dialog's Delete fires `acp-workspace-delete`.
-   * @param {string} id
-   */
-  async #confirmDelete(id) {
-    const found = await workspaces.deletePreview(id);
-    if (found) await this.renderRoot.querySelector('acp-workspace-delete-dialog')?.show(found.workspace, found.preview);
-  }
-
-  /** @param {Event} e */
-  #onDeleteRequest(e) {
-    void this.#confirmDelete(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
-  }
-
   #onNextWaiting = () => {
     workspaces.showNextWaiting();
   };
-
-  /** @param {Event} e */
-  #onDelete(e) {
-    const { id, keepBranch } = /** @type {CustomEvent<{ id: string, keepBranch: boolean }>} */ (e).detail;
-    void workspaces.delete(id, keepBranch);
-  }
 
   render() {
     const path = this.#projectPath.value;
@@ -128,7 +107,6 @@ export class AcpSessionColumn extends ViewElement {
         @acp-workspace-next-waiting=${this.#onNextWaiting}
         @acp-workspace-new-chat=${this.#onNewChat}
         @acp-workspace-recreate=${this.#onRecreate}
-        @acp-workspace-delete-request=${this.#onDeleteRequest}
         @acp-session-resync=${this.#onResync}
       >
         <acp-session-sync .sync=${path === null ? null : (this.#sync.value[path] ?? { running: false, report: null })}></acp-session-sync>
@@ -149,7 +127,6 @@ export class AcpSessionColumn extends ViewElement {
         @acp-session-mark-read=${this.#onSessionMarkRead}
       ></acp-session-list>
       <acp-confirm-dialog></acp-confirm-dialog>
-      <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onDelete}></acp-workspace-delete-dialog>
     </acp-panel>`;
   }
 }

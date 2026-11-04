@@ -15,9 +15,9 @@ pub fn is_checked_out(root: &Path) -> bool {
 }
 
 /// Checks a workspace's worktree out on its first checkout, and again from its branch when its
-/// folder was deleted. A worktree whose branch was checked out in the project (Check Out Branch)
-/// goes back on it, or isn't ready: its agents' commits would land on no branch. Stops early, and
-/// undoes what it did, once `cancel` turns true. Blocking.
+/// folder was deleted; a project folder its branch lacks fails here, where the user can see it. A
+/// chat's start then checks its branch (`WorkspaceEnv::prepare`). Stops early, and undoes what it
+/// did, once `cancel` turns true. Blocking.
 pub(super) fn check_out(w: &WorkspaceRecord, cancel: &AtomicBool) -> Result<(), String> {
     if !w.project_path.is_dir() {
         return Err(format!("{}: the project folder is gone", w.project_path.display()));
@@ -42,7 +42,6 @@ pub(super) fn check_out(w: &WorkspaceRecord, cancel: &AtomicBool) -> Result<(), 
         checked_out?;
         tracing::info!(path = %w.worktree_path.display(), branch = %w.branch, "worktree checked out");
     }
-    back_on_branch(git, &w.project_path, &w.worktree_path, &w.branch)?;
     folder_on_branch(&w.folder, &w.branch)
 }
 
@@ -268,7 +267,6 @@ mod tests {
             base_commit: repo.git(&["rev-parse", "HEAD"]).trim().to_owned(),
             base_branch: None,
             created_at: String::new(),
-            last_active_at: None,
             checked_out: false,
         }
     }

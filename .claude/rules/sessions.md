@@ -92,8 +92,8 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`hooks/workspaces/`). A chat (`workspaceId`) runs in its workspace's folder (`mode: worktree`,
   the worktree fields copied); its env is `WorkspaceEnv`: `prepare` only checks the
   folder (missing: "folder is missing", until `recreate_workspace`) and switches a detached
-  worktree back on its branch (refused while the project has it); it never checks out or removes. `session_create` takes the chat's `workspace` (`WorkspaceChoice`, `new_record`): `main`
-  (the project folder, `mode: local`, no git needed), or `existing` `{ id }` (refused for another
+  worktree back on its branch (refused while the project has it); it never checks out or removes. `session_create` takes the chat's `workspaceId` (`new_record`): `null` for Main
+  (the project folder, `mode: local`, no git needed), or a workspace's id (refused for another
   project's). `workspace_create` stores a workspace at once (`Workspaces::place`); one created
   without a name is called after its branch ("Workspace 2"), `nameSource: agent`: its first chat's
   message names it, then it takes its oldest chat's agent title, from `session_info_update` or a

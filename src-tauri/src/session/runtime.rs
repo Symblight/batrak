@@ -136,7 +136,7 @@ impl Sessions {
     pub fn create(&self, req: CreateSession, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
         let record = self.new_record(&req)?;
         let state = self.insert(record, Some((sink_key, sink)))?;
-        tracing::info!(session = %state.id, agent = %req.agent_id, workspace = ?req.workspace, branch = ?state.record().branch, "session created");
+        tracing::info!(session = %state.id, agent = %req.agent_id, workspace = ?req.workspace_id, branch = ?state.record().branch, "session created");
         self.inner.start_in_background(&state);
         Ok(state.page())
     }
@@ -164,16 +164,16 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
-        let workspace = match &req.workspace {
-            WorkspaceChoice::Main => None,
-            WorkspaceChoice::Existing { id } => {
+        let workspace = match &req.workspace_id {
+            None => None,
+            Some(id) => {
                 let workspace = self.inner.workspaces.for_new_chat(id)?;
                 if workspace.project_path != project {
                     return Err(format!("workspace {id} belongs to another project"));
                 }
                 // An unnamed workspace takes its first chat's first message.
                 if !self.inner.known().iter().any(|r| r.workspace_id.as_deref() == Some(id)) {
-                    if let Err(e) = self.inner.workspaces.follow_title(id, &req.title) {
+                    if let Err(e) = self.inner.workspaces.follow_title(id, || Some(req.title.clone())) {
                         tracing::warn!(workspace = %id, "naming the workspace after its first chat failed: {e}");
                     }
                 }
@@ -540,7 +540,7 @@ use self::start::*;
 use self::state::*;
 use self::turn::*;
 pub use cli::{CliDraft, CliOpened, CliWindow};
-pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions, WorkspaceChoice};
+pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions};
 pub use sign_in::{Login, LoginExit, LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};
 pub use sync::SyncReport;

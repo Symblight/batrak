@@ -28,7 +28,7 @@ pub(super) struct SessionHost {
 impl SessionHost {
     /// `session_info_update`'s title: `None` clears it. It becomes the session's title unless the
     /// user named the session; saved with the next status change or turn end, like config options.
-    fn on_agent_title(&self, state: &SessionState, title: Option<&str>) {
+    fn on_agent_title(&self, state: &Arc<SessionState>, title: Option<&str>) {
         let title = title.map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
         {
             let mut record = lock(&state.record);
@@ -43,7 +43,7 @@ impl SessionHost {
         }
         state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
         if let Some(inner) = self.inner.upgrade() {
-            inner.name_workspace_after(&state.record());
+            inner.name_workspace_after(Arc::clone(state));
         }
     }
 

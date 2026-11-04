@@ -13,7 +13,6 @@
  * @property {string} baseCommit
  * @property {string | null} baseBranch
  * @property {string} createdAt
- * @property {string | null} lastActiveAt
  * @property {boolean} creating Its checkout runs.
  * @property {string | null} error Why its last checkout failed.
  * @property {boolean} missing Its folder was deleted outside Brama.
@@ -21,17 +20,8 @@
  */
 
 /**
- * A workspace's folder, whose files are its (`$worktrees`).
- * @typedef {Object} WorktreeFolder
- * @property {string} projectId Its project's path.
- * @property {string} folder The project's folder in the worktree.
- * @property {string} branch
- */
-
-/**
- * Where a draft's first message creates its chat (`session_create`'s `workspace`): Main or a stored
- * workspace.
- * @typedef {{ kind: 'main' } | { kind: 'existing', id: string }} WorkspaceChoice
+ * What marks a file as a workspace's.
+ * @typedef {Pick<Workspace, 'projectPath' | 'folder' | 'branch'>} WorktreeFolder
  */
 
 /**

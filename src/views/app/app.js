@@ -21,7 +21,7 @@ import { $trustPrompt } from '../../stores/trust/trust.js';
 import { $unreadSessions, markWorkspaceRead } from '../../stores/session-read/session-read.js';
 import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $project } from '../../stores/project/project.js';
-import { $activeWorkspaceId, $rootId, $worktrees, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspaceId, $rootId, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
 import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses, $workspacesEnabled } from '../../stores/workspace-status/workspace-status.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/about-dialog/about-dialog.js';
@@ -541,7 +541,7 @@ export class AcpApp extends ViewElement {
   async #revealInTree(path, options) {
     // The tree lists the shown folder (the project's or a workspace's); a path of the project or of
     // another worktree is shown by its twin there.
-    const rel = projects.relPath(path) ?? projects.rel(projects.path(), projects.projectPathOf($worktrees.get(), path));
+    const rel = projects.relPath(path) ?? projects.rel(projects.path(), projects.projectPathOf($workspaces.get(), path));
     if (rel === null) return;
     this.sideView = 'files';
     showColumn('side');
@@ -590,7 +590,7 @@ export class AcpApp extends ViewElement {
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
     const picker = { list: this.#pickerWorkspaces.value, statuses: this.#workspaceStatuses.value };
     const workspaceId = this.#workspaceId.value;
-    return html`<acp-panel variant="window">
+    return html`<acp-panel variant="window" @acp-workspace-delete-request=${this.#onWorkspaceEvent}>
       <acp-toolbar
         slot="header"
         .project=${this.#project.value}
@@ -610,7 +610,6 @@ export class AcpApp extends ViewElement {
         @acp-workspace-select=${this.#onWorkspaceEvent}
         @acp-workspace-new=${this.#onWorkspaceEvent}
         @acp-workspace-rename=${this.#onWorkspaceEvent}
-        @acp-workspace-delete-request=${this.#onWorkspaceEvent}
         @acp-workspace-changes=${this.#onWorkspaceEvent}
         @acp-workspace-apply=${this.#onWorkspaceEvent}
         @acp-workspace-check-out=${this.#onWorkspaceEvent}

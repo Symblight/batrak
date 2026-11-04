@@ -39,7 +39,7 @@ import {
 } from '../../stores/comments/comments.js';
 import { $terminals, moveTerminalToEditor } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
-import { $workspaces, $worktrees } from '../../stores/workspaces/workspaces.js';
+import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
 import '../changes-tab/changes-tab.js';
@@ -64,7 +64,6 @@ export class AcpMainColumn extends ViewElement {
   #files = new TabFilesController(this);
   #editorTabs = new StoreController(this, { store: $editorTabs });
   #project = new StoreController(this, { store: $project });
-  #worktrees = new StoreController(this, { store: $worktrees });
   #workspaces = new StoreController(this, { store: $workspaces });
   #tabComments = new StoreController(this, { store: $tabComments });
   #terminals = new StoreController(this, { store: $terminals });
@@ -271,7 +270,6 @@ export class AcpMainColumn extends ViewElement {
         .root=${this.#project.value?.path ?? null}
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
-        .worktrees=${this.#worktrees.value}
         .workspaces=${this.#workspaces.value}
         .renderContent=${this.#renderTabContent}
         @keydown=${{ handleEvent: this.#onKeydown, capture: true }}

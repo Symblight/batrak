@@ -23,7 +23,7 @@ export function worktreeOf(worktrees, abs) {
  */
 export function projectPathOf(worktrees, abs) {
   const worktree = worktreeOf(worktrees, abs);
-  return worktree ? absPath(worktree.projectId, relPath(worktree.folder, abs) ?? '') : abs;
+  return worktree ? absPath(worktree.projectPath, relPath(worktree.folder, abs) ?? '') : abs;
 }
 
 /**

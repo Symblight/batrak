@@ -1,5 +1,5 @@
 import { $markdownModes, modeOf, setMode } from '../../stores/markdown-view/markdown-view.js';
-import { $worktrees } from '../../stores/workspaces/workspaces.js';
+import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import { $settings } from '../../stores/settings/settings.js';
 import { $project } from '../../stores/project/project.js';
 import { projects } from '../projects/projects.js';
@@ -15,7 +15,7 @@ import { projects } from '../projects/projects.js';
 function placeOf(path) {
   const project = $project.get()?.path;
   if (!project) return null;
-  const rel = projects.rel(project, projects.projectPathOf($worktrees.get(), path));
+  const rel = projects.rel(project, projects.projectPathOf($workspaces.get(), path));
   return rel === null ? null : { project, rel };
 }
 

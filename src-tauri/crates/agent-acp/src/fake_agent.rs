@@ -64,6 +64,10 @@ pub struct FakeAgentOptions {
     pub list_sessions: bool,
     pub resume_session: bool,
     pub delete_session: bool,
+    /// How many `session/delete` calls ran at once, at most; each takes 50 ms.
+    pub deletes_peak: Arc<std::sync::atomic::AtomicUsize>,
+    /// How many `session/delete` calls run now.
+    pub deletes_running: Arc<std::sync::atomic::AtomicUsize>,
     /// `session/list` is never answered.
     pub hang_list: bool,
     /// Sessions a page of `session/list` holds; 0 is 50.
@@ -261,6 +265,13 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         )
         .on_receive_request(
             async move |request: DeleteSessionRequest, responder: Responder<DeleteSessionResponse>, _cx| {
+                {
+                    use std::sync::atomic::Ordering::SeqCst;
+                    let running = delete_options.deletes_running.fetch_add(1, SeqCst) + 1;
+                    delete_options.deletes_peak.fetch_max(running, SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    delete_options.deletes_running.fetch_sub(1, SeqCst);
+                }
                 delete_options.stored.lock().unwrap().retain(|s| s.id != request.session_id.to_string());
                 responder.respond(DeleteSessionResponse::new())
             },

@@ -110,18 +110,8 @@ pub struct CreateSession {
     /// The agent's config options picked in the draft (model, thought level, mode), by id.
     #[serde(default)]
     pub config: BTreeMap<String, String>,
-    /// The workspace it runs in, for life.
-    pub workspace: WorkspaceChoice,
-}
-
-/// Which workspace a draft's first message runs in.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-#[serde(tag = "kind", rename_all = "camelCase", rename_all_fields = "camelCase")]
-pub enum WorkspaceChoice {
-    /// The project's folder.
-    Main,
-    /// A workspace of the project.
-    Existing { id: String },
+    /// The workspace it runs in, for life; `None`: Main, the project's folder.
+    pub workspace_id: Option<String>,
 }
 
 /// A prompt piece from the page. Paths are relative to the session's folder; the backend maps and

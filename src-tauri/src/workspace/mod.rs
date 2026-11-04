@@ -44,9 +44,6 @@ pub struct WorkspaceRecord {
     #[serde(default)]
     pub base_branch: Option<String>,
     pub created_at: String,
-    /// A turn of one of its chats started or ended.
-    #[serde(default)]
-    pub last_active_at: Option<String>,
     /// Its first checkout succeeded: a folder not there since was deleted. Records older than
     /// this field count as checked out.
     #[serde(default = "checked_out_before")]
@@ -247,7 +244,6 @@ impl Workspaces {
             base_commit: placed.base_commit,
             base_branch,
             created_at: crate::session::iso_now(),
-            last_active_at: None,
             checked_out: false,
         };
         lock(&self.inner.creating).insert(record.id.clone());
@@ -331,7 +327,6 @@ impl Workspaces {
             base_commit,
             base_branch: None,
             created_at: session.created_at.clone(),
-            last_active_at: session.last_activity_at.clone(),
             checked_out: true,
         };
         self.inner.store.insert(record.clone())?;
@@ -356,15 +351,18 @@ impl Workspaces {
 
     /// Takes `title` as its name while its chats name it (`NameSource::Agent`); the page hears
     /// of a change.
-    pub fn follow_title(&self, id: &str, title: &str) -> Result<(), String> {
-        let follows = |r: &WorkspaceRecord| r.name_source == NameSource::Agent && r.name != title;
-        if !follows(&self.get(id)?) {
+    pub fn follow_title(&self, id: &str, title: impl Fn() -> Option<String>) -> Result<(), String> {
+        let follows = |r: &WorkspaceRecord, title: &str| r.name_source == NameSource::Agent && r.name != title;
+        // Gone meanwhile: nothing to name. The `update` below reads the title again: it's the one
+        // writer, so the last caller to get there applies the latest title.
+        let Ok(current) = self.get(id) else { return Ok(()) };
+        if !title().is_some_and(|t| follows(&current, &t)) {
             return Ok(());
         }
         let mut renamed = false;
         let record = self.inner.store.update(id, |r| {
-            if follows(r) {
-                title.clone_into(&mut r.name);
+            if let Some(title) = title().filter(|t| follows(r, t)) {
+                r.name = title;
                 renamed = true;
             }
         })?;

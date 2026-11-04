@@ -39,7 +39,6 @@ export function orderWorkspaces(list, statuses, chats) {
   const activity = (w) =>
     Math.max(
       Date.parse(w.createdAt) || 0,
-      Date.parse(w.lastActiveAt ?? '') || 0,
       ...chats.filter((c) => c.workspaceId === w.id).map((c) => Date.parse(c.lastActivityAt) || 0),
     );
   /** @param {Workspace} w */

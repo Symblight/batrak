@@ -8,7 +8,7 @@ const NOW = Date.parse('2026-11-03T12:00:00.000Z');
 
 /** @param {Partial<Workspace>} extra */
 const workspace = (extra) =>
-  /** @type {Workspace} */ ({ id: 'w', name: 'Task', branch: 'brama/task', createdAt: '2026-11-01T00:00:00.000Z', lastActiveAt: null, creating: false, error: null, missing: false, ...extra });
+  /** @type {Workspace} */ ({ id: 'w', name: 'Task', branch: 'brama/task', createdAt: '2026-11-01T00:00:00.000Z', creating: false, error: null, missing: false, ...extra });
 
 /** @param {Partial<Session>} extra */
 const chat = (extra) => /** @type {Session} */ ({ id: 's', status: 'stopped', lastActivityAt: '2026-11-01T00:00:00.000Z', ...extra });
@@ -44,7 +44,6 @@ describe('workspaces rules', () => {
     const list = [
       workspace({ id: 'old-idle', createdAt: '2026-10-01T00:00:00.000Z' }),
       workspace({ id: 'new-idle', createdAt: '2026-10-02T00:00:00.000Z' }),
-      workspace({ id: 'active-idle', createdAt: '2026-09-01T00:00:00.000Z', lastActiveAt: '2026-11-02T00:00:00.000Z' }),
       workspace({ id: 'chatted-idle', createdAt: '2026-09-01T00:00:00.000Z' }),
       workspace({ id: 'unread' }),
       workspace({ id: 'error' }),
@@ -52,14 +51,14 @@ describe('workspaces rules', () => {
       workspace({ id: 'waiting' }),
     ];
     /** @type {Record<string, import('../types.js').WorkspaceStatus>} */
-    const statuses = { 'old-idle': 'idle', 'new-idle': 'idle', 'active-idle': 'idle', 'chatted-idle': 'idle', unread: 'unread', error: 'error', working: 'working', waiting: 'waiting' };
+    const statuses = { 'old-idle': 'idle', 'new-idle': 'idle', 'chatted-idle': 'idle', unread: 'unread', error: 'error', working: 'working', waiting: 'waiting' };
     const chats = [chat({ workspaceId: 'chatted-idle', lastActivityAt: '2026-11-03T00:00:00.000Z' })];
 
     // Act
     const ordered = orderWorkspaces(list, statuses, chats);
 
     // Assert
-    expect(ordered.map((w) => w.id)).to.deep.equal(['waiting', 'error', 'working', 'unread', 'chatted-idle', 'active-idle', 'new-idle', 'old-idle']);
+    expect(ordered.map((w) => w.id)).to.deep.equal(['waiting', 'error', 'working', 'unread', 'chatted-idle', 'new-idle', 'old-idle']);
   });
 
   it("statusesOf: each workspace's and Main's status from the project's own chats", () => {
@@ -117,7 +116,7 @@ describe('workspaces rules', () => {
       [[task], [{ ...task, name: 'Login form' }], ['Renamed workspace "Fix login" to "Login form"'], 'renamed by the user'],
       [[{ ...task, nameSource: 'agent' }], [{ ...task, nameSource: 'agent', name: 'Login form' }], [], 'its agent titled it'],
       [[{ ...task, missing: true }], [task], ['Recreated the folder of "Fix login"'], 'its folder back'],
-      [[task], [{ ...task, lastActiveAt: '2026-11-03T00:00:00.000Z' }], [], 'nothing to say'],
+      [[task], [{ ...task, createdAt: '2026-11-03T00:00:00.000Z' }], [], 'nothing to say'],
     ];
     for (const [before, after, notices, why] of cases) {
       // Act + Assert

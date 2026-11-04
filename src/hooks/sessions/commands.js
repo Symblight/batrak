@@ -5,7 +5,6 @@ import { ipc } from '../ipc/ipc.js';
 /** @typedef {import('./types.js').PromptInput} PromptInput */
 /** @typedef {import('./types.js').SyncReport} SyncReport */
 /** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
-/** @typedef {import('../workspaces/types.js').WorkspaceChoice} WorkspaceChoice */
 
 /** The Rust commands of sessions, their folders and the project's settings. */
 
@@ -43,18 +42,18 @@ export function onSessionsSynced(callback) {
  * @param {string} session.agentId
  * @param {string} session.title
  * @param {Record<string, string>} session.config The agent's config options picked in the draft, by id.
- * @param {WorkspaceChoice} session.workspace
+ * @param {string | null} session.workspaceId `null`: Main.
  * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
  * @returns {Promise<Session>}
  */
-export function sessionCreate({ sessionId, projectPath, agentId, title, config, workspace }, onEvent) {
+export function sessionCreate({ sessionId, projectPath, agentId, title, config, workspaceId }, onEvent) {
   return ipc.invoke('session_create', {
     sessionId,
     projectPath,
     agentId,
     title,
     config,
-    workspace,
+    workspaceId,
     channel: channelOf(onEvent),
   });
 }
@@ -170,7 +169,7 @@ export function sessionRestart(sessionId) {
  * @property {string} agentId
  * @property {string} title
  * @property {Record<string, string>} [config]
- * @property {WorkspaceChoice} workspace
+ * @property {string | null} workspaceId `null`: Main.
  * @property {string} [prompt] Its first message, which the CLI starts with.
  */
 

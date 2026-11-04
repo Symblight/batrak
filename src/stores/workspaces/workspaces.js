@@ -4,7 +4,6 @@ import { $openRoots, $project, $projectPath } from '../project/project.js';
 import { MAIN, folderOfWorkspace } from '../../hooks/workspaces/folder.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
-/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/workspaces/types.js').ActiveRoot} ActiveRoot */
 
 export { MAIN };
@@ -80,8 +79,3 @@ export const $shownFolder = computed($activeRoot, (root) => root.path);
 
 /** The active root's backend id; notifies only when it changes. */
 export const $rootId = computed($activeRoot, (root) => root.rootId);
-
-/** The shown project's workspaces' folders, whose files are marked as theirs. */
-export const $worktrees = computed($workspaces, (list) =>
-  list.map((w) => /** @type {WorktreeFolder} */ ({ projectId: w.projectPath, folder: w.folder, branch: w.branch })),
-);

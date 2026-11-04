@@ -182,7 +182,7 @@ describe('acp-code-view', () => {
         .root=${'/work/app'}
         .rootId=${'r1'}
         .listDir=${listDir}
-        .worktrees=${/** @type {any} */ (props).worktrees ?? []}
+        .workspaces=${/** @type {any} */ (props).workspaces ?? []}
         .language=${/** @type {any} */ (props).language ?? ''}
       ></acp-code-view>`);
     };
@@ -265,7 +265,7 @@ describe('acp-code-view', () => {
       const el = await fixture(html`<acp-code-view
         .tab=${fileTab(wtFile)}
         .root=${'/work/app'}
-        .worktrees=${[{ sessionId: 's1', projectId: '/work/app', folder, branch: 'brama/x', title: 'X' }]}
+        .workspaces=${[{ projectPath: '/work/app', folder, branch: 'brama/x' }]}
       ></acp-code-view>`);
       await clickStatus(el, 'path', 0);
       const reveals = listen(el, 'acp-file-reveal');

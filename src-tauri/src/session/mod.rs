@@ -10,7 +10,7 @@ mod runtime;
 
 pub use runtime::{
     CliDraft, CliOpened, DeletePreview, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
-    SessionsOptions, SyncReport, WorkspaceChoice,
+    SessionsOptions, SyncReport,
 };
 
 use std::collections::BTreeMap;
@@ -139,12 +139,9 @@ pub struct Session {
     /// reports meanwhile is that CLI's, not another app's.
     pub in_terminal: bool,
     pub config: BTreeMap<String, String>,
-    pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
     pub folder: String,
-    pub worktree_path: Option<String>,
     pub branch: Option<String>,
-    pub base_commit: Option<String>,
     pub workspace_id: Option<String>,
     pub created_at: String,
     /// The last prompt or turn end, else `created_at`; the list's order.
@@ -168,11 +165,8 @@ impl Session {
             active_elsewhere_until: None,
             in_terminal: false,
             config: r.config.clone(),
-            mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),
-            worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
             branch: r.branch.clone(),
-            base_commit: r.base_commit.clone(),
             workspace_id: r.workspace_id.clone(),
             created_at: r.created_at.clone(),
             last_activity_at: r.last_activity_at.clone().unwrap_or_else(|| r.created_at.clone()),

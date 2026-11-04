@@ -13,7 +13,6 @@ import styles from './tab-view.css?inline';
 
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
@@ -35,7 +34,6 @@ export class AcpTabView extends LitElement {
     active: { attribute: false },
     pinned: { attribute: false },
     root: { attribute: false },
-    worktrees: { attribute: false },
     workspaces: { attribute: false },
     renderContent: { attribute: false },
     terminals: { attribute: false },
@@ -91,9 +89,7 @@ export class AcpTabView extends LitElement {
     this.pinned = [];
     /** @type {string | null} The project's path. */
     this.root = null;
-    /** @type {readonly WorktreeFolder[]} Workspaces' folders, whose files are marked. */
-    this.worktrees = [];
-    /** @type {readonly Workspace[]} The project's workspaces, whose Changes tabs are named after them. */
+    /** @type {readonly Workspace[]} The project's workspaces: their files are marked, their Changes tabs named after them. */
     this.workspaces = [];
     /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
     this.terminals = {};
@@ -217,7 +213,6 @@ export class AcpTabView extends LitElement {
           .active=${this.active}
           .pinned=${this.pinned}
           .root=${this.root}
-          .worktrees=${this.worktrees}
           .workspaces=${this.workspaces}
           .terminals=${this.terminals}
           .dropTo=${this.dropTo}

@@ -100,24 +100,24 @@ function startDraft(id, place, fields) {
  * (`workspaces.create()`), and the chat moves into it, shown.
  * @param {string} id
  * @param {Place} place
- * @returns {Promise<import('../workspaces/types.js').WorkspaceChoice | null>} `null`: the chat was
+ * @returns {Promise<string | null | undefined>} Its id, `null` for Main; `undefined`: the chat was
  *   removed meanwhile; its new workspace is deleted, and nothing more is created for it.
  */
 async function workspaceFor(id, place) {
   const { target, projectPath } = place;
-  if (target.kind === 'local') return { kind: 'main' };
-  if (target.kind === 'workspace') return { kind: 'existing', id: place.workspaceId };
+  if (target.kind === 'local') return null;
+  if (target.kind === 'workspace') return place.workspaceId;
   const created = await workspaces.create(projectPath, target.base);
   if (!$sessions.get().some((s) => s.id === id)) {
     // Removing the chat meant "don't run this": its workspace, still empty, goes too.
     void workspaces.delete(created.id, false);
-    return null;
+    return undefined;
   }
   moveSession(id, created);
   // A draft again (its chat refused), it's this workspace's.
   setRunTarget(id, { kind: 'workspace' });
   if ($activeSessionId.get() === id) setActiveWorkspace(projectPath, created.id);
-  return { kind: 'existing', id: created.id };
+  return created.id;
 }
 
 /**
@@ -334,16 +334,16 @@ async function startInTerminal(id, title, prompt) {
   setCliStarting(id, true);
   const label = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'Agent';
   try {
-    let workspace;
+    let workspaceId;
     try {
-      workspace = await workspaceFor(id, place);
+      workspaceId = await workspaceFor(id, place);
     } catch (err) {
       workspaceFailed(id, err);
       return 'reported';
     }
-    if (workspace === null) return 'reported';
+    if (workspaceId === undefined) return 'reported';
     unknownToBackend.delete(id);
-    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, title, config, workspace, prompt });
+    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, title, config, workspaceId, prompt });
     addSessionTerminal(terminalId, id, projectPath, label);
     const session = $sessions.get().find((s) => s.id === id);
     if (session) openAll([session]);
@@ -457,18 +457,18 @@ function start(id, title) {
   startDraft(id, place, { title, agentId, config });
   const { projectPath } = place;
   const create = async () => {
-    let workspace;
+    let workspaceId;
     try {
-      workspace = await workspaceFor(id, place);
+      workspaceId = await workspaceFor(id, place);
     } catch (err) {
       workspaceFailed(id, err);
       throw err;
     }
     // Removed meanwhile: its send fails, nothing is prompted.
-    if (workspace === null) throw new Error('The session was removed');
+    if (workspaceId === undefined) throw new Error('The session was removed');
     unknownToBackend.delete(id);
     try {
-      upsertSession(await sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspace }, onSessionEvent));
+      upsertSession(await sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspaceId }, onSessionEvent));
     } catch (err) {
       revertDraft(id);
       setSessionNotice(id, { kind: 'error', message: err instanceof Error ? err.message : String(err) });

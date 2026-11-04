@@ -47,7 +47,7 @@ export class AcpMarkdownView extends LitElement {
     language: { attribute: false },
     root: { attribute: false },
     rootId: { attribute: false },
-    worktrees: { attribute: false },
+    workspaces: { attribute: false },
     listDir: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
@@ -94,7 +94,7 @@ export class AcpMarkdownView extends LitElement {
     /** @type {string | null} */
     this.rootId = null;
     /** @type {readonly WorktreeFolder[]} */
-    this.worktrees = [];
+    this.workspaces = [];
     /** @type {ListDir} */
     this.listDir = async () => [];
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} */
@@ -280,7 +280,7 @@ export class AcpMarkdownView extends LitElement {
       .language=${this.language}
       .root=${this.root}
       .rootId=${this.rootId}
-      .worktrees=${this.worktrees}
+      .workspaces=${this.workspaces}
       .listDir=${this.listDir}
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
@@ -291,7 +291,7 @@ export class AcpMarkdownView extends LitElement {
   #renderPreview(tab) {
     const slash = tab.path.lastIndexOf('/');
     // A worktree session's file is in its own folder, not the project's.
-    const root = projects.worktreeOf(this.worktrees, tab.path)?.folder ?? this.root;
+    const root = projects.worktreeOf(this.workspaces, tab.path)?.folder ?? this.root;
     return html`<div class="acp-markdown-view__scroller">
       <acp-markdown
         class=${classMap({ 'acp-markdown-view__preview': true, 'acp-markdown-view__preview_centered': this.mode === 'preview' })}

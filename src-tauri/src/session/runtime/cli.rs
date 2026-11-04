@@ -36,7 +36,8 @@ pub struct CliDraft {
     pub title: String,
     #[serde(default)]
     pub config: BTreeMap<String, String>,
-    pub workspace: WorkspaceChoice,
+    /// `None`: Main.
+    pub workspace_id: Option<String>,
     /// The draft's first message, which the CLI starts with.
     #[serde(default)]
     pub prompt: Option<String>,
@@ -157,7 +158,7 @@ impl Sessions {
             agent_id: draft.agent_id,
             title: draft.title,
             config: draft.config,
-            workspace: draft.workspace,
+            workspace_id: draft.workspace_id,
         };
         let sessions = self.clone();
         let mut record = tokio::task::spawn_blocking(move || sessions.new_record(&request)).await.map_err(|e| e.to_string())??;

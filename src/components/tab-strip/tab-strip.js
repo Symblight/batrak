@@ -28,7 +28,6 @@ import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflo
 import styles from './tab-strip.css?inline';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
@@ -52,7 +51,6 @@ export class AcpTabStrip extends LitElement {
     active: { attribute: false },
     pinned: { attribute: false },
     root: { attribute: false },
-    worktrees: { attribute: false },
     workspaces: { attribute: false },
     terminals: { attribute: false },
     dropTo: { attribute: false },
@@ -161,8 +159,6 @@ export class AcpTabStrip extends LitElement {
     this.pinned = [];
     /** @type {string | null} The project's path. */
     this.root = null;
-    /** @type {readonly WorktreeFolder[]} Workspaces' folders, whose files are marked. */
-    this.worktrees = [];
     /** @type {readonly Workspace[]} The project's workspaces, whose Changes tabs are named after them. */
     this.workspaces = [];
     /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
@@ -293,8 +289,8 @@ export class AcpTabStrip extends LitElement {
     }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, file: null, tooltip: 'Browser' };
     const name = projects.basename(tab.path);
-    const path = projects.shownPath(this.root, this.worktrees, tab.path);
-    const worktree = projects.worktreeOf(this.worktrees, tab.path);
+    const path = projects.shownPath(this.root, this.workspaces, tab.path);
+    const worktree = projects.worktreeOf(this.workspaces, tab.path);
     if (worktree) return { title: name, icon: branchIcon, file: null, tooltip: `${path} in worktree ${worktree.branch}` };
     return { title: name, icon: '', file: name, tooltip: path };
   }

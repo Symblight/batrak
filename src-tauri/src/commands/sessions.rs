@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State, Window};
 
-use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport, WorkspaceChoice};
+use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
 use super::blocking;
 
@@ -54,7 +54,7 @@ pub async fn sessions_sync(
     Ok(report)
 }
 
-/// A draft's first message: creates the session under the draft's id, in `workspace` (Main or a
+/// A draft's first message: creates the session under the draft's id, in `workspace_id` (`None`: Main; or a
 /// stored one of the project), and starts its folder and agent in the background.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
@@ -66,11 +66,11 @@ pub async fn session_create(
     agent_id: String,
     title: String,
     config: Option<BTreeMap<String, String>>,
-    workspace: WorkspaceChoice,
+    workspace_id: Option<String>,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
     let config = config.unwrap_or_default();
-    let request = CreateSession { session_id, project_path, agent_id, title, config, workspace };
+    let request = CreateSession { session_id, project_path, agent_id, title, config, workspace_id };
     let sessions = sessions.inner().clone();
     let label = window.label().to_owned();
     blocking(move || sessions.create(request, &label, sink(channel))).await?
