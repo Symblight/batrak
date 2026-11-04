@@ -1,33 +1,33 @@
 import { html, nothing } from 'lit';
-import { sessions } from '../../hooks/sessions/sessions.js';
+import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { SessionChangesController } from '../../controllers/session-changes/SessionChangesController.js';
+import { WorkspaceChangesController } from '../../controllers/workspace-changes/WorkspaceChangesController.js';
 import '../../components/changes-review/changes-review.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
- * @tag acp-session-changes-tab
- * @summary A worktree session's Changes tab wired to its data: the files it changed since it started and their diffs, with Apply locally and Check out branch.
+ * @tag acp-workspace-changes-tab
+ * @summary A workspace's Changes tab wired to its data: the files changed since its base and their diffs, with Apply to Main and Check out branch.
  */
-export class AcpSessionChangesTab extends ViewElement {
+export class AcpWorkspaceChangesTab extends ViewElement {
   static properties = {
-    sessionId: { attribute: false },
+    workspaceId: { attribute: false },
   };
 
-  #review = new SessionChangesController(this, { sessionId: () => this.sessionId });
+  #review = new WorkspaceChangesController(this, { workspaceId: () => this.workspaceId });
   #comments = new StoreController(this, { store: $comments });
   #commentFocus = new StoreController(this, { store: $commentFocus });
 
   constructor() {
     super();
-    /** @type {string | null} The session whose tab this is. */
-    this.sessionId = null;
+    /** @type {string | null} The workspace whose tab this is. */
+    this.workspaceId = null;
   }
 
   /** @param {Map<string, unknown>} changed */
   willUpdate(changed) {
-    if (changed.has('sessionId')) this.#review.sync();
+    if (changed.has('workspaceId')) this.#review.sync();
   }
 
   /**
@@ -44,7 +44,7 @@ export class AcpSessionChangesTab extends ViewElement {
   render() {
     const view = this.#review.view;
     if (!view) return nothing;
-    const byId = AcpSessionChangesTab.#byId;
+    const byId = AcpWorkspaceChangesTab.#byId;
     return html`<acp-changes-review
       .changes=${view.changes}
       .expanded=${view.expanded}
@@ -62,14 +62,14 @@ export class AcpSessionChangesTab extends ViewElement {
       }}
       @acp-session-apply=${(/** @type {Event} */ e) => {
         e.stopPropagation();
-        sessions.applyLocally(view.sessionId);
+        workspaces.apply(view.workspaceId);
       }}
       @acp-session-check-out=${(/** @type {Event} */ e) => {
         e.stopPropagation();
-        sessions.checkOutBranch(view.sessionId);
+        workspaces.checkOut(view.workspaceId);
       }}
     ></acp-changes-review>`;
   }
 }
 
-customElements.define('acp-session-changes-tab', AcpSessionChangesTab);
+customElements.define('acp-workspace-changes-tab', AcpWorkspaceChangesTab);

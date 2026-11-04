@@ -1,25 +1,24 @@
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { StoreController } from '../store/StoreController.js';
-import { sessions } from '../../hooks/sessions/sessions.js';
+import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
+import { $workspaces } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */
 /** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
-/** @typedef {import('../../hooks/sessions/types.js').Session} Session */
-
 /**
- * What a worktree session's Changes tab shows.
- * @typedef {Object} SessionChangesView
- * @property {string} sessionId
+ * What a workspace's Changes tab shows.
+ * @typedef {Object} WorkspaceChangesView
+ * @property {string} workspaceId
  * @property {GitChangesView} changes Paths relative to `folder`.
  * @property {ReadonlySet<string>} expanded
  * @property {ReadonlyMap<string, FileDiff>} diffs
- * @property {string} folder The session's folder.
- * @property {string} base The commit it started from.
+ * @property {string} folder The workspace's folder.
+ * @property {string} base Its base commit.
  * @property {string | null} branch
  */
 
@@ -27,34 +26,42 @@ import { $sessions } from '../../stores/sessions/sessions.js';
 const NOT_LOADED = { files: [], loaded: false, loading: true, error: null };
 
 /** @param {string} id */
-function sessionOf(id) {
-  return $sessions.get().find((s) => s.id === id) ?? null;
-}
-
-/** @param {Session | null} session */
-function isBusy(session) {
-  return session?.status === 'working' || session?.status === 'waiting';
+function workspaceOf(id) {
+  return $workspaces.get().find((w) => w.id === id) ?? null;
 }
 
 /**
- * @typedef {Object} SessionChangesConfig
- * @property {() => string | null} sessionId The session whose tab the host shows.
+ * @param {string} id
+ * @returns {Set<string>} The workspace's chats that are mid-turn.
+ */
+function busyChats(id) {
+  return new Set(
+    $sessions
+      .get()
+      .filter((s) => s.workspaceId === id && (s.status === 'working' || s.status === 'waiting'))
+      .map((s) => s.id),
+  );
+}
+
+/**
+ * @typedef {Object} WorkspaceChangesConfig
+ * @property {() => string | null} workspaceId The workspace whose tab the host shows.
  */
 
 /**
- * A worktree session's Changes tab while it's active: the files the session changed since it
- * started, which of them are expanded, and their diffs against its base. Listed when the tab is
- * shown and again after each of the session's turns (nothing watches a worktree); dropped when
- * another tab is shown. One per tab: it follows its host's session only.
+ * A workspace's Changes tab while it's active: the files changed in it since its base, which of
+ * them are expanded, and their diffs against its base. Listed when the tab is shown and again
+ * after each turn of any of its chats (nothing watches a worktree); dropped when another tab
+ * is shown. One per tab: it follows its host's workspace only.
  * @implements {ReactiveController}
  */
-export class SessionChangesController {
+export class WorkspaceChangesController {
   /** @type {ReactiveControllerHost} */
   #host;
-  /** @type {SessionChangesConfig} */
+  /** @type {WorkspaceChangesConfig} */
   #config;
-  /** @type {string | null} The session whose tab is active. */
-  #sessionId = null;
+  /** @type {string | null} The workspace whose tab is active. */
+  #workspaceId = null;
   /** @type {GitChangesView} */
   #changes = NOT_LOADED;
   /** @type {ReadonlySet<string>} */
@@ -67,12 +74,12 @@ export class SessionChangesController {
   #loadCount = 0;
   /** Latest list asked for; an older one that resolves later (a slow scan) is dropped. */
   #listCount = 0;
-  /** The shown session was mid-turn at its last status. */
-  #busy = false;
+  /** @type {ReadonlySet<string>} The shown workspace's chats mid-turn at the last statuses. */
+  #busy = new Set();
 
   /**
    * @param {ReactiveControllerHost & HTMLElement} host
-   * @param {SessionChangesConfig} config
+   * @param {WorkspaceChangesConfig} config
    */
   constructor(host, config) {
     this.#host = host;
@@ -84,20 +91,20 @@ export class SessionChangesController {
     new StoreController(host, {
       store: $sessions,
       onChange: () => {
-        if (this.#sessionId === null) return;
-        const busy = isBusy(sessionOf(this.#sessionId));
-        if (this.#busy && !busy) this.#list();
+        if (this.#workspaceId === null) return;
+        const busy = busyChats(this.#workspaceId);
+        if ([...this.#busy].some((id) => !busy.has(id))) this.#list();
         this.#busy = busy;
       },
     });
     host.addController(this);
   }
 
-  /** Shows the host's session if its tab is the active one, else nothing; call it when the host's session changes. */
+  /** Shows the host's workspace if its tab is the active one, else nothing; call it when the host's workspace changes. */
   sync() {
     const active = $activePath.get();
-    const id = active === null ? null : tabs.sessionOf(active);
-    this.#show(id !== null && id === this.#config.sessionId() ? id : null);
+    const id = active === null ? null : tabs.workspaceOf(active);
+    this.#show(id !== null && id === this.#config.workspaceId() ? id : null);
   }
 
   // Shown again on connect, when the active tab is first reported.
@@ -105,37 +112,37 @@ export class SessionChangesController {
     this.#show(null);
   }
 
-  /** @returns {SessionChangesView | null} `null` unless a worktree session's tab is active. */
+  /** @returns {WorkspaceChangesView | null} `null` unless a listed workspace's tab is active. */
   get view() {
-    const session = this.#sessionId === null ? null : sessionOf(this.#sessionId);
-    if (!session?.baseCommit) return null;
+    const workspace = this.#workspaceId === null ? null : workspaceOf(this.#workspaceId);
+    if (!workspace) return null;
     return {
-      sessionId: session.id,
+      workspaceId: workspace.id,
       changes: this.#changes,
       expanded: this.#expanded,
       diffs: this.#diffs,
-      folder: session.folder,
-      base: session.baseCommit,
-      branch: session.branch,
+      folder: workspace.folder,
+      base: workspace.baseCommit,
+      branch: workspace.branch,
     };
   }
 
-  /** @param {string | null} sessionId */
-  #show(sessionId) {
-    if (sessionId === this.#sessionId) return;
-    this.#sessionId = sessionId;
+  /** @param {string | null} workspaceId */
+  #show(workspaceId) {
+    if (workspaceId === this.#workspaceId) return;
+    this.#workspaceId = workspaceId;
     this.#changes = NOT_LOADED;
     this.#expanded = new Set();
     this.#diffs = new Map();
     this.#loads.clear();
-    this.#busy = sessionId !== null && isBusy(sessionOf(sessionId));
-    if (sessionId !== null) this.#list();
+    this.#busy = workspaceId === null ? new Set() : busyChats(workspaceId);
+    if (workspaceId !== null) this.#list();
     this.#host.requestUpdate();
   }
 
   /** Lists the changed files; the expanded ones still listed are read again. */
   async #list() {
-    const id = this.#sessionId;
+    const id = this.#workspaceId;
     if (id === null) return;
     const list = ++this.#listCount;
     this.#changes = { ...this.#changes, loading: true };
@@ -143,11 +150,11 @@ export class SessionChangesController {
     /** @type {GitChangesView} */
     let changes;
     try {
-      changes = { files: await sessions.changes(id), loaded: true, loading: false, error: null };
+      changes = { files: await workspaces.listChanges(id), loaded: true, loading: false, error: null };
     } catch (err) {
       changes = { files: [], loaded: true, loading: false, error: String(err) };
     }
-    if (id !== this.#sessionId || list !== this.#listCount) return;
+    if (id !== this.#workspaceId || list !== this.#listCount) return;
     this.#changes = changes;
     const listed = new Set(changes.files.map((file) => file.path));
     this.#expanded = new Set([...this.#expanded].filter((rel) => listed.has(rel)));
@@ -187,17 +194,17 @@ export class SessionChangesController {
    * @param {string} rel
    */
   async #loadDiff(rel) {
-    const id = this.#sessionId;
-    const session = id === null ? null : sessionOf(id);
-    if (id === null || !session) return;
+    const id = this.#workspaceId;
+    const workspace = id === null ? null : workspaceOf(id);
+    if (id === null || !workspace) return;
     const load = ++this.#loadCount;
     this.#loads.set(rel, load);
     if (!this.#diffs.has(rel)) this.#setDiff(rel, { content: '', baseline: '', error: '', loading: true });
     const [content, baseline] = await Promise.all([
-      projects.readFile(`${session.folder}/${rel}`).catch(() => null),
-      sessions.fileAtBase(id, rel).catch(() => null),
+      projects.readFile(`${workspace.folder}/${rel}`).catch(() => null),
+      workspaces.fileAtBase(id, rel).catch(() => null),
     ]);
-    if (id !== this.#sessionId || this.#loads.get(rel) !== load) return;
+    if (id !== this.#workspaceId || this.#loads.get(rel) !== load) return;
     this.#setDiff(
       rel,
       content === null && baseline === null

@@ -116,9 +116,9 @@ impl Sessions {
         sessions
     }
 
-    /// Whether a canonical `path` lies in a worktree session's folder, which the page may read.
+    /// Whether a canonical `path` lies in a workspace's folder, which the page may read.
     pub fn contains(&self, path: &Path) -> bool {
-        self.inner.known().iter().any(|record| record.mode == Mode::Worktree && path.starts_with(&record.agent_cwd))
+        self.inner.workspaces.store().list(None).iter().any(|w| path.starts_with(&w.folder))
     }
 
     /// Whether a canonical `path` lies in any session's folder: a local session's project, a
@@ -166,7 +166,7 @@ impl Sessions {
         }
         let (mode, placed, workspace_id) = match &req.workspace {
             WorkspaceChoice::Main => {
-                (Mode::Local, env::place(Mode::Local, &project, self.inner.data_dir(), &req.session_id, &req.title, None)?, None)
+                (Mode::Local, env::Placement::main(&project), None)
             }
             WorkspaceChoice::Existing { id } => {
                 let workspace = self.inner.workspaces.for_new_chat(id)?;
@@ -300,9 +300,6 @@ impl Sessions {
         self.inner.persist();
         let dir = self.inner.data_dir().join("sessions").join(id);
         tokio::task::spawn_blocking(move || {
-            if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
-                tracing::warn!(session = %record.session_id, "discarding the session's folder failed: {e}");
-            }
             match std::fs::remove_dir_all(&dir) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
                     tracing::warn!(path = %dir.display(), "deleting the session's files failed: {e}");

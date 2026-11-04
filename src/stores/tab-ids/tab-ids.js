@@ -1,20 +1,20 @@
-/** Prefix of a worktree session's Changes tab id; the session's id follows. */
-const SESSION_CHANGES_PREFIX = 'view:session-changes:';
+/** Prefix of a workspace's Changes tab id; the workspace's id follows. */
+const WORKSPACE_CHANGES_PREFIX = 'view:workspace-changes:';
 
 /**
- * @param {string} sessionId
- * @returns {string} The id of the tab with a worktree session's changes since it started.
+ * @param {string} workspaceId
+ * @returns {string} The id of the tab with a workspace's changes since its base.
  */
-export function sessionChangesTabId(sessionId) {
-  return `${SESSION_CHANGES_PREFIX}${sessionId}`;
+export function workspaceChangesTabId(workspaceId) {
+  return `${WORKSPACE_CHANGES_PREFIX}${workspaceId}`;
 }
 
 /**
  * @param {string} id A tab id.
- * @returns {string | null} The session whose changes it shows; `null` for any other tab.
+ * @returns {string | null} The workspace whose changes it shows; `null` for any other tab.
  */
-export function sessionOfTab(id) {
-  return id.startsWith(SESSION_CHANGES_PREFIX) ? id.slice(SESSION_CHANGES_PREFIX.length) : null;
+export function workspaceOfTab(id) {
+  return id.startsWith(WORKSPACE_CHANGES_PREFIX) ? id.slice(WORKSPACE_CHANGES_PREFIX.length) : null;
 }
 
 /** Prefix of a terminal's tab id; the terminal's id follows. */

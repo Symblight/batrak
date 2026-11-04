@@ -1,16 +1,16 @@
 import { atom, computed } from 'nanostores';
 import { isRecord, persistentMapStore } from '../persistent/persistent.js';
-import { $sessionsLoaded, $worktrees } from '../sessions/sessions.js';
+import { $projectPath } from '../project/project.js';
 import { $shownFolder, $workspaces, $workspacesProject } from '../workspaces/workspaces.js';
 import { isUserAgentsFile } from '../agents/rules.js';
-import { sessionChangesTabId, sessionOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
+import { workspaceChangesTabId, workspaceOfTab, terminalOfTab } from '../tab-ids/tab-ids.js';
 import { NO_PROJECT, NO_TABS, tabGroup, tabsOf } from '../tab-group/tab-group.js';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
 /** @typedef {import('../../hooks/settings/types.js').SettingsReveal} SettingsReveal */
 /** @typedef {import('../../hooks/agents/types.js').AgentsReveal} AgentsReveal */
 /** @typedef {import('../../hooks/tabs/types.js').TabKind} TabKind */
-/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 
 /** Id of the Settings tab. */
 export const SETTINGS_TAB_ID = 'view:settings';
@@ -37,21 +37,21 @@ const VIEW_TABS = new Map([
 export function parseTabId(id) {
   const view =
     VIEW_TABS.get(id) ??
-    (sessionOfTab(id) !== null ? 'session-changes' : terminalOfTab(id) !== null ? 'terminal' : undefined);
+    (workspaceOfTab(id) !== null ? 'workspace-changes' : terminalOfTab(id) !== null ? 'terminal' : undefined);
   return view ? { kind: view, path: '' } : { kind: 'file', path: id };
 }
 
 /**
  * Whether a tab may be open in a folder: a file tab only inside it (the user's agents.json anywhere),
- * a session's changes while it's a worktree session's, any other view anywhere.
+ * a workspace's changes while the workspace is the project's, any other view anywhere.
  * @param {string} id Tab id.
  * @param {string} folder Absolute; `NO_PROJECT` contains no file.
- * @param {readonly WorktreeFolder[] | null} worktrees Worktree sessions; `null` until the sessions are
- *   listed, when a session's changes are kept (a write now must not drop them).
+ * @param {readonly Workspace[] | null} workspaces The shown project's workspaces; `null` until they
+ *   are listed, when a workspace's changes are kept (a write now must not drop them).
  */
-function belongsTo(id, folder, worktrees) {
+function belongsTo(id, folder, workspaces) {
   const { kind, path } = parseTabId(id);
-  if (kind === 'session-changes') return worktrees === null || worktrees.some((w) => w.sessionId === sessionOfTab(id));
+  if (kind === 'workspace-changes') return workspaces === null || workspaces.some((w) => w.id === workspaceOfTab(id));
   if (kind !== 'file' || isUserAgentsFile(path)) return true;
   return folder !== NO_PROJECT && path.startsWith(`${folder}/`);
 }
@@ -122,12 +122,12 @@ export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
  * show no file (Settings).
  */
 export const $editorTabs = computed(
-  [$projectTabs, $shownFolder, $worktrees, $sessionsLoaded],
-  (folders, shown, worktrees, loaded) => {
+  [$projectTabs, $shownFolder, $workspaces, $workspacesProject, $projectPath],
+  (folders, shown, workspaces, listedFor, project) => {
     const folder = shown ?? NO_PROJECT;
     const tabs = folders[folder];
     if (!tabs) return NO_TABS;
-    const own = loaded ? worktrees : null;
+    const own = listedFor !== null && listedFor === project ? workspaces : null;
     return tabs.paths.every((id) => belongsTo(id, folder, own))
       ? tabs
       : tabsOf(
@@ -238,11 +238,11 @@ export function openChanges() {
 }
 
 /**
- * Opens the tab with a worktree session's changes, or switches to it; its project must be active.
- * @param {string} sessionId
+ * Opens the tab with a workspace's changes since its base, or switches to it; its project must be active.
+ * @param {string} workspaceId
  */
-export function openSessionChanges(sessionId) {
-  openTab(sessionChangesTabId(sessionId));
+export function openWorkspaceChanges(workspaceId) {
+  openTab(workspaceChangesTabId(workspaceId));
 }
 
 /** Opens the Browser tab, or switches to it. */

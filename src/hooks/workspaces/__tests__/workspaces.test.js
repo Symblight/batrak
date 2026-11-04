@@ -5,7 +5,7 @@ import { $project } from '../../../stores/project/project.js';
 import { $activeRoot, $activeWorkspaceId, $shownFolder, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $projectTabs } from '../../../stores/editor/editor.js';
+import { $activePath, $projectTabs, closeAllTabs } from '../../../stores/editor/editor.js';
 import { $projectTerminalPanelHeights, $projectTerminalTabs, $terminals, openTerminal } from '../../../stores/terminals/terminals.js';
 import { $projectExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { workspaces } from '../workspaces.js';
@@ -336,5 +336,61 @@ describe('workspaces hook', () => {
       selectSession(null);
       $sessions.set([]);
     }
+  });
+
+  it('opens the Changes tab of a workspace that has no chat yet', () => {
+    // Arrange
+    $sessions.set([]);
+
+    // Act
+    workspaces.changes('w1');
+
+    // Assert
+    expect($activePath.get()).to.equal('view:workspace-changes:w1');
+
+    // Cleanup
+    closeAllTabs();
+  });
+
+  it('says what applying a workspace to Main did, and what checking out its branch did', async () => {
+    // Arrange
+    $workspaces.set([/** @type {import('../types.js').Workspace} */ (/** @type {unknown} */ ({ id: 'w1', name: 'Fix tabs', branch: 'brama/fix-1' }))]);
+    /** @type {(cmd: string) => unknown} */
+    let answer = () => null;
+    clearMocks();
+    mockIPC((cmd) => {
+      const value = answer(cmd);
+      if (value instanceof Error) throw value;
+      return value;
+    });
+    /** @type {[unknown, string, string][]} */
+    const cases = [
+      [{ outcome: 'clean', conflicts: [] }, 'info', 'Applied "Fix tabs" to Main, unstaged'],
+      [{ outcome: 'empty', conflicts: [] }, 'info', '"Fix tabs" has no changes to apply'],
+      [{ outcome: 'conflicts', conflicts: ['a.js', 'b.js'] }, 'warn', 'Applied "Fix tabs" with conflicts in a.js, b.js'],
+    ];
+    for (const [result, level, message] of cases) {
+      $notices.set([]);
+      answer = (cmd) => (cmd === 'workspace_apply_locally' ? result : null);
+      // Act
+      await workspaces.apply('w1');
+      // Assert
+      expect([$notices.get()[0]?.level, $notices.get()[0]?.message], message).to.deep.equal([level, message]);
+    }
+    // Act
+    $notices.set([]);
+    await workspaces.checkOut('w1');
+    // Assert
+    expect($notices.get()[0]?.message).to.equal('Checked out brama/fix-1 in Main');
+    // Act
+    $notices.set([]);
+    answer = (cmd) => (cmd === 'workspace_check_out_branch' ? new Error('dirty worktree') : null);
+    await workspaces.checkOut('w1');
+    // Assert
+    expect($notices.get()[0]?.level).to.equal('error');
+
+    // Cleanup
+    $workspaces.set([]);
+    $notices.set([]);
   });
 });

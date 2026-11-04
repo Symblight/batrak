@@ -2,15 +2,15 @@ import { expect } from '@esm-bundle/chai';
 import { tabs } from '../tabs.js';
 
 describe('tabs', () => {
-  it('names a terminal’s and a worktree session’s Changes tab, and reads each back from it', () => {
+  it('names a terminal’s and a workspace’s Changes tab, and reads each back from it', () => {
     expect(tabs.terminalId('t1')).to.equal('view:terminal:t1');
     expect(tabs.terminalOf('view:terminal:t1')).to.equal('t1');
     expect(tabs.terminalOf('/p/a.js')).to.equal(null);
-    expect(tabs.sessionChangesId('s1')).to.equal('view:session-changes:s1');
-    expect(tabs.sessionOf('view:session-changes:s1')).to.equal('s1');
-    expect(tabs.sessionOf('view:changes')).to.equal(null);
-    expect(tabs.sessionOf('view:terminal:t1')).to.equal(null);
-    expect(tabs.terminalOf('view:session-changes:s1')).to.equal(null);
+    expect(tabs.workspaceChangesId('w1')).to.equal('view:workspace-changes:w1');
+    expect(tabs.workspaceOf('view:workspace-changes:w1')).to.equal('w1');
+    expect(tabs.workspaceOf('view:changes')).to.equal(null);
+    expect(tabs.workspaceOf('view:terminal:t1')).to.equal(null);
+    expect(tabs.terminalOf('view:workspace-changes:w1')).to.equal(null);
   });
 
   it('hides the tabs a strip cuts off or fades, in strip order, and none that fit', () => {

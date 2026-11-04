@@ -46,7 +46,7 @@ describe('acp-main-column', () => {
   it('shows the Settings, Agents, Changes and terminal tabs through their views', async () => {
     // Arrange
     openTab(tabs.terminalId('t1'));
-    openTab(tabs.sessionChangesId('s1'));
+    openTab(tabs.workspaceChangesId('w1'));
     openChanges();
     openAgents();
     openSettings();
@@ -61,7 +61,7 @@ describe('acp-main-column', () => {
     expect(panel.hasAttribute('active')).to.equal(true);
     expect(tabView.shadowRoot?.querySelector('acp-agents-tab acp-agents-view'), 'the Agents tab too').to.not.equal(null);
     expect(tabView.shadowRoot?.querySelector('acp-changes-tab acp-changes-review'), 'and the Changes tab').to.not.equal(null);
-    expect(tabView.shadowRoot?.querySelector('acp-session-changes-tab')?.sessionId, 'and a session’s Changes tab').to.equal('s1');
+    expect(tabView.shadowRoot?.querySelector('acp-workspace-changes-tab')?.workspaceId, 'and a workspace’s Changes tab').to.equal('w1');
     expect(tabView.shadowRoot?.querySelector('acp-terminal-view')?.getAttribute('terminal-id'), 'and a terminal').to.equal('t1');
   });
 

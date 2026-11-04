@@ -36,7 +36,7 @@
 
 /**
  * Where a session runs (`Session.mode`): its project's folder or a worktree.
- * @typedef {'local' | 'worktree' | 'docker'} RunTargetKind
+ * @typedef {'local' | 'worktree'} RunTargetKind
  */
 
 /**

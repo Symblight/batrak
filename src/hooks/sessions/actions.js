@@ -1,12 +1,9 @@
 import { app } from '../app/app.js';
-import { notify } from '../../stores/notices/notices.js';
 import { composerOf, revertConfigOption, setConfigOption } from '../../stores/composer/composer.js';
 import { upsertSession, $sessions } from '../../stores/sessions/sessions.js';
 import { $permissionRequests, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import {
-  sessionApplyLocally,
   sessionCancelSubagent,
-  sessionCheckOutBranch,
   sessionOpenLog,
   sessionRename,
   sessionResetTitle,
@@ -71,37 +68,6 @@ function stop(id) {
 }
 
 /**
- * Brings a worktree session's work (commits and uncommitted changes since it started) into the
- * project's checkout as unstaged changes; says what happened.
- * @param {string} id
- */
-async function applyLocally(id) {
-  const title = $sessions.get().find((s) => s.id === id)?.title ?? 'the session';
-  try {
-    const result = await sessionApplyLocally(id);
-    if (result.outcome === 'conflicts') notify('warn', `Applied "${title}" with conflicts in ${result.conflicts.join(', ')}`);
-    else if (result.outcome === 'empty') notify('info', `"${title}" has no changes to apply`);
-    else notify('info', `Applied "${title}" to the project, unstaged`);
-  } catch (err) {
-    app.reportError('Applying the session failed', err);
-  }
-}
-
-/**
- * Stops a worktree session's agent and checks its branch out in the project.
- * @param {string} id
- */
-async function checkOutBranch(id) {
-  const branch = $sessions.get().find((s) => s.id === id)?.branch ?? 'the branch';
-  try {
-    await sessionCheckOutBranch(id);
-    notify('info', `Checked out ${branch}`);
-  } catch (err) {
-    app.reportError(`Checking out ${branch} failed`, err);
-  }
-}
-
-/**
  * Starts the agent again (after an error, or to resume a stopped session with its history).
  * @param {string} id
  */
@@ -154,8 +120,6 @@ export const actions = Object.freeze({
   respondPermission,
   cancelSubagent,
   stop,
-  applyLocally,
-  checkOutBranch,
   restart,
   rename,
   resetTitle,

@@ -196,45 +196,6 @@ pub async fn session_set_config_option(
     sessions.set_config_option(&session_id, &config_id, &value).await
 }
 
-/// A worktree session's changed files since it started (its commits and uncommitted work),
-/// relative to its folder.
-#[tauri::command]
-pub async fn session_changes(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-) -> Result<Vec<crate::git::repo::FileStatus>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.changes(&session_id)).await?
-}
-
-/// A worktree session's file at the commit it started from, its diff's baseline; `null` when new,
-/// binary or too large.
-#[tauri::command]
-pub async fn session_file_at_base(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-    path: String,
-) -> Result<Option<String>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.file_at_base(&session_id, &path)).await?
-}
-
-/// Applies a worktree session's work since it started to the project's checkout, unstaged;
-/// `conflicts` lists files left with conflict markers by a three-way merge.
-#[tauri::command]
-pub async fn session_apply_locally(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-) -> Result<crate::git::apply::ApplyOutcome, String> {
-    sessions.apply_locally(&session_id).await
-}
-
-/// Stops a worktree session's agent and checks its branch out in the project's checkout.
-#[tauri::command]
-pub async fn session_check_out_branch(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
-    sessions.check_out_branch(&session_id).await
-}
-
 /// Opens the agent's stderr log in the OS's default viewer.
 #[tauri::command]
 pub async fn session_open_log(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {

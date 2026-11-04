@@ -49,9 +49,4 @@ impl SessionEnv for LocalEnv {
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String> {
         Ok(agent_path.to_path_buf())
     }
-
-    /// Never deletes the project.
-    fn discard(&self) -> Result<(), String> {
-        Ok(())
-    }
 }

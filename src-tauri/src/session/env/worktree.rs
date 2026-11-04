@@ -22,19 +22,16 @@ pub struct WorktreeEnv {
     dir: PathBuf,
     branch: String,
     base_commit: String,
-    /// The session's, for its snapshot commit.
-    title: String,
     /// A workspace's chat: the workspace checks the folder out and removes it, never the chat.
     shared: bool,
 }
 
 impl WorktreeEnv {
-    pub fn new(project: PathBuf, root: PathBuf, dir: PathBuf, branch: String, base_commit: String, title: String) -> WorktreeEnv {
-        WorktreeEnv { project, root, dir, branch, base_commit, title, shared: false }
+    pub fn new(project: PathBuf, root: PathBuf, dir: PathBuf, branch: String, base_commit: String) -> WorktreeEnv {
+        WorktreeEnv { project, root, dir, branch, base_commit, shared: false }
     }
 
-    /// The same worktree as a workspace's chat sees it: `prepare` checks no folder out and
-    /// `archive` / `discard` leave it.
+    /// The same worktree as a workspace's chat sees it: `prepare` checks no folder out.
     pub fn shared(self) -> WorktreeEnv {
         WorktreeEnv { shared: true, ..self }
     }
@@ -59,12 +56,6 @@ impl WorktreeEnv {
     }
 }
 
-/// Where a new worktree session goes, checked against the repository: `base` (a branch or commit,
-/// `None` for the project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
-pub fn place(project: &Path, worktrees: &Path, session_id: &str, title: &str, base: Option<&str>) -> Result<Placement, String> {
-    place_named(project, worktrees, &format!("{}-{}", slug(title, "session"), short_id(session_id)), base, &|_, _| false)
-}
-
 /// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on `brama/<stem>`,
 /// `-2`, `-3`… when the folder or the branch is taken, on disk or by `reserved` (a worktree root
 /// and branch placed but not checked out yet). `base` (a branch or commit, `None` for the
@@ -79,7 +70,7 @@ pub fn place_named(
     let git = binary::git()?;
     let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| exec::run(git, project, &exec::args(args), GitMode::Background);
     let top = run(&[&"rev-parse", &"--show-toplevel"])
-        .map_err(|_| format!("{}: worktree sessions need a git repository", project.display()))?;
+        .map_err(|_| format!("{}: workspaces need a git repository", project.display()))?;
     let top = exec::canonical(Path::new(String::from_utf8_lossy(&top).trim()));
     let inside = project.strip_prefix(&top).map_err(|_| format!("{}: not inside {}", project.display(), top.display()))?;
     // A branch first, then a remote branch (`origin/main`), then any name git takes (a tag, a
@@ -196,17 +187,6 @@ impl SessionEnv for WorktreeEnv {
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String> {
         Ok(agent_path.to_path_buf())
     }
-
-    /// Removes the worktree, its uncommitted work first committed onto its branch (a snapshot), and
-    /// the branch when it has no commits of its own. A detached worktree with uncommitted work is
-    /// kept: its branch is the project's then.
-    fn discard(&self) -> Result<(), String> {
-        if self.shared {
-            return Ok(());
-        }
-        let message = format!("Work in progress from session \"{}\"\n\nSaved by Brama when the session was removed.", self.title);
-        self.remove_with(&message, true)
-    }
 }
 
 impl WorktreeEnv {
@@ -303,11 +283,6 @@ pub fn slug(text: &str, fallback: &str) -> String {
     if out.is_empty() { fallback.to_owned() } else { out.to_owned() }
 }
 
-/// The session id's first 8 letters and digits, so two sessions with one title get two branches.
-fn short_id(id: &str) -> String {
-    id.chars().filter(char::is_ascii_alphanumeric).take(8).collect::<String>().to_ascii_lowercase()
-}
-
 /// FNV-1a: stable across builds (unlike `DefaultHasher`), so a project keeps its folder.
 fn fnv1a(bytes: &[u8]) -> u64 {
     bytes.iter().fold(0xcbf2_9ce4_8422_2325, |hash, &b| (hash ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
@@ -332,7 +307,7 @@ mod tests {
         let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
         let home = temp_dir("cancel-checkout-home");
         let root = home.join("s");
-        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/cancel".into(), base, "t".into());
+        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/cancel".into(), base);
 
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&cancel);
@@ -357,7 +332,7 @@ mod tests {
         let git = binary::git().unwrap();
         worktree::add(git, &repo.path, &root, "brama/locked", &base, &AtomicBool::new(false)).unwrap();
         repo.git(&["worktree", "lock", "--reason", "initializing", root.to_str().unwrap()]);
-        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/locked".into(), base, "t".into());
+        let env = WorktreeEnv::new(repo.path.clone(), root.clone(), root.clone(), "brama/locked".into(), base);
 
         env.undo_checkout(git, false).unwrap();
 
@@ -367,20 +342,20 @@ mod tests {
     }
 
     #[test]
-    fn a_worktree_is_named_after_its_session() {
+    fn a_worktree_is_named_after_its_stem_and_a_taken_name_takes_the_next() {
         use crate::git::test_repo::{temp_dir, TestRepo};
         let repo = TestRepo::with_commit("place-name");
         let worktrees = temp_dir("place-name-worktrees");
-        let placed = place(&repo.path, &worktrees, "3f2a91bc-77d0", "Fix the login", None).unwrap();
+        let placed = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
         let root = placed.worktree_path.unwrap();
-        assert_eq!(root.file_name().unwrap(), "fix-the-login-3f2a91bc");
-        assert_eq!(placed.branch.as_deref(), Some("brama/fix-the-login-3f2a91bc"));
+        assert_eq!(root.file_name().unwrap(), "fix-the-login");
+        assert_eq!(placed.branch.as_deref(), Some("brama/fix-the-login"));
 
         // A folder left behind (an orphan kept for its uncommitted work) takes the next name.
         std::fs::create_dir_all(&root).unwrap();
-        let next = place(&repo.path, &worktrees, "3f2a91bc-77d0", "Fix the login", None).unwrap();
-        assert_eq!(next.worktree_path.unwrap().file_name().unwrap(), "fix-the-login-3f2a91bc-2");
-        assert_eq!(next.branch.as_deref(), Some("brama/fix-the-login-3f2a91bc-2"));
+        let next = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
+        assert_eq!(next.worktree_path.unwrap().file_name().unwrap(), "fix-the-login-2");
+        assert_eq!(next.branch.as_deref(), Some("brama/fix-the-login-2"));
         std::fs::remove_dir_all(worktrees).unwrap();
     }
 
@@ -407,6 +382,5 @@ mod tests {
         assert_eq!(slug("  Ünïcode — only  ", "x"), "n-code-only");
         assert_eq!(slug("…", "session"), "session");
         assert_eq!(slug(&"a".repeat(50), "x").len(), 32);
-        assert_eq!(short_id("3F2a-91bc-77d0"), "3f2a91bc");
     }
 }

@@ -257,16 +257,6 @@
  */
 
 /**
- * A worktree session's folder: its files open in tabs of the project, beside the project's own.
- * @typedef {Object} WorktreeFolder
- * @property {string} sessionId
- * @property {string} projectId
- * @property {string} folder The project's folder in the worktree (`Session.folder`).
- * @property {string} branch
- * @property {string} title The session's.
- */
-
-/**
  * What Apply Locally did with a worktree session's work.
  * @typedef {{ outcome: 'empty' | 'clean' } | { outcome: 'conflicts', conflicts: string[] }} ApplyResult
  *   `conflicts`: files (relative to the repository) left with conflict markers by a three-way merge.

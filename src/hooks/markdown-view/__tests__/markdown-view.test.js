@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
-import { $sessions } from '../../../stores/sessions/sessions.js';
+import { setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { $settings } from '../../../stores/settings/settings.js';
 import { DEFAULT_SETTINGS } from '../../../stores/settings/rules.js';
 import { $project } from '../../../stores/project/project.js';
@@ -13,7 +13,7 @@ describe('markdownView', () => {
 
   afterEach(() => {
     $markdownModes.setKey('/p', undefined);
-    $sessions.set([]);
+    setWorkspaces([]);
     $settings.set(DEFAULT_SETTINGS);
     $project.set(null);
   });
@@ -41,12 +41,8 @@ describe('markdownView', () => {
       expect($markdownModes.get()['/p']).to.equal(undefined);
     });
 
-    it('is the same for a worktree session’s copy as for the project’s file', () => {
-      $sessions.set([
-        /** @type {import('../../sessions/types.js').Session} */ (
-          /** @type {unknown} */ ({ id: 's', projectId: '/p', mode: 'worktree', folder: '/wt/s', branch: 'b', title: 't', status: 'idle' })
-        ),
-      ]);
+    it('is the same for a workspace’s copy as for the project’s file', () => {
+      setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ (/** @type {unknown} */ ({ id: 'w', projectPath: '/p', folder: '/wt/s', branch: 'b' }))], '/p');
 
       markdownView.setMode('/wt/s/docs/a.md', 'split');
 

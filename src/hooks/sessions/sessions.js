@@ -1,6 +1,6 @@
 import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from './adapter.js';
 import { cliInput, cliPromptOf } from './cli-input.js';
-import { saveAttachment, sessionChanges, sessionFileAtBase } from './commands.js';
+import { saveAttachment } from './commands.js';
 import { controller } from './controller.js';
 import { input } from './input.js';
 import { inputOfComposer } from './input-parts.js';
@@ -27,9 +27,4 @@ export const sessions = Object.freeze({
   forgetHistory,
 
   saveAttachment,
-  /** A worktree session's changed files since it started. */
-  changes: sessionChanges,
-  /** A worktree session's file at the commit it started from. */
-  fileAtBase: sessionFileAtBase,
-
 });

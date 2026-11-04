@@ -1,13 +1,13 @@
 /**
  * What a main-column tab shows: a file, or a view (Settings; Changes, every changed file's diff;
  * Terminal; Browser).
- * @typedef {'file' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} TabKind
+ * @typedef {'file' | 'settings' | 'agents' | 'changes' | 'workspace-changes' | 'terminal' | 'browser'} TabKind
  */
 
 /**
  * Which view renders a tab's content: a file's by its extension (`code` for any other), a view tab's
  * by its kind. Picked by `TabContentController`.
- * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'agents' | 'changes' | 'session-changes' | 'terminal' | 'browser'} ContentKind
+ * @typedef {'code' | 'markdown' | 'image' | 'settings' | 'agents' | 'changes' | 'workspace-changes' | 'terminal' | 'browser'} ContentKind
  */
 
 /**

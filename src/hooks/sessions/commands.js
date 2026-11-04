@@ -1,8 +1,6 @@
 import { ipc } from '../ipc/ipc.js';
 
 /** @typedef {import('./types.js').Session} Session */
-/** @typedef {import('../git/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('./types.js').ApplyResult} ApplyResult */
 /** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('./types.js').PromptInput} PromptInput */
 /** @typedef {import('./types.js').SyncReport} SyncReport */
@@ -236,46 +234,6 @@ export function sessionSetConfigOption(sessionId, configId, value) {
  */
 export function sessionOpenLog(sessionId) {
   return ipc.invoke('session_open_log', { sessionId });
-}
-
-
-/**
- * A worktree session's changed files since it started (its commits and uncommitted work).
- * @param {string} sessionId
- * @returns {Promise<GitFileStatus[]>} Paths relative to the session's folder.
- */
-export function sessionChanges(sessionId) {
-  return ipc.invoke('session_changes', { sessionId });
-}
-
-/**
- * Applies a worktree session's work since it started to the project's checkout, unstaged. Rejects
- * while its agent is mid-turn.
- * @param {string} sessionId
- * @returns {Promise<ApplyResult>}
- */
-export function sessionApplyLocally(sessionId) {
-  return ipc.invoke('session_apply_locally', { sessionId });
-}
-
-/**
- * Stops a worktree session's agent and checks its branch out in the project's checkout. Rejects
- * while its agent is mid-turn or the worktree has uncommitted changes.
- * @param {string} sessionId
- * @returns {Promise<void>}
- */
-export function sessionCheckOutBranch(sessionId) {
-  return ipc.invoke('session_check_out_branch', { sessionId });
-}
-
-/**
- * A worktree session's file at the commit it started from: its diff's baseline.
- * @param {string} sessionId
- * @param {string} path Relative to the session's folder.
- * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
- */
-export function sessionFileAtBase(sessionId, path) {
-  return ipc.invoke('session_file_at_base', { sessionId, path });
 }
 
 /**

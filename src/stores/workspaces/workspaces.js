@@ -3,6 +3,7 @@ import { persistentMapStore } from '../persistent/persistent.js';
 import { $openRoots, $project, $projectPath } from '../project/project.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
+/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/workspaces/types.js').ActiveRoot} ActiveRoot */
 
 /** Main's id: the project's own folder, never stored as a workspace. */
@@ -79,3 +80,8 @@ export const $shownFolder = computed($activeRoot, (root) => root.path);
 
 /** The active root's backend id; notifies only when it changes. */
 export const $rootId = computed($activeRoot, (root) => root.rootId);
+
+/** The shown project's workspaces' folders, whose files are marked as theirs. */
+export const $worktrees = computed($workspaces, (list) =>
+  list.map((w) => /** @type {WorktreeFolder} */ ({ projectId: w.projectPath, folder: w.folder, branch: w.branch })),
+);

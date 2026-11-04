@@ -4,7 +4,6 @@ import { $workspaces, MAIN } from '../workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 /** @typedef {import('../../hooks/sessions/types.js').SessionStatus} SessionStatus */
-/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/sessions/types.js').DraftSession} DraftSession */
 
 /** Statuses in which a session holds (or is getting) an agent process. */
@@ -89,23 +88,6 @@ export const $activeFolder = computed([$sessions, $draftSessions, $workspaces, $
   const draft = drafts[id];
   return sessions.find((s) => s.id === id)?.folder ?? (draft ? draftFolder(draft, workspaces) : null);
 });
-
-/** Every worktree session's folder. */
-export const $worktrees = computed($sessions, (sessions) =>
-  sessions.flatMap((s) =>
-    s.mode === 'worktree' && s.branch
-      ? [
-          /** @type {WorktreeFolder} */ ({
-            sessionId: s.id,
-            projectId: s.projectId,
-            folder: s.folder,
-            branch: s.branch,
-            title: s.title,
-          }),
-        ]
-      : [],
-  ),
-);
 
 /**
  * The session last shown per folder (Main's: the project path; a workspace's: its folder), to come

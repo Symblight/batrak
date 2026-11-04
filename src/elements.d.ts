@@ -19,7 +19,7 @@ import type { AcpTerminalAction } from './components/terminal-action/terminal-ac
 import type { AcpGitChanges } from './views/git-changes/git-changes.js';
 import type { AcpFilesView } from './views/files-view/files-view.js';
 import type { AcpChangesTab } from './views/changes-tab/changes-tab.js';
-import type { AcpSessionChangesTab } from './views/session-changes-tab/session-changes-tab.js';
+import type { AcpWorkspaceChangesTab } from './views/workspace-changes-tab/workspace-changes-tab.js';
 import type { AcpSearchPane } from './views/search-pane/search-pane.js';
 import type { AcpSearchView } from './views/search-view/search-view.js';
 import type { AcpSettingsView } from './views/settings-view/settings-view.js';
@@ -109,7 +109,7 @@ declare global {
     'acp-terminal-view': AcpTerminalView;
     'acp-terminals-view': AcpTerminalsView;
     'acp-terminal-action': AcpTerminalAction;
-    'acp-session-changes-tab': AcpSessionChangesTab;
+    'acp-workspace-changes-tab': AcpWorkspaceChangesTab;
     'acp-search-pane': AcpSearchPane;
     'acp-search-view': AcpSearchView;
     'acp-settings-view': AcpSettingsView;

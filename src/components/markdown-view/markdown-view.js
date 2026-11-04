@@ -16,7 +16,7 @@ import styles from './markdown-view.css?inline';
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 /** @typedef {import('../resize-handle/resize-handle.js').ResizeEventDetail} ResizeEventDetail */
 

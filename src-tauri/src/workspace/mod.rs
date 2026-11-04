@@ -217,8 +217,7 @@ impl Workspaces {
         let reserved = |root: &Path, branch: &str| {
             stored.iter().any(|w| w.worktree_path == root || (w.worktree_path.parent() == root.parent() && w.branch == branch))
         };
-        let placed = env::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)
-            .map_err(|e| e.replace("worktree sessions need", "workspaces need"))?;
+        let placed = env::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)?;
         let (Some(worktree_path), Some(branch), Some(base_commit)) = (placed.worktree_path, placed.branch, placed.base_commit) else {
             return Err("a worktree placement without a worktree".to_owned());
         };
@@ -453,7 +452,6 @@ impl WorkspaceRecord {
             self.folder.clone(),
             self.branch.clone(),
             self.base_commit.clone(),
-            self.name.clone(),
         )
     }
 }

@@ -137,27 +137,4 @@ describe('session actions', () => {
     expect(composerOf('s1').configOptions.find((o) => o.id === 'thought_level')?.currentValue).to.equal('low');
     expect($notices.get().length).to.be.greaterThan(0);
   });
-
-  it('says what applying a worktree session locally did, and what checking out its branch did', async () => {
-    $sessions.set([session({ title: 'Fix tabs', branch: 'brama/fix-1', mode: 'worktree' })]);
-    /** @type {[unknown, string, string][]} */
-    const cases = [
-      [{ outcome: 'applied', conflicts: [] }, 'info', 'Applied "Fix tabs" to the project, unstaged'],
-      [{ outcome: 'empty', conflicts: [] }, 'info', '"Fix tabs" has no changes to apply'],
-      [{ outcome: 'conflicts', conflicts: ['a.js', 'b.js'] }, 'warn', 'Applied "Fix tabs" with conflicts in a.js, b.js'],
-    ];
-    for (const [result, level, message] of cases) {
-      $notices.set([]);
-      answer = (cmd) => (cmd === 'session_apply_locally' ? result : null);
-      await actions.applyLocally('s1');
-      expect([$notices.get()[0]?.level, $notices.get()[0]?.message], message).to.deep.equal([level, message]);
-    }
-    $notices.set([]);
-    await actions.checkOutBranch('s1');
-    expect($notices.get()[0]?.message).to.equal('Checked out brama/fix-1');
-    $notices.set([]);
-    answer = (cmd) => (cmd === 'session_check_out_branch' ? new Error('dirty worktree') : null);
-    await actions.checkOutBranch('s1');
-    expect($notices.get()[0]?.level).to.equal('error');
-  });
 });

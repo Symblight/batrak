@@ -18,7 +18,7 @@ import styles from './code-view.css?inline';
 /** @typedef {import('../../hooks/search/types.js').RevealAt} RevealAt */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
-/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/projects/types.js').RootEntry} RootEntry */
 /** @typedef {import('../file-tree/file-tree.js').ListDir} ListDir */
 
@@ -103,7 +103,7 @@ export class AcpCodeView extends LitElement {
     this.root = null;
     /** @type {string | null} The project's snapshot id, for `listDir`; `null` while none is open. */
     this.rootId = null;
-    /** @type {readonly WorktreeFolder[]} Worktree sessions' folders. */
+    /** @type {readonly WorktreeFolder[]} Workspaces' folders. */
     this.worktrees = [];
     /** @type {ListDir} Lists a project folder for a footer crumb. */
     this.listDir = async () => [];

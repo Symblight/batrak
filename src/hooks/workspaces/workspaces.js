@@ -15,7 +15,7 @@ import { $permissionRequests } from '../../stores/session-runtime/session-runtim
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { defaultBase, nextWaiting, noticesOf } from './rules.js';
 import { git } from '../git/git.js';
-import { openSessionChanges, removeProjectTabs } from '../../stores/editor/editor.js';
+import { openWorkspaceChanges, removeProjectTabs } from '../../stores/editor/editor.js';
 import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
 import { app } from '../app/app.js';
@@ -340,16 +340,29 @@ export const workspaces = Object.freeze({
   },
 
   /**
-   * Changes since base: the review tab of the workspace's oldest chat (its worktree is the
-   * workspace's), until the review is keyed by workspace.
+   * Changes since base: opens the workspace's review tab.
    * @param {string} id
    */
   changes(id) {
-    const chat = $sessions
-      .get()
-      .filter((s) => s.workspaceId === id)
-      .reduce((/** @type {import('../sessions/types.js').Session | null} */ a, s) => (a === null || s.createdAt < a.createdAt ? s : a), null);
-    if (chat === null) notify('info', 'Send a first message in this workspace to review its changes');
-    else openSessionChanges(chat.id);
+    openWorkspaceChanges(id);
+  },
+
+  /**
+   * A workspace's changed files since its base (its commits and uncommitted work).
+   * @param {string} id
+   * @returns {Promise<import('../git/types.js').GitFileStatus[]>} Paths relative to its folder.
+   */
+  listChanges(id) {
+    return ipc.invoke('workspace_changes', { id });
+  },
+
+  /**
+   * A workspace's file at its base commit: its diff's baseline.
+   * @param {string} id
+   * @param {string} path Relative to the workspace's folder.
+   * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
+   */
+  fileAtBase(id, path) {
+    return ipc.invoke('workspace_file_at_base', { id, path });
   },
 });

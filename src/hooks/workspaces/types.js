@@ -20,6 +20,14 @@
  */
 
 /**
+ * A workspace's folder, whose files are its (`$worktrees`).
+ * @typedef {Object} WorktreeFolder
+ * @property {string} projectId Its project's path.
+ * @property {string} folder The project's folder in the worktree.
+ * @property {string} branch
+ */
+
+/**
  * Where a draft's first message creates its chat (`session_create`'s `workspace`): Main or a stored
  * workspace.
  * @typedef {{ kind: 'main' } | { kind: 'existing', id: string }} WorkspaceChoice

@@ -37,14 +37,14 @@ import {
   focusComment,
   sendToChat,
 } from '../../stores/comments/comments.js';
-import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $terminals, moveTerminalToEditor } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
+import { $workspaces, $worktrees } from '../../stores/workspaces/workspaces.js';
 import '../../components/tab-view/tab-view.js';
 import '../agents-tab/agents-tab.js';
 import '../changes-tab/changes-tab.js';
 import '../editor-view/editor-view.js';
-import '../session-changes-tab/session-changes-tab.js';
+import '../workspace-changes-tab/workspace-changes-tab.js';
 import '../settings-view/settings-view.js';
 import '../terminal-view/terminal-view.js';
 import '../../components/comment-bar/comment-bar.js';
@@ -65,6 +65,7 @@ export class AcpMainColumn extends ViewElement {
   #editorTabs = new StoreController(this, { store: $editorTabs });
   #project = new StoreController(this, { store: $project });
   #worktrees = new StoreController(this, { store: $worktrees });
+  #workspaces = new StoreController(this, { store: $workspaces });
   #tabComments = new StoreController(this, { store: $tabComments });
   #terminals = new StoreController(this, { store: $terminals });
 
@@ -252,8 +253,8 @@ export class AcpMainColumn extends ViewElement {
         return html`<acp-terminal-view terminal-id=${tabs.terminalOf(tab.id) ?? ''}></acp-terminal-view>`;
       case 'changes':
         return html`<acp-changes-tab ${ref(this.#changesTab)}></acp-changes-tab>`;
-      case 'session-changes':
-        return html`<acp-session-changes-tab .sessionId=${tabs.sessionOf(tab.id)}></acp-session-changes-tab>`;
+      case 'workspace-changes':
+        return html`<acp-workspace-changes-tab .workspaceId=${tabs.workspaceOf(tab.id)}></acp-workspace-changes-tab>`;
       default:
         return nothing;
     }
@@ -271,6 +272,7 @@ export class AcpMainColumn extends ViewElement {
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
         .worktrees=${this.#worktrees.value}
+        .workspaces=${this.#workspaces.value}
         .renderContent=${this.#renderTabContent}
         @keydown=${{ handleEvent: this.#onKeydown, capture: true }}
         .dropName=${tabs.editorDrop}

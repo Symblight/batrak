@@ -73,7 +73,7 @@ Split / Preview, and in Split the scroll sync toggle). There is no status-bar mo
 has no slot for one.
 
 - **View per file:** `markdownView` (`src/hooks/markdown-view/`) reads and writes `$markdownModes` by the
-  file's place in its project (a worktree session's copy is the project's file), falling back to
+  file's place in its project (a workspace's copy is the project's file), falling back to
   `$settings.markdownDefaultView`; setting the default deletes the entry. `pruneModes()`
   (`stores/markdown-view/`) drops entries of files that are gone; nothing calls it yet.
 - **Rendering:** `markdown.render(text, { policy, baseDir, root, decorate })` (`src/hooks/markdown/`) is the

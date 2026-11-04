@@ -4,7 +4,7 @@ paths:
   - "src-tauri/src/commands/git.rs"
   - "src/hooks/git/**"
   - "src/stores/git/git.js"
-  - "src/controllers/{changes-review,session-changes}/**"
+  - "src/controllers/{changes-review,workspace-changes}/**"
   - "src/components/changes-*/**"
   - "docs/specs/agent-git.md"
 ---
@@ -21,12 +21,12 @@ paths:
   terminal, so ssh fails instead of prompting), stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
 - `worktree` backs worktree sessions (`add` / `attach` check out under `Mode::Hooks`: a big
-  tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a worktree session's Apply
-  Locally (`session_apply_locally`: its commits and uncommitted work since `baseCommit` as an
+  tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a workspace's Apply
+  to Main (`workspace_apply_locally`: its commits and uncommitted work since `baseCommit` as an
   unstaged patch, `--3way` with a conflict list when the project moved on; applied from the
   project's folder, so changes outside it are left out) and Check Out Branch
-  (`session_check_out_branch`: refused while the worktree is dirty, which a checkout would leave
-  behind; stops the agent, detaches the worktree). Both are refused mid-turn and hold the turn
+  (`workspace_check_out_branch`: refused while the worktree is dirty, which a checkout would leave
+  behind; stops its chats' agents, detaches the worktree). Both are refused mid-turn and hold the turn
   slot while they run (`SlotGuard`), so no prompt starts under them. A worktree whose
   branch is checked out elsewhere doesn't start (`prepare`) until it can switch back to it. A
   dirty worktree is removed only after its work was committed (`remove_saved`).

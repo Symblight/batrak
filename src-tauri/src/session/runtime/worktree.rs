@@ -1,33 +1,8 @@
-//! Worktree sessions: their folders, changes, Apply Locally, Check Out Branch, and tidying at launch.
+//! Worktrees in app data: tidying them at launch.
 
 use super::*;
 
 impl Sessions {
-    /// Applies the work of a chat's workspace to the project (`workspace_apply_locally`).
-    pub async fn apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
-        self.workspace_apply_locally(&self.workspace_of_chat(id)?).await
-    }
-
-    /// Hands the branch of a chat's workspace to the project (`workspace_check_out_branch`).
-    pub async fn check_out_branch(&self, id: &str) -> Result<(), String> {
-        self.workspace_check_out_branch(&self.workspace_of_chat(id)?).await
-    }
-
-    /// The changes of a chat's workspace since its base (`workspace_changes`). Blocking.
-    pub fn changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
-        self.workspace_changes(&self.workspace_of_chat(id)?)
-    }
-
-    /// A file of a chat's workspace at its base (`workspace_file_at_base`). Blocking.
-    pub fn file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
-        self.workspace_file_at_base(&self.workspace_of_chat(id)?, path)
-    }
-
-    /// The workspace a chat runs in.
-    fn workspace_of_chat(&self, id: &str) -> Result<String, String> {
-        self.get(id)?.record().workspace_id.ok_or_else(|| "only chats in a workspace (a worktree) have changes of their own".to_owned())
-    }
-
     /// At launch: drops the worktree metadata of deleted folders in every project with
     /// workspaces, and removes the worktrees in app data no workspace owns (left by a removal
     /// that failed), unless they hold uncommitted work. Branches stay. Blocking.

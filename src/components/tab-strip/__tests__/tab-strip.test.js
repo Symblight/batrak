@@ -52,6 +52,20 @@ describe('acp-tab-strip', () => {
     expect(labels[1].querySelector('md-icon')).to.not.equal(null);
   });
 
+  it('titles a workspace’s Changes tab after its workspace, and tells its branch', async () => {
+    // Arrange
+    const tab = { ...fileTab(''), id: 'view:workspace-changes:w1', kind: /** @type {const} */ ('workspace-changes') };
+    const workspace = /** @type {import('../../../hooks/workspaces/types.js').Workspace} */ (/** @type {unknown} */ ({ id: 'w1', name: 'Fix tabs', branch: 'brama/fix-tabs' }));
+    // Act
+    const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
+      await fixture(html`<acp-tab-strip .tabs=${[tab]} .workspaces=${[workspace]}></acp-tab-strip>`)
+    );
+    // Assert
+    const label = el.shadowRoot?.querySelector('.acp-tab-strip__label');
+    expect(label?.textContent?.replace(/\s+/g, ' ').trim()).to.include('Fix tabs');
+    expect(el.shadowRoot?.querySelector('md-tooltip')?.textContent).to.include('brama/fix-tabs');
+  });
+
   it('titles a terminal tab from its terminal, or the title its shell set', async () => {
     const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
       await fixture(html`<acp-tab-strip .tabs=${[terminalTab('t1')]} .terminals=${{ t1: terminalInfo }}></acp-tab-strip>`)

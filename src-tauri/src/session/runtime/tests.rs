@@ -1026,9 +1026,9 @@ async fn resume_starts_a_local_session_while_another_runs_in_the_project() {
 #[tokio::test]
 async fn resume_leaves_a_worktree_session_stopped_while_the_project_has_its_branch() {
     let f = git_fixture("resume-wt");
-    let (_, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
+    let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
-    f.sessions.check_out_branch("c").await.unwrap();
+    f.sessions.workspace_check_out_branch(session.workspace_id.as_deref().unwrap()).await.unwrap();
 
     events.clear();
     assert!(!f.sessions.resume("c").await.unwrap());
@@ -1105,7 +1105,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 }
 
 #[tokio::test]
-async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable() {
+async fn a_sessions_folder_is_where_its_agent_works_and_its_workspaces_folder_is_readable() {
     let f = git_fixture("wt-folder");
     let (local, events) = f.create("l", "fake").unwrap();
     let (wt, other) = f.create_in("w", "fake", f.new_workspace(None)).unwrap();
@@ -1120,7 +1120,9 @@ async fn a_sessions_folder_is_where_its_agent_works_and_a_worktree_is_readable()
     assert!(!f.sessions.contains(&root.with_file_name("other").join("a.txt")));
     assert!(!f.sessions.contains(&f.dir.join("data/sessions.json")));
     f.sessions.remove("w").await.unwrap();
-    assert!(!f.sessions.contains(&root.join("a.txt")), "gone with its session");
+    assert!(f.sessions.contains(&root.join("a.txt")), "its workspace stays");
+    f.sessions.delete_workspace(wt.workspace_id.as_deref().unwrap(), false).await.unwrap();
+    assert!(!f.sessions.contains(&root.join("a.txt")), "gone with its workspace");
 }
 
 #[tokio::test]
@@ -1167,39 +1169,39 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
 }
 
 #[tokio::test]
-async fn a_worktree_sessions_changes_are_listed_against_its_base() {
+async fn a_workspaces_changes_are_listed_against_its_base() {
     let f = git_fixture("wt-changes");
     let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
-    let (_, local) = f.create("l", "fake").unwrap();
     events.wait_status("idle").await;
-    local.wait_status("idle").await;
+    let ws = session.workspace_id.clone().unwrap();
     let wt = PathBuf::from(&session.folder);
-    assert!(f.sessions.changes("c").unwrap().is_empty(), "nothing done yet");
+    assert!(f.sessions.workspace_changes(&ws).unwrap().is_empty(), "nothing done yet");
 
     assert_eq!(f.ask("c", &events, &format!("write {} one\nmore", wt.join("a.txt").display())).await, "written");
     assert_eq!(f.ask("c", &events, &format!("write {} new", wt.join("dir/new.txt").display())).await, "written");
-    let changed: Vec<_> = f.sessions.changes("c").unwrap().into_iter().map(|file| file.path).collect();
+    let changed: Vec<_> = f.sessions.workspace_changes(&ws).unwrap().into_iter().map(|file| file.path).collect();
     assert_eq!(changed, ["a.txt", "dir/new.txt"]);
-    assert_eq!(f.sessions.file_at_base("c", "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
-    assert_eq!(f.sessions.file_at_base("c", "dir/new.txt").unwrap(), None);
-    assert!(f.sessions.file_at_base("c", "../x").is_err());
-    assert!(f.sessions.changes("l").unwrap_err().contains("worktree"));
+    assert_eq!(f.sessions.workspace_file_at_base(&ws, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
+    assert_eq!(f.sessions.workspace_file_at_base(&ws, "dir/new.txt").unwrap(), None);
+    assert!(f.sessions.workspace_file_at_base(&ws, "../x").is_err());
+    assert!(f.sessions.workspace_changes("nope").is_err(), "an unknown workspace");
 }
 
 #[tokio::test]
-async fn checking_out_a_worktree_sessions_branch_stops_it_and_hands_the_branch_over() {
+async fn checking_out_a_workspaces_branch_stops_its_chat_and_hands_the_branch_over() {
     let f = git_fixture("wt-checkout");
     let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
     events.wait_status("idle").await;
+    let ws = session.workspace_id.clone().unwrap();
     let wt = PathBuf::from(&session.folder);
     let branch = session.branch.clone().unwrap();
     std::fs::write(wt.join("work.txt"), "w\n").unwrap();
-    let err = f.sessions.check_out_branch("c").await.unwrap_err();
+    let err = f.sessions.workspace_check_out_branch(&ws).await.unwrap_err();
     assert!(err.contains("uncommitted") && err.contains("Apply to Main"), "{err}");
     run_in(&wt, &["add", "."]);
     run_in(&wt, &["commit", "-qm", "agent"]);
 
-    f.sessions.check_out_branch("c").await.unwrap();
+    f.sessions.workspace_check_out_branch(&ws).await.unwrap();
     assert_eq!(run_in(&f.project, &["branch", "--show-current"]).trim(), branch);
     assert_eq!(std::fs::read_to_string(f.project.join("work.txt")).unwrap(), "w\n");
     let listed = f.sessions.list().into_iter().find(|s| s.id == "c").unwrap();

@@ -62,7 +62,7 @@ describe('acp-tab-view', () => {
       { ...fileTab(''), id: 'view:settings', kind: /** @type {const} */ ('settings') },
       { ...fileTab(''), id: 'view:agents', kind: /** @type {const} */ ('agents') },
       { ...fileTab(''), id: 'view:changes', kind: /** @type {const} */ ('changes') },
-      { ...fileTab(''), id: 'view:session-changes:s1', kind: /** @type {const} */ ('session-changes') },
+      { ...fileTab(''), id: 'view:workspace-changes:w1', kind: /** @type {const} */ ('workspace-changes') },
       terminalTab('t1'),
       { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') },
     ];
@@ -79,7 +79,7 @@ describe('acp-tab-view', () => {
     );
     // Assert
     const panels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-view__panel') ?? [])];
-    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:session-changes:s1', 'view:terminal:t1']);
+    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:workspace-changes:w1', 'view:terminal:t1']);
     expect(panels[0].querySelector('.from-host')?.textContent).to.equal('view:settings');
     expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false, false, false, false, false]);
   });

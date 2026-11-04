@@ -7,6 +7,7 @@ import {
   $rootId,
   $shownFolder,
   $workspaceOpening,
+  $worktrees,
   setActiveWorkspace,
   setWorkspaces,
 } from '../workspaces.js';
@@ -23,6 +24,14 @@ describe('workspaces store', () => {
     $openRoots.set({});
     $workspaceOpening.set(null);
     $project.set(null);
+  });
+
+  it("lists each workspace's folder and branch, chats or none, so its files are known as its", () => {
+    // Arrange / Act
+    setWorkspaces([{ ...WORKSPACE, branch: 'brama/task' }], '/p');
+
+    // Assert
+    expect($worktrees.get()).to.deep.equal([{ projectId: '/p', folder: '/wt/task', branch: 'brama/task' }]);
   });
 
   it("shows each project's chosen workspace; Main when none was or it's gone, waiting while its list loads", () => {

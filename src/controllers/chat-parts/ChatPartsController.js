@@ -2,7 +2,8 @@ import { projects } from '../../hooks/projects/projects.js';
 import { buildChipElement } from '@symblight/chat';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { chat } from '../../hooks/chat/chat.js';
-import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
+import { $activeSessionId, folderOf } from '../../stores/sessions/sessions.js';
+import { $worktrees } from '../../stores/workspaces/workspaces.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 

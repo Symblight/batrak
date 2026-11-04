@@ -9,7 +9,7 @@ paths:
   - "src/views/agent-column/**"
   - "src/views/chat-view/**"
   - "src/components/{chat,session-*,markdown,part-thinking,context-meter,mode-picker,agent-picker,model-picker}/**"
-  - "src/controllers/{chat-session,chat-parts,session-changes,session-actions}/**"
+  - "src/controllers/{chat-session,chat-parts,workspace-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input,session-read-state}.md"
 ---
 
@@ -163,14 +163,14 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   and the branch follow it; removing a chat leaves its workspace's root open (only Delete
   workspace closes it). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
-  A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
-  `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no
-  longer offers it, so nothing in the UI opens it now): `SessionChangesController`
-  (`<acp-session-changes-tab>`, one per tab, following its own session) lists `session_changes` (commits and uncommitted work since `baseCommit`,
+  A workspace's Changes tab (`view:workspace-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.workspaceChangesId()`, opened by
+  `openWorkspaceChanges()` from `workspaces.changes()`, Changes since base, with or without chats; kept while the workspace is in
+  the project's `$workspaces`, and until they're listed): `WorkspaceChangesController`
+  (`<acp-workspace-changes-tab>`, one per tab, following its own workspace) lists `workspace_changes` (commits and uncommitted work since `baseCommit`,
   `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
-  each of its turns, and diffs a file against `session_file_at_base`; `<acp-changes-review>` with
-  `base` shows them without commit picks, with Apply locally and Check out branch (through
-  the `sessions` hook).
+  each turn of any of its chats, and diffs a file against `workspace_file_at_base`; `<acp-changes-review>` with
+  `base` shows them without commit picks, with Apply to Main and Check out branch (`workspaces.apply()` /
+  `checkOut()`, the `workspaces` hook).
 - **Config options** (model, thought level, mode): the agent's own, from `session/new` / `session/load`,
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set

@@ -1,5 +1,5 @@
 import { $markdownModes, modeOf, setMode } from '../../stores/markdown-view/markdown-view.js';
-import { $worktrees } from '../../stores/sessions/sessions.js';
+import { $worktrees } from '../../stores/workspaces/workspaces.js';
 import { $settings } from '../../stores/settings/settings.js';
 import { $project } from '../../stores/project/project.js';
 import { projects } from '../projects/projects.js';
