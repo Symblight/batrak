@@ -186,6 +186,27 @@ describe('acp-settings', () => {
       expect(patches, 'a size out of bounds is not asked for').to.deep.equal([{ terminalFontSize: 15 }, { terminalFontSize: 16 }, { terminalFontSize: null }]);
     });
 
+    it('asks for custom colors, and offers them only then, each edit for both schemes', async () => {
+      // Arrange
+      const { el, root } = await render();
+      const patches = changes(el);
+      const colors = () => [...section(root).querySelectorAll('input[type="color"]')].map((i) => /** @type {HTMLInputElement} */ (i));
+      expect(colors(), 'the app’s').to.deep.equal([]);
+      // Act
+      section(root).querySelector('md-segmented-button-group')?.dispatchEvent(new CustomEvent('change', { detail: { value: 'custom' }, bubbles: true }));
+      const pair = { light: settingsHook.terminalPalette, dark: settingsHook.terminalPalette };
+      el.settings = { ...settingsHook.defaults, terminalTheme: 'custom', terminalColors: pair };
+      await rendered(el);
+      const red = /** @type {HTMLInputElement} */ (section(root).querySelector('input[aria-label="Red"]'));
+      expect(colors().length, 'background, foreground, cursor and 16 ANSI').to.equal(19);
+      expect(red.value).to.equal(settingsHook.terminalPalette.red.toLowerCase());
+      red.value = '#123456';
+      red.dispatchEvent(new Event('input', { bubbles: true }));
+      // Assert
+      const edited = { ...settingsHook.terminalPalette, red: '#123456' };
+      expect(patches).to.deep.equal([{ terminalTheme: 'custom' }, { terminalColors: { light: edited, dark: edited } }]);
+    });
+
     it('resets on its own, once something is set', async () => {
       // Arrange
       const { el, root } = await render();

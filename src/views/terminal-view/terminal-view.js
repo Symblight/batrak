@@ -6,7 +6,7 @@ import { sessions } from '../../hooks/sessions/sessions.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { $pendingInput } from '../../stores/chat/chat.js';
 import { $fileDropTarget } from '../../stores/file-drop/file-drop.js';
-import { $terminalFontFamily, $terminalFontSize } from '../../stores/settings/settings.js';
+import { $terminalColors, $terminalFontFamily, $terminalFontSize } from '../../stores/settings/settings.js';
 import { $terminalFocus, $terminals, setTerminalTitle, terminalFocused } from '../../stores/terminals/terminals.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -17,7 +17,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
  * @tag acp-terminal-view
- * @summary A terminal wired to its data: the shell's state, its font, copy, links, asking before a paste runs lines, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
+ * @summary A terminal wired to its data: the shell's state, its font and colors, copy, links, asking before a paste runs lines, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
  * @fires acp-session-view `{ sessionId, view }` the way back to the chat, from a session's ended CLI
  */
 export class AcpTerminalView extends ViewElement {
@@ -29,6 +29,7 @@ export class AcpTerminalView extends ViewElement {
   #terminals = new StoreController(this, { store: $terminals });
   #fontFamily = new StoreController(this, { store: $terminalFontFamily });
   #fontSize = new StoreController(this, { store: $terminalFontSize });
+  #colors = new StoreController(this, { store: $terminalColors });
   #dropTarget = new StoreController(this, { store: $fileDropTarget });
   #pending = new StoreController(this, { store: $pendingInput });
   #focusRequest = new StoreController(this, { store: $terminalFocus });
@@ -123,6 +124,7 @@ export class AcpTerminalView extends ViewElement {
         .info=${info ?? null}
         .fontFamily=${this.#fontFamily.value}
         .fontSize=${this.#fontSize.value}
+        .colors=${this.#colors.value}
         .waiting=${this.#waiting}
         ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
         @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}

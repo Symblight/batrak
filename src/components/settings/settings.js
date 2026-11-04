@@ -40,6 +40,29 @@ const SECTIONS = [
   { id: 'terminal', label: 'Terminal', icon: terminalIcon },
 ];
 
+/** @type {{ key: import('../../hooks/settings/types.js').TerminalColorKey, label: string }[]} */
+const TERMINAL_COLORS = [
+  { key: 'background', label: 'Background' },
+  { key: 'foreground', label: 'Foreground' },
+  { key: 'cursor', label: 'Cursor' },
+  { key: 'black', label: 'Black' },
+  { key: 'red', label: 'Red' },
+  { key: 'green', label: 'Green' },
+  { key: 'yellow', label: 'Yellow' },
+  { key: 'blue', label: 'Blue' },
+  { key: 'magenta', label: 'Magenta' },
+  { key: 'cyan', label: 'Cyan' },
+  { key: 'white', label: 'White' },
+  { key: 'brightBlack', label: 'Bright black' },
+  { key: 'brightRed', label: 'Bright red' },
+  { key: 'brightGreen', label: 'Bright green' },
+  { key: 'brightYellow', label: 'Bright yellow' },
+  { key: 'brightBlue', label: 'Bright blue' },
+  { key: 'brightMagenta', label: 'Bright magenta' },
+  { key: 'brightCyan', label: 'Bright cyan' },
+  { key: 'brightWhite', label: 'Bright white' },
+];
+
 /** How far below the scroller's top a section counts as the one being read. */
 const SPY_OFFSET = 24;
 
@@ -410,6 +433,25 @@ export class AcpSettings extends LitElement {
     </section>`;
   }
 
+  /** @param {import('../../hooks/settings/types.js').TerminalColors} colors */
+  #renderTerminalColors(colors) {
+    return html`<div class="acp-settings__colors">
+      ${TERMINAL_COLORS.map(
+        ({ key, label }) => html`<label class="acp-settings__color">
+          <input
+            class="acp-settings__swatch"
+            type="color"
+            aria-label=${label}
+            .value=${colors.dark[key].toLowerCase()}
+            @input=${(/** @type {Event} */ e) =>
+              this.#change({ terminalColors: settingsHook.withTerminalColor(colors, key, /** @type {HTMLInputElement} */ (e.target).value) })}
+          />
+          <span>${label}</span>
+        </label>`,
+      )}
+    </div>`;
+  }
+
   /** @param {Settings} settings */
   #renderTerminal(settings) {
     const { terminalFont, terminalFontSize, editorFontSize } = settings;
@@ -422,6 +464,20 @@ export class AcpSettings extends LitElement {
         terminalFontSize ?? editorFontSize,
         terminalFontSize === null ? `Same as the editor: ${editorFontSize} px.` : `${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Empty follows the editor.`,
       )}
+      <div class="acp-settings__field">
+        <span class="acp-settings__label" id="acp-settings-terminal-colors">Colors</span>
+        <md-segmented-button-group
+          class="acp-settings__segments"
+          label="Terminal colors"
+          aria-labelledby="acp-settings-terminal-colors"
+          .value=${settings.terminalTheme}
+          @change=${(/** @type {CustomEvent<{ value: Settings['terminalTheme'] }>} */ e) => this.#change({ terminalTheme: e.detail.value })}
+        >
+          <md-segmented-button value="app">From the app</md-segmented-button>
+          <md-segmented-button value="custom">Custom</md-segmented-button>
+        </md-segmented-button-group>
+      </div>
+      ${settings.terminalTheme === 'custom' && settings.terminalColors ? this.#renderTerminalColors(settings.terminalColors) : nothing}
     </section>`;
   }
 

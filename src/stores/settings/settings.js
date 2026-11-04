@@ -1,7 +1,7 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentStore } from '../persistent/persistent.js';
 import { isMarkdownMode } from '../markdown-view/markdown-view.js';
-import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, normalizeHex } from './rules.js';
+import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, TERMINAL_PALETTE, normalizeHex, parseTerminalColors } from './rules.js';
 
 /** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
 /** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
@@ -20,7 +20,8 @@ function isFontSize(size) {
  */
 export function parseSettings(raw) {
   if (!isRecord(raw)) return null;
-  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize } = raw;
+  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize, terminalTheme, terminalColors } = raw;
+  const colors = parseTerminalColors(terminalColors);
   return {
     appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
     accent: (typeof accent === 'string' && normalizeHex(accent)) || DEFAULTS.accent,
@@ -30,6 +31,8 @@ export function parseSettings(raw) {
     markdownScrollSync: typeof markdownScrollSync === 'boolean' ? markdownScrollSync : DEFAULTS.markdownScrollSync,
     terminalFont: typeof terminalFont === 'string' && terminalFont !== '' ? terminalFont : DEFAULTS.terminalFont,
     terminalFontSize: isFontSize(terminalFontSize) ? /** @type {number} */ (terminalFontSize) : DEFAULTS.terminalFontSize,
+    terminalTheme: terminalTheme === 'custom' && colors ? 'custom' : DEFAULTS.terminalTheme,
+    terminalColors: colors,
   };
 }
 
@@ -42,6 +45,8 @@ export const $editorFont = computed($settings, (settings) => settings.editorFont
 export const $editorFontSize = computed($settings, (settings) => settings.editorFontSize);
 export const $markdownDefaultView = computed($settings, (settings) => settings.markdownDefaultView);
 export const $markdownScrollSync = computed($settings, (settings) => settings.markdownScrollSync);
+/** The terminal's custom colors; `null` while it has the app's. */
+export const $terminalColors = computed($settings, (settings) => (settings.terminalTheme === 'custom' ? settings.terminalColors : null));
 /** The terminal's own font, else the editor's. */
 export const $terminalFontFamily = computed($settings, (settings) => settings.terminalFont ?? settings.editorFont);
 export const $terminalFontSize = computed($settings, (settings) => settings.terminalFontSize ?? settings.editorFontSize);
@@ -85,6 +90,19 @@ export function setTerminalFont(family) {
 /** @param {number | null} size Clamped to `FONT_SIZE_MIN`–`FONT_SIZE_MAX`; `null` follows the editor's. */
 export function setTerminalFontSize(size) {
   update('terminalFontSize', size === null ? null : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
+}
+
+/** @param {Settings['terminalTheme']} theme Custom starts from the colors kept, or the default ones. */
+export function setTerminalTheme(theme) {
+  const settings = $settings.get();
+  const terminalColors = theme === 'custom' ? settings.terminalColors ?? { light: TERMINAL_PALETTE, dark: TERMINAL_PALETTE } : settings.terminalColors;
+  $settings.set({ ...settings, terminalTheme: theme, terminalColors });
+}
+
+/** @param {import('../../hooks/settings/types.js').TerminalColors} colors Ignored unless all are colors. */
+export function setTerminalColors(colors) {
+  const parsed = parseTerminalColors(colors);
+  if (parsed) update('terminalColors', parsed);
 }
 
 /** @param {boolean} on */

@@ -16,7 +16,7 @@ describe('settings', () => {
         editorFont: null,
         editorFontSize: 13,
         markdownDefaultView: 'raw',
-        markdownScrollSync: true, terminalFont: null, terminalFontSize: null });
+        markdownScrollSync: true, terminalFont: null, terminalFontSize: null, terminalTheme: 'app', terminalColors: null });
       expect([settings.fontSizeMin, settings.fontSizeMax]).to.deep.equal([10, 24]);
     });
 

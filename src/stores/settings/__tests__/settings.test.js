@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
-import { $settings, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalFont, setTerminalFontSize } from '../settings.js';
-import { DEFAULT_SETTINGS, FONT_SIZE_MAX } from '../rules.js';
+import { $settings, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalTheme } from '../settings.js';
+import { DEFAULT_SETTINGS, FONT_SIZE_MAX, TERMINAL_PALETTE } from '../rules.js';
 
 describe('settings store: markdown', () => {
   afterEach(() => $settings.set(DEFAULT_SETTINGS));
@@ -49,6 +49,40 @@ describe('settings store: markdown', () => {
     expect(inherited).to.deep.equal(['Mono', 14]);
     expect(own, 'clamped').to.deep.equal(['Fira Code', FONT_SIZE_MAX]);
     expect(back).to.deep.equal(['Mono', 14]);
+  });
+
+  it('keeps custom terminal colors only when every one is a color, as a light and dark pair', () => {
+    // Arrange
+    const colors = { light: TERMINAL_PALETTE, dark: { ...TERMINAL_PALETTE, background: '#000000' } };
+    // Act
+    const good = parseSettings({ terminalTheme: 'custom', terminalColors: colors });
+    const bad = parseSettings({ terminalTheme: 'custom', terminalColors: { light: TERMINAL_PALETTE, dark: { ...TERMINAL_PALETTE, red: 'url(x)' } } });
+    const missing = parseSettings({ terminalTheme: 'custom', terminalColors: { light: TERMINAL_PALETTE } });
+    // Assert
+    expect(good).to.deep.include({ terminalTheme: 'custom', terminalColors: colors });
+    expect(bad, 'never custom with no colors').to.deep.include({ terminalTheme: 'app', terminalColors: null });
+    expect(missing).to.deep.include({ terminalTheme: 'app', terminalColors: null });
+  });
+
+  it('gives the terminal colors once custom, keeping them through a switch back to the app’s', () => {
+    // Act
+    const app = $terminalColors.get();
+    setTerminalTheme('custom');
+    const seeded = $terminalColors.get();
+    setTerminalColors({ light: { ...TERMINAL_PALETTE, red: '#123456' }, dark: { ...TERMINAL_PALETTE, red: '#123456' } });
+    const edited = $terminalColors.get();
+    setTerminalColors({ light: TERMINAL_PALETTE, dark: { ...TERMINAL_PALETTE, red: 'nope' } });
+    const refused = $terminalColors.get();
+    setTerminalTheme('app');
+    const back = $terminalColors.get();
+    setTerminalTheme('custom');
+    // Assert
+    expect(app).to.equal(null);
+    expect(seeded).to.deep.equal({ light: TERMINAL_PALETTE, dark: TERMINAL_PALETTE });
+    expect(edited?.dark.red).to.equal('#123456');
+    expect(refused?.dark.red, 'not a color').to.equal('#123456');
+    expect(back).to.equal(null);
+    expect($terminalColors.get()?.dark.red, 'kept').to.equal('#123456');
   });
 
   it('sets the scroll sync', () => {

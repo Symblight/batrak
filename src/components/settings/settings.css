@@ -214,6 +214,18 @@
     outline-offset: 2px;
   }
 }
+.acp-settings__colors {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: var(--acp-space-2);
+}
+.acp-settings__color {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
 .acp-settings__stepper {
   display: flex;
   gap: var(--acp-space-0-5);

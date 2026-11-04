@@ -52,13 +52,24 @@ function withAlpha(color, alpha) {
 }
 
 /**
- * xterm's colors: the app's surface, text and primary (from its tokens), and a fixed ANSI set.
+ * xterm's colors: a palette's, else the app's surface, text and primary (from its tokens) and a fixed ANSI set.
  * @param {{ background: string, foreground: string, primary: string }} tokens Resolved colors; an
  *   empty one keeps xterm's default.
  * @param {boolean} dark
+ * @param {import('../../hooks/settings/types.js').TerminalPalette | null} [palette]
  * @returns {ITheme}
  */
-export function terminalTheme({ background, foreground, primary }, dark) {
+export function terminalTheme({ background, foreground, primary }, dark, palette = null) {
+  if (palette) {
+    return {
+      ...palette,
+      cursorAccent: palette.background,
+      selectionBackground: withAlpha(palette.cursor, 0.3),
+      scrollbarSliderBackground: withAlpha(palette.foreground, 0.2),
+      scrollbarSliderHoverBackground: withAlpha(palette.foreground, 0.4),
+      scrollbarSliderActiveBackground: withAlpha(palette.foreground, 0.5),
+    };
+  }
   return {
     ...(dark ? ANSI_DARK : ANSI_LIGHT),
     ...(background && { background }),

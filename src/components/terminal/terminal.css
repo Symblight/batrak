@@ -5,7 +5,7 @@
   box-sizing: border-box;
   flex: 1;
   min-height: 0;
-  background: var(--acp-color-surface);
+  background: var(--acp-terminal-background, var(--acp-color-surface));
   padding: var(--acp-tab-view-padding, 0);
 }
 .acp-terminal__screen {

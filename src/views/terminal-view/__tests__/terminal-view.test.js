@@ -4,6 +4,7 @@ import { app } from '../../../hooks/app/app.js';
 import { fileDrop } from '../../../hooks/file-drop/file-drop.js';
 import { terminals } from '../../../hooks/terminals/terminals.js';
 import { $settings } from '../../../stores/settings/settings.js';
+import { DEFAULT_SETTINGS, TERMINAL_PALETTE } from '../../../stores/settings/rules.js';
 import { $pendingInput, addDrop } from '../../../stores/chat/chat.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 import { $terminalFocus, $terminals, addSessionTerminal, focusTerminal } from '../../../stores/terminals/terminals.js';
@@ -99,6 +100,13 @@ describe('acp-terminal-view', () => {
     // Assert
     expect([terminal.terminalId, terminal.info, terminal.connect === terminals.connect]).to.deep.equal(['t1', running, true]);
     expect([terminal.fontFamily, terminal.fontSize]).to.deep.equal(['Mono X', 15]);
+    expect(terminal.colors, 'the app’s').to.equal(null);
+    // Act
+    $settings.set({ ...$settings.get(), terminalTheme: 'custom', terminalColors: { light: TERMINAL_PALETTE, dark: TERMINAL_PALETTE } });
+    await el.updateComplete;
+    // Assert
+    expect(terminal.colors?.dark).to.equal(TERMINAL_PALETTE);
+    $settings.set(DEFAULT_SETTINGS);
     // Act
     $terminals.set({});
     await el.updateComplete;

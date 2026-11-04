@@ -58,6 +58,7 @@ export class AcpTerminal extends LitElement {
     info: { attribute: false },
     fontFamily: { attribute: false },
     fontSize: { attribute: false },
+    colors: { attribute: false },
     gpu: { attribute: false },
     platform: { attribute: false },
     chatFallback: { type: Boolean, attribute: 'chat-fallback' },
@@ -101,6 +102,8 @@ export class AcpTerminal extends LitElement {
     this.fontFamily = null;
     /** @type {number} px */
     this.fontSize = 13;
+    /** @type {import('../../hooks/settings/types.js').TerminalColors | null} Its own colors; `null` for the app's. */
+    this.colors = null;
     /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
     this.gpu = true;
     /** @type {import('../../hooks/app/types.js').Platform} Which keys are the app's and the shell's. */
@@ -125,7 +128,16 @@ export class AcpTerminal extends LitElement {
     const style = getComputedStyle(this);
     const token = (/** @type {string} */ name) => style.getPropertyValue(name).trim();
     const tokens = { background: token('--acp-color-surface'), foreground: token('--acp-color-on-surface'), primary: token('--acp-color-primary') };
-    return terminalTheme(tokens, document.documentElement.dataset.theme === 'dark');
+    const dark = document.documentElement.dataset.theme === 'dark';
+    return terminalTheme(tokens, dark, dark ? this.colors?.dark : this.colors?.light);
+  }
+
+  /** @param {Terminal} term */
+  #applyTheme(term) {
+    const theme = this.#theme();
+    term.options.theme = theme;
+    // The padding around xterm's screen is the host's.
+    this.style.setProperty('--acp-terminal-background', theme.background ?? null);
   }
 
   #font() {
@@ -161,12 +173,12 @@ export class AcpTerminal extends LitElement {
       fontSize: this.fontSize,
       scrollback: 10000,
       macOptionIsMeta: false,
-      theme: this.#theme(),
       linkHandler: { activate: this.#openLink },
       // The Unicode addon registers through xterm's proposed API.
       allowProposedApi: true,
     });
     this.#term = term;
+    this.#applyTheme(term);
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
     term.loadAddon(new WebLinksAddon(this.#openLink));
@@ -182,7 +194,7 @@ export class AcpTerminal extends LitElement {
     this.#resizes = new ResizeObserver(() => this.#scheduleFit());
     this.#resizes.observe(this);
     this.#themes = new MutationObserver(() => {
-      if (this.#term) this.#term.options.theme = this.#theme();
+      if (this.#term) this.#applyTheme(this.#term);
     });
     this.#themes.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
   }
@@ -214,6 +226,7 @@ export class AcpTerminal extends LitElement {
       this.#visible = false;
       this.#scheduleFit();
     }
+    if (changed.get('colors') !== undefined) this.#applyTheme(term);
     if (changed.has('fontFamily') || changed.has('fontSize')) {
       term.options.fontFamily = this.#font();
       term.options.fontSize = this.fontSize;

@@ -1,7 +1,7 @@
 import { generateTheme } from '@symblight/md-colors/client';
 import { $systemFonts } from '../../stores/fonts/fonts.js';
 import { $accent, $appearance, $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
-import { DEFAULT_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS, normalizeHex } from '../../stores/settings/rules.js';
+import { DEFAULT_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS, TERMINAL_PALETTE, normalizeHex, withTerminalColor } from '../../stores/settings/rules.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 
@@ -69,6 +69,8 @@ export const settings = Object.freeze({
   fontSizeMax: FONT_SIZE_MAX,
   defaultEditorFont: DEFAULT_EDITOR_FONT,
   normalizeHex,
+  terminalPalette: TERMINAL_PALETTE,
+  withTerminalColor,
 
   lineHeightFor,
   fontStack,

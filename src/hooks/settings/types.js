@@ -34,6 +34,20 @@
  * @property {string | null} logDir
  */
 
+/** @typedef {'background' | 'foreground' | 'cursor' | 'black' | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' | 'white' | 'brightBlack' | 'brightRed' | 'brightGreen' | 'brightYellow' | 'brightBlue' | 'brightMagenta' | 'brightCyan' | 'brightWhite'} TerminalColorKey */
+
+/**
+ * A terminal's colors, `#RRGGBB`; the keys are xterm's.
+ * @typedef {Record<TerminalColorKey, string>} TerminalPalette
+ */
+
+/**
+ * A custom terminal theme: a palette per scheme.
+ * @typedef {Object} TerminalColors
+ * @property {TerminalPalette} light
+ * @property {TerminalPalette} dark
+ */
+
 /**
  * App preferences, shared by every window.
  * @typedef {Object} Settings
@@ -45,6 +59,8 @@
  * @property {boolean} markdownScrollSync In Split, the editor and the preview scroll together.
  * @property {string | null} terminalFont Terminal font family; `null` follows the editor's.
  * @property {number | null} terminalFontSize Terminal font size in px; `null` follows the editor's.
+ * @property {'app' | 'custom'} terminalTheme Whose colors the terminal has; `custom` always has `terminalColors`.
+ * @property {TerminalColors | null} terminalColors Kept while the theme is `app`, for going back.
  */
 
 export {};
