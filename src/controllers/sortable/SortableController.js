@@ -162,7 +162,10 @@ export class SortableController {
   /** No native drag (an image, a selection) may start from an item: the page's would be swallowed. */
   #onDragstart = (/** @type {Event} */ e) => e.preventDefault();
 
-  /** Pointer Events don't stop the browser selecting text as the mouse moves: a drag would select the page. */
+  /**
+   * Pointer Events don't stop the browser selecting text as the mouse moves: a drag would select the
+   * page. WebKit goes on selecting past `selectstart`, so nothing is selectable during a press.
+   */
   #onSelectstart = (/** @type {Event} */ e) => e.preventDefault();
 
   /** @param {PointerEvent} e */
@@ -182,6 +185,8 @@ export class SortableController {
     window.addEventListener('pointercancel', this.#onPointercancel, true);
     window.addEventListener('keydown', this.#onKeydown, true);
     window.addEventListener('selectstart', this.#onSelectstart, true);
+    document.body.style.setProperty('-webkit-user-select', 'none');
+    document.body.style.setProperty('user-select', 'none');
     window.addEventListener('blur', this.#cancel);
   };
 
@@ -198,6 +203,7 @@ export class SortableController {
     if (!press.moved) {
       if (Math.hypot(pointer.x - press.x, pointer.y - press.y) < DRAG_THRESHOLD) return;
       press.moved = true;
+      window.getSelection()?.removeAllRanges();
       this.#start(press);
     }
     const drag = this.#drag;
@@ -255,6 +261,8 @@ export class SortableController {
     window.removeEventListener('pointercancel', this.#onPointercancel, true);
     window.removeEventListener('keydown', this.#onKeydown, true);
     window.removeEventListener('selectstart', this.#onSelectstart, true);
+    document.body.style.removeProperty('-webkit-user-select');
+    document.body.style.removeProperty('user-select');
     window.removeEventListener('blur', this.#cancel);
     if (this.#drag) this.#finish(false);
     this.#press = null;
