@@ -7,9 +7,9 @@ runs:
     # Version from package.json's packageManager: later pnpm 10 releases (10.34.9 at
     # least) allowlist a git-hosted package's build only by its exact commit spec, so they refuse
     # rich-components' prepare.
-    - uses: pnpm/action-setup@v4
+    - uses: pnpm/action-setup@v6
 
-    - uses: actions/setup-node@v4
+    - uses: actions/setup-node@v7
       with:
         node-version: lts/*
         cache: pnpm
