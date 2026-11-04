@@ -3223,6 +3223,43 @@ async fn worktree_sessions_become_workspaces_at_load_and_local_ones_stay_in_main
 }
 
 #[tokio::test]
+async fn a_corrupt_workspaces_file_loses_no_chats_workspace_or_worktree() {
+    let f = git_fixture("ws-corrupt");
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let (_, events) = f.create_in_workspace("a", &ws.id).unwrap();
+    events.wait_status("idle").await;
+    std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
+    f.sessions.shutdown();
+    std::fs::write(f.dir.join("data/workspaces.json"), "{ not json").unwrap();
+
+    let reopened = Sessions::new(options_for(&f.dir, &f.launcher));
+    reopened.tidy_worktrees();
+
+    let workspaces = reopened.workspaces().list(&f.project);
+    assert_eq!(workspaces.iter().map(|w| &w.folder).collect::<Vec<_>>(), [&ws.folder], "its workspace is back");
+    let chat = reopened.list().into_iter().find(|s| s.id == "a").unwrap();
+    assert_eq!(chat.workspace_id.as_deref(), Some(workspaces[0].id.as_str()));
+    assert_eq!(std::fs::read_to_string(ws.folder.join("a.txt")).unwrap(), "edited", "the worktree stays");
+}
+
+#[tokio::test]
+async fn a_workspace_being_deleted_gets_no_new_or_listed_chat() {
+    let options = listing();
+    let f = git_fixture_with("ws-deleting", options.clone());
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    options.stored.lock().unwrap().push(fake_agent::FakeSession::new("in-ws", &ws.folder, Some("Listed"), None));
+    let deleting = f.sessions.workspaces().deleting(&ws.id);
+
+    let err = f.create_in_workspace("late", &ws.id).unwrap_err();
+    f.sessions.sync(&f.project, None).await;
+
+    assert!(err.contains("being deleted"), "{err}");
+    assert!(f.sessions.list().is_empty(), "neither the new nor the listed chat");
+    drop(deleting);
+    assert!(f.create_in_workspace("after", &ws.id).is_ok(), "a delete that stopped leaves it usable");
+}
+
+#[tokio::test]
 async fn a_workspace_outlives_its_only_chat() {
     let f = git_fixture("ws-new");
 

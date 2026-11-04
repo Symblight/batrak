@@ -359,7 +359,11 @@ impl Inner {
             if hidden.contains_key(&item.session_id) {
                 continue;
             }
-            let record = listed_record(project, workspace_of(&item.cwd), agent, item);
+            let workspace = workspace_of(&item.cwd);
+            if workspace.is_some_and(|w| self.workspaces.is_deleting(&w.id)) {
+                continue;
+            }
+            let record = listed_record(project, workspace, agent, item);
             if sessions.contains_key(&record.session_id) {
                 continue;
             }

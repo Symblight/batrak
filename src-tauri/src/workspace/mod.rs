@@ -75,6 +75,8 @@ struct Inner {
     failed: Mutex<HashMap<String, String>>,
     /// Set by Delete: its checkout stops and undoes itself.
     cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Being deleted (`Deleting`): no chat joins them.
+    deleting: Mutex<HashSet<String>>,
     /// Told the project of every change (the app: `workspaces://changed` to every window).
     on_change: Mutex<Option<OnChange>>,
 }
@@ -108,6 +110,7 @@ impl Workspaces {
                 creating: Mutex::default(),
                 failed: Mutex::default(),
                 cancels: Mutex::default(),
+                deleting: Mutex::default(),
                 on_change: Mutex::default(),
             }),
         }
@@ -153,6 +156,24 @@ impl Workspaces {
 
     pub fn get(&self, id: &str) -> Result<WorkspaceRecord, String> {
         self.inner.store.get(id)
+    }
+
+    /// A workspace a new chat may join: not one being deleted.
+    pub fn for_new_chat(&self, id: &str) -> Result<WorkspaceRecord, String> {
+        if self.is_deleting(id) {
+            return Err(format!("workspace {id} is being deleted"));
+        }
+        self.get(id)
+    }
+
+    pub fn is_deleting(&self, id: &str) -> bool {
+        lock(&self.inner.deleting).contains(id)
+    }
+
+    /// Marks a workspace as being deleted until the guard drops (done, or stopped halfway).
+    pub fn deleting(&self, id: &str) -> Deleting {
+        lock(&self.inner.deleting).insert(id.to_owned());
+        Deleting { inner: Arc::clone(&self.inner), id: id.to_owned() }
     }
 
     /// The folder of a workspace checked out and not checking out now: what a window opens as its root.
@@ -388,6 +409,18 @@ impl Workspaces {
     /// Never cleared once set: only Delete sets it, and the workspace goes.
     fn cancel_flag(&self, id: &str) -> Arc<AtomicBool> {
         Arc::clone(lock(&self.inner.cancels).entry(id.to_owned()).or_default())
+    }
+}
+
+/// A workspace being deleted, while held (`Workspaces::deleting`).
+pub struct Deleting {
+    inner: Arc<Inner>,
+    id: String,
+}
+
+impl Drop for Deleting {
+    fn drop(&mut self) {
+        lock(&self.inner.deleting).remove(&self.id);
     }
 }
 

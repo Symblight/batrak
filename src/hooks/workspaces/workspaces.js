@@ -231,7 +231,8 @@ export const workspaces = Object.freeze({
     const base = baseBranch ?? (await defaultBaseOf(projectPath));
     /** @type {Workspace} */
     const created = await ipc.invoke('workspace_create', { projectPath, name: null, baseBranch: base });
-    // Listed now, before `workspaces://changed` brings it.
+    // Listed now, before `workspaces://changed` brings it; a list asked before it was made is dropped.
+    latest++;
     if ($projectPath.get() === projectPath && !$workspaces.get().some((w) => w.id === created.id)) {
       setWorkspaces([...$workspaces.get(), created], projectPath);
     }

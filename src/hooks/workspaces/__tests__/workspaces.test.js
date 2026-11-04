@@ -114,6 +114,36 @@ describe('workspaces hook', () => {
     expect($workspaces.get().map((w) => w.creating)).to.deep.equal([false]);
   });
 
+  it('keeps a just created workspace listed when a list asked before it was made lands after', async () => {
+    // Arrange: a change's list is still out when the create answers
+    let lists = 0;
+    /** @type {(list: unknown) => void} */
+    let answerLate = () => {};
+    clearMocks();
+    mockIPC(
+      (cmd) => {
+        if (cmd === 'workspace_create') return { id: 'new', projectPath: '/work/a', name: 'Workspace 2' };
+        if (cmd !== 'workspaces_list') return null;
+        lists++;
+        return lists === 1 ? [] : new Promise((resolve) => (answerLate = resolve));
+      },
+      { shouldMockEvents: true },
+    );
+    stop = workspaces.start();
+    $project.set({ path: '/work/a', name: 'a', rootId: null });
+    await until(() => lists === 1);
+    await emit('workspaces://changed', { projectPath: '/work/a' });
+    await until(() => lists === 2);
+
+    // Act
+    await workspaces.create('/work/a', 'main');
+    answerLate([]);
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Assert
+    expect($workspaces.get().map((w) => w.id)).to.deep.equal(['new']);
+  });
+
   it("opens the shown chat's workspace as the root once, keeps it for coming back, and closes it once the workspace goes", async () => {
     // Arrange
     /** @type {unknown[]} */

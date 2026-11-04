@@ -6,6 +6,7 @@ impl Sessions {
     /// Deletes a workspace: each of its chats is removed as Remove session removes one (a running
     /// turn ends `cancelled`), then its folder (`Workspaces::discard`).
     pub async fn delete_workspace(&self, id: &str, keep_branch: bool) -> Result<(), String> {
+        let _deleting = self.inner.workspaces.deleting(id);
         for chat in self.chats_of(id) {
             self.remove(&chat).await?;
         }
@@ -168,15 +169,19 @@ pub(super) fn in_turn(status: SessionStatus) -> bool {
     )
 }
 
-/// Gives each worktree session without a workspace one of its own (`Workspaces::adopt`), at
-/// every load, so it's idempotent. `true` when a record changed.
+/// Gives each worktree session without a known workspace one (`Workspaces::adopt`): an older
+/// version's, or one whose `workspaces.json` was lost. At every load, so it's idempotent. `true`
+/// when a record changed.
 pub(super) fn migrate(workspaces: &crate::workspace::Workspaces, records: &mut [SessionRecord]) -> bool {
     let mut changed = false;
-    for record in records.iter_mut().filter(|r| r.mode == Mode::Worktree && r.workspace_id.is_none()) {
+    let known = |id: &Option<String>| id.as_deref().is_some_and(|id| workspaces.get(id).is_ok());
+    for record in records.iter_mut().filter(|r| r.mode == Mode::Worktree && !known(&r.workspace_id)) {
         match workspaces.adopt(record) {
             Ok(workspace) => {
-                record.workspace_id = Some(workspace.id);
-                changed = true;
+                if record.workspace_id.as_ref() != Some(&workspace.id) {
+                    record.workspace_id = Some(workspace.id);
+                    changed = true;
+                }
             }
             Err(e) => tracing::warn!("moving a worktree session into a workspace failed: {e}"),
         }

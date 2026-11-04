@@ -160,8 +160,8 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   icon, no diff gutter, re-read when its turn ends; its folder refs
   reveal the project's same folder. While a chat of a workspace is shown, the window shows that
   workspace's folder (`$activeRoot`, see CLAUDE.md "Open roots"): Files, Search, Changes, Quick Open
-  and the branch follow it; removing a workspace's last chat closes its root first (its folder may
-  go with it). A prompt path that is relative is the session's own copy; an
+  and the branch follow it; removing a chat leaves its workspace's root open (only Delete
+  workspace closes it). A prompt path that is relative is the session's own copy; an
   absolute one inside the project is the user's file there (a selection quotes the project's text).
   A session's own Changes tab (`view:session-changes:<id>`, `stores/tab-ids/tab-ids.js`, `tabs.sessionChangesId()`, opened by
   `openSessionChanges()`; kept while it's a worktree session of the project; the session row menu no

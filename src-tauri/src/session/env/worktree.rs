@@ -163,7 +163,7 @@ impl SessionEnv for WorktreeEnv {
                     self.branch
                 ));
             }
-            exec::run(git, &self.root, &exec::args(&[&"switch", &"--end-of-options", &self.branch]), GitMode::Local)?;
+            worktree::switch(git, &self.root, &self.branch)?;
         }
         if self.dir.is_dir() {
             Ok(())
@@ -219,7 +219,7 @@ impl WorktreeEnv {
             let admin = fs::read_to_string(self.root.join(".git")).ok();
             let locked = admin.as_deref().and_then(|a| a.trim().strip_prefix("gitdir: ")).is_some_and(|dir| Path::new(dir).join("locked").exists());
             if locked {
-                exec::run(git, &self.project, &exec::args(&[&"worktree", &"unlock", &self.root]), GitMode::Local)?;
+                worktree::unlock(git, &self.project, &self.root)?;
             }
             worktree::remove_saved(git, &self.project, &self.root)?;
         }

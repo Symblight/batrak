@@ -169,7 +169,7 @@ impl Sessions {
                 (Mode::Local, env::place(Mode::Local, &project, self.inner.data_dir(), &req.session_id, &req.title, None)?, None)
             }
             WorkspaceChoice::Existing { id } => {
-                let workspace = self.inner.workspaces.get(id)?;
+                let workspace = self.inner.workspaces.for_new_chat(id)?;
                 if workspace.project_path != project {
                     return Err(format!("workspace {id} belongs to another project"));
                 }

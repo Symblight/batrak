@@ -146,6 +146,16 @@ pub fn remove_saved(git: &Path, repo: &Path, path: &Path) -> Result<(), String> 
     })
 }
 
+/// Puts the worktree at `path` back on `branch`.
+pub fn switch(git: &Path, path: &Path, branch: &str) -> Result<(), String> {
+    with_mutation(git, path, || exec::run(git, path, &exec::args(&[&"switch", &"--end-of-options", &branch]), Mode::Local).map(drop))
+}
+
+/// Unlocks the worktree at `path`, which a checkout killed outright leaves locked.
+pub fn unlock(git: &Path, repo: &Path, path: &Path) -> Result<(), String> {
+    with_mutation(git, repo, || exec::run(git, repo, &exec::args(&[&"worktree", &"unlock", &path]), Mode::Local).map(drop))
+}
+
 /// Drops metadata of worktrees whose directories were deleted outside the app.
 pub fn prune(git: &Path, repo: &Path) -> Result<(), String> {
     with_mutation(git, repo, || exec::run(git, repo, &exec::args(&[&"worktree", &"prune"]), Mode::Local).map(drop))

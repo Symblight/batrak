@@ -17,7 +17,6 @@ import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
 import { forgetRead, recordBaselines } from '../../stores/session-read/session-read.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
-import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { showColumn } from '../../stores/layout/layout.js';
 import {
   $activeSessionId,
@@ -492,13 +491,6 @@ function start(id, title) {
  * @returns {Promise<void>}
  */
 async function remove(id) {
-  const worktree = $sessions.get().find((s) => s.id === id && s.mode === 'worktree')?.folder ?? null;
-  const workspaceId = $sessions.get().find((s) => s.id === id)?.workspaceId ?? null;
-  // Its workspace may go with its last chat: nothing may watch the folder while it's deleted
-  // (Windows refuses a watched folder).
-  if (worktree !== null && workspaceId && !$sessions.get().some((s) => s.id !== id && s.workspaceId === workspaceId)) {
-    await projects.closeFolder(worktree);
-  }
   try {
     // One the backend doesn't know yet is only unlisted (its New worktree's workspace is still being created).
     if (!unknownToBackend.delete(id)) await sessionRemove(id);
@@ -518,7 +510,6 @@ async function remove(id) {
   forgetComposer(id);
   forgetContextUsage(id);
   forgetPendingInput(id);
-  if (worktree !== null) removeProjectExpandedFolders(worktree);
   opened.delete(id);
   removeSession(id);
   // After it is unlisted: while it's shown and listed, dropping its mark would have it marked seen again.
