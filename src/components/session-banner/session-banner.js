@@ -202,7 +202,7 @@ export class AcpSessionBanner extends LitElement {
       ?hidden=${!shown}
       .label=${label}
       .variant=${variant}
-      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap')}
+      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap' || notice?.kind === 'stop-reason')}
       @chx-input-mode-banner-dismiss=${() => this.#act('dismiss-notice')}
     >
       ${request ? this.#renderPermission(request) : notice ? this.#renderNoticeActions(notice) : nothing}

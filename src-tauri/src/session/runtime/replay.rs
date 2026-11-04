@@ -61,15 +61,18 @@ impl ReplayLog {
     }
 }
 
-/// A tool call as the page and this log keep it: what its card shows, and `content` only for the
-/// reason of a failure. Diffs, terminal output and raw input and output can be large, and nothing
-/// after `note_touched` reads them.
+/// A tool call as the page and this log keep it: what its card shows, and the text of `content`
+/// only for the reason of a failure. Diffs, terminal output and raw input and output can be large,
+/// and nothing after `note_touched` reads them.
 pub(super) fn keep_shown_fields(tool_call: &mut Value) {
     let failed = tool_call["status"] == "failed";
     if let Some(fields) = tool_call.as_object_mut() {
         fields.retain(|key, _| {
             matches!(key.as_str(), "sessionUpdate" | "toolCallId" | "title" | "kind" | "status" | "locations") || (failed && key == "content")
         });
+    }
+    if let Some(blocks) = tool_call.get_mut("content").and_then(Value::as_array_mut) {
+        blocks.retain(|block| block["content"]["type"] == "text");
     }
 }
 
@@ -110,10 +113,11 @@ mod tests {
     #[test]
     fn a_tool_update_keeps_what_the_page_shows_and_a_failures_reason() {
         let text = json!([{ "type": "content", "content": { "type": "text", "text": "boom" } }]);
+        let mixed = json!([text[0], { "type": "diff", "path": "a.js", "newText": "x" }, { "type": "terminal", "terminalId": "t" }]);
         let full = |status: &str| {
             json!({
                 "sessionUpdate": "tool_call_update", "toolCallId": "t1", "title": "Run", "kind": "execute", "status": status,
-                "locations": [{ "path": "a.js" }], "content": text, "rawInput": { "big": 1 }, "rawOutput": { "big": 2 },
+                "locations": [{ "path": "a.js" }], "content": mixed, "rawInput": { "big": 1 }, "rawOutput": { "big": 2 },
                 "_meta": { "big": 3 },
             })
         };

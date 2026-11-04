@@ -218,13 +218,14 @@
  * What the chat says about a session above its composer: the agent starting, an error (with
  * Restart and Open log), the agent stopped (with Resume), or information until dismissed.
  * @typedef {Object} SessionNotice
- * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued' | 'overlap' | 'sign-in'} kind `outdated`:
+ * @property {'progress' | 'error' | 'stopped' | 'info' | 'outdated' | 'queued' | 'overlap' | 'stop-reason' | 'sign-in'} kind `outdated`:
  *   agents.json changed what the running agent runs; Restart picks it up. `queued`: the turn waits for
  *   `holder`'s. `overlap`: another running turn changed a file this one did, until the turn ends.
+ *   `stop-reason`: why the last turn stopped short, until the next starts.
  *   `sign-in`: the agent asks for a sign-in; a prompt sent meanwhile waits for it.
  * @property {string} message
  * @property {{ id: string, title: string | null }} [holder] `queued`: the session whose turn has the checkout.
- * @property {SessionNotice} [under] The notice it covers (`overlap`'s, a refused send's), back when it goes.
+ * @property {SessionNotice} [under] The notice it covers (`overlap`'s, `stop-reason`'s, a refused send's), back when it goes.
  * @property {string} [offAgent] `error`: the user turned this agent off; Turn on starts the session again.
  * @property {SessionSignIn} [signIn] `sign-in`: the agent and the ways it offers.
  */

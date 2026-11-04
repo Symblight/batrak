@@ -218,7 +218,7 @@ describe('acp-adapter', () => {
       handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-end', payload: { stopReason, at: AT } });
       handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'idle' } });
 
-      const expected = message === null ? null : { kind: 'info', message };
+      const expected = message === null ? null : { kind: 'stop-reason', message };
       expect($sessionNotices.get()[id] ?? null, stopReason).to.deep.equal(expected);
     }
   });

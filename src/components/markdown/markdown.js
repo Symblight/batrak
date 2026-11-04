@@ -16,7 +16,7 @@ import styles from './markdown.css?inline';
 
 /**
  * @tag acp-markdown
- * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams, only its last block.
+ * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams, only its last blocks.
  * @fires acp-link-open `{ url }` A web or mail link, for the browser.
  * @fires acp-file-open `{ path }` A link to a file in the project (document).
  * @fires acp-file-reveal `{ path, expand: true }` A link to a folder in the project (document).
@@ -142,11 +142,12 @@ export class AcpMarkdown extends LitElement {
 
   /**
    * How many leading blocks a paint can leave alone without rendering them: while text only grows
-   * at its end, all but the last, which nothing after it can change.
+   * at its end, all but the last two. The last can change, and so can the one before it, which it
+   * may still join (`1. a\n\n2` is a list and a paragraph, `1. a\n\n2. b` one list).
    */
   #settledBlocks() {
     if (!this.streaming || this.#painted === null || !this.text.startsWith(this.#painted)) return 0;
-    return Math.max(0, this.#blocks.length - 1);
+    return Math.max(0, this.#blocks.length - 2);
   }
 
   /**

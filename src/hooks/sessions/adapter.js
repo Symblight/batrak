@@ -169,7 +169,8 @@ function showSubagentCard(sessionId, subagentId) {
   const subagent = $subagents.get()[sessionId]?.find((s) => s.id === subagentId);
   const conversationId = subagentConversationId(sessionId, subagentId);
   if (!subagent || subagentCards.has(conversationId)) return;
-  const fields = { label: subagentLabel(subagent), kind: 'think', status: cardStatus(subagent) };
+  // Detached: a subagent can outlive the turn that started it, and its status comes on later.
+  const fields = { label: subagentLabel(subagent), kind: 'think', status: cardStatus(subagent), detached: true };
   const turn = turns.get(sessionId);
   if (turn?.started) {
     for (const chunk of turn.builder.subagentCard(subagentId, fields)) enqueue(sessionId, chunk);
@@ -358,6 +359,7 @@ export function handleSessionEvent(event) {
     }
     case 'turn-start': {
       endReplay(sessionId);
+      if ($sessionNotices.get()[sessionId]?.kind === 'stop-reason') dismissSessionNotice(sessionId);
       const turn = turns.get(sessionId);
       if (turn) turn.started = true;
       return;
@@ -372,7 +374,11 @@ export function handleSessionEvent(event) {
       clearPermissionRequests(sessionId);
       if ($sessionNotices.get()[sessionId]?.kind === 'overlap') dismissSessionNotice(sessionId);
       const message = stopNotice(event.payload.stopReason);
-      if (message && !$sessionNotices.get()[sessionId]) setSessionNotice(sessionId, { kind: 'info', message });
+      if (message) {
+        const current = $sessionNotices.get()[sessionId];
+        const under = current?.kind === 'info' || current?.kind === 'outdated' ? current : undefined;
+        setSessionNotice(sessionId, under ? { kind: 'stop-reason', message, under } : { kind: 'stop-reason', message });
+      }
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
       return;
     }
@@ -387,11 +393,11 @@ export function handleSessionEvent(event) {
     case 'agent-outdated': {
       const { message } = event.payload;
       const current = $sessionNotices.get()[sessionId];
-      if (current?.kind === 'overlap') {
-        // Under the overlap until the turn ends.
-        const { under, ...overlap } = current;
-        if (message !== null) setSessionNotice(sessionId, { ...overlap, under: { kind: 'outdated', message } });
-        else if (under?.kind === 'outdated') setSessionNotice(sessionId, overlap);
+      if (current?.kind === 'overlap' || current?.kind === 'stop-reason') {
+        // Under it until it goes.
+        const { under, ...over } = current;
+        if (message !== null) setSessionNotice(sessionId, { ...over, under: { kind: 'outdated', message } });
+        else if (under?.kind === 'outdated') setSessionNotice(sessionId, over);
       } else if (message !== null) setSessionNotice(sessionId, { kind: 'outdated', message });
       else if (current?.kind === 'outdated') setSessionNotice(sessionId, null);
       return;
@@ -463,8 +469,9 @@ function noticeOf(sessionId, status, message) {
   const current = $sessionNotices.get()[sessionId] ?? null;
   // The `queued` event says what it waits for.
   if (status === 'queued' && current?.kind === 'queued') return current;
-  // Information and a changed launch stay through the session's turns, an overlap through its turn.
-  return current?.kind === 'info' || current?.kind === 'outdated' || current?.kind === 'overlap' ? current : null;
+  // Information and a changed launch stay through the session's turns, an overlap through its turn,
+  // why a turn stopped short until the next starts.
+  return current?.kind === 'info' || current?.kind === 'outdated' || current?.kind === 'overlap' || current?.kind === 'stop-reason' ? current : null;
 }
 
 /**

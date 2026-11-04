@@ -225,7 +225,7 @@ describe('acp-markdown', () => {
       expect(body(el).children[1].textContent).to.equal('second paragraph');
     });
 
-    it('while it streams, renders only the block still growing', async () => {
+    it('while it streams, renders only the blocks that can still change', async () => {
       const el = await fixture(html`<acp-markdown streaming .text=${'one\n\ntwo\n\nthr'}></acp-markdown>`);
       /** @type {string[]} */
       const rendered = [];
@@ -233,7 +233,7 @@ describe('acp-markdown', () => {
 
       await show(el, 'one\n\ntwo\n\nthree');
 
-      expect(rendered).to.deep.equal(['three']);
+      expect(rendered).to.deep.equal(['two\nthree']);
     });
 
     it('streamed in pieces, ends up as the same text rendered whole', async () => {
