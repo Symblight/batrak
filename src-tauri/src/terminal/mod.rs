@@ -30,6 +30,9 @@ const FLOW_RESUME_AT: usize = 32 * 1024;
 /// How long the shell's last output gets to arrive before its exit is reported: a background job
 /// may hold the terminal open after the shell is gone (and ConPTY's never ends while it's open).
 const EXIT_DRAIN: Duration = Duration::from_millis(100);
+/// How often the waiter looks whether the shell ended, where it can't wait without reaping it.
+#[cfg(not(unix))]
+const EXIT_POLL: Duration = Duration::from_millis(50);
 /// A program turns bracketed paste on (`ESC[?2004h`) when it reads its input, and off (`…l`).
 const BRACKETED_ON: &[u8] = b"\x1b[?2004h";
 const BRACKETED_OFF: &[u8] = b"\x1b[?2004l";
@@ -347,9 +350,14 @@ impl Terminals {
         std::thread::Builder::new()
             .name(format!("terminal-{id}-wait"))
             .spawn(move || {
+                // Before taking the shell's lock, which a close needs while the shell runs.
                 #[cfg(unix)]
                 if let Some(pid) = pid {
                     wait_exited(pid);
+                }
+                #[cfg(not(unix))]
+                while matches!(child.try_wait(), Ok(None)) {
+                    std::thread::sleep(EXIT_POLL);
                 }
                 // Closed and gone: heard now, not once the close's grace is over.
                 if waiting.closed.load(Ordering::SeqCst) {
@@ -559,8 +567,15 @@ impl Terminal {
         stream.paused = false;
     }
 
+    #[cfg(unix)]
     fn foreground(&self) -> Option<i32> {
         lock(&self.master).as_ref()?.process_group_leader()
+    }
+
+    /// Windows has no foreground process group to ask a console for.
+    #[cfg(not(unix))]
+    fn foreground(&self) -> Option<i32> {
+        None
     }
 
     /// SIGHUP to the shell's group and the foreground group, then the PTY dropped; `kill` is due
@@ -766,3 +781,5 @@ fn tail_start(bytes: &[u8], limit: usize) -> usize {
 
 #[cfg(all(test, unix))]
 mod tests;
+#[cfg(all(test, windows))]
+mod tests_windows;
