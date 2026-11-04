@@ -139,8 +139,8 @@
   }
 }
 /* Fades the start of the message list into the column, over the scroller and inside the list (it
-   doesn't reach the header above). As high as the content's leading space (`viewport` below), so at
-   the top the first message sits below it and only content scrolled up goes under it. */
+   doesn't reach the header above). As high as the scroller's leading space below, so the first
+   message and a sent one, pinned, sit below it and only content scrolled up goes under it. */
 .acp-chat__message-list::before {
   content: '';
   position: absolute;
@@ -151,7 +151,8 @@
   background: linear-gradient(to bottom, var(--acp-column-background), transparent);
   pointer-events: none;
 }
-.acp-chat__message-list::part(viewport) {
+/* On the scroller, not the content inside it: a pin stops short of the scroller's own padding. */
+.acp-chat__message-list::part(scroller) {
   padding-block-start: calc(2 * var(--acp-space-3));
 }
 .acp-chat__message-list::part(item) {
