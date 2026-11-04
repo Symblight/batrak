@@ -20,7 +20,7 @@ function isFontSize(size) {
  */
 export function parseSettings(raw) {
   if (!isRecord(raw)) return null;
-  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize, terminalTheme, terminalColors } = raw;
+  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize, terminalTheme, terminalColors, terminalOptionMeta } = raw;
   const colors = parseTerminalColors(terminalColors);
   return {
     appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
@@ -33,6 +33,7 @@ export function parseSettings(raw) {
     terminalFontSize: isFontSize(terminalFontSize) ? /** @type {number} */ (terminalFontSize) : DEFAULTS.terminalFontSize,
     terminalTheme: terminalTheme === 'custom' && colors ? 'custom' : DEFAULTS.terminalTheme,
     terminalColors: colors,
+    terminalOptionMeta: typeof terminalOptionMeta === 'boolean' ? terminalOptionMeta : DEFAULTS.terminalOptionMeta,
   };
 }
 
@@ -47,6 +48,7 @@ export const $markdownDefaultView = computed($settings, (settings) => settings.m
 export const $markdownScrollSync = computed($settings, (settings) => settings.markdownScrollSync);
 /** The terminal's custom colors; `null` while it has the app's. */
 export const $terminalColors = computed($settings, (settings) => (settings.terminalTheme === 'custom' ? settings.terminalColors : null));
+export const $terminalOptionMeta = computed($settings, (settings) => settings.terminalOptionMeta);
 /** The terminal's own font, else the editor's. */
 export const $terminalFontFamily = computed($settings, (settings) => settings.terminalFont ?? settings.editorFont);
 export const $terminalFontSize = computed($settings, (settings) => settings.terminalFontSize ?? settings.editorFontSize);
@@ -103,6 +105,11 @@ export function setTerminalTheme(theme) {
 export function setTerminalColors(colors) {
   const parsed = parseTerminalColors(colors);
   if (parsed) update('terminalColors', parsed);
+}
+
+/** @param {boolean} on */
+export function setTerminalOptionMeta(on) {
+  update('terminalOptionMeta', on);
 }
 
 /** @param {boolean} on */

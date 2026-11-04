@@ -436,6 +436,26 @@ describe('acp-terminal', () => {
     });
   });
 
+  it('takes ⌥ as Meta when asked, so the shell gets ESC and the key', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    el.platform = 'mac';
+    const press = () => input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'b', code: 'KeyB', keyCode: 66, altKey: true, bubbles: true, composed: true }));
+    // xterm tells a Mac by the browser it runs in, not by our `platform`; elsewhere Alt always is Meta.
+    const composes = navigator.platform.startsWith('Mac');
+    // Act
+    press();
+    // Assert
+    expect(calls.writes, 'by default').to.deep.equal(composes ? [] : ['\x1bb']);
+    calls.writes.length = 0;
+    // Act
+    el.optionMeta = true;
+    await el.updateComplete;
+    press();
+    // Assert
+    expect(calls.writes, 'asked').to.deep.equal(['\x1bb']);
+  });
+
   it('keeps a paste until its shell is connected', async () => {
     const { calls, connect } = fakeConnect();
     const el = /** @type {AcpTerminal} */ (

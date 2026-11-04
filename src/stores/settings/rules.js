@@ -36,12 +36,12 @@ export const TERMINAL_PALETTE = {
 };
 
 /** @type {Settings} */
-export const DEFAULT_SETTINGS = { appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13, markdownDefaultView: 'raw', markdownScrollSync: true, terminalFont: null, terminalFontSize: null, terminalTheme: 'app', terminalColors: null };
+export const DEFAULT_SETTINGS = { appearance: 'system', accent: '#4355B9', editorFont: null, editorFontSize: 13, markdownDefaultView: 'raw', markdownScrollSync: true, terminalFont: null, terminalFontSize: null, terminalTheme: 'app', terminalColors: null, terminalOptionMeta: false };
 
 /** @typedef {'theme' | 'editor' | 'terminal'} SettingsSection */
 
 /** @type {Record<SettingsSection, (keyof Settings)[]>} */
-export const SETTINGS_SECTIONS = { theme: ['appearance', 'accent'], editor: ['editorFont', 'editorFontSize', 'markdownDefaultView', 'markdownScrollSync'], terminal: ['terminalFont', 'terminalFontSize', 'terminalTheme', 'terminalColors'] };
+export const SETTINGS_SECTIONS = { theme: ['appearance', 'accent'], editor: ['editorFont', 'editorFontSize', 'markdownDefaultView', 'markdownScrollSync'], terminal: ['terminalFont', 'terminalFontSize', 'terminalTheme', 'terminalColors', 'terminalOptionMeta'] };
 
 /**
  * @param {string} value `#RGB` or `#RRGGBB`, any case, surrounding space ignored.

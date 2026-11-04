@@ -102,6 +102,13 @@ describe('acp-terminal-view', () => {
     expect([terminal.fontFamily, terminal.fontSize]).to.deep.equal(['Mono X', 15]);
     expect(terminal.colors, 'the app’s').to.equal(null);
     expect(terminal.windowsBuild, 'not on Windows').to.equal(null);
+    expect(terminal.optionMeta, '⌥ by default').to.equal(false);
+    // Act
+    $settings.set({ ...$settings.get(), terminalOptionMeta: true });
+    await el.updateComplete;
+    // Assert
+    expect(terminal.optionMeta).to.equal(true);
+    $settings.set({ ...$settings.get(), terminalOptionMeta: false });
     // Act
     $windowsBuild.set(19045);
     await el.updateComplete;

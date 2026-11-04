@@ -14,6 +14,7 @@ import {
   setTerminalColors,
   setTerminalFont,
   setTerminalFontSize,
+  setTerminalOptionMeta,
   setTerminalTheme,
 } from '../../stores/settings/settings.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -53,6 +54,7 @@ export class AcpSettingsView extends ViewElement {
     if (patch.markdownScrollSync !== undefined) setMarkdownScrollSync(patch.markdownScrollSync);
     if (patch.terminalFont !== undefined) setTerminalFont(patch.terminalFont);
     if (patch.terminalFontSize !== undefined) setTerminalFontSize(patch.terminalFontSize);
+    if (patch.terminalOptionMeta !== undefined) setTerminalOptionMeta(patch.terminalOptionMeta);
     if (patch.terminalTheme !== undefined) setTerminalTheme(patch.terminalTheme);
     if (patch.terminalColors) setTerminalColors(patch.terminalColors);
   }

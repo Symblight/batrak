@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
@@ -85,6 +86,7 @@ export class AcpSettings extends LitElement {
     settings: { attribute: false },
     fonts: { attribute: false },
     reveal: { attribute: false },
+    platform: { attribute: false },
     current: { state: true },
     accentDraft: { state: true },
     fontSizeDrafts: { state: true },
@@ -100,6 +102,8 @@ export class AcpSettings extends LitElement {
     this.fonts = null;
     /** @type {SettingsReveal | null} A section to scroll to; `acp-settings-revealed` once it has. */
     this.reveal = null;
+    /** @type {import('../../hooks/app/types.js').Platform} */
+    this.platform = app.platform;
     /** @type {SettingsAnchor} The section being read, marked in the list. */
     this.current = 'theme';
     /** @type {string | null} Accent HEX being typed; `null` shows the stored one. */
@@ -478,6 +482,16 @@ export class AcpSettings extends LitElement {
         </md-segmented-button-group>
       </div>
       ${settings.terminalTheme === 'custom' && settings.terminalColors ? this.#renderTerminalColors(settings.terminalColors) : nothing}
+      ${this.platform === 'mac'
+        ? html`<label class="acp-settings__toggle">
+            <md-switch
+              class="acp-settings__switch"
+              .selected=${live(settings.terminalOptionMeta)}
+              @change=${(/** @type {Event} */ e) => this.#change({ terminalOptionMeta: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.target).selected })}
+            ></md-switch>
+            <span>Use ⌥ as Meta, so Alt shortcuts reach the shell. ⌥ then no longer types characters like @ or € on some layouts.</span>
+          </label>`
+        : nothing}
     </section>`;
   }
 

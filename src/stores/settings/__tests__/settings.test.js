@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $settings, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalTheme } from '../settings.js';
+import { $settings, $terminalOptionMeta, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalOptionMeta, setTerminalTheme } from '../settings.js';
 import { DEFAULT_SETTINGS, FONT_SIZE_MAX, TERMINAL_PALETTE } from '../rules.js';
 
 describe('settings store: markdown', () => {
@@ -83,6 +83,13 @@ describe('settings store: markdown', () => {
     expect(refused?.dark.red, 'not a color').to.equal('#123456');
     expect(back).to.equal(null);
     expect($terminalColors.get()?.dark.red, 'kept').to.equal('#123456');
+  });
+
+  it('reads and sets ⌥ as Meta, off unless stored as on', () => {
+    expect(parseSettings({ terminalOptionMeta: true })?.terminalOptionMeta).to.equal(true);
+    expect(parseSettings({ terminalOptionMeta: 'yes' })?.terminalOptionMeta).to.equal(false);
+    setTerminalOptionMeta(true);
+    expect($terminalOptionMeta.get()).to.equal(true);
   });
 
   it('sets the scroll sync', () => {

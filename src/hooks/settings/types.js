@@ -61,6 +61,7 @@
  * @property {number | null} terminalFontSize Terminal font size in px; `null` follows the editor's.
  * @property {'app' | 'custom'} terminalTheme Whose colors the terminal has; `custom` always has `terminalColors`.
  * @property {TerminalColors | null} terminalColors Kept while the theme is `app`, for going back.
+ * @property {boolean} terminalOptionMeta macOS: ⌥ sends ESC and the key in a terminal, instead of composing a character.
  */
 
 export {};

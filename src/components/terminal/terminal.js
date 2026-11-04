@@ -76,6 +76,7 @@ export class AcpTerminal extends LitElement {
     fontFamily: { attribute: false },
     fontSize: { attribute: false },
     colors: { attribute: false },
+    optionMeta: { attribute: false },
     windowsBuild: { attribute: false },
     gpu: { attribute: false },
     platform: { attribute: false },
@@ -139,6 +140,8 @@ export class AcpTerminal extends LitElement {
     this.fontSize = 13;
     /** @type {import('../../hooks/settings/types.js').TerminalColors | null} Its own colors; `null` for the app's. */
     this.colors = null;
+    /** @type {boolean} macOS: ⌥ is Meta to the shell, instead of composing a character. */
+    this.optionMeta = false;
     /** @type {number | null} The Windows build its ConPTY comes with: how xterm must read line wrapping; `null` elsewhere. */
     this.windowsBuild = null;
     /** @type {boolean} Draw with WebGL where it's available; else (and once its context is lost) the DOM. */
@@ -302,7 +305,7 @@ export class AcpTerminal extends LitElement {
       fontFamily: this.#font(),
       fontSize: this.fontSize,
       scrollback: 10000,
-      macOptionIsMeta: false,
+      macOptionIsMeta: this.optionMeta,
       // A program's colors may assume another background than the theme's: text stays readable.
       minimumContrastRatio: 4.5,
       linkHandler: { activate: (event, url) => owner.current.#openLink(event, url) },
@@ -369,6 +372,7 @@ export class AcpTerminal extends LitElement {
     }
     if (changed.get('colors') !== undefined) this.#applyTheme(term);
     if (changed.has('windowsBuild')) this.#applyWindowsPty(term);
+    if (changed.has('optionMeta')) term.options.macOptionIsMeta = this.optionMeta;
     if (changed.has('fontFamily') || changed.has('fontSize')) {
       term.options.fontFamily = this.#font();
       term.options.fontSize = this.fontSize;

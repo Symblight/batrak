@@ -207,6 +207,24 @@ describe('acp-settings', () => {
       expect(patches).to.deep.equal([{ terminalTheme: 'custom' }, { terminalColors: { light: edited, dark: edited } }]);
     });
 
+    it('offers ⌥ as Meta only on a Mac, and asks to flip it', async () => {
+      // Arrange
+      const { el, root } = await render();
+      const patches = changes(el);
+      const toggle = () => /** @type {HTMLElementTagNameMap['md-switch'] | null} */ (section(root).querySelector('md-switch'));
+      el.platform = 'windows';
+      await rendered(el);
+      expect(toggle(), 'not on Windows').to.equal(null);
+      el.platform = 'mac';
+      await rendered(el);
+      // Act
+      const on = /** @type {HTMLElementTagNameMap['md-switch']} */ (toggle());
+      on.selected = true;
+      on.dispatchEvent(new Event('change', { bubbles: true }));
+      // Assert
+      expect(patches).to.deep.equal([{ terminalOptionMeta: true }]);
+    });
+
     it('resets on its own, once something is set', async () => {
       // Arrange
       const { el, root } = await render();
