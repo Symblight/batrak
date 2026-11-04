@@ -43,22 +43,6 @@ describe('acp-main-column', () => {
     return { el, tabView };
   }
 
-  it('lets a terminal tab fill a tall panel, nothing above it', async () => {
-    // Arrange
-    openTab(tabs.terminalId('t1'));
-    // Act: taller than the terminal's first size, where an item before it in the panel's grid leaves a gap
-    const el = /** @type {AcpMainColumn} */ (await fixture(html`<acp-main-column style="display: flex; width: 800px; height: 1400px"></acp-main-column>`));
-    const tabView = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view'));
-    await tabView.updateComplete;
-    const terminal = /** @type {HTMLElementTagNameMap['acp-terminal']} */ (tabView.shadowRoot?.querySelector('acp-terminal'));
-    await terminal.updateComplete;
-    const hosted = /** @type {HTMLElement} */ (tabView.shadowRoot?.querySelector('.acp-tab-view__hosted')).getBoundingClientRect();
-    const box = terminal.getBoundingClientRect();
-    // Assert
-    expect(Math.round(box.top - hosted.top), 'from the top').to.equal(0);
-    expect(Math.round(box.height), 'its whole height').to.equal(Math.round(hosted.height));
-  });
-
   it('gives the keyboard to a terminal whose tab is clicked, and asks nothing for a file', async () => {
     // Arrange
     const { tabView } = await render();

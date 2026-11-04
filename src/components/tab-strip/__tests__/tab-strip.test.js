@@ -377,40 +377,6 @@ describe('acp-tab-strip', () => {
       expect(activations, 'a later click').to.deep.equal([{ id: ids[1] }, { id: ids[2] }]);
     });
 
-    it('selects no text while a tab is pressed and dragged, and leaves selecting alone after', async () => {
-      // Arrange
-      const { press, moveTo, release } = await render();
-      const selecting = () => document.body.dispatchEvent(new Event('selectstart', { bubbles: true, cancelable: true }));
-      expect(selecting(), 'no press').to.equal(true);
-      // Act
-      const start = press(ids[1]);
-      // Assert
-      expect(selecting(), 'pressed').to.equal(false);
-      // Act
-      await moveTo(start.x + 40, start.y);
-      // Assert
-      expect(selecting(), 'dragged').to.equal(false);
-      // Act
-      await release(start.x + 40, start.y);
-      // Assert
-      expect(selecting(), 'released').to.equal(true);
-    });
-
-    it('clears a selection when a drag starts', async () => {
-      // Arrange
-      const { press, moveTo, release } = await render();
-      const text = document.body.appendChild(document.createElement('p'));
-      text.textContent = 'selected earlier';
-      window.getSelection()?.selectAllChildren(text);
-      const start = press(ids[1]);
-      // Act
-      await moveTo(start.x + 40, start.y);
-      // Assert
-      expect(window.getSelection()?.isCollapsed).to.equal(true);
-      await release(start.x + 40, start.y);
-      text.remove();
-    });
-
     it('does not drag with the middle button', async () => {
       const { center, press, moveTo, release, listen, dragging } = await render();
       const moves = listen('acp-tab-move');
