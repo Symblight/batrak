@@ -1,7 +1,7 @@
 //! The client side of one agent connection: handshake, session setup, prompts, cancel, and the
 //! agent's requests (permissions, files).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -13,7 +13,7 @@ use agent_client_protocol::schema::v1::{
     InitializeResponse, ListSessionsRequest, LoadSessionRequest, McpServer, NewSessionRequest, ResumeSessionRequest, PromptRequest, ReadTextFileRequest, SessionConfigOption, SessionModeState,
     SetSessionConfigOptionRequest, SetSessionModeRequest, ReadTextFileResponse, RequestPermissionOutcome,
     RequestPermissionRequest, RequestPermissionResponse, ResourceLink, SelectedPermissionOutcome, SessionId,
-    SessionNotification, TextContent, TextResourceContents, WriteTextFileRequest, WriteTextFileResponse,
+    SessionNotification, SessionUpdate, SubagentCapabilities, TextContent, TextResourceContents, WriteTextFileRequest, WriteTextFileResponse,
 };
 use agent_client_protocol::schema::ProtocolVersion;
 use agent_client_protocol::{Agent, ByteStreams, Client, ConnectionTo, Responder};
@@ -126,13 +126,44 @@ pub const MODE_OPTION_ID: &str = "_brama_mode";
 struct Shared {
     host: Arc<dyn ClientHost>,
     /// Permission requests waiting for the user, by our request id.
-    pending: Mutex<HashMap<String, Responder<RequestPermissionResponse>>>,
+    pending: Mutex<HashMap<String, Pending>>,
     next_request: AtomicU64,
+    /// ACP session ids of the subagents the agent announced (`subagent_update`): their traffic
+    /// comes on this connection under their own id.
+    subagents: Mutex<HashSet<String>>,
+}
+
+struct Pending {
+    /// The subagent that asked, `None` for the session.
+    subagent: Option<String>,
+    responder: Responder<RequestPermissionResponse>,
 }
 
 impl Shared {
-    fn pending(&self) -> std::sync::MutexGuard<'_, HashMap<String, Responder<RequestPermissionResponse>>> {
+    fn pending(&self) -> std::sync::MutexGuard<'_, HashMap<String, Pending>> {
         self.pending.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    fn subagents(&self) -> std::sync::MutexGuard<'_, HashSet<String>> {
+        self.subagents.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// The subagent `session_id` is, if the agent announced it as one.
+    fn subagent(&self, session_id: &SessionId) -> Option<String> {
+        let id = session_id.to_string();
+        self.subagents().contains(&id).then_some(id)
+    }
+
+    /// Answers the pending requests `which` keeps `cancelled`, as ACP asks of a cancel.
+    fn cancel_pending(&self, which: impl Fn(&Pending) -> bool) {
+        let cancelled: Vec<Pending> = {
+            let mut pending = self.pending();
+            let ids: Vec<String> = pending.iter().filter(|(_, p)| which(p)).map(|(id, _)| id.clone()).collect();
+            ids.iter().filter_map(|id| pending.remove(id)).collect()
+        };
+        for p in cancelled {
+            let _ = p.responder.respond(RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled));
+        }
     }
 }
 
@@ -306,16 +337,25 @@ impl Connection {
     /// The running `prompt` resolves with `"cancelled"` once the agent has stopped.
     pub fn cancel(&self) -> Result<(), String> {
         let sent = self.cx.send_notification(CancelNotification::new(self.session_id.clone())).map_err(|e| e.message);
-        let pending: Vec<_> = self.shared.pending().drain().map(|(_, responder)| responder).collect();
-        for responder in pending {
-            let _ = responder.respond(RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled));
+        self.shared.cancel_pending(|_| true);
+        sent
+    }
+
+    /// `session/cancel` of one of the session's subagents, then its pending permission requests
+    /// answered `cancelled`. Refused for an id the agent didn't announce as a subagent.
+    pub fn cancel_subagent(&self, subagent: &str) -> Result<(), String> {
+        let id = SessionId::new(subagent.to_owned());
+        if self.shared.subagent(&id).is_none() {
+            return Err(format!("{subagent} is not a subagent of this session"));
         }
+        let sent = self.cx.send_notification(CancelNotification::new(id)).map_err(|e| e.message);
+        self.shared.cancel_pending(|p| p.subagent.as_deref() == Some(subagent));
         sent
     }
 
     /// Answers a permission request: the chosen option, or `None` for cancelled.
     pub fn respond_permission(&self, request_id: &str, option_id: Option<String>) -> Result<(), String> {
-        let responder = self
+        let Pending { responder, .. } = self
             .shared
             .pending()
             .remove(request_id)
@@ -444,7 +484,7 @@ impl Catalog {
 struct NoSession;
 
 impl ClientHost for NoSession {
-    fn on_update(&self, _update: serde_json::Value) {}
+    fn on_update(&self, _update: serde_json::Value, _subagent: Option<String>) {}
 
     fn on_permission_request(&self, _request: PermissionRequest) {}
 
@@ -479,7 +519,7 @@ where
     W: AsyncWrite + Send + Unpin + 'static,
     R: AsyncRead + Send + Unpin + 'static,
 {
-    let shared = Arc::new(Shared { host, pending: Mutex::default(), next_request: AtomicU64::new(0) });
+    let shared = Arc::new(Shared { host, pending: Mutex::default(), next_request: AtomicU64::new(0), subagents: Mutex::default() });
     let (cx_tx, cx_rx) = oneshot::channel();
     let (closed_tx, closed_rx) = watch::channel(None);
 
@@ -495,8 +535,12 @@ where
         .name("brama")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
+                if let SessionUpdate::SubagentUpdate(announced) = &notification.update {
+                    on_update.subagents().insert(announced.session_id.to_string());
+                }
+                let subagent = on_update.subagent(&notification.session_id);
                 match serde_json::to_value(&notification.update) {
-                    Ok(update) => on_update.host.on_update(update),
+                    Ok(update) => on_update.host.on_update(update, subagent),
                     Err(e) => tracing::warn!("unserializable session update: {e}"),
                 }
                 Ok(())
@@ -510,8 +554,9 @@ where
                 let to_json = |value: Result<serde_json::Value, serde_json::Error>| value.unwrap_or_default();
                 let tool_call = to_json(serde_json::to_value(&request.tool_call));
                 let options = to_json(serde_json::to_value(&request.options));
-                on_permission.pending().insert(request_id.clone(), responder);
-                on_permission.host.on_permission_request(PermissionRequest { request_id, tool_call, options });
+                let subagent = on_permission.subagent(&request.session_id);
+                on_permission.pending().insert(request_id.clone(), Pending { subagent: subagent.clone(), responder });
+                on_permission.host.on_permission_request(PermissionRequest { request_id, tool_call, options, subagent });
                 Ok(())
             },
             agent_client_protocol::on_receive_request!(),
@@ -577,6 +622,7 @@ where
                 // A `terminal` method reruns the agent's launch in a Terminal tab; the meta
                 // flag is for agents that still read Zed's pre-standard one.
                 .auth(AuthCapabilities::new().terminal(true))
+                .subagents(SubagentCapabilities::new())
                 .meta(serde_json::Map::from_iter([("terminal-auth".to_owned(), serde_json::Value::Bool(true))])),
         )
         .client_info(Implementation::new("brama", env!("CARGO_PKG_VERSION")));
@@ -697,8 +743,10 @@ mod tests {
     /// Everything the agent sent, in order: updates' text and permission requests.
     #[derive(Debug, Clone, PartialEq)]
     enum Seen {
+        /// `kind:text`, prefixed with `<subagent>/` for a subagent's.
         Update(String),
         Permission(String),
+        SubagentPermission { subagent: String, id: String },
     }
 
     struct RecordingHost {
@@ -706,15 +754,19 @@ mod tests {
     }
 
     impl ClientHost for RecordingHost {
-        fn on_update(&self, update: serde_json::Value) {
+        fn on_update(&self, update: serde_json::Value, subagent: Option<String>) {
             let kind = update["sessionUpdate"].as_str().unwrap_or_default();
             let text = update["content"]["text"].as_str().unwrap_or_default();
-            let _ = self.tx.send(Seen::Update(format!("{kind}:{text}")));
+            let prefix = subagent.map(|id| format!("{id}/")).unwrap_or_default();
+            let _ = self.tx.send(Seen::Update(format!("{prefix}{kind}:{text}")));
         }
 
         fn on_permission_request(&self, request: PermissionRequest) {
             assert_eq!(request.options[0]["optionId"], "allow");
-            let _ = self.tx.send(Seen::Permission(request.request_id));
+            let _ = self.tx.send(match request.subagent {
+                Some(subagent) => Seen::SubagentPermission { subagent, id: request.request_id },
+                None => Seen::Permission(request.request_id),
+            });
         }
 
         fn read_text_file(&self, path: PathBuf, line: Option<u32>, limit: Option<u32>) -> Result<String, FsError> {
@@ -791,6 +843,49 @@ mod tests {
         assert_eq!(turn.await.unwrap().unwrap(), "end_turn");
         assert_eq!(drain(&mut rx), vec![Seen::Update("agent_message_chunk:chose allow".into())]);
         assert!(conn.respond_permission(&id, None).is_err(), "answered once only");
+    }
+
+    /// Runs the fake's `subagent` script up to its subagent's permission request: its id.
+    async fn until_subagent_asks(conn: &Arc<Connection>, rx: &mut mpsc::UnboundedReceiver<Seen>) -> (tokio::task::JoinHandle<Result<String, ConnectError>>, String) {
+        let turn = tokio::spawn({
+            let conn = Arc::clone(conn);
+            async move { conn.prompt(text("subagent")).await }
+        });
+        assert_eq!(rx.recv().await, Some(Seen::Update("subagent_update:".into())), "announced on the parent's stream");
+        assert_eq!(rx.recv().await, Some(Seen::Update("child-1/session_info_update:".into())));
+        assert_eq!(rx.recv().await, Some(Seen::Update("child-1/tool_call:".into())));
+        assert_eq!(rx.recv().await, Some(Seen::Update("child-1/agent_message_chunk:found".into())));
+        let Some(Seen::SubagentPermission { subagent, id }) = rx.recv().await else { panic!("no subagent permission request") };
+        assert_eq!(subagent, "child-1");
+        (turn, id)
+    }
+
+    #[tokio::test]
+    async fn a_subagents_updates_and_permission_requests_name_it() {
+        // Arrange
+        let (conn, _, mut rx, _) = connect(FakeAgentOptions::default(), None).await.unwrap();
+        let conn = Arc::new(conn);
+        // Act
+        let (turn, id) = until_subagent_asks(&conn, &mut rx).await;
+        conn.respond_permission(&id, Some("allow".into())).unwrap();
+        // Assert
+        assert_eq!(turn.await.unwrap().unwrap(), "end_turn");
+        assert_eq!(drain(&mut rx), vec![Seen::Update("subagent_update:".into()), Seen::Update("agent_message_chunk:done".into())]);
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_subagent_cancels_it_alone() {
+        // Arrange
+        let (conn, _, mut rx, agent) = connect(FakeAgentOptions::default(), None).await.unwrap();
+        let conn = Arc::new(conn);
+        let (turn, _) = until_subagent_asks(&conn, &mut rx).await;
+        // Act
+        conn.cancel_subagent("child-1").unwrap();
+        // Assert: its request is answered cancelled, the parent's turn goes on
+        assert_eq!(turn.await.unwrap().unwrap(), "end_turn");
+        assert_eq!(*agent.cancelled_sessions.lock().unwrap(), ["child-1"]);
+        assert_eq!(drain(&mut rx)[1], Seen::Update("agent_message_chunk:child cancelled".into()));
+        assert!(conn.cancel_subagent("child-9").is_err(), "not a subagent of this session");
     }
 
     #[tokio::test]
@@ -874,6 +969,13 @@ mod tests {
         let capabilities = agent.client_capabilities.lock().unwrap().clone().unwrap();
         assert_eq!(capabilities["auth"]["terminal"], true);
         assert_eq!(capabilities["_meta"]["terminal-auth"], true);
+    }
+
+    #[tokio::test]
+    async fn the_client_offers_subagent_sessions() {
+        let (_, _, _, agent) = connect(FakeAgentOptions::default(), None).await.unwrap();
+        let capabilities = agent.client_capabilities.lock().unwrap().clone().unwrap();
+        assert_eq!(capabilities["subagents"], serde_json::json!({}));
     }
 
     #[tokio::test]

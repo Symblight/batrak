@@ -53,18 +53,18 @@ impl Sessions {
         Ok(stamp)
     }
 
-    /// Files that changed in a project (root-relative, a watcher batch): each one the tool calls of
-    /// two or more local turns named, running or just ended (`overlap_grace`), is reported to each
+    /// Files that changed in a folder (root-relative, a watcher batch of Main or a workspace): each
+    /// one the tool calls of two or more turns of chats in that folder named, running or just ended (`overlap_grace`), is reported to each
     /// running one (`overlap`, naming another), once per file per turn. A change no tool call
     /// names is nobody's.
-    pub fn note_changes(&self, project: &Path, changed: &[String]) {
+    pub fn note_changes(&self, folder: &Path, changed: &[String]) {
         let grace = self.inner.opts.overlap_grace;
         let turns: Vec<_> = lock(&self.inner.sessions)
             .values()
             .filter(|s| {
                 let record = lock(&s.record);
                 let ended = || lock(&s.turn_ended).is_some_and(|at| at.elapsed() < grace);
-                record.mode == Mode::Local && record.project_path == project && (s.in_turn.load(Ordering::SeqCst) || ended())
+                shares_folder(&record) && record.agent_cwd == folder && (s.in_turn.load(Ordering::SeqCst) || ended())
             })
             .cloned()
             .collect();
@@ -72,7 +72,7 @@ impl Sessions {
             return;
         }
         for rel in changed {
-            let path = project.join(rel);
+            let path = folder.join(rel);
             let by: Vec<_> = turns.iter().filter(|s| lock(&s.touched).contains(&path)).collect();
             if by.len() < 2 {
                 continue;
@@ -102,6 +102,18 @@ impl Sessions {
             // Still starting: the turn sees `cancel_requested` before it prompts.
             None => Ok(()),
         }
+    }
+
+    /// `session/cancel` of one of the session's subagents (its ACP session id); its pending
+    /// permission requests are answered `cancelled`, the session's turn goes on.
+    pub fn cancel_subagent(&self, id: &str, subagent: &str) -> Result<(), String> {
+        let state = self.get(id)?;
+        let conn = state.conn().ok_or("the agent is not running")?;
+        conn.cancel_subagent(subagent)?;
+        if conn.pending_permissions().is_empty() && state.turn_running.load(Ordering::SeqCst) {
+            self.inner.set_status(&state, SessionStatus::Working, None);
+        }
+        Ok(())
     }
 
     /// The user's answer to a permission request: an option id, or `None` to cancel it.
@@ -205,22 +217,23 @@ impl Inner {
         StartError::SignIn
     }
 
-    /// A local session's turn slot in its project, waited for (`queued`) while another session's
-    /// turn has it. `None` when the turn needs none: a worktree session, or `localTurns:
-    /// "parallel"` (read at each turn, so a change applies to the next one), or it was cancelled.
+    /// A chat's turn slot in its folder (Main's, or its workspace's), waited for (`queued`) while
+    /// another chat's turn there has it. `None` when the turn needs none: a worktree session of
+    /// its own (no workspace), or `localTurns: "parallel"` (the project's, read at each turn, so a
+    /// change applies to the next one), or it was cancelled.
     async fn take_slot(&self, state: &SessionState) -> Result<Option<TurnPermit>, String> {
         let record = state.record();
-        if record.mode != Mode::Local {
+        if !shares_folder(&record) {
             return Ok(None);
         }
         let project = record.project_path.clone();
-        let turns = tokio::task::spawn_blocking(move || crate::config::workspace_settings(&project).local_turns)
+        let turns = tokio::task::spawn_blocking(move || crate::config::project_settings(&project).local_turns)
             .await
             .map_err(|e| e.to_string())?;
         if turns == LocalTurns::Parallel {
             return Ok(None);
         }
-        let (mut holder, mut ticket) = match self.slots.enter(&record.project_path, &state.id) {
+        let (mut holder, mut ticket) = match self.slots.enter(&record.agent_cwd, &state.id) {
             Entry::Granted(permit) => return Ok(Some(permit)),
             Entry::Queued { holder, ticket } => (holder, ticket),
         };
@@ -243,8 +256,8 @@ impl Inner {
 
     /// Drops the session's queued turn, if it has one.
     pub(super) fn leave_queue(&self, state: &SessionState) -> bool {
-        let project = lock(&state.record).project_path.clone();
-        self.slots.leave(&project, &state.id)
+        let folder = lock(&state.record).agent_cwd.clone();
+        self.slots.leave(&folder, &state.id)
     }
 
     fn title_of(&self, id: &str) -> Option<String> {
@@ -262,7 +275,7 @@ pub(super) fn prompt_blocks(env: &dyn SessionEnv, prompt: Vec<PromptInput>) -> R
             let host = env::confine(env.project_dir(), Path::new(path), Access::Read)?;
             return Ok((host.clone(), host));
         }
-        let rel = crate::workspace::checked_rel(path)?;
+        let rel = crate::roots::checked_rel(path)?;
         let host = env::confine(env.host_dir(), &env.host_dir().join(rel), Access::Read).map_err(|e| {
             if env.host_dir() != env.project_dir() && env.project_dir().join(rel).exists() {
                 format!("{path}: not in this session's worktree (untracked or ignored in the project)")
@@ -337,4 +350,10 @@ pub(super) fn read_lines(path: &Path, line: Option<u32>, limit: Option<u32>, max
         }
     }
     String::from_utf8(out).map_err(|_| "not UTF-8 text".to_owned())
+}
+
+/// Whether a chat shares its folder with other chats, and so its turn slot: Main's chats and a
+/// workspace's.
+pub(super) fn shares_folder(record: &SessionRecord) -> bool {
+    record.mode == Mode::Local || record.workspace_id.is_some()
 }

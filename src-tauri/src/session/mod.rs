@@ -9,7 +9,7 @@ pub mod env;
 mod runtime;
 
 pub use runtime::{
-    CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
+    CliDraft, CliOpened, DeletePreview, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
     SessionsOptions, SyncReport,
 };
 
@@ -107,6 +107,9 @@ pub struct SessionRecord {
     /// Removed where its agent can't delete sessions: never listed again.
     #[serde(default)]
     pub hidden: bool,
+    /// The workspace it runs in (its folder and branch are the workspace's); `None`: Main.
+    #[serde(default)]
+    pub workspace_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -132,16 +135,15 @@ pub struct Session {
     /// Until when another app may be running it: its agent saw activity in it that wasn't Brama's
     /// (2 min after that). Counts only while it doesn't run here.
     pub active_elsewhere_until: Option<String>,
-    /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`): activity its agent
-    /// reports meanwhile is that CLI's, not another app's.
+    /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`).
     pub in_terminal: bool,
+    /// What that CLI is doing, as its agent's records tell; `None`: no CLI, or its agent can't tell.
+    pub activity: Option<agent_api::SessionActivity>,
     pub config: BTreeMap<String, String>,
-    pub mode: Mode,
     /// Where the agent works: the project, or its folder in the worktree.
     pub folder: String,
-    pub worktree_path: Option<String>,
     pub branch: Option<String>,
-    pub base_commit: Option<String>,
+    pub workspace_id: Option<String>,
     pub created_at: String,
     /// The last prompt or turn end, else `created_at`; the list's order.
     pub last_activity_at: String,
@@ -163,12 +165,11 @@ impl Session {
             acp_session_id: r.acp_session_id.clone(),
             active_elsewhere_until: None,
             in_terminal: false,
+            activity: None,
             config: r.config.clone(),
-            mode: r.mode,
             folder: r.agent_cwd.to_string_lossy().into_owned(),
-            worktree_path: r.worktree_path.as_ref().map(|p| p.to_string_lossy().into_owned()),
             branch: r.branch.clone(),
-            base_commit: r.base_commit.clone(),
+            workspace_id: r.workspace_id.clone(),
             created_at: r.created_at.clone(),
             last_activity_at: r.last_activity_at.clone().unwrap_or_else(|| r.created_at.clone()),
         }

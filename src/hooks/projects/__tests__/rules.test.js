@@ -13,9 +13,9 @@ describe('projects: path rules', () => {
     expect(rel(null, '/p/a.js')).to.equal(null);
   });
 
-  it('finds the worktree session folder a path lies in, and its place in the project', () => {
-    const worktrees = [{ sessionId: 's', projectId: '/p', folder: '/wt/s', branch: 'b', title: 't' }];
-    expect(worktreeOf(worktrees, '/wt/s/src/a.js')?.sessionId).to.equal('s');
+  it('finds the workspace folder a path lies in, and its place in the project', () => {
+    const worktrees = [{ projectPath: '/p', folder: '/wt/s', branch: 'b' }];
+    expect(worktreeOf(worktrees, '/wt/s/src/a.js')?.folder).to.equal('/wt/s');
     expect(worktreeOf(worktrees, '/p/src/a.js')).to.equal(null);
     expect(projectPathOf(worktrees, '/wt/s/src/a.js')).to.equal('/p/src/a.js');
     expect(projectPathOf(worktrees, '/p/src/a.js')).to.equal('/p/src/a.js');
@@ -35,7 +35,7 @@ describe('projects: path rules', () => {
   });
 
   describe('shownPath', () => {
-    const worktrees = [{ sessionId: 's1', projectId: '/p', folder: '/w/s1', branch: 'b', title: 'T' }];
+    const worktrees = [{ projectPath: '/p', folder: '/w/s1', branch: 'b' }];
 
     it("shows a project file relative to the project, a worktree's to its folder", () => {
       expect(shownPath('/p', worktrees, '/p/src/a.js')).to.equal('src/a.js');

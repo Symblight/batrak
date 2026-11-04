@@ -1,7 +1,7 @@
 import { app } from '../app/app.js';
 import { endSync, startSync, syncOf } from '../../stores/session-sync/session-sync.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
-import { $workspacePath } from '../../stores/workspace/workspace.js';
+import { $projectPath } from '../../stores/project/project.js';
 import { sessionsSync } from './commands.js';
 
 /** A project shown again is synced with its agents when its last sync is older than this. */
@@ -21,7 +21,7 @@ const syncing = new Map();
  * the window is visible.
  */
 function poll() {
-  const path = $workspacePath.get();
+  const path = $projectPath.get();
   if (path === null || document.visibilityState !== 'visible') return;
   const { report, running } = syncOf(path);
   if (report === null || running || syncing.has(path)) return;

@@ -1,11 +1,9 @@
 import { app } from '../app/app.js';
-import { notify } from '../../stores/notices/notices.js';
 import { composerOf, revertConfigOption, setConfigOption } from '../../stores/composer/composer.js';
 import { upsertSession, $sessions } from '../../stores/sessions/sessions.js';
-import { dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
+import { $permissionRequests, dismissSessionNotice, removePermissionRequest, setSessionNotice } from '../../stores/session-runtime/session-runtime.js';
 import {
-  sessionApplyLocally,
-  sessionCheckOutBranch,
+  sessionCancelSubagent,
   sessionOpenLog,
   sessionRename,
   sessionResetTitle,
@@ -45,42 +43,28 @@ function respondPermission(id, requestId, optionId) {
 }
 
 /**
+ * Stops one subagent of the session; the backend answers its permission requests `cancelled`, which
+ * leave the banner then (a refused stop keeps them to answer).
+ * @param {string} id
+ * @param {string} subagentId
+ */
+function cancelSubagent(id, subagentId) {
+  sessionCancelSubagent(id, subagentId).then(
+    () => {
+      for (const request of $permissionRequests.get()[id] ?? []) {
+        if (request.subagentId === subagentId) removePermissionRequest(id, request.requestId);
+      }
+    },
+    (err) => app.reportError('Stopping the subagent failed', err),
+  );
+}
+
+/**
  * Stops the agent and its whole process tree; the next message starts it again.
  * @param {string} id
  */
 function stop(id) {
   sessionStop(id).catch((err) => app.reportError('Stopping the agent failed', err));
-}
-
-/**
- * Brings a worktree session's work (commits and uncommitted changes since it started) into the
- * project's checkout as unstaged changes; says what happened.
- * @param {string} id
- */
-async function applyLocally(id) {
-  const title = $sessions.get().find((s) => s.id === id)?.title ?? 'the session';
-  try {
-    const result = await sessionApplyLocally(id);
-    if (result.outcome === 'conflicts') notify('warn', `Applied "${title}" with conflicts in ${result.conflicts.join(', ')}`);
-    else if (result.outcome === 'empty') notify('info', `"${title}" has no changes to apply`);
-    else notify('info', `Applied "${title}" to the project, unstaged`);
-  } catch (err) {
-    app.reportError('Applying the session failed', err);
-  }
-}
-
-/**
- * Stops a worktree session's agent and checks its branch out in the project.
- * @param {string} id
- */
-async function checkOutBranch(id) {
-  const branch = $sessions.get().find((s) => s.id === id)?.branch ?? 'the branch';
-  try {
-    await sessionCheckOutBranch(id);
-    notify('info', `Checked out ${branch}`);
-  } catch (err) {
-    app.reportError(`Checking out ${branch} failed`, err);
-  }
 }
 
 /**
@@ -134,9 +118,8 @@ function dismissNotice(id) {
 export const actions = Object.freeze({
   setConfigOption: setConfigOptionFor,
   respondPermission,
+  cancelSubagent,
   stop,
-  applyLocally,
-  checkOutBranch,
   restart,
   rename,
   resetTitle,

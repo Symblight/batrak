@@ -63,7 +63,7 @@ function signInKey(projectPath, agentId) {
  */
 export function noteSignIn({ projectPath, agentId, state, message, terminal }) {
   const login = terminal && $terminals.get()[terminal.terminalId];
-  if (state === 'cancelled' && terminal && login) closeTerminalTab(login.projectPath, terminal.terminalId);
+  if (state === 'cancelled' && terminal && login) closeTerminalTab(login.folder, terminal.terminalId);
   const { [signInKey(projectPath, agentId)]: _, ...rest } = $signIns.get();
   const kept = state === 'waiting' || state === 'failed';
   $signIns.set(kept ? { ...rest, [signInKey(projectPath, agentId)]: { state, message, terminal } } : rest);

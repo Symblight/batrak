@@ -15,14 +15,15 @@ use super::{lock, new_state, Inner, LaunchKey, Launched, SessionState, Sessions,
 use crate::acp::process::AgentProcess;
 use crate::acp::{Catalog, CatalogOptions, ConnectError, ListedSession};
 use crate::config::AgentConfig;
-use crate::session::env::Mode;
+use crate::session::env;
 use crate::session::{iso_from_millis, iso_now, parse_iso_millis, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::storage::JsonFile;
+use crate::workspace::WorkspaceRecord;
 
 /// How long one agent may take to start and list its sessions.
 pub(super) const SYNC_TIMEOUT: Duration = Duration::from_secs(15);
 /// Agents asked at once.
-const SYNC_CONCURRENCY: usize = 2;
+pub(super) const SYNC_CONCURRENCY: usize = 2;
 /// The most sessions taken from one agent.
 const MAX_LISTED: usize = 500;
 /// Activity an agent reports marks a session not running here as active elsewhere for this long.
@@ -181,6 +182,9 @@ impl Inner {
                 Some(SyncOutcome::Untrusted)
             } else if self.waits_for_sign_in(&LaunchKey::of(agent)) {
                 Some(SyncOutcome::SignIn)
+            } else if !self.starts_in_background(agent) {
+                // Listing would start it: only its sessions here show.
+                Some(SyncOutcome::Unsupported)
             } else {
                 None
             };
@@ -232,19 +236,13 @@ impl Inner {
         report
     }
 
-    fn waits_for_sign_in(&self, key: &LaunchKey) -> bool {
+    pub(super) fn waits_for_sign_in(&self, key: &LaunchKey) -> bool {
         lock(&self.sign_ins_needed).contains_key(key) || lock(&self.signing_in).contains_key(key)
     }
 
-    /// The folders a project's sessions run in: the project, and its worktree sessions' folders.
+    /// The folders a project's sessions run in: the project (Main) and its workspaces' folders.
     fn sync_folders(&self, project: &Path) -> Vec<PathBuf> {
-        let mut folders = vec![project.to_path_buf()];
-        for record in self.known().into_iter().filter(|r| r.project_path == project && r.mode == Mode::Worktree) {
-            if !folders.contains(&record.agent_cwd) {
-                folders.push(record.agent_cwd);
-            }
-        }
-        folders
+        std::iter::once(project.to_path_buf()).chain(self.workspaces.list(project).into_iter().map(|w| w.folder)).collect()
     }
 
     /// Starts `agent` in the probe folder for its session store only.
@@ -338,33 +336,49 @@ impl Inner {
     /// An agent's list becomes its sessions of the project: each one known here is brought up to
     /// date, each new one listed (unless hidden); when the list is complete, a
     /// session it no longer has goes unless it runs here. Returns how many it listed.
-    fn apply_listing(&self, project: &Path, agent: &AgentConfig, folders: &[PathBuf], listing: Listing) -> usize {
-        let in_folders = |cwd: &Path| folders.iter().any(|f| f == cwd) || dunce::canonicalize(cwd).is_ok_and(|c| folders.contains(&c));
+    fn apply_listing(self: &Arc<Self>, project: &Path, agent: &AgentConfig, folders: &[PathBuf], listing: Listing) -> usize {
+        let canonical = |cwd: &Path| dunce::canonicalize(cwd).unwrap_or_else(|_| cwd.to_path_buf());
+        let in_folders = |cwd: &Path| folders.iter().any(|f| f == cwd) || folders.contains(&canonical(cwd));
+        let workspaces = self.workspaces.list(project);
+        let workspace_of = |cwd: &Path| workspaces.iter().find(|w| w.folder == cwd || w.folder == canonical(cwd));
         let mut sessions = lock(&self.sessions);
         let hidden = lock(&self.hidden);
         let mut seen = HashSet::new();
+        let mut titled = Vec::new();
         for item in listing.sessions.iter().filter(|s| in_folders(&s.cwd)) {
             if !seen.insert(item.session_id.clone()) {
                 continue;
             }
             let known = sessions.values().find(|s| lock(&s.record).acp_session_id.as_deref() == Some(&item.session_id)).cloned();
             if let Some(state) = known {
-                update_from_list(&state, item);
+                if update_from_list(&state, item) {
+                    titled.push(state);
+                }
                 continue;
             }
             if hidden.contains_key(&item.session_id) {
                 continue;
             }
-            let record = listed_record(project, agent, item);
+            let workspace = workspace_of(&item.cwd);
+            if workspace.is_some_and(|w| self.workspaces.is_deleting(&w.id)) {
+                continue;
+            }
+            let record = listed_record(project, workspace, agent, item);
             if sessions.contains_key(&record.session_id) {
                 continue;
             }
             let state = Arc::new(new_state(record));
-            update_from_list(&state, item);
+            if update_from_list(&state, item) {
+                titled.push(Arc::clone(&state));
+            }
             sessions.insert(state.id.clone(), state);
         }
         if listing.complete {
             sessions.retain(|_, state| {
+                // Its agent lists a session a CLI runs only once the CLI has written it.
+                if lock(&state.cli).is_some() {
+                    return true;
+                }
                 let record = lock(&state.record);
                 let gone = record.project_path == project
                     && record.agent_id == agent.id
@@ -373,6 +387,10 @@ impl Inner {
                     && !state.turn_running.load(std::sync::atomic::Ordering::SeqCst);
                 !gone
             });
+        }
+        drop((sessions, hidden));
+        for state in titled {
+            self.name_workspace_after(state);
         }
         seen.len()
     }
@@ -431,15 +449,17 @@ fn listed_id(agent_id: &str, acp_id: &str) -> String {
     format!("{}~{}", safe(agent_id), safe(acp_id))
 }
 
-/// A session first seen in its agent's list: local, in the listed folder.
-fn listed_record(project: &Path, agent: &AgentConfig, item: &ListedSession) -> SessionRecord {
+/// A session first seen in its agent's list: in the workspace whose folder it was listed in, else
+/// in Main.
+fn listed_record(project: &Path, workspace: Option<&WorkspaceRecord>, agent: &AgentConfig, item: &ListedSession) -> SessionRecord {
     let at = item.updated_at.as_deref().and_then(parse_iso_millis).map_or_else(iso_now, iso_from_millis);
+    let placement = env::Placement::of(project, workspace);
     SessionRecord {
         session_id: listed_id(&agent.id, &item.session_id),
         acp_session_id: Some(item.session_id.clone()),
         agent_id: agent.id.clone(),
-        mode: Mode::Local,
-        agent_cwd: project.to_path_buf(),
+        mode: placement.mode,
+        agent_cwd: placement.agent_cwd,
         project_path: project.to_path_buf(),
         title: String::new(),
         title_source: TitleSource::Agent,
@@ -448,20 +468,23 @@ fn listed_record(project: &Path, agent: &AgentConfig, item: &ListedSession) -> S
         created_at: at,
         last_activity_at: None,
         config: Default::default(),
-        worktree_path: None,
-        branch: None,
-        base_commit: None,
+        worktree_path: placement.worktree_path,
+        branch: placement.branch,
+        base_commit: placement.base_commit,
         launch: None,
         agent_name: Some(agent.name.clone()),
         hidden: false,
+        workspace_id: placement.workspace_id,
     }
 }
 
-/// The agent's title (unless the user named it) and its last activity.
-fn update_from_list(state: &SessionState, item: &ListedSession) {
+/// The agent's title (unless the user named it) and its last activity; `true` when the agent's
+/// title changed.
+fn update_from_list(state: &SessionState, item: &ListedSession) -> bool {
     let title = item.title.as_deref().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
     let updated = item.updated_at.as_deref().and_then(parse_iso_millis);
     let mut record = lock(&state.record);
+    let retitled = title.is_some() && record.agent_title != title;
     if title.is_some() {
         record.agent_title.clone_from(&title);
     }
@@ -480,18 +503,23 @@ fn update_from_list(state: &SessionState, item: &ListedSession) {
         }
         *lock(&state.listed_activity) = Some(updated);
     }
+    retitled
 }
 
-/// A session as the page gets it: until when another app may be running it, when its agent saw
-/// activity in it that wasn't Brama's own, and whether its CLI holds it. Takes the record's lock:
-/// call it with none held.
+/// A session as the page gets it: whether its CLI holds it and what that CLI is doing, else until
+/// when another app may be running it, when its agent saw activity in it that wasn't Brama's own.
+/// Takes the record's lock: call it with none held.
 pub(super) fn listed(state: &SessionState) -> Session {
     let mut session = Session::of_record(&lock(&state.record));
     let ours = *lock(&state.active_here);
+    if let Some(held) = lock(&state.cli).as_ref() {
+        session.in_terminal = true;
+        session.activity = held.activity;
+        return session;
+    }
     session.active_elsewhere_until = lock(&state.listed_activity)
         .filter(|at| ours.is_none_or(|ours| *at > ours + OWN_ACTIVITY_SLACK_MS))
         .map(|at| iso_from_millis(at + ELSEWHERE_MS));
-    session.in_terminal = lock(&state.cli).is_some();
     session
 }
 

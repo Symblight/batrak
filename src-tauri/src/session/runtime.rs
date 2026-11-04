@@ -61,15 +61,19 @@ struct Inner {
     signing_in: Mutex<HashMap<LaunchKey, SignInRun>>,
     /// Numbers login terminals (`sign-in-<n>`).
     next_login: AtomicU64,
+    /// The projects' workspaces, whose folders chats run in.
+    workspaces: crate::workspace::Workspaces,
 }
 
 impl Sessions {
     /// Lists the sessions as last stored, all `stopped`, until a sync asks their agents (`sync`).
     pub fn new(opts: SessionsOptions) -> Sessions {
         let store = JsonFile::new(opts.data_dir.join("sessions.json"));
-        let (records, hidden) = sync::load(&store, &opts.data_dir);
+        let (mut records, hidden) = sync::load(&store, &opts.data_dir);
+        let workspaces = crate::workspace::Workspaces::new(&opts.data_dir);
+        let migrated = workspaces::migrate(&workspaces, &mut records);
         let sessions = records.into_iter().map(|record| (record.session_id.clone(), Arc::new(new_state(record)))).collect();
-        Sessions {
+        let sessions = Sessions {
             inner: Arc::new(Inner {
                 opts,
                 store,
@@ -80,8 +84,18 @@ impl Sessions {
                 sign_ins_needed: Mutex::default(),
                 signing_in: Mutex::default(),
                 next_login: AtomicU64::new(0),
+                workspaces,
             }),
+        };
+        if migrated {
+            sessions.inner.persist();
         }
+        sessions
+    }
+
+    /// The projects' workspaces.
+    pub fn workspaces(&self) -> &crate::workspace::Workspaces {
+        &self.inner.workspaces
     }
 
     /// How many of the project's sessions run `agent_id` now (or are about to).
@@ -102,9 +116,9 @@ impl Sessions {
         sessions
     }
 
-    /// Whether a canonical `path` lies in a worktree session's folder, which the page may read.
+    /// Whether a canonical `path` lies in a workspace's folder, which the page may read.
     pub fn contains(&self, path: &Path) -> bool {
-        self.inner.known().iter().any(|record| record.mode == Mode::Worktree && path.starts_with(&record.agent_cwd))
+        self.inner.workspaces.store().list(None).iter().any(|w| path.starts_with(&w.folder))
     }
 
     /// Whether a canonical `path` lies in any session's folder: a local session's project, a
@@ -122,7 +136,7 @@ impl Sessions {
     pub fn create(&self, req: CreateSession, sink_key: &str, sink: Arc<dyn EventSink>) -> Result<Session, String> {
         let record = self.new_record(&req)?;
         let state = self.insert(record, Some((sink_key, sink)))?;
-        tracing::info!(session = %state.id, agent = %req.agent_id, mode = ?req.mode, branch = ?state.record().branch, "session created");
+        tracing::info!(session = %state.id, agent = %req.agent_id, workspace = ?req.workspace_id, branch = ?state.record().branch, "session created");
         self.inner.start_in_background(&state);
         Ok(state.page())
     }
@@ -150,13 +164,28 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
-        let placed =
-            env::place(req.mode, &project, self.inner.data_dir(), &req.session_id, &req.title, req.base_branch.as_deref())?;
+        let workspace = match &req.workspace_id {
+            None => None,
+            Some(id) => {
+                let workspace = self.inner.workspaces.for_new_chat(id)?;
+                if workspace.project_path != project {
+                    return Err(format!("workspace {id} belongs to another project"));
+                }
+                // An unnamed workspace takes its first chat's first message.
+                if !self.inner.known().iter().any(|r| r.workspace_id.as_deref() == Some(id)) {
+                    if let Err(e) = self.inner.workspaces.follow_title(id, || Some(req.title.clone())) {
+                        tracing::warn!(workspace = %id, "naming the workspace after its first chat failed: {e}");
+                    }
+                }
+                Some(workspace)
+            }
+        };
+        let placed = env::Placement::of(&project, workspace.as_ref());
         Ok(SessionRecord {
             session_id: req.session_id.clone(),
             acp_session_id: None,
             agent_id: req.agent_id.clone(),
-            mode: req.mode,
+            mode: placed.mode,
             agent_cwd: placed.agent_cwd,
             project_path: project,
             title: req.title.clone(),
@@ -172,6 +201,7 @@ impl Sessions {
             launch: None,
             agent_name: Some(agent_name),
             hidden: false,
+            workspace_id: placed.workspace_id,
         })
     }
 
@@ -269,9 +299,6 @@ impl Sessions {
         self.inner.persist();
         let dir = self.inner.data_dir().join("sessions").join(id);
         tokio::task::spawn_blocking(move || {
-            if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
-                tracing::warn!(session = %record.session_id, "discarding the session's folder failed: {e}");
-            }
             match std::fs::remove_dir_all(&dir) {
                 Err(e) if e.kind() != std::io::ErrorKind::NotFound => {
                     tracing::warn!(path = %dir.display(), "deleting the session's files failed: {e}");
@@ -298,7 +325,7 @@ impl Sessions {
     /// Starts a stopped session's agent, continuing its ACP session where the agent supports
     /// `session/load`; a running or starting one is left as it is. `false`, quietly, when it
     /// can't start where it is: the project has its worktree's branch checked out (Restart then
-    /// says why).
+    /// says why), or its agent starts only when the user acts on it (`Agent::starts_in_background`).
     pub async fn resume(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
         if lock(&state.cli).is_some() {
@@ -307,6 +334,10 @@ impl Sessions {
         let record = state.record();
         if record.status != SessionStatus::Stopped {
             return Ok(record.status.is_active());
+        }
+        let merged = self.inner.opts.configs.merged(Some(&record.project_path));
+        if merged.agent(&record.agent_id).is_some_and(|agent| !self.inner.starts_in_background(agent)) {
+            return Ok(false);
         }
         let env = env::for_session(&record)?;
         let held = tokio::task::spawn_blocking(move || env.held_elsewhere()).await.map_err(|e| e.to_string())??;
@@ -349,9 +380,6 @@ impl Sessions {
         let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
         for state in &states {
             state.stopping.store(true, Ordering::SeqCst);
-            if let Some(cancel) = lock(&state.prepare_cancel).take() {
-                cancel.store(true, Ordering::SeqCst);
-            }
             if let Some(start) = lock(&state.starting).take() {
                 start.abort();
             }
@@ -443,9 +471,6 @@ impl Inner {
         if lock(&state.sign_in).take().is_some() {
             state.emit("sign-in", Value::Null);
         }
-        if let Some(cancel) = lock(&state.prepare_cancel).take() {
-            cancel.store(true, Ordering::SeqCst);
-        }
         if let Some(start) = lock(&state.starting).take() {
             start.abort();
         }
@@ -500,10 +525,12 @@ mod sign_in;
 mod slots;
 mod start;
 mod state;
+mod subagents;
 mod sync;
 #[cfg(test)]
 mod tests;
 mod turn;
+mod workspaces;
 mod worktree;
 
 use self::agents::*;
@@ -517,3 +544,4 @@ pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInpu
 pub use sign_in::{Login, LoginExit, LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};
 pub use sync::SyncReport;
+pub use workspaces::DeletePreview;

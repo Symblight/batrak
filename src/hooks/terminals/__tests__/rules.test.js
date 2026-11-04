@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
+import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 
@@ -8,21 +8,19 @@ import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalF
  * @returns {Session}
  */
 function session(fields) {
-  return /** @type {Session} */ ({ id: 's', projectId: '/p', mode: 'local', folder: '/p', worktreePath: null, ...fields });
+  return /** @type {Session} */ ({ id: 's', projectId: '/p', folder: '/p', ...fields });
 }
 
 describe('terminals: rules', () => {
-  it('starts each kind of terminal in the session’s folder, the project, or home', () => {
+  it('starts each kind of terminal in the shown folder, a session’s, the project, or home', () => {
     // Arrange
     const home = '/Users/me';
-    const wt = session({ mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
+    const wt = session({ workspaceId: 'w1', folder: '/wt/s1/app' });
     const cases = [
-      ['new, in a worktree session', newTerminalFolder({ activeFolder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
-      ['new, in a local session', newTerminalFolder({ activeFolder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['new, in a draft', newTerminalFolder({ activeFolder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['new, with no project', newTerminalFolder({ activeFolder: null, project: null, home }), { cwd: home, fallback: null }],
-      ['project', projectTerminalFolder({ project: '/p', home }), { cwd: '/p', fallback: '/p' }],
-      ['project, with no project', projectTerminalFolder({ project: null, home }), { cwd: home, fallback: null }],
+      ['new, in a workspace', newTerminalFolder({ folder: '/wt/s1/app', project: '/p', home }), { cwd: '/wt/s1/app', fallback: '/p' }],
+      ['new, in Main', newTerminalFolder({ folder: '/p', project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, while the workspace loads', newTerminalFolder({ folder: null, project: '/p', home }), { cwd: '/p', fallback: '/p' }],
+      ['new, with no project', newTerminalFolder({ folder: null, project: null, home }), { cwd: home, fallback: null }],
       ['a worktree session’s', sessionTerminalFolder(wt), { cwd: '/wt/s1/app', fallback: '/p' }],
       ['a local session’s', sessionTerminalFolder(session({})), { cwd: '/p', fallback: '/p' }],
     ];
@@ -32,10 +30,10 @@ describe('terminals: rules', () => {
     }
   });
 
-  it('names a folder after itself, or a worktree’s after the worktree (either separator)', () => {
+  it('names a folder after itself, or a workspace’s after its worktree (either separator)', () => {
     // Arrange
-    const posix = [session({ mode: 'worktree', folder: '/wt/brama-1a2b/app', worktreePath: '/wt/brama-1a2b' })];
-    const windows = [session({ mode: 'worktree', folder: 'C:\\wt\\brama-1a2b\\app', worktreePath: 'C:\\wt\\brama-1a2b' })];
+    const posix = [{ worktreePath: '/wt/brama-1a2b' }];
+    const windows = [{ worktreePath: 'C:\\wt\\brama-1a2b' }];
     const cases = [
       ['/home/me/app', posix, 'app'],
       ['/wt/brama-1a2b/app', posix, 'brama-1a2b'],
@@ -44,9 +42,9 @@ describe('terminals: rules', () => {
       ['C:\\wt\\brama-1a2b\\app', windows, 'brama-1a2b'],
       ['C:\\wt\\brama-1a2bc', windows, 'brama-1a2bc'],
     ];
-    for (const [folder, sessions, label] of cases) {
+    for (const [folder, workspaces, label] of cases) {
       // Act + Assert
-      expect(folderLabel(/** @type {string} */ (folder), /** @type {Session[]} */ (sessions)), String(folder)).to.equal(label);
+      expect(folderLabel(/** @type {string} */ (folder), /** @type {{ worktreePath: string }[]} */ (workspaces)), String(folder)).to.equal(label);
     }
   });
 

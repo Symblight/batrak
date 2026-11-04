@@ -1,10 +1,11 @@
 import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
-import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from '../adapter.js';
+import { USER_ID, acpAdapter, forgetHistory, forgetSession, handleSessionEvent } from '../adapter.js';
 import { $terminals, addSessionTerminal } from '../../../stores/terminals/terminals.js';
 import { $returnedPrompts, takeReturnedPrompt } from '../../../stores/chat/chat.js';
 import { $sessions, newSession, startSession } from '../../../stores/sessions/sessions.js';
-import { $sessionNotices, dismissSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
+import { $permissionRequests, $sessionNotices, $subagents, clearPermissionRequests, dismissSessionNotice } from '../../../stores/session-runtime/session-runtime.js';
+import { subagentConversationId } from '../rules.js';
 import { $awaitingTrust } from '../../../stores/trust/trust.js';
 import { $sessionReads, $unreadSessions, forgetRead } from '../../../stores/session-read/session-read.js';
 import { $contextUsage, forgetContextUsage } from '../../../stores/context-usage/context-usage.js';
@@ -119,7 +120,7 @@ describe('acp-adapter', () => {
 
   it('takes the session the agent named as the backend reports it', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'Analyze the tree', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'Analyze the tree', agentId: 'a', config: {} });
     /** @type {import('../types.js').Session} */
     const named = { ...$sessions.get()[0], title: 'Tree view gaps', titleSource: 'agent', agentTitle: 'Tree view gaps' };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'session', payload: named });
@@ -128,7 +129,7 @@ describe('acp-adapter', () => {
 
   it('asks for trust when the project agent was refused, keeping the error in the chat', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'repo', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'repo', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message: 'Not trusted' } });
     const launch = { agentId: 'repo', command: './run', args: [], env: {}, mcpServers: [] };
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'untrusted', payload: { launch, message: 'Not trusted' } });
@@ -139,7 +140,7 @@ describe('acp-adapter', () => {
 
   it('shows why a session stopped when agents.json lost its agent', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     const message = 'Agent "claude" is no longer configured';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'claude', message, ran: 'npx -y x' } });
@@ -148,7 +149,7 @@ describe('acp-adapter', () => {
 
   it('offers to turn a session\'s agent back on when the user turned it off', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'codex', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'codex', config: {} });
     const message = 'Codex is off';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'codex', message, ran: null, reason: 'off' } });
@@ -157,7 +158,7 @@ describe('acp-adapter', () => {
 
   it('keeps the notice that agents.json changed the running agent until it is restarted or changed back', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     const message = 'agents.json changed what Fake runs. Restart to use it.';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message } });
     expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'outdated', message });
@@ -174,7 +175,7 @@ describe('acp-adapter', () => {
 
   it('says which session a queued turn waits for until the turn starts', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'queued' } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'queued', payload: { holder: { id: 'a', title: 'Fix the tree' } } });
     const notice = { kind: 'queued', message: 'Waiting for "Fix the tree" to finish', holder: { id: 'a', title: 'Fix the tree' } };
@@ -190,7 +191,7 @@ describe('acp-adapter', () => {
 
   it('warns that another running turn changed the same file until the turn ends', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-start', payload: {} });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'working' } });
     handleSessionEvent({ sessionId: id, seq: 3, kind: 'overlap', payload: { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } } });
@@ -204,7 +205,7 @@ describe('acp-adapter', () => {
 
   it('puts back the notice an overlap covered once the turn ends', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     const outdated = { kind: 'outdated', message: 'agents.json changed what Fake runs. Restart to use it.' };
     const overlap = { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message: outdated.message } });
@@ -278,11 +279,109 @@ describe('acp-adapter', () => {
 
   it("keeps a running session's context usage, without its cost", () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     const cost = { amount: 0.04, currency: 'USD' };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'update', payload: { sessionUpdate: 'usage_update', used: 24000, size: 200000, cost } });
     expect($contextUsage.get()[id]).to.deep.equal({ used: 24000, size: 200000 });
     forgetContextUsage(id);
+  });
+
+  describe('subagents', () => {
+    const id = 'parent';
+    let seq = 0;
+    const send = (/** @type {string} */ kind, /** @type {unknown} */ payload) =>
+      handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: id, seq: ++seq, kind, payload }));
+    afterEach(() => {
+      forgetSession(id);
+      forgetContextUsage(id);
+    });
+
+    /** @param {Partial<import('../types.js').Subagent>} [fields] */
+    const subagent = (fields = {}) => ({ id: 'c1', title: 'Find usages', description: 'Explore', state: /** @type {const} */ ('running'), stopReason: null, cancellable: true, announcedAt: '2026-11-03T10:00:00Z', ...fields });
+
+    it("keeps the session's subagents as the backend lists them; a raw subagent_update shows nothing", () => {
+      // Arrange
+      /** @type {unknown[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(c), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('subagents', { subagents: [subagent()] });
+        send('update', { sessionUpdate: 'subagent_update', sessionId: 'c1', state: { state: 'idle', stopReason: 'end_turn' } });
+        // Assert
+        expect($subagents.get()[id]).to.deep.equal([subagent()]);
+        expect(chunks, 'the backend folds it into its list').to.deep.equal([]);
+      } finally {
+        unsubscribe?.();
+      }
+    });
+
+    it("shows a subagent's own updates in its own conversation, never in the chat or its context usage", () => {
+      // Arrange
+      /** @type {{ conversationId?: string, delta?: { text?: string } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('subagents', { subagents: [subagent()] });
+        send('update', { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }], subagentId: 'c1' });
+        send('update', { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' });
+        send('update', { sessionUpdate: 'usage_update', used: 10, size: 100, subagentId: 'c1' });
+        send('permission-request', { requestId: 'r1', toolCall: { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Read a.txt' }, options: [], subagentId: 'c1' });
+        // Assert
+        const shown = chunks.filter((c) => c.delta?.text).map((c) => [c.conversationId, c.delta?.text]);
+        expect(shown, 'its task first').to.deep.equal([[subagentConversationId(id, 'c1'), 'Look for md-menu'], [subagentConversationId(id, 'c1'), 'found']]);
+        expect($contextUsage.get()[id]).to.equal(undefined);
+        expect($permissionRequests.get()[id]?.map((r) => r.subagentId)).to.deep.equal(['c1']);
+      } finally {
+        unsubscribe?.();
+      }
+    });
+
+    it("routes a running chat's subagents in a snapshot as it does live: their list, card and own conversation", () => {
+      // Arrange
+      /** @type {{ conversationId?: string, partType?: string, delta?: { text?: string, data?: Record<string, unknown> } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act: a page attaches mid-run: the backend sends its subagents before the snapshot
+        send('subagents', { subagents: [subagent()] });
+        send('snapshot', {
+          updates: [
+            { sessionUpdate: 'session_message', messageId: 'm1', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look' }] },
+            { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: 'found' }, subagentId: 'c1' },
+          ],
+        });
+        // Assert
+        expect($subagents.get()[id]?.map((s) => s.id)).to.deep.equal(['c1']);
+        const where = chunks.filter((c) => c.delta?.text || c.delta?.data?.subagentId).map((c) => [c.conversationId, c.delta?.text ?? 'card']);
+        expect(where).to.deep.equal([[id, 'card'], [subagentConversationId(id, 'c1'), 'found']]);
+      } finally {
+        unsubscribe?.();
+        send('status', { status: 'idle' });
+      }
+    });
+
+    it('shows the task handed to a subagent as a card in the chat, its status following the subagent', () => {
+      // Arrange
+      /** @type {{ conversationId?: string, partType?: string, delta?: { label?: string, status?: string, data?: Record<string, unknown> } }[]} */
+      const chunks = [];
+      const unsubscribe = acpAdapter.subscribe?.({ onMessage: () => {}, onChunk: (c) => chunks.push(/** @type {never} */ (c)), onConnectionChange: () => {} });
+      try {
+        // Act
+        send('subagents', { subagents: [subagent()] });
+        send('update', { sessionUpdate: 'session_message', messageId: 'm1', senderSessionId: 'acp-parent', recipientSessionId: 'c1', content: [{ type: 'text', text: 'Look for md-menu' }] });
+        send('subagents', { subagents: [subagent({ state: 'idle', stopReason: 'end_turn' })] });
+        // Assert
+        const cards = chunks.filter((c) => c.conversationId === id && c.partType === 'tool_call').map((c) => c.delta);
+        expect(cards.map((d) => [d?.label, d?.status, d?.data?.subagentId])).to.deep.equal([
+          ['Explore · Find usages', 'in_progress', 'c1'],
+          [undefined, 'completed', 'c1'],
+        ]);
+      } finally {
+        unsubscribe?.();
+      }
+    });
   });
 
   describe('signing in', () => {
@@ -291,7 +390,7 @@ describe('acp-adapter', () => {
 
     it('shows the agent asking to sign in until a start works', () => {
       const id = newSession('/p');
-      startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+      startSession(id, { title: 'T', agentId: 'fake', config: {} });
       handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message: 'Sign in to Fake' } });
       handleSessionEvent({ sessionId: id, seq: 2, kind: 'sign-in', payload: { agentId: 'fake', agentName: 'Fake', methods } });
       expect($sessionNotices.get()[id]).to.deep.equal({
@@ -322,7 +421,7 @@ describe('acp-adapter', () => {
       });
       try {
         const id = newSession('/p');
-        startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+        startSession(id, { title: 'T', agentId: 'fake', config: {} });
         const stream = await acpAdapter.sendMessage?.(
           /** @type {Parameters<NonNullable<typeof acpAdapter.sendMessage>>[0]} */ (
             /** @type {unknown} */ ({ id: 'm', conversationId: id, parts: [{ type: 'text', text: 'hello' }] })

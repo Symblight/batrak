@@ -3,8 +3,8 @@ import { expect } from '@esm-bundle/chai';
 import { noteSignIn } from '../../../stores/agents/agents.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 import {
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalFocus,
   $terminalPanel,
   $terminalTabs,
@@ -17,8 +17,9 @@ import {
   removeProjectTerminals,
   terminalFailed,
 } from '../../../stores/terminals/terminals.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../tabs/tabs.js';
+import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../sessions/types.js').Session} Session */
 /** @typedef {import('../types.js').TerminalSink} TerminalSink */
@@ -62,7 +63,7 @@ const sent = (/** @type {string} */ cmd) => calls.filter((c) => c.cmd === cmd);
  * @returns {Session}
  */
 function session(fields) {
-  return /** @type {Session} */ ({ id: 's', projectId: '/p', mode: 'local', folder: '/p', worktreePath: null, ...fields });
+  return /** @type {Session} */ ({ id: 's', projectId: '/p', folder: '/p', ...fields });
 }
 
 /** A view's sink that keeps each output's `done`, and what it was told. */
@@ -117,32 +118,36 @@ describe('terminals', () => {
     stop?.();
     stop = null;
     for (const id of Object.keys($terminals.get())) forgetTerminal(id);
-    $projectTerminalTabs.set({});
-    $projectTerminalPanels.set({});
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
     $terminalFocus.set(null);
     clearMocks();
-    $workspace.set(null);
+    setActiveWorkspace('/p', MAIN);
+    setWorkspaces([]);
+    $project.set(null);
     $sessions.set([]);
     $activeSessionId.set(null);
   });
 
-  it('opens a terminal where its kind says: the active session’s folder, the project root, a session’s folder', async () => {
+  it("opens the rail's first terminal, New Terminal and a session's Open in → Terminal in the shown workspace's folder and panel", async () => {
     // Arrange
     const { terminals } = await started();
-    const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    const wt = session({ id: 's1', workspaceId: 'w1', folder: '/wt/s1/app' });
+    $project.set({ path: '/p', name: 'p', rootId: null });
+    setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1/app', worktreePath: '/wt/s1' })], '/p');
+    setActiveWorkspace('/p', 'w1');
     $sessions.set([wt]);
-    $activeSessionId.set('s1');
     // Act
     await terminals.showPanel();
     await terminals.newTerminal();
     terminals.openInSession(wt);
     // Assert
-    expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label])).to.deep.equal([
-      ['/p', '/p', 'p'],
-      ['/wt/s1/app', '/p', 's1'],
-      ['/wt/s1/app', '/p', 's1'],
+    expect(Object.values($terminals.get()).map((t) => [t.cwd, t.fallback, t.label, t.folder])).to.deep.equal([
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
+      ['/wt/s1/app', '/p', 's1', '/wt/s1/app'],
     ]);
+    expect($terminalPanel.get()).to.deep.equal({ open: true });
   });
 
   it('closes the previous page load’s shells as soon as it starts, before any view connects', async () => {
@@ -270,7 +275,7 @@ describe('terminals', () => {
   it('closes the tab of a shell that exits with 0, keeps one that fails with Restart, and starts it afresh', async () => {
     // Arrange
     const { terminals } = await started();
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     const clean = openTerminal('/p', '/p', 'p');
     const failing = openTerminal('/p', '/p', 'p');
     const screens = { clean: view(), failing: view() };
@@ -300,7 +305,7 @@ describe('terminals', () => {
   it("closes a login's tab when its sign-in is cancelled", async () => {
     // Arrange
     await started();
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     const terminal = { terminalId: 'sign-in-1', title: 'Copilot Login', commandLine: 'copilot login' };
     openLoginTerminal(terminal, '/p');
     // Act
@@ -319,7 +324,7 @@ describe('terminals', () => {
     it('follows the rail: the first click shows the panel with one terminal, later ones add none', async () => {
       // Arrange
       const { terminals } = await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       // Act
       await terminals.showPanel();
       const [first] = panelTerminals();
@@ -337,26 +342,23 @@ describe('terminals', () => {
       expect(sent('terminal_close')).to.have.length(0);
     });
 
-    it('adds a terminal with +, showing a hidden panel, in the active session’s folder', async () => {
+    it('adds a terminal with +, showing a hidden panel', async () => {
       // Arrange
       const { terminals } = await started();
-      const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
-      $sessions.set([wt]);
-      $activeSessionId.set('s1');
+      $project.set({ path: '/p', name: 'p', rootId: null });
       await terminals.showPanel();
       terminals.hidePanel();
       // Act
       await terminals.newTerminal();
       // Assert
       expect($terminalPanel.get().open).to.equal(true);
-      expect(panelTerminals().map((id) => $terminals.get()[id].cwd)).to.deep.equal(['/p', '/wt/s1/app']);
+      expect(panelTerminals()).to.have.length(2);
     });
 
     it('hides the panel when its last terminal goes, and closes the shell of each terminal that goes', async () => {
       // Arrange
       await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
+      $project.set({ path: '/p', name: 'p', rootId: null });
       const a = openTerminal('/p', '/p', 'p');
       const b = openTerminal('/p', '/p', 'p');
       // Act
@@ -370,16 +372,20 @@ describe('terminals', () => {
       expect(sent('terminal_close').flatMap((c) => c.args.ids)).to.deep.equal([a, b]);
     });
 
-    it('closes the shells of a removed project’s panel', async () => {
+    it('closes the shells of a removed project’s panels, its workspaces’ too', async () => {
       // Arrange
       await started();
-      $workspace.set({ path: '/p', name: 'p', rootId: null });
-      const id = openTerminal('/p', '/p', 'p');
+      $project.set({ path: '/p', name: 'p', rootId: null });
+      setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/task' })], '/p');
+      const main = openTerminal('/p', '/p', 'p');
+      setActiveWorkspace('/p', 'w1');
+      const workspace = openTerminal('/wt/task', '/p', 'task');
+      setActiveWorkspace('/p', MAIN);
       // Act
       removeProjectTerminals('/p');
       // Assert
-      await until(() => sent('terminal_close').length === 1);
-      expect(sent('terminal_close')[0].args).to.deep.equal({ ids: [id] });
+      await until(() => sent('terminal_close').flatMap((c) => c.args.ids).length === 2);
+      expect(sent('terminal_close').flatMap((c) => c.args.ids)).to.have.members([main, workspace]);
     });
   });
 });

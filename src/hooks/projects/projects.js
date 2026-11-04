@@ -1,11 +1,13 @@
-import { $openingPath, $rootId, $workspace } from '../../stores/workspace/workspace.js';
-import { removeProjectTabs } from '../../stores/editor/editor.js';
+import { $openingPath, $project } from '../../stores/project/project.js';
+import { $activeRoot, $rootId } from '../../stores/workspaces/workspaces.js';
+import { removeFolderTabs } from '../../stores/editor/editor.js';
 import { removeProjectTerminals } from '../../stores/terminals/terminals.js';
-import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { removeFolderExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $projects, addProject, removeProject } from '../../stores/projects/projects.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { files } from './files.js';
+import { createRoots } from './roots.js';
 import {
   absPath,
   basename,
@@ -20,26 +22,22 @@ import {
   worktreeOf,
 } from './rules.js';
 
-/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 /** @typedef {import('./types.js').OpenedRoot} OpenedRoot */
 
-/**
- * Projects whose backend root (snapshot + watcher) stays open, the active one included. Switching to
- * one of them needs no scan: its watcher kept the snapshot current.
- */
+/** Backend roots (snapshot + watcher) that stay open, projects' and workspaces' together, the shown ones included. */
 const KEEP_OPEN = 3;
 
 /** Id of the latest `openFolder()` call; an older one that finishes later is discarded. */
 let generation = 0;
-/** @type {Map<string, { rootId: string, name: string }>} Open roots by project path, least recently active first; the active project is last. */
-let roots = new Map();
+const roots = createRoots(KEEP_OPEN, (rootId) => ipc.invoke('close_root', { rootId }).then(() => {}, () => {}));
 /** @type {{ path: string, done: Promise<void> } | null} The latest `openFolder()` call, until it settles. */
 let pending = null;
 /** @type {Promise<void> | null} */
 let readyPromise = null;
 /** @returns {string | null} Canonical absolute path of the opened folder. */
 function currentPath() {
-  return $workspace.get()?.path ?? null;
+  return $project.get()?.path ?? null;
 }
 
 /** @param {{ path: string, done: Promise<void> } | null} next Mirrored into `$openingPath`. */
@@ -54,41 +52,21 @@ function cancelPending() {
   setPending(null);
 }
 
-/** @param {string} path Closes that project's root, if open. */
-function closeRoot(path) {
-  const root = roots.get(path);
-  if (!root) return;
-  roots.delete(path);
-  ipc.invoke('close_workspace', { rootId: root.rootId }).catch(() => {});
-}
-
-/** Closes the least recently active roots beyond `KEEP_OPEN`. */
-function evict() {
-  for (const path of roots.keys()) {
-    if (roots.size <= KEEP_OPEN) break;
-    closeRoot(path);
-  }
-}
-
 /**
- * Makes an open root the active workspace.
+ * Makes an open root the active project.
  * @param {string} path
- * @param {string} name
  * @param {string} rootId
  */
-function show(path, name, rootId) {
-  roots.delete(path);
-  roots.set(path, { rootId, name });
-  // Before the switch: the oldest is never the one still shown, as `KEEP_OPEN` is at least 2.
-  evict();
-  $workspace.set({ path, name, rootId });
+function show(path, rootId) {
+  roots.show(path, rootId);
+  $project.set({ path, name: basename(path), rootId });
 }
 
-/** Leaves the active workspace and closes its backend root. */
+/** Leaves the active project and closes its backend root. */
 function close() {
   const path = currentPath();
-  $workspace.set(null);
-  if (path) closeRoot(path);
+  $project.set(null);
+  if (path) void roots.close(path);
 }
 
 /**
@@ -100,28 +78,26 @@ async function switchTo(path, id) {
   /** @type {OpenedRoot} */
   let opened;
   try {
-    opened = await ipc.invoke('open_workspace', { path });
+    opened = await ipc.invoke('open_root', { path });
   } catch (err) {
     // A newer open from this window cancels the older scan in the backend; that's not a failure.
     if (id !== generation) return;
     setPending(null);
     throw err;
   }
-  const name = opened.path.split(/[\\/]/).filter(Boolean).pop() ?? opened.path;
   if (id !== generation) {
     // Another project became active meanwhile: keep the scan for switching here later, unless
     // the project was removed or is open already.
     const listed = $projects.get().some((p) => p.id === opened.path);
-    if (!listed || roots.has(opened.path)) {
-      ipc.invoke('close_workspace', { rootId: opened.rootId }).catch(() => {});
+    if (!listed || roots.get(opened.path) !== null) {
+      ipc.invoke('close_root', { rootId: opened.rootId }).catch(() => {});
       return;
     }
-    roots = new Map([[opened.path, { rootId: opened.rootId, name }], ...roots]);
-    evict();
+    roots.keepOlder(opened.path, opened.rootId, [$project.get()?.path ?? '', $activeRoot.get().path ?? '']);
     return;
   }
-  addProject(opened.path, name);
-  show(opened.path, name, opened.rootId);
+  addProject(opened.path, basename(opened.path));
+  show(opened.path, opened.rootId);
   setPending(null);
 }
 
@@ -138,7 +114,7 @@ function openFolder(path) {
 }
 
 /**
- * The opened projects: the active one lives in `$workspace` (subscribe to it, or to `$rootId`, for
+ * The opened projects: the active one lives in `$project` (subscribe to it, or to `$rootId`, for
  * changes). The last `KEEP_OPEN` active projects keep their backend root (scan + watcher), so
  * switching back to one is instant; an older one is closed and scanned afresh when activated again.
  * Also the rules about paths: a root and a relative path, and the worktree folders of sessions.
@@ -160,7 +136,7 @@ export const projects = Object.freeze({
   /** @returns {string | null} Canonical absolute path of the opened folder. */
   path: currentPath,
 
-  /** @returns {string | null} Workspace snapshot id; `null` until the backend has the folder open. */
+  /** @returns {string | null} Root snapshot id; `null` until the backend has the folder open. */
   rootId() {
     return $rootId.get();
   },
@@ -170,7 +146,7 @@ export const projects = Object.freeze({
    * @returns {string} Absolute path.
    */
   absPath(rel) {
-    return absPath(currentPath(), rel);
+    return absPath($activeRoot.get().path, rel);
   },
 
   /**
@@ -178,7 +154,7 @@ export const projects = Object.freeze({
    * @returns {string | null} Relative path, or null when outside the root.
    */
   relPath(abs) {
-    return relPath(currentPath(), abs);
+    return relPath($activeRoot.get().path, abs);
   },
 
   /**
@@ -188,7 +164,7 @@ export const projects = Object.freeze({
    */
   ready() {
     readyPromise ??= ipc
-      .invoke('close_window_workspaces')
+      .invoke('close_window_roots')
       .then(() => {})
       .catch((err) => app.reportError('Closing previous projects failed', err));
     return readyPromise;
@@ -197,12 +173,12 @@ export const projects = Object.freeze({
   /**
    * Hands the changes of the active root's files on disk to `listener`, as the watcher reports them
    * (the other open roots' changes only reach their snapshots and git caches).
-   * @param {(changes: WorkspaceChanges) => void} listener
+   * @param {(changes: RootChanges) => void} listener
    * @returns {() => void} Stops listening.
    */
   onFsChange(listener) {
     const stop = ipc
-      .listen('workspace://changed', (/** @type {WorkspaceChanges} */ changes) => {
+      .listen('roots://changed', (/** @type {RootChanges} */ changes) => {
         if (changes.rootId === $rootId.get()) listener(changes);
       })
       .catch((err) => {
@@ -225,20 +201,46 @@ export const projects = Object.freeze({
    * @returns {boolean} Whether a backend root is still open (active or kept for switching back).
    */
   isOpen(rootId) {
-    return [...roots.values()].some((root) => root.rootId === rootId);
+    return roots.isOpen(rootId);
   },
 
   /**
-   * Makes a project the active workspace: at once when its root is still open, else by scanning it.
+   * Keeps a workspace's root open while its project is shown, as the most recently shown root.
+   * @param {string} folder
+   * @param {string} rootId
+   */
+  showRoot(folder, rootId) {
+    roots.show(folder, rootId, [currentPath() ?? '']);
+  },
+
+  /**
+   * @param {string} folder
+   * @returns {string | null} The id of its root while it's open.
+   */
+  openRoot(folder) {
+    return roots.get(folder);
+  },
+
+  /**
+   * Closes a folder's root, if open: a workspace's before its folder is deleted.
+   * @param {string} folder
+   * @returns {Promise<void>} Settles once nothing watches it.
+   */
+  closeFolder(folder) {
+    return roots.close(folder);
+  },
+
+  /**
+   * Makes a project the active project: at once when its root is still open, else by scanning it.
    * @param {string} path Canonical absolute path (a project id).
    */
   async activate(path) {
-    if (path === currentPath() && $rootId.get() !== null) return;
+    if (path === currentPath() && $project.get()?.rootId) return;
     const open = roots.get(path);
-    if (open) {
+    if (open !== null) {
       // A scan of another project still running is kept for later (see `switchTo`).
       cancelPending();
-      show(path, open.name, open.rootId);
+      show(path, open);
       return;
     }
     // A second click while it is scanning waits for that scan instead of starting another.
@@ -250,12 +252,12 @@ export const projects = Object.freeze({
   async restore() {
     // Runs at every start: the last page load's roots close even with no folder to reopen.
     projects.ready();
-    const saved = $workspace.get();
+    const saved = $project.get();
     if (!saved || saved.rootId !== null) return;
     try {
       await openFolder(saved.path);
     } catch (err) {
-      if ($workspace.get() === saved) $workspace.set(null);
+      if ($project.get() === saved) $project.set(null);
       throw err;
     }
   },
@@ -274,18 +276,18 @@ export const projects = Object.freeze({
     if (active || pending?.path === id) cancelPending();
     removeProject(id);
     if (!active) {
-      closeRoot(id);
-      removeProjectTabs(id);
+      void roots.close(id);
+      removeFolderTabs(id);
       removeProjectTerminals(id);
-      removeProjectExpandedFolders(id);
+      removeFolderExpandedFolders(id);
       return;
     }
     // Leave the removed project before forgetting its tabs and folders, so nothing can write them back while
     // the next one is scanned.
     close();
-    removeProjectTabs(id);
+    removeFolderTabs(id);
     removeProjectTerminals(id);
-    removeProjectExpandedFolders(id);
+    removeFolderExpandedFolders(id);
     if (next) projects.activate(next.path).catch((err) => app.reportError('Opening project failed', err));
   },
 
@@ -323,8 +325,8 @@ export const projects = Object.freeze({
    * @param {string} abs
    */
   noteOpened(abs) {
-    const rel = relPath(currentPath(), abs);
-    const rootId = $rootId.get();
+    const { path, rootId } = $activeRoot.get();
+    const rel = relPath(path, abs);
     if (rootId && rel) ipc.invoke('note_file_opened', { rootId, path: rel }).catch(() => {});
   },
 });

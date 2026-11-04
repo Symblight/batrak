@@ -21,3 +21,21 @@ describe('composer options', () => {
     expect(composer.currentName(null)).to.equal(null);
   });
 });
+
+describe('composer run target', () => {
+  it("is a draft's picked place, else its workspace's own: This workspace in a worktree workspace, Local in Main", () => {
+    /** @type {[import('../types.js').RunTarget | undefined, string, boolean, import('../types.js').RunTarget, string][]} */
+    const cases = [
+      // [picked, the draft's workspace, the project can have workspaces, place, why]
+      [undefined, 'w1', true, { kind: 'workspace' }, 'a worktree workspace'],
+      [undefined, 'main', true, { kind: 'local' }, 'Main'],
+      [{ kind: 'local' }, 'w1', true, { kind: 'local' }, 'picked'],
+      [{ kind: 'worktree', base: 'dev' }, 'main', true, { kind: 'worktree', base: 'dev' }, 'picked'],
+      [{ kind: 'workspace' }, 'main', true, { kind: 'local' }, 'Main is no worktree workspace'],
+      [{ kind: 'worktree', base: 'dev' }, 'main', false, { kind: 'local' }, 'no New worktree where there can be no workspace'],
+    ];
+    for (const [picked, workspaceId, worktrees, expected, why] of cases) {
+      expect(composer.runTargetOf(picked, workspaceId, worktrees), why).to.deep.equal(expected);
+    }
+  });
+});

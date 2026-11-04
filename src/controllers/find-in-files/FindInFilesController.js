@@ -1,6 +1,6 @@
 import { StoreController } from '../store/StoreController.js';
 import { search } from '../../hooks/search/search.js';
-import { $rootId } from '../../stores/workspace/workspace.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').ReactiveControllerHost} ReactiveControllerHost */

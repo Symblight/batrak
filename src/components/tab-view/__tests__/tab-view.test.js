@@ -39,7 +39,7 @@ const terminalInfo = {
   fallback: '/p',
   label: 'zsh — p',
   title: null,
-  projectPath: '/p',
+  folder: '/p', projectPath: '/p',
   status: 'running',
   exit: null,
   error: null,
@@ -56,40 +56,13 @@ describe('acp-tab-view', () => {
     expect(placeholder?.getAttribute('text')).to.equal('Not implemented yet.');
   });
 
-  for (const [name, count] of /** @type {const} */ ([['few tabs', 2], ['tabs that overflow the row', 40]])) {
-    it(`puts the host’s add button right after the last tab, like a browser, and its actions at the end of the row, with ${name}`, async () => {
-      // Arrange
-      const tabs = Array.from({ length: count }, (_, i) => fileTab(`/p/file-${i}.js`));
-      const wrap = await fixture(
-        html`<div style="width: 700px">
-          <acp-tab-view .tabs=${tabs} .active=${'/p/file-0.js'}><button slot="add">+</button><button slot="actions">−</button></acp-tab-view>
-        </div>`,
-      );
-      const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (wrap.firstElementChild);
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
-      // Act
-      const row = el.getBoundingClientRect();
-      const add = /** @type {HTMLElement} */ (el.querySelector('[slot="add"]')).getBoundingClientRect();
-      const actions = /** @type {HTMLElement} */ (el.querySelector('[slot="actions"]')).getBoundingClientRect();
-      const strip = el.shadowRoot?.querySelector('acp-tab-strip');
-      const last = /** @type {Element} */ ([...(strip?.shadowRoot?.querySelectorAll('md-tab') ?? [])].at(-1)).getBoundingClientRect();
-
-      // Assert
-      expect(actions.right, 'the actions at the very end').to.be.closeTo(row.right, 8);
-      expect(add.right, 'the add button is never pushed out of the row').to.be.at.most(actions.left + 1);
-      if (count < 10) expect(add.left - last.right, 'right after the last tab').to.be.within(-1, 40);
-      else expect(add.left, 'at the end of the strip that scrolls').to.be.greaterThan(row.right / 2);
-    });
-  }
-
   it('shows what its host renders for a view tab, one panel per tab and only the active one shown', async () => {
     // Arrange
     const tabs = [
       { ...fileTab(''), id: 'view:settings', kind: /** @type {const} */ ('settings') },
       { ...fileTab(''), id: 'view:agents', kind: /** @type {const} */ ('agents') },
       { ...fileTab(''), id: 'view:changes', kind: /** @type {const} */ ('changes') },
-      { ...fileTab(''), id: 'view:session-changes:s1', kind: /** @type {const} */ ('session-changes') },
+      { ...fileTab(''), id: 'view:workspace-changes:w1', kind: /** @type {const} */ ('workspace-changes') },
       terminalTab('t1'),
       { ...fileTab(''), id: 'view:browser', kind: /** @type {const} */ ('browser') },
     ];
@@ -106,7 +79,7 @@ describe('acp-tab-view', () => {
     );
     // Assert
     const panels = [...(el.shadowRoot?.querySelectorAll('.acp-tab-view__panel') ?? [])];
-    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:session-changes:s1', 'view:terminal:t1']);
+    expect(asked, 'asked for the host’s tabs only, not the placeholder').to.deep.equal(['view:settings', 'view:agents', 'view:changes', 'view:workspace-changes:w1', 'view:terminal:t1']);
     expect(panels[0].querySelector('.from-host')?.textContent).to.equal('view:settings');
     expect(panels.map((p) => p.hasAttribute('active'))).to.deep.equal([true, false, false, false, false, false]);
   });

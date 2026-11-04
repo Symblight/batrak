@@ -14,11 +14,10 @@ paths:
 # Agents: config, registry, trust, sign-in
 
 - **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
-  `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`'s
-  `defaultMode` (`local` / `worktree`, anything else `local`; `worktree` only in a repository with
-  a commit, since older projects got it written whether git or not) is the run target a new session's
-  composer starts with (`$workspaceSettings`, read when the project opens); a worktree picks its
-  base from `git_branches` (local branches, sessions' `brama/…` left out). A project's agents are its
+  `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
+  holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
+  chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local
+  branches, sessions' `brama/…` left out). A project's agents are its
   `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
@@ -71,7 +70,10 @@ paths:
     runs its archive's program (`cmd`'s file name, `agy_acp_server.par`) from PATH
     (`Launch::Program`, this platform's args): the user installs and updates it, Brama never
     downloads an agent; a start that doesn't find it says so with the archive's link
-    (`registry::not_installed`). An installed agent
+    (`registry::not_installed`). Antigravity is never started in the background
+    (`Agent::starts_in_background` false: signed out, its `session/new` / `load` opens Google's
+    sign-in in the browser): no probe (it fails), no sync (`unsupported`), and `session_resume` on
+    show leaves it stopped; a message, Restart, Retry or Sign in start it. An installed agent
     is matched by what it runs (`match_launch`: that program's name, or `npx` running the entry's
     package, its first `-p` / `--package` value or first non-flag argument, with or without
     `@version`), not by id;
@@ -123,13 +125,14 @@ paths:
   needing one (`AgentRow.status: signIn`). A prompt sent meanwhile is held (`held`), not failed:
   Stop, cancel or the agent leaving drop it (`prompt-returned`, back into the composer). The banner
   offers the agent's `agent` methods and Retry (`agents_sign_in`, `methodId: null` only checks, for
-  a login done in a terminal); once a sign-in, Retry or probe works, every session waiting on that
+  a login done in a terminal); a launch noted so isn't probed (started) again, since an agent may
+  open the browser at each start signed out (Antigravity does); once a sign-in, Retry or probe works, every session waiting on that
   launch starts again and sends its held prompt. A `terminal` / `command` method (`agent-acp`'s `auth.rs`
   `login_command`: the launch plus the method's args and env, or the agent's own command) runs in a
   terminal the backend opens for the calling window (`Terminals::open_program`, cwd
   `<app data>/probe`); `agents_sign_in` returns its `LoginTab` (also in `agents://sign-in`'s
   `terminal`, which every window hears; a window joining another's login gets none back), which
-  `openLoginTerminal()` shows as a running tab of the sign-in's project's terminal panel (`terminal-panel.md`; a login moved to the editor is shown there)
+  `openLoginTerminal()` shows as a running tab of the terminal panel of the folder shown when the sign-in started (`terminal-panel.md`; a login moved to the editor is shown there)
   (`TerminalInfo.login`: its command line as tooltip, no Restart: the sign-in runs it again); exit
   0 signs in (`Sessions::login_ended`), another exit fails, closing the tab cancels, and a cancel
   closes the tab (`noteSignIn()`). The banner offers every method but API keys, says which terminal

@@ -2,26 +2,15 @@
   display: contents;
 }
 
-.acp-confirm-dialog__dialog {
-  --md-dialog-container-color: var(--acp-color-surface-container-high);
-  --md-dialog-container-radius: 16px;
-
-  color: var(--acp-color-on-surface);
-  font-family: var(--acp-font-family);
-}
-.acp-confirm-dialog__dialog::part(dialog) {
-  width: min(400px, calc(100vw - 32px));
-}
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
 .acp-confirm-dialog__dialog_top::part(dialog) {
-  width: min(480px, calc(100vw - 32px));
-  max-inline-size: none;
   /* md-dialog centers with `margin: auto` over `inset: 0`; a fixed top margin pins it up. */
   margin-block-start: var(--acp-space-4);
 }
 
 .acp-confirm-dialog__headline {
   margin: 0;
-  font: 500 20px/28px var(--acp-font-family);
+  font: var(--acp-dialog-headline-font);
   color: var(--acp-color-on-surface);
 }
 
@@ -33,13 +22,13 @@
 }
 .acp-confirm-dialog__message {
   margin: 0;
-  font: 400 14px/20px var(--acp-font-family);
+  font: var(--acp-dialog-text-font);
   color: var(--acp-color-on-surface);
   overflow-wrap: anywhere;
 }
 .acp-confirm-dialog__detail {
   margin: 0;
-  font: 400 13px/18px var(--acp-font-family);
+  font: var(--acp-dialog-detail-font);
   color: var(--acp-color-on-surface-variant);
 }
 
@@ -48,10 +37,7 @@
   justify-content: flex-end;
   gap: var(--acp-space-2);
   width: 100%;
-  padding-block-start: calc(var(--acp-space-4) + var(--acp-space-2));
-}
-.acp-confirm-dialog__action {
-  --md-button-font-size: var(--acp-font-size-md);
+  padding-block-start: var(--acp-dialog-footer-space);
 }
 .acp-confirm-dialog__action_destructive {
   --md-button-background-color: var(--acp-color-error);

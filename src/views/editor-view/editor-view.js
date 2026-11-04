@@ -12,9 +12,9 @@ import { $commentFocus, $comments } from '../../stores/comments/comments.js';
 import { $fileLanguages, setFileLanguage } from '../../stores/editor/editor.js';
 import { $markdownSplit, setMarkdownSplit } from '../../stores/layout/layout.js';
 import { notify } from '../../stores/notices/notices.js';
-import { $worktrees } from '../../stores/sessions/sessions.js';
 import { $settings, setMarkdownScrollSync } from '../../stores/settings/settings.js';
-import { $rootId, $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
+import { $rootId, $workspaces } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -32,9 +32,9 @@ export class AcpEditorView extends ViewElement {
     tab: { attribute: false },
   };
 
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #rootId = new StoreController(this, { store: $rootId });
-  #worktrees = new StoreController(this, { store: $worktrees });
+  #workspaces = new StoreController(this, { store: $workspaces });
   #languages = new StoreController(this, { store: $fileLanguages });
   #settings = new StoreController(this, { store: $settings });
   #comments = new StoreController(this, { store: $comments });
@@ -94,9 +94,9 @@ export class AcpEditorView extends ViewElement {
       .scrollSync=${markdownScrollSync}
       .ratio=${this.#markdownSplit.value}
       .language=${this.#languages.value[tab.path] ?? ''}
-      .root=${this.#workspace.value?.path ?? null}
+      .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
-      .worktrees=${this.#worktrees.value}
+      .workspaces=${this.#workspaces.value}
       .listDir=${projects.listDir}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
@@ -133,9 +133,9 @@ export class AcpEditorView extends ViewElement {
     return html`<acp-code-view
       .tab=${tab}
       .language=${this.#languages.value[tab.path] ?? ''}
-      .root=${this.#workspace.value?.path ?? null}
+      .root=${this.#project.value?.path ?? null}
       .rootId=${this.#rootId.value}
-      .worktrees=${this.#worktrees.value}
+      .workspaces=${this.#workspaces.value}
       .listDir=${projects.listDir}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}

@@ -5,7 +5,7 @@ import { $agentList, $agentsView } from '../../../stores/agents/agents.js';
 import { $notices, dismissNotice, runNoticeAction } from '../../../stores/notices/notices.js';
 import { $awaitingTrust, $trustPrompt } from '../../../stores/trust/trust.js';
 import { $draftSessions } from '../../../stores/sessions/sessions.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 
 /** @typedef {import('../types.js').UntrustedAgent} UntrustedAgent */
 
@@ -38,7 +38,7 @@ async function until(pred) {
 }
 
 /** @param {string} path */
-const open = (path) => $workspace.set({ path, name: path.split('/').pop() ?? path, rootId: `root:${path}` });
+const open = (path) => $project.set({ path, name: path.split('/').pop() ?? path, rootId: `root:${path}` });
 
 /** @param {string} id An agent id unique to the test: an agent's options are cached across tests. */
 const unique = (id) => `${id}-${counter}`;
@@ -51,7 +51,7 @@ describe('agents', () => {
       agents_view: () => ({ installed: [] }),
       agents_untrusted: () => [],
     };
-    $workspace.set(null);
+    $project.set(null);
     $trustPrompt.set(null);
     $awaitingTrust.set([]);
     mockIPC(
@@ -67,7 +67,7 @@ describe('agents', () => {
     stop?.();
     stop = null;
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
     for (const notice of $notices.get()) dismissNotice(notice.id);
   });
 
@@ -180,7 +180,7 @@ describe('agents', () => {
       let command = './run';
       answers.agents_untrusted = () => [runs(command)];
       const agents = await started();
-      $draftSessions.set({ s1: '/work/a' });
+      $draftSessions.set({ s1: { projectId: '/work/a', workspaceId: 'main' } });
       // Act
       open('/work/a');
       await until(() => $trustPrompt.get() !== null);
@@ -206,7 +206,7 @@ describe('agents', () => {
       // Arrange
       answers.agents_untrusted = () => [runs('./run')];
       const agents = await started();
-      $draftSessions.set({ s1: '/work/a', s2: '/work/b' });
+      $draftSessions.set({ s1: { projectId: '/work/a', workspaceId: 'main' }, s2: { projectId: '/work/b', workspaceId: 'main' } });
       open('/work/a');
       await until(() => $trustPrompt.get() !== null);
       $awaitingTrust.set(['s2', 's1']);

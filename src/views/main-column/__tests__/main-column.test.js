@@ -5,7 +5,7 @@ import { $activePath, closeAllTabs, openAgents, openChanges, openSettings, openT
 import { $gitChanges } from '../../../stores/git/git.js';
 import { $terminals } from '../../../stores/terminals/terminals.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { $markdownModes } from '../../../stores/markdown-view/markdown-view.js';
 import { markdownView } from '../../../hooks/markdown-view/markdown-view.js';
 import { app } from '../../../hooks/app/app.js';
@@ -15,7 +15,7 @@ import '../main-column.js';
 /** @typedef {import('../../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
 /** @type {TerminalInfo} */
-const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, projectPath: '/p', status: 'running', exit: null, error: null, login: null };
+const running = { cwd: '/p', fallback: '/p', label: 'zsh — p', title: null, folder: '/p', projectPath: '/p', status: 'running', exit: null, error: null, login: null };
 
 describe('acp-main-column', () => {
   beforeEach(() => {
@@ -24,7 +24,7 @@ describe('acp-main-column', () => {
       if (cmd === 'agents_view') return { installed: [], userAgents: [], registry: [], counts: { all: 0, updates: 0, off: 0 }, defaultAgent: null, errors: [], registryState: { checkedAt: null, offline: false, checking: false } };
       return null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     $terminals.set({ t1: running });
   });
 
@@ -32,7 +32,7 @@ describe('acp-main-column', () => {
     closeAllTabs();
     $terminals.set({});
     $gitChanges.set({ files: [], loaded: false, loading: false, error: null });
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -46,7 +46,7 @@ describe('acp-main-column', () => {
   it('shows the Settings, Agents, Changes and terminal tabs through their views', async () => {
     // Arrange
     openTab(tabs.terminalId('t1'));
-    openTab(tabs.sessionChangesId('s1'));
+    openTab(tabs.workspaceChangesId('w1'));
     openChanges();
     openAgents();
     openSettings();
@@ -61,7 +61,7 @@ describe('acp-main-column', () => {
     expect(panel.hasAttribute('active')).to.equal(true);
     expect(tabView.shadowRoot?.querySelector('acp-agents-tab acp-agents-view'), 'the Agents tab too').to.not.equal(null);
     expect(tabView.shadowRoot?.querySelector('acp-changes-tab acp-changes-review'), 'and the Changes tab').to.not.equal(null);
-    expect(tabView.shadowRoot?.querySelector('acp-session-changes-tab')?.sessionId, 'and a session’s Changes tab').to.equal('s1');
+    expect(tabView.shadowRoot?.querySelector('acp-workspace-changes-tab')?.workspaceId, 'and a workspace’s Changes tab').to.equal('w1');
     expect(tabView.shadowRoot?.querySelector('acp-terminal-view')?.getAttribute('terminal-id'), 'and a terminal').to.equal('t1');
   });
 
@@ -91,7 +91,7 @@ describe('acp-main-column', () => {
   it('shows a file in its editor view, with a match selected, and reads the selection back', async () => {
     mockIPC((cmd) => (cmd === 'read_file' ? 'first\nsecond needle\n' : null));
     // Files are read only once the project's root is open.
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     const { el } = await render();
     el.openFile('/p/a.txt', { line: 2, column: 8, length: 6 });
     const started = Date.now();

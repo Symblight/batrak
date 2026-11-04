@@ -1,0 +1,109 @@
+export { MAIN, folderOfWorkspace } from './folder.js';
+import { isActiveElsewhere } from '../sessions/rules.js';
+
+/** @typedef {import('./types.js').Workspace} Workspace */
+/** @typedef {import('./types.js').WorkspaceStatus} WorkspaceStatus */
+/** @typedef {import('../sessions/types.js').Session} Session */
+
+/** Statuses, the strongest first: a workspace shows the strongest of its chats'. */
+export const STATUS_ORDER = /** @type {const} */ (['waiting', 'error', 'working', 'unread', 'idle']);
+
+const WORKING = new Set(['preparing', 'starting', 'working', 'queued']);
+
+/**
+ * A workspace's status (Main's for `null`): the strongest of its chats', and its own failed or
+ * running checkout and missing folder.
+ * @param {Workspace | null} workspace
+ * @param {readonly Session[]} chats Its chats.
+ * @param {{ pending: ReadonlySet<string>, unread: ReadonlySet<string>, now: number }} facts Ids of
+ *   chats with a permission request waiting, of unread chats; the current time (ms).
+ * @returns {WorkspaceStatus}
+ */
+export function statusOf(workspace, chats, { pending, unread, now }) {
+  if (chats.some((c) => c.status === 'waiting' || c.activity === 'waitingForUser' || pending.has(c.id))) return 'waiting';
+  if (workspace?.missing || workspace?.error || chats.some((c) => c.status === 'error')) return 'error';
+  if (workspace?.creating || chats.some((c) => WORKING.has(c.status) || c.activity === 'running' || isActiveElsewhere(c, now))) return 'working';
+  if (chats.some((c) => unread.has(c.id))) return 'unread';
+  return 'idle';
+}
+
+/**
+ * The picker's Active group: by status, the strongest first, then the latest activity (its own, or
+ * its chats') first. Main isn't in it: it's a group of its own, after.
+ * @param {readonly Workspace[]} list
+ * @param {Readonly<Record<string, WorkspaceStatus>>} statuses By workspace id.
+ * @param {readonly Session[]} chats The project's chats.
+ */
+export function orderWorkspaces(list, statuses, chats) {
+  /** @param {Workspace} w */
+  const activity = (w) =>
+    Math.max(
+      Date.parse(w.createdAt) || 0,
+      ...chats.filter((c) => c.workspaceId === w.id).map((c) => Date.parse(c.lastActivityAt) || 0),
+    );
+  /** @param {Workspace} w */
+  const rank = (w) => STATUS_ORDER.indexOf(statuses[w.id] ?? 'idle');
+  return [...list].sort((a, b) => rank(a) - rank(b) || activity(b) - activity(a));
+}
+
+/**
+ * The status of each workspace of a project and of Main (`main`), from its chats (`statusOf()`).
+ * @param {string} projectPath
+ * @param {readonly Workspace[]} list The project's workspaces.
+ * @param {readonly Session[]} sessions Every chat.
+ * @param {{ pending: ReadonlySet<string>, unread: ReadonlySet<string>, now: number }} facts As `statusOf()` takes them.
+ * @returns {Record<string, WorkspaceStatus>}
+ */
+export function statusesOf(projectPath, list, sessions, facts) {
+  const chats = sessions.filter((s) => s.projectId === projectPath);
+  /** @type {Record<string, WorkspaceStatus>} */
+  const statuses = { main: statusOf(null, chats.filter((c) => !c.workspaceId), facts) };
+  for (const w of list) statuses[w.id] = statusOf(w, chats.filter((c) => c.workspaceId === w.id), facts);
+  return statuses;
+}
+
+/**
+ * The workspace "next waiting" goes to: the first waiting one after the shown one in the picker's
+ * order (Active, then Main), wrapping around; `null` when no other one waits.
+ * @param {readonly string[]} order Workspace ids, Main's (`main`) among them.
+ * @param {Readonly<Record<string, WorkspaceStatus>>} statuses By workspace id.
+ * @param {string} shownId
+ * @returns {string | null}
+ */
+export function nextWaiting(order, statuses, shownId) {
+  const from = order.indexOf(shownId) + 1;
+  const rotated = [...order.slice(from), ...order.slice(0, from)];
+  return rotated.find((id) => id !== shownId && statuses[id] === 'waiting') ?? null;
+}
+
+/**
+ * What changed between two lists of a project's workspaces, as snackbar messages: created, deleted,
+ * renamed by the user (not its agent's titles), its folder recreated.
+ * @param {readonly Workspace[]} before
+ * @param {readonly Workspace[]} after
+ * @returns {string[]}
+ */
+export function noticesOf(before, after) {
+  const was = new Map(before.map((w) => [w.id, w]));
+  const notices = [];
+  for (const w of after) {
+    const old = was.get(w.id);
+    if (old === undefined) notices.push(`Created workspace "${w.name}" on ${w.branch}`);
+    else if (old.name !== w.name && w.nameSource === 'user') notices.push(`Renamed workspace "${old.name}" to "${w.name}"`);
+    else if (old.missing && !w.missing) notices.push(`Recreated the folder of "${w.name}"`);
+  }
+  const kept = new Set(after.map((w) => w.id));
+  for (const w of before) if (!kept.has(w.id)) notices.push(`Deleted workspace "${w.name}"`);
+  return notices;
+}
+
+/**
+ * The branch a new workspace starts from when none was picked: the remote's default, else Main's
+ * checked-out branch, else the first local one.
+ * @param {import('../git/types.js').BranchList} list Main's branches.
+ * @param {string | null} mainBranch
+ * @returns {string | null}
+ */
+export function defaultBase(list, mainBranch) {
+  return list.default ?? mainBranch ?? list.local[0] ?? null;
+}

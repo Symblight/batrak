@@ -2,7 +2,8 @@ import { projects } from '../../hooks/projects/projects.js';
 import { buildChipElement } from '@symblight/chat';
 import { fileIcon } from '../../components/file-icon/file-icon.js';
 import { chat } from '../../hooks/chat/chat.js';
-import { $activeSessionId, $worktrees, folderOf } from '../../stores/sessions/sessions.js';
+import { $activeSessionId, folderOf } from '../../stores/sessions/sessions.js';
+import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 
@@ -177,8 +178,9 @@ async function isFolder(absolute) {
  * Renders the chat's message parts (the agent's Markdown, your text, chips, pastes, thoughts, plans,
  * tool calls, attachments) with file refs as chips and links, and opens a clicked one from the host:
  * a file chip or link in a message, or a tool call's location, fires `acp-file-open`; a folder's,
- * `acp-file-reveal`.
+ * `acp-file-reveal`; a subagent's card opens its chat (`acp-subagent-open`).
  * @fires acp-file-open {{ path: string, line?: number }}
+ * @fires acp-subagent-open {{ sessionId: string, subagentId: string }}
  * @fires acp-file-reveal {{ path: string }}
  * @implements {ReactiveController}
  */
@@ -276,6 +278,10 @@ export class ChatPartsController {
       call.status = part.status ?? 'pending';
       call.locations = part.locations ?? [];
       call.error = part.error ?? '';
+      // A subagent's card (`subagentCardData()`): a click opens its chat.
+      const subagentId = part.data?.subagentId;
+      if (typeof subagentId === 'string') call.dataset.subagentId = subagentId;
+      else delete call.dataset.subagentId;
       return call;
     },
     attachment: (part, previous) => {
@@ -292,6 +298,13 @@ export class ChatPartsController {
   #onClick = (/** @type {Event} */ e) => {
     const path = e.composedPath();
     if (!path.some((n) => n instanceof HTMLElement && n.localName === 'chx-message-list')) return;
+    const card = path.find((n) => n instanceof HTMLElement && n.localName === 'chx-tool-call');
+    const subagentId = card instanceof HTMLElement ? card.dataset.subagentId : undefined;
+    const sessionId = $activeSessionId.get();
+    if (subagentId !== undefined && sessionId !== null) {
+      this.#host.dispatchEvent(new CustomEvent('acp-subagent-open', { detail: { sessionId, subagentId }, bubbles: true, composed: true }));
+      return;
+    }
     const target = path.find(
       (n) =>
         n instanceof HTMLElement &&
@@ -321,7 +334,7 @@ export class ChatPartsController {
     const root = folderOf($activeSessionId.get() ?? '') ?? projects.path();
     const absolute = chat.absoluteRefPath(path, root);
     if (!absolute) return;
-    const inProject = projects.projectPathOf($worktrees.get(), absolute);
+    const inProject = projects.projectPathOf($workspaces.get(), absolute);
     const isDir = folder || (await isFolder(inProject));
     const detail = isDir ? { path: inProject } : { path: absolute, line };
     this.#host.dispatchEvent(

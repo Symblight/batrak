@@ -1,0 +1,19 @@
+:host {
+  display: block;
+}
+
+/* Under its chat's title (the chat's row is the root); themed like the file tree's. */
+.acp-subagent-tree__tree {
+  padding-inline-start: var(--acp-space-4);
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
+}
+
+/* The rows render in the tree's shadow root: its part is the way in. Compact, as a chat row's age. */
+.acp-subagent-tree__tree::part(trailing) {
+  font-size: var(--acp-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--acp-color-on-surface-variant);
+}

@@ -3,9 +3,31 @@ import { $activeSessionId } from '../sessions/sessions.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
+/** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
 
 /** Permission requests waiting for the user, by session id, oldest first. Written by the ACP adapter. */
 export const $permissionRequests = atom(/** @type {Readonly<Record<string, readonly PermissionRequest[]>>} */ ({}));
+
+/** Each chat's subagents, by session id, in the order announced. Written by the ACP adapter. */
+export const $subagents = atom(/** @type {Readonly<Record<string, readonly Subagent[]>>} */ ({}));
+
+/**
+ * The subagent whose read-only chat the agent column shows in place of its chat's: per window, in
+ * memory. Shown only while its chat is the active session (`$activeSubagent`).
+ */
+export const $shownSubagent = atom(/** @type {{ sessionId: string, subagentId: string } | null} */ (null));
+
+/** The active session's subagent the agent column shows, or `null` for the chat itself. */
+export const $activeSubagent = computed([$shownSubagent, $activeSessionId, $subagents], (shown, id, all) =>
+  shown === null || shown.sessionId !== id ? null : (all[id]?.find((s) => s.id === shown.subagentId) ?? null),
+);
+
+/**
+ * @param {{ sessionId: string, subagentId: string } | null} shown `null`: back to the chat.
+ */
+export function showSubagent(shown) {
+  $shownSubagent.set(shown);
+}
 
 /** What the chat says about each session above its composer, by session id (a draft's too). */
 export const $sessionNotices = atom(/** @type {Readonly<Record<string, SessionNotice>>} */ ({}));
@@ -78,4 +100,23 @@ export function setSessionNotice(sessionId, notice) {
  */
 export function dismissSessionNotice(sessionId) {
   setSessionNotice(sessionId, $sessionNotices.get()[sessionId]?.under ?? null);
+}
+
+/** @param {string} sessionId */
+export function forgetSubagents(sessionId) {
+  const { [sessionId]: dropped, ...rest } = $subagents.get();
+  if (dropped) $subagents.set(rest);
+}
+
+/**
+ * The session's subagents as the backend lists them (`subagents` event); a list equal to the one
+ * held changes nothing.
+ * @param {string} sessionId
+ * @param {readonly Subagent[]} subagents
+ */
+export function setSubagents(sessionId, subagents) {
+  const all = $subagents.get();
+  const held = all[sessionId] ?? [];
+  if (JSON.stringify(held) === JSON.stringify(subagents)) return;
+  $subagents.set({ ...all, [sessionId]: subagents });
 }

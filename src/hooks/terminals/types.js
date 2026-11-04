@@ -14,7 +14,8 @@
  * @property {string | null} fallback Where it starts when `cwd` doesn't exist.
  * @property {string} label The tab's title: the folder's name, then `zsh — my-app`.
  * @property {string | null} title A title the shell set (OSC 0 / 2), shown instead of `label`.
- * @property {string | null} projectPath The project whose tabs hold it; `null` for no project's.
+ * @property {string | null} folder The folder whose tabs hold it (`$shownFolder` when it opened); `null` for none's.
+ * @property {string | null} projectPath The project shown when it opened: removing it closes the terminal.
  * @property {TerminalStatus} status
  * @property {TerminalExit | null} exit Set once `exited`.
  * @property {string | null} error Why it didn't start, once `failed`.

@@ -1,7 +1,6 @@
 //! `local` mode: the agent works in the project directory itself, so its paths are host paths.
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 
 use super::{spawn_in, Launch, Mode, SessionEnv};
 use crate::acp::process::{AgentPipes, AgentProcess};
@@ -22,7 +21,7 @@ impl SessionEnv for LocalEnv {
         Mode::Local
     }
 
-    fn prepare(&self, _cancel: &AtomicBool) -> Result<(), String> {
+    fn prepare(&self) -> Result<(), String> {
         if self.root.is_dir() {
             Ok(())
         } else {
@@ -48,15 +47,5 @@ impl SessionEnv for LocalEnv {
 
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String> {
         Ok(agent_path.to_path_buf())
-    }
-
-    /// The work is the project's own: nothing to keep apart.
-    fn archive(&self) -> Result<(), String> {
-        Ok(())
-    }
-
-    /// Never deletes the project.
-    fn discard(&self) -> Result<(), String> {
-        Ok(())
     }
 }

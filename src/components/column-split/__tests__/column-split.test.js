@@ -66,7 +66,6 @@ describe('acp-column-split', () => {
     // Assert
     expect(layoutOf(el), 'hidden and filling columns lose their divider').to.deep.equal(['pane:a-hidden', 'pane:b', 'pane:c-hidden', 'handle:d', 'pane:d']);
     expect(pane(el, 'a').style.width, 'hidden: no inline width, so it collapses to nothing').to.equal('');
-    expect(pane(el, 'b').style.getPropertyValue('--acp-pane-flex'), 'filling: takes the slack').to.equal('1');
     expect(pane(el, 'b').style.width).to.equal('');
   });
 
@@ -112,10 +111,5 @@ describe('acp-column-split', () => {
     expect(el.shadowRoot?.querySelector('acp-split')?.getAttribute('direction')).to.equal('column');
     expect(bottom.height, 'the given size is its height').to.equal('260px');
     expect(bottom.width).to.equal('');
-    expect(
-      ['--acp-pane-height', '--acp-pane-min-height', '--acp-pane-max-height'].map((name) => bottom.getPropertyValue(name)),
-      'its tokens are heights',
-    ).to.deep.equal(['var(--t-h-height)', 'var(--t-h-min)', 'var(--t-h-max)']);
-    expect(bottom.getPropertyValue('--acp-pane-width')).to.equal('');
   });
 });

@@ -5,7 +5,6 @@
 
 /** @typedef {import('../composer/types.js').AcpConfigOption} AcpConfigOption */
 /** @typedef {import('../agents/types.js').LaunchConfig} LaunchConfig */
-/** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../agents/types.js').SessionSignIn} SessionSignIn */
 /** @typedef {import('../terminals/types.js').TerminalExit} TerminalExit */
 /**
@@ -13,6 +12,11 @@
  * permission request); `queued`: a local turn waits for another local session's turn in the same
  * checkout; `stopped`: no agent process, the next message starts one.
  * @typedef {'preparing' | 'starting' | 'idle' | 'working' | 'queued' | 'waiting' | 'stopped' | 'error'} SessionStatus
+ */
+
+/**
+ * What a CLI-run session is doing, as its agent tells (spec: `docs/specs/session-activity.md`).
+ * @typedef {'running' | 'waitingForUser' | 'idle'} SessionActivity
  */
 
 /**
@@ -54,14 +58,14 @@
  * @property {string | null} [activeElsewhereUntil] Until when another app (a terminal) may be running it:
  *   its agent saw activity in it that wasn't Brama's. Counts only while it doesn't run here
  *   (`isActiveElsewhere()`).
- * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal; activity it reports is that CLI's.
+ * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal.
+ * @property {SessionActivity | null} [activity] What that CLI is doing, as its agent tells; `null`: no
+ *   CLI, or its agent can't tell.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
- * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
- * @property {string} folder Where the agent works: the project, or the project's folder in its worktree.
- * @property {string | null} worktreePath `worktree` only: its root.
- * @property {string | null} branch `worktree` only: the session's own branch.
- * @property {string | null} baseCommit `worktree` only: the commit it started from.
+ * @property {string} folder Where the agent works: the project, or the project's folder in its workspace.
+ * @property {string | null} [workspaceId] Its workspace; `null` or absent for Main, the project's folder.
+ * @property {string | null} branch Its workspace's branch; `null` in Main.
  * @property {string} createdAt
  * @property {string} lastActivityAt The last prompt or turn end, else `createdAt`; the list's order.
  */
@@ -77,7 +81,7 @@
  * fields the chat reads are typed.
  * @typedef {Object} AcpSessionUpdate
  * @property {string} sessionUpdate
- * @property {AcpContent} [content] Message, thought and user chunks.
+ * @property {AcpContent | AcpContent[]} [content] Message, thought and user chunks; `session_message`: its blocks.
  * @property {string} [toolCallId]
  * @property {string | null} [title]
  * @property {string | null} [kind]
@@ -87,6 +91,36 @@
  * @property {number} [used] `usage_update`: tokens in context.
  * @property {number} [size] `usage_update`: the context window, tokens.
  * @property {{ amount: number, currency: string } | null} [cost] `usage_update`: the session's so far.
+ * @property {string} [subagentId] Added by the backend: the subagent (its ACP session id) whose
+ *   update this is, on the chat's channel; absent for the chat's own.
+ * @property {string} [sessionId] `subagent_update`: the subagent it announces or patches.
+ * @property {string | null} [description] `subagent_update`: what kind of subagent (Explore, Plan, …).
+ * @property {{ cancel?: object | null } | null} [capabilities] `subagent_update`: what the client may do to it.
+ * @property {{ state: SubagentState, stopReason?: string | object | null } | null} [state] `subagent_update`.
+ * @property {string} [messageId] `session_message` / `session_message_chunk`.
+ * @property {string | null} [senderSessionId] `session_message` / `session_message_chunk`.
+ * @property {string | null} [recipientSessionId] `session_message` / `session_message_chunk`.
+ */
+
+/**
+ * What an ACP subagent session is doing: working, blocked on the user (a permission), done (its
+ * `stopReason` says how), or not known.
+ * @typedef {'running' | 'requires_action' | 'idle' | 'unknown'} SubagentState
+ */
+
+/**
+ * A subagent of a chat, as the backend's `subagents` event lists them (`Subagent` in
+ * `session/runtime/subagents.rs`), whatever told it: the chat's agent over ACP, or the records of a
+ * CLI-run chat's agent. Runtime state of its chat; not a chat itself (spec:
+ * `docs/specs/workspaces.md` §2.12).
+ * @typedef {Object} Subagent
+ * @property {string} id Its ACP session id.
+ * @property {string | null} title
+ * @property {string | null} description Its kind (Explore, Plan, …).
+ * @property {SubagentState | null} state `null`: not reported.
+ * @property {string | null} stopReason `idle`: `end_turn`, `cancelled`, `error`, …
+ * @property {boolean} cancellable The agent lets the user stop it.
+ * @property {string} announcedAt ISO time it was first seen.
  */
 
 /**
@@ -105,7 +139,8 @@
  *   | { kind: 'snapshot', payload: { updates: AcpSessionUpdate[] } }
  *   | { kind: 'status', payload: { status: SessionStatus, message?: string | null } }
  *   | { kind: 'permission-request',
- *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[] } }
+ *       payload: { requestId: string, toolCall: AcpSessionUpdate, options: AcpPermissionOption[], subagentId?: string } }
+ *   | { kind: 'subagents', payload: { subagents: Subagent[] } }
  *   | { kind: 'turn-start', payload: Record<string, never> }
  *   | { kind: 'queued', payload: { holder: { id: string, title: string | null } } }
  *   | { kind: 'overlap', payload: { path: string, other: { id: string, title: string } } }
@@ -176,6 +211,7 @@
  * @property {string | null} toolCallId
  * @property {string} title What the agent wants to do.
  * @property {AcpPermissionOption[]} options
+ * @property {string | null} [subagentId] The subagent asking; absent for the chat itself.
  */
 
 /**
@@ -216,30 +252,11 @@
  */
 
 /**
- * A worktree session's folder: its files open in tabs of the project, beside the project's own.
- * @typedef {Object} WorktreeFolder
- * @property {string} sessionId
+ * A new chat with no message yet (`$draftSessions`): its project and its workspace (`main` or a
+ * workspace's id).
+ * @typedef {Object} DraftSession
  * @property {string} projectId
- * @property {string} folder The project's folder in the worktree (`Session.folder`).
- * @property {string} branch
- * @property {string} title The session's.
- */
-
-/**
- * A worktree session's folder, open as a backend root for the Files tree.
- * @typedef {Object} SessionRoot
- * @property {string} sessionId
- * @property {string} rootId
- * @property {string} path Canonical; the session's folder (`Session.folder`).
- * @property {string} label The worktree's folder name, the tree's root row.
- */
-
-/**
- * The folder the Files tree lists.
- * @typedef {Object} TreeRoot
- * @property {string | null} rootId `null` while none is open.
- * @property {string | null} path
- * @property {string | null} label A root row's: the worktree's name; `null` for the project (no row).
+ * @property {string} workspaceId
  */
 
 /**

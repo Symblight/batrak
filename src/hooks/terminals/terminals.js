@@ -1,8 +1,8 @@
-import { $projectTabs } from '../../stores/editor/editor.js';
-import { $activeFolder, $sessions } from '../../stores/sessions/sessions.js';
+import { $folderTabs } from '../../stores/editor/editor.js';
+import { $shownFolder, $workspaces } from '../../stores/workspaces/workspaces.js';
 import {
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalPanel,
   $terminalTabs,
   $terminals,
@@ -10,17 +10,18 @@ import {
   focusTerminal,
   forgetTerminal,
   openTerminal,
+  removeProjectTerminals,
   setTerminalPanelOpen,
   terminalExited,
   terminalFailed,
   terminalRestarting,
   terminalStarted,
 } from '../../stores/terminals/terminals.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { tabs } from '../tabs/tabs.js';
-import { folderLabel, newTerminalFolder, projectTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
+import { folderLabel, newTerminalFolder, sessionTerminalFolder, shellPaths, terminalTab } from './rules.js';
 
 /** @typedef {import('../sessions/types.js').Session} Session */
 /** @typedef {import('./types.js').TerminalBusy} TerminalBusy */
@@ -66,7 +67,7 @@ function previousClosed() {
 
 /** @param {TerminalFolder} folder */
 function openIn({ cwd, fallback }) {
-  openTerminal(cwd, fallback, folderLabel(cwd, $sessions.get()));
+  openTerminal(cwd, fallback, folderLabel(cwd, $workspaces.get()));
 }
 
 /** @param {string} id */
@@ -137,7 +138,7 @@ async function start(id, { cols, rows }) {
   try {
     /** @type {TerminalOpened} */
     const opened = await ipc.invoke('terminal_open', { id, cwd: info.cwd, fallback: info.fallback, cols, rows });
-    terminalStarted(id, opened, `${opened.shell} — ${folderLabel(opened.cwd, $sessions.get())}`);
+    terminalStarted(id, opened, `${opened.shell} — ${folderLabel(opened.cwd, $workspaces.get())}`);
     return true;
   } catch (err) {
     terminalFailed(id, String(err));
@@ -188,7 +189,7 @@ function exited(id, exit) {
   const info = $terminals.get()[id];
   if (!info || info.status === 'exited') return;
   if (info.sessionId) terminalExited(id, exit);
-  else if (exit.code === 0 && exit.signal === null) closeTerminalTab(info.projectPath, id);
+  else if (exit.code === 0 && exit.signal === null) closeTerminalTab(info.folder, id);
   else terminalExited(id, exit);
 }
 
@@ -244,22 +245,22 @@ export const terminals = Object.freeze({
     previousClosed();
     // A terminal's tab is in its project's editor tabs or in its terminal panel's.
     const releaseGone = () => {
-      const editor = $projectTabs.get();
-      const panel = $projectTerminalTabs.get();
+      const editor = $folderTabs.get();
+      const panel = $folderTerminalTabs.get();
       const gone = Object.entries($terminals.get())
         .filter(([id, t]) => {
           const tab = tabs.terminalId(id);
-          const root = t.projectPath ?? '';
+          const root = t.folder ?? '';
           return !t.sessionId && !editor[root]?.paths.includes(tab) && !panel[root]?.paths.includes(tab);
         })
         .map(([id]) => id);
       if (gone.length) release(gone);
     };
     const stops = [
-      $projectTabs.listen(releaseGone),
-      $projectTerminalTabs.listen((panel) => {
+      $folderTabs.listen(releaseGone),
+      $folderTerminalTabs.listen((panel) => {
         // A panel is never shown empty.
-        for (const [root, state] of Object.entries($projectTerminalPanels.get())) {
+        for (const [root, state] of Object.entries($folderTerminalPanels.get())) {
           if (state?.open && !panel[root]?.paths.length) setTerminalPanelOpen(root, false);
         }
         releaseGone();
@@ -276,7 +277,7 @@ export const terminals = Object.freeze({
 
   /**
    * The nav rail's Terminal button: shows the panel with its terminals, or with a first one in the
-   * project's folder; with the panel shown, focuses its active terminal.
+   * shown folder; with the panel shown, focuses its active terminal.
    */
   async showPanel() {
     const { open } = $terminalPanel.get();
@@ -284,24 +285,22 @@ export const terminals = Object.freeze({
     if (open && active !== null) {
       focusTerminal(tabs.terminalOf(active) ?? '');
     } else if (paths.length) {
-      setTerminalPanelOpen($workspace.get()?.path ?? null, true);
+      setTerminalPanelOpen($shownFolder.get(), true);
     } else {
-      const project = $workspace.get()?.path ?? null;
-      const home = project === null ? await ipc.homeDir() : '';
-      openIn(projectTerminalFolder({ project, home }));
+      await terminals.newTerminal();
     }
   },
 
-  /** Hides the shown project's panel; its shells keep running. */
+  /** Hides the shown folder's panel; its shells keep running. */
   hidePanel() {
-    setTerminalPanelOpen($workspace.get()?.path ?? null, false);
+    setTerminalPanelOpen($shownFolder.get(), false);
   },
 
-  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the active session's folder, the project, or home. */
+  /** New Terminal (`+`, ⌃\`, the Terminal menu) in the panel, shown if hidden: in the shown folder, the project, or home. */
   async newTerminal() {
-    const project = $workspace.get()?.path ?? null;
+    const project = $project.get()?.path ?? null;
     const home = project === null ? await ipc.homeDir() : '';
-    openIn(newTerminalFolder({ activeFolder: $activeFolder.get(), project, home }));
+    openIn(newTerminalFolder({ folder: $shownFolder.get(), project, home }));
   },
 
   /**
@@ -310,6 +309,14 @@ export const terminals = Object.freeze({
    */
   openInSession(session) {
     openIn(sessionTerminalFolder(session));
+  },
+
+  /**
+   * Open in → Terminal of a workspace or Main: a terminal in its folder.
+   * @param {string} path
+   */
+  openAt(path) {
+    openIn({ cwd: path, fallback: path });
   },
 
   /**
@@ -363,6 +370,29 @@ export const terminals = Object.freeze({
   },
 
   close,
+
+  /**
+   * Closes a folder's terminals, waiting for their shells to end, and forgets its panel: before its
+   * workspace is deleted, so no shell keeps the folder busy (Windows refuses to remove a cwd) or
+   * writes into it as it goes.
+   * @param {string} folder
+   */
+  async closeFolder(folder) {
+    const ids = Object.entries($terminals.get())
+      .filter(([, t]) => t.folder === folder && !t.sessionId)
+      .map(([id]) => id);
+    // Forgotten before their tabs close, so the tab listener doesn't close them again.
+    for (const id of ids) forgetTerminal(id);
+    for (const id of ids) closeTerminalTab(folder, id);
+    removeProjectTerminals(folder);
+    if (!ids.length) return;
+    try {
+      await previousClosed();
+      await close(ids);
+    } catch (err) {
+      app.reportError('Closing terminals failed', err);
+    }
+  },
 
   shellPaths,
 

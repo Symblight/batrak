@@ -1,6 +1,8 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $openRoots, $project } from '../../../stores/project/project.js';
+import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
+import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../file-column.js';
 
 /** @typedef {import('../file-column.js').AcpFileColumn} AcpFileColumn */
@@ -27,12 +29,18 @@ describe('acp-file-column', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
       return cmd === 'list_dir' ? [] : null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     clearMocks();
-    $workspace.set(null);
+    setActiveWorkspace('/p', 'main');
+    selectSession(null);
+    $sessions.set([]);
+    $workspaces.set([]);
+    $openRoots.set({});
+    $workspaceOpening.set(null);
+    $project.set(null);
   });
 
   const render = async () => /** @type {AcpFileColumn} */ (await fixture(html`<acp-file-column></acp-file-column>`));
@@ -54,7 +62,7 @@ describe('acp-file-column', () => {
     let finishScan = () => {};
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args) });
-      if (cmd === 'rescan_workspace') return new Promise((resolve) => (finishScan = () => resolve(null)));
+      if (cmd === 'rescan_root') return new Promise((resolve) => (finishScan = () => resolve(null)));
       return cmd === 'list_dir' ? [] : null;
     });
     const el = await render();
@@ -65,7 +73,7 @@ describe('acp-file-column', () => {
     view.reveal = (rel, options) => revealed.push([rel, options]);
     // Act
     header.dispatchEvent(new CustomEvent('acp-panel-header-action', { bubbles: true, composed: true }));
-    await until(() => calls.some((c) => c.cmd === 'rescan_workspace'));
+    await until(() => calls.some((c) => c.cmd === 'rescan_root'));
     await el.updateComplete;
     // Assert
     expect(header.hasAttribute('action-disabled'), 'while it runs').to.equal(true);
@@ -81,7 +89,7 @@ describe('acp-file-column', () => {
       return !header.hasAttribute('action-disabled');
     });
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
+    expect(calls.filter((c) => c.cmd === 'rescan_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
     // Act: from another pane
     el.sideView = 'changes';
     await el.reveal('src/a.js', { expand: true });
@@ -131,5 +139,40 @@ describe('acp-file-column', () => {
     el.showChanges();
     await el.updateComplete;
     expect([view.active, /** @type {HTMLElement} */ (view.parentElement).hidden]).to.deep.equal([true, false]);
+  });
+
+  it("hides the previous tree while a workspace's root opens, shows a skeleton after 150 ms, then lists its folder", async () => {
+    // Arrange
+    const el = await render();
+    const tree = /** @type {HTMLElementTagNameMap['acp-file-tree']} */ (el.querySelector('acp-file-tree'));
+    const shown = () => {
+      const root = /** @type {ShadowRoot} */ (tree.shadowRoot);
+      return {
+        tree: !root.querySelector('tvx-tree-view')?.hidden,
+        skeleton: root.querySelector('[role="status"][aria-label="Opening folder"]') !== null,
+      };
+    };
+    setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one' })], '/p');
+    $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c', projectId: '/p', workspaceId: 'w1' }])));
+
+    // Act: switch to the workspace while its root scans
+    $workspaceOpening.set('/wt/one');
+    setActiveWorkspace('/p', 'w1');
+    await /** @type {HTMLElementTagNameMap['acp-files-view']} */ (el.querySelector('acp-files-view')).updateComplete;
+    await tree.updateComplete;
+
+    // Assert
+    expect(shown(), 'the tree goes at once, the skeleton waits').to.deep.equal({ tree: false, skeleton: false });
+    await until(() => shown().skeleton);
+
+    // Act: its root is open
+    calls = [];
+    $openRoots.set({ '/wt/one': 'r-w' });
+    $workspaceOpening.set(null);
+    await until(() => calls.some((c) => c.cmd === 'list_dir'));
+
+    // Assert
+    expect(shown()).to.deep.equal({ tree: true, skeleton: false });
+    expect(calls.find((c) => c.cmd === 'list_dir')?.args, 'its entries, under no root row').to.deep.include({ rootId: 'r-w', path: '' });
   });
 });

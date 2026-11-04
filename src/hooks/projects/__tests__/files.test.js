@@ -23,8 +23,8 @@ describe('projects files', () => {
       [() => projects.readFileBytes('/p/a.png'), 'read_file_bytes', { path: '/p/a.png' }],
       [() => projects.writeFile('/p/.brama/agents.json', '{}'), 'write_file', { path: '/p/.brama/agents.json', content: '{}' }],
       [() => projects.listDir('root:/p', 'src'), 'list_dir', { rootId: 'root:/p', path: 'src' }],
-      [() => projects.rescan('root:/p'), 'rescan_workspace', { rootId: 'root:/p' }],
-      [() => projects.closeRoot('root:/p'), 'close_workspace', { rootId: 'root:/p' }],
+      [() => projects.rescan('root:/p'), 'rescan_root', { rootId: 'root:/p' }],
+      [() => projects.closeRoot('root:/p'), 'close_root', { rootId: 'root:/p' }],
     ];
     for (const [call, cmd, args] of cases) {
       calls = [];

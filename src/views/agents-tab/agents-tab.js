@@ -3,7 +3,7 @@ import { agents } from '../../hooks/agents/agents.js';
 import { $agentList, $agentsPending, $agentsQuery, $agentsView, $signIns, signInsOf } from '../../stores/agents/agents.js';
 import { $agentsReveal, $activePath, AGENTS_TAB_ID, agentsRevealed } from '../../stores/editor/editor.js';
 import { $agentViews, setAgentView } from '../../stores/session-views/session-views.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/agents-view/agents-view.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
@@ -26,7 +26,7 @@ export class AcpAgentsTab extends ViewElement {
   #reveal = new StoreController(this, { store: $agentsReveal });
   #signIns = new StoreController(this, { store: $signIns });
   #agentViews = new StoreController(this, { store: $agentViews });
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   /** The tab asks again whenever it is shown. */
   #activePath = new StoreController(this, {
     store: $activePath,
@@ -69,7 +69,7 @@ export class AcpAgentsTab extends ViewElement {
       .query=${this.#query.value}
       .known=${this.#list.value.known}
       .pending=${this.#pending.value}
-      .signIns=${signInsOf(this.#signIns.value, this.#workspace.value?.path ?? null)}
+      .signIns=${signInsOf(this.#signIns.value, this.#project.value?.path ?? null)}
       .terminalAgents=${Object.keys(this.#agentViews.value)}
       .reveal=${this.#reveal.value}
       @acp-agents-file-open=${on(() => agents.openFile())}

@@ -130,6 +130,16 @@
   --acp-icon-size-md: 18px;
   --acp-icon-size-lg: 20px;
 
+  /* Dialogs: one standard for every md-dialog (frame and controls in src/styles/shadow.css; each
+     dialog's headline, text and footer use these) */
+  --acp-dialog-width: 400px;
+  --acp-dialog-width-wide: 480px;
+  --acp-dialog-shape: 16px;
+  --acp-dialog-headline-font: 500 18px/24px var(--acp-font-family);
+  --acp-dialog-text-font: 400 14px/20px var(--acp-font-family);
+  --acp-dialog-detail-font: 400 13px/18px var(--acp-font-family);
+  --acp-dialog-footer-space: var(--acp-space-4);
+
   /* md-button vertical padding: compact chips and rows, regular actions */
   --acp-button-block-space-compact: var(--acp-space-1);
   --acp-button-block-space-regular: var(--acp-space-1-5);

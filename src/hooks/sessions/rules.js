@@ -1,10 +1,11 @@
-import { RUNNING } from '../../stores/sessions/sessions.js';
 
-export { RUNNING };
+/** Statuses in which a session holds (or is getting) an agent process. */
+export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
 export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
 
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
 /** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('./types.js').SessionActivity} SessionActivity */
 /** @typedef {import('./types.js').SessionIndicator} SessionIndicator */
 /** @typedef {import('./types.js').SessionRead} SessionRead */
 /** @typedef {import('./types.js').SessionStatus} SessionStatus */
@@ -36,15 +37,16 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
  * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
- * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal: activity elsewhere is that CLI's.
+ * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal.
+ * @param {SessionActivity | null} [activity] What that CLI is doing, as its agent tells.
  * @returns {SessionIndicator | null}
  */
-export function sessionIndicator(status, permissionPending, activeElsewhere = false, inTerminal = false) {
-  if (permissionPending || status === 'waiting') return 'permission';
+export function sessionIndicator(status, permissionPending, activeElsewhere = false, inTerminal = false, activity = null) {
+  if (permissionPending || status === 'waiting' || activity === 'waitingForUser') return 'permission';
   if (status === 'error') return 'error';
   if (status === 'preparing' || status === 'starting' || status === 'working') return 'running';
   if (status === 'queued') return 'queued';
-  if (inTerminal) return activeElsewhere ? 'terminal-working' : 'terminal';
+  if (inTerminal) return activity === 'running' ? 'terminal-working' : 'terminal';
   if (activeElsewhere) return 'elsewhere';
   return null;
 }
@@ -167,8 +169,8 @@ export function removeSessionConfirm(session) {
     headline: 'Remove session?',
     message: `"${session.title}" will be deleted from ${session.agentName ?? 'its agent'}, for every app that uses it${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
     detail:
-      session.mode === 'worktree'
-        ? `Its worktree is deleted; uncommitted work is first committed onto ${session.branch}, which is kept if it has commits.`
+      session.workspaceId
+        ? 'Its workspace, and the files the agent changed there, stay as they are.'
         : 'Files the agent changed in the project stay as they are.',
     confirmLabel: 'Remove',
     destructive: true,
@@ -204,4 +206,58 @@ export function syncSummary({ running, report }, now) {
 /** @param {import('./types.js').SyncReport} report */
 function linesOf(report) {
   return report.agents.map((a) => `${a.agentName} · ${OUTCOMES[a.outcome](a.count, a.error)}`);
+}
+
+/**
+ * The `<chx-chat>` conversation that shows a chat's subagent.
+ * @param {string} sessionId
+ * @param {string} subagentId Its ACP session id.
+ */
+export function subagentConversationId(sessionId, subagentId) {
+  return `${sessionId}/${subagentId}`;
+}
+
+/** @typedef {import('./types.js').Subagent} Subagent */
+/**
+ * The status a subagent's row shows.
+ * @typedef {'running' | 'waiting' | 'done' | 'failed' | 'stopped' | 'unknown'} SubagentIndicator
+ */
+
+/** @type {Readonly<Record<SubagentIndicator, string>>} */
+export const SUBAGENT_INDICATOR_LABELS = Object.freeze({
+  running: 'Working',
+  waiting: 'Waiting for you',
+  done: 'Done',
+  failed: 'Failed',
+  stopped: 'Stopped',
+  unknown: 'Status unknown',
+});
+
+/**
+ * @param {Subagent} subagent
+ * @returns {SubagentIndicator}
+ */
+export function subagentIndicator({ state, stopReason }) {
+  if (state === 'running') return 'running';
+  if (state === 'requires_action') return 'waiting';
+  if (state !== 'idle') return 'unknown';
+  if (stopReason === 'cancelled') return 'stopped';
+  return stopReason === null || stopReason === 'end_turn' ? 'done' : 'failed';
+}
+
+/**
+ * A subagent's name in a row: its kind and title (`Explore · Find usages`).
+ * @param {Subagent} subagent
+ */
+export function subagentLabel({ description, title }) {
+  return [description, title ?? 'Subagent'].filter(Boolean).join(' · ');
+}
+
+/**
+ * The tool call id of a subagent's card in its chat's reply: its part's key. What makes it a card
+ * is its `data.subagentId`, not this id.
+ * @param {string} subagentId
+ */
+export function subagentCardId(subagentId) {
+  return `subagent-${subagentId}`;
 }

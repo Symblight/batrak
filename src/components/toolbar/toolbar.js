@@ -6,17 +6,18 @@ import '@symblight/wc-material/tooltip';
 import '../branch-popover/branch-popover.js';
 import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
+import '../workspace-picker/workspace-picker.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/fullscreen.svg?raw';
 import collapseIcon from '@material-design-icons/svg/outlined/fullscreen_exit.svg?raw';
 import styles from './toolbar.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
-/** @typedef {import('../../hooks/projects/types.js').Workspace} Workspace */
+/** @typedef {import('../../hooks/projects/types.js').OpenProject} OpenProject */
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the project menu and git branch (a card with its remote and pull request), and the
+ * @summary Narrow app-wide bar above the columns: the project menu, the workspace picker and git branch (a card with its remote and pull request), and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-github-open `{ url }` From the GitHub slot and the branch card.
@@ -24,7 +25,7 @@ import styles from './toolbar.css?inline';
  */
 export class AcpToolbar extends LitElement {
   static properties = {
-    workspace: { attribute: false },
+    project: { attribute: false },
     projects: { attribute: false },
     unread: { attribute: false },
     home: {},
@@ -33,14 +34,19 @@ export class AcpToolbar extends LitElement {
     githubReply: { attribute: false },
     hiddenColumns: { attribute: false },
     expandable: { type: Boolean },
+    workspaces: { attribute: false },
+    workspaceStatuses: { attribute: false },
+    workspaceNumbers: { attribute: false },
+    workspaceId: { attribute: false },
+    workspacesEnabled: { type: Boolean, attribute: 'workspaces-enabled' },
   };
 
   static styles = styles;
 
   constructor() {
     super();
-    /** @type {Workspace | null} */
-    this.workspace = null;
+    /** @type {OpenProject | null} */
+    this.project = null;
     /** @type {readonly import('../../hooks/projects/types.js').Project[]} The project menu's list. */
     this.projects = [];
     /** @type {Readonly<Record<string, number>>} Unread sessions by project id, for the menu's dots. */
@@ -57,6 +63,16 @@ export class AcpToolbar extends LitElement {
     this.hiddenColumns = [];
     /** @type {boolean} A tab is open, so the editor can take the agent column's room. */
     this.expandable = false;
+    /** @type {readonly import('../../hooks/workspaces/types.js').Workspace[]} The picker's Active group, in order. */
+    this.workspaces = [];
+    /** @type {Readonly<Record<string, import('../../hooks/workspaces/types.js').WorkspaceStatus>>} By id, Main's under `main`. */
+    this.workspaceStatuses = {};
+    /** @type {Readonly<Record<string, number>>} Each workspace's shortcut number by id, Main's under `main`. */
+    this.workspaceNumbers = {};
+    /** @type {string | null} The shown workspace; `null` for Main. */
+    this.workspaceId = null;
+    /** @type {boolean} The project can have workspaces: git with a commit. */
+    this.workspacesEnabled = false;
   }
 
   /** Button hiding the agent column, so the editor's tabs take the whole middle. */
@@ -116,17 +132,33 @@ export class AcpToolbar extends LitElement {
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
 
+  /** Opens the workspace picker's menu. */
+  showWorkspaces() {
+    this.renderRoot.querySelector('acp-workspace-picker')?.show();
+  }
+
   render() {
-    const workspace = this.workspace;
+    const project = this.project;
     return html`${this.#renderColumnToggle('session', 'sessions column', 'start')}
       <acp-project-menu
         .projects=${this.projects}
-        .currentId=${workspace?.path ?? null}
+        .currentId=${project?.path ?? null}
         .unread=${this.unread}
         .home=${this.home}
       ></acp-project-menu>
-      ${workspace && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
-      ${workspace ? this.#renderBranch(this.git) : nothing}
+      ${project
+        ? html`<acp-workspace-picker
+            .workspaces=${this.workspaces}
+            .statuses=${this.workspaceStatuses}
+            .numbers=${this.workspaceNumbers}
+            .currentId=${this.workspaceId}
+            .projectName=${project.name}
+            .projectPath=${project.path}
+            ?enabled=${this.workspacesEnabled}
+          ></acp-workspace-picker>`
+        : nothing}
+      ${project && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
+      ${project ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
       ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;
   }

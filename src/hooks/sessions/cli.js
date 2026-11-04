@@ -24,7 +24,7 @@ export async function toChat(id) {
   await closeCli(id);
   resetHistory(id);
   forgetHistory(id);
-  // Not `#resume`: the activity another app showed was this CLI's.
+  // Not `#resume`: the user asked for the chat, whatever another app seems to do.
   if ($sessions.get().find((s) => s.id === id)?.status === 'stopped')
     await sessionResume(id).catch((err) => app.reportError('Starting the agent failed', err));
 }

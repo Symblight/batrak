@@ -33,6 +33,17 @@ describe('shortcuts', () => {
       // A row per platform
       ['settings', 'mac', '⌘,'],
       ['settings', 'windows', 'Ctrl+,'],
+      // Workspaces
+      ['openWorkspaces', 'mac', '⇧⌘O'],
+      ['openWorkspaces', 'linux', 'Ctrl+Shift+O'],
+      ['workspace1', 'mac', '⌥⌘1'],
+      ['workspace9', 'windows', 'Ctrl+Shift+9'],
+      ['nextWaitingWorkspace', 'mac', '⇧⌘J'],
+      ['nextWaitingWorkspace', 'windows', 'Ctrl+Shift+J'],
+      ['newWorkspace', 'mac', '⌘N'],
+      ['newWorkspace', 'linux', 'Ctrl+N'],
+      ['newChat', 'mac', '⇧⌘N'],
+      ['newChat', 'windows', 'Ctrl+Shift+N'],
     ];
     for (const [id, platform, hint] of cases) {
       // Act + Assert
@@ -125,7 +136,7 @@ describe('shortcuts', () => {
     };
     for (const platform of ['windows', 'linux']) {
       reserved[platform] = [
-        [/^Ctrl\+[A-EG-JLMNQRT-Z]$/, 'the shell’s keys in the terminal (P, O, S, F, K are the app’s on purpose)'],
+        [/^Ctrl\+[A-EG-JLMQRT-Z]$/, 'the shell’s keys in the terminal (P, O, S, F, K, N are the app’s on purpose)'],
         [/^Ctrl\+Shift\+C$/, 'the terminal’s copy'],
         // Only for a markdown tab, in the main column; no terminal has the focus then.
         [/^Ctrl\+Shift\+V$/, 'the terminal’s paste', 'markdownPreview'],

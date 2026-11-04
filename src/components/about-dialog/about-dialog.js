@@ -44,7 +44,7 @@ export class AcpAboutDialog extends LitElement {
 
   render() {
     const about = this.about;
-    return html`<md-dialog class="acp-about-dialog__dialog">
+    return html`<md-dialog class="acp-about-dialog__dialog" wide>
       <div slot="headline" class="acp-about-dialog__headline">
         <img class="acp-about-dialog__logo" src="/favicon.svg" alt="" />
         <span class="acp-about-dialog__title">Brama</span>

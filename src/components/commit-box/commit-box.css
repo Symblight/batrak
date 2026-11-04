@@ -7,8 +7,6 @@
 .acp-commit-box__message {
   width: 100%;
   min-width: 0;
-  --md-text-field-font-size: var(--acp-font-size-md);
-  --md-text-field-line-height: 20px;
   --md-text-field-background-color: var(--acp-column-background);
 }
 /* When narrow, the button wraps under Amend and fills the row: the spacer takes

@@ -170,6 +170,12 @@ impl Inner {
         Ok(agent)
     }
 
+    /// Whether the agent's crate lets Brama start it without the user acting on it
+    /// (`Agent::starts_in_background`).
+    pub(super) fn starts_in_background(&self, agent: &AgentConfig) -> bool {
+        self.opts.agents.for_launch(&crate::agents::launch_of(agent)).starts_in_background()
+    }
+
     /// A spawn's error; an agent's program on PATH that isn't there says how to install it.
     fn launch_error(&self, agent: &AgentConfig, error: String) -> String {
         // `os error 2`: not found, on unix (ENOENT) and Windows (ERROR_FILE_NOT_FOUND) alike.
@@ -246,6 +252,20 @@ impl Inner {
         Err(Untrusted { launch: Box::new(launch), message })
     }
 
+    /// Gets a session's folder ready for its agent or CLI: its workspace's checkout (the first,
+    /// or one that runs: `Workspaces::ready`), then its env's `prepare`.
+    pub(super) async fn prepare_folder(&self, record: &SessionRecord) -> Result<Arc<dyn SessionEnv>, String> {
+        let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(record)?);
+        let (workspaces, workspace, preparing) = (self.workspaces.clone(), record.workspace_id.clone(), Arc::clone(&env));
+        tokio::task::spawn_blocking(move || {
+            workspace.map_or(Ok(()), |id| workspaces.ready(&id))?;
+            preparing.prepare()
+        })
+        .await
+        .map_err(|e| e.to_string())??;
+        Ok(env)
+    }
+
     async fn start_agent(
         self: Arc<Self>,
         state: Arc<SessionState>,
@@ -253,13 +273,7 @@ impl Inner {
         let record = state.record();
         state.start_replay();
         self.set_status(&state, SessionStatus::Preparing, None);
-        let env: Arc<dyn SessionEnv> = Arc::from(env::for_session(&record)?);
-        let preparing = Arc::clone(&env);
-        let cancel = Arc::new(AtomicBool::new(false));
-        *lock(&state.prepare_cancel) = Some(Arc::clone(&cancel));
-        let prepared = tokio::task::spawn_blocking(move || preparing.prepare(&cancel)).await;
-        lock(&state.prepare_cancel).take();
-        prepared.map_err(|e| e.to_string())??;
+        let env = self.prepare_folder(&record).await?;
 
         self.set_status(&state, SessionStatus::Starting, Some("Starting agent…"));
         let merged = self.opts.configs.merged(Some(&record.project_path));

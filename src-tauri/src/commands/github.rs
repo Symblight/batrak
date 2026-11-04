@@ -3,7 +3,7 @@
 use tauri::{AppHandle, Emitter};
 
 use crate::github::{self, Account, PrReply, PrStatus};
-use crate::workspace::Workspaces;
+use crate::roots::Roots;
 use tauri::State;
 use crate::git::binary;
 
@@ -21,8 +21,8 @@ pub async fn github_account() -> Result<Account, String> {
 /// The pull request of the root's branch on GitHub, with the repository's default branch. `signedOut`
 /// when `gh` has no login; empty when the branch's remote isn't on github.com.
 #[tauri::command]
-pub async fn github_pull_request(app: AppHandle, workspaces: State<'_, Workspaces>, root_id: String) -> Result<PrReply, String> {
-    let root = workspaces.get(&root_id)?;
+pub async fn github_pull_request(app: AppHandle, roots: State<'_, Roots>, root_id: String) -> Result<PrReply, String> {
+    let root = roots.get(&root_id)?;
     blocking(move || {
         let Some(gh) = github::gh() else { return Ok(PrReply { status: PrStatus::SignedOut, pr: None, default_branch: None, message: Some("The GitHub CLI isn't installed".into()) }) };
         let state = root.git.head(binary::git()?, &root.path, root.epoch())?;

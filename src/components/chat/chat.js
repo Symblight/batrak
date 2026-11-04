@@ -4,14 +4,18 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import { buildChipElement, createSplitOnSendHandler } from '@symblight/chat';
 import '@symblight/chat/agent';
 import { ChxCommandPicker } from '@symblight/chat/composer';
+import '@symblight/wc-material/button';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/icon';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
+import folderOffIcon from '@material-design-icons/svg/outlined/folder_off.svg?raw';
+import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
 import { buildMenuItem, codeChip, commentLines, fileChipAttrs } from '../../controllers/file-mentions/chips.js';
 import { chat } from '../../hooks/chat/chat.js';
+import { composer } from '../../hooks/composer/composer.js';
 import '../agent-picker/agent-picker.js';
 import '../context-meter/context-meter.js';
 import '../mode-picker/mode-picker.js';
@@ -19,6 +23,7 @@ import '../model-picker/model-picker.js';
 import '../part-thinking/part-thinking.js';
 import '../run-target/run-target.js';
 import '../session-banner/session-banner.js';
+import '../subagent-bar/subagent-bar.js';
 
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('../../controllers/file-mentions/chips.js').ComposerTextbox} ComposerTextbox */
@@ -30,9 +35,21 @@ import '../session-banner/session-banner.js';
 /** @typedef {import('../../hooks/agents/types.js').CatalogAgent} CatalogAgent */
 /** @typedef {import('../../hooks/agents/types.js').AgentInfo} AgentInfo */
 /** @typedef {import('../../hooks/composer/types.js').ComposerState} ComposerState */
+/** @typedef {import('../../hooks/sessions/types.js').Subagent} Subagent */
 /** @typedef {import('../../hooks/sessions/types.js').PermissionRequest} PermissionRequest */
 /** @typedef {import('../../hooks/sessions/types.js').SessionNotice} SessionNotice */
 /** @typedef {import('@symblight/chat').ChxChat} ChxChat */
+/**
+ * A draft's footer: where its first message creates the chat (`<acp-run-target>`'s data).
+ * @typedef {Object} ChatPlace
+ * @property {import('../../hooks/composer/types.js').RunTarget} target
+ * @property {string | null} workspaceName The worktree workspace the draft is of; `null` in Main.
+ * @property {boolean} worktrees New worktree is offered: the project can have workspaces.
+ * @property {import('../../hooks/git/types.js').BranchList} branches Main's.
+ * @property {string | null} base New worktree's, as shown.
+ * @property {() => Promise<void>} load Before the base menu opens.
+ */
+/** @typedef {{ message: string, workspaceId: string }} ChatBlock Why the composer can't send, and the workspace whose folder fixes it. */
 
 const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 
@@ -41,9 +58,12 @@ const splitOnSend = createSplitOnSendHandler(chat.MESSAGE_PART_RULES);
 
 /**
  * @tag acp-chat
- * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and run target.
+ * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and mode's access.
  * @fires acp-chat-file-query `{ query }` Files and folders for `@` to search for; `null` drops the search.
  * @fires acp-chat-attach `{ files }` Files attached (picked, pasted): saved, they come back as path chips (`insertFiles()`).
+ * @fires acp-workspace-recreate `{ id }` Recreate folder, while `blocked`.
+ * @fires acp-subagent-close `null` From the subagent's bar.
+ * @fires acp-subagent-stop `{ subagentId }` From the subagent's bar.
  */
 export class AcpChat extends LitElement {
   static properties = {
@@ -64,15 +84,17 @@ export class AcpChat extends LitElement {
     agent: { attribute: false },
     /** Whether the composer's agent's config options are being asked for, or that failed. */
     optionsStatus: { attribute: false },
-    branches: { attribute: false },
-    currentBranch: { attribute: false },
-    localShared: { attribute: false },
-    localTurns: { attribute: false },
+    /** The composer can't send: its workspace's folder is missing. */
+    blocked: { attribute: false },
+    /** A draft's: where it runs. */
+    place: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
     /** Files dragged from the OS are over it. */
     dropping: { type: Boolean, reflect: true },
+    /** A subagent's read-only chat is shown (`conversationId` is its): its bar in place of the composer. */
+    subagent: { attribute: false },
   };
 
   static styles = styles;
@@ -88,6 +110,8 @@ export class AcpChat extends LitElement {
     super();
     /** @type {string | undefined} */
     this.conversationId = undefined;
+    /** @type {{ subagent: Subagent, chatTitle: string } | null} */
+    this.subagent = null;
     /** @type {boolean} */
     this.empty = false;
     /** @type {ChxChat['adapter']} */
@@ -110,14 +134,10 @@ export class AcpChat extends LitElement {
     this.agent = null;
     /** @type {import('../../hooks/agents/types.js').AgentOptionsStatus | null} */
     this.optionsStatus = null;
-    /** @type {readonly string[]} */
-    this.branches = [];
-    /** @type {string | null} */
-    this.currentBranch = null;
-    /** @type {number} Other local sessions of the project with a running agent, for the run target. */
-    this.localShared = 0;
-    /** @type {import('../../hooks/projects/types.js').LocalTurns} */
-    this.localTurns = 'queue';
+    /** @type {ChatBlock | null} */
+    this.blocked = null;
+    /** @type {ChatPlace | null} */
+    this.place = null;
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
@@ -249,6 +269,43 @@ export class AcpChat extends LitElement {
     picker.addOptions(options);
   };
 
+  #onRecreate = () => {
+    if (this.blocked) this.#emit('acp-workspace-recreate', { id: this.blocked.workspaceId });
+  };
+
+  /** What the footer says: why the composer can't send, or a draft's place and whether its mode reaches past the workspace. */
+  #renderFooter() {
+    if (this.blocked) {
+      return html`<div slot="footer" class="acp-chat__blocked" role="status">
+        <md-icon class="acp-chat__note-icon">${unsafeSVG(folderOffIcon)}</md-icon>
+        <span class="acp-chat__blocked-text">${this.blocked.message}</span>
+        <md-button class="acp-chat__blocked-action" variant="text" @click=${this.#onRecreate}>Recreate folder</md-button>
+      </div>`;
+    }
+    if (!this.empty) return nothing;
+    // Its risk, which the backend tagged it with (the agent's crate knows its modes).
+    const mode = composer.configOf(this.composer?.configOptions ?? [], 'mode');
+    const place = this.place;
+    return html`${place
+      ? html`<acp-run-target
+          slot="footer"
+          class="acp-chat__run-target"
+          .target=${place.target}
+          .workspaceName=${place.workspaceName}
+          .worktrees=${place.worktrees}
+          .branches=${place.branches}
+          .base=${place.base}
+          .loadBranches=${place.load}
+        ></acp-run-target>`
+      : nothing}
+    ${mode?.options.find((v) => v.value === mode.currentValue)?.risk === 'full'
+      ? html`<span slot="footer" class="acp-chat__note">
+          <md-icon class="acp-chat__note-icon">${unsafeSVG(publicIcon)}</md-icon>
+          Network and files outside the workspace
+        </span>`
+      : nothing}`;
+  }
+
   render() {
     const empty = this.empty;
     return html`
@@ -281,12 +338,22 @@ export class AcpChat extends LitElement {
           .notice=${this.notice}
           .signInRun=${this.signInRun}
         ></acp-session-banner>
+        ${this.subagent
+          ? html`<acp-subagent-bar
+              slot="input-banner"
+              class="acp-chat__subagent"
+              .subagent=${this.subagent.subagent}
+              .chatTitle=${this.subagent.chatTitle}
+            ></acp-subagent-bar>`
+          : nothing}
         <chx-message-composer
           slot="message-composer"
           class="acp-chat__composer"
           placeholder="Describe a task, @ to mention, / for commands"
           layout="stacked"
           send-button="always"
+          ?disabled=${this.blocked !== null}
+          ?hidden=${this.subagent !== null}
           busy-action="stop"
         >
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
@@ -329,18 +396,7 @@ export class AcpChat extends LitElement {
           ${this.composer?.agentId
             ? html`<acp-context-meter slot="actions" .usage=${this.usage}></acp-context-meter>`
             : nothing}
-          <!-- Where the session runs is picked before the first message; the footer goes with it. -->
-          ${empty
-            ? html`<acp-run-target
-                slot="footer"
-                class="acp-chat__run-target"
-                .composer=${this.composer}
-                .branches=${this.branches}
-                .currentBranch=${this.currentBranch}
-                .localShared=${this.localShared}
-                .localTurns=${this.localTurns}
-              ></acp-run-target>`
-            : nothing}
+          ${this.#renderFooter()}
         </chx-message-composer>
       </chx-chat>
     `;

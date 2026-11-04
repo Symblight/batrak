@@ -2,8 +2,9 @@
 //! program is the CLI a session continues in.
 
 use std::collections::BTreeMap;
+use std::path::Path;
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, Update, ID, PROMPT};
+use agent_api::{is_flag_value, is_session_id, strings, Agent, CliSpec, Install, Launch, ModeRisk, SessionActivity, Update, ID, PROMPT};
 
 pub const PACKAGE: &str = "@github/copilot";
 
@@ -12,6 +13,10 @@ pub struct Copilot;
 impl Agent for Copilot {
     fn kind(&self) -> &'static str {
         "copilot"
+    }
+
+    fn session_activity(&self, session_id: &str) -> Option<SessionActivity> {
+        activity_in(&agent_kit::agent_home("COPILOT_HOME", ".copilot")?, session_id)
     }
 
     fn registry_id(&self) -> Option<&'static str> {
@@ -71,9 +76,89 @@ impl Agent for Copilot {
     }
 }
 
+/// What session `session_id` is doing, from the last turn event of its log under `home`
+/// (`session-state/<session id>/events.jsonl`). A CLI killed mid-turn writes no end, so its next
+/// `session.resume` ends that turn.
+pub fn activity_in(home: &Path, session_id: &str) -> Option<SessionActivity> {
+    if !is_session_id(session_id) {
+        return None;
+    }
+    let log = home.join("session-state").join(session_id).join("events.jsonl");
+    agent_kit::last_told(&log, |line| {
+        let record: serde_json::Value = serde_json::from_str(line).ok()?;
+        match record.get("type")?.as_str()? {
+            "assistant.turn_start" | "permission.completed" => Some(SessionActivity::Running),
+            "permission.requested" => Some(SessionActivity::WaitingForUser),
+            "assistant.turn_end" | "abort" | "session.error" | "session.shutdown" | "session.resume" => Some(SessionActivity::Idle),
+            _ => None,
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Copilot);
+    }
+
+    /// A Copilot home with `session`'s event log of these event types.
+    fn event_log(name: &str, session: &str, types: &[&str]) -> std::path::PathBuf {
+        let root = std::env::temp_dir().join(format!("brama-copilot-activity-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let dir = root.join("session-state").join(session);
+        std::fs::create_dir_all(&dir).unwrap();
+        let lines: Vec<String> = types.iter().map(|t| serde_json::json!({ "type": t, "data": {}, "timestamp": "2026-10-21T13:37:16.143Z" }).to_string()).collect();
+        std::fs::write(dir.join("events.jsonl"), lines.join("\n")).unwrap();
+        root
+    }
+
+    #[test]
+    fn a_sessions_last_turn_event_tells_what_it_is_doing() {
+        // Arrange
+        use SessionActivity::{Idle, Running, WaitingForUser};
+        let cases = [
+            (&["user.message", "assistant.turn_start"][..], Some(Running), "a turn began"),
+            (&["assistant.turn_start", "tool.execution_start", "hook.start"], Some(Running), "its work follows"),
+            (&["assistant.turn_start", "permission.requested"], Some(WaitingForUser), "it asks"),
+            (&["assistant.turn_start", "permission.requested", "permission.completed"], Some(Running), "answered"),
+            (&["assistant.turn_start", "assistant.turn_end", "session.usage_checkpoint"], Some(Idle), "ended"),
+            (&["assistant.turn_start", "abort"], Some(Idle), "Esc"),
+            (&["assistant.turn_start", "session.error"], Some(Idle), "failed"),
+            (&["assistant.turn_start", "session.shutdown"], Some(Idle), "closed"),
+            (&["assistant.turn_start", "session.resume"], Some(Idle), "killed mid-turn, resumed at its prompt"),
+            (&["session.start", "session.model_change"], None, "no turn yet"),
+        ];
+        for (types, expected, why) in cases {
+            let root = event_log("events", "s-1", types);
+            // Act + Assert
+            assert_eq!(activity_in(&root, "s-1"), expected, "{why}");
+            let _ = std::fs::remove_dir_all(root);
+        }
+    }
+
+    #[test]
+    fn only_a_sessions_own_log_is_read() {
+        // Arrange
+        let root = event_log("own", "s-1", &["assistant.turn_start"]);
+        std::fs::write(root.join("events.jsonl"), "{\"type\":\"assistant.turn_start\"}").unwrap();
+        // Act + Assert
+        assert_eq!(activity_in(&root, "s-2"), None, "another session");
+        assert_eq!(activity_in(&root, ".."), None, "not an id: the log above session-state/");
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    /// What this machine's records say of session `$BRAMA_COPILOT_SESSION`: `cargo test -p agent-copilot real_session_activity -- --ignored --nocapture`.
+    #[test]
+    #[ignore]
+    fn real_session_activity() {
+        let session = std::env::var("BRAMA_COPILOT_SESSION").expect("BRAMA_COPILOT_SESSION");
+        let answer = Copilot.session_activity(&session);
+        eprintln!("{session}: {answer:?}");
+        assert!(answer.is_some(), "no record of {session} told");
+    }
 
     fn config(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect()

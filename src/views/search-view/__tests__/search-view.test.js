@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch, $searchDialogPrefs } from '../../../stores/search/search.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../search-view.js';
 
 /** @typedef {import('../search-view.js').AcpSearchView} AcpSearchView */
@@ -57,13 +57,13 @@ describe('acp-search-view', () => {
       calls.push({ cmd, args: a });
       return answer(cmd, a);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
     $projectSearch.setKey('/p', { ...STATE, recent: ['older'] });
   });
 
   afterEach(() => {
     $projectSearch.setKey('/p', undefined);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 
@@ -93,7 +93,7 @@ describe('acp-search-view', () => {
     await until(() => view.open);
     expect([dialog(view).query, dialog(view).folder, dialog(view).recent], 'no saved search').to.deep.equal(['', '', []]);
     dialog(view).close();
-    $workspace.set(null);
+    $project.set(null);
     await view.updateComplete;
     expect(dialog(view).hasProject).to.equal(false);
   });
@@ -126,7 +126,7 @@ describe('acp-search-view', () => {
     await new Promise((r) => setTimeout(r, 30));
     expect([dialog(view).foldersQuery, dialog(view).folders.map((f) => f.path)], 'a late answer to older typing is dropped').to.deep.equal(['comp', ['src/comp']]);
     expect(calls.find((c) => c.cmd === 'quick_open')?.args).to.include({ rootId: 'r', kind: 'dirs' });
-    $workspace.set({ path: '/p', name: 'p', rootId: null });
+    $project.set({ path: '/p', name: 'p', rootId: null });
     await view.updateComplete;
     fire(view, 'acp-search-dialog-folders', { query: 'x' });
     await until(() => dialog(view).foldersQuery === 'x');

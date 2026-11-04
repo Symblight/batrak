@@ -20,7 +20,7 @@ import { $activeFolder, $activeSession, $activeSessionId } from '../../stores/se
 import { $activePermission } from '../../stores/session-runtime/session-runtime.js';
 import { $sessionTerminals, $terminals } from '../../stores/terminals/terminals.js';
 import { $activeShownView, $activeView } from '../../stores/session-views/session-views.js';
-import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
+import { $openingPath, $project } from '../../stores/project/project.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').SessionView} SessionView */
 
@@ -31,7 +31,7 @@ import { $openingPath, $workspace } from '../../stores/workspace/workspace.js';
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
 export class AcpAgentColumn extends ViewElement {
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #openingPath = new StoreController(this, { store: $openingPath });
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #permission = new StoreController(this, { store: $activePermission });
@@ -54,7 +54,7 @@ export class AcpAgentColumn extends ViewElement {
     cli: () => this.#runningCli,
     inTerminal: () => this.#inTerminal,
     opening: () => this.#openingPath.value !== null,
-    root: () => this.#activeFolder.value ?? this.#workspace.value?.path ?? null,
+    root: () => this.#activeFolder.value ?? this.#project.value?.path ?? null,
     draft: () => this.#activeSession.value === null,
   });
 
@@ -79,7 +79,7 @@ export class AcpAgentColumn extends ViewElement {
 
   /** Whether the active session shows its CLI in place of the chat. */
   get #inTerminal() {
-    return this.#workspace.value !== null && this.#openingPath.value === null && this.#activeSessionId.value !== null && this.#shownView.value === 'terminal';
+    return this.#project.value !== null && this.#openingPath.value === null && this.#activeSessionId.value !== null && this.#shownView.value === 'terminal';
   }
 
   /** @returns {HTMLElementTagNameMap['acp-terminal'] | null} The active session's CLI while it runs. */
@@ -148,11 +148,6 @@ export class AcpAgentColumn extends ViewElement {
     ></acp-terminal-view>`;
   }
 
-  #onNewSession() {
-    const workspace = $workspace.get();
-    if (workspace) sessions.create(workspace.path);
-  }
-
   /** The active session's header; a draft shows as a new session. */
   #renderHeader() {
     if (this.#activeSessionId.value === null) return nothing;
@@ -170,7 +165,6 @@ export class AcpAgentColumn extends ViewElement {
       .now=${this.#now.value}
       .view=${this.#shownView.value}
       view-disabled=${this.#activeView.value.disabled}
-      @acp-session-new=${this.#onNewSession}
       @acp-session-view=${this.#onSessionView}
     ></acp-session-header>`;
   }
@@ -181,7 +175,7 @@ export class AcpAgentColumn extends ViewElement {
 
   render() {
     const opening = this.#openingPath.value !== null;
-    const workspace = this.#workspace.value;
+    const project = this.#project.value;
     const inTerminal = this.#inTerminal;
     const startingCli = inTerminal && this.#cliTerminalId === undefined;
     // Hidden rather than removed while a project opens, so the chat keeps its state.
@@ -189,14 +183,14 @@ export class AcpAgentColumn extends ViewElement {
       ?loading=${opening || startingCli}
       loading-label=${opening ? 'Opening project' : "Starting the agent's CLI"}
     >
-      ${workspace !== null && !opening ? this.#renderHeader() : nothing}
+      ${project !== null && !opening ? this.#renderHeader() : nothing}
       <!-- Always rendered, so its controllers (a session's unsent composer text) outlive a closed project. -->
       <acp-chat-view
         ?concealed=${opening || inTerminal}
         ?dropping=${this.#input.isShownChat(this.#fileDropTarget.value)}
         @acp-chat-attach=${this.#input.onAttach}
       ></acp-chat-view>
-      ${workspace === null
+      ${project === null
         ? html`<acp-welcome
             class="acp-agent-column__welcome"
             ?hidden=${opening}

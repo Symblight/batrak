@@ -1,17 +1,12 @@
 import { ipc } from '../ipc/ipc.js';
 
 /** @typedef {import('./types.js').Session} Session */
-/** @typedef {import('../projects/types.js').OpenedRoot} OpenedRoot */
-/** @typedef {import('../git/types.js').GitFileStatus} GitFileStatus */
-/** @typedef {import('./types.js').ApplyResult} ApplyResult */
 /** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
 /** @typedef {import('./types.js').PromptInput} PromptInput */
 /** @typedef {import('./types.js').SyncReport} SyncReport */
 /** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
-/** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
-/** @typedef {import('../projects/types.js').WorkspaceSettings} WorkspaceSettings */
 
-/** The Rust commands of sessions, their folders and the project's workspace settings. */
+/** The Rust commands of sessions, their folders and the project's settings. */
 
 /** @returns {Promise<Session[]>} The sessions as last stored or synced. */
 export function listSessions() {
@@ -39,28 +34,26 @@ export function onSessionsSynced(callback) {
 }
 
 /**
- * A draft's first message: creates the session (under the draft's id) and starts its agent in the
- * background. Rejects when a worktree one has no repository or base to start from.
+ * A draft's first message: creates the session (under the draft's id) in its workspace and starts
+ * its agent in the background. Rejects when its workspace is another project's or unknown.
  * @param {Object} session
  * @param {string} session.sessionId
  * @param {string} session.projectPath
  * @param {string} session.agentId
- * @param {RunTargetKind} session.mode
  * @param {string} session.title
  * @param {Record<string, string>} session.config The agent's config options picked in the draft, by id.
- * @param {string | null} session.baseBranch `worktree`: the branch to start from; `null` for HEAD.
+ * @param {string | null} session.workspaceId `null`: Main.
  * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
  * @returns {Promise<Session>}
  */
-export function sessionCreate({ sessionId, projectPath, agentId, mode, title, config, baseBranch }, onEvent) {
+export function sessionCreate({ sessionId, projectPath, agentId, title, config, workspaceId }, onEvent) {
   return ipc.invoke('session_create', {
     sessionId,
     projectPath,
     agentId,
-    mode,
     title,
     config,
-    baseBranch,
+    workspaceId,
     channel: channelOf(onEvent),
   });
 }
@@ -102,6 +95,14 @@ export function sessionSendPrompt(sessionId, prompt) {
  */
 export function sessionCancel(sessionId) {
   return ipc.invoke('session_cancel', { sessionId });
+}
+
+/**
+ * @param {string} sessionId
+ * @param {string} subagentId Its ACP session id.
+ */
+export function sessionCancelSubagent(sessionId, subagentId) {
+  return ipc.invoke('session_cancel_subagent', { sessionId, subagentId });
 }
 
 /**
@@ -166,10 +167,9 @@ export function sessionRestart(sessionId) {
  * @typedef {Object} CliDraft
  * @property {string} projectPath
  * @property {string} agentId
- * @property {import('../composer/types.js').RunTargetKind} mode
  * @property {string} title
  * @property {Record<string, string>} [config]
- * @property {string | null} [baseBranch]
+ * @property {string | null} workspaceId `null`: Main.
  * @property {string} [prompt] Its first message, which the CLI starts with.
  */
 
@@ -233,63 +233,6 @@ export function sessionSetConfigOption(sessionId, configId, value) {
  */
 export function sessionOpenLog(sessionId) {
   return ipc.invoke('session_open_log', { sessionId });
-}
-
-/**
- * The project's `.brama/workspace.json` settings; missing or invalid ones are the defaults.
- * @param {string} projectPath
- * @returns {Promise<WorkspaceSettings>}
- */
-export function workspaceSettings(projectPath) {
-  return ipc.invoke('workspace_settings', { projectPath });
-}
-
-/**
- * Scans a worktree session's folder for the Files tree and starts watching it.
- * @param {string} sessionId
- * @returns {Promise<OpenedRoot>}
- */
-export function openSessionRoot(sessionId) {
-  return ipc.invoke('open_session_root', { sessionId });
-}
-
-/**
- * A worktree session's changed files since it started (its commits and uncommitted work).
- * @param {string} sessionId
- * @returns {Promise<GitFileStatus[]>} Paths relative to the session's folder.
- */
-export function sessionChanges(sessionId) {
-  return ipc.invoke('session_changes', { sessionId });
-}
-
-/**
- * Applies a worktree session's work since it started to the project's checkout, unstaged. Rejects
- * while its agent is mid-turn.
- * @param {string} sessionId
- * @returns {Promise<ApplyResult>}
- */
-export function sessionApplyLocally(sessionId) {
-  return ipc.invoke('session_apply_locally', { sessionId });
-}
-
-/**
- * Stops a worktree session's agent and checks its branch out in the project's checkout. Rejects
- * while its agent is mid-turn or the worktree has uncommitted changes.
- * @param {string} sessionId
- * @returns {Promise<void>}
- */
-export function sessionCheckOutBranch(sessionId) {
-  return ipc.invoke('session_check_out_branch', { sessionId });
-}
-
-/**
- * A worktree session's file at the commit it started from: its diff's baseline.
- * @param {string} sessionId
- * @param {string} path Relative to the session's folder.
- * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
- */
-export function sessionFileAtBase(sessionId, path) {
-  return ipc.invoke('session_file_at_base', { sessionId, path });
 }
 
 /**

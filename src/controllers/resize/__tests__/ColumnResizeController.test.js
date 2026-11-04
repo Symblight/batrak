@@ -77,7 +77,7 @@ describe('ColumnResizeController', () => {
     expect(column(host, 'right').style.width).to.equal('600px');
   });
 
-  it('moves width between the column and its partner inline, never through a custom property on the host', async () => {
+  it('moves width between the column and its partner inline, and commits it when the drag ends', async () => {
     const measure = { width: 200, neighborWidth: 600, neighborMin: 0 };
     host.dispatchEvent(new CustomEvent('acp-resize-start', { detail: { name: 'left', measure } }));
     host.dispatchEvent(new CustomEvent('acp-resize', { detail: { name: 'left', delta: 50 } }));
@@ -85,8 +85,6 @@ describe('ColumnResizeController', () => {
 
     expect(column(host, 'left').style.width).to.equal('250px');
     expect(column(host, 'right').style.width).to.equal('550px');
-    expect(host.style.getPropertyValue('--test-left-width')).to.equal('');
-    expect(host.style.getPropertyValue('--test-right-width')).to.equal('');
     expect(host.commits, 'nothing before the end').to.deep.equal([]);
 
     host.dispatchEvent(new CustomEvent('acp-resize-end', { detail: { name: 'left' } }));

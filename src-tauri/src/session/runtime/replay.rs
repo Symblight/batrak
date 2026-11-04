@@ -23,7 +23,8 @@ impl ReplayLog {
             return;
         }
         if let (Some(text), Some(last)) = (chunk_text(update), self.updates.last_mut()) {
-            if last["sessionUpdate"] == update["sessionUpdate"] {
+            // A subagent's chunk (`subagentId`) never continues the session's or another's.
+            if last["sessionUpdate"] == update["sessionUpdate"] && last.get("subagentId") == update.get("subagentId") {
                 if let Some(before) = chunk_text(last) {
                     last["content"]["text"] = Value::String(format!("{before}{text}"));
                     return;
@@ -66,4 +67,30 @@ fn chunk_text(update: &Value) -> Option<&str> {
         return None;
     }
     update["content"]["text"].as_str()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn chunk(text: &str, subagent: Option<&str>) -> Value {
+        let mut update = json!({ "sessionUpdate": "agent_message_chunk", "content": { "type": "text", "text": text } });
+        if let Some(id) = subagent {
+            update["subagentId"] = json!(id);
+        }
+        update
+    }
+
+    #[test]
+    fn chunks_merge_only_within_one_speaker() {
+        // Arrange
+        let mut log = ReplayLog::default();
+        // Act
+        for update in [chunk("Hel", None), chunk("lo", None), chunk("fo", Some("c1")), chunk("und", Some("c1")), chunk("!", None)] {
+            log.push(&update);
+        }
+        // Assert
+        let texts: Vec<_> = log.updates().iter().map(|u| (u["subagentId"].as_str(), u["content"]["text"].as_str().unwrap())).collect();
+        assert_eq!(texts, [(None, "Hello"), (Some("c1"), "found"), (None, "!")]);
+    }
 }

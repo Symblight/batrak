@@ -6,7 +6,8 @@ import { $notices } from '../../../stores/notices/notices.js';
 import { $fileLanguages, setFileLanguage } from '../../../stores/editor/editor.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { $settings } from '../../../stores/settings/settings.js';
-import { $rootId, $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
+import { $rootId } from '../../../stores/workspaces/workspaces.js';
 import '../editor-view.js';
 
 /** @typedef {import('../editor-view.js').AcpEditorView} AcpEditorView */
@@ -31,7 +32,7 @@ describe('acp-editor-view', () => {
   const settings = $settings.get();
 
   beforeEach(() => {
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
@@ -39,7 +40,7 @@ describe('acp-editor-view', () => {
     $comments.set({});
     $commentFocus.set(null);
     $settings.set(settings);
-    $workspace.set(null);
+    $project.set(null);
   });
 
   /** @returns {Promise<{ el: AcpEditorView, code: HTMLElementTagNameMap['acp-code-view'] }>} */
@@ -209,7 +210,7 @@ describe('acp-editor-view', () => {
       it('opens a file that is there, as it would from anywhere', async () => {
         mockIPC(listing);
         const { el, view } = await renderMarkdown();
-        $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+        $project.set({ path: '/p', name: 'p', rootId: 'r' });
         /** @type {unknown[]} */
         const heard = [];
         el.addEventListener('acp-file-open', (e) => heard.push(/** @type {CustomEvent} */ (e).detail));
@@ -224,7 +225,7 @@ describe('acp-editor-view', () => {
       it('says so, and opens nothing, when the file or folder is not there', async () => {
         mockIPC(listing);
         const { el, view } = await renderMarkdown();
-        $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+        $project.set({ path: '/p', name: 'p', rootId: 'r' });
         /** @type {unknown[]} */
         const heard = [];
         el.addEventListener('acp-file-open', (e) => heard.push(e));

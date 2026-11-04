@@ -6,6 +6,7 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -13,6 +14,8 @@ use std::time::{Duration, Instant};
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
 /// A pre-commit hook may run a test suite.
 const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
+/// A fetch over a slow network, a credential helper waiting on the keychain.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
 const TERM_GRACE: Duration = Duration::from_secs(3);
 /// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
@@ -87,13 +90,16 @@ pub enum Mode {
     /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
     /// hook keeps running.
     Hooks,
+    /// Talks to a remote (a fetch the user asked for): credential helpers and ssh run, so like
+    /// `Hooks` the whole process group is stopped on its timeout.
+    Network,
 }
 
 impl Mode {
     /// git leads its own session and process group, stopped as a whole on a timeout: hooks and
     /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
     fn own_group(self) -> bool {
-        self == Mode::Hooks
+        matches!(self, Mode::Hooks | Mode::Network)
     }
 }
 
@@ -105,7 +111,12 @@ pub struct Options<'a> {
     pub env: &'a [(&'a str, &'a OsStr)],
     /// Cap on captured stdout; `MAX_OUTPUT` when `None`.
     pub max_output: Option<usize>,
+    /// Once set, git is stopped as on a timeout and the call fails with `CANCELLED`.
+    pub cancel: Option<&'a AtomicBool>,
 }
+
+/// The error of a call stopped through `Options::cancel`.
+pub const CANCELLED: &str = "cancelled";
 
 #[derive(Debug)]
 pub struct Output {
@@ -143,6 +154,8 @@ pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Opti
     let elapsed = started.elapsed();
     match &result {
         Ok(out) => tracing::debug!(cwd = %cwd.display(), args = %Args(args), status = %out.status, ?elapsed, "git"),
+        // Stopped on purpose (a workspace deleted while it checks out): nothing the user must hear of.
+        Err(e) if e == CANCELLED => tracing::debug!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git cancelled"),
         // The first line: a timeout's error goes on with git's output, which may hold anything.
         Err(e) => tracing::warn!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {}", e.lines().next().unwrap_or_default()),
     }
@@ -214,10 +227,11 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let timeout = match mode {
         Mode::Local | Mode::Background => LOCAL_TIMEOUT,
         Mode::Hooks => HOOKS_TIMEOUT,
+        Mode::Network => NETWORK_TIMEOUT,
     };
     #[cfg(test)]
     let timeout = TEST_TIMEOUT.get().unwrap_or(timeout);
-    let status = wait_with_timeout(&mut child, timeout, mode.own_group());
+    let status = wait_with_timeout(&mut child, timeout, mode.own_group(), opts.cancel);
     if let Some(writer) = writer {
         let _ = writer.join();
     }
@@ -265,20 +279,22 @@ fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
     (bytes, truncated)
 }
 
-/// `group`: the child leads its own process group (`Mode::own_group`), stopped as a whole on timeout.
-fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool) -> Result<ExitStatus, String> {
+/// `group`: the child leads its own process group (`Mode::own_group`), stopped as a whole on
+/// timeout or once `cancel` is set.
+fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool, cancel: Option<&AtomicBool>) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
-            Ok(None) if started.elapsed() > timeout => {
+            Ok(None) if started.elapsed() > timeout || cancel.is_some_and(|c| c.load(Ordering::SeqCst)) => {
+                let timed_out = started.elapsed() > timeout;
                 if group {
                     stop_group(child);
                 } else {
                     let _ = child.kill();
                 }
                 let _ = child.wait();
-                return Err(format!("git timed out after {}s", timeout.as_secs()));
+                return Err(if timed_out { format!("git timed out after {}s", timeout.as_secs()) } else { CANCELLED.to_owned() });
             }
             Ok(None) => thread::sleep(Duration::from_millis(5)),
             Err(e) => {
@@ -461,6 +477,41 @@ mod tests {
             assert!(said.is_none_or(|s| err.contains(s)), "{body}: {err}");
             let _ = std::fs::remove_dir_all(&dir);
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_cancelled_call_is_no_failure_the_user_hears_of() {
+        use std::os::unix::fs::PermissionsExt;
+        use std::sync::{Arc, Mutex};
+        use tracing_subscriber::layer::SubscriberExt;
+        /// The levels of the events logged while it's the default subscriber.
+        struct Levels(Arc<Mutex<Vec<tracing::Level>>>);
+        impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Levels {
+            fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+                self.0.lock().unwrap().push(*event.metadata().level());
+            }
+        }
+        // Arrange: a git that would run for long, already cancelled
+        let dir = crate::git::test_repo::temp_dir("cancelled");
+        let git = dir.join("git");
+        std::fs::write(&git, "#!/bin/sh
+exec sleep 30
+").unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let cancel = AtomicBool::new(true);
+        let levels = Arc::new(Mutex::new(Vec::new()));
+        let subscriber = tracing_subscriber::registry().with(Levels(Arc::clone(&levels)));
+
+        // Act
+        let result = tracing::subscriber::with_default(subscriber, || {
+            run_with(&git, &dir, &[OsStr::new("status")], Mode::Hooks, &Options { cancel: Some(&cancel), ..Options::default() })
+        });
+
+        // Assert
+        assert_eq!(result.unwrap_err(), CANCELLED);
+        assert!(!levels.lock().unwrap().iter().any(|l| *l <= tracing::Level::WARN), "no warn, so no snackbar: {:?}", levels.lock().unwrap());
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

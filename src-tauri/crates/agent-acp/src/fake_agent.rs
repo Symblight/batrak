@@ -10,6 +10,9 @@
 //!   disk as agents' own tools do; then like `sleep`
 //! - `look <path> <ms>` → a read tool call naming the file (location only); then like `sleep`
 //! - `crash` → one chunk, then the agent's side of the pipe closes mid-turn
+//! - `subagent` → announces subagent `child-1` (`subagent_update`: title, description, cancel,
+//!   running); under its id a title, a tool call, a chunk and a permission request; then `child-1` idle
+//!   (`end_turn`, or `cancelled` when the request was cancelled) and a chunk of the parent's
 //!
 //! With `require_auth`, any prompt is answered AuthRequired while `signed_in` is unset (a login
 //! that ran out).
@@ -30,7 +33,8 @@ use agent_client_protocol::schema::v1::{
     PermissionOptionKind, PromptRequest, PromptResponse, ReadTextFileRequest, RequestPermissionOutcome,
     RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory, SessionConfigOptionValue,
     SessionConfigSelectOption, SessionId, SessionInfoUpdate, SessionNotification, SessionUpdate, SetSessionConfigOptionRequest,
-    SetSessionConfigOptionResponse, StopReason, TextContent, ToolCall, ToolCallContent, ToolCallLocation, ToolCallStatus,
+    SetSessionConfigOptionResponse, StopReason, SubagentSessionCapabilities, SubagentUpdate, SessionCancelCapabilities,
+    StateUpdate, RunningStateUpdate, IdleStateUpdate, IdleStopReason, TextContent, ToolCall, ToolCallContent, ToolCallLocation, ToolCallStatus,
     ToolCallUpdate, ToolCallUpdateFields, ToolKind, WriteTextFileRequest, Diff,
 };
 use agent_client_protocol::{Agent, ByteStreams, Client, ConnectionTo, Responder};
@@ -60,6 +64,10 @@ pub struct FakeAgentOptions {
     pub list_sessions: bool,
     pub resume_session: bool,
     pub delete_session: bool,
+    /// How many `session/delete` calls ran at once, at most; each takes 50 ms.
+    pub deletes_peak: Arc<std::sync::atomic::AtomicUsize>,
+    /// How many `session/delete` calls run now.
+    pub deletes_running: Arc<std::sync::atomic::AtomicUsize>,
     /// `session/list` is never answered.
     pub hang_list: bool,
     /// Sessions a page of `session/list` holds; 0 is 50.
@@ -92,6 +100,8 @@ pub struct FakeAgentState {
     /// The model the client last set (`fast` / `smart`); `smart` until then.
     pub model: std::sync::Mutex<String>,
     pub cancelled: AtomicBool,
+    /// The sessions `session/cancel` named, in order (a subagent's doesn't set `cancelled`).
+    pub cancelled_sessions: std::sync::Mutex<Vec<String>>,
     pub cancel_count: AtomicUsize,
     pub loads: AtomicUsize,
     pub resumes: AtomicUsize,
@@ -255,6 +265,13 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
         )
         .on_receive_request(
             async move |request: DeleteSessionRequest, responder: Responder<DeleteSessionResponse>, _cx| {
+                {
+                    use std::sync::atomic::Ordering::SeqCst;
+                    let running = delete_options.deletes_running.fetch_add(1, SeqCst) + 1;
+                    delete_options.deletes_peak.fetch_max(running, SeqCst);
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                    delete_options.deletes_running.fetch_sub(1, SeqCst);
+                }
                 delete_options.stored.lock().unwrap().retain(|s| s.id != request.session_id.to_string());
                 responder.respond(DeleteSessionResponse::new())
             },
@@ -282,7 +299,12 @@ async fn serve(out: DuplexStream, input: DuplexStream, options: FakeAgentOptions
             agent_client_protocol::on_receive_request!(),
         )
         .on_receive_notification(
-            async move |_n: CancelNotification, _cx| {
+            async move |n: CancelNotification, _cx| {
+                let id = n.session_id.to_string();
+                on_cancel.cancelled_sessions.lock().unwrap().push(id.clone());
+                if id.starts_with(SUBAGENT_PREFIX) {
+                    return Ok(());
+                }
                 on_cancel.cancelled.store(true, Ordering::SeqCst);
                 on_cancel.cancel_count.fetch_add(1, Ordering::SeqCst);
                 Ok(())
@@ -497,10 +519,48 @@ async fn run_turn(
             // Never answered: the pipe is gone.
             std::future::pending::<()>().await;
         }
+        "subagent" => {
+            let child = SessionId::new(format!("{SUBAGENT_PREFIX}1"));
+            let announce = SubagentUpdate::new(child.clone())
+                .title("find usages")
+                .description("Explore")
+                .capabilities(SubagentSessionCapabilities::new().cancel(SessionCancelCapabilities::new()))
+                .state(StateUpdate::Running(RunningStateUpdate::new()));
+            cx.send_notification(SessionNotification::new(sid.clone(), SessionUpdate::SubagentUpdate(announce)))?;
+            cx.send_notification(SessionNotification::new(
+                child.clone(),
+                SessionUpdate::SessionInfoUpdate(SessionInfoUpdate::new().title("child title")),
+            ))?;
+            cx.send_notification(SessionNotification::new(
+                child.clone(),
+                SessionUpdate::ToolCall(ToolCall::new("child-call", "Read a.txt").kind(ToolKind::Read)),
+            ))?;
+            say(cx, &child, "found")?;
+            let ask = RequestPermissionRequest::new(
+                child.clone(),
+                ToolCallUpdate::new("child-call", ToolCallUpdateFields::new().title("Read a.txt")),
+                vec![
+                    PermissionOption::new("allow", "Allow", PermissionOptionKind::AllowOnce),
+                    PermissionOption::new("deny", "Deny", PermissionOptionKind::RejectOnce),
+                ],
+            );
+            let answer = cx.send_request(ask).block_task().await?;
+            let stop = match answer.outcome {
+                RequestPermissionOutcome::Selected(_) => IdleStopReason::EndTurn,
+                _ => IdleStopReason::Cancelled,
+            };
+            let cancelled = matches!(stop, IdleStopReason::Cancelled);
+            let idle = SubagentUpdate::new(child).state(StateUpdate::Idle(IdleStateUpdate::new().stop_reason(stop)));
+            cx.send_notification(SessionNotification::new(sid.clone(), SessionUpdate::SubagentUpdate(idle)))?;
+            say(cx, &sid, if cancelled { "child cancelled" } else { "done" })?;
+        }
         other => say(cx, &sid, &format!("unknown script {other:?}"))?,
     }
     Ok(StopReason::EndTurn)
 }
+
+/// Session ids of the `subagent` script's children.
+const SUBAGENT_PREFIX: &str = "child-";
 
 /// Waits `ms` in steps; `false` when the turn was cancelled meanwhile.
 async fn sleep(state: &FakeAgentState, ms: u64) -> bool {

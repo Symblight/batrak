@@ -7,8 +7,8 @@ use crate::terminal::{OpenRequest, PasteWait, Program, TerminalEvent, Terminals}
 
 /// How long closing the CLI waits for it to be gone.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
-/// Activity this recent means the CLI is working (`cli_busy`).
-const BUSY_WITHIN_MS: i64 = 10_000;
+/// How often a running CLI's session is read from its agent's records.
+const CLI_POLL: Duration = Duration::from_secs(3);
 
 /// A session's CLI: its terminal (once started) and who hears it's gone.
 pub(in crate::session) struct CliHeld {
@@ -18,6 +18,8 @@ pub(in crate::session) struct CliHeld {
     /// `None` while getting ready (a worktree's checkout).
     terminals: Option<Terminals>,
     gone: Arc<watch::Sender<bool>>,
+    /// What it's doing, as its agent's records last told.
+    pub(super) activity: Option<agent_api::SessionActivity>,
 }
 
 /// A session opened in its agent's CLI: the terminal the page attaches to.
@@ -33,12 +35,11 @@ pub struct CliOpened {
 pub struct CliDraft {
     pub project_path: String,
     pub agent_id: String,
-    pub mode: Mode,
     pub title: String,
     #[serde(default)]
     pub config: BTreeMap<String, String>,
-    #[serde(default)]
-    pub base_branch: Option<String>,
+    /// `None`: Main.
+    pub workspace_id: Option<String>,
     /// The draft's first message, which the CLI starts with.
     #[serde(default)]
     pub prompt: Option<String>,
@@ -109,30 +110,26 @@ impl Sessions {
         Ok(())
     }
 
-    /// Whether closing the CLI would stop work: a program it runs is in the terminal's
-    /// foreground, or its agent saw activity in the session in the last 10 s.
+    /// Whether closing the CLI may stop work: its agent doesn't say it's at its prompt, or a program
+    /// it runs is in the terminal's foreground.
     pub fn cli_busy(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
-        let Some((terminals, terminal_id)) = lock(&state.cli).as_ref().and_then(|h| Some((h.terminals.clone()?, h.terminal_id.clone())))
+        let Some((terminals, terminal_id, activity)) =
+            lock(&state.cli).as_ref().and_then(|h| Some((h.terminals.clone()?, h.terminal_id.clone(), h.activity)))
         else {
             return Ok(false);
         };
-        let now = parse_iso_millis(&iso_now()).unwrap_or_default();
-        let recent = lock(&state.listed_activity).is_some_and(|at| now - at < BUSY_WITHIN_MS);
-        Ok(recent || !terminals.busy(&[terminal_id]).is_empty())
+        let at_prompt = activity == Some(agent_api::SessionActivity::Idle);
+        Ok(!at_prompt || !terminals.busy(&[terminal_id]).is_empty())
     }
 
-    /// Undoes a draft created for a CLI that didn't start: unlisted, its worktree and branch (if
-    /// prepared) and its files gone. The page never listed it, so nothing is announced.
+    /// Undoes a draft created for a CLI that didn't start: unlisted, its files gone (its workspace
+    /// stays). The page never listed it, so nothing is announced.
     async fn forget_failed_draft(&self, state: &Arc<SessionState>) {
         lock(&self.inner.sessions).remove(&state.id);
         self.inner.persist();
-        let record = state.record();
         let dir = self.inner.data_dir().join("sessions").join(&state.id);
         let discarded = tokio::task::spawn_blocking(move || {
-            if let Err(e) = env::for_session(&record).and_then(|env| env.discard()) {
-                tracing::warn!(session = %record.session_id, "discarding a draft's folder failed: {e}");
-            }
             let _ = std::fs::remove_dir_all(&dir);
         })
         .await;
@@ -161,10 +158,9 @@ impl Sessions {
             session_id: id.to_owned(),
             project_path: draft.project_path,
             agent_id: draft.agent_id,
-            mode: draft.mode,
             title: draft.title,
             config: draft.config,
-            base_branch: draft.base_branch,
+            workspace_id: draft.workspace_id,
         };
         let sessions = self.clone();
         let mut record = tokio::task::spawn_blocking(move || sessions.new_record(&request)).await.map_err(|e| e.to_string())??;
@@ -195,10 +191,14 @@ impl Inner {
                 return Err("The agent is running in the chat: stop it first".to_owned());
             }
             let gone = Arc::new(watch::channel(false).0);
-            *cli = Some(CliHeld { terminal_id: terminal_id.clone(), token, terminals: None, gone });
+            *cli = Some(CliHeld { terminal_id: terminal_id.clone(), token, terminals: None, gone, activity: None });
         }
         match self.start_cli(state, start, token, &terminal_id, &window).await {
             Ok(()) => {
+                // A failure of the chat's agent would hide what its CLI is doing.
+                if state.status() == SessionStatus::Error {
+                    self.set_status(state, SessionStatus::Stopped, None);
+                }
                 state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
                 Ok(CliOpened { terminal_id })
             }
@@ -239,15 +239,14 @@ impl Inner {
             CliStart::Resume => spec.resume(&acp_id),
         };
 
-        let env = env::for_session(&record)?;
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Preparing, None);
         }
-        let prepared = tokio::task::spawn_blocking(move || env.prepare(&AtomicBool::new(false))).await;
+        let prepared = self.prepare_folder(&record).await;
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Stopped, None);
         }
-        prepared.map_err(|e| e.to_string())??;
+        prepared?;
 
         let base_env = Arc::clone(&self.opts.base_env);
         let secrets = Arc::clone(&self.opts.secrets);
@@ -279,13 +278,19 @@ impl Inner {
         if let Some(prompt) = pasted {
             window.terminals.paste_when_ready(terminal_id, &prompt, FIRST_PROMPT_WAIT);
         }
-        let kept = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
+        let gone = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
             Some(held) => {
                 held.terminals = Some(window.terminals.clone());
-                true
+                Some(held.gone.subscribe())
             }
-            None => false,
+            None => None,
         };
+        let kept = gone.is_some();
+        // A CLI tells nothing over ACP: its agent's records tell what it's doing.
+        if let Some(gone) = gone {
+            let kind = Arc::clone(self.opts.agents.shared_for_launch(&crate::agents::launch_of(&agent)));
+            watch_cli_records(state, kind, gone);
+        }
         // Closed while it started (or already exited): its terminal goes too.
         if !kept {
             window.terminals.close(&[terminal_id.to_owned()]);
@@ -324,6 +329,10 @@ impl Inner {
             cli.take()
         };
         if let Some(held) = held {
+            // What its agent lists from now on, up to the slack, is this CLI's last writes.
+            if held.terminals.is_some() {
+                *lock(&state.active_here) = parse_iso_millis(&iso_now());
+            }
             held.gone.send_replace(true);
             // Exited on its own: its terminal (and its output kept for a reattach) goes too; the
             // page keeps what it shows.
@@ -339,8 +348,44 @@ impl Inner {
     }
 }
 
+/// While the session's CLI runs (until `gone`), reads what it's doing and its subagents from its
+/// agent's records.
+fn watch_cli_records(state: &Arc<SessionState>, agent: Arc<dyn agent_api::Agent>, mut gone: watch::Receiver<bool>) {
+    let Some(acp_id) = state.record().acp_session_id else { return };
+    let state = Arc::downgrade(state);
+    tokio::spawn(async move {
+        loop {
+            let (agent, id) = (Arc::clone(&agent), acp_id.clone());
+            let Ok((activity, subagents)) = tokio::task::spawn_blocking(move || (agent.session_activity(&id), agent.subagents(&id))).await else {
+                return;
+            };
+            let Some(state) = state.upgrade() else { return };
+            state.set_cli_activity(activity);
+            state.set_subagents(subagents::of_records(subagents));
+            drop(state);
+            tokio::select! {
+                _ = tokio::time::sleep(CLI_POLL) => {}
+                _ = gone.wait_for(|gone| *gone) => return,
+            }
+        }
+    });
+}
+
+impl SessionState {
+    /// Takes `activity` as what its CLI is doing; the page hears of it only when it changed.
+    fn set_cli_activity(&self, activity: Option<agent_api::SessionActivity>) {
+        {
+            let mut cli = lock(&self.cli);
+            let Some(held) = cli.as_mut().filter(|held| held.activity != activity) else { return };
+            held.activity = activity;
+        }
+        self.emit("session", serde_json::to_value(self.page()).unwrap_or_default());
+    }
+}
+
 /// `8-4-4-4-12` hex digits, as the CLIs take for a new session's id.
 fn is_uuid(id: &str) -> bool {
     let groups: Vec<&str> = id.split('-').collect();
     groups.iter().map(|g| g.len()).eq([8, 4, 4, 4, 12]) && groups.iter().all(|g| g.bytes().all(|b| b.is_ascii_hexdigit()))
 }
+

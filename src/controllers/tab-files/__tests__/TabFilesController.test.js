@@ -4,7 +4,8 @@ import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { TabFilesController } from '../TabFilesController.js';
 import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
+import { $sessions } from '../../../stores/sessions/sessions.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -36,7 +37,7 @@ async function until(pred) {
  * @param {{ added?: string[], removed?: string[], modified?: string[] }} changes Root-relative paths.
  */
 function report({ added = [], removed = [], modified = [] }) {
-  return emit('workspace://changed', { rootId: 'r', dirs: [], added, removed, modified, git: false });
+  return emit('roots://changed', { rootId: 'r', dirs: [], added, removed, modified, git: false });
 }
 
 /** The watcher reports the file changed. */
@@ -73,12 +74,13 @@ describe('TabFilesController', () => {
       }
       return null;
     }, { shouldMockEvents: true });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
     closeAllTabs();
-    $workspace.set(null);
+    $sessions.set([]);
+    $project.set(null);
     clearMocks();
   });
 
@@ -103,6 +105,31 @@ describe('TabFilesController', () => {
     expect(await files.save(PATH, { force: true })).to.equal(true);
     expect(writes).to.deep.equal(['{ "mine": 1 }']);
     expect(tab()).to.include({ content: '{ "mine": 1 }', draft: null, changedOnDisk: false });
+  });
+
+  it("re-reads a workspace chat's files when its turn ends, not a Main chat's", async () => {
+    // Arrange: no watcher reports a workspace's files
+    const host = /** @type {FilesHost} */ (await fixture(html`<test-tab-files-host></test-tab-files-host>`));
+    openTab(PATH);
+    const tab = () => /** @type {EditorTab} */ (host.files.tabs.find((t) => t.id === PATH));
+    await until(() => tab()?.loaded);
+    /** @param {string | null} workspaceId @param {string} status */
+    const chat = (workspaceId, status) => /** @type {import('../../../hooks/sessions/types.js').Session} */ (
+      /** @type {unknown} */ ({ id: `s-${workspaceId}`, folder: '/p', workspaceId, status })
+    );
+    $sessions.set([chat(null, 'working'), chat('w1', 'working')]);
+    disk[PATH] = '{ "agent": 1 }';
+
+    // Act: Main's turn ends
+    $sessions.set([chat(null, 'idle'), chat('w1', 'working')]);
+    await new Promise((r) => setTimeout(r, 50));
+    const afterMain = tab().content;
+    // Act: the workspace's turn ends
+    $sessions.set([chat(null, 'idle'), chat('w1', 'idle')]);
+    await until(() => tab().content === '{ "agent": 1 }');
+
+    // Assert
+    expect(afterMain).to.equal('{}');
   });
 
   it('takes its own save for no change on disk', async () => {
@@ -182,8 +209,8 @@ describe('TabFilesController', () => {
   });
 
   describe('switching projects', () => {
-    const away = () => $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
-    const back = () => $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    const away = () => $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+    const back = () => $project.set({ path: '/p', name: 'p', rootId: 'r' });
 
     it('keeps unsaved edits while another project is shown', async () => {
       const { files, tab } = await edited();

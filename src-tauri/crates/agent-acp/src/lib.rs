@@ -35,13 +35,17 @@ pub struct PermissionRequest {
     pub request_id: String,
     pub tool_call: serde_json::Value,
     pub options: serde_json::Value,
+    /// The subagent asking (its ACP session id), `None` for the session itself.
+    pub subagent: Option<String>,
 }
 
 /// What the app does for the agent. `read_text_file` / `write_text_file` run on a blocking thread
 /// and get the agent's paths as sent: confining them is the implementor's job.
 pub trait ClientHost: Send + Sync + 'static {
-    /// A `session/update`'s `update`, in arrival order.
-    fn on_update(&self, update: serde_json::Value);
+    /// A `session/update`'s `update`, in arrival order. `subagent` is the ACP session id of the
+    /// subagent it belongs to (one the agent announced with a `subagent_update`), `None` for the
+    /// session's own.
+    fn on_update(&self, update: serde_json::Value, subagent: Option<String>);
     fn on_permission_request(&self, request: PermissionRequest);
     /// `line` is 1-based; `limit` is a number of lines.
     fn read_text_file(&self, path: PathBuf, line: Option<u32>, limit: Option<u32>) -> Result<String, FsError>;

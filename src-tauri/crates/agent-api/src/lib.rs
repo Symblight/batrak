@@ -158,6 +158,42 @@ pub struct Command {
     pub args: Vec<String>,
 }
 
+/// What a subagent is doing, as its agent's own records tell.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubagentState {
+    Running,
+    Done,
+    /// The user stopped it.
+    Stopped,
+    /// Neither done nor heard from lately: it may have died with its session.
+    Unknown,
+}
+
+/// A subagent of a session, from the agent's own records: what a session run by its CLI (no ACP
+/// stream) has of its subagents.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SubagentRecord {
+    pub id: String,
+    /// What kind it is (`Explore`, `Plan`, …).
+    pub kind: Option<String>,
+    pub title: Option<String>,
+    pub state: SubagentState,
+    /// ISO 8601, when it started.
+    pub started_at: Option<String>,
+}
+
+/// What a session is doing, as its agent's own records tell (spec: `docs/specs/session-activity.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SessionActivity {
+    /// A turn is in progress now.
+    Running,
+    /// A turn is held by a permission or approval prompt.
+    WaitingForUser,
+    /// The agent is at its prompt, or no process runs the session.
+    Idle,
+}
+
 /// One kind of agent. Default methods are plain ACP with no CLI; a crate overrides what its agent
 /// does differently. The app's hub picks the crate for a launch and calls only this.
 pub trait Agent: Send + Sync + 'static {
@@ -178,6 +214,13 @@ pub trait Agent: Send + Sync + 'static {
     }
     /// Whether this crate drives an agent with this launch.
     fn matches(&self, launch: &Launch) -> bool;
+
+    /// Whether Brama may start it without the user acting on it (an options probe, a session
+    /// sync, resuming a session shown at launch). `false` for one that, started signed out, signs
+    /// in in the browser on its own: it then starts only for a message, Restart, Retry or Sign in.
+    fn starts_in_background(&self) -> bool {
+        true
+    }
     /// Its CLI, if it has one: how to resume a session and start one under our id.
     fn cli(&self, _launch: &Launch) -> Option<CliSpec> {
         None
@@ -189,6 +232,32 @@ pub trait Agent: Send + Sync + 'static {
     /// The composer's picks (option id → value) as the CLI's flags; those it doesn't know left out.
     fn cli_args(&self, _config: &BTreeMap<String, String>) -> Vec<String> {
         Vec::new()
+    }
+    /// The subagents of its session `session_id` (its ACP id), from its own records, oldest first;
+    /// none for an agent that keeps none. Reads files: call off the async runtime.
+    fn subagents(&self, _session_id: &str) -> Vec<SubagentRecord> {
+        Vec::new()
+    }
+    /// What its session `session_id` (its ACP id) is doing, from its own records; `None` when it
+    /// can't tell, never a guess from a timestamp. Called every few seconds for each open CLI, so it
+    /// reads little. Reads files: call off the async runtime.
+    fn session_activity(&self, _session_id: &str) -> Option<SessionActivity> {
+        None
+    }
+}
+
+/// What every agent crate's tests run, once.
+#[cfg(any(test, feature = "test-support"))]
+pub mod conformance {
+    use super::Agent;
+
+    /// Panics unless `agent` keeps the contract any crate can be checked on without its files: an
+    /// id it doesn't know, or that isn't an id, gets no answer.
+    pub fn check(agent: &dyn Agent) {
+        for id in ["brama-conformance-no-such-session", "", "..", "../projects", "a/b", "a\\b"] {
+            let answer = agent.session_activity(id);
+            assert_eq!(answer, None, "{} answered for session id {id:?}", agent.kind());
+        }
     }
 }
 
@@ -202,6 +271,12 @@ pub fn is_flag_value(value: &str) -> bool {
         && value.chars().all(|c| c.is_ascii_alphanumeric() || "._:/[]-".contains(c))
 }
 
+/// Whether a session id can be part of a path: letters, digits, `-` and `_`, as agents' ids are. An id
+/// comes from the agent's list and the session's record, so it isn't trusted as is.
+pub fn is_session_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 /// Owned strings, for building argument lists.
 pub fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|a| (*a).to_owned()).collect()
@@ -210,6 +285,41 @@ pub fn strings(args: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Plain;
+    impl Agent for Plain {
+        fn kind(&self) -> &'static str {
+            "plain"
+        }
+        fn matches(&self, _launch: &Launch) -> bool {
+            true
+        }
+    }
+
+    /// A crate that breaks the contract: it answers for any id.
+    struct Guesses;
+    impl Agent for Guesses {
+        fn kind(&self) -> &'static str {
+            "guesses"
+        }
+        fn matches(&self, _launch: &Launch) -> bool {
+            true
+        }
+        fn session_activity(&self, _session_id: &str) -> Option<SessionActivity> {
+            Some(SessionActivity::Running)
+        }
+    }
+
+    #[test]
+    fn an_agent_that_keeps_no_records_passes_the_conformance_suite() {
+        conformance::check(&Plain);
+    }
+
+    #[test]
+    #[should_panic(expected = "guesses")]
+    fn the_conformance_suite_catches_an_agent_that_answers_for_any_id() {
+        conformance::check(&Guesses);
+    }
 
     #[test]
     fn a_first_prompt_goes_on_the_command_line_only_where_it_is_safe() {
@@ -229,6 +339,16 @@ mod tests {
         assert_eq!(last("-v what changed?").as_deref(), Some(" -v what changed?"), "never parsed as a flag");
         assert_eq!(spec.resume("abc").1, ["--resume", "abc"]);
         assert_eq!(spec.mode(), TerminalMode { resume: true, new: true });
+    }
+
+    #[test]
+    fn a_session_id_can_never_name_another_path() {
+        for ok in ["01a1745c-19ee-7990-82a6-fb09b922c5fe", "s_1"] {
+            assert!(is_session_id(ok), "{ok}");
+        }
+        for bad in ["", "..", "../projects", "a/b", "a\\b", "a.b", "a b"] {
+            assert!(!is_session_id(bad), "{bad}");
+        }
     }
 
     #[test]

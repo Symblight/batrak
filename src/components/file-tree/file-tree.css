@@ -19,12 +19,24 @@
     display: none;
   }
 }
-.acp-file-tree__loading {
-  flex: 1;
+.acp-file-tree__skeleton {
   display: flex;
-  align-items: center;
-  justify-content: center;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+  padding: var(--acp-space-2) var(--acp-space-3);
 }
-.acp-file-tree__spinner {
-  font-size: 32px;
+.acp-file-tree__skeleton-row {
+  block-size: 12px;
+  inline-size: 70%;
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: color-mix(in srgb, var(--acp-color-on-surface) 8%, transparent);
+
+  &:nth-child(2n) {
+    inline-size: 55%;
+    margin-inline-start: var(--acp-space-4);
+  }
+  &:nth-child(3n) {
+    inline-size: 40%;
+    margin-inline-start: var(--acp-space-4);
+  }
 }

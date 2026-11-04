@@ -12,29 +12,6 @@
 .acp-agent-form__subtitle {
   font: var(--acp-font-weight-medium) 14px/20px var(--acp-font-family);
 }
-/* The same dense outlined field as Theme and Editor (acp-settings.css); md-select's own field
-   (part `text-field`) sets these on its :host, so they go on that part too. */
-.acp-agent-form__input,
-.acp-agent-form__input::part(text-field) {
-  --md-text-field-top-space: 8px;
-  --md-text-field-bottom-space: 8px;
-  --md-text-field-inline-start-space: var(--acp-space-4);
-  --md-text-field-inline-end-space: var(--acp-space-4);
-  --md-text-field-font-size: var(--acp-font-size-lg);
-  --md-text-field-label-size: var(--acp-font-size-lg);
-  --md-text-field-line-height: 20px;
-  --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--acp-color-on-surface);
-  --md-text-field-border-color: var(--acp-color-outline);
-  --md-text-field-primary-color: var(--acp-color-primary);
-  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
-
-  caret-color: var(--acp-color-primary);
-
-  &:focus-within::part(indicator) {
-    border-width: 2px;
-  }
-}
 .acp-agent-form__input_mono {
   --md-text-field-font-family: var(--acp-font-family-mono);
 }

@@ -78,4 +78,75 @@ describe('acp-chat', () => {
     chat.insertFiles([]);
     expect(chipsOf(chat)).to.deep.equal([]);
   });
+
+  it("notes network and files outside the workspace for a draft's full-access mode, by its risk, not its name", async () => {
+    // Arrange
+    /** @param {import('../../../hooks/composer/types.js').ConfigOptionValue[]} options @param {string} current */
+    const withMode = (options, current) => ({
+      agentId: 'a',
+      chosen: {},
+      started: false,
+      configOptions: [{ id: 'mode', name: 'Mode', category: 'mode', type: /** @type {const} */ ('select'), currentValue: current, options }],
+    });
+    const note = (/** @type {AcpChat} */ el) => el.renderRoot.querySelector('.acp-chat__note');
+
+    // Act
+    const bypass = /** @type {AcpChat} */ (
+      await fixture(html`<acp-chat empty .composer=${withMode([{ value: 'bypassPermissions', name: 'Bypass', risk: 'full' }], 'bypassPermissions')}></acp-chat>`)
+    );
+    const untagged = /** @type {AcpChat} */ (
+      await fixture(html`<acp-chat empty .composer=${withMode([{ value: 'full', name: 'Full' }], 'full')}></acp-chat>`)
+    );
+
+    // Assert
+    expect(note(bypass)?.textContent).to.contain('Network and files outside the workspace');
+    expect(note(untagged)?.textContent ?? null, 'a name alone says nothing').to.equal(null);
+  });
+
+  it("hands a draft's footer where it runs, beside the full-access note; a started session has none", async () => {
+    // Arrange
+    const load = async () => {};
+    const place = { target: { kind: 'worktree', base: null }, workspaceName: 'Fix login', branches: { local: ['main'], remotes: [], default: null }, base: 'main', load };
+    const footerOf = (/** @type {AcpChat} */ el) => /** @type {HTMLElementTagNameMap['acp-run-target'] | null} */ (el.renderRoot.querySelector('acp-run-target'));
+
+    // Act
+    const draft = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .place=${place}></acp-chat>`));
+    const started = /** @type {AcpChat} */ (await fixture(html`<acp-chat .place=${place}></acp-chat>`));
+
+    // Assert
+    const footer = footerOf(draft);
+    expect([footer?.slot, footer?.target, footer?.workspaceName, footer?.branches, footer?.base, footer?.loadBranches]).to.deep.equal([
+      'footer', place.target, 'Fix login', place.branches, 'main', load,
+    ]);
+    expect(footerOf(started), 'none once started').to.equal(null);
+  });
+
+  it("disables the composer while blocked, says why and offers to recreate the workspace's folder", async () => {
+    // Arrange
+    const chat = /** @type {AcpChat} */ (
+      await fixture(html`<acp-chat .blocked=${{ message: 'Recreate the folder to continue', workspaceId: 'w1' }}></acp-chat>`)
+    );
+    /** @type {unknown[]} */
+    const fired = [];
+    document.addEventListener('acp-workspace-recreate', (e) => fired.push(/** @type {CustomEvent} */ (e).detail), { once: true });
+    const composer = /** @type {HTMLElement & { disabled: boolean }} */ (chat.renderRoot.querySelector('chx-message-composer'));
+
+    // Act
+    const button = /** @type {HTMLElement} */ (chat.renderRoot.querySelector('.acp-chat__blocked-action'));
+    button.click();
+
+    // Assert
+    expect(composer.disabled, 'no sending').to.equal(true);
+    expect(chat.renderRoot.querySelector('.acp-chat__blocked')?.textContent).to.contain('Recreate the folder to continue');
+    expect(button.textContent?.trim()).to.equal('Recreate folder');
+    expect(fired, 'reaches the document').to.deep.equal([{ id: 'w1' }]);
+
+    // Act: the folder is back
+    chat.blocked = null;
+    await chat.updateComplete;
+
+    // Assert
+    expect(composer.disabled, 'sends again').to.equal(false);
+    expect(chat.renderRoot.querySelector('.acp-chat__blocked')?.textContent ?? null).to.equal(null);
+  });
 });

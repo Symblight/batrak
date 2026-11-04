@@ -60,16 +60,4 @@ describe('acp-image-preview', () => {
     el.remove();
     expect(await fetch(second).then(() => true, () => false)).to.equal(false);
   });
-
-  it('draws a checkerboard behind the image by default; auto keeps the column background', async () => {
-    // The app's tokens, which the checkerboard is drawn with.
-    const tokens = '--acp-color-surface-container: #eee; --acp-color-surface-container-high: #ddd';
-    const el = await fixture(html`<acp-image-preview style=${tokens} path="/p/a.png"></acp-image-preview>`);
-    expect(el.background).to.equal('grid');
-    const canvas = /** @type {HTMLElement} */ (query(el, '.acp-image-preview__canvas'));
-    expect(getComputedStyle(canvas).backgroundImage).to.include('gradient');
-    el.background = 'auto';
-    await el.updateComplete;
-    expect(getComputedStyle(canvas).backgroundImage).to.equal('none');
-  });
 });

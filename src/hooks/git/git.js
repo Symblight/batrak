@@ -1,12 +1,12 @@
 import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
-import { $rootId } from '../../stores/workspace/workspace.js';
+import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { remoteLine } from './branch.js';
 import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
-/** @typedef {import('./types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').RootChanges} RootChanges */
 /** @typedef {import('./types.js').GitChangesView} GitChangesView */
 /** @typedef {import('./types.js').GitRepoView} GitRepoView */
 /** @typedef {import('./types.js').GitCommitted} GitCommitted */
@@ -222,13 +222,33 @@ export const git = Object.freeze({
   },
 
   /**
-   * Local branches a worktree session can start from, most recently committed first (the sessions'
-   * own `brama/…` left out).
+   * Branches a workspace can be based on: local and remote-tracking ones, most recently committed
+   * first (Brama's own `brama/…` left out), and the remote's default.
    * @param {string} rootId
-   * @returns {Promise<string[]>}
+   * @returns {Promise<import('./types.js').BranchList>}
    */
   branches(rootId) {
     return ipc.invoke('git_branches', { rootId });
+  },
+
+  /**
+   * Fetches every remote of the root's repository, pruning deleted branches (New worktree's base menu refreshes with it).
+   * @param {string} rootId
+   * @returns {Promise<void>}
+   */
+  fetch(rootId) {
+    return ipc.invoke('git_fetch', { rootId });
+  },
+
+  /**
+   * A root's checked-out branch (`null` when detached or outside a repository).
+   * @param {string} rootId
+   * @returns {Promise<string | null>}
+   */
+  async branchOf(rootId) {
+    /** @type {import('./types.js').GitRepoState | null} */
+    const repo = await ipc.invoke('git_head', { rootId });
+    return repo?.detached ? null : (repo?.branch ?? null);
   },
 
   /**

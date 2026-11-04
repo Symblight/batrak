@@ -3,15 +3,15 @@ import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $projects } from '../../../stores/projects/projects.js';
 import {
-  $projectTerminalPanelHeights,
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanelHeights,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   setTerminalPanelHeight,
   setTerminalPanelOpen,
 } from '../../../stores/terminals/terminals.js';
-import { $openingPath, $workspace } from '../../../stores/workspace/workspace.js';
+import { $openingPath, $project } from '../../../stores/project/project.js';
 
-/** @typedef {import('../../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('../../git/types.js').RootChanges} RootChanges */
 
 /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
 let calls;
@@ -45,13 +45,13 @@ describe('projects', () => {
     held = new Map();
     failing = new Set();
     $projects.set([]);
-    $workspace.set(null);
+    $project.set(null);
     $openingPath.set(null);
     mockIPC(
       (cmd, args) => {
         const a = /** @type {Record<string, unknown>} */ (args ?? {});
         calls.push({ cmd, args: a });
-        if (cmd === 'open_workspace') {
+        if (cmd === 'open_root') {
           const path = /** @type {string} */ (a.path);
           if (failing.has(path)) throw new Error(`cannot open ${path}`);
           if (held.has(path)) return new Promise((resolve, reject) => held.set(path, { resolve, reject }));
@@ -64,7 +64,7 @@ describe('projects', () => {
   });
   afterEach(() => {
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
     $projects.set([]);
     $openingPath.set(null);
   });
@@ -79,13 +79,13 @@ describe('projects', () => {
     it('scans a folder, makes it the workspace and lists it as a project', async () => {
       const projects = await fresh();
       await projects.activate('/work/alpha');
-      expect($workspace.get()).to.deep.equal({ path: '/work/alpha', name: 'alpha', rootId: 'root:/work/alpha' });
+      expect($project.get()).to.deep.equal({ path: '/work/alpha', name: 'alpha', rootId: 'root:/work/alpha' });
       expect($projects.get().map((p) => p.id)).to.deep.equal(['/work/alpha']);
       expect($openingPath.get()).to.equal(null);
       expect(projects.path()).to.equal('/work/alpha');
       expect(projects.rootId()).to.equal('root:/work/alpha');
-      expect(names('close_window_workspaces').length, 'last page load’s roots closed first').to.equal(1);
-      expect(calls.findIndex((c) => c.cmd === 'close_window_workspaces')).to.be.lessThan(calls.findIndex((c) => c.cmd === 'open_workspace'));
+      expect(names('close_window_roots').length, 'last page load’s roots closed first').to.equal(1);
+      expect(calls.findIndex((c) => c.cmd === 'close_window_roots')).to.be.lessThan(calls.findIndex((c) => c.cmd === 'open_root'));
     });
 
     it('answers relative paths against the active project', async () => {
@@ -101,15 +101,15 @@ describe('projects', () => {
       await projects.activate('/work/a');
       await projects.activate('/work/b');
       await projects.activate('/work/a');
-      expect($workspace.get()?.path).to.equal('/work/a');
-      expect(names('open_workspace').map((a) => a.path)).to.deep.equal(['/work/a', '/work/b']);
+      expect($project.get()?.path).to.equal('/work/a');
+      expect(names('open_root').map((a) => a.path)).to.deep.equal(['/work/a', '/work/b']);
       expect(projects.isOpen('root:/work/b')).to.equal(true);
     });
 
     it('keeps the last three roots open and closes the one used longest ago', async () => {
       const projects = await fresh();
       for (const name of ['a', 'b', 'c', 'd']) await projects.activate(`/work/${name}`);
-      expect(names('close_workspace')).to.deep.equal([{ rootId: 'root:/work/a' }]);
+      expect(names('close_root')).to.deep.equal([{ rootId: 'root:/work/a' }]);
       expect(projects.isOpen('root:/work/a')).to.equal(false);
       expect(projects.isOpen('root:/work/d')).to.equal(true);
     });
@@ -118,13 +118,13 @@ describe('projects', () => {
       const projects = await fresh();
       held.set('/work/slow', { resolve() {}, reject() {} });
       const first = projects.activate('/work/slow');
-      await until(() => names('open_workspace').length === 1);
+      await until(() => names('open_root').length === 1);
       expect($openingPath.get()).to.equal('/work/slow');
       const second = projects.activate('/work/slow');
       held.get('/work/slow')?.resolve({ rootId: 'root:slow', path: '/work/slow' });
       await Promise.all([first, second]);
-      expect(names('open_workspace').length).to.equal(1);
-      expect($workspace.get()?.rootId).to.equal('root:slow');
+      expect(names('open_root').length).to.equal(1);
+      expect($project.get()?.rootId).to.equal('root:slow');
       expect($openingPath.get()).to.equal(null);
     });
 
@@ -133,11 +133,11 @@ describe('projects', () => {
       held.set('/work/slow', { resolve() {}, reject() {} });
       $projects.set([{ id: '/work/slow', name: 'slow', path: '/work/slow' }]);
       const slow = projects.activate('/work/slow');
-      await until(() => names('open_workspace').length === 1);
+      await until(() => names('open_root').length === 1);
       await projects.activate('/work/fast');
       held.get('/work/slow')?.resolve({ rootId: 'root:slow', path: '/work/slow' });
       await slow;
-      expect($workspace.get()?.path, 'the newest stays shown').to.equal('/work/fast');
+      expect($project.get()?.path, 'the newest stays shown').to.equal('/work/fast');
       expect(projects.isOpen('root:slow'), 'the older scan is kept').to.equal(true);
     });
 
@@ -148,45 +148,45 @@ describe('projects', () => {
       await projects.activate('/work/bad').catch((e) => (error = e.message));
       expect(error).to.contain('cannot open /work/bad');
       expect($openingPath.get()).to.equal(null);
-      expect($workspace.get()).to.equal(null);
+      expect($project.get()).to.equal(null);
     });
 
     it('does nothing when the folder picker is cancelled', async () => {
       const projects = await fresh();
       await projects.open();
-      expect(names('open_workspace')).to.deep.equal([]);
+      expect(names('open_root')).to.deep.equal([]);
     });
   });
 
   describe('restoring', () => {
     it('reopens the folder of the last run', async () => {
       const projects = await fresh();
-      $workspace.set({ path: '/work/last', name: 'last', rootId: null });
+      $project.set({ path: '/work/last', name: 'last', rootId: null });
       await projects.restore();
-      expect($workspace.get()?.rootId).to.equal('root:/work/last');
+      expect($project.get()?.rootId).to.equal('root:/work/last');
     });
 
     it('forgets a folder that cannot be opened any more', async () => {
       const projects = await fresh();
       failing.add('/work/gone');
-      $workspace.set({ path: '/work/gone', name: 'gone', rootId: null });
+      $project.set({ path: '/work/gone', name: 'gone', rootId: null });
       let failed = false;
       await projects.restore().catch(() => (failed = true));
       expect(failed).to.equal(true);
-      expect($workspace.get()).to.equal(null);
+      expect($project.get()).to.equal(null);
     });
 
     it('closes the roots the last page load left open, with no folder to reopen too', async () => {
       const projects = await fresh();
       await projects.restore();
-      expect(names('close_window_workspaces').length).to.equal(1);
+      expect(names('close_window_roots').length).to.equal(1);
     });
 
     it('leaves a folder that is open already alone', async () => {
       const projects = await fresh();
       await projects.activate('/work/a');
       await projects.restore();
-      expect(names('open_workspace').length).to.equal(1);
+      expect(names('open_root').length).to.equal(1);
     });
   });
 
@@ -197,8 +197,8 @@ describe('projects', () => {
       await projects.activate('/work/b');
       projects.remove('/work/a');
       expect($projects.get().map((p) => p.id)).to.deep.equal(['/work/b']);
-      expect(names('close_workspace')).to.deep.equal([{ rootId: 'root:/work/a' }]);
-      expect($workspace.get()?.path).to.equal('/work/b');
+      expect(names('close_root')).to.deep.equal([{ rootId: 'root:/work/a' }]);
+      expect($project.get()?.path).to.equal('/work/b');
     });
 
     it('forgets the terminal panel of a project, shown or not', async () => {
@@ -206,7 +206,7 @@ describe('projects', () => {
       await projects.activate('/work/a');
       await projects.activate('/work/b');
       for (const root of ['/work/a', '/work/b']) {
-        $projectTerminalTabs.setKey(root, { paths: ['view:terminal:t'], active: 'view:terminal:t', pinned: [] });
+        $folderTerminalTabs.setKey(root, { paths: ['view:terminal:t'], active: 'view:terminal:t', pinned: [] });
         setTerminalPanelOpen(root, true);
       }
       setTerminalPanelHeight(300);
@@ -214,9 +214,9 @@ describe('projects', () => {
       projects.remove('/work/a');
       projects.remove('/work/b');
 
-      expect($projectTerminalTabs.get()).to.deep.equal({});
-      expect($projectTerminalPanels.get()).to.deep.equal({});
-      expect($projectTerminalPanelHeights.get()).to.deep.equal({});
+      expect($folderTerminalTabs.get()).to.deep.equal({});
+      expect($folderTerminalPanels.get()).to.deep.equal({});
+      expect($folderTerminalPanelHeights.get()).to.deep.equal({});
     });
 
     it('asks before removing a project, and removes it only when confirmed', async () => {
@@ -248,29 +248,29 @@ describe('projects', () => {
       await projects.activate('/work/a');
       await projects.activate('/work/b');
       projects.remove('/work/b');
-      await until(() => $workspace.get()?.path === '/work/a');
+      await until(() => $project.get()?.path === '/work/a');
       projects.remove('/work/a');
-      expect($workspace.get()).to.equal(null);
+      expect($project.get()).to.equal(null);
       expect($projects.get()).to.deep.equal([]);
     });
   });
 
   describe('files changing on disk', () => {
-    /** @param {string} rootId @returns {WorkspaceChanges} */
+    /** @param {string} rootId @returns {RootChanges} */
     const changes = (rootId) => ({ rootId, dirs: [''], added: ['a.js'], removed: [], modified: [], git: false });
 
     it('hands the active root’s changes to whoever listens, until they stop', async () => {
       const projects = await fresh();
       await projects.activate('/work/a');
-      /** @type {WorkspaceChanges[]} */
+      /** @type {RootChanges[]} */
       const heard = [];
       const stop = projects.onFsChange((c) => heard.push(c));
       await new Promise((r) => setTimeout(r, 30));
-      await emit('workspace://changed', changes('root:/work/a'));
+      await emit('roots://changed', changes('root:/work/a'));
       await until(() => heard.length === 1);
       stop();
       await new Promise((r) => setTimeout(r, 30));
-      await emit('workspace://changed', changes('root:/work/a'));
+      await emit('roots://changed', changes('root:/work/a'));
       await new Promise((r) => setTimeout(r, 30));
       expect(heard.length).to.equal(1);
     });
@@ -300,11 +300,11 @@ describe('projects', () => {
     it('leaves the changes of the other open roots to their snapshots', async () => {
       const projects = await fresh();
       await projects.activate('/work/a');
-      /** @type {WorkspaceChanges[]} */
+      /** @type {RootChanges[]} */
       const heard = [];
       projects.onFsChange((c) => heard.push(c));
       await new Promise((r) => setTimeout(r, 30));
-      await emit('workspace://changed', changes('root:/work/other'));
+      await emit('roots://changed', changes('root:/work/other'));
       await new Promise((r) => setTimeout(r, 30));
       expect(heard).to.deep.equal([]);
     });

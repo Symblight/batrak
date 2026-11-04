@@ -1,5 +1,5 @@
 import { app } from '../app/app.js';
-import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume, workspaceSettings } from './commands.js';
+import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionOpen, sessionOpenCli, sessionRemove, sessionResume } from './commands.js';
 import { actions } from './actions.js';
 import { CLI_SIZE, openCli, restartCli, cliBusy, toChat } from './cli.js';
 import { cancelIdleStop, stopWhenIdle } from './idle.js';
@@ -7,8 +7,9 @@ import { forgetSession, handleSessionEvent, trackCreate } from './adapter.js';
 import { agents } from '../agents/agents.js';
 import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
-import { composerOf, forgetComposer, startComposer } from '../../stores/composer/composer.js';
-import { root } from './root.js';
+import { composerOf, forgetComposer, reopenComposer, setRunTarget, startComposer } from '../../stores/composer/composer.js';
+import { composer } from '../composer/composer.js';
+import { workspaces } from '../workspaces/workspaces.js';
 import { trackSeen } from './seen.js';
 import { poll, sync, syncAgentOf } from './sync.js';
 import { inTurn, isActiveElsewhere } from './rules.js';
@@ -16,18 +17,19 @@ import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
 import { forgetRead, recordBaselines } from '../../stores/session-read/session-read.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
-import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { showColumn } from '../../stores/layout/layout.js';
 import {
   $activeSessionId,
   $draftSessions,
   $sessions,
+  moveSession,
   newSession,
   removeSession,
   revertToDraft,
   selectSession,
   setListedSessions,
   setProjectSessions,
-  showProject,
+  showWorkspace,
   startSession,
   upsertSession,
 } from '../../stores/sessions/sessions.js';
@@ -35,7 +37,9 @@ import { $activePermission, setSessionNotice } from '../../stores/session-runtim
 import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '../../stores/session-views/session-views.js';
 import { forgetPendingInput } from '../../stores/chat/chat.js';
 import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
-import { $workspacePath, setWorkspaceSettings } from '../../stores/workspace/workspace.js';
+import { $projectPath } from '../../stores/project/project.js';
+import { $activeWorkspaceId, $shownFolder, MAIN, setActiveWorkspace } from '../../stores/workspaces/workspaces.js';
+import { computed } from 'nanostores';
 
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
 const POLL_MS = 20_000;
@@ -51,10 +55,86 @@ function onSessionEvent(event) {
   if (event.kind === 'sign-in') agents.refresh();
 }
 
+/** The shown project's workspace, with its folder; `null` while its record loads. */
+const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $shownFolder], (projectPath, id, folder) =>
+  projectPath === null || folder === null ? null : { projectPath, id, folder },
+);
+
+/**
+ * Where a draft's chat is created (its footer's place, `composer.runTargetOf()`) and the workspace it's
+ * listed in meanwhile (a New worktree chat: the draft's, until its own exists).
+ * @param {string} id A draft's.
+ */
+export function placeOf(id) {
+  const draft = $draftSessions.get()[id];
+  if (draft === undefined) return null;
+  // A picked New worktree holds even while `$workspacesEnabled` is false (a root switch, git loading):
+  // the backend refuses one that can't be, and the draft comes back.
+  const target = composer.runTargetOf(composerOf(id).runTarget, draft.workspaceId);
+  const local = target.kind === 'local';
+  return {
+    projectPath: draft.projectId,
+    target,
+    workspaceId: local ? MAIN : draft.workspaceId,
+  };
+}
+
+/** @typedef {NonNullable<ReturnType<typeof placeOf>>} Place */
+
+/**
+ * A draft's first message lists it where it goes; the window shows that workspace with it.
+ * @param {string} id
+ * @param {Place} place
+ * @param {Pick<Session, 'title' | 'agentId' | 'config'>} fields
+ */
+function startDraft(id, place, fields) {
+  unknownToBackend.add(id);
+  startComposer(id);
+  startSession(id, fields, place.workspaceId);
+  setSessionNotice(id, null);
+  if ($activeSessionId.get() === id) setActiveWorkspace(place.projectPath, place.workspaceId);
+}
+
+/**
+ * The started chat's workspace for the backend: a New worktree's is created first
+ * (`workspaces.create()`), and the chat moves into it, shown.
+ * @param {string} id
+ * @param {Place} place
+ * @returns {Promise<string | null | undefined>} Its id, `null` for Main; `undefined`: the chat was
+ *   removed meanwhile; its new workspace is deleted, and nothing more is created for it.
+ */
+async function workspaceFor(id, place) {
+  const { target, projectPath } = place;
+  if (target.kind === 'local') return null;
+  if (target.kind === 'workspace') return place.workspaceId;
+  const created = await workspaces.create(projectPath, target.base);
+  if (!$sessions.get().some((s) => s.id === id)) {
+    // Removing the chat meant "don't run this": its workspace, still empty, goes too.
+    void workspaces.delete(created.id, false);
+    return undefined;
+  }
+  moveSession(id, created);
+  // A draft again (its chat refused), it's this workspace's.
+  setRunTarget(id, { kind: 'workspace' });
+  if ($activeSessionId.get() === id) setActiveWorkspace(projectPath, created.id);
+  return created.id;
+}
+
+/**
+ * A New worktree's workspace wasn't created: the chat is a draft again, and a snackbar says why.
+ * @param {string} id
+ * @param {unknown} err
+ */
+function workspaceFailed(id, err) {
+  app.reportError('Creating the workspace failed', err);
+  revertDraft(id);
+}
+
+/** @type {Set<string>} Started chats not yet asked of the backend (`session_create` / `session_open_cli`): removed, they're only unlisted. */
+const unknownToBackend = new Set();
+
 /** @type {Set<string>} Sessions whose event channel this window opened. */
 const opened = new Set();
-/** Sequence of workspace.json reads; only the latest answer is kept. */
-let settingsLoad = 0;
 /** @type {string | null} The shown session once its agent's list is current: its view is acted on from then. */
 let ready = null;
 /** @type {Promise<boolean>} The last reconcile; the next waits for it. */
@@ -93,17 +173,23 @@ async function init() {
     cancelIdleStop(id);
     show(id);
   });
-  $workspacePath.subscribe((path) => {
-    loadSettings(path);
+  $projectPath.subscribe((path) => {
     if (path === null) return;
     // Before showing: the shown session's one-agent sync then waits for this one.
     sync(path);
-    showProject(path);
+  });
+  // The shown workspace's chat: kept if it's one already, else its last, newest or a new draft.
+  let shownKey = '';
+  $shownWorkspace.subscribe((shown) => {
+    const key = shown === null ? '' : `${shown.projectPath}\n${shown.id}\n${shown.folder}`;
+    if (key === shownKey) return;
+    shownKey = key;
+    if (shown !== null) showWorkspace(shown.projectPath, shown.id, shown.folder);
   });
   // Agents added, turned on, trusted or signed in: those that neither listed nor said they can't
   // last time are asked now.
   $agentList.subscribe(({ agents: listed }) => {
-    const path = $workspacePath.get();
+    const path = $projectPath.get();
     const report = path === null ? null : syncOf(path).report;
     if (path === null || report === null || syncOf(path).running) return;
     const settled = new Set(
@@ -231,45 +317,55 @@ function startsInTerminal(id) {
 /**
  * A draft's first message, for its agent's CLI: listed at once, and its CLI starts the agent's
  * session under the draft's id, with the draft's picks and the message as its first prompt.
- * Refused, it's a draft again, with the reason above its composer.
+ * Refused, it's a draft again, with the reason above its composer (a New worktree's refused
+ * workspace: in its snackbar only).
  * @param {string} id
  * @param {string} title
  * @param {string} prompt
- * @returns {Promise<boolean>} Its CLI started.
+ * @returns {Promise<'started' | 'refused' | 'reported'>} Its CLI started; or not, and nothing was
+ *   said yet (`refused`) or why was said (`reported`; also the chat removed meanwhile).
  */
 async function startInTerminal(id, title, prompt) {
-  const projectPath = $draftSessions.get()[id];
-  const { agentId, chosen: config, runTarget } = composerOf(id);
-  if (projectPath === undefined || agentId === null) return false;
-  const mode = runTarget.kind;
-  const baseBranch = mode === 'worktree' ? runTarget.branch : null;
-  startComposer(id);
-  startSession(id, { title, agentId, config, mode });
-  setSessionNotice(id, null);
+  const place = placeOf(id);
+  const { agentId, chosen: config } = composerOf(id);
+  if (place === null || agentId === null) return 'refused';
+  const { projectPath } = place;
+  startDraft(id, place, { title, agentId, config });
   setCliStarting(id, true);
   const label = $agentList.get().agents.find((a) => a.id === agentId)?.name ?? 'Agent';
   try {
-    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, mode, title, config, baseBranch, prompt });
+    let workspaceId;
+    try {
+      workspaceId = await workspaceFor(id, place);
+    } catch (err) {
+      workspaceFailed(id, err);
+      return 'reported';
+    }
+    if (workspaceId === undefined) return 'reported';
+    unknownToBackend.delete(id);
+    const { terminalId } = await sessionOpenCli(id, CLI_SIZE.cols, CLI_SIZE.rows, { projectPath, agentId, title, config, workspaceId, prompt });
     addSessionTerminal(terminalId, id, projectPath, label);
     const session = $sessions.get().find((s) => s.id === id);
     if (session) openAll([session]);
   } catch (err) {
     revertDraft(id);
     setSessionNotice(id, { kind: 'error', message: `Couldn't start ${label}: ${err instanceof Error ? err.message : String(err)}` });
-    return false;
+    return 'reported';
   } finally {
     setCliStarting(id, false);
   }
-  return true;
+  return 'started';
 }
 
 /**
- * A session whose start was refused is a draft again, with no read mark.
+ * A session whose start was refused is a draft again, with no read mark, its agent no longer fixed.
  * @param {string} id
  */
 function revertDraft(id) {
+  unknownToBackend.delete(id);
   revertToDraft(id);
   forgetRead(id);
+  if (id in $draftSessions.get()) reopenComposer(id);
 }
 
 /** @param {Session[]} sessions Opens the event channel of each one this window hasn't yet. */
@@ -281,22 +377,6 @@ function openAll(sessions) {
       opened.delete(session.id);
       app.reportError(`Opening "${session.title}" failed`, err);
     });
-  }
-}
-
-/**
- * Reads the project's workspace.json: the run target its new sessions start with.
- * @param {string | null} path
- */
-async function loadSettings(path) {
-  const load = ++settingsLoad;
-  setWorkspaceSettings(null);
-  if (path === null) return;
-  try {
-    const settings = await workspaceSettings(path);
-    if (load === settingsLoad) setWorkspaceSettings(settings);
-  } catch (err) {
-    app.reportError('Reading .brama/workspace.json failed', err);
   }
 }
 
@@ -342,11 +422,17 @@ async function openInTerminal(id) {
 }
 
 /**
- * Shows an empty draft session in the project; the project itself is activated by the caller.
+ * Shows an empty draft session in a workspace of the project; the project itself is activated by the caller.
  * @param {string} projectId
+ * @param {string} [workspaceId] `main` (default) for Main.
+ * @param {import('../composer/types.js').RunTarget} [target] Where it runs, picked in advance (New workspace: a New worktree);
+ *   none: its workspace's default, whatever the reused draft had picked.
  */
-function create(projectId) {
-  newSession(projectId);
+function create(projectId, workspaceId, target) {
+  const id = newSession(projectId, workspaceId);
+  setRunTarget(id, target ?? null);
+  // A new chat is for typing in: an expanded editor gives the agent column back.
+  showColumn('agent');
 }
 
 /**
@@ -359,30 +445,37 @@ function create(projectId) {
  * @returns {boolean} Whether the message goes: `false` keeps it in the composer.
  */
 function start(id, title) {
-  const projectPath = $draftSessions.get()[id];
-  if (projectPath === undefined) return true;
+  const place = placeOf(id);
+  if (place === null) return true;
   // Only what was picked in the draft: the values it shows otherwise are another session's.
-  const { agentId, chosen: config, runTarget } = composerOf(id);
+  const { agentId, chosen: config } = composerOf(id);
   if (agentId === null) {
     setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .brama/agents.json to start a session.' });
     return false;
   }
-  const mode = runTarget.kind;
-  const baseBranch = mode === 'worktree' ? runTarget.branch : null;
   // While it's a draft still: a listed session without a composer would get one from its record.
-  startComposer(id);
-  startSession(id, { title, agentId, config, mode });
-  setSessionNotice(id, null);
-  const request = { sessionId: id, projectPath, agentId, mode, title, config, baseBranch };
-  const created = sessionCreate(request, onSessionEvent).then(
-    (session) => upsertSession(session),
-    (err) => {
+  startDraft(id, place, { title, agentId, config });
+  const { projectPath } = place;
+  const create = async () => {
+    let workspaceId;
+    try {
+      workspaceId = await workspaceFor(id, place);
+    } catch (err) {
+      workspaceFailed(id, err);
+      throw err;
+    }
+    // Removed meanwhile: its send fails, nothing is prompted.
+    if (workspaceId === undefined) throw new Error('The session was removed');
+    unknownToBackend.delete(id);
+    try {
+      upsertSession(await sessionCreate({ sessionId: id, projectPath, agentId, title, config, workspaceId }, onSessionEvent));
+    } catch (err) {
       revertDraft(id);
       setSessionNotice(id, { kind: 'error', message: err instanceof Error ? err.message : String(err) });
       throw err;
-    },
-  );
-  trackCreate(id, created);
+    }
+  };
+  trackCreate(id, create());
   return true;
 }
 
@@ -394,11 +487,9 @@ function start(id, title) {
  * @returns {Promise<void>}
  */
 async function remove(id) {
-  const worktree = $sessions.get().find((s) => s.id === id && s.mode === 'worktree')?.folder ?? null;
-  // Nothing may watch the worktree while it's deleted (Windows refuses a watched folder).
-  await root.forget(id);
   try {
-    await sessionRemove(id);
+    // One the backend doesn't know yet is only unlisted (its New worktree's workspace is still being created).
+    if (!unknownToBackend.delete(id)) await sessionRemove(id);
   } catch (err) {
     app.reportError('Removing the session failed', err);
     return;
@@ -415,7 +506,6 @@ async function remove(id) {
   forgetComposer(id);
   forgetContextUsage(id);
   forgetPendingInput(id);
-  if (worktree !== null) removeProjectExpandedFolders(worktree);
   opened.delete(id);
   removeSession(id);
   // After it is unlisted: while it's shown and listed, dropping its mark would have it marked seen again.

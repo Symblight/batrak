@@ -1,7 +1,7 @@
 import { ipc } from '../ipc/ipc.js';
 
-/** @typedef {import('./types.js').WorkspaceEntry} WorkspaceEntry */
-/** @typedef {import('../git/types.js').WorkspaceChanges} WorkspaceChanges */
+/** @typedef {import('./types.js').RootEntry} RootEntry */
+/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 
 /** The Rust commands about files and folders of open roots. */
 
@@ -38,35 +38,35 @@ function readFileBytes(path) {
  * @returns {Promise<void>}
  */
 function closeWorkspace(rootId) {
-  return ipc.invoke('close_workspace', { rootId });
+  return ipc.invoke('close_root', { rootId });
 }
 
 /**
  * Children of a directory from the snapshot.
  * @param {string} rootId
  * @param {string} path Relative; `''` for the root.
- * @returns {Promise<WorkspaceEntry[]>}
+ * @returns {Promise<RootEntry[]>}
  */
 function listDir(rootId, path) {
   return ipc.invoke('list_dir', { rootId, path });
 }
 
 /**
- * Scans a root again from disk, for changes its watcher missed; they arrive as `workspace://changed`.
+ * Scans a root again from disk, for changes its watcher missed; they arrive as `roots://changed`.
  * @param {string} rootId
  * @returns {Promise<void>}
  */
 function rescanWorkspace(rootId) {
-  return ipc.invoke('rescan_workspace', { rootId });
+  return ipc.invoke('rescan_root', { rootId });
 }
 
 /**
  * Subscribes to snapshot changes made by the file watcher.
- * @param {(changes: WorkspaceChanges) => void} callback
+ * @param {(changes: RootChanges) => void} callback
  * @returns {Promise<() => void>} Unsubscribe.
  */
 function onWorkspaceChanged(callback) {
-  return ipc.listen('workspace://changed', callback);
+  return ipc.listen('roots://changed', callback);
 }
 
 /** @returns {Promise<string>} The user's home folder. */

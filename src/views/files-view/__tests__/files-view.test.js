@@ -2,11 +2,11 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { projects } from '../../../hooks/projects/projects.js';
-import { sessions } from '../../../hooks/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $projectExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
-import { $sessionRoot, $sessionRootOpening } from '../../../stores/session-root/session-root.js';
-import { $openingPath, $workspace } from '../../../stores/workspace/workspace.js';
+import { $folderExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
+import { $openRoots, $openingPath, $project } from '../../../stores/project/project.js';
+import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
+import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../files-view.js';
 
 /** @typedef {import('../files-view.js').AcpFilesView} AcpFilesView */
@@ -29,9 +29,18 @@ async function emitUntil(change, heard) {
   const started = Date.now();
   while (!heard()) {
     expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
-    await emit('workspace://changed', change);
+    await emit('roots://changed', change);
     await new Promise((r) => setTimeout(r, 10));
   }
+}
+
+/** Shows a chat of workspace `/wt/s1`, whose root is `rootId` once open (`null`: scanning). @param {string | null} rootId */
+function showWorkspace(rootId) {
+  setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1' })], '/p');
+  $sessions.set(/** @type {import('../../../hooks/sessions/types.js').Session[]} */ (/** @type {unknown} */ ([{ id: 'c', projectId: '/p', workspaceId: 'w1' }])));
+  $openRoots.set(rootId === null ? {} : { '/wt/s1': rootId });
+  $workspaceOpening.set(rootId === null ? '/wt/s1' : null);
+  setActiveWorkspace('/p', 'w1');
 }
 
 /** @param {string} rootId @param {string[]} dirs */
@@ -50,15 +59,19 @@ describe('acp-files-view', () => {
       },
       { shouldMockEvents: true },
     );
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
-    $projectExpandedFolders.setKey('/p', undefined);
-    $sessionRoot.set(null);
-    $sessionRootOpening.set(false);
+    $folderExpandedFolders.setKey('/p', undefined);
+    setActiveWorkspace('/p', 'main');
+    selectSession(null);
+    $sessions.set([]);
+    $workspaces.set([]);
+    $openRoots.set({});
+    $workspaceOpening.set(null);
     $openingPath.set(null);
-    $workspace.set(null);
+    $project.set(null);
     $notices.set([]);
     clearMocks();
   });
@@ -69,25 +82,25 @@ describe('acp-files-view', () => {
     return { el, tree: /** @type {HTMLElementTagNameMap['acp-file-tree']} */ (el.querySelector('acp-file-tree')) };
   }
 
-  it('lists the project’s folder, or the shown worktree session’s, with its expanded folders and whether one is opening', async () => {
+  it('lists the project’s folder, or the shown workspace’s, with its expanded folders and whether one is opening', async () => {
     // Arrange
     const { el, tree } = await render();
     // Assert
-    expect([tree.rootId, tree.root, tree.rootLabel, tree.opening]).to.deep.equal(['r', '/p', null, false]);
+    expect([tree.rootId, tree.root, tree.opening]).to.deep.equal(['r', '/p', false]);
     // Act
     setExpandedFolders(['src']);
-    $sessionRoot.set({ sessionId: 's1', rootId: 'wt', path: '/wt/s1', label: 'brama/s1' });
-    $sessionRootOpening.set(true);
+    showWorkspace(null);
     await el.updateComplete;
     // Assert
-    expect([tree.rootId, tree.root, tree.rootLabel, tree.opening], 'a session folder opening').to.deep.equal(['wt', '/wt/s1', 'brama/s1', true]);
+    expect([tree.rootId, tree.root, tree.opening], 'a workspace folder opening').to.deep.equal([null, '/wt/s1', true]);
     // Act
-    $sessionRootOpening.set(false);
+    showWorkspace('wt');
     $openingPath.set('/q');
     await el.updateComplete;
     // Assert
     expect(tree.opening, 'a project opening').to.equal(true);
-    expect(tree.expanded, 'a worktree with none of its own shows the project’s').to.deep.equal(['src']);
+    expect(tree.rootId, 'its root, once open').to.equal('wt');
+    expect(tree.expanded, 'a workspace with none of its own shows the project’s').to.deep.equal(['src']);
     expect(tree.listDir === projects.listDir, 'lists folders through the projects hook').to.equal(true);
   });
 
@@ -100,11 +113,11 @@ describe('acp-files-view', () => {
     // Act
     tree.dispatchEvent(new CustomEvent('acp-expanded-change', { detail: { paths: ['src', 'src/a'] }, bubbles: true, composed: true }));
     // Assert
-    expect($projectExpandedFolders.get()['/p']).to.deep.equal(['src', 'src/a']);
+    expect($folderExpandedFolders.get()['/p']).to.deep.equal(['src', 'src/a']);
     expect(leaked).to.deep.equal([]);
   });
 
-  it('lists folders again where files changed on disk: the project’s, or the shown worktree session’s, and not once it is gone', async () => {
+  it('lists folders again where files changed on disk, and not once it is gone', async () => {
     // Arrange
     const { el, tree } = await render();
     /** @type {string[][]} */
@@ -128,19 +141,18 @@ describe('acp-files-view', () => {
     expect(reloaded.length, 'a removed view hears nothing').to.equal(settled);
   });
 
-  it('lists folders again where the shown worktree session’s files changed, and not for the project’s', async () => {
+  it('lists folders again where the shown workspace’s files changed, and not for the project’s', async () => {
     // Arrange
-    sessions.followRoot();
-    $sessionRoot.set({ sessionId: 's1', rootId: 'wt', path: '/wt/s1', label: 'brama/s1' });
+    showWorkspace('wt');
     const { tree } = await render();
     /** @type {string[][]} */
     const reloaded = [];
     tree.reload = (dirs) => reloaded.push(dirs);
     // Act: the project's change arrives first, then the session's
-    await emit('workspace://changed', change('r', ['src']));
+    await emit('roots://changed', change('r', ['src']));
     await emitUntil(change('wt', ['lib']), () => reloaded.length > 0);
     // Assert
-    expect(reloaded.every((dirs) => dirs.join() === 'lib'), 'only the session folder’s').to.equal(true);
+    expect(reloaded.every((dirs) => dirs.join() === 'lib'), 'only the workspace folder’s').to.equal(true);
   });
 
   it('refreshes by scanning the root again, then listing the root and the expanded folders; one refresh at a time', async () => {
@@ -158,12 +170,12 @@ describe('acp-files-view', () => {
     const second = el.refresh();
     await Promise.all([first, second]);
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
+    expect(calls.filter((c) => c.cmd === 'rescan_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
     expect(reloaded).to.deep.equal([['', 'src']]);
     // Act: once it is done, the next one runs
     await el.refresh();
     // Assert
-    expect(calls.filter((c) => c.cmd === 'rescan_workspace')).to.have.length(2);
+    expect(calls.filter((c) => c.cmd === 'rescan_root')).to.have.length(2);
   });
 
   it('says so when the scan fails, lists nothing again, and can be tried again', async () => {
@@ -172,7 +184,7 @@ describe('acp-files-view', () => {
     mockIPC(
       (cmd, args) => {
         calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
-        if (cmd === 'rescan_workspace' && failing) throw 'disk gone';
+        if (cmd === 'rescan_root' && failing) throw 'disk gone';
         return cmd === 'list_dir' ? [] : null;
       },
       { shouldMockEvents: true },
@@ -200,7 +212,7 @@ describe('acp-files-view', () => {
     mockIPC(
       (cmd, args) => {
         calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
-        if (cmd === 'rescan_workspace') return new Promise((resolve) => (finishScan = () => resolve(null)));
+        if (cmd === 'rescan_root') return new Promise((resolve) => (finishScan = () => resolve(null)));
         return cmd === 'list_dir' ? [] : null;
       },
       { shouldMockEvents: true },
@@ -211,8 +223,8 @@ describe('acp-files-view', () => {
     tree.reload = (dirs) => reloaded.push(dirs);
     // Act
     const refreshing = el.refresh();
-    await until(() => calls.some((c) => c.cmd === 'rescan_workspace'));
-    $workspace.set({ path: '/q', name: 'q', rootId: 'r2' });
+    await until(() => calls.some((c) => c.cmd === 'rescan_root'));
+    $project.set({ path: '/q', name: 'q', rootId: 'r2' });
     finishScan();
     await refreshing;
     // Assert

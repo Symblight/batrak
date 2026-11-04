@@ -8,7 +8,6 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{AppHandle, Emitter, State, Window};
 
-use crate::session::env::Mode;
 use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
 use super::blocking;
@@ -55,9 +54,8 @@ pub async fn sessions_sync(
     Ok(report)
 }
 
-/// A draft's first message: creates the session under the draft's id and starts its workspace
-/// and agent in the background. Refused when a worktree one has no repository or `base_branch` to
-/// start from.
+/// A draft's first message: creates the session under the draft's id, in `workspace_id` (`None`: Main; or a
+/// stored one of the project), and starts its folder and agent in the background.
 #[allow(clippy::too_many_arguments)]
 #[tauri::command]
 pub async fn session_create(
@@ -66,14 +64,13 @@ pub async fn session_create(
     session_id: String,
     project_path: String,
     agent_id: String,
-    mode: Mode,
     title: String,
     config: Option<BTreeMap<String, String>>,
-    base_branch: Option<String>,
+    workspace_id: Option<String>,
     channel: Channel<Envelope>,
 ) -> Result<Session, String> {
     let config = config.unwrap_or_default();
-    let request = CreateSession { session_id, project_path, agent_id, mode, title, config, base_branch };
+    let request = CreateSession { session_id, project_path, agent_id, title, config, workspace_id };
     let sessions = sessions.inner().clone();
     let label = window.label().to_owned();
     blocking(move || sessions.create(request, &label, sink(channel))).await?
@@ -102,6 +99,12 @@ pub async fn session_send_prompt(
 #[tauri::command]
 pub async fn session_cancel(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
     sessions.cancel(&session_id)
+}
+
+/// Stops one subagent of the session (`subagent_id`: its ACP session id).
+#[tauri::command]
+pub async fn session_cancel_subagent(sessions: State<'_, Sessions>, session_id: String, subagent_id: String) -> Result<(), String> {
+    sessions.cancel_subagent(&session_id, &subagent_id)
 }
 
 /// `option_id: null` cancels the request.
@@ -191,45 +194,6 @@ pub async fn session_set_config_option(
     value: String,
 ) -> Result<(), String> {
     sessions.set_config_option(&session_id, &config_id, &value).await
-}
-
-/// A worktree session's changed files since it started (its commits and uncommitted work),
-/// relative to its folder.
-#[tauri::command]
-pub async fn session_changes(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-) -> Result<Vec<crate::git::repo::FileStatus>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.changes(&session_id)).await?
-}
-
-/// A worktree session's file at the commit it started from, its diff's baseline; `null` when new,
-/// binary or too large.
-#[tauri::command]
-pub async fn session_file_at_base(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-    path: String,
-) -> Result<Option<String>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.file_at_base(&session_id, &path)).await?
-}
-
-/// Applies a worktree session's work since it started to the project's checkout, unstaged;
-/// `conflicts` lists files left with conflict markers by a three-way merge.
-#[tauri::command]
-pub async fn session_apply_locally(
-    sessions: State<'_, Sessions>,
-    session_id: String,
-) -> Result<crate::git::apply::ApplyOutcome, String> {
-    sessions.apply_locally(&session_id).await
-}
-
-/// Stops a worktree session's agent and checks its branch out in the project's checkout.
-#[tauri::command]
-pub async fn session_check_out_branch(sessions: State<'_, Sessions>, session_id: String) -> Result<(), String> {
-    sessions.check_out_branch(&session_id).await
 }
 
 /// Opens the agent's stderr log in the OS's default viewer.

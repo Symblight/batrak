@@ -9,7 +9,7 @@ use tauri::ipc::{InvokeBody, Request};
 use tauri::State;
 
 use crate::session::Sessions;
-use crate::workspace::Workspaces;
+use crate::roots::Roots;
 
 use super::blocking;
 
@@ -97,16 +97,16 @@ fn decode(text: &str) -> Result<String, String> {
 /// Saves the request's raw body as an attachment (`save`) in the `folder` header's folder (a
 /// folder of an open project or a session's), named by the `name` header. Returns its path.
 #[tauri::command]
-pub async fn save_attachment(workspaces: State<'_, Workspaces>, sessions: State<'_, Sessions>, request: Request<'_>) -> Result<String, String> {
+pub async fn save_attachment(roots: State<'_, Roots>, sessions: State<'_, Sessions>, request: Request<'_>) -> Result<String, String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("an attachment must be raw bytes".to_owned());
     };
     let header = |key: &str| request.headers().get(key).and_then(|v| v.to_str().ok()).ok_or(format!("no {key}")).and_then(decode);
     let (folder, name) = (header(FOLDER_HEADER)?, header(NAME_HEADER)?);
-    let (bytes, workspaces, sessions) = (bytes.clone(), workspaces.inner().clone(), sessions.inner().clone());
+    let (bytes, roots, sessions) = (bytes.clone(), roots.inner().clone(), sessions.inner().clone());
     blocking(move || {
         let canonical = dunce::canonicalize(&folder).map_err(|e| format!("{folder}: {e}"))?;
-        if !workspaces.contains(&canonical) && !sessions.contains_folder(&canonical) {
+        if !roots.contains(&canonical) && !sessions.contains_folder(&canonical) {
             return Err(format!("{folder}: outside the opened folders"));
         }
         let path = save(&canonical, &name, &bytes, MAX_BYTES)?;

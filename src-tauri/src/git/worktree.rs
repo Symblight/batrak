@@ -3,6 +3,7 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use super::exec::{self, Mode};
 use super::lock::with_mutation;
@@ -28,28 +29,45 @@ pub enum BranchCleanup {
 }
 
 /// Creates `path` as a worktree of the repository at `repo` on a new `branch` starting at `base`.
-pub fn add(git: &Path, repo: &Path, path: &Path, branch: &str, base: &str) -> Result<(), String> {
-    check_out(git, repo, path, &[&"-b", &branch, &path, &base])
+/// Once `cancel` is set git is stopped (`exec::CANCELLED`); it removes what it checked out, not the
+/// new branch.
+pub fn add(git: &Path, repo: &Path, path: &Path, branch: &str, base: &str, cancel: &AtomicBool) -> Result<(), String> {
+    check_out(git, repo, path, &[&"-b", &branch, &path, &base], cancel)
 }
 
 /// Creates `path` as a worktree of the repository at `repo` on its existing `branch` (a session's
-/// folder that was deleted).
-pub fn attach(git: &Path, repo: &Path, path: &Path, branch: &str) -> Result<(), String> {
-    check_out(git, repo, path, &[&path, &branch])
+/// folder that was deleted). `cancel` as for `add`.
+pub fn attach(git: &Path, repo: &Path, path: &Path, branch: &str, cancel: &AtomicBool) -> Result<(), String> {
+    check_out(git, repo, path, &[&path, &branch], cancel)
 }
 
 /// `git worktree add` with `rest`. A checkout of a large tree, LFS filters and a `post-checkout`
-/// hook can take long: `Mode::Hooks`, not the 10 s of `Mode::Local`.
-fn check_out(git: &Path, repo: &Path, path: &Path, rest: &[&dyn AsRef<std::ffi::OsStr>]) -> Result<(), String> {
-    if path.exists() {
+/// hook can take long: `Mode::Hooks`, not the 10 s of `Mode::Local`. What an interrupted checkout
+/// left goes first: an empty folder, and the entry a killed `worktree add` left locked
+/// ("initializing") once its folder is gone, which `prune` skips.
+fn check_out(git: &Path, repo: &Path, path: &Path, rest: &[&dyn AsRef<std::ffi::OsStr>], cancel: &AtomicBool) -> Result<(), String> {
+    if path.join(".git").exists() {
         return Err(format!("{}: already exists", path.display()));
+    }
+    // Only when empty: `remove_dir` refuses anything else.
+    if path.exists() && fs::remove_dir(path).is_err() {
+        return Err(format!("{}: is in the way and isn't a worktree; move or delete it to go on", path.display()));
     }
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("{}: {e}", parent.display()))?;
     }
     let mut args: Vec<&dyn AsRef<std::ffi::OsStr>> = vec![&"worktree", &"add"];
     args.extend_from_slice(rest);
-    with_mutation(git, repo, || exec::run(git, repo, &exec::args(&args), Mode::Hooks).map(drop))
+    let opts = exec::Options { cancel: Some(cancel), ..Default::default() };
+    with_mutation(git, repo, || {
+        let canonical = exec::canonical(path);
+        if list(git, repo)?.iter().any(|e| e.locked && e.path == canonical) {
+            exec::run(git, repo, &exec::args(&[&"worktree", &"unlock", &path]), Mode::Local)?;
+            exec::run(git, repo, &exec::args(&[&"worktree", &"prune"]), Mode::Local)?;
+        }
+        let out = exec::run_with(git, repo, &exec::args(&args), Mode::Hooks, &opts)?;
+        if out.success() { Ok(()) } else { Err(exec::failure_message(&out)) }
+    })
 }
 
 /// Every worktree of the repository at `repo`, the main checkout first.
@@ -128,6 +146,16 @@ pub fn remove_saved(git: &Path, repo: &Path, path: &Path) -> Result<(), String> 
     })
 }
 
+/// Puts the worktree at `path` back on `branch`.
+pub fn switch(git: &Path, path: &Path, branch: &str) -> Result<(), String> {
+    with_mutation(git, path, || exec::run(git, path, &exec::args(&[&"switch", &"--end-of-options", &branch]), Mode::Local).map(drop))
+}
+
+/// Unlocks the worktree at `path`, which a checkout killed outright leaves locked.
+pub fn unlock(git: &Path, repo: &Path, path: &Path) -> Result<(), String> {
+    with_mutation(git, repo, || exec::run(git, repo, &exec::args(&[&"worktree", &"unlock", &path]), Mode::Local).map(drop))
+}
+
 /// Drops metadata of worktrees whose directories were deleted outside the app.
 pub fn prune(git: &Path, repo: &Path) -> Result<(), String> {
     with_mutation(git, repo, || exec::run(git, repo, &exec::args(&[&"worktree", &"prune"]), Mode::Local).map(drop))
@@ -145,8 +173,8 @@ mod tests {
         let path = parent.join("project/session-1");
         let git = git_bin();
 
-        add(&git, &repo.path, &path, "brama/session-1", "main").unwrap();
-        assert!(add(&git, &repo.path, &path, "brama/other", "main").unwrap_err().contains("already exists"));
+        add(&git, &repo.path, &path, "brama/session-1", "main", &AtomicBool::new(false)).unwrap();
+        assert!(add(&git, &repo.path, &path, "brama/other", "main", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
         let entries = list(&git, &repo.path).unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, repo.path);
@@ -172,7 +200,7 @@ mod tests {
         let parent = temp_dir("wt-dirty-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/s", "main").unwrap();
+        add(&git, &repo.path, &path, "brama/s", "main", &AtomicBool::new(false)).unwrap();
 
         std::fs::write(path.join("new.txt"), "agent work").unwrap();
         let err = remove(&git, &repo.path, &path, Some("brama/s"), BranchCleanup::Delete).unwrap_err();
@@ -192,17 +220,17 @@ mod tests {
         let parent = temp_dir("wt-attach-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/attach", "main").unwrap();
+        add(&git, &repo.path, &path, "brama/attach", "main", &AtomicBool::new(false)).unwrap();
         std::fs::write(path.join("work.txt"), "kept").unwrap();
         run_in(&path, &["add", "."]);
         run_in(&path, &["commit", "-qm", "agent"]);
         std::fs::remove_dir_all(&path).unwrap();
         prune(&git, &repo.path).unwrap();
 
-        attach(&git, &repo.path, &path, "brama/attach").unwrap();
+        attach(&git, &repo.path, &path, "brama/attach", &AtomicBool::new(false)).unwrap();
         assert_eq!(std::fs::read_to_string(path.join("work.txt")).unwrap(), "kept");
         assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "brama/attach");
-        assert!(attach(&git, &repo.path, &path, "brama/attach").unwrap_err().contains("already exists"));
+        assert!(attach(&git, &repo.path, &path, "brama/attach", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
         std::fs::remove_dir_all(parent).unwrap();
     }
 
@@ -212,12 +240,50 @@ mod tests {
         let parent = temp_dir("wt-gone-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/gone", "main").unwrap();
+        add(&git, &repo.path, &path, "brama/gone", "main", &AtomicBool::new(false)).unwrap();
         std::fs::remove_dir_all(&path).unwrap();
         assert!(list(&git, &repo.path).unwrap().iter().any(|e| e.prunable));
 
         remove(&git, &repo.path, &path, Some("brama/gone"), BranchCleanup::Keep).unwrap();
         assert_eq!(list(&git, &repo.path).unwrap().len(), 1);
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    #[test]
+    fn an_empty_folder_left_behind_is_replaced_and_one_with_files_is_named() {
+        let repo = TestRepo::with_commit("wt-leftover");
+        let parent = temp_dir("wt-leftover-home");
+        let (empty, full) = (parent.join("empty"), parent.join("full"));
+        std::fs::create_dir_all(&empty).unwrap();
+        std::fs::create_dir_all(&full).unwrap();
+        std::fs::write(full.join("notes.txt"), "kept").unwrap();
+        let git = git_bin();
+
+        add(&git, &repo.path, &empty, "brama/empty", "main", &AtomicBool::new(false)).unwrap();
+        let err = add(&git, &repo.path, &full, "brama/full", "main", &AtomicBool::new(false)).unwrap_err();
+
+        assert!(empty.join("README.md").is_file(), "checked out over the empty folder");
+        assert!(err.contains(&full.display().to_string()) && err.contains("isn't a worktree"), "{err}");
+        assert_eq!(std::fs::read_to_string(full.join("notes.txt")).unwrap(), "kept", "left as it was");
+        std::fs::remove_dir_all(parent).unwrap();
+    }
+
+    /// A `worktree add` killed while it checks out leaves its entry locked ("initializing"), and
+    /// `prune` skips locked entries: once its folder is gone, its branch can't be checked out again.
+    #[test]
+    fn a_checkout_killed_midway_and_its_folder_deleted_can_be_retried() {
+        let repo = TestRepo::with_commit("wt-locked");
+        let parent = temp_dir("wt-locked-home");
+        let path = parent.join("s");
+        let git = git_bin();
+        add(&git, &repo.path, &path, "brama/locked", "main", &AtomicBool::new(false)).unwrap();
+        run_in(&repo.path, &["worktree", "lock", "--reason", "initializing", path.to_str().unwrap()]);
+        std::fs::remove_dir_all(&path).unwrap();
+
+        attach(&git, &repo.path, &path, "brama/locked", &AtomicBool::new(false)).unwrap();
+
+        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "brama/locked");
+        assert!(!list(&git, &repo.path).unwrap().iter().any(|e| e.locked), "unlocked");
         std::fs::remove_dir_all(parent).unwrap();
     }
 }

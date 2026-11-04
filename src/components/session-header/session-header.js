@@ -7,7 +7,6 @@ import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/text-field';
 import '@symblight/wc-material/tooltip';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
-import newSessionIcon from '@material-design-icons/svg/outlined/edit_note.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import chatIcon from '@material-design-icons/svg/outlined/chat.svg?raw';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
@@ -20,13 +19,12 @@ import styles from './session-header.css?inline';
 
 /**
  * @tag acp-session-header
- * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, open in a terminal, delete), a Chat / Terminal switch and a new-session button.
+ * @summary The chat column's header: the active session's status and title, which opens its menu (rename in place, reveal, open in a terminal, delete), and a Chat / Terminal switch.
  * @fires acp-session-rename `{ sessionId, title }` A new title, trimmed, not empty and not the current one.
  * @fires acp-session-reset-title `{ sessionId }`
  * @fires acp-session-reveal `{ sessionId }`
  * @fires acp-session-open-terminal `{ sessionId }` Open in → Terminal.
  * @fires acp-session-delete `{ sessionId }`
- * @fires acp-session-new `null`
  * @fires acp-session-view `{ sessionId, view }` Continue in the other view.
  */
 export class AcpSessionHeader extends LitElement {
@@ -244,17 +242,6 @@ export class AcpSessionHeader extends LitElement {
       ${this.#renderTitle()}
       <span class="acp-session-header__spacer"></span>
       ${this.#renderViewToggle()}
-      ${this.renaming
-        ? nothing
-        : html`<md-icon-button
-              id="acp-session-header-new"
-              class="acp-session-header__new"
-              aria-label="New session"
-              @click=${() => this.#emit('acp-session-new')}
-            >
-              <md-icon class="acp-session-header__new-icon">${unsafeSVG(newSessionIcon)}</md-icon>
-            </md-icon-button>
-            <md-tooltip for="acp-session-header-new" show-delay="800" placement="bottom">New session</md-tooltip>`}
       ${this.#renderMenu()}
     `;
   }

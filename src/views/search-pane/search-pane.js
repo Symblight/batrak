@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { projects } from '../../hooks/projects/projects.js';
 import { search } from '../../hooks/search/search.js';
-import { $workspace } from '../../stores/workspace/workspace.js';
+import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { FindInFilesController } from '../../controllers/find-in-files/FindInFilesController.js';
 import '../../components/search-panel/search-panel.js';
@@ -20,7 +20,7 @@ export class AcpSearchPane extends ViewElement {
     active: { type: Boolean },
   };
 
-  #workspace = new StoreController(this, { store: $workspace });
+  #project = new StoreController(this, { store: $project });
   #search = new FindInFilesController(this, { slot: 'panel' });
 
   constructor() {
@@ -58,7 +58,7 @@ export class AcpSearchPane extends ViewElement {
   #onOpen(e) {
     e.stopPropagation();
     const { path, line, column, length } = /** @type {CustomEvent<{ path: string, line: number, column: number, length: number }>} */ (e).detail;
-    const root = this.#workspace.value?.path ?? null;
+    const root = this.#project.value?.path ?? null;
     this.dispatchEvent(
       new CustomEvent('acp-file-open', { detail: { path: projects.abs(root, path), line, column, length }, bubbles: true, composed: true }),
     );

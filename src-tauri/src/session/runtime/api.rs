@@ -106,14 +106,12 @@ pub struct CreateSession {
     pub session_id: String,
     pub project_path: String,
     pub agent_id: String,
-    pub mode: Mode,
     pub title: String,
     /// The agent's config options picked in the draft (model, thought level, mode), by id.
     #[serde(default)]
     pub config: BTreeMap<String, String>,
-    /// `worktree`: the branch or commit to start from; `None` for the project's HEAD.
-    #[serde(default)]
-    pub base_branch: Option<String>,
+    /// The workspace it runs in, for life; `None`: Main, the project's folder.
+    pub workspace_id: Option<String>,
 }
 
 /// A prompt piece from the page. Paths are relative to the session's folder; the backend maps and

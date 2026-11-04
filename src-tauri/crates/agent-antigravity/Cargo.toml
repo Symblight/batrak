@@ -6,3 +6,6 @@ description = "Antigravity for Brama: a program the user installs from the regis
 
 [dependencies]
 agent-api = { path = "../agent-api" }
+
+[dev-dependencies]
+agent-api = { path = "../agent-api", features = ["test-support"] }

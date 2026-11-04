@@ -1,6 +1,6 @@
 import { $awaitingTrust, $trustPrompt, takeAwaitingTrust } from '../../stores/trust/trust.js';
 import { projectOf } from '../../stores/sessions/sessions.js';
-import { $workspacePath } from '../../stores/workspace/workspace.js';
+import { $projectPath } from '../../stores/project/project.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { trustKey } from './rules.js';
@@ -44,7 +44,7 @@ async function refresh(projectPath, force) {
 export function startTrust() {
   dismissed.clear();
   const stops = [
-    $workspacePath.subscribe((path) => refresh(path, false)),
+    $projectPath.subscribe((path) => refresh(path, false)),
     $awaitingTrust.listen((waiting) => {
       const projectPath = waiting.length ? projectOf(waiting[waiting.length - 1]) : null;
       if (projectPath !== null && $trustPrompt.get()?.projectPath !== projectPath) refresh(projectPath, true);
@@ -55,7 +55,7 @@ export function startTrust() {
 
 /** @param {string | null} projectPath An agents.json changed: this project's, or the user's (`null`). */
 export function trustOnChanged(projectPath) {
-  if (projectPath === null || projectPath === $workspacePath.get()) refresh($workspacePath.get(), false);
+  if (projectPath === null || projectPath === $projectPath.get()) refresh($projectPath.get(), false);
 }
 
 /**

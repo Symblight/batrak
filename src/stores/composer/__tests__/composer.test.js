@@ -5,7 +5,6 @@ import {
   $composer,
   $composerOptionsStatus,
   agentInfo,
-  applyAgentOptions,
   normalizeOptions,
   selectAgent,
   setRunTarget,
@@ -13,7 +12,6 @@ import {
   whileLoadingOptions,
 } from '../composer.js';
 import { $activeSessionId, $sessions, newSession, startSession, upsertSession } from '../../sessions/sessions.js';
-import { setWorkspaceSettings } from '../../workspace/workspace.js';
 
 /**
  * @param {string} id
@@ -26,7 +24,6 @@ describe('composer', () => {
   afterEach(() => {
     $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     $activeSessionId.set(null);
-    setWorkspaceSettings(null);
   });
 
   it('has no agent while the project configures none', () => {
@@ -41,27 +38,23 @@ describe('composer', () => {
     expect(agentInfo('b')?.name).to.equal('B');
   });
 
-  it('gives a draft changed before any agent existed the agent added later', () => {
+  it('gives a draft made before any agent existed the agent added later', () => {
     $agentList.set({ agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] });
     newSession('/p');
-    setRunTarget({ kind: 'worktree' });
     expect($composer.get().agentId).to.equal(null);
 
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId).to.equal('a');
-    expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
   });
 
   it('moves a draft off an agent agents.json no longer has', () => {
     $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     newSession('/p');
     selectAgent('b');
-    setRunTarget({ kind: 'worktree' });
     expect($composer.get().agentId).to.equal('b');
 
     $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect($composer.get().agentId, 'removed from the file').to.equal('a');
-    expect($composer.get().runTarget.kind).to.equal('worktree', 'keeps what the draft changed');
     expect($agents.get().map((x) => x.id)).to.deep.equal(['a']);
   });
 
@@ -79,35 +72,33 @@ describe('composer', () => {
     expect(agentInfo('b')).to.include({ name: 'B', off: true });
   });
 
+  it("keeps each draft's picked place, through switching drafts and agents, and the agent it was picked with when that goes", () => {
+    // Arrange
+    $agentList.set({ agents: [agent('a', 'A'), agent('b', 'B')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    const first = newSession('/p');
+    const second = newSession('/p', 'w1');
+
+    // Act
+    setRunTarget(first, { kind: 'worktree', base: 'dev' });
+    $activeSessionId.set(first);
+    selectAgent('b');
+    const afterAgent = $composer.get().runTarget;
+    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
+    const afterGone = $composer.get().runTarget;
+    $activeSessionId.set(second);
+
+    // Assert
+    expect([afterAgent, afterGone], 'kept through an agent pick, and its agent going').to.deep.equal([
+      { kind: 'worktree', base: 'dev' },
+      { kind: 'worktree', base: 'dev' },
+    ]);
+    expect($composer.get().runTarget, "the other draft's: none picked").to.equal(undefined);
+  });
+
   it('says which agent asks to sign in', () => {
     $agentList.set({ agents: [agent('a', 'A'), { ...agent('b', 'B'), signIn: true }], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
     expect(agentInfo('a')).to.include({ signIn: false });
     expect(agentInfo('b')).to.include({ signIn: true });
-  });
-
-  it("gives a draft the project's run target once workspace.json is read, until the user picks one", () => {
-    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
-    const id = newSession('/settings');
-    // The agent's options arrive before the project's workspace.json is read.
-    applyAgentOptions(id, []);
-    expect($composer.get().runTarget.kind).to.equal('local');
-
-    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    expect($composer.get().runTarget.kind).to.equal('worktree');
-
-    setRunTarget({ kind: 'local' });
-    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    expect($composer.get().runTarget.kind).to.equal('local', 'keeps what the user picked');
-  });
-
-  it('counts a base branch pick as picking the run target', () => {
-    $agentList.set({ agents: [agent('a', 'A')], defaultAgent: 'a', known: [], userAgents: [], errors: [] });
-    setWorkspaceSettings({ defaultMode: 'worktree', localTurns: 'queue' });
-    newSession('/branch-pick');
-    setRunTarget({ branch: 'dev' });
-
-    setWorkspaceSettings({ defaultMode: 'local', localTurns: 'queue' });
-    expect($composer.get().runTarget).to.deep.equal({ kind: 'worktree', branch: 'dev' });
   });
 
   it("follows a started session's agent to the id the backend moved it to", () => {
@@ -115,8 +106,7 @@ describe('composer', () => {
     const id = newSession('/started');
     $activeSessionId.set(id);
     selectAgent('claude');
-    setRunTarget({ kind: 'worktree' });
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     startComposer(id);
     expect($composer.get().agentId).to.equal('claude');
 

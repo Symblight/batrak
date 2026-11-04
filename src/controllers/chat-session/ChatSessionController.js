@@ -92,6 +92,7 @@ export class ChatSessionController {
     host.addController(this);
   }
 
+
   /**
    * The session's returned prompt into the composer, unless the user typed something since.
    * @param {ChxChat} chat Showing `id`.

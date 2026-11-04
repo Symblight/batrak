@@ -4,7 +4,7 @@ import { git } from '../../../hooks/git/git.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
 import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import '../changes-tab.js';
 
@@ -42,7 +42,7 @@ describe('acp-changes-tab', () => {
       if (cmd === 'git_file_at_head') return 'old text';
       return null;
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r1' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r1' });
     $gitChanges.set(CHANGES);
     $gitRepo.set(REPO);
     // The Changes tab is open, but another tab is active: nothing watches the working tree yet.
@@ -55,7 +55,7 @@ describe('acp-changes-tab', () => {
     $commitSelection.set(new Set());
     $comments.set({});
     $commentFocus.set(null);
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 

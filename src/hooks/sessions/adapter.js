@@ -1,7 +1,8 @@
 import { app } from '../app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './commands.js';
-import { MessageBuilder } from './message-builder.js';
+import { MessageBuilder, subagentCardData } from './message-builder.js';
 import { promptOf } from './prompt.js';
+import { subagentConversationId, subagentIndicator, subagentLabel } from './rules.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
 import { setContextUsage } from '../../stores/context-usage/context-usage.js';
@@ -9,10 +10,13 @@ import { $terminals, sessionTerminalOf, terminalExited } from '../../stores/term
 import { setSessionStatus, touchSession, upsertSession } from '../../stores/sessions/sessions.js';
 import {
   $sessionNotices,
+  $subagents,
   addPermissionRequest,
   clearPermissionRequests,
   dismissSessionNotice,
+  forgetSubagents,
   setSessionNotice,
+  setSubagents,
 } from '../../stores/session-runtime/session-runtime.js';
 import { awaitTrust } from '../../stores/trust/trust.js';
 
@@ -57,6 +61,10 @@ const undelivered = [];
 const loaded = new Set();
 /** Sessions whose agent is replaying their history now (`session/load`). */
 const replaying = new Set();
+/** @type {Map<string, MessageBuilder>} The message each subagent's conversation is building, by its conversation id. */
+const subagentChats = new Map();
+/** @type {Map<string, MessageBuilder>} The chat's message holding each subagent's card, by the subagent's conversation id. */
+const subagentCards = new Map();
 
 /** @param {ChxChunk} chunk */
 function deliver(chunk) {
@@ -114,21 +122,76 @@ function endTurn(sessionId, { cancelled = false, error }) {
  * @param {AcpSessionUpdate} update
  */
 function replay(sessionId, update) {
-  if (loaded.has(sessionId)) return;
+  replayWith(sessionId, update.sessionUpdate === 'user_message_chunk' ? USER_ID : AGENT_ID, (builder) => builder.chunks(update));
+}
+
+/**
+ * @param {string} sessionId
+ * @param {string} authorId
+ * @param {(builder: MessageBuilder) => ChxChunk[]} chunksOf What to show, in the message of `authorId`.
+ * @returns {MessageBuilder | null} The message it went into; `null` for nothing shown.
+ */
+function replayWith(sessionId, authorId, chunksOf) {
+  if (loaded.has(sessionId)) return null;
   replaying.add(sessionId);
-  const authorId = update.sessionUpdate === 'user_message_chunk' ? USER_ID : AGENT_ID;
   let builder = replays.get(sessionId);
   if (builder && builder.authorId !== authorId) builder = undefined;
   const next = builder ?? new MessageBuilder(sessionId, authorId);
-  const chunks = next.chunks(update);
+  const chunks = chunksOf(next);
   // Updates with nothing to show (usage, available commands) open no message: finishing one with
   // no parts would leave an empty bubble.
-  if (!chunks.length) return;
+  if (!chunks.length) return null;
   if (next !== builder) {
     endReplay(sessionId);
     replays.set(sessionId, next);
   }
   for (const chunk of chunks) deliver(chunk);
+  return next;
+}
+
+/**
+ * A subagent's card status: a tool call's.
+ * @param {import('./types.js').Subagent} subagent
+ * @returns {'in_progress' | 'completed' | 'failed'}
+ */
+function cardStatus(subagent) {
+  const indicator = subagentIndicator(subagent);
+  return indicator === 'done' ? 'completed' : indicator === 'failed' || indicator === 'stopped' ? 'failed' : 'in_progress';
+}
+
+/**
+ * The chat handed work to its subagent (`session_message` to it): the subagent's card, in the
+ * turn's reply or the replayed message.
+ * @param {string} sessionId
+ * @param {string} subagentId
+ */
+function showSubagentCard(sessionId, subagentId) {
+  const subagent = $subagents.get()[sessionId]?.find((s) => s.id === subagentId);
+  const conversationId = subagentConversationId(sessionId, subagentId);
+  if (!subagent || subagentCards.has(conversationId)) return;
+  const fields = { label: subagentLabel(subagent), kind: 'think', status: cardStatus(subagent) };
+  const turn = turns.get(sessionId);
+  if (turn?.started) {
+    for (const chunk of turn.builder.subagentCard(subagentId, fields)) enqueue(sessionId, chunk);
+    subagentCards.set(conversationId, turn.builder);
+  } else {
+    const builder = replayWith(sessionId, AGENT_ID, (b) => b.subagentCard(subagentId, fields));
+    if (builder) subagentCards.set(conversationId, builder);
+  }
+}
+
+/**
+ * The subagent's card follows its status.
+ * @param {string} sessionId
+ * @param {string} subagentId
+ */
+function updateSubagentCard(sessionId, subagentId) {
+  const builder = subagentCards.get(subagentConversationId(sessionId, subagentId));
+  const subagent = $subagents.get()[sessionId]?.find((s) => s.id === subagentId);
+  if (!builder || !subagent) return;
+  const chunk = builder.chunk(builder.subagentPartId(subagentId), 'tool_call', { status: cardStatus(subagent), data: subagentCardData(subagentId) });
+  if (turns.get(sessionId)?.builder === builder) enqueue(sessionId, chunk);
+  else deliver(chunk);
 }
 
 /** @param {string} sessionId */
@@ -136,6 +199,66 @@ function endReplay(sessionId) {
   const builder = replays.get(sessionId);
   replays.delete(sessionId);
   if (builder) builder.finish().forEach(deliver);
+}
+
+/**
+ * A subagent's own update: into its conversation, never the chat's. A later load of a chat whose
+ * history is shown replays its subagents too, which would repeat them.
+ * @param {string} sessionId
+ * @param {string} subagentId
+ * @param {AcpSessionUpdate} update
+ */
+function subagentUpdate(sessionId, subagentId, update) {
+  const live = Boolean(turns.get(sessionId)?.started);
+  if (!live && loaded.has(sessionId)) return;
+  const conversationId = subagentConversationId(sessionId, subagentId);
+  if (update.sessionUpdate === 'session_message') {
+    // Its task: the prompt of its conversation.
+    const text = (Array.isArray(update.content) ? update.content : []).map((c) => (c.type === 'text' ? (c.text ?? '') : '')).filter(Boolean).join('\n\n');
+    if (!text) return;
+    endSubagentChat(conversationId);
+    const task = new MessageBuilder(conversationId, USER_ID);
+    [...task.chunks({ sessionUpdate: 'user_message_chunk', content: { type: 'text', text } }), ...task.finish()].forEach(deliver);
+    return;
+  }
+  let builder = subagentChats.get(conversationId);
+  if (!builder) {
+    builder = new MessageBuilder(conversationId, AGENT_ID, { live });
+    subagentChats.set(conversationId, builder);
+  }
+  builder.chunks(update).forEach(deliver);
+}
+
+/**
+ * The subagent is done: its conversation's message ends (a later run of it starts the next).
+ * @param {string} conversationId
+ */
+function endSubagentChat(conversationId) {
+  const builder = subagentChats.get(conversationId);
+  subagentChats.delete(conversationId);
+  if (builder) builder.finish().forEach(deliver);
+}
+
+/**
+ * Takes an update about the session's subagents, live or in a snapshot: a subagent's own (its
+ * conversation), one announcing or patching a subagent (the backend's `subagents` list tells), and
+ * the work handed to one (its card).
+ * @param {string} sessionId
+ * @param {AcpSessionUpdate} update
+ * @returns {boolean} It was one: the chat itself shows nothing of it.
+ */
+function takeSubagentUpdate(sessionId, update) {
+  if (update.subagentId) {
+    subagentUpdate(sessionId, update.subagentId, update);
+    return true;
+  }
+  // The backend folds it into the session's `subagents` list.
+  if (update.sessionUpdate === 'subagent_update') return true;
+  if (update.sessionUpdate === 'session_message' && update.recipientSessionId) {
+    showSubagentCard(sessionId, update.recipientSessionId);
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -159,6 +282,7 @@ export function handleSessionEvent(event) {
   switch (event.kind) {
     case 'update': {
       const update = event.payload;
+      if (takeSubagentUpdate(sessionId, update)) return;
       if (update.sessionUpdate === 'usage_update' && typeof update.used === 'number' && typeof update.size === 'number') {
         setContextUsage(sessionId, { used: update.used, size: update.size });
         return;
@@ -172,9 +296,19 @@ export function handleSessionEvent(event) {
       }
       return;
     }
+    case 'subagents': {
+      // Whatever told the backend (ACP, a CLI's records): its cards and chats follow.
+      const { subagents } = event.payload;
+      setSubagents(sessionId, subagents);
+      for (const subagent of subagents) {
+        updateSubagentCard(sessionId, subagent.id);
+        if (subagent.state === 'idle') endSubagentChat(subagentConversationId(sessionId, subagent.id));
+      }
+      return;
+    }
     case 'snapshot':
       // A running agent's conversation, for this page attaching to it; the status after it ends it.
-      for (const update of event.payload.updates) replay(sessionId, update);
+      for (const update of event.payload.updates) if (!takeSubagentUpdate(sessionId, update)) replay(sessionId, update);
       return;
     case 'status': {
       const { status, message } = event.payload;
@@ -188,13 +322,16 @@ export function handleSessionEvent(event) {
       return;
     }
     case 'permission-request': {
-      const { requestId, toolCall, options } = event.payload;
+      const { requestId, toolCall, options, subagentId } = event.payload;
       const toolCallId = toolCall.toolCallId ?? null;
-      addPermissionRequest(sessionId, { requestId, toolCallId, title: toolCall.title ?? 'The agent asks for permission', options });
+      const title = toolCall.title ?? 'The agent asks for permission';
+      addPermissionRequest(sessionId, subagentId ? { requestId, toolCallId, title, options, subagentId } : { requestId, toolCallId, title, options });
+      if (!toolCallId) return;
+      const awaiting = { status: /** @type {const} */ ('awaiting-permission') };
+      const child = subagentId ? subagentChats.get(subagentConversationId(sessionId, subagentId)) : undefined;
       const turn = turns.get(sessionId);
-      if (turn && toolCallId) {
-        enqueue(sessionId, turn.builder.chunk(turn.builder.toolPartId(toolCallId), 'tool_call', { status: 'awaiting-permission' }));
-      }
+      if (child) deliver(child.chunk(child.toolPartId(toolCallId), 'tool_call', awaiting));
+      else if (turn && !subagentId) enqueue(sessionId, turn.builder.chunk(turn.builder.toolPartId(toolCallId), 'tool_call', awaiting));
       return;
     }
     case 'config-options':
@@ -237,7 +374,7 @@ export function handleSessionEvent(event) {
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
       return;
     case 'session':
-      // The agent named it (`session_info_update`).
+      // The agent named it (`session_info_update`), or its CLI opened, closed or changed activity.
       upsertSession(event.payload);
       return;
     case 'untrusted':
@@ -348,6 +485,9 @@ export function forgetSession(sessionId) {
   creating.delete(sessionId);
   clearPermissionRequests(sessionId);
   setSessionNotice(sessionId, null);
+  forgetSubagents(sessionId);
+  const prefix = subagentConversationId(sessionId, '');
+  for (const map of [subagentChats, subagentCards]) for (const id of map.keys()) if (id.startsWith(prefix)) map.delete(id);
 }
 
 /**

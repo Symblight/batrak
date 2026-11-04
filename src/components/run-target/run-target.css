@@ -20,44 +20,20 @@
   --_btn-container-space-right: 4px;
 }
 
+.acp-run-target__icon,
 .acp-run-target__arrow {
   font-size: var(--acp-icon-size-sm);
+}
+
+.acp-run-target__arrow {
   vertical-align: middle;
 }
 
-.acp-run-target__fixed {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--acp-space-0-5);
-  height: 24px;
-  padding-inline: var(--acp-space-1);
-  font-weight: var(--acp-font-weight-medium);
-  white-space: nowrap;
+.acp-run-target__base {
+  min-width: 0;
 }
 
-.acp-run-target__icon {
-  font-size: var(--acp-icon-size-sm);
-}
-
-.acp-run-target__note {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--acp-space-1);
-  margin-inline-start: auto;
-  padding-inline-end: var(--acp-space-1);
-  font-size: var(--acp-font-size-sm);
-  color: var(--acp-color-error);
-
-  /* The full-access note is the mode menu's description too; a narrow composer drops it. */
-  @container acp-composer (width <= 500px) {
-    display: none;
-  }
-}
-
-.acp-run-target__note-icon {
-  font-size: var(--acp-icon-size-sm);
-}
-
+/* Menu density comes from src/styles/shadow.css. */
 .acp-run-target__menu {
-  --md-menu-min-width: 13rem;
+  --md-menu-min-width: 15rem;
 }

@@ -1,541 +1,498 @@
-//! Workspace snapshots: one per opened root (today the project; later each session's
-//! git worktree). The file tree, Quick Open and Find in Files all read from here.
+//! Workspaces: a project's tasks (docs/specs/workspaces.md). A workspace has a name, its own git
+//! worktree in app data on branch `brama/<slug>`, and chats (sessions) that run in its folder.
+//! Main, the project's own folder, is not stored.
 
-pub mod quick_open;
-pub mod search;
-pub mod snapshot;
-mod watcher;
+pub mod checkout;
+mod store;
 
-#[cfg(test)]
-mod bench;
-
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::{Arc, Mutex, PoisonError, RwLock};
-use std::time::Instant;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use notify_debouncer_full::notify::RecommendedWatcher;
-use notify_debouncer_full::{Debouncer, NoCache};
-use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use crate::git::exec::{self, Mode as GitMode};
 
-use crate::git::cache::GitCache;
-use snapshot::{Changes, Snapshot};
+use serde::{Deserialize, Serialize};
 
-/// Tauri event carrying [`ChangedPayload`] after the watcher patched a snapshot.
-pub const CHANGED_EVENT: &str = "workspace://changed";
+pub use store::Store;
 
-#[derive(Clone, Serialize)]
+/// Where a workspace's name comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum NameSource {
+    /// Its first chat's: the first message's line, then the agent's title.
+    Agent,
+    /// The user named it: chats no longer rename it.
+    User,
+}
+
+/// A workspace as stored in `workspaces.json`. Folder, worktree and branch never change.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ChangedPayload<'a> {
-    root_id: &'a str,
-    #[serde(flatten)]
-    changes: Changes,
+pub struct WorkspaceRecord {
+    pub id: String,
+    /// Canonical project root.
+    pub project_path: PathBuf,
+    pub name: String,
+    pub name_source: NameSource,
+    /// The project's folder in the worktree: its chats' cwd.
+    pub folder: PathBuf,
+    pub worktree_path: PathBuf,
+    pub branch: String,
+    pub base_commit: String,
+    /// The branch it was created from; `None` for the project's HEAD then.
+    #[serde(default)]
+    pub base_branch: Option<String>,
+    pub created_at: String,
+    /// Its first checkout succeeded: a folder not there since was deleted. Records older than
+    /// this field count as checked out.
+    #[serde(default = "checked_out_before")]
+    pub checked_out: bool,
 }
 
-/// Checks a root-relative path from the frontend: `/`-separated, no `..`, `.` or empty
-/// segments, not absolute, and not inside `.git`. Every command taking a relative path calls it.
-pub fn checked_rel(rel: &str) -> Result<&str, String> {
-    let ok = !rel.is_empty()
-        && !rel.contains('\\')
-        && !rel.contains('\0')
-        && !Path::new(rel).is_absolute()
-        && rel.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
-        && rel.split('/').next() != Some(".git");
-    if ok {
-        Ok(rel)
-    } else {
-        Err(format!("{rel:?}: not a path inside the workspace"))
-    }
+fn checked_out_before() -> bool {
+    true
 }
 
-/// Locks ignoring poisoning: a panicked reader must not take the whole workspace down.
-fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+/// Where a workspace's folder stands (`WorkspaceRecord::checkout_state`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckoutState {
+    /// Checked out.
+    Ready,
+    /// Placed, its first checkout still to run (it failed, or the app quit first).
+    NeverCheckedOut,
+    /// Deleted after a checkout (outside Brama): missing until Recreate.
+    Absent,
+}
+
+fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
 }
 
-/// `.brama/agents.json` changed on disk: the project's agent list is re-read, and windows hear
-/// of it when it differs.
-fn agents_changed(app: &AppHandle, project: &Path) {
-    use tauri::Manager;
-    let Some(configs) = app.try_state::<crate::config::AgentConfigs>() else { return };
-    if configs.reload(project) {
-        crate::commands::agents::emit_changed(app, Some(project));
-    }
-}
-
-/// Files changed in a project: running local turns that both changed one hear of it.
-fn sessions_changed(app: &AppHandle, project: &Path, changes: &Changes) {
-    use tauri::Manager;
-    let Some(sessions) = app.try_state::<crate::session::Sessions>() else { return };
-    let changed: Vec<String> = changes.added.iter().chain(&changes.modified).chain(&changes.removed).cloned().collect();
-    if !changed.is_empty() {
-        sessions.note_changes(project, &changed);
-    }
-}
-
-/// Hears a root's changed snapshot, on the watcher's thread or a rescan's.
-type OnChange = Box<dyn Fn(&Root, Changes) + Send + Sync>;
-
-pub struct Root {
-    pub id: String,
-    pub path: PathBuf,
-    /// The window that opened it; its roots close with it.
-    group: String,
-    /// A worktree session's folder for the Files tree, not a project: its `.brama/` configures nothing.
-    session: bool,
-    pub snapshot: RwLock<Snapshot>,
-    /// Hears every batch that changed the snapshot: the watcher's and a `rescan`'s.
-    on_change: OnChange,
-    /// Held through a whole batch (scan, patch, `on_change`) by the watcher and by `rescan`, which
-    /// run on different threads: a rescan's older scan must not replace what the watcher applied
-    /// meanwhile, and batches reach `on_change` in order.
-    batch: Mutex<()>,
-    watcher: Mutex<Option<Debouncer<RecommendedWatcher, NoCache>>>,
-    /// Most recent first, at most `quick_open::RECENT_CAPACITY`.
-    recent: Mutex<VecDeque<String>>,
-    /// Bumped by every Quick Open query; a running query stops when it is no longer current.
-    quick_open_generation: AtomicU64,
-    /// Cancel flag of the running Find in Files per slot (the Search pane's, the dialog's),
-    /// replaced on every new search in that slot.
-    search_cancel: Mutex<HashMap<String, Arc<AtomicBool>>>,
-    /// Set by `Workspaces::close`; stops a watcher rescan still running for a closed root.
-    pub closed: AtomicBool,
-    /// Bumped by the watcher after every batch that changed something (or lost events): a cached
-    /// result computed at an older epoch may be out of date.
-    change_epoch: AtomicU64,
-    /// Branch and status, validated against `change_epoch` before reuse.
-    pub git: GitCache,
-}
-
-impl Root {
-    pub fn read(&self) -> std::sync::RwLockReadGuard<'_, Snapshot> {
-        self.snapshot.read().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    pub fn write(&self) -> std::sync::RwLockWriteGuard<'_, Snapshot> {
-        self.snapshot.write().unwrap_or_else(PoisonError::into_inner)
-    }
-
-    /// Read before computing anything cached against it, so a change meanwhile invalidates the result.
-    pub fn epoch(&self) -> u64 {
-        self.change_epoch.load(Ordering::SeqCst)
-    }
-
-    fn bump_epoch(&self) {
-        self.change_epoch.fetch_add(1, Ordering::SeqCst);
-    }
-
-    pub fn note_opened(&self, rel: String) {
-        let mut recent = lock(&self.recent);
-        recent.retain(|p| p != &rel);
-        recent.push_front(rel);
-        recent.truncate(quick_open::RECENT_CAPACITY);
-    }
-
-    pub fn quick_open(&self, query: &str, kind: quick_open::QuickOpenKind) -> Option<Vec<quick_open::QuickOpenItem>> {
-        let generation = self.quick_open_generation.fetch_add(1, Ordering::SeqCst) + 1;
-        let recent: Vec<String> = lock(&self.recent).iter().cloned().collect();
-        let snapshot = self.read();
-        quick_open::search(&snapshot, &recent, query, kind, || {
-            self.quick_open_generation.load(Ordering::Relaxed) != generation
-        })
-    }
-
-    /// Cancels the running search of `slot` (if any) and returns the flag for a new one.
-    pub fn start_search(&self, slot: &str) -> Arc<AtomicBool> {
-        let fresh = Arc::new(AtomicBool::new(false));
-        if let Some(previous) = lock(&self.search_cancel).insert(slot.to_owned(), Arc::clone(&fresh)) {
-            previous.store(true, Ordering::Relaxed);
-        }
-        fresh
-    }
-
-    pub fn cancel_search(&self, slot: &str) {
-        if let Some(cancel) = lock(&self.search_cancel).get(slot) {
-            cancel.store(true, Ordering::Relaxed);
-        }
-    }
-
-    fn cancel_all_searches(&self) {
-        for cancel in lock(&self.search_cancel).values() {
-            cancel.store(true, Ordering::Relaxed);
-        }
-    }
-
-    /// Scans the whole root again (the Files column's Refresh), for changes the watcher missed,
-    /// and reports them as the watcher would. Blocking.
-    pub fn rescan(&self) {
-        let _batch = lock(&self.batch);
-        let Some(fresh) = Snapshot::scan_until(&self.path, &self.closed) else { return };
-        let mut changes = Changes::default();
-        self.write().replace_with(fresh, &mut changes);
-        // Whatever was missed may have changed git's answers too.
-        self.bump_epoch();
-        if !changes.is_empty() {
-            (self.on_change)(self, changes);
-        }
-    }
-}
-
-/// Cancel key of a window's session-root scans, apart from its project scans.
-fn session_key(group: &str) -> String {
-    format!("{group}:session")
-}
-
-/// Error of an open whose scan was cancelled by a newer open in the same group.
-pub const SUPERSEDED: &str = "superseded by a newer open";
-
-/// All opened roots, by id. Cheap to clone.
-#[derive(Clone, Default)]
+/// Every project's workspaces: the records, and what only this launch knows (a checkout
+/// running or failed). Cheap to clone.
+#[derive(Clone)]
 pub struct Workspaces {
-    roots: Arc<Mutex<HashMap<String, Arc<Root>>>>,
-    next_id: Arc<AtomicU64>,
-    /// Cancel flag of the scan in progress per group (a window): a newer open stops the older scan
-    /// instead of letting both saturate the disk.
-    opening: Arc<Mutex<HashMap<String, Arc<AtomicBool>>>>,
+    inner: Arc<Inner>,
+}
+
+struct Inner {
+    store: Store,
+    /// `<app data>/worktrees`.
+    worktrees: PathBuf,
+    /// Held while a workspace's folder is checked out; a chat's start waits on it.
+    gates: Mutex<HashMap<String, Arc<Mutex<()>>>>,
+    /// Held while a new workspace's name is chosen and stored.
+    placing: Mutex<()>,
+    /// Workspaces whose checkout runs.
+    creating: Mutex<HashSet<String>>,
+    /// Why a workspace's last checkout failed.
+    failed: Mutex<HashMap<String, String>>,
+    /// Set by Delete: its checkout stops and undoes itself.
+    cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
+    /// Being deleted (`Deleting`): no chat joins them.
+    deleting: Mutex<HashSet<String>>,
+    /// Told the project of every change (the app: `workspaces://changed` to every window).
+    on_change: Mutex<Option<OnChange>>,
+}
+
+/// Told a project's workspaces changed.
+pub type OnChange = Arc<dyn Fn(&Path) + Send + Sync>;
+
+/// A workspace as the page lists it: its record and what this launch knows of its folder.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Workspace {
+    #[serde(flatten)]
+    pub record: WorkspaceRecord,
+    /// Its checkout runs.
+    pub creating: bool,
+    /// Why its last checkout failed.
+    pub error: Option<String>,
+    /// Its folder is gone (deleted outside Brama); Recreate checks it out again.
+    pub missing: bool,
 }
 
 impl Workspaces {
-    /// Scans `path` and starts watching it; changes go to the frontend as [`CHANGED_EVENT`].
-    /// A later open in the same `group` cancels this one's scan, which then fails with
-    /// [`SUPERSEDED`]. Blocking: call off the main thread.
-    pub fn open(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
-        let cancel = self.begin_open(group);
-        let result = self.open_with(path, group, &cancel, false, move |root, changes| {
-            if changes.config {
-                agents_changed(&app, &root.path);
-            }
-            sessions_changed(&app, &root.path, &changes);
-            let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
-        });
-        self.end_open(group, &cancel);
-        result
-    }
-
-    /// Opens a worktree session's folder for the Files tree, in `group` so it closes with the
-    /// window. Its scan has its own cancel key: it neither cancels nor is cancelled by a project's.
-    /// Its `.brama/agents.json` is the branch's copy, so a change there reloads no agents. Blocking.
-    pub fn open_session(&self, app: AppHandle, path: &Path, group: &str) -> Result<Arc<Root>, String> {
-        let key = session_key(group);
-        let cancel = self.begin_open(&key);
-        let result = self.open_with(path, group, &cancel, true, move |root, changes| {
-            let _ = app.emit(CHANGED_EVENT, ChangedPayload { root_id: &root.id, changes });
-        });
-        self.end_open(&key, &cancel);
-        result
-    }
-
-    /// Cancels the scan in progress in `group`, if any, and returns the flag of a new one.
-    fn begin_open(&self, group: &str) -> Arc<AtomicBool> {
-        let cancel = Arc::new(AtomicBool::new(false));
-        if let Some(previous) = lock(&self.opening).insert(group.to_owned(), Arc::clone(&cancel)) {
-            previous.store(true, Ordering::Relaxed);
-        }
-        cancel
-    }
-
-    /// Forgets `cancel` once its open is done, unless a newer open already replaced it.
-    fn end_open(&self, group: &str, cancel: &Arc<AtomicBool>) {
-        let mut opening = lock(&self.opening);
-        if opening.get(group).is_some_and(|current| Arc::ptr_eq(current, cancel)) {
-            opening.remove(group);
+    /// `data_dir` is app data: `workspaces.json` and `worktrees/`.
+    pub fn new(data_dir: &Path) -> Workspaces {
+        Workspaces {
+            inner: Arc::new(Inner {
+                store: Store::open(data_dir.join("workspaces.json")),
+                worktrees: data_dir.join("worktrees"),
+                gates: Mutex::default(),
+                placing: Mutex::default(),
+                creating: Mutex::default(),
+                failed: Mutex::default(),
+                cancels: Mutex::default(),
+                deleting: Mutex::default(),
+                on_change: Mutex::default(),
+            }),
         }
     }
 
-    fn open_with(
-        &self,
-        path: &Path,
-        group: &str,
-        cancel: &AtomicBool,
-        session: bool,
-        on_change: impl Fn(&Root, Changes) + Send + Sync + 'static,
-    ) -> Result<Arc<Root>, String> {
-        // FSEvents reports canonical paths (e.g. /private/var), so the root must be canonical too.
-        // `dunce` keeps it a plain `C:\…` on Windows: relative paths are joined to it with `/`.
-        let path = dunce::canonicalize(path).map_err(|e| format!("{}: {e}", path.display()))?;
-        if !path.is_dir() {
-            return Err(format!("{}: not a directory", path.display()));
+    /// Calls `f` with the project of each change from now on.
+    pub fn on_change(&self, f: OnChange) {
+        *lock(&self.inner.on_change) = Some(f);
+    }
+
+    fn changed(&self, project: &Path) {
+        let f = lock(&self.inner.on_change).clone();
+        if let Some(f) = f {
+            f(project);
         }
-        let started = Instant::now();
-        let Some(snapshot) = Snapshot::scan_until(&path, cancel) else {
-            tracing::debug!(path = %path.display(), "scan superseded");
-            return Err(SUPERSEDED.to_owned());
+    }
+
+    /// A project's workspaces as the page lists them: a folder not checked out while no checkout
+    /// runs is missing (deleted, never checked out before a relaunch, or its checkout failed), and
+    /// Recreate checks it out. Blocking (looks for each folder).
+    pub fn pages(&self, project: &Path) -> Vec<Workspace> {
+        let creating = lock(&self.inner.creating).clone();
+        let failed = lock(&self.inner.failed).clone();
+        self.list(project)
+            .into_iter()
+            .map(|record| Workspace {
+                creating: creating.contains(&record.id),
+                error: failed.get(&record.id).cloned(),
+                missing: !creating.contains(&record.id) && record.checkout_state() != CheckoutState::Ready,
+                record,
+            })
+            .collect()
+    }
+
+    pub fn store(&self) -> &Store {
+        &self.inner.store
+    }
+
+    /// The workspaces of a canonical project, oldest first.
+    pub fn list(&self, project: &Path) -> Vec<WorkspaceRecord> {
+        self.inner.store.list(Some(project))
+    }
+
+    pub fn get(&self, id: &str) -> Result<WorkspaceRecord, String> {
+        self.inner.store.get(id)
+    }
+
+    /// A workspace a new chat may join: not one being deleted.
+    pub fn for_new_chat(&self, id: &str) -> Result<WorkspaceRecord, String> {
+        if self.is_deleting(id) {
+            return Err(format!("workspace {id} is being deleted"));
+        }
+        self.get(id)
+    }
+
+    pub fn is_deleting(&self, id: &str) -> bool {
+        lock(&self.inner.deleting).contains(id)
+    }
+
+    /// Marks a workspace as being deleted until the guard drops (done, or stopped halfway).
+    pub fn deleting(&self, id: &str) -> Deleting {
+        lock(&self.inner.deleting).insert(id.to_owned());
+        Deleting { inner: Arc::clone(&self.inner), id: id.to_owned() }
+    }
+
+    /// The folder of a workspace checked out and not checking out now: what a window opens as its root.
+    pub fn open_folder(&self, id: &str) -> Result<PathBuf, String> {
+        let record = self.get(id)?;
+        if lock(&self.inner.creating).contains(id) || record.checkout_state() != CheckoutState::Ready {
+            return Err(format!("{}: the workspace isn't checked out", record.folder.display()));
+        }
+        Ok(record.folder)
+    }
+
+    /// Creates a workspace named `name` in a canonical `project` and checks its folder out.
+    /// Blocking.
+    #[cfg(test)]
+    pub fn create(&self, project: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceRecord, String> {
+        let record = self.place(project, Some(name), base)?;
+        self.check_out(&record.id)?;
+        self.get(&record.id)
+    }
+
+    /// Stores a new workspace placed from `base` (default: the project's base branch), listed as
+    /// `creating` from the start: the caller runs its checkout (`check_out`) next. Without a `name` it's called after its branch
+    /// (`brama/workspace-2`: "Workspace 2") and its first chat names it (`NameSource::Agent`); a
+    /// given name is the user's.
+    /// Refuses a project without git or a commit. Blocking.
+    pub fn place(&self, project: &Path, name: Option<&str>, base: Option<&str>) -> Result<WorkspaceRecord, String> {
+        let name = name.map(str::trim);
+        if name == Some("") {
+            return Err("a workspace's name can't be empty".to_owned());
+        }
+        let git = crate::git::binary::git()?;
+        let base_branch = match base {
+            Some(base) => Some(base.to_owned()),
+            None => default_base(git, project),
         };
-        tracing::info!(
-            path = %path.display(),
-            files = snapshot.files().count(),
-            elapsed = ?started.elapsed(),
-            "scanned root"
-        );
-        let id = format!("root-{}", self.next_id.fetch_add(1, Ordering::Relaxed) + 1);
-        let root = Arc::new(Root {
-            id: id.clone(),
-            snapshot: RwLock::new(snapshot),
-            on_change: Box::new(on_change),
-            batch: Mutex::new(()),
-            path,
-            group: group.to_owned(),
-            session,
-            watcher: Mutex::new(None),
-            recent: Mutex::new(VecDeque::new()),
-            quick_open_generation: AtomicU64::new(0),
-            search_cancel: Mutex::new(HashMap::new()),
-            closed: AtomicBool::new(false),
-            change_epoch: AtomicU64::new(0),
-            git: GitCache::default(),
-        });
-        // Started after the scan: a change in between is picked up by the next event in that folder.
-        let watcher = watcher::start(&root)?;
-        *lock(&root.watcher) = Some(watcher);
-        lock(&self.roots).insert(id, Arc::clone(&root));
-        Ok(root)
+        let stem = name.map_or_else(|| "workspace".to_owned(), |n| checkout::slug(n, "workspace"));
+        // One placement at a time: a name is taken once stored, before its checkout makes it.
+        let _placing = lock(&self.inner.placing);
+        let stored = self.inner.store.list(None);
+        // A branch is taken within one repository: the worktrees of one group folder.
+        let reserved = |root: &Path, branch: &str| {
+            stored.iter().any(|w| w.worktree_path == root || (w.worktree_path.parent() == root.parent() && w.branch == branch))
+        };
+        let placed = checkout::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)?;
+        let record = WorkspaceRecord {
+            id: new_id(),
+            project_path: project.to_path_buf(),
+            name: name.map_or_else(|| placeholder_name(&placed.branch), str::to_owned),
+            name_source: if name.is_some() { NameSource::User } else { NameSource::Agent },
+            folder: placed.folder,
+            worktree_path: placed.worktree_path,
+            branch: placed.branch,
+            base_commit: placed.base_commit,
+            base_branch,
+            created_at: crate::session::iso_now(),
+            checked_out: false,
+        };
+        lock(&self.inner.creating).insert(record.id.clone());
+        if let Err(e) = self.inner.store.insert(record.clone()) {
+            lock(&self.inner.creating).remove(&record.id);
+            return Err(e);
+        }
+        tracing::info!(workspace = %record.id, branch = %record.branch, "workspace created");
+        self.changed(project);
+        Ok(record)
     }
 
-    pub fn close(&self, id: &str) {
-        if let Some(root) = lock(&self.roots).remove(id) {
-            root.closed.store(true, Ordering::Relaxed);
-            root.cancel_all_searches();
-            // Dropping the debouncer stops its thread.
-            lock(&root.watcher).take();
+    /// Checks a workspace's folder out (again from its branch when it was deleted). Chats
+    /// starting meanwhile wait (`ready`). Blocking.
+    pub fn check_out(&self, id: &str) -> Result<(), String> {
+        let gate = self.gate(id);
+        let _held = lock(&gate);
+        self.check_out_held(id)
+    }
+
+    /// Before a chat of the workspace starts: waits for a checkout that runs, or runs the first
+    /// one of a workspace never checked out (placed, then its checkout failed or the app quit). A
+    /// folder deleted after its checkout stays missing until `check_out` (Recreate). Blocking.
+    pub fn ready(&self, id: &str) -> Result<(), String> {
+        let gate = self.gate(id);
+        let _held = lock(&gate);
+        if self.get(id)?.checkout_state() == CheckoutState::NeverCheckedOut {
+            return self.check_out_held(id);
+        }
+        Ok(())
+    }
+
+    /// `check_out` with the workspace's gate held.
+    fn check_out_held(&self, id: &str) -> Result<(), String> {
+        let record = self.get(id)?;
+        if lock(&self.inner.creating).insert(id.to_owned()) {
+            self.changed(&record.project_path);
+        }
+        let cancel = self.cancel_flag(id);
+        let result = checkout::check_out(&record, &cancel);
+        lock(&self.inner.creating).remove(id);
+        self.changed(&record.project_path);
+        match &result {
+            Ok(()) => {
+                lock(&self.inner.failed).remove(id);
+                if !record.checked_out {
+                    if let Err(e) = self.inner.store.update(id, |r| r.checked_out = true) {
+                        tracing::warn!(workspace = %id, "storing the workspace's checkout failed: {e}");
+                    }
+                }
+            }
+            Err(_) if cancel.load(Ordering::SeqCst) => tracing::info!(workspace = %id, "the workspace's checkout was stopped"),
+            Err(e) => {
+                tracing::warn!(workspace = %id, "checking the workspace out failed: {e}");
+                lock(&self.inner.failed).insert(id.to_owned(), e.clone());
+            }
+        }
+        result
+    }
+
+    /// The workspace of an older version's worktree session: its folder, worktree, branch and
+    /// base as they are, named after it. The one already made for that worktree when there is one
+    /// (idempotent).
+    pub fn adopt(&self, session: &crate::session::SessionRecord) -> Result<WorkspaceRecord, String> {
+        let (Some(worktree_path), Some(branch), Some(base_commit)) =
+            (session.worktree_path.clone(), session.branch.clone(), session.base_commit.clone())
+        else {
+            return Err(format!("session {}: its worktree is missing from its record", session.session_id));
+        };
+        if let Some(found) = self.inner.store.list(None).into_iter().find(|w| w.worktree_path == worktree_path) {
+            return Ok(found);
+        }
+        let record = WorkspaceRecord {
+            id: format!("ws-{}", session.session_id),
+            project_path: session.project_path.clone(),
+            name: session.title.clone(),
+            name_source: if session.title_source == crate::session::TitleSource::User { NameSource::User } else { NameSource::Agent },
+            folder: session.agent_cwd.clone(),
+            worktree_path,
+            branch,
+            base_commit,
+            base_branch: None,
+            created_at: session.created_at.clone(),
+            checked_out: true,
+        };
+        self.inner.store.insert(record.clone())?;
+        tracing::info!(workspace = %record.id, session = %session.session_id, "a worktree session became a workspace");
+        Ok(record)
+    }
+
+    /// Names a workspace (trimmed, not empty); its chats' titles no longer rename it. Folder and
+    /// branch stay.
+    pub fn rename(&self, id: &str, name: &str) -> Result<WorkspaceRecord, String> {
+        let name = name.trim();
+        if name.is_empty() {
+            return Err("a workspace's name can't be empty".to_owned());
+        }
+        let record = self.inner.store.update(id, |record| {
+            record.name = name.to_owned();
+            record.name_source = NameSource::User;
+        })?;
+        self.changed(&record.project_path);
+        Ok(record)
+    }
+
+    /// Takes `title` as its name while its chats name it (`NameSource::Agent`); the page hears
+    /// of a change.
+    pub fn follow_title(&self, id: &str, title: impl Fn() -> Option<String>) -> Result<(), String> {
+        let follows = |r: &WorkspaceRecord, title: &str| r.name_source == NameSource::Agent && r.name != title;
+        // Gone meanwhile: nothing to name. The `update` below reads the title again: it's the one
+        // writer, so the last caller to get there applies the latest title.
+        let Ok(current) = self.get(id) else { return Ok(()) };
+        if !title().is_some_and(|t| follows(&current, &t)) {
+            return Ok(());
+        }
+        let mut renamed = false;
+        let record = self.inner.store.update(id, |r| {
+            if let Some(title) = title().filter(|t| follows(r, t)) {
+                r.name = title;
+                renamed = true;
+            }
+        })?;
+        if renamed {
+            tracing::info!(workspace = %id, "the workspace took its chat's title");
+            self.changed(&record.project_path);
+        }
+        Ok(())
+    }
+
+    /// Deletes a workspace's folder and its record. Uncommitted work is first committed onto its
+    /// branch; the branch stays when `keep_branch` and it has commits past the base, else it's
+    /// deleted. Its chats are the caller's (`Sessions::delete_workspace`). Blocking.
+    /// A checkout that runs is stopped first, and undoes itself.
+    pub fn discard(&self, id: &str, keep_branch: bool) -> Result<(), String> {
+        let record = self.get(id)?;
+        self.cancel_flag(id).store(true, Ordering::SeqCst);
+        let gate = self.gate(id);
+        let _held = lock(&gate);
+        let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Brama when the workspace was deleted.", record.name);
+        let removed = checkout::remove(&record, &message, keep_branch);
+        if let Err(e) = &removed {
+            // Kept on disk (a detached worktree with work): the record goes all the same.
+            tracing::warn!(workspace = %id, "removing the workspace's folder failed: {e}");
+        }
+        self.inner.store.remove(id)?;
+        lock(&self.inner.gates).remove(id);
+        lock(&self.inner.failed).remove(id);
+        lock(&self.inner.cancels).remove(id);
+        // Deleted before its checkout began: nothing else clears it.
+        lock(&self.inner.creating).remove(id);
+        tracing::info!(workspace = %id, "workspace deleted");
+        self.changed(&record.project_path);
+        Ok(())
+    }
+
+    /// What deleting a workspace would touch: its uncommitted files and its commits past the base.
+    /// A folder that isn't there has neither. Blocking.
+    pub fn changes_counts(&self, id: &str) -> Result<(usize, usize), String> {
+        let record = self.get(id)?;
+        if record.checkout_state() != CheckoutState::Ready {
+            return Ok((0, 0));
+        }
+        let git = crate::git::binary::git()?;
+        let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| exec::run(git, &record.worktree_path, &exec::args(args), GitMode::Background);
+        let status = run(&[&"status", &"--porcelain", &"-z", &"--untracked-files=all"])?;
+        // `-z` entries; a rename's entry is followed by its old path.
+        let mut uncommitted = 0;
+        let mut entries = status.split(|b| *b == 0).filter(|e| !e.is_empty());
+        while let Some(entry) = entries.next() {
+            uncommitted += 1;
+            if matches!(entry.first(), Some(b'R' | b'C')) {
+                entries.next();
+            }
+        }
+        let range = format!("{}..refs/heads/{}", record.base_commit, record.branch);
+        let commits = run(&[&"rev-list", &"--count", &range]).map(|o| String::from_utf8_lossy(&o).trim().parse().unwrap_or(0)).unwrap_or(0);
+        Ok((uncommitted, commits))
+    }
+
+    fn gate(&self, id: &str) -> Arc<Mutex<()>> {
+        Arc::clone(lock(&self.inner.gates).entry(id.to_owned()).or_default())
+    }
+
+    /// Never cleared once set: only Delete sets it, and the workspace goes.
+    fn cancel_flag(&self, id: &str) -> Arc<AtomicBool> {
+        Arc::clone(lock(&self.inner.cancels).entry(id.to_owned()).or_default())
+    }
+}
+
+/// A workspace being deleted, while held (`Workspaces::deleting`).
+pub struct Deleting {
+    inner: Arc<Inner>,
+    id: String,
+}
+
+impl Drop for Deleting {
+    fn drop(&mut self) {
+        lock(&self.inner.deleting).remove(&self.id);
+    }
+}
+
+impl WorkspaceRecord {
+    /// Whether its folder is checked out, still to be, or gone. Blocking (looks for the folder).
+    pub fn checkout_state(&self) -> CheckoutState {
+        if checkout::is_checked_out(&self.worktree_path) {
+            CheckoutState::Ready
+        } else if self.checked_out {
+            CheckoutState::Absent
+        } else {
+            CheckoutState::NeverCheckedOut
         }
     }
+}
 
-    /// Closes every root a window opened: when it closes, or when its page loads again and the
-    /// frontend no longer knows them.
-    pub fn close_group(&self, group: &str) {
-        let ids: Vec<String> =
-            lock(&self.roots).values().filter(|root| root.group == group).map(|root| root.id.clone()).collect();
-        for id in ids {
-            self.close(&id);
-        }
-    }
+/// The project's base branch: `origin/HEAD`'s target (`origin/main`) when it resolves, else
+/// `main`, else `master`, else HEAD's; `None` when there is none (a detached HEAD). Blocking.
+fn default_base(git: &Path, project: &Path) -> Option<String> {
+    let run = |args: &[&dyn AsRef<std::ffi::OsStr>]| {
+        exec::run(git, project, &exec::args(args), GitMode::Background).ok().map(|o| String::from_utf8_lossy(&o).trim().to_owned())
+    };
+    let resolves = |r: &str| run(&[&"rev-parse", &"--verify", &"--quiet", &"--end-of-options", &format!("{r}^{{commit}}")]).is_some();
+    let exists = |branch: &str| resolves(&format!("refs/heads/{branch}"));
+    let origin = run(&[&"symbolic-ref", &"-q", &"refs/remotes/origin/HEAD"])
+        .filter(|r| resolves(r))
+        .and_then(|r| r.strip_prefix("refs/remotes/").map(str::to_owned));
+    origin.or_else(|| {
+        ["main", "master"]
+            .into_iter()
+            .map(str::to_owned)
+            .find(|b| exists(b))
+            .or_else(|| run(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]).filter(|b| exists(b)))
+    })
+}
 
-    pub fn get(&self, id: &str) -> Result<Arc<Root>, String> {
-        lock(&self.roots).get(id).cloned().ok_or_else(|| format!("unknown workspace root: {id}"))
+/// An unnamed workspace's name, from its branch: `brama/workspace-2` → "Workspace 2".
+fn placeholder_name(branch: &str) -> String {
+    match branch.rsplit_once('-') {
+        Some((_, n)) if n.chars().all(|c| c.is_ascii_digit()) => format!("Workspace {n}"),
+        _ => "Workspace".to_owned(),
     }
+}
 
-    /// Whether a canonical `path` lies inside an opened root (compared by component, so
-    /// `/a/bc` is not inside `/a/b`).
-    pub fn contains(&self, path: &Path) -> bool {
-        lock(&self.roots).values().any(|root| path.starts_with(&root.path))
-    }
-
-    /// Whether a canonical `path` lies inside an opened project, a session root left out.
-    pub fn contains_project(&self, path: &Path) -> bool {
-        lock(&self.roots).values().any(|root| !root.session && path.starts_with(&root.path))
-    }
+/// A new workspace id: time and a counter, unique in this app data.
+fn new_id() -> String {
+    use std::sync::atomic::{AtomicU64, Ordering};
+    static NEXT: AtomicU64 = AtomicU64::new(0);
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+    format!("ws-{:x}-{:x}-{}", now.as_millis(), std::process::id(), NEXT.fetch_add(1, Ordering::SeqCst))
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn a_newer_open_cancels_the_older_scan_in_its_group_only() {
-        let workspaces = Workspaces::default();
-        let first = workspaces.begin_open("main");
-        let other_window = workspaces.begin_open("second");
-        let second = workspaces.begin_open("main");
-        assert!(first.load(Ordering::Relaxed), "older scan in the same window is cancelled");
-        assert!(!second.load(Ordering::Relaxed));
-        assert!(!other_window.load(Ordering::Relaxed), "another window's scan keeps going");
-
-        workspaces.end_open("main", &first); // late finish of the cancelled open
-        assert!(lock(&workspaces.opening).contains_key("main"), "doesn't forget the newer one");
-        workspaces.end_open("main", &second);
-        assert!(!lock(&workspaces.opening).contains_key("main"));
-    }
-
-    #[test]
-    fn a_session_roots_scan_and_the_projects_dont_cancel_each_other() {
-        let workspaces = Workspaces::default();
-        let project = workspaces.begin_open("main");
-        let session = workspaces.begin_open(&session_key("main"));
-        assert!(!project.load(Ordering::Relaxed));
-        let newer = workspaces.begin_open(&session_key("main"));
-        assert!(session.load(Ordering::Relaxed), "a newer session root cancels the older one");
-        assert!(!project.load(Ordering::Relaxed) && !newer.load(Ordering::Relaxed));
-    }
-
-    #[test]
-    fn a_rescan_finds_what_the_watcher_missed_and_reports_it() {
-        let base = std::env::temp_dir().join(format!("brama-rescan-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(base.join("src")).unwrap();
-        let (tx, rx) = std::sync::mpsc::channel();
-        let workspaces = Workspaces::default();
-        let root =
-            workspaces.open_with(&base, "main", &AtomicBool::new(false), false, move |_, changes| tx.send(changes).unwrap()).unwrap();
-        // No watcher: every change from here on is one it missed.
-        lock(&root.watcher).take();
-        std::fs::write(base.join("src/missed.rs"), "").unwrap();
-        let epoch = root.epoch();
-
-        root.rescan();
-
-        assert!(root.read().files().any(|e| e.path == "src/missed.rs"));
-        assert!(root.epoch() > epoch, "cached git state is computed again");
-        let changes = rx.try_recv().expect("the rescan's changes are reported");
-        assert_eq!(changes.added, ["src/missed.rs"]);
-        assert!(changes.dirs.contains("src"));
-
-        root.rescan();
-        assert!(rx.try_recv().is_err(), "nothing changed, nothing reported");
-        workspaces.close(&root.id);
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn a_watcher_batch_waits_for_a_rescan_in_progress() {
-        let base = std::env::temp_dir().join(format!("brama-rescan-race-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(base.join("src")).unwrap();
-        let rescanning = std::thread::current().id();
-        let (tx, rx) = std::sync::mpsc::channel();
-        let workspaces = Workspaces::default();
-        let root = workspaces
-            .open_with(&base, "main", &AtomicBool::new(false), false, {
-                let base = base.clone();
-                move |root, _| {
-                    if std::thread::current().id() != rescanning {
-                        return;
-                    }
-                    // A change the watcher hears while the rescan is still reporting its own.
-                    std::fs::write(base.join("src/during.rs"), "").unwrap();
-                    std::thread::sleep(std::time::Duration::from_millis(800));
-                    tx.send(root.read().files().any(|e| e.path == "src/during.rs")).unwrap();
-                }
-            })
-            .unwrap();
-        std::fs::write(base.join("src/before.rs"), "").unwrap();
-
-        root.rescan();
-
-        assert!(!rx.try_recv().unwrap(), "the watcher's batch didn't patch the snapshot mid-rescan");
-        let deadline = Instant::now() + std::time::Duration::from_secs(5);
-        while !root.read().files().any(|e| e.path == "src/during.rs") {
-            assert!(Instant::now() < deadline, "the watcher's batch applies after the rescan");
-            std::thread::sleep(std::time::Duration::from_millis(50));
-        }
-        workspaces.close(&root.id);
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn a_cancelled_open_fails_as_superseded_and_registers_nothing() {
-        let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
-        std::fs::create_dir_all(base.join("src")).unwrap();
-        let workspaces = Workspaces::default();
-        let err = workspaces.open_with(&base, "main", &AtomicBool::new(true), false, |_, _| {}).err();
-        assert_eq!(err.as_deref(), Some(SUPERSEDED));
-        assert!(!workspaces.contains(&dunce::canonicalize(&base).unwrap().join("src")));
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn a_session_root_is_no_project() {
-        let base = std::env::temp_dir().join(format!("brama-session-root-{}", std::process::id()));
-        std::fs::create_dir_all(base.join("proj")).unwrap();
-        std::fs::create_dir_all(base.join("worktree")).unwrap();
-        let workspaces = Workspaces::default();
-        let project = workspaces.open_with(&base.join("proj"), "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
-        let session = workspaces.open_with(&base.join("worktree"), "main", &AtomicBool::new(false), true, |_, _| {}).unwrap();
-
-        let agents = |root: &Root| root.path.join(".brama/agents.json");
-        assert!(workspaces.contains_project(&agents(&project)));
-        assert!(workspaces.contains(&agents(&session)), "its files are readable");
-        assert!(!workspaces.contains_project(&agents(&session)), "but it isn't a project");
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn search_slots_cancel_only_their_own() {
-        let base = std::env::temp_dir().join(format!("brama-search-slots-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(&base).unwrap();
-        std::fs::write(base.join("a.txt"), "needle\n").unwrap();
-        let workspaces = Workspaces::default();
-        let root = workspaces.open_with(&base, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
-        let done = |cancel: &AtomicBool| {
-            let options = search::SearchOptions {
-                query: "needle".into(),
-                case_sensitive: false,
-                whole_word: false,
-                regex: false,
-                include: String::new(),
-                exclude: String::new(),
-            };
-            let cancelled = Mutex::new(None);
-            search::run(&root.path, vec![("a.txt".into(), 7)], &options, cancel, &|event| {
-                if let search::SearchEvent::Done { cancelled: c, .. } = event {
-                    *lock(&cancelled) = Some(c);
-                }
-            });
-            cancelled.into_inner().unwrap().unwrap()
-        };
-
-        let panel = root.start_search("panel");
-        let dialog = root.start_search("dialog");
-        root.cancel_search("panel");
-        assert!(done(&panel), "the cancelled slot's search reports cancelled");
-        assert!(!done(&dialog), "the other slot's search runs on");
-
-        let dialog_again = root.start_search("dialog");
-        assert!(dialog.load(Ordering::Relaxed), "a new search cancels its own slot's");
-        let panel_again = root.start_search("panel");
-        assert!(!dialog_again.load(Ordering::Relaxed));
-
-        workspaces.close(&root.id);
-        assert!(panel_again.load(Ordering::Relaxed) && dialog_again.load(Ordering::Relaxed), "closing cancels all");
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn checked_rel_rejects_paths_leaving_the_root() {
-        for ok in ["a.txt", "src/main.rs", ".gitignore", "a/.git-keep", "dir with space/ф.txt"] {
-            assert_eq!(checked_rel(ok), Ok(ok), "{ok}");
-        }
-        for bad in ["", "/etc/passwd", "../x", "a/../../x", "a//b", "./a", "a/", ".git/config", ".git", "a\\b", "C:\\x"] {
-            assert!(checked_rel(bad).is_err(), "{bad:?}");
-        }
-    }
-
-    #[test]
-    fn contains_only_paths_inside_open_roots() {
-        let base = std::env::temp_dir().join(format!("brama-contains-{}", std::process::id()));
-        let root = base.join("proj");
-        std::fs::create_dir_all(&root).unwrap();
-        std::fs::create_dir_all(base.join("proj-other")).unwrap();
-        let workspaces = Workspaces::default();
-        let opened = workspaces.open_with(&root, "main", &AtomicBool::new(false), false, |_, _| {}).unwrap();
-
-        assert!(workspaces.contains(&opened.path.join("src/main.rs")));
-        assert!(!workspaces.contains(&opened.path.with_file_name("proj-other").join("x")));
-        assert!(!workspaces.contains(Path::new("/etc/passwd")));
-
-        workspaces.close(&opened.id);
-        assert!(!workspaces.contains(&opened.path.join("src/main.rs")));
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn closing_a_window_closes_only_its_roots() {
-        let base = std::env::temp_dir().join(format!("brama-group-{}", std::process::id()));
-        std::fs::create_dir_all(base.join("a")).unwrap();
-        std::fs::create_dir_all(base.join("b")).unwrap();
-        let workspaces = Workspaces::default();
-        let open = |dir: &str, group: &str| {
-            workspaces.open_with(&base.join(dir), group, &AtomicBool::new(false), false, |_, _| {}).unwrap()
-        };
-        let (a1, b1, a2) = (open("a", "main"), open("b", "main"), open("a", "second"));
-
-        workspaces.close_group("main");
-        assert!(workspaces.get(&a1.id).is_err() && workspaces.get(&b1.id).is_err());
-        assert!(a1.closed.load(Ordering::Relaxed), "its watcher rescans stop too");
-        assert!(workspaces.get(&a2.id).is_ok(), "another window's root stays open");
-        workspaces.close_group("second");
-        std::fs::remove_dir_all(&base).unwrap();
-    }
-}
+mod tests;

@@ -1,4 +1,4 @@
-import { sessionChangesTabId, sessionOfTab, terminalOfTab, terminalTabId } from '../../stores/tab-ids/tab-ids.js';
+import { workspaceChangesTabId, workspaceOfTab, terminalOfTab, terminalTabId } from '../../stores/tab-ids/tab-ids.js';
 
 /**
  * Where a tab lies along the strip, in any one coordinate space shared with the view.
@@ -14,16 +14,16 @@ const EPSILON = 0.5;
 /** The rules about tabs: what their ids name, and which are out of sight. */
 export const tabs = Object.freeze({
   /**
-   * @param {string} sessionId
-   * @returns {string} The id of the tab with a worktree session's changes since it started.
+   * @param {string} workspaceId
+   * @returns {string} The id of the tab with a workspace's changes since its base.
    */
-  sessionChangesId: sessionChangesTabId,
+  workspaceChangesId: workspaceChangesTabId,
 
   /**
    * @param {string} id A tab id.
-   * @returns {string | null} The session whose changes it shows; `null` for any other tab.
+   * @returns {string | null} The workspace whose changes it shows; `null` for any other tab.
    */
-  sessionOf: sessionOfTab,
+  workspaceOf: workspaceOfTab,
 
   /**
    * @param {string} terminalId

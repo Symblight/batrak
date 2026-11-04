@@ -1,6 +1,6 @@
 /**
- * Payload of the `workspace://changed` event. All paths are relative.
- * @typedef {Object} WorkspaceChanges
+ * Payload of the `roots://changed` event. All paths are relative.
+ * @typedef {Object} RootChanges
  * @property {string} rootId
  * @property {string[]} dirs Directories whose child list changed (`''` = root).
  * @property {string[]} added
@@ -79,6 +79,14 @@
  * @property {boolean} loaded A status of this root has arrived.
  * @property {boolean} loading A check is in flight.
  * @property {string | null} error
+ */
+
+/**
+ * Branches a workspace can be based on (`git_branches`).
+ * @typedef {Object} BranchList
+ * @property {string[]} local
+ * @property {{ remote: string, branches: string[] }[]} remotes Each remote's branches as full short names (`origin/main`).
+ * @property {string | null} default What `origin/HEAD` points at (`origin/main`).
  */
 
 export {};

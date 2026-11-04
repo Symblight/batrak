@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
 import { StoreController } from '../../controllers/store/StoreController.js';
-import { $treeRoot } from '../../stores/session-root/session-root.js';
+import { $activeRoot } from '../../stores/workspaces/workspaces.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
 import '../../components/panel-header/panel-header.js';
@@ -28,7 +28,7 @@ export class AcpFileColumn extends ViewElement {
     refreshing: { state: true },
   };
 
-  #treeRoot = new StoreController(this, { store: $treeRoot });
+  #activeRoot = new StoreController(this, { store: $activeRoot });
 
   constructor() {
     super();
@@ -56,7 +56,7 @@ export class AcpFileColumn extends ViewElement {
 
   /**
    * Switches to Files and selects a file or folder there.
-   * @param {string} rel Relative to the folder the tree lists (`$treeRoot`).
+   * @param {string} rel Relative to the folder the tree lists (`$activeRoot`).
    * @param {{ expand?: boolean }} [options] Expand the folder itself too.
    */
   async reveal(rel, options) {
@@ -82,7 +82,7 @@ export class AcpFileColumn extends ViewElement {
   }
 
   render() {
-    const tree = this.#treeRoot.value;
+    const tree = this.#activeRoot.value;
     return html`<acp-panel>
       <acp-panel-header
         slot="header"

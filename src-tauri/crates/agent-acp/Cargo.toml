@@ -9,7 +9,8 @@ description = "Brama's generic ACP driver: an agent process over its stdio (Conn
 test-support = []
 
 [dependencies]
-agent-client-protocol = "=3.3.0"
+# `unstable_subagents`: ACP subagent sessions (docs/specs/workspaces.md §2.12)
+agent-client-protocol = { version = "=3.3.0", features = ["unstable_subagents"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }

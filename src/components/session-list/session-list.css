@@ -5,48 +5,14 @@
   color: var(--acp-color-on-surface);
 }
 
-.acp-session-list__top {
-  flex: none;
-  display: flex;
-  align-items: center;
-  height: 40px;
-  padding-inline: var(--acp-space-4) var(--acp-space-1);
-}
-
-.acp-session-list__heading {
-  flex: 1;
-  margin: 0;
-  font-size: var(--acp-font-size-title);
-  font-weight: var(--acp-font-weight-title);
-  color: var(--acp-color-on-surface-variant);
-}
-
-/* 28px icon button: 18px icon + 4px padding + the library's 1px border. */
-.acp-session-list__open-folder {
-  --md-icon-button-font-size: var(--acp-icon-size-md);
-}
-
-.acp-session-list__open-folder::part(button) {
-  padding: 4px;
-}
-
-.acp-session-list__open-folder-icon {
-  font-size: var(--acp-icon-size-md);
-}
-
 .acp-session-list__list {
   flex: 1;
   min-height: 0;
-  overflow: auto;
-  padding: 0 var(--acp-space-1) var(--acp-space-2);
-}
-
-/* Session rows */
-.acp-session-list__sessions {
   display: flex;
   flex-direction: column;
   gap: var(--acp-space-0-5);
-  padding-block: var(--acp-space-0-5) var(--acp-space-1-5);
+  overflow: auto;
+  padding: var(--acp-space-0-5) var(--acp-space-1) var(--acp-space-2);
 }
 
 .acp-session-list__more {
@@ -82,7 +48,6 @@
   display: flex;
   flex-direction: column;
   gap: var(--acp-space-0-5);
-  padding-block: var(--acp-space-0-5) var(--acp-space-1-5);
 }
 
 .acp-session-list__skeleton-row {
@@ -109,26 +74,3 @@
   line-height: 20px;
   color: var(--acp-color-on-surface-variant);
 }
-
-.acp-session-list__empty-icon {
-  font-size: var(--acp-icon-size-sm);
-  vertical-align: -3px;
-}
-
-.acp-session-list__error {
-  padding: var(--acp-space-1) var(--acp-space-3) var(--acp-space-1-5) 30px;
-  font-size: var(--acp-font-size-sm);
-  line-height: 16px;
-  overflow-wrap: anywhere;
-  color: var(--acp-color-error);
-}
-
-/* Menu density comes from src/styles/shadow.css. */
-.acp-session-list__project-menu {
-  --md-menu-min-width: 12.5rem;
-}
-
-.acp-session-list__menu-icon {
-  font-size: var(--acp-icon-size-md);
-}
-

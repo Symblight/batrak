@@ -26,11 +26,8 @@ const SESSION = {
   status: 'idle',
   agentId: 'a',
   config: {},
-  mode: 'local',
   folder: '/p',
-  worktreePath: null,
   branch: null,
-  baseCommit: null,
   createdAt: '2026-10-20T00:00:00Z',
   lastActivityAt: '2026-10-20T00:00:00Z',
   titleSource: 'prompt',
@@ -41,26 +38,28 @@ describe('sessions model', () => {
   it('shows one indicator per session: a permission request above all, then failure, running, queued, elsewhere and the terminal', () => {
     /** @type {any[][]} */
     const cases = [
-      // [status, permission, elsewhere, terminal, indicator, why]
-      ['idle', false, false, false, null, 'idle shows nothing'],
-      ['stopped', false, false, false, null, 'stopped shows nothing'],
-      ['preparing', false, false, false, 'running', 'starting up works'],
-      ['starting', false, false, false, 'running', 'starting works'],
-      ['working', false, false, false, 'running', 'a turn works'],
-      ['queued', false, false, false, 'queued', 'queued is not working'],
-      ['error', false, false, false, 'error', 'a failure'],
-      ['stopped', false, true, false, 'elsewhere', 'another app runs it'],
-      ['error', false, true, false, 'error', 'a failure above elsewhere'],
-      ['waiting', false, false, false, 'permission', 'waiting for an answer'],
-      ['working', true, false, false, 'permission', 'a permission above working'],
-      ['error', true, false, false, 'permission', 'a permission above a failure'],
-      ['stopped', false, false, true, 'terminal', 'the CLI runs it'],
-      ['stopped', false, true, true, 'terminal-working', 'the CLI works'],
-      ['error', false, true, true, 'error', 'a failure above the CLI'],
+      // [status, permission, elsewhere, terminal, activity, indicator, why]
+      ['idle', false, false, false, null, null, 'idle shows nothing'],
+      ['stopped', false, false, false, null, null, 'stopped shows nothing'],
+      ['preparing', false, false, false, null, 'running', 'starting up works'],
+      ['starting', false, false, false, null, 'running', 'starting works'],
+      ['working', false, false, false, null, 'running', 'a turn works'],
+      ['queued', false, false, false, null, 'queued', 'queued is not working'],
+      ['error', false, false, false, null, 'error', 'a failure'],
+      ['stopped', false, true, false, null, 'elsewhere', 'another app runs it'],
+      ['error', false, true, false, null, 'error', 'a failure above elsewhere'],
+      ['waiting', false, false, false, null, 'permission', 'waiting for an answer'],
+      ['working', true, false, false, null, 'permission', 'a permission above working'],
+      ['error', true, false, false, null, 'permission', 'a permission above a failure'],
+      ['stopped', false, false, true, null, 'terminal', 'the CLI runs it'],
+      ['stopped', false, false, true, 'running', 'terminal-working', 'the CLI works'],
+      ['stopped', false, false, true, 'waitingForUser', 'permission', 'the CLI asks for permission'],
+      ['stopped', false, false, true, 'idle', 'terminal', 'the CLI is at its prompt'],
+      ['error', false, false, true, 'running', 'error', 'a failure above the CLI'],
     ];
-    for (const [status, permission, elsewhere, terminal, indicator, why] of cases) {
+    for (const [status, permission, elsewhere, terminal, activity, indicator, why] of cases) {
       // Act + Assert
-      expect(sessionIndicator(/** @type {any} */ (status), /** @type {boolean} */ (permission), /** @type {boolean} */ (elsewhere), /** @type {boolean} */ (terminal)), why).to.equal(indicator);
+      expect(sessionIndicator(/** @type {any} */ (status), /** @type {boolean} */ (permission), /** @type {boolean} */ (elsewhere), /** @type {boolean} */ (terminal), /** @type {any} */ (activity)), why).to.equal(indicator);
     }
   });
 
@@ -153,16 +152,16 @@ describe('sessions model', () => {
     expect(viewDisabledReason(resumeOnly, false, 'Codex')).to.equal('');
   });
 
-  it('asks before removing: deleted in its agent, a running agent stopped, files stay; a worktree’s work goes to its branch', () => {
+  it('asks before removing: deleted in its agent, a running agent stopped, files stay; a workspace chat’s workspace stays', () => {
     // Act
     const running = removeSessionConfirm({ ...SESSION, status: 'working', agentName: 'Claude Code' });
-    const worktree = removeSessionConfirm({ ...SESSION, status: 'stopped', mode: 'worktree', branch: 'brama/fix-1' });
+    const workspace = removeSessionConfirm({ ...SESSION, status: 'stopped', workspaceId: 'w1' });
     // Assert
     expect(running.message).to.equal('"Fix the tree" will be deleted from Claude Code, for every app that uses it, and its agent stopped.');
     expect(running.detail).to.equal('Files the agent changed in the project stay as they are.');
     expect(running.destructive).to.equal(true);
-    expect(worktree.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
-    expect(worktree.detail).to.contain('brama/fix-1');
+    expect(workspace.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
+    expect(workspace.detail).to.equal('Its workspace, and the files the agent changed there, stay as they are.');
   });
 
   it('lists pinned sessions first, each part most recently active first, leaving the given list as it was', () => {

@@ -6,3 +6,7 @@ description = "What every Brama agent crate implements, and the types they share
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+
+[features]
+# `conformance`: what every agent crate's tests run
+test-support = []

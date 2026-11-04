@@ -1,0 +1,18 @@
+/* Only a popover: no box of its own where it's placed. */
+:host {
+  display: contents;
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-workspace-menu__menu {
+  --md-menu-min-width: 15rem;
+}
+
+.acp-workspace-menu__icon {
+  font-size: var(--acp-icon-size-lg);
+}
+
+.acp-workspace-menu__item_danger {
+  --md-menu-item-label-text-color: var(--acp-color-error);
+  --md-menu-item-leading-icon-color: var(--acp-color-error);
+}

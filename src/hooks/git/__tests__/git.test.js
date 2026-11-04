@@ -3,7 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import { projects } from '../../projects/projects.js';
 
 /** @typedef {import('../types.js').GitFileStatus} GitFileStatus */
@@ -91,18 +91,18 @@ async function open() {
 
 /** @param {string} rootId @param {Partial<{ git: boolean }>} [changes] */
 const changed = (rootId, changes = {}) =>
-  emit('workspace://changed', { rootId, dirs: [], added: [], removed: [], modified: ['a.txt'], git: false, ...changes });
+  emit('roots://changed', { rootId, dirs: [], added: [], removed: [], modified: ['a.txt'], git: false, ...changes });
 
 describe('git', () => {
   beforeEach(() => {
     calls = [];
     holdDebounces();
     answers = {
-      open_workspace: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
+      open_root: ({ path }) => ({ rootId: `root:${path}`, path, name: 'p' }),
       git_head: () => REPO,
       git_status: () => ({ version: 1, unchanged: false, status: { repo: REPO, files: [FILE] } }),
     };
-    $workspace.set(null);
+    $project.set(null);
     $gitRepo.set(NO_REPO);
     $notices.set([]);
     setCommitSelection([]);
@@ -120,7 +120,7 @@ describe('git', () => {
     stop?.();
     stop = null;
     clearMocks();
-    $workspace.set(null);
+    $project.set(null);
   });
 
   it('reads the branch when a project opens, once for a burst of changes, and again on focus; it stops when told', async () => {
@@ -291,13 +291,14 @@ describe('git', () => {
   it('passes the other git commands their project and path', async () => {
     // Arrange
     const git = await started();
-    answers.git_branches = () => ['main', 'dev'];
+    const list = { local: ['main'], remotes: [{ remote: 'origin', branches: ['origin/main'] }], default: 'origin/main' };
+    answers.git_branches = () => list;
     answers.git_last_commit_message = () => 'Fix it';
     answers.git_file_at_head = () => 'text';
     // Act
     const results = [await git.branches('r1'), await git.lastCommitMessage('r1'), await git.fileAtHead('r1', 'src/a.js')];
     // Assert
-    expect(results).to.deep.equal([['main', 'dev'], 'Fix it', 'text']);
+    expect(results).to.deep.equal([list, 'Fix it', 'text']);
     expect(sent('git_branches')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
   });

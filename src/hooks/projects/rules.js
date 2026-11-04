@@ -8,8 +8,8 @@ export function absPath(root, rel) {
 }
 
 /**
- * The worktree session folder a path lies in.
- * @param {readonly import('../sessions/types.js').WorktreeFolder[]} worktrees
+ * The workspace folder a path lies in.
+ * @param {readonly import('../workspaces/types.js').WorktreeFolder[]} worktrees
  * @param {string} abs Absolute path.
  */
 export function worktreeOf(worktrees, abs) {
@@ -17,13 +17,13 @@ export function worktreeOf(worktrees, abs) {
 }
 
 /**
- * A path in a worktree session's folder as the same path in its project; any other as it is.
- * @param {readonly import('../sessions/types.js').WorktreeFolder[]} worktrees
+ * A path in a workspace's folder as the same path in its project; any other as it is.
+ * @param {readonly import('../workspaces/types.js').WorktreeFolder[]} worktrees
  * @param {string} abs Absolute path.
  */
 export function projectPathOf(worktrees, abs) {
   const worktree = worktreeOf(worktrees, abs);
-  return worktree ? absPath(worktree.projectId, relPath(worktree.folder, abs) ?? '') : abs;
+  return worktree ? absPath(worktree.projectPath, relPath(worktree.folder, abs) ?? '') : abs;
 }
 
 /**
@@ -54,10 +54,10 @@ export function basename(path) {
 }
 
 /**
- * A file's path as tabs show it: relative to the project, or to its worktree session's folder;
+ * A file's path as tabs show it: relative to the project, or to its workspace's folder;
  * absolute outside both.
  * @param {string | null} root Absolute path of the project folder.
- * @param {readonly import('../sessions/types.js').WorktreeFolder[]} worktrees
+ * @param {readonly import('../workspaces/types.js').WorktreeFolder[]} worktrees
  * @param {string} abs Absolute path.
  */
 export function shownPath(root, worktrees, abs) {

@@ -31,7 +31,7 @@ describe('acp-session-status', () => {
       [{ session: session({ status: 'queued' }) }, 'queued', 'Waiting for the project', 'md-icon'],
       [{ session: session({ activeElsewhereUntil: SOON }) }, 'elsewhere', 'Active in another app', 'md-progress-circular'],
       [{ session: session({ inTerminal: true }) }, 'terminal', 'In terminal', 'md-icon'],
-      [{ session: session({ inTerminal: true, activeElsewhereUntil: SOON }) }, 'terminal-working', 'Working in terminal', 'md-progress-circular'],
+      [{ session: session({ inTerminal: true, activity: 'running' }) }, 'terminal-working', 'Working in terminal', 'md-progress-circular'],
     ];
     for (const [props, indicator, label, part] of cases) {
       const el = await render(props);
@@ -52,7 +52,7 @@ describe('acp-session-status', () => {
       expect(el.hasAttribute('indicator')).to.equal(false);
       expect(el.shadowRoot?.querySelector('.acp-session-status__icon')).to.equal(null);
     }
-    const working = await render({ session: session({ inTerminal: true, activeElsewhereUntil: SOON }), quiet: true });
+    const working = await render({ session: session({ inTerminal: true, activity: 'running' }), quiet: true });
     expect(working.indicator, 'quiet only drops the idle terminal').to.equal('terminal-working');
   });
 });

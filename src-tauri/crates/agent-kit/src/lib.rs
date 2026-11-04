@@ -1,9 +1,11 @@
 //! What several agent crates share: the mechanics of an npx agent (which package a launch runs, its
-//! pinned launch, pinning a launch to a version, downloading a version ahead of a start). Later: an
+//! pinned launch, pinning a launch to a version, downloading a version ahead of a start), an agent's
+//! home folder, and reading its logs from their end. Later: an
 //! agent's archive, downloaded and unpacked. A plugin may use it; the trait (`agent-api`) never
 //! requires it.
 
-use std::path::Path;
+use std::io::{Read, Seek, SeekFrom};
+use std::path::{Path, PathBuf};
 
 use agent_api::{Command, Launch, Update};
 
@@ -80,6 +82,39 @@ pub fn package_arg(args: &[String]) -> Option<(usize, &str)> {
     None
 }
 
+/// An agent's folder in the user's home: `$<var>`, else `~/<folder>`.
+pub fn agent_home(var: &str, folder: &str) -> Option<PathBuf> {
+    if let Some(dir) = std::env::var_os(var).filter(|d| !d.is_empty()) {
+        return Some(PathBuf::from(dir));
+    }
+    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
+    Some(PathBuf::from(home).join(folder))
+}
+
+/// What the last line of a log that `tell` answers for says, reading from its end and only as far
+/// back as it takes. A line still being written is one `tell` can't read, so it goes on to the next.
+pub fn last_told<T>(path: &Path, mut tell: impl FnMut(&str) -> Option<T>) -> Option<T> {
+    let mut file = std::fs::File::open(path).ok()?;
+    let len = file.metadata().ok()?.len();
+    let mut size: u64 = 64 * 1024;
+    loop {
+        let start = len.saturating_sub(size);
+        file.seek(SeekFrom::Start(start)).ok()?;
+        let mut tail = Vec::new();
+        (&mut file).take(len - start).read_to_end(&mut tail).ok()?;
+        let text = String::from_utf8_lossy(&tail);
+        // A read that starts inside the file starts inside a line.
+        let lines = text.lines().skip(usize::from(start > 0));
+        if let Some(told) = lines.collect::<Vec<_>>().into_iter().rev().find_map(&mut tell) {
+            return Some(told);
+        }
+        if start == 0 {
+            return None;
+        }
+        size = size.saturating_mul(4);
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,6 +122,20 @@ mod tests {
 
     fn launch(command: &str, args: &[&str]) -> Launch {
         Launch { command: command.into(), args: strings(args) }
+    }
+
+    #[test]
+    fn the_last_line_that_tells_decides_however_far_back() {
+        // Arrange: a line being written, and more after the telling line than one read holds.
+        let path = std::env::temp_dir().join(format!("brama-kit-last-told-{}", std::process::id()));
+        let filler = "other\n".repeat(100_000);
+        std::fs::write(&path, format!("tell 1\n{filler}tell 2\n{filler}tell 3 cut off")).unwrap();
+        let told = |line: &str| line.strip_prefix("tell ").filter(|rest| !rest.contains("cut")).map(str::to_owned);
+        // Act + Assert
+        assert_eq!(last_told(&path, told).as_deref(), Some("2"));
+        assert_eq!(last_told(&path, |line| line.strip_prefix("none").map(str::to_owned)), None, "nothing tells");
+        std::fs::remove_file(&path).unwrap();
+        assert_eq!(last_told(&path, told), None, "no file");
     }
 
     #[test]

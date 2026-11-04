@@ -35,12 +35,9 @@
   --md-menu-min-width: 240px;
   --md-menu-max-height: 320px;
 }
+/* The app's dense field (shadow.css), in mono. */
 .acp-search-filters__menu-field {
-  --md-text-field-top-space: 6px;
-  --md-text-field-bottom-space: 6px;
-  --md-text-field-font-size: var(--acp-font-size-md);
   --md-text-field-font-family: var(--acp-font-family-mono);
-  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
 
   box-sizing: border-box;
   width: calc(100% - 2 * var(--acp-space-2));

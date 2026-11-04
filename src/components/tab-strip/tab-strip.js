@@ -28,7 +28,7 @@ import { TabOverflowController } from '../../controllers/tab-overflow/TabOverflo
 import styles from './tab-strip.css?inline';
 
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
-/** @typedef {import('../../hooks/sessions/types.js').WorktreeFolder} WorktreeFolder */
+/** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalInfo} TerminalInfo */
 
 /** @typedef {'tab' | 'others' | 'right' | 'all'} CloseScope */
@@ -51,7 +51,7 @@ export class AcpTabStrip extends LitElement {
     active: { attribute: false },
     pinned: { attribute: false },
     root: { attribute: false },
-    worktrees: { attribute: false },
+    workspaces: { attribute: false },
     terminals: { attribute: false },
     dropTo: { attribute: false },
     dropName: { attribute: false },
@@ -159,8 +159,8 @@ export class AcpTabStrip extends LitElement {
     this.pinned = [];
     /** @type {string | null} The project's path. */
     this.root = null;
-    /** @type {readonly WorktreeFolder[]} Worktree sessions' folders, whose files are marked. */
-    this.worktrees = [];
+    /** @type {readonly Workspace[]} The project's workspaces, whose Changes tabs are named after them. */
+    this.workspaces = [];
     /** @type {Readonly<Record<string, TerminalInfo>>} Terminal tabs' shells, by terminal id. */
     this.terminals = {};
     /** @type {string | null} The name of the strip its tabs may be dragged to (that strip's `dropName`). */
@@ -278,10 +278,10 @@ export class AcpTabStrip extends LitElement {
     if (tab.kind === 'changes') {
       return { title: 'Changes', icon: differenceIcon, file: null, tooltip: 'Changed files and their diffs against HEAD' };
     }
-    if (tab.kind === 'session-changes') {
-      const worktree = this.worktrees.find((w) => w.sessionId === tabs.sessionOf(tab.id));
-      const branch = worktree?.branch ?? 'its worktree';
-      return { title: worktree?.title ?? 'Changes', icon: differenceIcon, file: null, tooltip: `Changes on ${branch} since the session started` };
+    if (tab.kind === 'workspace-changes') {
+      const workspace = this.workspaces.find((w) => w.id === tabs.workspaceOf(tab.id));
+      const branch = workspace?.branch ?? 'its branch';
+      return { title: workspace?.name ?? 'Changes', icon: differenceIcon, file: null, tooltip: `Changes on ${branch} since its base` };
     }
     if (tab.kind === 'terminal') {
       const info = this.terminals[tabs.terminalOf(tab.id) ?? ''];
@@ -289,8 +289,8 @@ export class AcpTabStrip extends LitElement {
     }
     if (tab.kind === 'browser') return { title: 'Browser', icon: languageIcon, file: null, tooltip: 'Browser' };
     const name = projects.basename(tab.path);
-    const path = projects.shownPath(this.root, this.worktrees, tab.path);
-    const worktree = projects.worktreeOf(this.worktrees, tab.path);
+    const path = projects.shownPath(this.root, this.workspaces, tab.path);
+    const worktree = projects.worktreeOf(this.workspaces, tab.path);
     if (worktree) return { title: name, icon: branchIcon, file: null, tooltip: `${path} in worktree ${worktree.branch}` };
     return { title: name, icon: '', file: name, tooltip: path };
   }

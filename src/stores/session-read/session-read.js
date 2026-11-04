@@ -1,6 +1,6 @@
 import { computed } from 'nanostores';
 import { isRecord, persistentMapStore, storedItem } from '../persistent/persistent.js';
-import { $sessions } from '../sessions/sessions.js';
+import { $sessions, workspaceOfSession } from '../sessions/sessions.js';
 import { isUnread } from '../../hooks/sessions/rules.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
@@ -137,6 +137,19 @@ export function markUnread(id) {
 export function markProjectRead(projectId, now = Date.now()) {
   const unread = new Set($unreadSessions.get());
   for (const s of $sessions.get()) if (s.projectId === projectId && unread.has(s.id)) markRead(s.id, now);
+}
+
+/**
+ * Mark all as read, of the shown workspace's chats.
+ * @param {string} projectId
+ * @param {string} workspaceId `main` for Main.
+ * @param {number} [now]
+ */
+export function markWorkspaceRead(projectId, workspaceId, now = Date.now()) {
+  const unread = new Set($unreadSessions.get());
+  for (const s of $sessions.get()) {
+    if (s.projectId === projectId && workspaceOfSession(s) === workspaceId && unread.has(s.id)) markRead(s.id, now);
+  }
 }
 
 /** @param {string} id A removed session's. */

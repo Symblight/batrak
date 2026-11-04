@@ -35,14 +35,9 @@
  */
 
 /**
- * @typedef {'local' | 'worktree' | 'docker'} RunTargetKind
- */
-
-/**
- * Where a session runs: picked before it starts, fixed after.
- * @typedef {Object} RunTarget
- * @property {RunTargetKind} kind
- * @property {string | null} branch `null`: the project's current branch.
+ * Where a draft's first message creates its chat: the worktree workspace it's a draft of, a new
+ * worktree workspace from `base` (`null`: Main's default branch), or Main (Local).
+ * @typedef {{ kind: 'workspace' } | { kind: 'worktree', base: string | null } | { kind: 'local' }} RunTarget
  */
 
 /**
@@ -52,10 +47,9 @@
  * @property {ConfigOption[]} configOptions The agent's, as it last reported them (shown with `chosen` applied).
  * @property {Record<string, string>} chosen Values the user picked that the agent hasn't confirmed yet
  *   (picked before it started, or on their way), by config option id.
- * @property {RunTarget} runTarget
- * @property {boolean} [runTargetPicked] The user picked the run target; until then a draft's is the
- *   project's default (`$workspaceSettings`).
- * @property {boolean} started After the first message: the agent and run target are fixed.
+ * @property {RunTarget} [runTarget] A draft's place, once picked; until then its workspace's
+ *   (`composer.runTargetOf()`).
+ * @property {boolean} started After the first message: the agent is fixed.
  */
 
 export {};

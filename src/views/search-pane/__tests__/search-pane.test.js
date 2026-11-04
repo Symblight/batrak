@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $workspace } from '../../../stores/workspace/workspace.js';
+import { $project } from '../../../stores/project/project.js';
 import '../search-pane.js';
 
 /** @typedef {import('../search-pane.js').AcpSearchPane} AcpSearchPane */
@@ -29,11 +29,11 @@ describe('acp-search-pane', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);
     });
-    $workspace.set({ path: '/p', name: 'p', rootId: 'r' });
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
   });
 
   afterEach(() => {
-    $workspace.set(null);
+    $project.set(null);
     clearMocks();
   });
 

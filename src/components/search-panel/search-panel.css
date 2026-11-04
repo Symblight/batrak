@@ -14,31 +14,12 @@
   padding-inline: var(--acp-space-3);
 }
 
-/* Dense MD3 outlined field: 40px (8 + 24 + 8), placeholder instead of a floating label. */
-.acp-search-panel__field {
-  --md-text-field-top-space: 8px;
-  --md-text-field-bottom-space: 8px;
-  --md-text-field-inline-start-space: var(--acp-space-3);
-  --md-text-field-inline-end-space: var(--acp-space-3);
-  --md-text-field-font-size: var(--acp-font-size-lg);
-  --md-text-field-line-height: 20px;
-  --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--acp-color-on-surface);
-  --md-text-field-border-color: var(--acp-color-outline);
-  --md-text-field-primary-color: var(--acp-color-primary);
-  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
-
-  caret-color: var(--acp-color-primary);
-}
+/* The app's dense field (shadow.css), with a placeholder instead of a floating label. */
 .acp-search-panel__field_query {
   --md-text-field-font-family: var(--acp-font-family-mono);
   --md-text-field-font-size: var(--acp-font-size-md);
   --md-text-field-inline-end-space: 0;
   --md-text-field-trailing-space: 4px;
-}
-/* The library's focused outline is 3px; MD3 asks for 2px. */
-.acp-search-panel__field:focus-within::part(indicator) {
-  border-width: 2px;
 }
 .acp-search-panel__field::part(input)::placeholder {
   color: var(--acp-color-on-surface-variant);

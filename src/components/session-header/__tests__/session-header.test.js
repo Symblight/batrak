@@ -94,11 +94,9 @@ describe('acp-session-header', () => {
     expect(seen).to.deep.equal(types.map((type) => [type, { sessionId: 's1' }]));
   });
 
-  it('asks for a new session from its trailing button', async () => {
-    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
-    const events = record(el, 'acp-session-new');
-    /** @type {HTMLElement} */ (root.querySelector('.acp-session-header__new')).click();
-    expect(events).to.have.length(1);
+  it('has no new-session button: a new session starts from the toolbar, the sidebar and the shortcut', async () => {
+    const { root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
+    expect(root.querySelector('.acp-session-header__new')).to.equal(null);
   });
 
   describe('rename', () => {
@@ -201,7 +199,6 @@ describe('acp-session-header', () => {
     const button = /** @type {HTMLElementTagNameMap['md-icon-button']} */ (root.querySelector('.acp-session-header__view'));
     expect(button.disabled).to.equal(true);
     expect(tooltipOf(button)).to.equal('Copilot has no terminal mode');
-    expect(tooltipOf(root.querySelector('.acp-session-header__new'))).to.equal('New session');
     expect(root.querySelector('[title]')).to.equal(null);
     button.click();
     expect(events).to.deep.equal([]);

@@ -1,0 +1,88 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  flex: none;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-workspace-header__top {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  height: 40px;
+  padding-inline: var(--acp-space-4) var(--acp-space-1);
+}
+
+.acp-workspace-header__name {
+  flex: 1;
+  overflow: hidden;
+  margin: 0;
+  font-size: var(--acp-font-size-lg);
+  font-weight: var(--acp-font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 28px icon button: 18px icon + 4px padding + the library's 1px border. */
+.acp-workspace-header__new-chat {
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+
+  &::part(button) {
+    padding: 4px;
+  }
+}
+
+.acp-workspace-header__icon {
+  font-size: var(--acp-icon-size-md);
+}
+
+.acp-workspace-header__progress {
+  height: 2px;
+}
+
+.acp-workspace-header__banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-1);
+  margin: 0 var(--acp-space-2) var(--acp-space-2);
+  padding: var(--acp-space-2) var(--acp-space-3);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-error-container);
+  color: var(--acp-color-on-error-container);
+  font-size: var(--acp-font-size-sm);
+}
+
+.acp-workspace-header__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.acp-workspace-header__action {
+  --md-button-foreground-color: var(--acp-color-on-error-container);
+}
+
+.acp-workspace-header__waiting {
+  overflow: hidden;
+  margin: 0 var(--acp-space-2) var(--acp-space-2);
+  padding: var(--acp-space-1) var(--acp-space-3);
+  border: none;
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-tertiary-container);
+  color: var(--acp-color-on-tertiary-container);
+  font: inherit;
+  font-size: var(--acp-font-size-sm);
+  text-align: start;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: color-mix(in srgb, var(--acp-color-on-tertiary-container) 8%, var(--acp-color-tertiary-container));
+  }
+
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-tertiary);
+    outline-offset: 1px;
+  }
+}

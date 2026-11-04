@@ -163,28 +163,14 @@
   font-size: var(--acp-icon-size-sm);
 }
 
-/* Dense MD3 outlined field, shared by every field here: 40px (8 + 24 + 8). Text starts 16px in, where
-   the library puts the floating label; every field has a trailing control (button, stepper, arrow), so
-   the end space is the trailing slot's alone. md-select's own md-text-field (part `text-field`) sets
-   these on its :host, which beats inheriting them, so they go on that part too. */
+/* The app's dense field (shadow.css); every field here has a trailing control (button, stepper,
+   arrow), so the end space is the trailing slot's alone. md-select's own md-text-field (part
+   `text-field`) sets these on its :host, so they go on that part too. */
 .acp-settings__input,
 .acp-settings__input::part(text-field) {
-  --md-text-field-top-space: 8px;
-  --md-text-field-bottom-space: 8px;
-  --md-text-field-inline-start-space: var(--acp-space-4);
   --md-text-field-inline-end-space: 0;
   --md-text-field-leading-space: var(--acp-space-3);
   --md-text-field-trailing-space: 4px;
-  --md-text-field-font-size: var(--acp-font-size-lg);
-  --md-text-field-label-size: var(--acp-font-size-lg);
-  --md-text-field-line-height: 20px;
-  --md-text-field-letter-spacing: normal;
-  --md-text-field-foreground-color: var(--acp-color-on-surface);
-  --md-text-field-border-color: var(--acp-color-outline);
-  --md-text-field-primary-color: var(--acp-color-primary);
-  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
-
-  caret-color: var(--acp-color-primary);
 }
 /* The Font field shows its value in that font. */
 .acp-settings__input_font::part(text-field) {
@@ -204,11 +190,6 @@
 .acp-settings__input_font {
   --_acp-settings-menu-max-height: 320px;
 }
-/* The library's focused outline is 3px; MD3 asks for 2px. */
-.acp-settings__input:focus-within::part(indicator) {
-  border-width: 2px;
-}
-
 .acp-settings__swatch {
   flex: none;
   width: 20px;

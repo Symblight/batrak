@@ -76,8 +76,8 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   changed on disk since its draft started, `changedOnDisk`, is refused until the tab view's
   Overwrite / Reload dialog answers; a text file deleted on disk stays shown, `deletedOnDisk`, and
   a save creates it again, like VS Code) and `ChangesReviewController`
-  (the Changes tab's expanded files and diffs; `<acp-changes-tab>`), `SessionChangesController` (a
-  worktree session's Changes tab; `<acp-session-changes-tab>`), `FindInFilesController` (`<acp-search-pane>`, for the
+  (the Changes tab's expanded files and diffs; `<acp-changes-tab>`), `WorkspaceChangesController` (a
+  workspace's Changes tab; `<acp-workspace-changes-tab>`), `FindInFilesController` (`<acp-search-pane>`, for the
   Search pane, and `<acp-search-view>`, for the search dialog; one backend slot each).
   The others are pure and go anywhere: `EditorCommentsController` takes the host's `comments` /
   `commentFocus` and fires `acp-comment-add` / `-edit` / `-delete` / `-revealed`,
@@ -95,16 +95,16 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   re-announce it with an event.
 - **Actions live next to their store** (`openTab()` / `closeTab()` in `stores/editor/editor.js`) or, when they
   call the backend, in a service that writes the store (`projects.open()` / `restore()` (`hooks/projects/`) →
-  `$workspace`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
-- **Narrow with `computed`.** `$rootId` (from `$workspace`) and `$activePath` (from `$editorTabs`) notify
+  `$project`). Container components call actions (see "Layers"); nobody `set()`s stores other modules own.
+- **Narrow with `computed`.** `$rootId` (from `$activeRoot`, `stores/workspaces/`) and `$activePath` (from `$editorTabs`) notify
   only when their slice changes, so subscribe to the narrowest store you need.
 - **Container components subscribe with `StoreController`** (`src/controllers/store/`):
-  `#workspace = new StoreController(this, { store: $workspace })`, read `this.#workspace.value` in
+  `#project = new StoreController(this, { store: $project })`, read `this.#project.value` in
   `render()`. It re-renders the host on change; `onChange(value, oldValue)` runs a side effect (also once
   on connect). Outside a component, or for a one-off read in a handler, use `$store.get()`.
 - **Persistence:** `persistentStore(key, initial, { parse, serialize?, listen? })` (`stores/persistent/persistent.js`)
   keeps an atom as JSON in `localStorage` under a `brama:` key. `parse` validates what was stored (`null`
-  → `initial`), `serialize` drops runtime-only fields (`Workspace.rootId`). `listen: false` for per-window
+  → `initial`), `serialize` drops runtime-only fields (`OpenProject.rootId`). `listen: false` for per-window
   state (folder, tabs); leave it on for shared preferences (column widths, settings) so all windows
   stay in sync through `storage` events. Per-window state keyed by something (tabs by project) uses
   `persistentMapStore(prefix, parse)` instead: one item per key, written only through `setKey()`, so two
@@ -132,18 +132,24 @@ files. Specs are in `docs/specs/`.
 Commands are `async` and push disk/process work to `spawn_blocking`; nothing blocks the IPC thread.
 Work that can be superseded must be cancellable, not just have its result dropped: Quick Open and
 Find in Files check a flag, and a project scan (`Snapshot::scan_until`) stops when a newer
-`open_workspace` from the same window starts (it then fails with `workspace::SUPERSEDED`, which
+`open_root` from the same window starts (it then fails with `roots::SUPERSEDED`, which
 `projects` ignores) or when its root closes. The editor reads only the active tab; other
 tabs are read, or re-read after a change on disk or a HEAD move, when they become active.
 
-**Open projects:** the `projects` hook keeps the backend roots (snapshot + watcher) of the last
-`KEEP_OPEN` (3) active projects; activating one of them only switches `$workspace`, no scan. Older
-ones are closed and scanned again when activated. Only the active root's changes reach the frontend
+**Open roots:** the window shows one folder, `$activeRoot` (`stores/workspaces/`): the shown
+workspace's (`$activeWorkspaceId`, per window and project, picked in the toolbar's
+`<acp-workspace-picker>` or following the shown chat; `Roots::open_workspace`, `open_workspace_root`,
+opened by the `workspaces` hook) or the project's (Main). `$rootId` follows it, so git, GitHub, Search,
+Changes, Quick Open, the tree and `projects.absPath()` / `relPath()` do too. The `projects` hook's
+roots part (`hooks/projects/roots.js`, mirrored in `$openRoots`) keeps the last `KEEP_OPEN` (3)
+shown roots open, projects' and workspaces' together, never the shown project's; switching to one
+of them needs no scan. Older ones are closed and scanned again when shown; meanwhile the tree hides
+and shows a skeleton after 150 ms. Only the active root's changes reach the frontend
 (`fs-change`); the others' watchers keep their snapshots and git caches current, and views keyed by
 root (the `git` hook's stores and commit picks, the Changes tab's expanded files, the file tree's
 expanded folders) save their state on switch and restore it, re-checking what may have changed. A
-root belongs to the window that opened it: `Workspaces::close_group` closes a window's roots when it
-is destroyed, and `close_window_workspaces` when its page loads again (before any open).
+root belongs to the window that opened it: `Roots::close_group` closes a window's roots when it
+is destroyed, and `close_window_roots` when its page loads again (before any open).
 
 ### Logging
 
@@ -178,7 +184,7 @@ helpers apply.
   (`exec::MAX_CONCURRENT`); more callers wait for a slot.
 - Anything that changes a repository runs inside `lock::with_mutation`, keyed by the common git
   dir, so a checkout and its worktrees are serialized together.
-- Commands take root-relative paths only after `workspace::checked_rel()`.
+- Commands take root-relative paths only after `roots::checked_rel()`.
 
 ## Tests first
 
@@ -208,6 +214,13 @@ test that reproduces it.
   subagent that writes tests.
 - Before reporting work done: `cargo test --lib`, `cargo clippy --all-targets`, `pnpm typecheck` and
   `pnpm test` pass. Say which behavior was verified by a test, which by running the app, and which not at all.
+
+## Working mode
+
+Invoke the `ub-mode` skill at the start of every task that changes code, and follow it. Where it
+differs from this file, this file wins: commit only after I say yes and never push unless asked
+(not "commit often, push at the end"), no worktrees (so no worktree cleanup), and its
+`crapper` / `dryer` / `mutator` steps are skipped while those tools aren't installed.
 
 ## Commits
 
