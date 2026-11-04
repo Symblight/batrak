@@ -126,8 +126,8 @@ export class AcpTerminalView extends ViewElement {
     if (!info && !this.sessionId) return nothing;
     const on = AcpTerminalView.#on;
     const session = this.sessionId;
-    return html`<acp-confirm-dialog ${ref(this.#confirmRef)}></acp-confirm-dialog>
-      <acp-terminal
+    // The terminal first: the tab's grid gives its one row to the first item, and a dialog's host takes a place in it.
+    return html`<acp-terminal
         ${ref(this.#terminalRef)}
         terminal-id=${this.terminalId}
         ?chat-fallback=${session !== ''}
@@ -147,7 +147,8 @@ export class AcpTerminalView extends ViewElement {
         @acp-terminal-restart=${on((/** @type {{ terminalId: string }} */ d) => (session ? sessions.restartCli(session) : terminals.restart(d.terminalId)))}
         @acp-terminal-title=${session ? nothing : on((/** @type {{ terminalId: string, title: string }} */ d) => setTerminalTitle(d.terminalId, d.title))}
         @acp-terminal-chat=${session ? on(() => this.dispatchEvent(new CustomEvent('acp-session-view', { detail: { sessionId: session, view: 'chat' }, bubbles: true, composed: true }))) : nothing}
-      ></acp-terminal>`;
+      ></acp-terminal>
+      <acp-confirm-dialog ${ref(this.#confirmRef)}></acp-confirm-dialog>`;
   }
 }
 
