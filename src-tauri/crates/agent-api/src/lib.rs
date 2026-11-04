@@ -182,6 +182,17 @@ pub struct SubagentRecord {
     pub started_at: Option<String>,
 }
 
+/// What a session is doing, as its agent's own records tell (spec: `docs/specs/session-activity.md`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SessionActivity {
+    /// A turn is in progress now.
+    Running,
+    /// A turn is held by a permission or approval prompt.
+    WaitingForUser,
+    /// The agent is at its prompt, or no process runs the session.
+    Idle,
+}
+
 /// One kind of agent. Default methods are plain ACP with no CLI; a crate overrides what its agent
 /// does differently. The app's hub picks the crate for a launch and calls only this.
 pub trait Agent: Send + Sync + 'static {
@@ -226,6 +237,27 @@ pub trait Agent: Send + Sync + 'static {
     fn subagents(&self, _session_id: &str) -> Vec<SubagentRecord> {
         Vec::new()
     }
+    /// What its session `session_id` (its ACP id) is doing, from its own records; `None` when it
+    /// can't tell, never a guess from a timestamp. Called every few seconds for each open CLI, so it
+    /// reads little. Reads files: call off the async runtime.
+    fn session_activity(&self, _session_id: &str) -> Option<SessionActivity> {
+        None
+    }
+}
+
+/// What every agent crate's tests run, once.
+#[cfg(any(test, feature = "test-support"))]
+pub mod conformance {
+    use super::Agent;
+
+    /// Panics unless `agent` keeps the contract any crate can be checked on without its files: an
+    /// id it doesn't know, or that isn't an id, gets no answer.
+    pub fn check(agent: &dyn Agent) {
+        for id in ["brama-conformance-no-such-session", "", "..", "../projects", "a/b", "a\\b"] {
+            let answer = agent.session_activity(id);
+            assert_eq!(answer, None, "{} answered for session id {id:?}", agent.kind());
+        }
+    }
 }
 
 /// Whether an option's value may go on a CLI's command line as a flag's value: it looks like an id
@@ -246,6 +278,41 @@ pub fn strings(args: &[&str]) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct Plain;
+    impl Agent for Plain {
+        fn kind(&self) -> &'static str {
+            "plain"
+        }
+        fn matches(&self, _launch: &Launch) -> bool {
+            true
+        }
+    }
+
+    /// A crate that breaks the contract: it answers for any id.
+    struct Guesses;
+    impl Agent for Guesses {
+        fn kind(&self) -> &'static str {
+            "guesses"
+        }
+        fn matches(&self, _launch: &Launch) -> bool {
+            true
+        }
+        fn session_activity(&self, _session_id: &str) -> Option<SessionActivity> {
+            Some(SessionActivity::Running)
+        }
+    }
+
+    #[test]
+    fn an_agent_that_keeps_no_records_passes_the_conformance_suite() {
+        conformance::check(&Plain);
+    }
+
+    #[test]
+    #[should_panic(expected = "guesses")]
+    fn the_conformance_suite_catches_an_agent_that_answers_for_any_id() {
+        conformance::check(&Guesses);
+    }
 
     #[test]
     fn a_first_prompt_goes_on_the_command_line_only_where_it_is_safe() {

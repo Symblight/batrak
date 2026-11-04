@@ -58,6 +58,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Codex);
+    }
+
+    #[test]
     fn resumes_a_thread_in_its_own_cli_and_starts_none() {
         let launch = Launch { command: "/usr/local/bin/npx".into(), args: strings(&["-y", "@agentclientprotocol/codex-acp@2.5.0"]) };
         assert!(Codex.matches(&launch));

@@ -75,6 +75,11 @@ impl Agent for Copilot {
 mod tests {
     use super::*;
 
+    #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Copilot);
+    }
+
     fn config(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect()
     }

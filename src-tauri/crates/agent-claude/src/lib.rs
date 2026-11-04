@@ -134,6 +134,11 @@ fn first_timestamp(path: &Path) -> Option<String> {
 mod tests {
     use super::*;
 
+    #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Claude);
+    }
+
     /// A Claude config dir with one session's subagents: (id, meta JSON, first transcript line's timestamp, transcript age).
     fn claude_dir(name: &str, session: &str, agents: &[(&str, &str, &str, std::time::Duration)]) -> std::path::PathBuf {
         let root = std::env::temp_dir().join(format!("brama-claude-subagents-{name}-{}", std::process::id()));

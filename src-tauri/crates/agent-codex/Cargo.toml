@@ -7,3 +7,6 @@ description = "Codex for Brama: codex-acp, a library over Codex's threads, whose
 [dependencies]
 agent-api = { path = "../agent-api" }
 agent-kit = { path = "../agent-kit" }
+
+[dev-dependencies]
+agent-api = { path = "../agent-api", features = ["test-support"] }

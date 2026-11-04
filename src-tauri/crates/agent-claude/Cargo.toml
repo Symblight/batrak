@@ -9,3 +9,6 @@ agent-api = { path = "../agent-api" }
 agent-kit = { path = "../agent-kit" }
 # Claude Code's `subagents/*.meta.json` and transcripts
 serde_json = "1"
+
+[dev-dependencies]
+agent-api = { path = "../agent-api", features = ["test-support"] }

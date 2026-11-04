@@ -39,6 +39,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Antigravity);
+    }
+
+    #[test]
     fn is_its_program_wherever_it_is_and_has_no_cli_or_update() {
         let launch = Launch { command: "/opt/agy/agy_acp_server.par".into(), args: Vec::new() };
         assert!(Antigravity.matches(&launch));

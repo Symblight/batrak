@@ -20,6 +20,11 @@ mod tests {
     use super::*;
 
     #[test]
+    fn keeps_the_agent_contract() {
+        agent_api::conformance::check(&Generic);
+    }
+
+    #[test]
     fn takes_any_launch_and_has_no_cli() {
         let launch = Launch { command: "my-agent".into(), args: vec!["--acp".into()] };
         assert!(Generic.matches(&launch));
