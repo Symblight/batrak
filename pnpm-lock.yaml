@@ -34,7 +34,7 @@ importers:
         version: 0.2.0
       '@symblight/tree-view':
         specifier: github:Symblight/rich-components#path:/packages/tree-view
-        version: https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
+        version: https://codeload.github.com/Symblight/rich-components/tar.gz/88e8da499dc7f12df605f43f95ee299350d9b027#path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@symblight/wc-material':
         specifier: ^0.5.2
         version: 0.5.2(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
@@ -661,8 +661,8 @@ packages:
     resolution: {integrity: sha512-YamBxiQkDYC8vusJRf8Ol2mDItPOLmWn/UdUCWmuvLoBM+EVMuJsGK/em3QjhlGsiLLCV5OH9zndR+TXMJGSPg==}
     hasBin: true
 
-  '@symblight/tree-view@https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/tree-view':
-    resolution: {path: /packages/tree-view, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114}
+  '@symblight/tree-view@https://codeload.github.com/Symblight/rich-components/tar.gz/88e8da499dc7f12df605f43f95ee299350d9b027#path:/packages/tree-view':
+    resolution: {path: /packages/tree-view, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/88e8da499dc7f12df605f43f95ee299350d9b027}
     version: 0.1.0
     peerDependencies:
       lit: '>=3.0.0'
@@ -2869,7 +2869,7 @@ snapshots:
       '@material/material-color-utilities': 0.3.0
       culori: 4.0.2
 
-  '@symblight/tree-view@https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
+  '@symblight/tree-view@https://codeload.github.com/Symblight/rich-components/tar.gz/88e8da499dc7f12df605f43f95ee299350d9b027#path:/packages/tree-view(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
     dependencies:
       '@atlaskit/pragmatic-drag-and-drop': 3.1.0
       '@atlaskit/pragmatic-drag-and-drop-hitbox': 2.2.2
