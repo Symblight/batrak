@@ -78,9 +78,6 @@ chx-message-row {
   align-self: center;
   width: 100%;
   max-width: var(--_acp-chat-messages-max-width, none);
-  /* Rows away from the viewport aren't laid out or painted; each remembers its last height. */
-  content-visibility: auto;
-  contain-intrinsic-size: auto 80px;
 }
 
 /* A reply's parts rise in as they stream in. Only while the row is busy, so history and rows
