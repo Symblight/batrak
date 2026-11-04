@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
-import { $settings, parseSettings, setMarkdownScrollSync } from '../settings.js';
-import { DEFAULT_SETTINGS } from '../rules.js';
+import { $settings, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalFont, setTerminalFontSize } from '../settings.js';
+import { DEFAULT_SETTINGS, FONT_SIZE_MAX } from '../rules.js';
 
 describe('settings store: markdown', () => {
   afterEach(() => $settings.set(DEFAULT_SETTINGS));
@@ -24,6 +24,31 @@ describe('settings store: markdown', () => {
       accent: '#112233',
       editorFontSize: 14,
     });
+  });
+
+  it('reads the terminal’s font and size, anything else as the editor’s', () => {
+    expect(parseSettings({ terminalFont: 'Fira Code', terminalFontSize: 15 })).to.include({ terminalFont: 'Fira Code', terminalFontSize: 15 });
+    expect(parseSettings({ terminalFont: '', terminalFontSize: 999 })).to.include({ terminalFont: null, terminalFontSize: null });
+  });
+
+  it('gives the terminal the editor’s font and size until it has its own', () => {
+    // Arrange
+    const saved = $settings.get();
+    setEditorFont('Mono');
+    setEditorFontSize(14);
+    const inherited = [$terminalFontFamily.get(), $terminalFontSize.get()];
+    // Act
+    setTerminalFont('Fira Code');
+    setTerminalFontSize(999);
+    const own = [$terminalFontFamily.get(), $terminalFontSize.get()];
+    setTerminalFont(null);
+    setTerminalFontSize(null);
+    const back = [$terminalFontFamily.get(), $terminalFontSize.get()];
+    $settings.set(saved);
+    // Assert
+    expect(inherited).to.deep.equal(['Mono', 14]);
+    expect(own, 'clamped').to.deep.equal(['Fira Code', FONT_SIZE_MAX]);
+    expect(back).to.deep.equal(['Mono', 14]);
   });
 
   it('sets the scroll sync', () => {

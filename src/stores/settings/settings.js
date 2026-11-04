@@ -20,7 +20,7 @@ function isFontSize(size) {
  */
 export function parseSettings(raw) {
   if (!isRecord(raw)) return null;
-  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync } = raw;
+  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize } = raw;
   return {
     appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
     accent: (typeof accent === 'string' && normalizeHex(accent)) || DEFAULTS.accent,
@@ -28,6 +28,8 @@ export function parseSettings(raw) {
     editorFontSize: isFontSize(editorFontSize) ? /** @type {number} */ (editorFontSize) : DEFAULTS.editorFontSize,
     markdownDefaultView: isMarkdownMode(markdownDefaultView) ? markdownDefaultView : DEFAULTS.markdownDefaultView,
     markdownScrollSync: typeof markdownScrollSync === 'boolean' ? markdownScrollSync : DEFAULTS.markdownScrollSync,
+    terminalFont: typeof terminalFont === 'string' && terminalFont !== '' ? terminalFont : DEFAULTS.terminalFont,
+    terminalFontSize: isFontSize(terminalFontSize) ? /** @type {number} */ (terminalFontSize) : DEFAULTS.terminalFontSize,
   };
 }
 
@@ -40,6 +42,9 @@ export const $editorFont = computed($settings, (settings) => settings.editorFont
 export const $editorFontSize = computed($settings, (settings) => settings.editorFontSize);
 export const $markdownDefaultView = computed($settings, (settings) => settings.markdownDefaultView);
 export const $markdownScrollSync = computed($settings, (settings) => settings.markdownScrollSync);
+/** The terminal's own font, else the editor's. */
+export const $terminalFontFamily = computed($settings, (settings) => settings.terminalFont ?? settings.editorFont);
+export const $terminalFontSize = computed($settings, (settings) => settings.terminalFontSize ?? settings.editorFontSize);
 
 /**
  * @template {keyof Settings} K
@@ -70,6 +75,16 @@ export function setEditorFont(family) {
 /** @param {number} size Clamped to `FONT_SIZE_MIN`–`FONT_SIZE_MAX`. */
 export function setEditorFontSize(size) {
   update('editorFontSize', Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
+}
+
+/** @param {string | null} family `null` follows the editor's. */
+export function setTerminalFont(family) {
+  update('terminalFont', family || null);
+}
+
+/** @param {number | null} size Clamped to `FONT_SIZE_MIN`–`FONT_SIZE_MAX`; `null` follows the editor's. */
+export function setTerminalFontSize(size) {
+  update('terminalFontSize', size === null ? null : Math.min(FONT_SIZE_MAX, Math.max(FONT_SIZE_MIN, Math.round(size))));
 }
 
 /** @param {boolean} on */

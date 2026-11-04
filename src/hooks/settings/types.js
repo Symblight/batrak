@@ -4,7 +4,7 @@
  * @property {SettingsAnchor} section
  */
 
-/** @typedef {'theme' | 'editor'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
+/** @typedef {'theme' | 'editor' | 'terminal'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
 
 /**
  * Column width in px by `acp-resize-handle` name (unique app-wide); a missing column uses its CSS default.
@@ -43,6 +43,8 @@
  * @property {number} editorFontSize Code editor font size in px; the line height follows it.
  * @property {import('../markdown/types.js').MarkdownMode} markdownDefaultView How a markdown file never set is shown.
  * @property {boolean} markdownScrollSync In Split, the editor and the preview scroll together.
+ * @property {string | null} terminalFont Terminal font family; `null` follows the editor's.
+ * @property {number | null} terminalFontSize Terminal font size in px; `null` follows the editor's.
  */
 
 export {};

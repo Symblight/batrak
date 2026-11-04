@@ -81,16 +81,18 @@ describe('acp-settings-view', () => {
     const leaked = [];
     for (const type of ['acp-settings-change', 'acp-settings-reset']) el.addEventListener(type, (e) => leaked.push(e));
     // Act
-    fire(settings, 'acp-settings-change', { patch: { appearance: 'dark', accent: '#336699', editorFont: 'Mono', editorFontSize: 999, markdownScrollSync: false } });
+    fire(settings, 'acp-settings-change', { patch: { appearance: 'dark', accent: '#336699', editorFont: 'Mono', editorFontSize: 999, markdownScrollSync: false, terminalFont: 'Fira', terminalFontSize: 15 } });
     const changed = $settings.get();
     fire(settings, 'acp-settings-reset', { section: 'editor' });
     // Assert
     expect([changed.appearance, changed.accent, changed.editorFont]).to.deep.equal(['dark', '#336699', 'Mono']);
     expect(changed.editorFontSize).to.equal(settingsHook.fontSizeMax);
     expect(changed.markdownScrollSync, 'markdown').to.equal(false);
+    expect([changed.terminalFont, changed.terminalFontSize], 'terminal').to.deep.equal(['Fira', 15]);
     expect($settings.get().editorFont, 'the editor section is reset').to.equal(settingsHook.defaults.editorFont);
     expect($settings.get().markdownScrollSync, 'markdown too').to.equal(true);
     expect($settings.get().appearance, 'other sections are kept').to.equal('dark');
+    expect($settings.get().terminalFont, 'the terminal section too').to.equal('Fira');
     expect(leaked).to.deep.equal([]);
   });
 

@@ -11,6 +11,8 @@ import {
   setEditorFont,
   setEditorFontSize,
   setMarkdownScrollSync,
+  setTerminalFont,
+  setTerminalFontSize,
 } from '../../stores/settings/settings.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/settings/settings.js';
@@ -47,6 +49,8 @@ export class AcpSettingsView extends ViewElement {
     if (patch.editorFont !== undefined) setEditorFont(patch.editorFont);
     if (patch.editorFontSize !== undefined) setEditorFontSize(patch.editorFontSize);
     if (patch.markdownScrollSync !== undefined) setMarkdownScrollSync(patch.markdownScrollSync);
+    if (patch.terminalFont !== undefined) setTerminalFont(patch.terminalFont);
+    if (patch.terminalFontSize !== undefined) setTerminalFontSize(patch.terminalFontSize);
   }
 
   /** @param {Event} e */

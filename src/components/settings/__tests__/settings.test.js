@@ -49,7 +49,7 @@ describe('acp-settings', () => {
   it('lists its sections and follows the scroll', async () => {
     const { el, root } = await render();
     const items = [...root.querySelectorAll('.acp-settings__nav-item')];
-    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor']);
+    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor', 'Terminal']);
     expect(current(root)).to.equal('Theme');
 
     const scroller = scrollerOf(root);
@@ -66,7 +66,7 @@ describe('acp-settings', () => {
   it('explains its controls in tooltips, not titles', async () => {
     const { root } = await render();
     const items = [...root.querySelectorAll('.acp-settings__nav-item')];
-    expect(items.map(tooltipOf)).to.deep.equal(['Theme', 'Editor']);
+    expect(items.map(tooltipOf)).to.deep.equal(['Theme', 'Editor', 'Terminal']);
     expect(tooltipOf(root.querySelector('.acp-settings__icon-button'))).to.equal('Pick a color');
     expect(tooltipOf(root.querySelector('.acp-settings__link'))).to.equal('Not available yet');
     expect(root.querySelector('[title]')).to.equal(null);
@@ -130,6 +130,76 @@ describe('acp-settings', () => {
       /** @type {HTMLElement} */ (root.querySelector('[data-section="editor"] .acp-settings__header-button')).click();
 
       expect(resets).to.deep.equal([{ section: 'editor' }]);
+    });
+  });
+
+  describe('the terminal section', () => {
+    const section = (/** @type {ShadowRoot} */ root) => /** @type {HTMLElement} */ (root.querySelector('[data-section="terminal"]'));
+    const sizeField = (/** @type {ShadowRoot} */ root) => /** @type {HTMLElementTagNameMap['md-text-field']} */ (section(root).querySelector('md-text-field'));
+
+    /** @param {AcpSettings} el */
+    function changes(el) {
+      /** @type {unknown[]} */
+      const patches = [];
+      el.addEventListener('acp-settings-change', (e) => patches.push(/** @type {CustomEvent} */ (e).detail.patch));
+      return patches;
+    }
+
+    it('offers only monospaced fonts, or the editor’s, and asks for what is picked', async () => {
+      // Arrange
+      const { el, root } = await render();
+      el.fonts = [{ family: 'Fira Code', monospace: true }, { family: 'Arial', monospace: false }];
+      await rendered(el);
+      const patches = changes(el);
+      const select = /** @type {HTMLElementTagNameMap['md-select']} */ (section(root).querySelector('md-select'));
+      // Assert
+      expect([...select.querySelectorAll('md-option')].map((o) => o.textContent?.trim())).to.deep.equal(['Same as the editor', 'Fira Code']);
+      // Act
+      select.value = 'Fira Code';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      select.value = '';
+      select.dispatchEvent(new Event('change', { bubbles: true }));
+      // Assert
+      expect(patches).to.deep.equal([{ terminalFont: 'Fira Code' }, { terminalFont: null }]);
+    });
+
+    it('takes a size typed, a size stepped from the editor’s, and goes back to the editor’s when emptied', async () => {
+      // Arrange
+      const { el, root } = await render();
+      el.settings = { ...settingsHook.defaults, editorFontSize: 14 };
+      await rendered(el);
+      const patches = changes(el);
+      const field = sizeField(root);
+      const type = (/** @type {string} */ value) => {
+        field.value = value;
+        field.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      };
+      // Assert
+      expect(field.value, 'empty while it is the editor’s').to.equal('');
+      expect(section(root).textContent, 'says whose').to.include('14 px');
+      // Act
+      /** @type {HTMLElement} */ (section(root).querySelector('[aria-label="Larger"]')).click();
+      type('16');
+      type('3');
+      type('');
+      // Assert
+      expect(patches, 'a size out of bounds is not asked for').to.deep.equal([{ terminalFontSize: 15 }, { terminalFontSize: 16 }, { terminalFontSize: null }]);
+    });
+
+    it('resets on its own, once something is set', async () => {
+      // Arrange
+      const { el, root } = await render();
+      const reset = () => /** @type {HTMLElementTagNameMap['md-button']} */ (section(root).querySelector('.acp-settings__header-button'));
+      /** @type {unknown[]} */
+      const resets = [];
+      el.addEventListener('acp-settings-reset', (e) => resets.push(/** @type {CustomEvent} */ (e).detail));
+      expect(reset().disabled, 'nothing to reset').to.equal(true);
+      el.settings = { ...settingsHook.defaults, terminalFontSize: 15 };
+      await rendered(el);
+      // Act
+      reset().click();
+      // Assert
+      expect(resets).to.deep.equal([{ section: 'terminal' }]);
     });
   });
 });
