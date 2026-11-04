@@ -63,3 +63,15 @@ fn closing_a_running_shell_doesnt_wait_for_it() {
     assert!(started.elapsed() < Duration::from_secs(1), "took {:?}", started.elapsed());
     assert!(!terminals.owns("main", "t"));
 }
+
+#[test]
+fn busy_names_what_the_shell_started_but_not_the_shell() {
+    let terminals = terminals();
+    let out = start(&terminals);
+    until("the prompt", || !lock(&out.output).is_empty());
+    assert!(terminals.busy(&["t".to_owned()]).is_empty(), "at its prompt");
+    terminals.write("t", b"ping -n 30 127.0.0.1\r\n").unwrap();
+    until("ping to start", || !terminals.busy(&["t".to_owned()]).is_empty());
+    assert!(terminals.busy(&["t".to_owned()])[0].process.to_ascii_lowercase().starts_with("ping"));
+    terminals.close(&["t".to_owned()]);
+}

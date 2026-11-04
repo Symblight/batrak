@@ -499,11 +499,10 @@ impl Terminals {
         ids.iter()
             .filter_map(|id| {
                 let terminal = self.get(id).ok()?;
-                let foreground = terminal.foreground()?;
-                if Some(foreground) == lock(&terminal.shell).pid || lock(&terminal.stream).exit.is_some() {
+                if lock(&terminal.stream).exit.is_some() {
                     return None;
                 }
-                Some(Busy { id: id.clone(), process: process_name(foreground)? })
+                Some(Busy { id: id.clone(), process: terminal.foreground_program()? })
             })
             .collect()
     }
@@ -576,6 +575,23 @@ impl Terminal {
     #[cfg(not(unix))]
     fn foreground(&self) -> Option<i32> {
         None
+    }
+
+    /// What runs in the foreground, if that isn't the shell.
+    #[cfg(unix)]
+    fn foreground_program(&self) -> Option<String> {
+        let foreground = self.foreground()?;
+        if Some(foreground) == lock(&self.shell).pid {
+            return None;
+        }
+        process_name(foreground)
+    }
+
+    /// What the shell started, if anything: the closest Windows has to a foreground program.
+    #[cfg(not(unix))]
+    fn foreground_program(&self) -> Option<String> {
+        let pid = u32::try_from(lock(&self.shell).pid?).ok()?;
+        child_process_name(pid)
     }
 
     /// SIGHUP to the shell's group and the foreground group, then the PTY dropped; `kill` is due
@@ -710,9 +726,37 @@ fn process_name(pid: i32) -> Option<String> {
     Some(name.trim_end().to_owned()).filter(|n| !n.is_empty())
 }
 
+/// The name of a process `parent` started, but the console host a pseudo-terminal runs on.
 #[cfg(not(unix))]
-fn process_name(_pid: i32) -> Option<String> {
-    None
+fn child_process_name(parent: u32) -> Option<String> {
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::{
+        CreateToolhelp32Snapshot, Process32FirstW, Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS,
+    };
+    // SAFETY: the snapshot is closed below; each entry is zeroed with its size set, as the API asks,
+    // and only read after a call that filled it succeeded.
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return None;
+        }
+        let mut entry: PROCESSENTRY32W = std::mem::zeroed();
+        entry.dwSize = u32::try_from(std::mem::size_of::<PROCESSENTRY32W>()).unwrap_or(0);
+        let mut found = None;
+        let mut more = Process32FirstW(snapshot, &raw mut entry) != 0;
+        while more && found.is_none() {
+            if entry.th32ParentProcessID == parent {
+                let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+                let name = String::from_utf16_lossy(&entry.szExeFile[..len]);
+                if !name.eq_ignore_ascii_case("conhost.exe") && !name.eq_ignore_ascii_case("OpenConsole.exe") {
+                    found = Some(name);
+                }
+            }
+            more = Process32NextW(snapshot, &raw mut entry) != 0;
+        }
+        CloseHandle(snapshot);
+        found
+    }
 }
 
 enum Signal {
