@@ -179,6 +179,8 @@ export class AcpTerminal extends LitElement {
       fontSize: this.fontSize,
       scrollback: 10000,
       macOptionIsMeta: false,
+      // A program's colors may assume another background than the theme's: text stays readable.
+      minimumContrastRatio: 4.5,
       linkHandler: { activate: this.#openLink },
       // The Unicode addon registers through xterm's proposed API.
       allowProposedApi: true,

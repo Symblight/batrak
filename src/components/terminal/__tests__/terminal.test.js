@@ -1,4 +1,5 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { TERMINAL_PALETTE } from '../../../stores/settings/rules.js';
 import '../terminal.js';
 
 /** @typedef {import('../terminal.js').AcpTerminal} AcpTerminal */
@@ -284,6 +285,20 @@ describe('acp-terminal', () => {
     await settled();
     // Assert
     expect(focused(), 'asked while hidden').to.equal(true);
+  });
+
+  it('keeps text readable on a background the program chose', async () => {
+    // Arrange: dark default text, as in a light theme
+    const { el, calls } = await render();
+    const palette = { ...TERMINAL_PALETTE, foreground: '#111111', black: '#000000' };
+    el.colors = { light: palette, dark: palette };
+    await el.updateComplete;
+    // Act: a program paints a black background, leaving the text the default color
+    await show(calls.sink, '\x1b[40mon black\x1b[0m');
+    await until(() => text(el).includes('on black'));
+    // Assert
+    const cell = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-rows span'));
+    expect(cell.style.color, 'drawn lighter than the default text').to.not.equal('');
   });
 
   it('keeps a paste until its shell is connected', async () => {
