@@ -69,6 +69,22 @@ const rawText = {
   },
 };
 
+/**
+ * Test files run side by side at one origin, and persisted stores read `localStorage` as they mount:
+ * each gets a storage of its own, or one file's saved tabs show up in another.
+ */
+const OWN_STORAGE = `<script>
+  const own = {};
+  const hidden = (name, value) => Object.defineProperty(own, name, { value, enumerable: false });
+  hidden('getItem', (key) => (Object.hasOwn(own, key) ? own[key] : null));
+  hidden('setItem', (key, value) => { own[key] = String(value); });
+  hidden('removeItem', (key) => { delete own[key]; });
+  hidden('clear', () => { for (const key of Object.keys(own)) delete own[key]; });
+  hidden('key', (index) => Object.keys(own)[index] ?? null);
+  Object.defineProperty(own, 'length', { get: () => Object.keys(own).length, enumerable: false });
+  Object.defineProperty(window, 'localStorage', { value: own });
+</script>`;
+
 export default {
   files: 'src/**/*.test.js',
   nodeResolve: true,
@@ -83,7 +99,7 @@ export default {
   plugins: [litCssInline, rawText, bindEventListener],
   // nanostores reads `process.env.NODE_ENV`, which the bundler defines.
   testRunnerHtml: (testFramework) => `<!doctype html>
-    <html>
+    <html><head>${OWN_STORAGE}</head>
       <body>
         <script>window.process = { env: { NODE_ENV: 'test' } };</script>
         <script type="module" src="${testFramework}"></script>
