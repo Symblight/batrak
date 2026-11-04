@@ -472,6 +472,12 @@ impl Terminals {
         terminal.flow.notify_all();
     }
 
+    /// Forgets the output kept for the next attach, but the line being written (a prompt, say).
+    pub fn clear_output(&self, id: &str) -> Result<(), String> {
+        lock(&self.get(id)?.stream).output.clear();
+        Ok(())
+    }
+
     pub fn resize(&self, id: &str, cols: u16, rows: u16) -> Result<(), String> {
         let terminal = self.get(id)?;
         let master = lock(&terminal.master);
@@ -728,6 +734,12 @@ impl Ring {
             let start = tail_start(&self.bytes, OUTPUT_KEPT);
             self.bytes.drain(..start);
         }
+    }
+
+    /// Keeps only what comes after the last line break.
+    fn clear(&mut self) {
+        let start = self.bytes.iter().rposition(|&b| b == b'\n').map_or(0, |at| at + 1);
+        self.bytes.drain(..start);
     }
 
     fn contents(&self) -> &[u8] {

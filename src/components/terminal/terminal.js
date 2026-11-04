@@ -336,7 +336,10 @@ export class AcpTerminal extends LitElement {
     if (this.platform === 'mac') {
       if (!e.metaKey) return true;
       if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
-      else if (down && key === 'k') term.clear();
+      else if (down && key === 'k') {
+        term.clear();
+        this.#link?.clear();
+      }
       else if (down && key === 'a') term.selectAll();
       if (down && (key === 'k' || key === 'a')) e.preventDefault();
       return false;

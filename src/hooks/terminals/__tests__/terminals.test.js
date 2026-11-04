@@ -247,6 +247,19 @@ describe('terminals', () => {
     expect(write.headers).to.deep.equal({ 'terminal-id': id });
   });
 
+  it('asks the backend to forget a terminal’s kept output when its view clears', async () => {
+    // Arrange
+    const { terminals } = await started();
+    const id = openTerminal('/p', '/p', 'p');
+    const link = terminals.connect(id, { cols: 80, rows: 24 }, view().sink);
+    // Act
+    link.clear();
+    await until(() => sent('terminal_clear').length > 0);
+    // Assert
+    expect(sent('terminal_clear')[0].args).to.deep.equal({ id });
+    link.dispose();
+  });
+
   it('acknowledges output once drawn, and what a view leaves undrawn when it goes', async () => {
     // Arrange
     const { terminals, ACK_EVERY } = await started();

@@ -30,6 +30,7 @@ function fakeConnect() {
     /** @type {{ cols: number, rows: number }[]} */ connects: [],
     /** @type {(string | Uint8Array)[]} */ writes: [],
     /** @type {[number, number][]} */ resizes: [],
+    clears: 0,
     /** @type {TerminalSink | null} */ sink: null,
   };
   /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
@@ -39,6 +40,7 @@ function fakeConnect() {
     return {
       write: (data) => calls.writes.push(data),
       resize: (cols, rows) => calls.resizes.push([cols, rows]),
+      clear: () => calls.clears++,
       dispose: () => {},
     };
   };
@@ -273,6 +275,18 @@ describe('acp-terminal', () => {
     expect(calls.writes).to.deep.equal(['@a.js#L1 ']);
   });
 
+  it('on a Mac, ⌘K clears the screen and what the shell keeps to replay', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    el.platform = 'mac';
+    await show(calls.sink, 'old output\r\n');
+    // Act
+    input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'k', code: 'KeyK', keyCode: 75, metaKey: true, bubbles: true, composed: true }));
+    // Assert
+    expect(calls.clears).to.equal(1);
+    await until(() => !text(el).includes('old output'));
+  });
+
   it('leaves the app’s shortcuts to the app', async () => {
     const { el, calls } = await render();
     /** @type {KeyboardEvent[]} */
@@ -378,7 +392,7 @@ describe('acp-terminal', () => {
     const connect = (id, _size, sink) => {
       const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]), disposed: false };
       links.push(link);
-      return { write: (data) => link.writes.push(data), resize: () => {}, dispose: () => (link.disposed = true) };
+      return { write: (data) => link.writes.push(data), resize: () => {}, clear: () => {}, dispose: () => (link.disposed = true) };
     };
     const el = /** @type {AcpTerminal} */ (
       await fixture(html`<acp-terminal
@@ -413,7 +427,7 @@ describe('acp-terminal', () => {
     const connect = (id, _size, sink) => {
       const link = { id, sink, writes: /** @type {(string | Uint8Array)[]} */ ([]) };
       links.push(link);
-      return { write: (data) => link.writes.push(data), resize: () => {}, dispose: () => {} };
+      return { write: (data) => link.writes.push(data), resize: () => {}, clear: () => {}, dispose: () => {} };
     };
     const el = /** @type {AcpTerminal} */ (
       await fixture(html`<acp-terminal

@@ -335,6 +335,9 @@ export const terminals = Object.freeze({
         route.size = { cols, rows };
         if ($terminals.get()[id]?.status === 'running') ipc.invoke('terminal_resize', { id, cols, rows }).catch(() => {});
       },
+      clear: () => {
+        ipc.invoke('terminal_clear', { id }).catch(() => {});
+      },
       dispose: () => {
         route.disposed = true;
         if (routes.get(id) === route) routes.delete(id);

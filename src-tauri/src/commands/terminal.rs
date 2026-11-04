@@ -112,6 +112,13 @@ pub async fn terminal_ack(window: Window, terminals: State<'_, Terminals>, id: S
     Ok(())
 }
 
+/// The user cleared the terminal: what it cleared doesn't come back on the next attach.
+#[tauri::command]
+pub async fn terminal_clear(window: Window, terminals: State<'_, Terminals>, id: String) -> Result<(), String> {
+    own(&terminals, &window, &id)?;
+    terminals.clear_output(&id)
+}
+
 #[tauri::command]
 pub async fn terminal_resize(window: Window, terminals: State<'_, Terminals>, id: String, cols: u16, rows: u16) -> Result<(), String> {
     own(&terminals, &window, &id)?;

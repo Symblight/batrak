@@ -44,6 +44,7 @@
  * @typedef {Object} TerminalLink
  * @property {(data: string | Uint8Array) => void} write Input for the shell: typed text, or raw bytes.
  * @property {(cols: number, rows: number) => void} resize
+ * @property {() => void} clear The user cleared the screen: a later view doesn't get it back.
  * @property {() => void} dispose The view is gone; the shell keeps running.
  */
 

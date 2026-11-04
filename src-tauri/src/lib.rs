@@ -172,6 +172,7 @@ pub fn run() {
             commands::terminal::terminal_attach,
             commands::terminal::terminal_write,
             commands::terminal::terminal_ack,
+            commands::terminal::terminal_clear,
             commands::terminal::terminal_resize,
             commands::terminal::terminal_busy,
             commands::terminal::terminal_close,

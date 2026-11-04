@@ -153,6 +153,21 @@ fn a_second_attach_first_gets_the_output_so_far() {
 }
 
 #[test]
+fn clearing_forgets_the_kept_output_but_the_line_being_written() {
+    let f = fixture("clear");
+    let first = f.start("t");
+    // Quotes in the middle, so the typed line's echo doesn't hold the words printed.
+    f.run("t", "printf 'se''cret\\n'; printf 'par''tial'; sleep 30");
+    first.wait_for("partial");
+    f.terminals.clear_output("t").unwrap();
+    let second = Arc::new(Recorder::default());
+    f.terminals.attach("t", second.clone()).unwrap();
+    let kept = second.text();
+    assert!(kept.contains("partial"), "{kept:?}");
+    assert!(!kept.contains("secret"), "{kept:?}");
+}
+
+#[test]
 fn kept_output_is_the_last_mebibyte_from_a_line_start() {
     let mut ring = Ring::default();
     let line = format!("{}\n", "é".repeat(50));
