@@ -160,11 +160,26 @@ describe('acp-workspace-changes-tab', () => {
     // Act
     fire(review, 'acp-changes-collapse');
     fire(review, 'acp-changes-apply');
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+    /** @type {string[]} */
+    const asked = [];
+    let answer = false;
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return answer;
+    };
+    fire(review, 'acp-changes-check-out');
+    await until(() => asked.length === 1);
+    await new Promise((r) => setTimeout(r));
+    const refused = calls.filter((c) => c.cmd === 'workspace_check_out_branch').length;
+    answer = true;
     fire(review, 'acp-changes-check-out');
     await until(() => calls.some((c) => c.cmd === 'workspace_check_out_branch'));
     // Assert
     expect(review.expanded.size).to.equal(0);
     expect(calls.find((c) => c.cmd === 'workspace_apply_locally')?.args).to.deep.equal({ id: 'w1' });
+    expect(refused, 'nothing before a yes').to.equal(0);
+    expect(asked[0]).to.match(/^Check out .*\?$/);
     expect(calls.find((c) => c.cmd === 'workspace_check_out_branch')?.args).to.deep.equal({ id: 'w1' });
     expect(leaked).to.deep.equal([]);
   });

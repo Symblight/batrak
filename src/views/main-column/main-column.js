@@ -4,6 +4,7 @@ import { tabs } from '../../hooks/tabs/tabs.js';
 import { html, nothing } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/panel/panel.js';
 import { codeEditor } from '../../components/code-view/code-editor.js';
 import { markdownView } from '../../hooks/markdown-view/markdown-view.js';
@@ -259,6 +260,10 @@ export class AcpMainColumn extends ViewElement {
     }
   };
 
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} A ref: a tab's view can hold a dialog of its own. */
+  #confirmDialogRef = createRef();
+  #confirmDialog = () => /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.#confirmDialogRef.value);
+
   render() {
     const { active, pinned } = this.#editorTabs.value;
     return html`<acp-panel>
@@ -270,6 +275,7 @@ export class AcpMainColumn extends ViewElement {
         .root=${this.#project.value?.path ?? null}
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
+        .confirmDialog=${this.#confirmDialog}
         .workspaces=${this.#workspaces.value}
         .renderContent=${this.#renderTabContent}
         @keydown=${{ handleEvent: this.#onKeydown, capture: true }}
@@ -308,7 +314,8 @@ export class AcpMainColumn extends ViewElement {
         @acp-comment-focus=${(/** @type {CustomEvent<CommentFocus>} */ e) => focusComment(e.detail)}
         @acp-comments-send=${() => sendToChat($tabComments.get())}
       ></acp-comment-bar>
-    </acp-panel>`;
+    </acp-panel>
+      <acp-confirm-dialog ${ref(this.#confirmDialogRef)}></acp-confirm-dialog>`;
   }
 }
 

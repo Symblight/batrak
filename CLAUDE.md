@@ -54,7 +54,7 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   fetches state outside the page: `localStorage` / `sessionStorage` (only in `stores/`, through
   `persistent.js`), `history` / `location`, `fetch`, the clipboard, `matchMedia`, and
   `@tauri-apps/*` (only in `hooks/ipc/ipc.js`). Nothing above it talks to these directly.
-- **Container components** — `<acp-app>`, the columns (`<acp-session-column>`,
+- **Container components** — `<acp-app>`, `<acp-toolbar-view>`, the columns (`<acp-session-column>`,
   `<acp-agent-column>`, `<acp-main-column>`, `<acp-file-column>`) and the views under them (every element in
   `src/views/`: `<acp-settings-view>`, `<acp-files-view>`, …) — are the only components that import
   from `stores/`. They subscribe (`StoreController`), call actions and hooks, and pass
@@ -69,6 +69,12 @@ Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor
   `commitFinished()`, `fillAmendMessage()`; `saveFinished()` of `<acp-agent-form>` and `<acp-agents-view>`); a lazy loader is a property (`<acp-file-tree>`'s
   `listDir`); a query is an event answered by a property (`acp-quick-open-query` → `files`,
   `acp-chat-file-query` → `fileOptions`, `acp-search` → `results`, `acp-agents-query` → `view`).
+- **Dialogs are rendered only by views.** `<acp-confirm-dialog>`, `<acp-about-dialog>`, every `acp-*-dialog`
+  and `<acp-quick-open>` hold their own `md-dialog` / `<dialog>` as components, but only an element in
+  `src/views/` places one in a template; a component or controller never does. A component that needs
+  an answer fires an intent and its view asks (`acp-changes-check-out`, answered by
+  `<acp-workspace-changes-tab>`), or, when it must await the answer, takes the view's dialog as a lazy
+  property (`<acp-tab-view>`'s `confirmDialog`).
 - A controller counts as part of its host. The data controllers (they read stores or call services)
   are hosted only by a container: `ChatSessionController`, `ChatPartsController` (`<acp-chat-view>`),
   `TabFilesController` (open tabs' files: reads, baselines, drafts, kept in memory while another

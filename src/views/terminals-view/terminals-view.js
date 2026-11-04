@@ -1,11 +1,12 @@
 import { html } from 'lit';
-import { ref } from 'lit/directives/ref.js';
+import { createRef, ref } from 'lit/directives/ref.js';
 import { app } from '../../hooks/app/app.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { $terminalFocus, $terminalTabs, $terminals, terminalFocused, terminalGroup } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/panel/panel.js';
 import '../../components/tab-view/tab-view.js';
 import '../../components/terminal-action/terminal-action.js';
@@ -79,6 +80,10 @@ export class AcpTerminalsView extends ViewElement {
     return html`<acp-terminal-view terminal-id=${id} ${ref((view) => this.#track(id, view))}></acp-terminal-view>`;
   };
 
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} A ref: a tab's view can hold a dialog of its own. */
+  #confirmDialogRef = createRef();
+  #confirmDialog = () => /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.#confirmDialogRef.value);
+
   render() {
     const { paths, active, pinned } = this.#terminalTabs.value;
     return html`<acp-panel>
@@ -89,6 +94,7 @@ export class AcpTerminalsView extends ViewElement {
         .root=${this.#project.value?.path ?? null}
         .terminals=${this.#terminals.value}
         .terminalBusy=${terminals.busy}
+        .confirmDialog=${this.#confirmDialog}
         .renderContent=${this.#renderTerminal}
         .dropTo=${tabs.editorDrop}
         @acp-tab-activate=${(/** @type {CustomEvent<{ id: string }>} */ e) => terminalGroup.activate(e.detail.id)}
@@ -99,7 +105,8 @@ export class AcpTerminalsView extends ViewElement {
         <acp-terminal-action slot="add" action="new" @acp-terminal-new=${() => this.#newTerminal()}></acp-terminal-action>
         <acp-terminal-action slot="actions" action="hide" @acp-terminal-hide=${() => terminals.hidePanel()}></acp-terminal-action>
       </acp-tab-view>
-    </acp-panel>`;
+    </acp-panel>
+      <acp-confirm-dialog ${ref(this.#confirmDialogRef)}></acp-confirm-dialog>`;
   }
 }
 

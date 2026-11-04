@@ -63,6 +63,16 @@ describe('acp-terminals-view', () => {
     expect(tabView(el).active).to.equal(tabs.terminalId(b));
   });
 
+  it('hands its tab view a dialog of its own to ask in', async () => {
+    // Arrange + Act
+    const el = await render();
+
+    // Assert
+    const dialog = el.querySelector('acp-confirm-dialog');
+    expect(dialog).to.exist;
+    expect(/** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view')).confirmDialog()).to.equal(dialog);
+  });
+
   it('adds a terminal with + and hides the panel with −, which keeps its terminals', async () => {
     // Arrange
     const first = openTerminal('/p', '/p', 'a');

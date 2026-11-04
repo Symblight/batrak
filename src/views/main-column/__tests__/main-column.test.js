@@ -43,6 +43,16 @@ describe('acp-main-column', () => {
     return { el, tabView };
   }
 
+  it('hands its tab view a dialog of its own to ask in', async () => {
+    // Arrange + Act
+    const { el } = await render();
+
+    // Assert
+    const dialog = el.querySelector('acp-confirm-dialog');
+    expect(dialog).to.exist;
+    expect(/** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view')).confirmDialog()).to.equal(dialog);
+  });
+
   it('shows the Settings, Agents, Changes and terminal tabs through their views', async () => {
     // Arrange
     openTab(tabs.terminalId('t1'));

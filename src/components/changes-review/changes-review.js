@@ -10,7 +10,6 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
-import '../confirm-dialog/confirm-dialog.js';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
 import '../change-row/change-row.js';
@@ -43,7 +42,7 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
  * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.
- * @fires acp-changes-check-out `null` With `base`: Check out branch was confirmed.
+ * @fires acp-changes-check-out `null` With `base`: Check out branch was pressed; its view asks first.
  */
 export class AcpChangesReview extends LitElement {
   static properties = {
@@ -167,20 +166,6 @@ export class AcpChangesReview extends LitElement {
     this.#emit('acp-file-open', { path: projects.abs(this.root, id) });
   }
 
-  /** The project switches branch and the session's agent stops: asked first. */
-  async #checkOut() {
-    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
-      this.renderRoot.querySelector('acp-confirm-dialog')
-    );
-    const confirmed = await dialog.confirm({
-      headline: `Check out ${this.branch}?`,
-      message: "The project switches to the session's branch, with its commits; the session's agent stops.",
-      detail: 'The session goes on once the project is on another branch again.',
-      confirmLabel: 'Check out',
-    });
-    if (confirmed) this.#emit('acp-changes-check-out', null);
-  }
-
   /**
    * @param {ChangeRow} row
    * @param {boolean} expanded Rendered as the expanded card's header, which always shows its actions.
@@ -286,7 +271,7 @@ export class AcpChangesReview extends LitElement {
               id="acp-changes-review-check-out"
               class="acp-changes-review__session-action"
               variant="text"
-              @click=${this.#checkOut}
+              @click=${() => this.#emit('acp-changes-check-out', null)}
               >Check out branch</md-button
             >
             <md-tooltip for="acp-changes-review-apply" show-delay="800">Bring the changes into the project, unstaged</md-tooltip>
@@ -325,8 +310,7 @@ export class AcpChangesReview extends LitElement {
   }
 
   render() {
-    return html`${this.#renderToolbar()}${this.#renderBody()}${this.#selectionActions.render()}
-      ${this.base !== null ? html`<acp-confirm-dialog></acp-confirm-dialog>` : nothing}`;
+    return html`${this.#renderToolbar()}${this.#renderBody()}${this.#selectionActions.render()}`;
   }
 }
 

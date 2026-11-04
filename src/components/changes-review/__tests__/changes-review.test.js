@@ -170,4 +170,19 @@ describe('acp-changes-review', () => {
     expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('3 files changed since abc1234');
     expect(root.querySelector('[title]')).to.equal(null);
   });
+
+  it('leaves asking about Check out branch to its view: fires at once, and renders no dialog', async () => {
+    // Arrange
+    const { el, root } = await render({ base: 'abc1234def', branch: 'brama/fix-1' });
+    /** @type {string[]} */
+    const fired = [];
+    el.addEventListener('acp-changes-check-out', (e) => fired.push(e.type));
+
+    // Act
+    /** @type {HTMLElement} */ (root.querySelector('#acp-changes-review-check-out')).click();
+
+    // Assert
+    expect(fired).to.deep.equal(['acp-changes-check-out']);
+    expect(root.querySelector('acp-confirm-dialog')).to.equal(null);
+  });
 });

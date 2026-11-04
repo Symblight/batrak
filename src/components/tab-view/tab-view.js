@@ -38,6 +38,7 @@ export class AcpTabView extends LitElement {
     renderContent: { attribute: false },
     terminals: { attribute: false },
     terminalBusy: { attribute: false },
+    confirmDialog: { attribute: false },
     dropTo: { attribute: false },
     dropName: { attribute: false },
     acceptsDrop: { attribute: false },
@@ -49,9 +50,10 @@ export class AcpTabView extends LitElement {
   /** @type {{ id: string, at: RevealAt } | null} Where to put the caret in a tab once it is active and loaded. */
   #pendingLine = null;
   /** @type {TabConfirmController} */
-  #confirm = new TabConfirmController(this, {
+  #confirm = new TabConfirmController({
     tabs: () => this.tabs,
     terminalBusy: () => this.terminalBusy,
+    dialog: () => this.confirmDialog(),
   });
   /** @type {TabContentController<EditorTab>} */
   #content = new TabContentController({
@@ -81,6 +83,10 @@ export class AcpTabView extends LitElement {
 
   constructor() {
     super();
+    /** @type {() => HTMLElementTagNameMap['acp-confirm-dialog']} The view's dialog, for what's asked before tabs lose work. */
+    this.confirmDialog = () => {
+      throw new Error('acp-tab-view: its view must hand it a confirmDialog');
+    };
     /** @type {readonly EditorTab[]} In strip order. */
     this.tabs = [];
     /** @type {string | null} The active tab's id. */
@@ -225,7 +231,6 @@ export class AcpTabView extends LitElement {
         <div class="acp-tab-view__actions"><slot name="actions"></slot></div>
       </div>
       ${repeat(this.tabs, (t) => t.id, (t) => this.#renderPanel(t))}
-      ${this.#confirm.render()}
     `;
   }
 }

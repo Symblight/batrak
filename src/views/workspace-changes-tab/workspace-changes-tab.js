@@ -4,6 +4,7 @@ import { $comments, $commentFocus } from '../../stores/comments/comments.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { WorkspaceChangesController } from '../../controllers/workspace-changes/WorkspaceChangesController.js';
 import '../../components/changes-review/changes-review.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
@@ -41,6 +42,22 @@ export class AcpWorkspaceChangesTab extends ViewElement {
     };
   }
 
+  /**
+   * The project switches branch and the session's agent stops: asked first.
+   * @param {string} id
+   * @param {string | null} branch
+   */
+  async #confirmCheckOut(id, branch) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+    const confirmed = await dialog.confirm({
+      headline: `Check out ${branch}?`,
+      message: "The project switches to the session's branch, with its commits; the session's agent stops.",
+      detail: 'The session goes on once the project is on another branch again.',
+      confirmLabel: 'Check out',
+    });
+    if (confirmed) workspaces.checkOut(id);
+  }
+
   render() {
     const view = this.#review.view;
     if (!view) return nothing;
@@ -66,9 +83,10 @@ export class AcpWorkspaceChangesTab extends ViewElement {
       }}
       @acp-changes-check-out=${(/** @type {Event} */ e) => {
         e.stopPropagation();
-        workspaces.checkOut(view.workspaceId);
+        void this.#confirmCheckOut(view.workspaceId, view.branch);
       }}
-    ></acp-changes-review>`;
+    ></acp-changes-review>
+      <acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }
 

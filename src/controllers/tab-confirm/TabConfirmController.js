@@ -1,10 +1,7 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
-import { html } from 'lit';
-import '../../components/confirm-dialog/confirm-dialog.js';
 
-/** @typedef {import('lit').ReactiveControllerHost & import('lit').LitElement} ReactiveElementHost */
 /** @typedef {import('../../hooks/tabs/types.js').EditorTab} EditorTab */
 /** @typedef {import('../../hooks/terminals/types.js').TerminalBusyQuery} TerminalBusyQuery */
 /** @typedef {import('../../hooks/app/types.js').ConfirmChoice} ConfirmChoice */
@@ -13,32 +10,27 @@ import '../../components/confirm-dialog/confirm-dialog.js';
  * @typedef {Object} TabConfirmConfig
  * @property {() => readonly EditorTab[]} tabs The host's tabs.
  * @property {() => TerminalBusyQuery} terminalBusy Which terminals run a program other than their shell.
+ * @property {() => HTMLElementTagNameMap['acp-confirm-dialog']} dialog The dialog they're asked in, rendered by the view above the host.
  */
 
 /**
  * The questions asked before tabs lose work: closing unsaved edits or a running program, saving
- * over a file changed on disk. The host renders `controller.render()`, the dialog they're asked in.
+ * over a file changed on disk.
  * Has no lifecycle, so it isn't added to the host as a `ReactiveController`.
  */
 export class TabConfirmController {
-  /** @type {ReactiveElementHost} */
-  #host;
   /** @type {TabConfirmConfig} */
   #config;
 
   /**
-   * @param {ReactiveElementHost} host
    * @param {TabConfirmConfig} config
    */
-  constructor(host, config) {
-    this.#host = host;
+  constructor(config) {
     this.#config = config;
   }
 
   get #dialog() {
-    return /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (
-      this.#host.renderRoot.querySelector('acp-confirm-dialog')
-    );
+    return this.#config.dialog();
   }
 
   /**
@@ -94,9 +86,5 @@ export class TabConfirmController {
       extraLabel: 'Reload',
       destructive: true,
     });
-  }
-
-  render() {
-    return html`<acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }

@@ -3,6 +3,10 @@ import { app } from '../../../hooks/app/app.js';
 import '../tab-view.js';
 import '../../code-view/code-view.js';
 import '../../markdown-view/markdown-view.js';
+import '../../confirm-dialog/confirm-dialog.js';
+
+/** The dialog a view hands its tab view. */
+const confirmDialog = async () => /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (await fixture(html`<acp-confirm-dialog></acp-confirm-dialog>`));
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
 
@@ -89,8 +93,10 @@ describe('acp-tab-view', () => {
     async function render(busy) {
       /** @type {string[][]} */
       const asked = [];
+      const dialog = await confirmDialog();
       const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
         await fixture(html`<acp-tab-view
+          .confirmDialog=${() => dialog}
           .tabs=${[terminalTab('t1')]}
           .active=${'view:terminal:t1'}
           .root=${'/p'}
@@ -107,7 +113,6 @@ describe('acp-tab-view', () => {
       el.addEventListener('acp-tab-close', (e) => closes.push(/** @type {CustomEvent} */ (e).detail));
       const strip = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (root.querySelector('acp-tab-strip'));
       const close = () => /** @type {HTMLElement} */ (strip.shadowRoot?.querySelector('.acp-tab-strip__close')).click();
-      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
       return { el, root, asked, closes, close, dialog };
     }
 
@@ -134,8 +139,9 @@ describe('acp-tab-view', () => {
 
   it('asks before closing a tab with unsaved edits; Cancel keeps it', async () => {
     const path = '/p/a.js';
+    const dialog = await confirmDialog();
     const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-      await fixture(html`<acp-tab-view .tabs=${[{ ...fileTab(path), draft: 'x' }]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
+      await fixture(html`<acp-tab-view .confirmDialog=${() => dialog} .tabs=${[{ ...fileTab(path), draft: 'x' }]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
     );
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     /** @type {unknown[]} */
@@ -144,7 +150,6 @@ describe('acp-tab-view', () => {
     const strip = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (root.querySelector('acp-tab-strip'));
     /** @type {HTMLElement} */ (strip.shadowRoot?.querySelector('.acp-tab-strip__close')).click();
     await new Promise((r) => setTimeout(r, 20));
-    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
     expect(dialog.options?.headline).to.equal('Discard unsaved changes?');
     dialog.close();
     await new Promise((r) => setTimeout(r, 20));
@@ -158,8 +163,9 @@ describe('acp-tab-view', () => {
 
     /** @param {EditorTab} tab */
     async function render(tab) {
+      const dialog = await confirmDialog();
       const el = /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (
-        await fixture(html`<acp-tab-view .tabs=${[tab]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
+        await fixture(html`<acp-tab-view .confirmDialog=${() => dialog} .tabs=${[tab]} .active=${path} .root=${'/p'} .renderContent=${codeContent}></acp-tab-view>`)
       );
       /** @type {{ type: string, detail: unknown }[]} */
       const fired = [];
@@ -167,7 +173,6 @@ describe('acp-tab-view', () => {
         el.addEventListener(type, (e) => fired.push({ type, detail: /** @type {CustomEvent} */ (e).detail }));
       }
       const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-      const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (root.querySelector('acp-confirm-dialog'));
       /** @param {string} label */
       const click = async (label) => {
         await dialog.updateComplete;
