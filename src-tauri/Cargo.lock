@@ -102,6 +102,7 @@ version = "0.1.0"
 dependencies = [
  "agent-api",
  "agent-kit",
+ "serde_json",
 ]
 
 [[package]]
@@ -110,6 +111,7 @@ version = "0.1.0"
 dependencies = [
  "agent-api",
  "agent-kit",
+ "serde_json",
 ]
 
 [[package]]

@@ -271,6 +271,12 @@ pub fn is_flag_value(value: &str) -> bool {
         && value.chars().all(|c| c.is_ascii_alphanumeric() || "._:/[]-".contains(c))
 }
 
+/// Whether a session id can be part of a path: letters, digits, `-` and `_`, as agents' ids are. An id
+/// comes from the agent's list and the session's record, so it isn't trusted as is.
+pub fn is_session_id(id: &str) -> bool {
+    !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
 /// Owned strings, for building argument lists.
 pub fn strings(args: &[&str]) -> Vec<String> {
     args.iter().map(|a| (*a).to_owned()).collect()
@@ -333,6 +339,16 @@ mod tests {
         assert_eq!(last("-v what changed?").as_deref(), Some(" -v what changed?"), "never parsed as a flag");
         assert_eq!(spec.resume("abc").1, ["--resume", "abc"]);
         assert_eq!(spec.mode(), TerminalMode { resume: true, new: true });
+    }
+
+    #[test]
+    fn a_session_id_can_never_name_another_path() {
+        for ok in ["01a1745c-19ee-7990-82a6-fb09b922c5fe", "s_1"] {
+            assert!(is_session_id(ok), "{ok}");
+        }
+        for bad in ["", "..", "../projects", "a/b", "a\\b", "a.b", "a b"] {
+            assert!(!is_session_id(bad), "{bad}");
+        }
     }
 
     #[test]

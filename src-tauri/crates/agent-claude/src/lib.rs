@@ -6,7 +6,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use agent_api::{is_flag_value, strings, Agent, CliSpec, Install, Launch, ModeRisk, SessionActivity, SubagentRecord, SubagentState, Update, ID, PROMPT};
+use agent_api::{is_flag_value, is_session_id, strings, Agent, CliSpec, Install, Launch, ModeRisk, SessionActivity, SubagentRecord, SubagentState, Update, ID, PROMPT};
 
 /// The adapter's npm package.
 pub const PACKAGE: &str = "@agentclientprotocol/claude-agent-acp";
@@ -77,17 +77,13 @@ const STALE: Duration = Duration::from_secs(5 * 60);
 
 /// Claude Code's config folder: `$CLAUDE_CONFIG_DIR`, else `~/.claude`.
 fn config_dir() -> Option<PathBuf> {
-    if let Some(dir) = std::env::var_os("CLAUDE_CONFIG_DIR").filter(|d| !d.is_empty()) {
-        return Some(PathBuf::from(dir));
-    }
-    let home = std::env::var_os(if cfg!(windows) { "USERPROFILE" } else { "HOME" })?;
-    Some(PathBuf::from(home).join(".claude"))
+    agent_kit::agent_home("CLAUDE_CONFIG_DIR", ".claude")
 }
 
 /// The subagents Claude Code recorded for session `session_id` under `config`
 /// (`projects/<project>/<session>/subagents/agent-<id>.meta.json` and `.jsonl`), oldest first.
 pub fn subagents_in(config: &Path, session_id: &str, now: SystemTime) -> Vec<SubagentRecord> {
-    if session_id.is_empty() || !session_id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_') {
+    if !is_session_id(session_id) {
         return Vec::new();
     }
     let Ok(projects) = std::fs::read_dir(config.join("projects")) else { return Vec::new() };
