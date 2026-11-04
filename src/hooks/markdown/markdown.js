@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it';
-import { blockStarts, createSlugger } from './blocks.js';
+import { blockStarts, createSlugger, lineStart } from './blocks.js';
 import { classifyUrl, resolveInProject, sanitize } from './policy.js';
 
 /** @typedef {import('./types.js').Rendered} Rendered */
@@ -186,7 +186,7 @@ function addHeadingIds(fragment) {
 function render(text, options = {}) {
   const { policy = 'reply', decorate = null } = options;
   const parser = parsers[policy];
-  const env = {};
+  const env = /** @type {{ references?: Record<string, never> }} */ ({});
   const tokens = parser.parse(text, env);
   const fragment = sanitize(parser.renderer.render(tokens, parser.options, env), policy);
 
@@ -205,8 +205,8 @@ function render(text, options = {}) {
   );
   const starts = blockStarts(tokens, text);
   const blocks = nodes.length === starts.length ? starts.map(({ line, raw }, i) => ({ line, raw, node: nodes[i] })) : [];
-  return { fragment, blocks, images, links };
+  return { fragment, blocks, images, links, references: env.references !== undefined };
 }
 
 /** Markdown for the app: one function renders it for every surface, from the policy of its source. */
-export const markdown = Object.freeze({ render });
+export const markdown = Object.freeze({ render, lineStart });

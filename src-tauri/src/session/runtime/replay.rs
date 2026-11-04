@@ -1,6 +1,7 @@
 //! A running agent's conversation, kept for a page that attaches to it later (a reload, another
-//! window): the agent's `session/load` replay and each turn since it started, as ACP updates,
-//! and the permission requests it asked.
+//! window): the agent's `session/load` replay and each turn since it started, as ACP updates
+//! (tool calls without what the page never shows, `keep_shown_fields`), and the permission
+//! requests it asked.
 //! In memory only, and only while the agent runs, like the page's own copy: a stopped session's
 //! history is its agent's replay at the next start (spec: `docs/specs/session-reattach.md`).
 
@@ -60,6 +61,18 @@ impl ReplayLog {
     }
 }
 
+/// A tool call as the page and this log keep it: what its card shows, and `content` only for the
+/// reason of a failure. Diffs, terminal output and raw input and output can be large, and nothing
+/// after `note_touched` reads them.
+pub(super) fn keep_shown_fields(tool_call: &mut Value) {
+    let failed = tool_call["status"] == "failed";
+    if let Some(fields) = tool_call.as_object_mut() {
+        fields.retain(|key, _| {
+            matches!(key.as_str(), "sessionUpdate" | "toolCallId" | "title" | "kind" | "status" | "locations") || (failed && key == "content")
+        });
+    }
+}
+
 /// The text of a text chunk (agent, user or thought).
 fn chunk_text(update: &Value) -> Option<&str> {
     let kind = update["sessionUpdate"].as_str()?;
@@ -92,5 +105,30 @@ mod tests {
         // Assert
         let texts: Vec<_> = log.updates().iter().map(|u| (u["subagentId"].as_str(), u["content"]["text"].as_str().unwrap())).collect();
         assert_eq!(texts, [(None, "Hello"), (Some("c1"), "found"), (None, "!")]);
+    }
+
+    #[test]
+    fn a_tool_update_keeps_what_the_page_shows_and_a_failures_reason() {
+        let text = json!([{ "type": "content", "content": { "type": "text", "text": "boom" } }]);
+        let full = |status: &str| {
+            json!({
+                "sessionUpdate": "tool_call_update", "toolCallId": "t1", "title": "Run", "kind": "execute", "status": status,
+                "locations": [{ "path": "a.js" }], "content": text, "rawInput": { "big": 1 }, "rawOutput": { "big": 2 },
+                "_meta": { "big": 3 },
+            })
+        };
+        let shown = |status: &str| {
+            json!({ "sessionUpdate": "tool_call_update", "toolCallId": "t1", "title": "Run", "kind": "execute", "status": status, "locations": [{ "path": "a.js" }] })
+        };
+        let mut failed_shown = shown("failed");
+        failed_shown["content"] = text.clone();
+        for (status, expected) in [("completed", shown("completed")), ("in_progress", shown("in_progress")), ("failed", failed_shown)] {
+            // Arrange
+            let mut update = full(status);
+            // Act
+            keep_shown_fields(&mut update);
+            // Assert
+            assert_eq!(update, expected, "{status}");
+        }
     }
 }

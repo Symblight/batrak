@@ -2,7 +2,7 @@ import { app } from '../app/app.js';
 import { sessionCancel, sessionSendPrompt, sessionSetConfigOption } from './commands.js';
 import { MessageBuilder, subagentCardData } from './message-builder.js';
 import { promptOf } from './prompt.js';
-import { subagentConversationId, subagentIndicator, subagentLabel } from './rules.js';
+import { stopNotice, subagentConversationId, subagentIndicator, subagentLabel } from './rules.js';
 import { returnPrompt } from '../../stores/chat/chat.js';
 import { applyAgentOptions } from '../../stores/composer/composer.js';
 import { setContextUsage } from '../../stores/context-usage/context-usage.js';
@@ -365,14 +365,17 @@ export function handleSessionEvent(event) {
     case 'activity':
       touchSession(sessionId, event.payload.at);
       return;
-    case 'turn-end':
+    case 'turn-end': {
       loaded.add(sessionId);
       touchSession(sessionId, event.payload.at);
       stopped.delete(sessionId);
       clearPermissionRequests(sessionId);
       if ($sessionNotices.get()[sessionId]?.kind === 'overlap') dismissSessionNotice(sessionId);
+      const message = stopNotice(event.payload.stopReason);
+      if (message && !$sessionNotices.get()[sessionId]) setSessionNotice(sessionId, { kind: 'info', message });
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
       return;
+    }
     case 'session':
       // The agent named it (`session_info_update`), or its CLI opened, closed or changed activity.
       upsertSession(event.payload);
@@ -428,6 +431,9 @@ export function handleSessionEvent(event) {
     }
     case 'error':
       if (event.payload.turn) {
+        // Started: its agent's history was already in, so a later load would repeat what's shown.
+        // Not started: the failed start may have shown none of it yet.
+        if (turns.get(sessionId)?.started) loaded.add(sessionId);
         touchSession(sessionId, event.payload.at);
         // A turn the user stopped can fail rather than end `cancelled`: its late updates are over too.
         stopped.delete(sessionId);

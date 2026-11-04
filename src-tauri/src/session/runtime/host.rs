@@ -134,6 +134,7 @@ impl ClientHost for SessionHost {
             }
             if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
                 self.note_touched(&state, &update);
+                replay::keep_shown_fields(&mut update);
             }
             update["subagentId"] = Value::String(subagent);
             state.emit("update", update);
@@ -151,6 +152,7 @@ impl ClientHost for SessionHost {
         }
         if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
             self.note_touched(&state, &update);
+            replay::keep_shown_fields(&mut update);
         }
         let output = self.is_output(&update);
         state.emit("update", update);
@@ -167,7 +169,9 @@ impl ClientHost for SessionHost {
     fn on_permission_request(&self, request: PermissionRequest) {
         let Some(state) = self.state.upgrade() else { return };
         self.stamp(&state);
-        let mut payload = json!({ "requestId": request.request_id, "toolCall": request.tool_call, "options": request.options });
+        let mut tool_call = request.tool_call;
+        replay::keep_shown_fields(&mut tool_call);
+        let mut payload = json!({ "requestId": request.request_id, "toolCall": tool_call, "options": request.options });
         if let Some(subagent) = request.subagent {
             payload["subagentId"] = Value::String(subagent);
         }

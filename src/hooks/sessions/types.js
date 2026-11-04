@@ -71,8 +71,8 @@
  */
 
 /**
- * ACP content block, as far as the chat reads it.
- * @typedef {{ type: 'text', text: string } | { type: string, text?: string, uri?: string, name?: string }} AcpContent
+ * ACP content block, as far as the chat reads it; a tool call's holds another in `content`.
+ * @typedef {{ type: 'text', text: string } | { type: string, text?: string, uri?: string, name?: string, content?: AcpContent }} AcpContent
  */
 
 /**

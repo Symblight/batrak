@@ -22,6 +22,9 @@ import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js
  * @property {() => ChxAttachments} attachments The composer's attachments, which draw a sent file's card.
  */
 
+/** One value for a part with none, so that re-rendering its message doesn't update its element. */
+const NONE = /** @type {never[]} */ ([]);
+
 /** Chip template ids: file chips carry the path in `data-path`, folder chips also `data-kind="folder"`. */
 export const FILE_CHIP_TEMPLATE = 'acp-chat-file-chip';
 /** Template id of a slash command's chip. */
@@ -266,7 +269,7 @@ export class ChatPartsController {
     },
     plan: (part, previous) => {
       const plan = /** @type {ChxPlan} */ (previous ?? document.createElement('chx-plan'));
-      plan.entries = part.entries ?? [];
+      plan.entries = part.entries ?? NONE;
       return plan;
     },
     tool_call: (part, previous) => {
@@ -276,7 +279,7 @@ export class ChatPartsController {
       call.label = part.label ?? '';
       call.kind = part.kind ?? 'other';
       call.status = part.status ?? 'pending';
-      call.locations = part.locations ?? [];
+      call.locations = part.locations ?? NONE;
       call.error = part.error ?? '';
       // A subagent's card (`subagentCardData()`): a click opens its chat.
       const subagentId = part.data?.subagentId;

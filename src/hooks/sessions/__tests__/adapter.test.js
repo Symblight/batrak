@@ -203,6 +203,26 @@ describe('acp-adapter', () => {
     expect($sessionNotices.get()[id] ?? null).to.equal(null);
   });
 
+  it('says why a turn stopped short, and nothing for one that ended or was stopped by you', () => {
+    const cases = [
+      { stopReason: 'max_tokens', message: 'The reply stopped: the agent reached its token limit.' },
+      { stopReason: 'max_turn_requests', message: 'The reply stopped: the agent reached its limit of requests for one turn.' },
+      { stopReason: 'refusal', message: 'The agent refused to continue.' },
+      { stopReason: 'end_turn', message: null },
+      { stopReason: 'cancelled', message: null },
+    ];
+    for (const { stopReason, message } of cases) {
+      const id = newSession('/p');
+      startSession(id, { title: 'T', agentId: 'fake', config: {} });
+
+      handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-end', payload: { stopReason, at: AT } });
+      handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'idle' } });
+
+      const expected = message === null ? null : { kind: 'info', message };
+      expect($sessionNotices.get()[id] ?? null, stopReason).to.deep.equal(expected);
+    }
+  });
+
   it('puts back the notice an overlap covered once the turn ends', () => {
     const id = newSession('/p');
     startSession(id, { title: 'T', agentId: 'fake', config: {} });

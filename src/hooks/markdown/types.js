@@ -35,6 +35,7 @@ export {};
  * @property {RenderedBlock[]} blocks Top-level blocks and their start lines; empty when the nodes can't be matched to the blocks.
  * @property {RenderedImage[]} images
  * @property {Map<HTMLAnchorElement, LinkTarget>} links
+ * @property {boolean} references The text defines reference links, which blocks anywhere in it may use.
  */
 
 /**

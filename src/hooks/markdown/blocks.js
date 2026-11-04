@@ -23,6 +23,17 @@ export function blockStarts(tokens, text) {
 }
 
 /**
+ * Where a line starts in the text.
+ * @param {string} text
+ * @param {number} line 1-based.
+ */
+export function lineStart(text, line) {
+  const eol = /\r\n|\r|\n/g;
+  for (let n = 1; n < line; n++) if (!eol.exec(text)) return text.length;
+  return eol.lastIndex;
+}
+
+/**
  * A heading's id the way GitHub forms it: lowercase, punctuation dropped, spaces to `-`.
  * @param {string} text
  */

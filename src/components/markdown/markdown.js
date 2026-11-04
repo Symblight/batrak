@@ -16,7 +16,7 @@ import styles from './markdown.css?inline';
 
 /**
  * @tag acp-markdown
- * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams.
+ * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams, only its last block.
  * @fires acp-link-open `{ url }` A web or mail link, for the browser.
  * @fires acp-file-open `{ path }` A link to a file in the project (document).
  * @fires acp-file-reveal `{ path, expand: true }` A link to a folder in the project (document).
@@ -44,6 +44,8 @@ export class AcpMarkdown extends LitElement {
   #painted = null;
   /** @type {Block[]} The body's top-level blocks. */
   #blocks = [];
+  /** The last paint rendered only the end of the text, so what it can't see wasn't applied (reference links). */
+  #fromTail = false;
   /** @type {Map<HTMLAnchorElement, LinkTarget>} Where the links in the body lead. */
   #links = new Map();
   /** @type {Map<HTMLImageElement, string>} The object URL of each image shown, freed with its image. */
@@ -96,7 +98,8 @@ export class AcpMarkdown extends LitElement {
   }
 
   updated() {
-    if (this.#painted === this.text || this.#frame) return;
+    const finished = this.#fromTail && !this.streaming;
+    if ((this.#painted === this.text && !finished) || this.#frame) return;
     // The first paint is immediate, so a restored message doesn't flash empty.
     if (this.#painted === null) this.#paint();
     else this.#frame = requestAnimationFrame(() => this.#paint());
@@ -106,11 +109,14 @@ export class AcpMarkdown extends LitElement {
     this.#frame = 0;
     const body = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-markdown__body'));
     if (!body) return;
+    const settled = this.#settledBlocks();
+    const line = settled ? this.#blocks[settled].line : 1;
+    const source = settled ? this.text.slice(markdown.lineStart(this.text, line)) : this.text;
     this.#painted = this.text;
     /** @type {import('../../hooks/markdown/types.js').Rendered} */
     let rendered;
     try {
-      rendered = markdown.render(this.text, {
+      rendered = markdown.render(source, {
         policy: this.policy,
         baseDir: this.baseDir,
         root: this.root,
@@ -120,14 +126,27 @@ export class AcpMarkdown extends LitElement {
       this.#showError(body, error);
       return;
     }
-    const { fragment, blocks, images, links } = rendered;
-    const kept = this.#show(body, fragment, blocks);
+    const { fragment, images, links, references } = rendered;
+    // Blocks rendered from the end alone may use a reference defined before it.
+    if (!settled && this.#fromTail && references) this.#blocks = [];
+    this.#fromTail = settled > 0;
+    const blocks = rendered.blocks.map((block) => ({ ...block, line: block.line + line - 1 }));
+    const kept = this.#show(body, fragment, blocks, settled);
     // Links of the blocks that stayed are still in the body; the rest are the new ones.
     this.#links = new Map([...this.#links, ...links].filter(([link]) => link.isConnected));
     // A kept block keeps its node, but sits where the text now has it.
-    this.#blocks = blocks.map((block, i) => (i < kept ? { ...block, node: this.#blocks[i].node } : block));
+    this.#blocks = [...this.#blocks.slice(0, settled), ...blocks.map((block, i) => (i < kept ? { ...block, node: this.#blocks[settled + i].node } : block))];
     this.#revokeUnused();
     for (const { node, path } of images) if (node.isConnected) this.#loadInto(node, path);
+  }
+
+  /**
+   * How many leading blocks a paint can leave alone without rendering them: while text only grows
+   * at its end, all but the last, which nothing after it can change.
+   */
+  #settledBlocks() {
+    if (!this.streaming || this.#painted === null || !this.text.startsWith(this.#painted)) return 0;
+    return Math.max(0, this.#blocks.length - 1);
   }
 
   /**
@@ -153,23 +172,26 @@ export class AcpMarkdown extends LitElement {
    * definition changed further down is not redone until its own block is.
    * @param {HTMLElement} body
    * @param {DocumentFragment} fragment
-   * @param {Block[]} blocks
-   * @returns {number} How many leading blocks were kept.
+   * @param {Block[]} blocks What the fragment holds.
+   * @param {number} settled How many leading blocks of the body it doesn't include.
+   * @returns {number} How many of its leading blocks were kept.
    */
-  #show(body, fragment, blocks) {
-    const before = this.#blocks;
+  #show(body, fragment, blocks, settled) {
+    const before = this.#blocks.slice(settled);
     let kept = 0;
     while (kept < before.length && kept < blocks.length && before[kept].raw === blocks[kept].raw) kept++;
-    if (kept === 0) {
+    const last = kept ? before[kept - 1].node : this.#blocks[settled - 1]?.node;
+    if (!last) {
       body.replaceChildren(fragment);
       return 0;
     }
-    const last = before[kept - 1].node;
     while (last.nextSibling) last.nextSibling.remove();
-    // The new fragment starts with the blocks already shown.
-    const boundary = blocks[kept - 1].node;
-    while (fragment.firstChild && fragment.firstChild !== boundary) fragment.firstChild.remove();
-    fragment.removeChild(boundary);
+    if (kept) {
+      // The new fragment starts with the blocks already shown.
+      const boundary = blocks[kept - 1].node;
+      while (fragment.firstChild && fragment.firstChild !== boundary) fragment.firstChild.remove();
+      fragment.removeChild(boundary);
+    }
     body.append(fragment);
     return kept;
   }

@@ -132,13 +132,15 @@ in the chat element and the agent, which replays them (`session/load`) when it s
 - **Frontend**: each session's events come over a Tauri channel (`{ sessionId, seq, kind, payload }`,
   `update` = raw ACP `SessionUpdate`) into `handleSessionEvent` (`hooks/sessions/adapter.js`), which
   maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
-  or replays them through `subscribe` outside a turn (`session/load`). Permission requests and
+  or replays them through `subscribe` outside a turn (`session/load`). Tool calls reach the page and the
+  reattach log with only what a card shows (`keep_shown_fields`, `session/runtime/replay.rs`), plus `content` of a
+  `failed` one, whose text is its error; a turn that stops short (`stopNotice()`) leaves an info notice. Permission requests and
   notices live in `stores/session-runtime/session-runtime.js`, shown by `<acp-session-banner>` (a queued
   turn's names the session it waits for, with Show session, and says when that one waits for
   your answer); `$agentList`
   (the `agents` hook, `hooks/agents/agents.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (`markdown.render()` with the `reply` policy: markdown-it + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
-  width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams. Parts rise in
+  width (`chx-message:not([own])` in `shadow.css`), with a caret while it streams (only the last block is rendered again per frame; streaming's end renders the whole text once). Parts rise in
   while their row is busy (`chx-message-row[aria-busy='true']` in `shadow.css`, CSS only: history and
   rows scrolled back don't replay; opacity and transform only, so row heights hold). A thought is `<acp-part-thinking>`: ACP never
   ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live

@@ -224,6 +224,42 @@ describe('acp-markdown', () => {
       expect(body(el).children).to.have.length(3);
       expect(body(el).children[1].textContent).to.equal('second paragraph');
     });
+
+    it('while it streams, renders only the block still growing', async () => {
+      const el = await fixture(html`<acp-markdown streaming .text=${'one\n\ntwo\n\nthr'}></acp-markdown>`);
+      /** @type {string[]} */
+      const rendered = [];
+      el.decorate = (/** @type {DocumentFragment} */ root) => rendered.push((root.textContent ?? '').trim());
+
+      await show(el, 'one\n\ntwo\n\nthree');
+
+      expect(rendered).to.deep.equal(['three']);
+    });
+
+    it('streamed in pieces, ends up as the same text rendered whole', async () => {
+      const cases = {
+        'a fence, a list and a table': 'intro\n\n```js\nlet a = 1;\n\nlet b = 2;\n```\n\n- one\n\n  still one\n- two\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\nend',
+        'a heading underlined later': 'first\n\nSecond\n===\n\nthird',
+        'a link defined before it is used': '[ref]: https://example.com\n\nsome text\n\nsee [the page][ref]\n\nend',
+      };
+      for (const [name, text] of Object.entries(cases)) {
+        const whole = await fixture(html`<acp-markdown .text=${text}></acp-markdown>`);
+        const el = await fixture(html`<acp-markdown streaming .text=${text.slice(0, 4)}></acp-markdown>`);
+
+        for (let end = 9; end < text.length; end += 5) await show(el, text.slice(0, end));
+        el.text = text;
+        el.streaming = false;
+        await el.updateComplete;
+        await frame();
+
+        const blocks = (/** @type {AcpMarkdown} */ m) => [...body(m).children].map((c) => c.outerHTML);
+        expect(blocks(el), name).to.deep.equal(blocks(whole));
+        const lines = (/** @type {AcpMarkdown} */ m) => m.blocks.map((b) => b.line);
+        expect(lines(el), `${name}: lines`).to.deep.equal(lines(whole));
+        const code = (/** @type {AcpMarkdown} */ m) => [...body(m).querySelectorAll('chx-code-block')].map((b) => /** @type {import('@symblight/chat/composer').ChxCodeBlock} */ (b).code);
+        expect(code(el), `${name}: code`).to.deep.equal(code(whole));
+      }
+    });
   });
 
   describe('a document', () => {

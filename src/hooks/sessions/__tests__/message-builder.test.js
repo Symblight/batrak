@@ -58,6 +58,20 @@ describe('MessageBuilder', () => {
     }
   });
 
+  it('tells why a tool call failed from its text, and nothing for any other status or content', () => {
+    const b = new MessageBuilder('s1', 'agent');
+    const content = [
+      { type: 'content', content: { type: 'text', text: 'boom' } },
+      { type: 'diff', path: 'a.js', newText: 'x' },
+      { type: 'content', content: { type: 'text', text: 'again' } },
+    ];
+    const delta = (/** @type {string} */ status) => shape(b.chunks(update({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status, content }))[0]).delta;
+
+    expect(delta('failed')?.error).to.equal('boom\nagain');
+    expect(delta('completed')?.error).to.equal(undefined);
+    expect(shape(b.chunks(update({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'failed' }))[0]).delta?.error, 'no text: no reason').to.equal(undefined);
+  });
+
   it('ends a thought when anything else arrives, timing it only when live', () => {
     for (const live of [true, false]) {
       const b = new MessageBuilder('s1', 'agent', { live });

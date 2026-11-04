@@ -259,3 +259,22 @@ export function subagentLabel({ description, title }) {
 export function subagentCardId(subagentId) {
   return `subagent-${subagentId}`;
 }
+
+/**
+ * What to say about a turn that stopped short, from its ACP stop reason; `null` for one that ended
+ * or that the user stopped.
+ * @param {string} stopReason
+ * @returns {string | null}
+ */
+export function stopNotice(stopReason) {
+  switch (stopReason) {
+    case 'max_tokens':
+      return 'The reply stopped: the agent reached its token limit.';
+    case 'max_turn_requests':
+      return 'The reply stopped: the agent reached its limit of requests for one turn.';
+    case 'refusal':
+      return 'The agent refused to continue.';
+    default:
+      return null;
+  }
+}

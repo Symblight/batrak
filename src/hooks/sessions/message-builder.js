@@ -11,11 +11,12 @@ import { subagentCardId } from './rules.js';
 
 /**
  * Turns ACP session updates into `<chx-chat>` chunks for one message. Consecutive text (or thought)
- * chunks grow one part; a tool call or plan in between starts the next text part, so the reply
- * reads in the order the agent worked. Tool calls are keyed by ACP's `toolCallId`.
+ * chunks grow one part; a new tool call or plan in between starts the next text part, so the reply
+ * reads in the order the agent worked. Tool calls are keyed by ACP's `toolCallId`; an update of one
+ * already shown, which can arrive at any moment, splits nothing.
  *
- * ACP never says a thought is over: any other update ends it (`part-end`), and a live one carries
- * when it started and ended in `data` (`startedAt`, `endedAt`).
+ * ACP never says a thought is over: any other update but that ends it (`part-end`), and a live one
+ * carries when it started and ended in `data` (`startedAt`, `endedAt`).
  */
 export class MessageBuilder {
   messageId = crypto.randomUUID();
@@ -25,6 +26,8 @@ export class MessageBuilder {
   #parts = 0;
   /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
   #thought = null;
+  /** @type {Set<string>} Tool calls with a card: a later update changes it in place. */
+  #tools = new Set();
 
   /**
    * @param {string} sessionId
@@ -85,8 +88,9 @@ export class MessageBuilder {
    */
   chunks(update) {
     if (update.sessionUpdate === 'agent_thought_chunk') return this.#thoughtChunks(update);
+    const inPlace = this.#tools.has(update.toolCallId ?? '');
     const chunks = this.#chunks(update);
-    return chunks.length ? [...this.#endThought(), ...chunks] : chunks;
+    return chunks.length && !inPlace ? [...this.#endThought(), ...chunks] : chunks;
   }
 
   /**
@@ -129,7 +133,10 @@ export class MessageBuilder {
       case 'tool_call':
       case 'tool_call_update': {
         if (!update.toolCallId) return [];
-        this.#lastKind = 'tool';
+        if (!this.#tools.has(update.toolCallId)) {
+          this.#tools.add(update.toolCallId);
+          this.#lastKind = 'tool';
+        }
         return [this.chunk(this.toolPartId(update.toolCallId), 'tool_call', this.#toolDelta(update))];
       }
       case 'plan':
@@ -151,6 +158,8 @@ export class MessageBuilder {
     if (update.title) delta.label = update.title;
     if (update.kind) delta.kind = update.kind;
     if (update.status) delta.status = update.status;
+    const reason = update.status === 'failed' ? failureOf(update) : '';
+    if (reason) delta.error = reason;
     if (update.locations) {
       delta.locations = update.locations.map(({ path, line }) => ({
         path: relativeTo(folderOf(this.sessionId), path),
@@ -182,6 +191,15 @@ export function subagentCardData(subagentId) {
 function textOf(update) {
   const content = update.content;
   return !Array.isArray(content) && content?.type === 'text' ? (content.text ?? '') : '';
+}
+
+/**
+ * Why a tool call failed: the text in its content.
+ * @param {AcpSessionUpdate} update
+ */
+function failureOf(update) {
+  const blocks = Array.isArray(update.content) ? update.content : [];
+  return blocks.map((block) => ('content' in block && block.content?.type === 'text' ? block.content.text : '')).filter(Boolean).join('\n');
 }
 
 /**
