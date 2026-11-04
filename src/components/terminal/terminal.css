@@ -15,9 +15,6 @@
   min-height: 0;
   padding: var(--acp-space-1) var(--acp-space-2);
 }
-.acp-terminal__menu-icon {
-  font-size: var(--acp-icon-size-sm);
-}
 .acp-terminal__find {
   position: absolute;
   inset-block-start: var(--acp-space-2);

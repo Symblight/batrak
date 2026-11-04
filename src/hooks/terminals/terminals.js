@@ -383,7 +383,7 @@ export const terminals = Object.freeze({
 
   close,
 
-  /** @returns {Promise<string>} What a paste asked for from a terminal's menu or keys pastes. */
+  /** @returns {Promise<string>} What a paste asked for by a terminal's keys pastes. */
   readClipboard() {
     return ipc.readClipboard();
   },
