@@ -2,6 +2,7 @@ import { LitElement, html, nothing } from 'lit';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
+import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
 import '@symblight/wc-material/button';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
@@ -161,11 +162,15 @@ export class AcpTerminal extends LitElement {
       macOptionIsMeta: false,
       theme: this.#theme(),
       linkHandler: { activate: this.#openLink },
+      // The Unicode addon registers through xterm's proposed API.
+      allowProposedApi: true,
     });
     this.#term = term;
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
     term.loadAddon(new WebLinksAddon(this.#openLink));
+    term.loadAddon(new Unicode11Addon());
+    term.unicode.activeVersion = '11';
     term.attachCustomKeyEventHandler(this.#onKey);
     term.onData((data) => this.#link?.write(data));
     // Bytes in a string (mouse reports past column 95), not text.

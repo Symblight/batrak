@@ -228,6 +228,15 @@ describe('acp-terminal', () => {
     expect(el.shadowRoot?.activeElement).to.equal(input(el));
   });
 
+  it('gives a wide character two cells, where programs expect it', async () => {
+    // Arrange
+    const { calls } = await render();
+    // Act: what's drawn, then the program asks where the cursor is
+    await show(calls.sink, '😀\x1b[6n');
+    // Assert
+    expect(calls.writes).to.deep.equal(['\x1b[1;3R']);
+  });
+
   it('keeps a paste until its shell is connected', async () => {
     const { calls, connect } = fakeConnect();
     const el = /** @type {AcpTerminal} */ (
