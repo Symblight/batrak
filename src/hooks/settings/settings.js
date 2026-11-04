@@ -1,6 +1,6 @@
 import { generateTheme } from '@symblight/md-colors/client';
 import { $systemFonts } from '../../stores/fonts/fonts.js';
-import { $accent, $appearance, $editorFont, $editorFontSize } from '../../stores/settings/settings.js';
+import { $appearance, $editorFont, $editorFontSize, $themeAccent } from '../../stores/settings/settings.js';
 import { DEFAULT_SETTINGS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS, TERMINAL_PALETTE, normalizeHex, withTerminalColor } from '../../stores/settings/rules.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
@@ -25,11 +25,11 @@ const APP_FONTS_WAIT = 1000;
 /** @type {Promise<void> | null} */
 let fontsLoading = null;
 
-/** Generates the MD3 palette from the accent for the chosen scheme. */
+/** Generates the MD3 palette from the shown project's accent, else the global one, for the chosen scheme. */
 function applyTheme() {
   const appearance = $appearance.get();
   const scheme = appearance === 'system' ? (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : appearance;
-  generateTheme({ sourceColor: $accent.get(), scheme });
+  generateTheme({ sourceColor: $themeAccent.get(), scheme });
   const root = document.documentElement;
   root.dataset.theme = scheme;
   // Native controls and scrollbars follow the chosen scheme, not the OS one.
@@ -86,7 +86,7 @@ export const settings = Object.freeze({
   /** Applies the palette from `$settings` and regenerates it when they or the OS scheme change. */
   syncTheme() {
     $appearance.listen(applyTheme);
-    $accent.listen(applyTheme);
+    $themeAccent.listen(applyTheme);
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', applyTheme);
     applyTheme();
   },

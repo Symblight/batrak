@@ -59,7 +59,7 @@ paths:
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, the code editor's font, `markdownDefaultView` (`raw` / `split` / `preview`: how a markdown file never set
   opens; no control in Settings, so `raw` unless the stored value is edited) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
-  `prefers-color-scheme`, since Appearance can override the OS). Typedefs for each are in
+  `prefers-color-scheme`, since Appearance can override the OS), `$projectAccents` (`brama:settings:project-accent:<project path>`, shared, one item per project through `setKey()`: `{ color, enabled }`, a project's own accent, which `$themeAccent` puts over the global one while `enabled`; switched off it keeps its color, and Theme's Reset forgets only the shown project's). Typedefs for each are in
   `src/hooks/settings/types.js`.
 
 ## Markdown view

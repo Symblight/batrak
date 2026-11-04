@@ -49,6 +49,13 @@
  */
 
 /**
+ * A project's own accent.
+ * @typedef {Object} ProjectAccent
+ * @property {string} color `#RRGGBB`, kept while switched off.
+ * @property {boolean} enabled It is used over the global accent.
+ */
+
+/**
  * App preferences, shared by every window.
  * @typedef {Object} Settings
  * @property {Appearance} appearance `system` follows the OS.

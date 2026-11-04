@@ -93,6 +93,92 @@ describe('acp-settings', () => {
     expect([...root.querySelectorAll('md-button')].some((b) => b.textContent?.includes('Edit agents.json'))).to.equal(false);
   });
 
+  describe('the project accent', () => {
+    /** @param {import('../../../hooks/settings/types.js').ProjectAccent | null} projectAccent */
+    async function renderProject(projectAccent) {
+      const el = /** @type {AcpSettings} */ (
+        await fixture(html`<acp-settings .settings=${settingsHook.defaults} .fonts=${[]} .projectName=${'Brama'} .projectAccent=${projectAccent}></acp-settings>`)
+      );
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      /** @type {(string | boolean)[]} */
+      const asked = [];
+      el.addEventListener('acp-settings-project-accent', (e) => asked.push(/** @type {CustomEvent<{ accent: string }>} */ (e).detail.accent));
+      el.addEventListener('acp-settings-project-accent-enabled', (e) => asked.push(/** @type {CustomEvent<{ enabled: boolean }>} */ (e).detail.enabled));
+      const toggle = () => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_project-accent'));
+      const field = () => /** @type {HTMLElementTagNameMap['md-text-field'] | null} */ (root.querySelector('md-text-field[label="Project accent color"]'));
+      return { el, root, asked, toggle, field };
+    }
+
+    it('is offered only with a project open', async () => {
+      // Arrange + Act
+      const { root } = await render();
+      // Assert
+      expect(root.querySelector('md-text-field[label="Project accent color"]')).to.equal(null);
+      expect(root.textContent).not.to.include('Own accent color');
+    });
+
+    it('asks to switch on and off, showing the color field only while on', async () => {
+      // Arrange
+      const { el, asked, toggle, field } = await renderProject({ color: '#AA00BB', enabled: false });
+      expect(field(), 'off').to.equal(null);
+      // Act
+      toggle().click();
+      await rendered(el);
+      // Assert
+      expect(asked).to.deep.equal([true]);
+      // Act
+      el.projectAccent = { color: '#AA00BB', enabled: true };
+      await rendered(el);
+      // Assert
+      expect(field()?.value).to.equal('#AA00BB');
+      // Act
+      toggle().click();
+      // Assert
+      expect(asked).to.deep.equal([true, false]);
+    });
+
+    it('asks for a color typed, and flags one that is not, leaving the global field alone', async () => {
+      // Arrange
+      const { el, asked, field, root } = await renderProject({ color: '#AA00BB', enabled: true });
+      const input = /** @type {HTMLElementTagNameMap['md-text-field']} */ (field());
+      // Act
+      input.value = 'nope';
+      input.dispatchEvent(new Event('input', { bubbles: true, composed: true }));
+      await rendered(el);
+      // Assert
+      expect(asked).to.deep.equal(['nope']);
+      expect(input.hasAttribute('error')).to.equal(true);
+      expect(/** @type {HTMLElementTagNameMap['md-text-field']} */ (root.querySelector('md-text-field[label="Accent color"]')).hasAttribute('error')).to.equal(false);
+    });
+
+    it('disables the global accent while the project has its own', async () => {
+      // Arrange
+      const { el, root } = await renderProject({ color: '#AA00BB', enabled: true });
+      const field = /** @type {HTMLElementTagNameMap['md-text-field']} */ (root.querySelector('md-text-field[label="Accent color"]'));
+      const swatch = /** @type {HTMLInputElement} */ (field.querySelector('.acp-settings__swatch'));
+      const pick = /** @type {HTMLElementTagNameMap['md-icon-button']} */ (field.querySelector('.acp-settings__icon-button'));
+      // Assert
+      expect([field.disabled, swatch.disabled, pick.disabled]).to.deep.equal([true, true, true]);
+      // Act
+      el.projectAccent = { color: '#AA00BB', enabled: false };
+      await rendered(el);
+      // Assert
+      expect([field.disabled, swatch.disabled, pick.disabled]).to.deep.equal([false, false, false]);
+    });
+
+    it('lets the Theme section reset while it is set', async () => {
+      // Arrange
+      const { el, root } = await renderProject(null);
+      const reset = () => /** @type {HTMLElementTagNameMap['md-button']} */ (root.querySelector('[data-section="theme"] .acp-settings__header-button'));
+      expect(reset().disabled, 'all default').to.equal(true);
+      // Act
+      el.projectAccent = { color: '#AA00BB', enabled: false };
+      await rendered(el);
+      // Assert
+      expect(reset().disabled, 'a color is kept').to.equal(false);
+    });
+  });
+
   describe('markdown', () => {
     /** @param {ShadowRoot} root */
     const toggle = (root) => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_markdown-sync'));

@@ -1,7 +1,8 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $systemFonts } from '../../../stores/fonts/fonts.js';
-import { $settings } from '../../../stores/settings/settings.js';
+import { $project } from '../../../stores/project/project.js';
+import { $projectAccent, $settings, clearProjectAccent } from '../../../stores/settings/settings.js';
 import { $settingsReveal, activateTab, closeTab, openAgents, openSettings, SETTINGS_TAB_ID, AGENTS_TAB_ID } from '../../../stores/editor/editor.js';
 import { settings as settingsHook } from '../../../hooks/settings/settings.js';
 import '../settings-view.js';
@@ -54,6 +55,27 @@ describe('acp-settings-view', () => {
   function fire(from, type, detail) {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
+
+  it('gives the settings the project shown, and sets its accent', async () => {
+    // Arrange
+    $project.set({ path: '/view-project', name: 'Brama', rootId: null });
+    const el = /** @type {AcpSettingsView} */ (await fixture(html`<acp-settings-view></acp-settings-view>`));
+    const settings = /** @type {HTMLElementTagNameMap['acp-settings']} */ (el.querySelector('acp-settings'));
+    expect(settings.projectName).to.equal('Brama');
+    // Act
+    settings.dispatchEvent(new CustomEvent('acp-settings-project-accent', { detail: { accent: '#AA00BB' }, bubbles: true, composed: true }));
+    await settings.updateComplete;
+    // Assert
+    expect(settings.projectAccent).to.deep.equal({ color: '#AA00BB', enabled: true });
+    // Act
+    settings.dispatchEvent(new CustomEvent('acp-settings-project-accent-enabled', { detail: { enabled: false }, bubbles: true, composed: true }));
+    await settings.updateComplete;
+    // Assert
+    expect($projectAccent.get()).to.deep.equal({ color: '#AA00BB', enabled: false });
+    // Clean up
+    clearProjectAccent();
+    $project.set(null);
+  });
 
   it('shows the settings, the fonts and the section to reveal, and clears the reveal once shown', async () => {
     // Arrange

@@ -209,6 +209,10 @@
     border: none;
     border-radius: 50%;
   }
+  &:disabled {
+    cursor: default;
+    opacity: 0.38;
+  }
   &:focus-visible {
     outline: 2px solid var(--acp-color-secondary);
     outline-offset: 2px;

@@ -1,5 +1,6 @@
 import { expect } from '@esm-bundle/chai';
-import { $settings, $terminalOptionMeta, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalOptionMeta, setTerminalTheme } from '../settings.js';
+import { $project } from '../../project/project.js';
+import { $projectAccent, $settings, clearProjectAccent, setProjectAccentEnabled, $terminalOptionMeta, $themeAccent, resetSection, setAccent, setProjectAccent, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalOptionMeta, setTerminalTheme } from '../settings.js';
 import { DEFAULT_SETTINGS, FONT_SIZE_MAX, TERMINAL_PALETTE } from '../rules.js';
 
 describe('settings store: markdown', () => {
@@ -95,5 +96,81 @@ describe('settings store: markdown', () => {
   it('sets the scroll sync', () => {
     setMarkdownScrollSync(false);
     expect($settings.get().markdownScrollSync).to.equal(false);
+  });
+});
+
+describe('settings store: project accent', () => {
+  /** @param {string} path */
+  const show = (path) => $project.set({ path, name: path, rootId: null });
+
+  afterEach(() => {
+    for (const path of ['/a', '/b']) {
+      show(path);
+      clearProjectAccent();
+    }
+    $project.set(null);
+    $settings.set(DEFAULT_SETTINGS);
+  });
+
+  it('colors a project on its own, the others and no project keeping the global accent', () => {
+    // Arrange
+    setAccent('#112233');
+    show('/a');
+    // Act
+    setProjectAccent('#a0b');
+    // Assert
+    expect($projectAccent.get()).to.deep.equal({ color: '#AA00BB', enabled: true });
+    expect($themeAccent.get()).to.equal('#AA00BB');
+    show('/b');
+    expect($projectAccent.get(), 'another project').to.equal(null);
+    expect($themeAccent.get()).to.equal('#112233');
+    $project.set(null);
+    expect($themeAccent.get(), 'no project').to.equal('#112233');
+    show('/a');
+    expect($themeAccent.get(), 'back on the project').to.equal('#AA00BB');
+  });
+
+  it('keeps the stored color over something not a color', () => {
+    // Arrange
+    show('/a');
+    setProjectAccent('#AA00BB');
+    // Act
+    setProjectAccent('nope');
+    // Assert
+    expect($themeAccent.get()).to.equal('#AA00BB');
+  });
+
+  it('starts from the global accent, and keeps its color while switched off', () => {
+    // Arrange
+    setAccent('#112233');
+    show('/a');
+    // Act
+    setProjectAccentEnabled(true);
+    // Assert
+    expect($projectAccent.get(), 'first on').to.deep.equal({ color: '#112233', enabled: true });
+    // Act
+    setProjectAccent('#AA00BB');
+    setProjectAccentEnabled(false);
+    // Assert
+    expect($themeAccent.get(), 'off').to.equal('#112233');
+    // Act
+    setAccent('#445566');
+    setProjectAccentEnabled(true);
+    // Assert
+    expect($themeAccent.get(), 'on again').to.equal('#AA00BB');
+  });
+
+  it('is cleared with the Theme section, for the project shown only', () => {
+    // Arrange
+    show('/a');
+    setProjectAccent('#AA00BB');
+    show('/b');
+    setProjectAccent('#00AA00');
+    // Act
+    resetSection('theme');
+    // Assert
+    expect($projectAccent.get()).to.equal(null);
+    show('/a');
+    expect($projectAccent.get()?.color, 'the other project').to.equal('#AA00BB');
   });
 });

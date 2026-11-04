@@ -1,13 +1,25 @@
 import { computed } from 'nanostores';
-import { isRecord, persistentStore } from '../persistent/persistent.js';
+import { isRecord, persistentMapStore, persistentStore } from '../persistent/persistent.js';
+import { $projectPath } from '../project/project.js';
 import { isMarkdownMode } from '../markdown-view/markdown-view.js';
 import { DEFAULT_SETTINGS as DEFAULTS, FONT_SIZE_MAX, FONT_SIZE_MIN, SETTINGS_SECTIONS as SECTIONS, TERMINAL_PALETTE, normalizeHex, parseTerminalColors } from './rules.js';
 
 /** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
+/** @typedef {import('../../hooks/settings/types.js').ProjectAccent} ProjectAccent */
 /** @typedef {import('../../hooks/settings/types.js').Settings} Settings */
 
 /** @type {Appearance[]} */
 const APPEARANCES = ['light', 'dark', 'system'];
+
+/**
+ * @param {unknown} raw
+ * @returns {ProjectAccent | null}
+ */
+function parseProjectAccent(raw) {
+  if (!isRecord(raw) || typeof raw.color !== 'string' || typeof raw.enabled !== 'boolean') return null;
+  const color = normalizeHex(raw.color);
+  return color ? { color, enabled: raw.enabled } : null;
+}
 
 /** @param {unknown} size */
 function isFontSize(size) {
@@ -42,6 +54,12 @@ export const $settings = persistentStore('brama:settings', DEFAULTS, { parse: pa
 
 export const $appearance = computed($settings, (settings) => settings.appearance);
 export const $accent = computed($settings, (settings) => settings.accent);
+/** A project's own accent by its path, shared by every window. */
+const $projectAccents = persistentMapStore('brama:settings:project-accent:', parseProjectAccent, { listen: true });
+/** The shown project's own accent, on or off; `null` when it never had one, or no project is shown. */
+export const $projectAccent = computed([$projectPath, $projectAccents], (path, accents) => (path && accents[path]) || null);
+/** The accent this window is painted with. */
+export const $themeAccent = computed([$projectAccent, $accent], (own, accent) => (own?.enabled ? own.color : accent));
 export const $editorFont = computed($settings, (settings) => settings.editorFont);
 export const $editorFontSize = computed($settings, (settings) => settings.editorFontSize);
 export const $markdownDefaultView = computed($settings, (settings) => settings.markdownDefaultView);
@@ -72,6 +90,28 @@ export function setAppearance(appearance) {
 export function setAccent(hex) {
   const accent = normalizeHex(hex);
   if (accent) update('accent', accent);
+}
+
+/** @param {ProjectAccent | undefined} own For the shown project; `undefined` forgets it. */
+function writeProjectAccent(own) {
+  const path = $projectPath.get();
+  if (path) $projectAccents.setKey(path, own);
+}
+
+/** @param {string} hex The shown project's color, which switches it on; ignored unless a hex colour. */
+export function setProjectAccent(hex) {
+  const color = normalizeHex(hex);
+  if (color) writeProjectAccent({ color, enabled: true });
+}
+
+/** @param {boolean} enabled For the shown project; its first color is the global accent's. */
+export function setProjectAccentEnabled(enabled) {
+  writeProjectAccent({ color: $projectAccent.get()?.color ?? $accent.get(), enabled });
+}
+
+/** Forgets the shown project's color too. */
+export function clearProjectAccent() {
+  writeProjectAccent(undefined);
 }
 
 /** @param {string | null} family `null` for the editor's default. */
@@ -122,4 +162,5 @@ export function resetSection(section) {
   const settings = { ...$settings.get() };
   for (const key of SECTIONS[section]) Object.assign(settings, { [key]: DEFAULTS[key] });
   $settings.set(settings);
+  if (section === 'theme') clearProjectAccent();
 }

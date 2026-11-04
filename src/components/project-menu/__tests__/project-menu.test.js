@@ -76,13 +76,13 @@ describe('acp-project-menu', () => {
     const { el, root, menu } = await render({ currentId: PROJECTS[0].id });
     /** @type {{ type: string, detail: unknown }[]} */
     const events = [];
-    const types = ['select', 'open-folder', 'reveal', 'open-terminal', 'remove'].map((t) => `acp-project-${t}`);
+    const types = ['select', 'open-folder', 'remove'].map((t) => `acp-project-${t}`);
     for (const type of types) {
       el.addEventListener(type, (e) => events.push({ type, detail: /** @type {CustomEvent} */ (e).detail }));
     }
 
     // Act
-    for (const value of [PROJECTS[1].id, PROJECTS[0].id, 'open-folder', 'reveal', 'open-terminal', 'remove']) {
+    for (const value of [PROJECTS[1].id, PROJECTS[0].id, 'open-folder', 'remove']) {
       pick(root, menu, value);
     }
 
@@ -90,8 +90,6 @@ describe('acp-project-menu', () => {
     expect(events).to.deep.equal([
       { type: 'acp-project-select', detail: { projectId: PROJECTS[1].id } },
       { type: 'acp-project-open-folder', detail: null },
-      { type: 'acp-project-reveal', detail: { projectId: PROJECTS[0].id } },
-      { type: 'acp-project-open-terminal', detail: null },
       { type: 'acp-project-remove', detail: { projectId: PROJECTS[0].id } },
     ]);
   });
@@ -100,7 +98,7 @@ describe('acp-project-menu', () => {
     // Arrange
     const { el, root } = await render({ currentId: PROJECTS[0].id });
     const actions = () => [...root.querySelectorAll('md-menu-item:not([data-project])')].map((i) => i.getAttribute('value'));
-    expect(actions()).to.deep.equal(['open-folder', 'reveal', 'open-terminal', 'remove']);
+    expect(actions()).to.deep.equal(['open-folder', 'remove']);
     const hint = root.querySelector('md-menu-item[value="open-folder"] [slot="trailing"]');
     expect(hint?.textContent?.trim(), 'Add project shows its shortcut').to.equal(shortcuts.hint('openFolder'));
 

@@ -9,10 +9,7 @@ import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import checkIcon from '@material-design-icons/svg/outlined/check.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import folderIcon from '@material-design-icons/svg/outlined/folder.svg?raw';
-import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
 import removeIcon from '@material-design-icons/svg/outlined/remove_circle_outline.svg?raw';
-import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
-import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import styles from './project-menu.css?inline';
@@ -20,15 +17,13 @@ import styles from './project-menu.css?inline';
 /** @typedef {import('../../hooks/projects/types.js').Project} Project */
 
 /** Menu values that are actions, not projects (a project's value is its id, with `data-project` on the item). */
-const ACTIONS = new Set(['open-folder', 'reveal', 'open-terminal', 'remove']);
+const ACTIONS = new Set(['open-folder', 'remove']);
 
 /**
  * @tag acp-project-menu
- * @summary The header's project button and its menu: the listed projects (the shown one checked, a dot on those with unread sessions), Add project, and the shown project's Reveal, Open in terminal and Remove.
+ * @summary The header's project button and its menu: the listed projects (the shown one checked, a dot on those with unread sessions), Add project, and the shown project's Remove.
  * @fires acp-project-select `{ projectId }` Another project was picked.
  * @fires acp-project-open-folder `null`
- * @fires acp-project-reveal `{ projectId }` The shown project.
- * @fires acp-project-open-terminal `null` The shown project's.
  * @fires acp-project-remove `{ projectId }` The shown project.
  */
 export class AcpProjectMenu extends LitElement {
@@ -69,7 +64,7 @@ export class AcpProjectMenu extends LitElement {
     const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
     const current = this.currentId;
     if (ACTIONS.has(value)) {
-      if (value === 'open-folder' || value === 'open-terminal') this.#emit(`acp-project-${value}`, null);
+      if (value === 'open-folder') this.#emit(`acp-project-${value}`, null);
       else if (current !== null) this.#emit(`acp-project-${value}`, { projectId: current });
     } else if (value !== current) this.#emit('acp-project-select', { projectId: value });
   };
@@ -153,8 +148,6 @@ export class AcpProjectMenu extends LitElement {
         </md-item-group>
         ${current
           ? html`<md-item-group>
-              ${this.#renderAction('reveal', folderOpenIcon, app.revealLabel)}
-              ${this.#renderAction('open-terminal', terminalIcon, 'Open in terminal')}
               ${this.#renderAction('remove', removeIcon, 'Remove from list')}
             </md-item-group>`
           : nothing}

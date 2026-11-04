@@ -54,7 +54,7 @@ describe('acp-toolbar-view', () => {
     return { view, toolbar, fire };
   }
 
-  it('hands the projects to the toolbar, and switches, reveals and removes as the menu asks', async () => {
+  it('hands the projects to the toolbar, and switches and removes as the menu asks', async () => {
     // Arrange
     const { view, toolbar, fire } = await render();
     expect(toolbar.projects.map((p) => p.id), 'the listed projects').to.deep.equal(['/p', '/q']);
@@ -62,9 +62,6 @@ describe('acp-toolbar-view', () => {
     // Act: switch
     fire('acp-project-select', { projectId: '/q' });
     await until(() => calls.some((c) => c.cmd === 'open_root' && c.args.path === '/q'));
-    // Act: reveal the shown project
-    fire('acp-project-reveal', { projectId: '/p' });
-    await until(() => calls.some((c) => c.cmd === 'reveal_path'));
     // Act: remove asks first
     const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (view.querySelector('acp-confirm-dialog'));
     /** @type {string[]} */
@@ -77,7 +74,6 @@ describe('acp-toolbar-view', () => {
     await until(() => $projects.get().length === 1);
 
     // Assert
-    expect(calls.find((c) => c.cmd === 'reveal_path')?.args).to.deep.equal({ path: '/p' });
     expect(asked).to.deep.equal(['Remove project?']);
     expect($projects.get().map((p) => p.id)).to.deep.equal(['/p']);
   });

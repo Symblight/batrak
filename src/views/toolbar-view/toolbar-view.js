@@ -120,17 +120,6 @@ export class AcpToolbarView extends ViewElement {
   };
 
   /** @param {Event} e */
-  #onProjectReveal = (e) => {
-    projects
-      .reveal(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId)
-      .catch((err) => app.reportError('Revealing folder failed', err));
-  };
-
-  #onProjectOpenTerminal = () => {
-    terminals.showPanel().catch((err) => app.reportError('Opening a terminal failed', err));
-  };
-
-  /** @param {Event} e */
   #onProjectRemove = (e) => {
     const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
     projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, dialog);
@@ -173,8 +162,6 @@ export class AcpToolbarView extends ViewElement {
         @acp-column-toggle=${this.#onColumnToggle}
         @acp-project-select=${this.#onProjectSelect}
         @acp-project-open-folder=${this.openFolder}
-        @acp-project-reveal=${this.#onProjectReveal}
-        @acp-project-open-terminal=${this.#onProjectOpenTerminal}
         @acp-project-remove=${this.#onProjectRemove}
         @acp-copy=${this.#onBranchCopy}
         @acp-github-open=${this.#onGithubOpen}

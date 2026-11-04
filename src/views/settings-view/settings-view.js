@@ -3,7 +3,9 @@ import { agents } from '../../hooks/agents/agents.js';
 import { settings as settingsHook } from '../../hooks/settings/settings.js';
 import { $activePath, $settingsReveal, SETTINGS_TAB_ID, settingsRevealed } from '../../stores/editor/editor.js';
 import { $systemFonts } from '../../stores/fonts/fonts.js';
+import { $project } from '../../stores/project/project.js';
 import {
+  $projectAccent,
   $settings,
   resetSection,
   setAccent,
@@ -11,6 +13,8 @@ import {
   setEditorFont,
   setEditorFontSize,
   setMarkdownScrollSync,
+  setProjectAccent,
+  setProjectAccentEnabled,
   setTerminalColors,
   setTerminalFont,
   setTerminalFontSize,
@@ -31,6 +35,8 @@ import { ViewElement } from '../../components/view-element/view-element.js';
  */
 export class AcpSettingsView extends ViewElement {
   #settings = new StoreController(this, { store: $settings });
+  #project = new StoreController(this, { store: $project });
+  #projectAccent = new StoreController(this, { store: $projectAccent });
   #fonts = new StoreController(this, { store: $systemFonts });
   #reveal = new StoreController(this, { store: $settingsReveal });
   /** Settings lists the fonts, and the agents with the versions they reported since. */
@@ -60,6 +66,18 @@ export class AcpSettingsView extends ViewElement {
   }
 
   /** @param {Event} e */
+  #onProjectAccent(e) {
+    e.stopPropagation();
+    setProjectAccent(/** @type {CustomEvent<{ accent: string }>} */ (e).detail.accent);
+  }
+
+  /** @param {Event} e */
+  #onProjectAccentEnabled(e) {
+    e.stopPropagation();
+    setProjectAccentEnabled(/** @type {CustomEvent<{ enabled: boolean }>} */ (e).detail.enabled);
+  }
+
+  /** @param {Event} e */
   #onReset(e) {
     e.stopPropagation();
     resetSection(/** @type {CustomEvent<{ section: SettingsSection }>} */ (e).detail.section);
@@ -74,9 +92,13 @@ export class AcpSettingsView extends ViewElement {
   render() {
     return html`<acp-settings
       .settings=${this.#settings.value}
+      .projectName=${this.#project.value?.name ?? null}
+      .projectAccent=${this.#projectAccent.value}
       .fonts=${this.#fonts.value}
       .reveal=${this.#reveal.value}
       @acp-settings-change=${this.#onChange}
+      @acp-settings-project-accent=${this.#onProjectAccent}
+      @acp-settings-project-accent-enabled=${this.#onProjectAccentEnabled}
       @acp-settings-reset=${this.#onReset}
       @acp-settings-revealed=${this.#onRevealed}
     ></acp-settings>`;

@@ -78,17 +78,22 @@ const APPEARANCES = [
  * @tag acp-settings
  * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor, Terminal) and a list that scrolls to them.
  * @fires acp-settings-change `{ patch }` A `Partial<Settings>`; the accent as typed, the font size unclamped.
+ * @fires acp-settings-project-accent `{ accent }` For the project shown: the color as typed.
+ * @fires acp-settings-project-accent-enabled `{ enabled }` For the project shown.
  * @fires acp-settings-reset `{ section }`
  * @fires acp-settings-revealed `{ reveal }` The `reveal` asked for was shown.
  */
 export class AcpSettings extends LitElement {
   static properties = {
     settings: { attribute: false },
+    projectName: { attribute: false },
+    projectAccent: { attribute: false },
     fonts: { attribute: false },
     reveal: { attribute: false },
     platform: { attribute: false },
     current: { state: true },
     accentDraft: { state: true },
+    projectAccentDraft: { state: true },
     fontSizeDrafts: { state: true },
   };
 
@@ -98,6 +103,10 @@ export class AcpSettings extends LitElement {
     super();
     /** @type {Settings | null} */
     this.settings = null;
+    /** @type {string | null} The project shown; `null` offers no accent of its own. */
+    this.projectName = null;
+    /** @type {import('../../hooks/settings/types.js').ProjectAccent | null} Its own accent; `null` when it never had one. */
+    this.projectAccent = null;
     /** @type {FontFamily[] | null} Installed fonts, sorted; `null` until listed. */
     this.fonts = null;
     /** @type {SettingsReveal | null} A section to scroll to; `acp-settings-revealed` once it has. */
@@ -108,6 +117,8 @@ export class AcpSettings extends LitElement {
     this.current = 'theme';
     /** @type {string | null} Accent HEX being typed; `null` shows the stored one. */
     this.accentDraft = null;
+    /** @type {string | null} The project's accent HEX being typed; `null` shows the stored one. */
+    this.projectAccentDraft = null;
     /** @type {Partial<Record<FontSizeField, string>>} Font sizes being typed; none shows the stored one. */
     this.fontSizeDrafts = {};
   }
@@ -169,9 +180,9 @@ export class AcpSettings extends LitElement {
     this.current = current;
   };
 
-  /** Opens the system color panel of the swatch, a native color input. */
-  #openColorPicker = () => {
-    /** @type {HTMLInputElement} */ (this.renderRoot.querySelector('.acp-settings__swatch')).click();
+  /** Opens the system color panel of the swatch beside the button, a native color input. */
+  #openColorPicker = (/** @type {Event} */ e) => {
+    /** @type {HTMLInputElement} */ (/** @type {Element} */ (e.currentTarget).parentElement?.querySelector('.acp-settings__swatch')).click();
   };
 
   #onAppearanceChange = (/** @type {Event} */ e) => {
@@ -189,6 +200,29 @@ export class AcpSettings extends LitElement {
     const value = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
     this.accentDraft = value;
     this.#change({ accent: value });
+  };
+
+  /** @param {string} accent */
+  #changeProjectAccent(accent) {
+    this.dispatchEvent(new CustomEvent('acp-settings-project-accent', { detail: { accent }, bubbles: true, composed: true }));
+  }
+
+  #onProjectColorPicked = (/** @type {Event} */ e) => {
+    e.stopPropagation();
+    this.projectAccentDraft = null;
+    this.#changeProjectAccent(/** @type {HTMLInputElement} */ (e.target).value);
+  };
+
+  #onProjectAccentInput = (/** @type {Event} */ e) => {
+    const value = /** @type {HTMLElementTagNameMap['md-text-field']} */ (e.target).value;
+    this.projectAccentDraft = value;
+    this.#changeProjectAccent(value);
+  };
+
+  #onProjectAccentToggle = (/** @type {Event} */ e) => {
+    this.projectAccentDraft = null;
+    const { selected: enabled } = /** @type {HTMLElementTagNameMap['md-switch']} */ (e.target);
+    this.dispatchEvent(new CustomEvent('acp-settings-project-accent-enabled', { detail: { enabled }, bubbles: true, composed: true }));
   };
 
   #onMarkdownSyncChange = (/** @type {Event} */ e) => {
@@ -220,6 +254,7 @@ export class AcpSettings extends LitElement {
   /** Drops what was typed, showing the stored value again (the last valid one). */
   #revertDrafts = () => {
     this.accentDraft = null;
+    this.projectAccentDraft = null;
     this.fontSizeDrafts = {};
   };
 
@@ -234,7 +269,7 @@ export class AcpSettings extends LitElement {
       <md-button
         class="acp-settings__header-button"
         variant="text"
-        ?disabled=${settingsHook.isSectionDefault(settings, section)}
+        ?disabled=${settingsHook.isSectionDefault(settings, section) && !(section === 'theme' && this.projectAccent)}
         @click=${() => {
           this.#revertDrafts();
           this.dispatchEvent(new CustomEvent('acp-settings-reset', { detail: { section }, bubbles: true, composed: true }));
@@ -242,6 +277,59 @@ export class AcpSettings extends LitElement {
         >Reset</md-button
       >
     </div>`;
+  }
+
+  /**
+   * @param {Object} field
+   * @param {string} field.id The pick button's, unique in the shadow root.
+   * @param {string} field.label
+   * @param {string} field.value The stored color.
+   * @param {string | null} field.draft What is being typed.
+   * @param {(e: Event) => void} field.onInput
+   * @param {(e: Event) => void} field.onPicked
+   * @param {boolean} [field.disabled]
+   */
+  #renderAccentInput({ id, label, value, draft, onInput, onPicked, disabled = false }) {
+    return html`<md-text-field
+        class="acp-settings__input"
+        variant="outlined"
+        label=${label}
+        spellcheck="false"
+        ?disabled=${disabled}
+        .value=${draft ?? value}
+        ?error=${draft !== null && settingsHook.normalizeHex(draft) === null}
+        @input=${onInput}
+        @blur=${this.#revertDrafts}
+      >
+        <input slot="leading" class="acp-settings__swatch" type="color" aria-label="${label} picker" ?disabled=${disabled} .value=${value.toLowerCase()} @input=${onPicked} />
+        <md-icon-button id=${id} slot="trailing" class="acp-settings__icon-button" aria-label="Pick a color" ?disabled=${disabled} @click=${this.#openColorPicker}>
+          <md-icon class="acp-settings__icon">${unsafeSVG(colorizeIcon)}</md-icon>
+        </md-icon-button>
+      </md-text-field>
+      <md-tooltip for=${id} show-delay="800">Pick a color</md-tooltip>`;
+  }
+
+  /**
+   * @param {string} name The project's.
+   */
+  #renderProjectAccent(name) {
+    const own = this.projectAccent?.enabled ? this.projectAccent.color : null;
+    return html`<label class="acp-settings__toggle">
+        <md-switch class="acp-settings__switch acp-settings__switch_project-accent" .selected=${live(own !== null)} @change=${this.#onProjectAccentToggle}></md-switch>
+        <span>Own accent color for ${name}</span>
+      </label>
+      ${own === null
+        ? nothing
+        : html`<div class="acp-settings__field">
+            ${this.#renderAccentInput({
+              id: 'acp-settings-pick-project-color',
+              label: 'Project accent color',
+              value: own,
+              draft: this.projectAccentDraft,
+              onInput: this.#onProjectAccentInput,
+              onPicked: this.#onProjectColorPicked,
+            })}
+          </div>`}`;
   }
 
   /** @param {Settings} settings */
@@ -268,39 +356,20 @@ export class AcpSettings extends LitElement {
         </md-segmented-button-group>
       </div>
       <div class="acp-settings__field acp-settings__field_accent">
-        <md-text-field
-          class="acp-settings__input"
-          variant="outlined"
-          label="Accent color"
-          spellcheck="false"
-          .value=${this.accentDraft ?? accent}
-          ?error=${accentError}
-          @input=${this.#onAccentInput}
-          @blur=${this.#revertDrafts}
-        >
-          <input
-            slot="leading"
-            class="acp-settings__swatch"
-            type="color"
-            aria-label="Accent color picker"
-            .value=${accent.toLowerCase()}
-            @input=${this.#onColorPicked}
-          />
-          <md-icon-button
-            id="acp-settings-pick-color"
-            slot="trailing"
-            class="acp-settings__icon-button"
-            aria-label="Pick a color"
-            @click=${this.#openColorPicker}
-          >
-            <md-icon class="acp-settings__icon">${unsafeSVG(colorizeIcon)}</md-icon>
-          </md-icon-button>
-        </md-text-field>
-        <md-tooltip for="acp-settings-pick-color" show-delay="800">Pick a color</md-tooltip>
+        ${this.#renderAccentInput({
+          id: 'acp-settings-pick-color',
+          label: 'Accent color',
+          value: accent,
+          draft: this.accentDraft,
+          onInput: this.#onAccentInput,
+          onPicked: this.#onColorPicked,
+          disabled: Boolean(this.projectAccent?.enabled),
+        })}
         ${accentError
           ? nothing
           : html`<span class="acp-settings__hint">Buttons, links, the caret and selection use this color.</span>`}
       </div>
+      ${this.projectName ? this.#renderProjectAccent(this.projectName) : nothing}
     </section>`;
   }
 
