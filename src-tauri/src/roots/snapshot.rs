@@ -21,8 +21,11 @@ pub struct Entry {
     pub path: String,
     pub is_dir: bool,
     pub ignored: bool,
+    /// Backend only, like `mtime`: Find in Files skips big files, and both tell a modified file.
+    #[serde(skip)]
     pub size: u64,
     /// Milliseconds since the Unix epoch.
+    #[serde(skip)]
     pub mtime: u64,
 }
 
@@ -123,11 +126,7 @@ impl Snapshot {
     pub fn list_dir(&self, rel: &str) -> Option<Vec<Entry>> {
         let children = self.children.get(rel)?;
         let mut entries: Vec<Entry> = children.iter().filter_map(|p| self.entries.get(p)).cloned().collect();
-        entries.sort_by(|a, b| {
-            b.is_dir
-                .cmp(&a.is_dir)
-                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
-        });
+        entries.sort_by_cached_key(|e| (!e.is_dir, e.name.to_lowercase()));
         Some(entries)
     }
 
@@ -445,6 +444,34 @@ mod tests {
         let files: Vec<_> = snap.files().map(|e| e.path.as_str()).collect();
         assert!(files.contains(&"src/main.rs"));
         assert!(!files.contains(&"debug.log"));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn a_listing_sends_the_page_only_what_the_tree_shows() {
+        let entry = Entry {
+            name: "a.rs".into(),
+            path: "src/a.rs".into(),
+            is_dir: false,
+            ignored: false,
+            size: 5,
+            mtime: 7,
+        };
+        let sent = serde_json::to_value(&entry).unwrap();
+        assert_eq!(sent, serde_json::json!({ "name": "a.rs", "path": "src/a.rs", "isDir": false, "ignored": false }));
+    }
+
+    #[test]
+    fn a_listing_has_folders_first_then_names_ignoring_case() {
+        let root = temp_root("list-order");
+        fs::create_dir_all(root.join("sub/Zeta")).unwrap();
+        fs::create_dir_all(root.join("sub/alpha")).unwrap();
+        for name in ["b.txt", "A.txt", "C.txt"] {
+            fs::write(root.join("sub").join(name), "").unwrap();
+        }
+        let snap = Snapshot::scan(&root);
+        let names: Vec<_> = snap.list_dir("sub").unwrap().into_iter().map(|e| e.name).collect();
+        assert_eq!(names, ["alpha", "Zeta", "A.txt", "b.txt", "C.txt"]);
         fs::remove_dir_all(root).unwrap();
     }
 

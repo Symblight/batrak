@@ -24,7 +24,6 @@ describe('projects files', () => {
       [() => projects.writeFile('/p/.brama/agents.json', '{}'), 'write_file', { path: '/p/.brama/agents.json', content: '{}' }],
       [() => projects.listDir('root:/p', 'src'), 'list_dir', { rootId: 'root:/p', path: 'src' }],
       [() => projects.rescan('root:/p'), 'rescan_root', { rootId: 'root:/p' }],
-      [() => projects.closeRoot('root:/p'), 'close_root', { rootId: 'root:/p' }],
     ];
     for (const [call, cmd, args] of cases) {
       calls = [];

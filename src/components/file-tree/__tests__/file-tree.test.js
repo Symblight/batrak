@@ -1,4 +1,4 @@
-import { expect, fixture, html } from '../../../../test/fixture.js';
+import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
 import '../file-tree.js';
 
 /** @typedef {import('../../../hooks/projects/types.js').RootEntry} RootEntry */
@@ -9,7 +9,7 @@ import '../file-tree.js';
  * @param {boolean} isDir
  * @returns {RootEntry}
  */
-const entry = (path, isDir) => ({ name: path.split('/').pop() ?? path, path, isDir, ignored: false, size: 0, mtime: 0 });
+const entry = (path, isDir) => ({ name: path.split('/').pop() ?? path, path, isDir, ignored: false });
 
 /** @type {Record<string, RootEntry[]>} */
 const LISTING = { '': [entry('src', true), entry('a.txt', false)], src: [entry('src/x.js', false)] };
@@ -43,6 +43,19 @@ describe('acp-file-tree', () => {
     const el = await fixture(html`<acp-file-tree .rootId=${'root-1'} .root=${'/p'} .listDir=${listDir}></acp-file-tree>`);
     await until(() => treeOf(el).nodes.getChildIds().length > 0);
     expect(treeOf(el).nodes.getChildIds()).to.deep.equal(['src', 'a.txt']);
+  });
+
+  it("hints a row's path once, on its label", async () => {
+    // Arrange
+    /** @type {AcpFileTree} */
+    const el = await fixture(html`<acp-file-tree .rootId=${'root-2'} .root=${'/p'} .listDir=${listDir}></acp-file-tree>`);
+    const shadow = /** @type {ShadowRoot} */ (treeOf(el).shadowRoot);
+    const hints = () => [...shadow.querySelectorAll('md-tooltip')].map((t) => t.textContent?.trim());
+    // Act
+    await until(() => hints().includes('a.txt'));
+    // Assert
+    expect(hints().filter((hint) => hint === 'a.txt')).to.have.length(1);
+    expect(tooltipOf(shadow.getElementById('acp-file-tree-label:a.txt'))).to.equal('a.txt');
   });
 
   it('reveals a nested file, storing the folders it expanded', async () => {

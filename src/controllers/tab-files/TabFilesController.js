@@ -17,11 +17,6 @@ import { $rootId } from '../../stores/workspaces/workspaces.js';
 /** @typedef {import('../../hooks/git/types.js').RootChanges} RootChanges */
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 
-/** @param {string} path */
-function basename(path) {
-  return path.split(/[\\/]/).pop() || path;
-}
-
 /**
  * The open tabs (`$editorTabs`) with what they show: reads the active tab's file and its text at HEAD
  * (the diff gutter), or an image tab's bytes, re-reads after a change on disk or a HEAD move, keeps an editable file's unsaved
@@ -189,7 +184,7 @@ export class TabFilesController {
       const now = this.#find(id);
       if (now) this.#patch(id, { content, draft: now.draft === content ? null : now.draft, changedOnDisk: false, deletedOnDisk: false });
     } catch (err) {
-      app.reportError(`Saving ${basename(tab.path)} failed`, err);
+      app.reportError(`Saving ${projects.basename(tab.path)} failed`, err);
     }
     return true;
   }

@@ -22,7 +22,7 @@ const SKELETON_DELAY = 150;
 const SKELETON_ROWS = 6;
 
 /**
- * Tooltip of a row's icon and label: its root-relative path.
+ * Tooltip of a row's label: its root-relative path.
  * @param {TreeItem} item
  */
 function tooltipFor(item) {
@@ -279,23 +279,21 @@ export class AcpFileTree extends LitElement {
 
   /**
    * Leading icon of a row: folder icon from the tree-view package, language logo from simple-icons, else a Material file icon.
-   * Rendered in the tree's shadow root, so each anchor and its tooltip stay in one template.
-   * Tooltips get `width: max-content`: wc-material's fixed tooltip otherwise shrinks to the space right of
-   * its `left`, so near the window's edge each reposition resizes it and re-fires Floating UI's
-   * ResizeObserver ("ResizeObserver loop completed with undelivered notifications").
    * @param {TreeItem} item
    * @param {{ expanded: boolean }} state
    */
   #renderLeading(item, { expanded }) {
-    const id = `acp-file-tree-icon:${item.id}`;
-    const icon = item.isDir
-      ? html`<tvx-tree-directory-icon id=${id} ?expanded=${expanded}></tvx-tree-directory-icon>`
-      : html`<acp-file-icon id=${id} style="font-size: 14px" name=${item.label}></acp-file-icon>`;
-    return html`${icon}<md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
+    return item.isDir
+      ? html`<tvx-tree-directory-icon ?expanded=${expanded}></tvx-tree-directory-icon>`
+      : html`<acp-file-icon style="font-size: 14px" name=${item.label}></acp-file-icon>`;
   }
 
   /**
-   * Ignored entries are dimmed. Rendered inside the tree's shadow root, so styled inline.
+   * Ignored entries are dimmed. Rendered inside the tree's shadow root, so styled inline, the anchor
+   * and its tooltip in one template. The tooltip gets `width: max-content`: wc-material's fixed tooltip
+   * otherwise shrinks to the space right of its `left`, so near the window's edge each reposition
+   * resizes it and re-fires Floating UI's ResizeObserver ("ResizeObserver loop completed with
+   * undelivered notifications").
    * @param {TreeItem} item
    */
   #renderLabel(item) {

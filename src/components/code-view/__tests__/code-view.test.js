@@ -171,7 +171,7 @@ describe('acp-code-view', () => {
      */
     const listDir = async (rootId, rel) => {
       listed.push([rootId, rel]);
-      return (folders[rel] ?? []).map((e) => ({ ...e, size: 0, mtime: 0 }));
+      return folders[rel] ?? [];
     };
 
     /** @param {object} [props] */

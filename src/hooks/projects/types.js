@@ -13,8 +13,6 @@
  * @property {string} path Relative to the root, `/`-separated.
  * @property {boolean} isDir
  * @property {boolean} ignored Matched by .gitignore & co: shown dimmed, not searched.
- * @property {number} size
- * @property {number} mtime Milliseconds since the Unix epoch.
  */
 
 /**

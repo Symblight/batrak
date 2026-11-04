@@ -1,7 +1,6 @@
 import { ipc } from '../ipc/ipc.js';
 
 /** @typedef {import('./types.js').RootEntry} RootEntry */
-/** @typedef {import('../git/types.js').RootChanges} RootChanges */
 
 /** The Rust commands about files and folders of open roots. */
 
@@ -34,14 +33,6 @@ function readFileBytes(path) {
 }
 
 /**
- * @param {string} rootId
- * @returns {Promise<void>}
- */
-function closeWorkspace(rootId) {
-  return ipc.invoke('close_root', { rootId });
-}
-
-/**
  * Children of a directory from the snapshot.
  * @param {string} rootId
  * @param {string} path Relative; `''` for the root.
@@ -56,17 +47,8 @@ function listDir(rootId, path) {
  * @param {string} rootId
  * @returns {Promise<void>}
  */
-function rescanWorkspace(rootId) {
+function rescan(rootId) {
   return ipc.invoke('rescan_root', { rootId });
-}
-
-/**
- * Subscribes to snapshot changes made by the file watcher.
- * @param {(changes: RootChanges) => void} callback
- * @returns {Promise<() => void>} Unsubscribe.
- */
-function onWorkspaceChanged(callback) {
-  return ipc.listen('roots://changed', callback);
 }
 
 /** @returns {Promise<string>} The user's home folder. */
@@ -79,8 +61,6 @@ export const files = Object.freeze({
   readFileBytes,
   writeFile,
   listDir,
-  rescan: rescanWorkspace,
-  closeRoot: closeWorkspace,
-  onRootsChanged: onWorkspaceChanged,
+  rescan,
   homeDir: getHomeDir,
 });
