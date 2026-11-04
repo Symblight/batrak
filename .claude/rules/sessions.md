@@ -60,7 +60,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   every 30 s at most), for agents that didn't list once `$agentList` changes, on Resync
   (`<acp-session-sync>` in the session list), and every 20 s for the shown project's listing agents
   (quiet, window visible). `Session.activeElsewhereUntil`: its agent saw activity that wasn't
-  Brama's, plus 2 min; `isActiveElsewhere(session, $now)` (`stores/clock/clock.js`, 10 s ticks) shows it
+  Brama's, plus 2 min (30 s while Brama's terminal runs its CLI: it reads as working only while the agent keeps writing); `isActiveElsewhere(session, $now)` (`stores/clock/clock.js`, 10 s ticks) shows it
   with the working spinner while it doesn't run here. Showing a session waits for its agent's
   sync before resuming, and doesn't resume one active elsewhere (the banner's Resume does). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project

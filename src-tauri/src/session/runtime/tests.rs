@@ -2979,6 +2979,24 @@ async fn a_running_cli_chat_stays_listed_though_its_agent_doesnt_list_it_yet() {
 }
 
 #[tokio::test]
+async fn a_running_clis_activity_reads_as_working_only_briefly() {
+    let options = listing();
+    let f = fixture("cli-working", options.clone());
+    f.give_cli_agents();
+    let terminals = terminals();
+    let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
+    f.sessions.open_cli(id, Some(f.draft("fake", WorkspaceChoice::Main)), window(&terminals)).await.unwrap();
+    let now = crate::session::iso_now();
+    stored_in(&options, &[(id, &f.project, None, Some(now.as_str()))]);
+
+    f.sessions.sync(&f.project, None).await;
+
+    let now_ms = crate::session::parse_iso_millis(&now).unwrap();
+    let until = listed(&f, id).active_elsewhere_until;
+    assert_eq!(until, Some(crate::session::iso_from_millis(now_ms + 30_000)), "past the next poll and clock tick, no longer");
+}
+
+#[tokio::test]
 async fn a_draft_starts_in_the_cli_under_its_own_id() {
     let f = fixture("cli-draft", FakeAgentOptions::default());
     f.give_cli_agents();
