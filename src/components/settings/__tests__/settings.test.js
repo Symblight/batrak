@@ -272,7 +272,17 @@ describe('acp-settings', () => {
       expect(patches, 'a size out of bounds is not asked for').to.deep.equal([{ terminalFontSize: 15 }, { terminalFontSize: 16 }, { terminalFontSize: null }]);
     });
 
-    it('asks for custom colors, and offers them only then, each edit for both schemes', async () => {
+    it('offers no terminal colors for now', async () => {
+      // Arrange + Act
+      const { root } = await render();
+
+      // Assert
+      expect(section(root).querySelector('md-segmented-button-group') === null, 'no theme choice').to.equal(true);
+      expect(section(root).textContent?.includes('Colors'), 'no label').to.equal(false);
+    });
+
+    // Back with `SHOW_TERMINAL_COLORS` in settings.js.
+    it.skip('asks for custom colors, and offers them only then, each edit for both schemes', async () => {
       // Arrange
       const { el, root } = await render();
       const patches = changes(el);

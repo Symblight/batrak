@@ -41,6 +41,9 @@ const SECTIONS = [
   { id: 'terminal', label: 'Terminal', icon: terminalIcon },
 ];
 
+/** @type {boolean} The terminal's Colors row, hidden until it is finished. */
+const SHOW_TERMINAL_COLORS = false;
+
 /** @type {{ key: import('../../hooks/settings/types.js').TerminalColorKey, label: string }[]} */
 const TERMINAL_COLORS = [
   { key: 'background', label: 'Background' },
@@ -526,18 +529,8 @@ export class AcpSettings extends LitElement {
   }
 
   /** @param {Settings} settings */
-  #renderTerminal(settings) {
-    const { terminalFont, terminalFontSize, editorFontSize } = settings;
-    return html`<section class="acp-settings__group" aria-label="Terminal" data-section="terminal">
-      ${this.#renderGroupHeader('Terminal', 'terminal', settings)}
-      ${this.#renderFontSelect('terminalFont', terminalFont, 'Same as the editor', false)}
-      ${this.#renderFontSize(
-        'terminalFontSize',
-        terminalFontSize,
-        terminalFontSize ?? editorFontSize,
-        terminalFontSize === null ? `Same as the editor: ${editorFontSize} px.` : `${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Empty follows the editor.`,
-      )}
-      <div class="acp-settings__field">
+  #renderTerminalColorsField(settings) {
+    return html`<div class="acp-settings__field">
         <span class="acp-settings__label" id="acp-settings-terminal-colors">Colors</span>
         <md-segmented-button-group
           class="acp-settings__segments"
@@ -550,7 +543,22 @@ export class AcpSettings extends LitElement {
           <md-segmented-button value="custom">Custom</md-segmented-button>
         </md-segmented-button-group>
       </div>
-      ${settings.terminalTheme === 'custom' && settings.terminalColors ? this.#renderTerminalColors(settings.terminalColors) : nothing}
+      ${settings.terminalTheme === 'custom' && settings.terminalColors ? this.#renderTerminalColors(settings.terminalColors) : nothing}`;
+  }
+
+  /** @param {Settings} settings */
+  #renderTerminal(settings) {
+    const { terminalFont, terminalFontSize, editorFontSize } = settings;
+    return html`<section class="acp-settings__group" aria-label="Terminal" data-section="terminal">
+      ${this.#renderGroupHeader('Terminal', 'terminal', settings)}
+      ${this.#renderFontSelect('terminalFont', terminalFont, 'Same as the editor', false)}
+      ${this.#renderFontSize(
+        'terminalFontSize',
+        terminalFontSize,
+        terminalFontSize ?? editorFontSize,
+        terminalFontSize === null ? `Same as the editor: ${editorFontSize} px.` : `${settingsHook.fontSizeMin}–${settingsHook.fontSizeMax} px. Empty follows the editor.`,
+      )}
+      ${SHOW_TERMINAL_COLORS ? this.#renderTerminalColorsField(settings) : nothing}
       ${this.platform === 'mac'
         ? html`<label class="acp-settings__toggle">
             <md-switch
