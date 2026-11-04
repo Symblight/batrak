@@ -53,7 +53,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   waiting for a sign-in for its sessions there (`acp::Catalog`: `initialize` + `session/list` of
   the project and its workspaces' folders, a session first seen in a workspace's folder landing in that workspace, scratch process in `<app data>/probe`, two at a time, 15 s
   each; one that listed is kept up for the next sync, stopped after 90 s unused) and makes them the list (`SyncReport`: `listed` / `unsupported` / `off` / `untrusted` /
-  `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has. A
+  `signIn` / `failed` per agent); a complete list drops the stopped sessions it no longer has, never one its CLI runs (a new CLI's session isn't listed yet). A
   session first seen in a list gets the id `<agent id>~<acp id>`. `sessions.json` in app data
   stores the list as last seen (no messages, all `stopped` after a restart) so it shows at once; a
   sync runs at launch, when a project is shown (5 min stale), when a session is clicked (its agent,

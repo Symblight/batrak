@@ -2960,6 +2960,25 @@ async fn a_session_continues_in_its_agents_cli_in_its_folder_with_its_env() {
 }
 
 #[tokio::test]
+async fn a_running_cli_chat_stays_listed_though_its_agent_doesnt_list_it_yet() {
+    let f = git_fixture("cli-unlisted");
+    f.give_cli_agents();
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let terminals = terminals();
+    let id = "2cb916db-26aa-40f2-86b5-1ba81b225fd2";
+    let workspace = WorkspaceChoice::Existing { id: ws.id.clone() };
+    f.sessions.open_cli(id, Some(f.draft("fake", workspace)), window(&terminals)).await.unwrap();
+
+    f.sessions.sync(&f.project, None).await;
+
+    let chat = f.sessions.list().into_iter().find(|s| s.id == id);
+    assert_eq!(chat.and_then(|c| c.workspace_id), Some(ws.id.clone()), "still its workspace's chat");
+    f.sessions.close_cli(id).await.unwrap();
+    f.sessions.sync(&f.project, None).await;
+    assert!(f.sessions.list().iter().all(|s| s.id != id), "once its CLI is gone the agent's list decides");
+}
+
+#[tokio::test]
 async fn a_draft_starts_in_the_cli_under_its_own_id() {
     let f = fixture("cli-draft", FakeAgentOptions::default());
     f.give_cli_agents();

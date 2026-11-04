@@ -375,6 +375,10 @@ impl Inner {
         }
         if listing.complete {
             sessions.retain(|_, state| {
+                // Its agent lists a session a CLI runs only once the CLI has written it.
+                if lock(&state.cli).is_some() {
+                    return true;
+                }
                 let record = lock(&state.record);
                 let gone = record.project_path == project
                     && record.agent_id == agent.id
