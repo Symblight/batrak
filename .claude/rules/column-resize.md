@@ -34,7 +34,7 @@ and pointer capture — no drag-and-drop library (Pragmatic drag and drop reads 
   panel, resizable height, edge `start`, hidden while the shown project's panel isn't open or has no
   terminal); `middle` holds a flush split of `agent | main`. The outer and the middle split share
   `$columnWidths` (names unique app-wide; the session handle trades width with the center, the agent
-  handle with the editor, which is why `center`'s min width is the agent's plus the editor's while a
+  handle with the editor, which has no minimum: `center`'s min width is the agent's plus the gap while a
   file tab is open); the panel's height is the shown project's `$terminalPanelHeight`
   (`stores/terminals/`, per project, clamped; a reset clears it back to `--acp-terminal-panel-height`).
   Each split's `acp-columns-resize` is stopped at its own handler in `<acp-app>`, as the splits nest in

@@ -112,4 +112,23 @@ describe('acp-column-split', () => {
     expect(bottom.height, 'the given size is its height').to.equal('260px');
     expect(bottom.width).to.equal('');
   });
+
+  it('lets a column with no minimum shrink past the minimum of the column around it', async () => {
+    // Arrange: `b` has no minimum of its own and sits in a column with one, its neighbor wants the whole row
+    const wrapper = await fixture(html`<div style="display: flex; width: 400px; height: 100px; --t-outer-min: 300px; --t-wide: 400px">
+      <acp-column-split flush .columns=${[{ name: 'outer', minSize: '--t-outer-min' }]}>
+        <acp-column-split slot="outer" flush .columns=${[{ name: 'a', size: '--t-wide' }, { name: 'b' }]}>
+          <div slot="b" class="t-b"></div>
+        </acp-column-split>
+      </acp-column-split>
+    </div>`);
+    const [outer, inner] = wrapper.querySelectorAll('acp-column-split');
+
+    // Act
+    await outer.updateComplete;
+    await inner.updateComplete;
+
+    // Assert
+    expect(wrapper.querySelector('.t-b').getBoundingClientRect().width).to.equal(0);
+  });
 });

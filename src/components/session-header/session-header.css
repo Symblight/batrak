@@ -114,6 +114,7 @@
 }
 
 .acp-session-header__view {
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
   flex: none;
 }
 

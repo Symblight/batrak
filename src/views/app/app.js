@@ -74,7 +74,7 @@ const COLUMNS = [
 const COLUMNS_AGENT_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { ...column, minSize: '--acp-agent-column-min-width' } : column));
 
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} The same, while the agent column is hidden: the center is the editor alone. */
-const COLUMNS_MAIN_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { ...column, minSize: '--acp-main-column-min-width' } : column));
+const COLUMNS_MAIN_ONLY = COLUMNS.map((column) => (column.name === 'center' ? { name: 'center' } : column));
 
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */
 const MIDDLE_COLUMNS = [
@@ -85,7 +85,7 @@ const MIDDLE_COLUMNS = [
     shrink: 1000,
     resize: { min: 280, max: 1600, label: 'Resize agent column' },
   },
-  { name: 'main', minSize: '--acp-main-column-min-width' },
+  { name: 'main' },
 ];
 
 /** @type {readonly import('../../components/column-split/column-split.js').SplitColumn[]} */

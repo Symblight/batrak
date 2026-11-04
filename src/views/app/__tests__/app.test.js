@@ -628,7 +628,8 @@ describe('acp-app: terminal panel layout', () => {
   });
 
   it('moves a terminal tab dragged from the panel onto the editor’s tabs, its shell kept and the empty panel hidden', async () => {
-    // Arrange
+    // Arrange: the editor has no minimum width, so it needs the side columns' room in the test's window
+    $hiddenColumns.set(['session', 'side']);
     const app = await render({ file: true, panel: true });
     const [terminalTab] = $terminalTabs.get().paths;
     const terminalId = tabs.terminalOf(terminalTab) ?? '';

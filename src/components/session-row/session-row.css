@@ -124,6 +124,7 @@
 }
 
 .acp-session-row__status {
+  --acp-session-status-spinner-size: var(--acp-icon-size-xs);
   flex: none;
 }
 

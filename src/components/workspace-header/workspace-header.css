@@ -25,6 +25,7 @@
 
 /* 28px icon button: 18px icon + 4px padding + the library's 1px border. */
 .acp-workspace-header__new-chat {
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
   --md-icon-button-font-size: var(--acp-icon-size-md);
 
   &::part(button) {

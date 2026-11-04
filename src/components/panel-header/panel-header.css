@@ -15,6 +15,7 @@
 }
 
 .acp-panel-header__action {
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
   flex: none;
   margin-block: calc(-1 * var(--acp-space-1));
   --md-icon-button-font-size: var(--acp-icon-size-md);

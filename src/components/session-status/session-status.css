@@ -27,5 +27,5 @@
 }
 
 .acp-session-status__spinner {
-  font-size: var(--acp-icon-size-sm);
+  font-size: var(--acp-session-status-spinner-size, var(--acp-icon-size-sm));
 }

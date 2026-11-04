@@ -101,8 +101,9 @@ export class AcpColumnSplit extends LitElement {
     const dimension = this.#axis === 'y' ? 'height' : 'width';
     const style = [];
     if (size) style.push(`--acp-pane-flex: 0 ${shrink} var(${size})`, `--acp-pane-${dimension}: var(${size})`);
-    if (minSize) style.push(`--acp-pane-min-${dimension}: var(${minSize})`);
-    if (maxSize) style.push(`--acp-pane-max-${dimension}: var(${maxSize})`);
+    // Custom properties inherit: without `initial`, a nested pane takes the limits of the pane around it.
+    style.push(`--acp-pane-min-${dimension}: ${minSize ? `var(${minSize})` : 'initial'}`);
+    style.push(`--acp-pane-max-${dimension}: ${maxSize ? `var(${maxSize})` : 'initial'}`);
     // A hidden column drops its inline width, so its collapse can take it to nothing.
     if (resize && !hidden) style.push(this.#resize.columnStyle(name));
     return style.join('; ');
