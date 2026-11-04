@@ -16,7 +16,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
  * @tag acp-terminal-view
- * @summary A terminal wired to its data: the shell's state, the editor's font, copy, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
+ * @summary A terminal wired to its data: the shell's state, the editor's font, copy, links, restart, and, for a terminal tab, the title the shell sets and files dropped from the OS typed in. With a `session-id` it is that session's CLI: restart reopens the session's CLI, a way back to the chat is offered, what waits for the CLI is counted, and dropped files are left to the session's input.
  * @fires acp-session-view `{ sessionId, view }` the way back to the chat, from a session's ended CLI
  */
 export class AcpTerminalView extends ViewElement {
@@ -103,6 +103,7 @@ export class AcpTerminalView extends ViewElement {
       .waiting=${this.#waiting}
       ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
       @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}
+      @acp-link-open=${on((/** @type {{ url: string }} */ d) => app.openUrl(d.url).catch((err) => app.reportError('Opening the link failed', err)))}
       @acp-terminal-restart=${on((/** @type {{ terminalId: string }} */ d) => (session ? sessions.restartCli(session) : terminals.restart(d.terminalId)))}
       @acp-terminal-title=${session ? nothing : on((/** @type {{ terminalId: string, title: string }} */ d) => setTerminalTitle(d.terminalId, d.title))}
       @acp-terminal-chat=${session ? on(() => this.dispatchEvent(new CustomEvent('acp-session-view', { detail: { sessionId: session, view: 'chat' }, bubbles: true, composed: true }))) : nothing}

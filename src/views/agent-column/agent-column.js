@@ -88,12 +88,6 @@ export class AcpAgentColumn extends ViewElement {
     return terminal && this.#terminals.value[terminal.terminalId]?.status === 'running' ? terminal : null;
   }
 
-  /** @param {Event} e */
-  #onLinkOpen(e) {
-    const { url } = /** @type {CustomEvent<{ url: string }>} */ (e).detail;
-    app.openUrl(url).catch((err) => app.reportError('Opening the link failed', err));
-  }
-
   /** Continue in the other view: ⌘⇧T, or the header's button. */
   toggleView() {
     const id = $activeSessionId.get();
@@ -144,7 +138,6 @@ export class AcpAgentColumn extends ViewElement {
       terminal-id=${terminalId}
       session-id=${id}
       @acp-session-view=${this.#onSessionView}
-      @acp-link-open=${this.#onLinkOpen}
     ></acp-terminal-view>`;
   }
 

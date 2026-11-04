@@ -128,6 +128,15 @@ export class AcpTerminal extends LitElement {
     return this.fontFamily ? `"${this.fontFamily}", ${MONO}` : MONO;
   }
 
+  /**
+   * A link in the output, written out or as OSC 8: only the platform's modifier opens it.
+   * @param {MouseEvent} event
+   * @param {string} url
+   */
+  #openLink = (event, url) => {
+    if (this.platform === 'mac' ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
+  };
+
   firstUpdated() {
     this.#setUp();
   }
@@ -147,15 +156,12 @@ export class AcpTerminal extends LitElement {
       scrollback: 10000,
       macOptionIsMeta: false,
       theme: this.#theme(),
+      linkHandler: { activate: this.#openLink },
     });
     this.#term = term;
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
-    term.loadAddon(
-      new WebLinksAddon((event, url) => {
-        if (this.platform === 'mac' ? event.metaKey : event.ctrlKey) this.#emit('acp-link-open', { url });
-      }),
-    );
+    term.loadAddon(new WebLinksAddon(this.#openLink));
     term.attachCustomKeyEventHandler(this.#onKey);
     term.onData((data) => this.#link?.write(data));
     // Bytes in a string (mouse reports past column 95), not text.

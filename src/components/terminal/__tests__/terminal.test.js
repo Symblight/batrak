@@ -79,7 +79,64 @@ const text = (el) => el.shadowRoot?.querySelector('.xterm-rows')?.textContent ??
 /** @param {AcpTerminal} el */
 const input = (el) => /** @type {HTMLTextAreaElement} */ (el.shadowRoot?.querySelector('textarea'));
 
+/**
+ * Hovers a row's first cell, then clicks it, as xterm's link detection needs.
+ * @param {AcpTerminal} el
+ * @param {number} row
+ * @param {MouseEventInit} modifier
+ */
+async function clickCell(el, row, modifier) {
+  const screen = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-screen'));
+  const rows = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.xterm-rows')?.children[row]);
+  const box = rows.getBoundingClientRect();
+  const init = { clientX: box.left + 2, clientY: box.top + box.height / 2, bubbles: true, composed: true, ...modifier };
+  screen.dispatchEvent(new MouseEvent('mousemove', init));
+  await new Promise((resolve) => setTimeout(resolve, 30));
+  screen.dispatchEvent(new MouseEvent('mousedown', { ...init, button: 0 }));
+  screen.dispatchEvent(new MouseEvent('mouseup', { ...init, button: 0 }));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+}
+
 describe('acp-terminal', () => {
+  it('opens a link, written out or as OSC 8, only on the platform’s modifier click, and never asks through a browser dialog', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    /** @type {string[]} */
+    const opened = [];
+    el.addEventListener('acp-link-open', (e) => opened.push(/** @type {CustomEvent<{ url: string }>} */ (e).detail.url));
+    const { confirm } = window;
+    let dialogs = 0;
+    window.confirm = () => (dialogs++, false);
+    await show(calls.sink, '\x1b]8;;https://a.test/osc8\x07label\x1b]8;;\x07\r\nhttps://a.test/plain\r\n');
+    const links = [
+      { row: 0, url: 'https://a.test/osc8' },
+      { row: 1, url: 'https://a.test/plain' },
+    ];
+    const clicks = [
+      { platform: 'mac', modifier: { metaKey: true }, opens: true },
+      { platform: 'mac', modifier: { ctrlKey: true }, opens: false },
+      { platform: 'mac', modifier: {}, opens: false },
+      { platform: 'windows', modifier: { ctrlKey: true }, opens: true },
+      { platform: 'windows', modifier: { metaKey: true }, opens: false },
+      { platform: 'linux', modifier: {}, opens: false },
+    ];
+    try {
+      for (const { row, url } of links) {
+        for (const { platform, modifier, opens } of clicks) {
+          opened.length = 0;
+          el.platform = /** @type {import('../../../hooks/app/types.js').Platform} */ (platform);
+          // Act
+          await clickCell(el, row, modifier);
+          // Assert
+          expect(opened, `${url} ${platform} ${JSON.stringify(modifier)}`).to.deep.equal(opens ? [url] : []);
+        }
+      }
+      expect(dialogs, 'no browser dialog').to.equal(0);
+    } finally {
+      window.confirm = confirm;
+    }
+  });
+
   it('connects at its size, shows the shell’s output and sends what is typed', async () => {
     const { el, calls } = await render();
     expect(calls.connects[0].cols).to.be.greaterThan(10);

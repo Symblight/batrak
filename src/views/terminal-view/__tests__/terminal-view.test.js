@@ -97,7 +97,7 @@ describe('acp-terminal-view', () => {
     expect(el.querySelector('acp-terminal')).to.equal(null);
   });
 
-  it('copies, restarts and titles on the terminal’s asks, and none leaves the view', async () => {
+  it('copies, opens links, restarts and titles on the terminal’s asks, and none leaves the view', async () => {
     // Arrange
     $terminals.set({ t1: { ...running, status: 'exited', exit: { code: 0, signal: null } } });
     const { el, terminal } = await render();
@@ -107,6 +107,12 @@ describe('acp-terminal-view', () => {
     /** @type {unknown[]} */
     const links = [];
     el.addEventListener('acp-link-open', (e) => links.push(/** @type {CustomEvent} */ (e).detail));
+    /** @type {unknown[]} */
+    const opened = [];
+    mockIPC((cmd, args) => {
+      if (cmd === 'open_url') opened.push(args);
+      return null;
+    });
     /** @type {string[]} */
     const copied = [];
     navigator.clipboard.writeText = async (text) => void copied.push(text);
@@ -119,10 +125,11 @@ describe('acp-terminal-view', () => {
     expect(copied).to.deep.equal(['ls -la']);
     expect($terminals.get().t1.title).to.equal('vim');
     expect($terminals.get().t1.status, 'starting again').to.equal('starting');
-    // Act: a link is for the column
+    // Act
     fire(terminal, 'acp-link-open', { url: 'https://example.com' });
     // Assert
-    expect(links, 'links still reach the column').to.deep.equal([{ url: 'https://example.com' }]);
+    expect(opened, 'wherever the terminal is shown').to.deep.equal([{ url: 'https://example.com' }]);
+    expect(links, 'handled here').to.deep.equal([]);
     expect(leaked).to.deep.equal([]);
   });
 
