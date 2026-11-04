@@ -9,9 +9,11 @@ const hosts = new Set();
 // Registered by the first test file that imports this: removes what a test rendered once it ends, so
 // a host's store subscriptions and IPC listeners never reach the next test. Runs after the file's
 // own `afterEach` hooks, which can still read the elements.
-afterEach(() => {
+afterEach(async () => {
   for (const host of hosts) host.remove();
   hosts.clear();
+  // A removed terminal lets go of its screen a task later: the next test's mustn't take it over.
+  await new Promise((resolve) => setTimeout(resolve));
 });
 
 /**

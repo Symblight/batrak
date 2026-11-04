@@ -1,8 +1,10 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $folderTerminalPanels, $folderTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openTerminal } from '../../../stores/terminals/terminals.js';
+import { $folderTerminalPanels, $folderTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, moveTerminalToEditor, openTerminal } from '../../../stores/terminals/terminals.js';
 import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
+import { closeAllTabs } from '../../../stores/editor/editor.js';
+import '../../main-column/main-column.js';
 import '../terminals-view.js';
 
 /** @typedef {import('../terminals-view.js').AcpTerminalsView} AcpTerminalsView */
@@ -115,5 +117,29 @@ describe('acp-terminals-view', () => {
     expect($terminalTabs.get().paths, 'the pinned stay').to.deep.equal([tc, ta]);
     send('acp-tab-close', { id: tc, scope: 'all' });
     expect($terminalTabs.get().paths).to.deep.equal([tc]);
+  });
+
+  it('keeps a terminal’s shell stream when its tab moves to the editor, attaching and replaying nothing again', async () => {
+    // Arrange
+    /** @type {string[]} */
+    const commands = [];
+    mockIPC((cmd) => {
+      commands.push(cmd);
+      return cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : null;
+    });
+    const id = openTerminal('/p', '/p', 'a');
+    const host = await fixture(html`<div style="display: flex; flex-direction: column; width: 800px; height: 600px">
+      <div style="height: 300px; display: flex"><acp-terminals-view></acp-terminals-view></div>
+      <div style="height: 300px; display: flex"><acp-main-column></acp-main-column></div>
+    </div>`);
+    await until(() => commands.includes('terminal_attach'));
+    // Act
+    moveTerminalToEditor(id, 0);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Assert
+    const main = /** @type {HTMLElement} */ (host.querySelector('acp-main-column')?.querySelector('acp-tab-view'));
+    expect(main.shadowRoot?.querySelector('acp-terminal')?.shadowRoot?.querySelector('.xterm'), 'its screen, in the editor').to.not.equal(null);
+    expect(commands.filter((c) => c === 'terminal_attach')).to.have.length(1);
+    closeAllTabs();
   });
 });

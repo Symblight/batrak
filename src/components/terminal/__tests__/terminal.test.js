@@ -48,6 +48,8 @@ function fakeConnect() {
   return { calls, connect };
 }
 
+let rendered = 0;
+
 /**
  * @param {TerminalInfo} [info]
  * @param {number} [width] px
@@ -55,11 +57,11 @@ function fakeConnect() {
  */
 async function render(info = running, width = 600) {
   const { calls, connect } = fakeConnect();
-  // The DOM renderer, whose rows the tests read.
+  // The DOM renderer, whose rows the tests read. An id of its own: a table's next terminal is another, not this one moved.
   const el = /** @type {AcpTerminal} */ (
     await fixture(html`<acp-terminal
       style="display: flex; width: ${width}px; height: 300px"
-      terminal-id="t1"
+      terminal-id=${`t${++rendered}`}
       .connect=${connect}
       .info=${info}
       .gpu=${false}
@@ -204,9 +206,43 @@ describe('acp-terminal', () => {
     expect(text(el)).to.include('kept through the move');
     // Act
     el.remove();
-    await Promise.resolve();
+    await new Promise((resolve) => setTimeout(resolve, 10));
     // Assert
     expect(disposed).to.deep.equal(['t1']);
+  });
+
+  it('hands its screen and shell to a new element of the same terminal, whichever comes first, as a tab moved to the editor does', async () => {
+    for (const order of ['new first', 'old removed first']) {
+      // Arrange
+      const { calls, connect } = fakeConnect();
+      let disposed = 0;
+      /** @type {import('../../../hooks/terminals/types.js').TerminalConnect} */
+      const counting = (id, size, sink) => ({ ...connect(id, size, sink), dispose: () => disposed++ });
+      const make = () => html`<acp-terminal style="display: flex; width: 500px; height: 300px" terminal-id="moving" .connect=${counting} .info=${running} .gpu=${false}></acp-terminal>`;
+      const old = /** @type {AcpTerminal} */ (await fixture(make()));
+      await until(() => calls.sink !== null);
+      await show(calls.sink, 'kept through the move\r\n');
+      // Act
+      if (order === 'old removed first') old.remove();
+      const moved = /** @type {AcpTerminal} */ (await fixture(make()));
+      if (order === 'new first') old.remove();
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      // Assert
+      expect(calls.connects.length, `${order}: not connected again`).to.equal(1);
+      expect(disposed, `${order}: its stream stays`).to.equal(0);
+      expect(text(moved), order).to.include('kept through the move');
+      // Act: the shell's still its own, and what it prints lands here
+      input(moved).dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', keyCode: 13, bubbles: true, composed: true }));
+      await show(calls.sink, 'after the move\r\n');
+      await until(() => text(moved).includes('after the move'));
+      // Assert
+      expect(calls.writes, order).to.deep.equal(['\r']);
+      // Act
+      moved.remove();
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Assert
+      expect(disposed, `${order}: let go with its last element`).to.equal(1);
+    }
   });
 
   it('sends a mouse report far right as bytes, not as text', async () => {
@@ -770,7 +806,7 @@ describe('acp-terminal', () => {
     const chats = [];
     el.addEventListener('acp-terminal-chat', (e) => chats.push(/** @type {CustomEvent} */ (e)));
     /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-terminal__chat')).click();
-    expect(chats.map((e) => e.detail)).to.deep.equal([{ terminalId: 't1' }]);
+    expect(chats.map((e) => e.detail)).to.deep.equal([{ terminalId: el.terminalId }]);
     expect(el.shadowRoot?.querySelector('.acp-terminal__restart')).to.not.equal(null);
   });
 

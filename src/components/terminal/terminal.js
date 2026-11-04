@@ -32,6 +32,8 @@ import styles from './terminal.css?inline';
 const PTY_RESIZE_DELAY = 100;
 /** RIS: xterm's full reset, written into the stream so it runs in order with the output. */
 const FULL_RESET = '\x1bc';
+/** The element showing each terminal: a new one for the same terminal takes its screen over. */
+const shownBy = /** @type {Map<string, AcpTerminal>} */ (new Map());
 /**
  * Ctrl shortcuts the terminal leaves to the app on Windows and Linux; every other Ctrl key is the shell's.
  * @type {import('../../hooks/shortcuts/shortcuts.js').ShortcutId[]}
@@ -90,6 +92,8 @@ export class AcpTerminal extends LitElement {
 
   /** @type {Terminal | null} */
   #term = null;
+  /** The element the screen's own callbacks act for: they outlive the one that made them. */
+  #owner = { current: /** @type {AcpTerminal} */ (/** @type {unknown} */ (this)) };
   /** @type {FitAddon | null} */
   #fit = null;
   /** @type {TerminalLink | null} */
@@ -251,6 +255,49 @@ export class AcpTerminal extends LitElement {
     // Captured, or xterm's own listener would paste it as it is.
     screen.addEventListener('paste', this.#onPaste, { capture: true });
     screen.addEventListener('contextmenu', this.#onContextMenu);
+    const showing = shownBy.get(this.terminalId);
+    if (showing && showing.#term && showing !== this) this.#takeOver(showing, screen);
+    else this.#create(screen);
+    if (this.terminalId) shownBy.set(this.terminalId, this);
+    this.#resizes = new ResizeObserver(() => this.#scheduleFit());
+    this.#resizes.observe(this);
+    this.#themes = new MutationObserver(() => {
+      if (this.#term) this.#applyTheme(this.#term);
+    });
+    this.#themes.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
+  }
+
+  /**
+   * Shows the screen another element has, as it is: its scrollback, its scroll position and its
+   * stream to the shell. Replaying the shell's output would draw it for the width it was printed at.
+   * @param {AcpTerminal} from
+   * @param {HTMLElement} screen
+   */
+  #takeOver(from, screen) {
+    const term = /** @type {Terminal} */ (from.#term);
+    this.#term = term;
+    this.#fit = from.#fit;
+    this.#search = from.#search;
+    this.#webgl = from.#webgl;
+    this.#link = from.#link;
+    this.#linkId = from.#linkId;
+    this.#owner = from.#owner;
+    this.#owner.current = this;
+    from.#stopWatching();
+    from.#term = null;
+    from.#fit = null;
+    from.#search = null;
+    from.#webgl = null;
+    from.#link = null;
+    from.#visible = false;
+    screen.append(/** @type {HTMLElement} */ (term.element));
+    this.#applyTheme(term);
+    this.#applyWindowsPty(term);
+  }
+
+  /** @param {HTMLElement} screen */
+  #create(screen) {
+    const owner = this.#owner;
     const term = new Terminal({
       fontFamily: this.#font(),
       fontSize: this.fontSize,
@@ -258,7 +305,7 @@ export class AcpTerminal extends LitElement {
       macOptionIsMeta: false,
       // A program's colors may assume another background than the theme's: text stays readable.
       minimumContrastRatio: 4.5,
-      linkHandler: { activate: this.#openLink },
+      linkHandler: { activate: (event, url) => owner.current.#openLink(event, url) },
       // The Unicode addon registers through xterm's proposed API.
       allowProposedApi: true,
     });
@@ -267,25 +314,19 @@ export class AcpTerminal extends LitElement {
     this.#applyWindowsPty(term);
     this.#fit = new FitAddon();
     term.loadAddon(this.#fit);
-    term.loadAddon(new WebLinksAddon(this.#openLink));
-    term.registerLinkProvider({ provideLinks: (y, done) => done(this.#fileLinksAt(term, y)) });
+    term.loadAddon(new WebLinksAddon((event, url) => owner.current.#openLink(event, url)));
+    term.registerLinkProvider({ provideLinks: (y, done) => done(owner.current.#fileLinksAt(term, y)) });
     term.loadAddon(new Unicode11Addon());
     this.#search = new SearchAddon();
-    this.#search.onDidChangeResults(({ resultIndex, resultCount }) => (this.findResult = { index: resultIndex, total: resultCount }));
+    this.#search.onDidChangeResults(({ resultIndex, resultCount }) => (owner.current.findResult = { index: resultIndex, total: resultCount }));
     term.loadAddon(this.#search);
     term.unicode.activeVersion = '11';
-    term.attachCustomKeyEventHandler(this.#onKey);
-    term.onData((data) => this.#link?.write(data));
+    term.attachCustomKeyEventHandler((e) => owner.current.#onKey(e));
+    term.onData((data) => owner.current.#link?.write(data));
     // Bytes in a string (mouse reports past column 95), not text.
-    term.onBinary((data) => this.#link?.write(Uint8Array.from(data, (c) => c.charCodeAt(0))));
-    term.onTitleChange((title) => this.#emit('acp-terminal-title', { terminalId: this.terminalId, title }));
+    term.onBinary((data) => owner.current.#link?.write(Uint8Array.from(data, (c) => c.charCodeAt(0))));
+    term.onTitleChange((title) => owner.current.#emit('acp-terminal-title', { terminalId: owner.current.terminalId, title }));
     term.open(screen);
-    this.#resizes = new ResizeObserver(() => this.#scheduleFit());
-    this.#resizes.observe(this);
-    this.#themes = new MutationObserver(() => {
-      if (this.#term) this.#applyTheme(this.#term);
-    });
-    this.#themes.observe(document.documentElement, { attributes: true, attributeFilter: ['style', 'data-theme'] });
   }
 
   /** @param {Terminal} term */
@@ -312,6 +353,9 @@ export class AcpTerminal extends LitElement {
     const term = this.#term;
     if (!term) return;
     if (changed.get('terminalId')) {
+      // Another terminal in this element: the last one's screen isn't there to take over any more.
+      if (shownBy.get(/** @type {string} */ (changed.get('terminalId'))) === this) shownBy.delete(/** @type {string} */ (changed.get('terminalId')));
+      if (this.terminalId) shownBy.set(this.terminalId, this);
       // Another terminal shown in this element (the agent column's next session): its own screen and
       // link, never the last one's. Connecting again replays its kept output.
       this.#link?.dispose();
@@ -334,20 +378,26 @@ export class AcpTerminal extends LitElement {
 
   disconnectedCallback() {
     super.disconnectedCallback();
-    // A move (a tab reorder moves its panel) is back by then, with its screen and scrollback.
-    queueMicrotask(() => {
+    // A move is done by then: back in place (a tab reorder moves its panel), or taken over by a new
+    // element (a tab moved to the editor).
+    setTimeout(() => {
       if (!this.isConnected) this.#tearDown();
     });
   }
 
-  #tearDown() {
+  #stopWatching() {
     clearTimeout(this.#frame);
     clearTimeout(this.#ptyResize);
+    this.#resizes?.disconnect();
+    this.#themes?.disconnect();
+  }
+
+  #tearDown() {
+    this.#stopWatching();
+    if (shownBy.get(this.terminalId) === this) shownBy.delete(this.terminalId);
     this.#webgl = null;
     this.#search = null;
     this.findOpen = false;
-    this.#resizes?.disconnect();
-    this.#themes?.disconnect();
     this.#link?.dispose();
     this.#link = null;
     this.#term?.dispose();
