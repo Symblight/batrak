@@ -30,6 +30,7 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
 tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
 # Workspace snapshot: ignore-aware walk + file watching
 ignore = "0.4"
 notify = "8"

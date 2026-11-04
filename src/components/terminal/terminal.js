@@ -5,8 +5,17 @@ import { WebglAddon } from '@xterm/addon-webgl';
 import { SearchAddon } from '@xterm/addon-search';
 import { Unicode11Addon } from '@xterm/addon-unicode11';
 import { WebLinksAddon } from '@xterm/addon-web-links';
+import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/button';
+import '@symblight/wc-material/icon';
+import '@symblight/wc-material/menu';
+import cleanIcon from '@material-design-icons/svg/outlined/cleaning_services.svg?raw';
+import copyIcon from '@material-design-icons/svg/outlined/content_copy.svg?raw';
+import pasteIcon from '@material-design-icons/svg/outlined/content_paste.svg?raw';
+import searchIcon from '@material-design-icons/svg/outlined/search.svg?raw';
+import selectAllIcon from '@material-design-icons/svg/outlined/select_all.svg?raw';
 import xtermStyles from '@xterm/xterm/css/xterm.css?inline';
+import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import { app } from '../../hooks/app/app.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { fileLinks, fontStack, oneLine, resolveFile, runsLines, safePaste, validFind } from '../../hooks/terminals/rules.js';
@@ -52,6 +61,7 @@ const APP_KEYS = [
  * @fires acp-terminal-restart `{ terminalId }`
  * @fires acp-terminal-chat `{ terminalId }` Continue in chat, for a session's CLI that ended.
  * @fires acp-terminal-title `{ terminalId, title }` A title the shell set.
+ * @fires acp-terminal-paste-request Paste was asked for by its menu or keys: the view reads the clipboard, then `pasteAsUser()`.
  * @fires acp-terminal-paste-lines `{ text }` The user pasted lines that would each run: `pasteLines()` if they agree.
  * @fires acp-link-open `{ url }` A link ⌘-clicked (Ctrl-clicked elsewhere).
  * @fires acp-file-open `{ path, line }` A file named in the output ⌘-clicked (Ctrl-clicked elsewhere).
@@ -94,6 +104,11 @@ export class AcpTerminal extends LitElement {
   #ptyResize;
   /** @type {SearchAddon | null} */
   #search = null;
+  /** @type {ContextMenuController<true>} */
+  #menu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-terminal__menu'),
+    onSelect: (value) => this.#onMenuSelect(value),
+  });
   /** @type {WebglAddon | null} Only while shown: a page's WebGL contexts are few. */
   #webgl = null;
   #visible = false;
@@ -235,6 +250,7 @@ export class AcpTerminal extends LitElement {
     screen.replaceChildren();
     // Captured, or xterm's own listener would paste it as it is.
     screen.addEventListener('paste', this.#onPaste, { capture: true });
+    screen.addEventListener('contextmenu', this.#onContextMenu);
     const term = new Terminal({
       fontFamily: this.#font(),
       fontSize: this.fontSize,
@@ -466,16 +482,70 @@ export class AcpTerminal extends LitElement {
     term.paste(safePaste(term.modes.bracketedPasteMode ? text : oneLine(text)));
   }
 
-  /** What the user pastes (⌘V, the Edit menu): sent, unless its lines would each run. */
+  /**
+   * Pastes what the user asked to: sent, unless its lines would each run.
+   * @param {string} text
+   */
+  pasteAsUser(text) {
+    const term = this.#term;
+    if (!term) return;
+    if (runsLines(text, term.modes.bracketedPasteMode)) this.#emit('acp-terminal-paste-lines', { text });
+    else term.paste(safePaste(text));
+  }
+
+  /** ⌘V, the Edit menu. */
   #onPaste = (/** @type {ClipboardEvent} */ e) => {
     e.preventDefault();
     e.stopPropagation();
-    const term = this.#term;
     const text = e.clipboardData?.getData('text/plain');
-    if (!term || !text) return;
-    if (runsLines(text, term.modes.bracketedPasteMode)) this.#emit('acp-terminal-paste-lines', { text });
-    else term.paste(safePaste(text));
+    if (text) this.pasteAsUser(text);
   };
+
+  /** A program that follows the mouse has its right clicks; Shift gets the menu anyway, as in native terminals. */
+  #onContextMenu = (/** @type {MouseEvent} */ e) => {
+    e.preventDefault();
+    if (this.#term?.modes.mouseTrackingMode !== 'none' && !e.shiftKey) return;
+    this.#menu.onContextMenu(true, e);
+  };
+
+  /** @param {string} value */
+  #onMenuSelect(value) {
+    const term = this.#term;
+    if (!term) return;
+    if (value === 'copy') this.#emit('acp-terminal-copy', { text: term.getSelection() });
+    else if (value === 'paste') this.#emit('acp-terminal-paste-request', {});
+    else if (value === 'select-all') term.selectAll();
+    else if (value === 'clear') this.#clear(term);
+    else if (value === 'find') this.#openFind();
+    this.requestUpdate();
+  }
+
+  /** @param {Terminal} term */
+  #clear(term) {
+    term.clear();
+    this.#link?.clear();
+  }
+
+  /** Back to the shell, unless a pick took the keyboard elsewhere. */
+  #onMenuClosed = () => {
+    // `md-menu` says `closed` as it first renders too.
+    const wasOpen = this.#menu.target !== null;
+    this.#menu.onClosed();
+    if (wasOpen && !this.findOpen) this.focus();
+  };
+
+  /**
+   * @param {string} value
+   * @param {string} icon
+   * @param {string} label
+   * @param {boolean} [disabled]
+   */
+  #menuItem(value, icon, label, disabled = false) {
+    return html`<md-menu-item value=${value} ?disabled=${disabled}>
+      <md-icon slot="leading" class="acp-terminal__menu-icon">${unsafeSVG(icon)}</md-icon>
+      ${label}
+    </md-menu-item>`;
+  }
 
   /**
    * Keys for the shell, except the app's shortcuts (they bubble on) and copy, paste, clear, select all.
@@ -498,10 +568,7 @@ export class AcpTerminal extends LitElement {
     if (this.platform === 'mac') {
       if (!e.metaKey) return true;
       if (down && key === 'c' && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
-      else if (down && key === 'k') {
-        term.clear();
-        this.#link?.clear();
-      }
+      else if (down && key === 'k') this.#clear(term);
       else if (down && key === 'a') term.selectAll();
       if (down && (key === 'k' || key === 'a')) e.preventDefault();
       return false;
@@ -521,7 +588,14 @@ export class AcpTerminal extends LitElement {
       if (down && term.hasSelection()) this.#emit('acp-terminal-copy', { text: term.getSelection() });
       return false;
     }
-    if (e.ctrlKey && e.shiftKey && key === 'v') return false;
+    if (e.ctrlKey && e.shiftKey && key === 'v') {
+      // WebKitGTK has no paste of its own on this key; WebView2's is the `paste` event.
+      if (down && this.platform === 'linux') {
+        e.preventDefault();
+        this.#emit('acp-terminal-paste-request', {});
+      }
+      return false;
+    }
     return !APP_KEYS.some((id) => shortcuts.matches(id, e, this.platform));
   };
 
@@ -532,6 +606,10 @@ export class AcpTerminal extends LitElement {
         ? html`<div class="acp-terminal__error" role="alert">${info.error}</div>`
         : nothing}
       <div class="acp-terminal__screen"></div>
+      <md-menu class="acp-terminal__menu" aria-label="Terminal" @select=${this.#menu.onSelect} @closed=${this.#onMenuClosed}>
+        ${this.#menuItem('copy', copyIcon, 'Copy', !this.#term?.hasSelection())} ${this.#menuItem('paste', pasteIcon, 'Paste')}
+        ${this.#menuItem('select-all', selectAllIcon, 'Select all')} ${this.#menuItem('clear', cleanIcon, 'Clear')} ${this.#menuItem('find', searchIcon, 'Find')}
+      </md-menu>
       ${this.findOpen
         ? html`<acp-terminal-find
             class="acp-terminal__find"

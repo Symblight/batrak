@@ -464,6 +464,88 @@ describe('acp-terminal', () => {
     }
   });
 
+  describe('its menu', () => {
+    const menu = (/** @type {AcpTerminal} */ el) => /** @type {HTMLElementTagNameMap['md-menu']} */ (el.shadowRoot?.querySelector('.acp-terminal__menu'));
+    const item = (/** @type {AcpTerminal} */ el, /** @type {string} */ value) => /** @type {HTMLElementTagNameMap['md-menu-item']} */ (menu(el).querySelector(`[value="${value}"]`));
+    const rightClick = (/** @type {AcpTerminal} */ el, /** @type {MouseEventInit} */ init = {}) =>
+      el.shadowRoot?.querySelector('.xterm-screen')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, button: 2, clientX: 40, clientY: 40, ...init }));
+    const pick = (/** @type {AcpTerminal} */ el, /** @type {string} */ value) => menu(el).dispatchEvent(new CustomEvent('select', { detail: { value } }));
+
+    it('opens on a right click, with Copy only for a selection, and does what is picked', async () => {
+      // Arrange
+      const { el, calls } = await render();
+      /** @type {unknown[]} */
+      const heard = [];
+      for (const type of ['acp-terminal-copy', 'acp-terminal-paste-request']) el.addEventListener(type, (e) => heard.push([type, /** @type {CustomEvent} */ (e).detail]));
+      await show(calls.sink, 'hello\r\n');
+      // Act
+      rightClick(el);
+      await until(() => menu(el).open);
+      // Assert
+      expect(item(el, 'copy').disabled, 'nothing selected').to.equal(true);
+      // Act
+      pick(el, 'paste');
+      pick(el, 'select-all');
+      await el.updateComplete;
+      // Assert
+      expect(item(el, 'copy').disabled, 'all selected').to.equal(false);
+      // Act
+      pick(el, 'copy');
+      pick(el, 'clear');
+      pick(el, 'find');
+      await el.updateComplete;
+      // Assert
+      expect(heard.map((h) => /** @type {unknown[]} */ (h)[0])).to.deep.equal(['acp-terminal-paste-request', 'acp-terminal-copy']);
+      expect(/** @type {{ text: string }} */ (/** @type {unknown[]} */ (heard[1])[1]).text).to.include('hello');
+      expect(calls.clears, 'clear').to.equal(1);
+      expect(el.shadowRoot?.querySelector('acp-terminal-find'), 'find').to.not.equal(null);
+    });
+
+    it('leaves a right click to a program that follows the mouse, unless Shift is held', async () => {
+      // Arrange
+      const { el, calls } = await render();
+      await show(calls.sink, '\x1b[?1000h');
+      // Act
+      rightClick(el);
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      // Assert
+      expect(menu(el).open, 'the program’s').to.equal(false);
+      // Act
+      rightClick(el, { shiftKey: true });
+      // Assert
+      await until(() => menu(el).open);
+    });
+  });
+
+  it('on Linux, Ctrl+Shift+V asks for the clipboard, which the webview doesn’t paste by itself', async () => {
+    for (const [platform, asked] of /** @type {const} */ ([['linux', 1], ['windows', 0]])) {
+      // Arrange
+      const { el, calls } = await render();
+      el.platform = platform;
+      let requests = 0;
+      el.addEventListener('acp-terminal-paste-request', () => requests++);
+      // Act
+      input(el).dispatchEvent(new KeyboardEvent('keydown', { key: 'V', code: 'KeyV', keyCode: 86, ctrlKey: true, shiftKey: true, bubbles: true, composed: true }));
+      // Assert
+      expect(requests, platform).to.equal(asked);
+      expect(calls.writes, platform).to.deep.equal([]);
+    }
+  });
+
+  it('pastes what its view read as the user would, asking first for lines that would run', async () => {
+    // Arrange
+    const { el, calls } = await render();
+    /** @type {string[]} */
+    const asked = [];
+    el.addEventListener('acp-terminal-paste-lines', (e) => asked.push(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text));
+    // Act
+    el.pasteAsUser('ls\x1b[0m');
+    el.pasteAsUser('a\nb');
+    // Assert
+    expect(calls.writes).to.deep.equal(['ls[0m']);
+    expect(asked).to.deep.equal(['a\nb']);
+  });
+
   it('leaves the app’s shortcuts to the app', async () => {
     const { el, calls } = await render();
     /** @type {KeyboardEvent[]} */

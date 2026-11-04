@@ -8,7 +8,7 @@ describe('ipc', () => {
 
   it('is one frozen object of the Tauri bridge, with nothing about any feature in it', () => {
     expect(Object.isFrozen(ipc)).to.equal(true);
-    expect(Object.keys(ipc).sort()).to.deep.equal(['channel', 'homeDir', 'invoke', 'listen', 'onDragDrop', 'pickFolder']);
+    expect(Object.keys(ipc).sort()).to.deep.equal(['channel', 'homeDir', 'invoke', 'listen', 'onDragDrop', 'pickFolder', 'readClipboard']);
   });
 
   it('invokes a command with its arguments and resolves with the answer', async () => {

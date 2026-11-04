@@ -20,6 +20,7 @@ pub fn run() {
     logging::install_panic_hook();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(roots::Roots::default())
         .manage(commands::dropped::DroppedFiles::default())
         .on_menu_event(menu::on_event)

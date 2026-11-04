@@ -76,6 +76,15 @@ export class AcpTerminalView extends ViewElement {
     }
   };
 
+  async #pasteClipboard() {
+    try {
+      const text = await terminals.readClipboard();
+      if (text) this.#terminalRef.value?.pasteAsUser(text);
+    } catch (err) {
+      app.reportError('Pasting failed', err);
+    }
+  }
+
   /**
    * Lines pasted into a program that would run each one: only if the user agrees.
    * @param {string} text
@@ -131,6 +140,7 @@ export class AcpTerminalView extends ViewElement {
         ?dropping=${this.#dropTarget.value !== null && this.#dropTarget.value === this.#terminalRef.value}
         @acp-terminal-copy=${on((/** @type {{ text: string }} */ d) => app.copy(d.text, 'Copying failed'))}
         @acp-link-open=${on((/** @type {{ url: string }} */ d) => app.openUrl(d.url).catch((err) => app.reportError('Opening the link failed', err)))}
+        @acp-terminal-paste-request=${on(() => this.#pasteClipboard())}
         @acp-terminal-paste-lines=${on((/** @type {{ text: string }} */ d) => this.#pasteLines(d.text))}
         @acp-terminal-restart=${on((/** @type {{ terminalId: string }} */ d) => (session ? sessions.restartCli(session) : terminals.restart(d.terminalId)))}
         @acp-terminal-title=${session ? nothing : on((/** @type {{ terminalId: string, title: string }} */ d) => setTerminalTitle(d.terminalId, d.title))}

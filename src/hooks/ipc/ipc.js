@@ -2,6 +2,7 @@ import { invoke, Channel } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { homeDir } from '@tauri-apps/api/path';
 import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { readText } from '@tauri-apps/plugin-clipboard-manager';
 import { open } from '@tauri-apps/plugin-dialog';
 
 /** @typedef {import('../file-drop/types.js').FileDrag} FileDrag */
@@ -45,6 +46,11 @@ export const ipc = Object.freeze({
    */
   listen(event, callback) {
     return listen(event, (e) => callback(/** @type {T} */ (e.payload)));
+  },
+
+  /** @returns {Promise<string>} The system clipboard's text, with no prompt from the webview. */
+  readClipboard() {
+    return readText();
   },
 
   /** @returns {Promise<string>} The user's home folder. */

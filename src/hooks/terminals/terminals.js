@@ -383,6 +383,11 @@ export const terminals = Object.freeze({
 
   close,
 
+  /** @returns {Promise<string>} What a paste asked for from a terminal's menu or keys pastes. */
+  readClipboard() {
+    return ipc.readClipboard();
+  },
+
   /**
    * Closes a folder's terminals, waiting for their shells to end, and forgets its panel: before its
    * workspace is deleted, so no shell keeps the folder busy (Windows refuses to remove a cwd) or

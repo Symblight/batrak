@@ -142,6 +142,20 @@ describe('acp-terminal-view', () => {
     }
   });
 
+  it('reads the clipboard when its terminal asks to paste, and pastes it as the user would', async () => {
+    // Arrange
+    mockIPC((cmd) => (cmd === 'plugin:clipboard-manager|read_text' ? 'from the clipboard' : null));
+    const { terminal } = await render();
+    /** @type {string[]} */
+    const pasted = [];
+    terminal.pasteAsUser = (text) => pasted.push(text);
+    // Act
+    fire(terminal, 'acp-terminal-paste-request', {});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    // Assert
+    expect(pasted).to.deep.equal(['from the clipboard']);
+  });
+
   it('copies, opens links, restarts and titles on the terminal’s asks, and none leaves the view', async () => {
     // Arrange
     $terminals.set({ t1: { ...running, status: 'exited', exit: { code: 0, signal: null } } });
