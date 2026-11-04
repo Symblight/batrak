@@ -15,8 +15,8 @@ import { $permissionRequests } from '../../stores/session-runtime/session-runtim
 import { $pickerOrder, $workspaceNumbers, $workspaceStatuses } from '../../stores/workspace-status/workspace-status.js';
 import { defaultBase, nextWaiting, noticesOf } from './rules.js';
 import { git } from '../git/git.js';
-import { openWorkspaceChanges, removeProjectTabs } from '../../stores/editor/editor.js';
-import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { openWorkspaceChanges, removeFolderTabs } from '../../stores/editor/editor.js';
+import { removeFolderExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { notify } from '../../stores/notices/notices.js';
 import { app } from '../app/app.js';
 import { projects } from '../projects/projects.js';
@@ -108,8 +108,8 @@ async function follow(workspace) {
  * @param {string} folder
  */
 function forgetFolder(folder) {
-  removeProjectTabs(folder);
-  removeProjectExpandedFolders(folder);
+  removeFolderTabs(folder);
+  removeFolderExpandedFolders(folder);
   forgetLastSession(folder);
 }
 
@@ -255,20 +255,21 @@ export const workspaces = Object.freeze({
   },
 
   /**
-   * Delete workspace…: asks in `dialog` with what deleting would touch; the dialog's Delete fires
-   * `acp-workspace-delete`.
+   * What Delete workspace… asks with: the workspace and what deleting it would touch.
    * @param {string} id
-   * @param {HTMLElementTagNameMap['acp-workspace-delete-dialog'] | null} dialog
+   * @returns {Promise<{ workspace: Workspace, preview: DeletePreview } | null>} `null`: not listed, or
+   *   the check failed (reported).
    */
-  async confirmDelete(id, dialog) {
-    const record = recordOf(id);
-    if (record === null || dialog === null) return;
+  async deletePreview(id) {
+    const workspace = recordOf(id);
+    if (workspace === null) return null;
     try {
       /** @type {DeletePreview} */
       const preview = await ipc.invoke('workspace_delete_preview', { id });
-      await dialog.show(record, preview);
+      return { workspace, preview };
     } catch (err) {
       app.reportError('Checking the workspace failed', err);
+      return null;
     }
   },
 

@@ -60,11 +60,11 @@ export class AcpWorkspaceChangesTab extends ViewElement {
         e.stopPropagation();
         this.#review.collapseAll();
       }}
-      @acp-session-apply=${(/** @type {Event} */ e) => {
+      @acp-changes-apply=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         workspaces.apply(view.workspaceId);
       }}
-      @acp-session-check-out=${(/** @type {Event} */ e) => {
+      @acp-changes-check-out=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         workspaces.checkOut(view.workspaceId);
       }}

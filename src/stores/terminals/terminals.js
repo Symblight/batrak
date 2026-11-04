@@ -1,5 +1,5 @@
 import { atom, computed, map } from 'nanostores';
-import { $projectTabs, closeProjectTab, moveTab, openProjectTab, openTab } from '../editor/editor.js';
+import { $folderTabs, closeFolderTab, moveTab, openFolderTab, openTab } from '../editor/editor.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { NO_PROJECT, NO_TABS, tabGroup } from '../tab-group/tab-group.js';
 import { $shownFolder } from '../workspaces/workspaces.js';
@@ -18,20 +18,20 @@ export const $terminals = atom(/** @type {Readonly<Record<string, TerminalInfo>>
  * The terminal panel's tabs by folder (`$shownFolder`'s keys): terminal tabs only, in memory (shells
  * don't outlive the page, so neither does a tab), written through `terminalGroup`.
  */
-export const $projectTerminalTabs = map(/** @type {Record<string, EditorTabs | undefined>} */ ({}));
+export const $folderTerminalTabs = map(/** @type {Record<string, EditorTabs | undefined>} */ ({}));
 
 /** The shown folder's key in the per-folder maps; `NO_PROJECT` with none shown. */
 const shownKey = () => $shownFolder.get() ?? NO_PROJECT;
 
 /** The shown folder's terminal tabs; with none, those opened with none. */
 export const $terminalTabs = computed(
-  [$projectTerminalTabs, $shownFolder],
+  [$folderTerminalTabs, $shownFolder],
   (folders, folder) => folders[folder ?? NO_PROJECT] ?? NO_TABS,
 );
 
 /** The editor's tab rules, applied to the terminal group (a second group, not a second tab system). */
 export const terminalGroup = tabGroup({
-  $projects: $projectTerminalTabs,
+  $folders: $folderTerminalTabs,
   $tabs: $terminalTabs,
   shownKey,
 });
@@ -40,18 +40,18 @@ export const terminalGroup = tabGroup({
  * Whether each folder's terminal panel is shown, by folder (`NO_PROJECT` for none). In memory, like
  * the shells; only a panel with terminals is ever open (the hook hides it with its last one).
  */
-export const $projectTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
+export const $folderTerminalPanels = map(/** @type {Record<string, { open: boolean } | undefined>} */ ({}));
 
 /** The shown folder's panel. */
-export const $terminalPanel = computed([$projectTerminalPanels, $shownFolder], (panels, folder) => panels[folder ?? NO_PROJECT] ?? { open: false });
+export const $terminalPanel = computed([$folderTerminalPanels, $shownFolder], (panels, folder) => panels[folder ?? NO_PROJECT] ?? { open: false });
 
 /**
- * @param {string | null} root The folder; `null`: none.
+ * @param {string | null} folder `null`: none.
  * @param {boolean} open
  */
-export function setTerminalPanelOpen(root, open) {
-  const key = root ?? NO_PROJECT;
-  if (($projectTerminalPanels.get()[key]?.open ?? false) !== open) $projectTerminalPanels.setKey(key, { open });
+export function setTerminalPanelOpen(folder, open) {
+  const key = folder ?? NO_PROJECT;
+  if (($folderTerminalPanels.get()[key]?.open ?? false) !== open) $folderTerminalPanels.setKey(key, { open });
 }
 
 /** Limits of the panel's height, in px. */
@@ -59,13 +59,13 @@ export const TERMINAL_PANEL_MIN_HEIGHT = 120;
 export const TERMINAL_PANEL_MAX_HEIGHT = 800;
 
 /** The panel's height by folder, one storage item each; per window, like the tabs. Written only through `setKey()`. */
-export const $projectTerminalPanelHeights = persistentMapStore('brama:layout:terminal-panel:', (raw) =>
+export const $folderTerminalPanelHeights = persistentMapStore('brama:layout:terminal-panel:', (raw) =>
   typeof raw === 'number' && Number.isFinite(raw) ? clampHeight(raw) : null,
 );
 
 /** The shown folder's panel height; `null` until it was resized (the token's default applies). */
 export const $terminalPanelHeight = computed(
-  [$projectTerminalPanelHeights, $shownFolder],
+  [$folderTerminalPanelHeights, $shownFolder],
   (heights, folder) => heights[folder ?? NO_PROJECT] ?? null,
 );
 
@@ -77,13 +77,13 @@ function clampHeight(px) {
 /** @param {number} px The shown folder's panel height; kept within the limits. */
 export function setTerminalPanelHeight(px) {
   if (!Number.isFinite(px)) return;
-  $projectTerminalPanelHeights.setKey(shownKey(), clampHeight(px));
+  $folderTerminalPanelHeights.setKey(shownKey(), clampHeight(px));
 }
 
 /** The shown folder's panel goes back to the default height. */
 export function clearTerminalPanelHeight() {
   const key = shownKey();
-  if (key in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(key, undefined);
+  if (key in $folderTerminalPanelHeights.get()) $folderTerminalPanelHeights.setKey(key, undefined);
 }
 
 /** A request to focus a terminal's screen, until its view has. */
@@ -109,8 +109,8 @@ export function removeProjectTerminals(root) {
     if (!t.sessionId && t.projectPath === root && t.folder !== root) closeTerminalTab(t.folder, id);
   }
   terminalGroup.forget(root);
-  if (root in $projectTerminalPanels.get()) $projectTerminalPanels.setKey(root, undefined);
-  if (root in $projectTerminalPanelHeights.get()) $projectTerminalPanelHeights.setKey(root, undefined);
+  if (root in $folderTerminalPanels.get()) $folderTerminalPanels.setKey(root, undefined);
+  if (root in $folderTerminalPanelHeights.get()) $folderTerminalPanelHeights.setKey(root, undefined);
 }
 
 /**
@@ -119,7 +119,7 @@ export function removeProjectTerminals(root) {
  * @param {string} id The terminal's.
  */
 export function closeTerminalTab(folder, id) {
-  closeProjectTab(folder, terminalTabId(id));
+  closeFolderTab(folder, terminalTabId(id));
   terminalGroup.closeIn(folder, terminalTabId(id));
 }
 
@@ -226,8 +226,8 @@ export function openLoginTerminal({ terminalId, title, commandLine }, folder) {
   }
   const root = known ? known.folder : folder;
   // Moved to the editor's tabs: shown there.
-  if ($projectTabs.get()[root ?? NO_PROJECT]?.paths.includes(terminalTabId(terminalId))) {
-    openProjectTab(root, terminalTabId(terminalId));
+  if ($folderTabs.get()[root ?? NO_PROJECT]?.paths.includes(terminalTabId(terminalId))) {
+    openFolderTab(root, terminalTabId(terminalId));
     return;
   }
   terminalGroup.openIn(root, terminalTabId(terminalId));

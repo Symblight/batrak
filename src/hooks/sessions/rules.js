@@ -1,6 +1,6 @@
-import { RUNNING } from '../../stores/sessions/sessions.js';
 
-export { RUNNING };
+/** Statuses in which a session holds (or is getting) an agent process. */
+export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
 export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
 
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
@@ -167,8 +167,8 @@ export function removeSessionConfirm(session) {
     headline: 'Remove session?',
     message: `"${session.title}" will be deleted from ${session.agentName ?? 'its agent'}, for every app that uses it${RUNNING.has(session.status) ? ', and its agent stopped' : ''}.`,
     detail:
-      session.mode === 'worktree'
-        ? `Its worktree is deleted; uncommitted work is first committed onto ${session.branch}, which is kept if it has commits.`
+      session.workspaceId
+        ? 'Its workspace, and the files the agent changed there, stay as they are.'
         : 'Files the agent changed in the project stay as they are.',
     confirmLabel: 'Remove',
     destructive: true,

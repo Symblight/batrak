@@ -164,10 +164,8 @@ impl Sessions {
         if lock(&self.inner.sessions).contains_key(&req.session_id) {
             return Err(format!("session {} exists already", req.session_id));
         }
-        let (mode, placed, workspace_id) = match &req.workspace {
-            WorkspaceChoice::Main => {
-                (Mode::Local, env::Placement::main(&project), None)
-            }
+        let workspace = match &req.workspace {
+            WorkspaceChoice::Main => None,
             WorkspaceChoice::Existing { id } => {
                 let workspace = self.inner.workspaces.for_new_chat(id)?;
                 if workspace.project_path != project {
@@ -179,14 +177,15 @@ impl Sessions {
                         tracing::warn!(workspace = %id, "naming the workspace after its first chat failed: {e}");
                     }
                 }
-                (Mode::Worktree, workspace.placement(), Some(workspace.id))
+                Some(workspace)
             }
         };
+        let placed = env::Placement::of(&project, workspace.as_ref());
         Ok(SessionRecord {
             session_id: req.session_id.clone(),
             acp_session_id: None,
             agent_id: req.agent_id.clone(),
-            mode,
+            mode: placed.mode,
             agent_cwd: placed.agent_cwd,
             project_path: project,
             title: req.title.clone(),
@@ -202,7 +201,7 @@ impl Sessions {
             launch: None,
             agent_name: Some(agent_name),
             hidden: false,
-            workspace_id,
+            workspace_id: placed.workspace_id,
         })
     }
 
@@ -381,9 +380,6 @@ impl Sessions {
         let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
         for state in &states {
             state.stopping.store(true, Ordering::SeqCst);
-            if let Some(cancel) = lock(&state.prepare_cancel).take() {
-                cancel.store(true, Ordering::SeqCst);
-            }
             if let Some(start) = lock(&state.starting).take() {
                 start.abort();
             }
@@ -474,9 +470,6 @@ impl Inner {
         self.drop_held(state);
         if lock(&state.sign_in).take().is_some() {
             state.emit("sign-in", Value::Null);
-        }
-        if let Some(cancel) = lock(&state.prepare_cancel).take() {
-            cancel.store(true, Ordering::SeqCst);
         }
         if let Some(start) = lock(&state.starting).take() {
             start.abort();

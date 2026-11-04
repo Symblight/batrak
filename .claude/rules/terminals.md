@@ -33,7 +33,7 @@ a background job that still holds the PTY. Input goes as raw bytes (`terminal_wr
 `terminal-id` header), so xterm's binary mouse reports arrive intact. Input and output are never
 logged. Keep it portable: unix-only parts behind `cfg(unix)` with a Windows path (ConPTY,
 `ChildKiller`). Frontend: `$terminals` (`stores/terminals/terminals.js`, in
-memory; `$projectTabs`' `parse` drops terminal tabs) and the `terminals` hook
+memory; `$folderTabs`' `parse` drops terminal tabs) and the `terminals` hook
 (`hooks/terminals/terminals.js`, its pure rules in `rules.js`): `connect()` (passed by `<acp-terminal-view>`) starts a shell when its
 tab is first shown and reattaches a remounted `<acp-terminal>` (xterm.js, WebGL renderer where available, else the DOM one; a moved one, as a tab reorder moves it, builds its screen again); a shell keeps running
 while its tab, workspace or project isn't shown; a terminal's shell is closed once its tab is in neither its
@@ -55,12 +55,12 @@ own browser window (`web-test-runner.config.mjs`) and remove their terminals aft
 
 **The terminal panel** (`<acp-terminals-view>`, `src/views/terminals-view/`): a row under the agent and
 editor columns (`<acp-app>`'s layout, see `column-resize.md`), a second *tab group* rather than a second tab system.
-`tabGroup()` (`stores/tab-group/`) holds the open / close / move / pin rules once, over a per-project map store; the editor's
-group is `$projectTabs` / `$editorTabs` and the panel's is `$projectTerminalTabs` / `$terminalTabs` (`terminalGroup`, in memory,
+`tabGroup()` (`stores/tab-group/`) holds the open / close / move / pin rules once, over a per-folder map store; the editor's
+group is `$folderTabs` / `$editorTabs` and the panel's is `$folderTerminalTabs` / `$terminalTabs` (`terminalGroup`, in memory,
 terminal tab ids only). The view is an `<acp-tab-view>` (strip, confirm, one mounted panel per tab) with its `add` slot
 (`<acp-terminal-action action="new">`, right after the last tab) and `actions` slot (`action="hide"`), its events turned into
-`terminalGroup` actions. Per folder (Main's or a workspace's, `TerminalInfo.folder`): `$projectTerminalPanels` (`{ open }`), the tabs, the height
-(`$projectTerminalPanelHeights`, persisted); the panel is shown only while open *and* it has a terminal (the hook hides it
+`terminalGroup` actions. Per folder (Main's or a workspace's, `TerminalInfo.folder`): `$folderTerminalPanels` (`{ open }`), the tabs, the height
+(`$folderTerminalPanelHeights`, persisted); the panel is shown only while open *and* it has a terminal (the hook hides it
 with its last one), and stays mounted while hidden. Entry points open a tab in a project's group and show its panel: the nav rail runs `terminals.showPanel()` (hidden with no terminal: shows it with a first one in the shown folder;
 hidden with terminals: shows them as they were, adds none; shown: asks to focus the active one, `$terminalFocus`, answered by
 the view), `terminals.newTerminal()` (`+`, ⌃\`, the menu) and `openInSession()` call `openTerminal()` (the shown folder's),

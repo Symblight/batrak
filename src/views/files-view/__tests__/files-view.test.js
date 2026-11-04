@@ -3,7 +3,7 @@ import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { projects } from '../../../hooks/projects/projects.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $projectExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
+import { $folderExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { $openRoots, $openingPath, $project } from '../../../stores/project/project.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
@@ -63,7 +63,7 @@ describe('acp-files-view', () => {
   });
 
   afterEach(() => {
-    $projectExpandedFolders.setKey('/p', undefined);
+    $folderExpandedFolders.setKey('/p', undefined);
     setActiveWorkspace('/p', 'main');
     selectSession(null);
     $sessions.set([]);
@@ -113,7 +113,7 @@ describe('acp-files-view', () => {
     // Act
     tree.dispatchEvent(new CustomEvent('acp-expanded-change', { detail: { paths: ['src', 'src/a'] }, bubbles: true, composed: true }));
     // Assert
-    expect($projectExpandedFolders.get()['/p']).to.deep.equal(['src', 'src/a']);
+    expect($folderExpandedFolders.get()['/p']).to.deep.equal(['src', 'src/a']);
     expect(leaked).to.deep.equal([]);
   });
 

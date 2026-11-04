@@ -38,7 +38,7 @@ import { $activeView, forgetSessionView, setSessionView, viewOfSession } from '.
 import { forgetPendingInput } from '../../stores/chat/chat.js';
 import { $cliStarting, $sessionTerminals, $terminals, addSessionTerminal, forgetTerminal, sessionTerminalOf, setCliStarting } from '../../stores/terminals/terminals.js';
 import { $projectPath } from '../../stores/project/project.js';
-import { $activeWorkspace, $activeWorkspaceId, MAIN, setActiveWorkspace } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspaceId, $shownFolder, MAIN, setActiveWorkspace } from '../../stores/workspaces/workspaces.js';
 import { computed } from 'nanostores';
 
 /** While a window shows a project, its agents that list are asked again this often: a session another app runs starts and stops showing so. */
@@ -56,16 +56,13 @@ function onSessionEvent(event) {
 }
 
 /** The shown project's workspace, with its folder; `null` while its record loads. */
-const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $activeWorkspace], (projectPath, id, workspace) => {
-  if (projectPath === null) return null;
-  if (id === MAIN) return { projectPath, id, folder: projectPath };
-  return workspace !== null ? { projectPath, id, folder: workspace.folder } : null;
-});
+const $shownWorkspace = computed([$projectPath, $activeWorkspaceId, $shownFolder], (projectPath, id, folder) =>
+  projectPath === null || folder === null ? null : { projectPath, id, folder },
+);
 
 /**
- * Where a draft's chat is created (its footer's place, `composer.runTargetOf()`), the workspace it's
- * listed in meanwhile (a New worktree chat: the draft's, until its own exists) and the mode its
- * record starts with (a New worktree chat's: `local` until it moves into its workspace).
+ * Where a draft's chat is created (its footer's place, `composer.runTargetOf()`) and the workspace it's
+ * listed in meanwhile (a New worktree chat: the draft's, until its own exists).
  * @param {string} id A draft's.
  */
 export function placeOf(id) {
@@ -79,7 +76,6 @@ export function placeOf(id) {
     projectPath: draft.projectId,
     target,
     workspaceId: local ? MAIN : draft.workspaceId,
-    mode: /** @type {'local' | 'worktree'} */ (target.kind === 'workspace' ? 'worktree' : 'local'),
   };
 }
 
@@ -94,7 +90,7 @@ export function placeOf(id) {
 function startDraft(id, place, fields) {
   unknownToBackend.add(id);
   startComposer(id);
-  startSession(id, { ...fields, mode: place.mode }, place.workspaceId);
+  startSession(id, fields, place.workspaceId);
   setSessionNotice(id, null);
   if ($activeSessionId.get() === id) setActiveWorkspace(place.projectPath, place.workspaceId);
 }

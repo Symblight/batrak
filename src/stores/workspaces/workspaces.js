@@ -1,13 +1,13 @@
 import { atom, computed } from 'nanostores';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { $openRoots, $project, $projectPath } from '../project/project.js';
+import { MAIN, folderOfWorkspace } from '../../hooks/workspaces/folder.js';
 
 /** @typedef {import('../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../hooks/workspaces/types.js').WorktreeFolder} WorktreeFolder */
 /** @typedef {import('../../hooks/workspaces/types.js').ActiveRoot} ActiveRoot */
 
-/** Main's id: the project's own folder, never stored as a workspace. */
-export const MAIN = 'main';
+export { MAIN };
 
 /** The shown project's workspaces, oldest first, as the backend lists them (`workspaces` hook). */
 export const $workspaces = atom(/** @type {readonly Workspace[]} */ ([]));
@@ -60,15 +60,15 @@ export const $workspaceOpening = atom(/** @type {string | null} */ (null));
 export const $activeRoot = computed(
   [$project, $activeWorkspaceId, $activeWorkspace, $openRoots, $workspaceOpening],
   (project, id, workspace, open, opening) => {
-    if (id === MAIN) {
-      return /** @type {ActiveRoot} */ ({ path: project?.path ?? null, rootId: project?.rootId ?? null, opening: false });
-    }
+    if (project === null) return /** @type {ActiveRoot} */ ({ path: null, rootId: null, opening: false });
+    const path = folderOfWorkspace(project.path, id, workspace === null ? [] : [workspace]);
     // A listed one still loading is on its way.
-    if (workspace === null) return /** @type {ActiveRoot} */ ({ path: null, rootId: null, opening: true });
-    const rootId = open[workspace.folder] ?? null;
+    if (path === null) return /** @type {ActiveRoot} */ ({ path: null, rootId: null, opening: true });
+    if (id === MAIN) return /** @type {ActiveRoot} */ ({ path, rootId: project.rootId ?? null, opening: false });
+    const rootId = open[path] ?? null;
     // One still checking out shows the skeleton until its root opens.
-    const pending = workspace.creating === true || opening === workspace.folder;
-    return /** @type {ActiveRoot} */ ({ path: workspace.folder, rootId, opening: rootId === null && pending });
+    const pending = workspace?.creating === true || opening === path;
+    return /** @type {ActiveRoot} */ ({ path, rootId, opening: rootId === null && pending });
   },
 );
 

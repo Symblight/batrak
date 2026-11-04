@@ -178,7 +178,7 @@ export class AcpApp extends ViewElement {
         void workspaces.rename(detail.id, detail.name);
         break;
       case 'acp-workspace-delete-request':
-        void workspaces.confirmDelete(detail.id, this.renderRoot.querySelector('acp-workspace-delete-dialog'));
+        void this.#confirmDelete(detail.id);
         break;
       case 'acp-workspace-changes':
         workspaces.changes(detail.id);
@@ -199,6 +199,15 @@ export class AcpApp extends ViewElement {
   #newWorktreeChat() {
     const project = this.#project.value?.path ?? null;
     if (project !== null) sessions.create(project, $activeWorkspaceId.get(), { kind: 'worktree', base: null });
+  }
+
+  /**
+   * Delete workspace…: asks with what deleting would touch; the dialog's Delete fires `acp-workspace-delete`.
+   * @param {string} id
+   */
+  async #confirmDelete(id) {
+    const found = await workspaces.deletePreview(id);
+    if (found) await this.renderRoot.querySelector('acp-workspace-delete-dialog')?.show(found.workspace, found.preview);
   }
 
   /** @param {Event} e */

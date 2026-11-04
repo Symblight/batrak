@@ -27,7 +27,7 @@ const workspace = (id) => /** @type {never} */ ({ id, name: id, folder: `/wt/${i
  * @param {string} id
  * @param {string} workspaceId
  */
-const chat = (id, workspaceId) => /** @type {never} */ ({ id, title: id, status: 'idle', workspaceId, folder: `/wt/${workspaceId}`, mode: 'worktree' });
+const chat = (id, workspaceId) => /** @type {never} */ ({ id, title: id, status: 'idle', workspaceId, folder: `/wt/${workspaceId}` });
 
 describe('acp-workspace-changes-tab', () => {
   /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
@@ -148,7 +148,7 @@ describe('acp-workspace-changes-tab', () => {
     const review = /** @type {HTMLElementTagNameMap['acp-changes-review']} */ (el.querySelector('acp-changes-review'));
     /** @type {Event[]} */
     const leaked = [];
-    for (const type of ['acp-change-toggle', 'acp-change-expand', 'acp-changes-collapse', 'acp-session-apply', 'acp-session-check-out']) el.addEventListener(type, (e) => leaked.push(e));
+    for (const type of ['acp-change-toggle', 'acp-change-expand', 'acp-changes-collapse', 'acp-changes-apply', 'acp-changes-check-out']) el.addEventListener(type, (e) => leaked.push(e));
     // Act
     fire(review, 'acp-change-toggle', { id: 'a.js' });
     await until(() => review.diffs.get('a.js')?.loading === false);
@@ -159,8 +159,8 @@ describe('acp-workspace-changes-tab', () => {
     expect(calls.find((c) => c.cmd === 'workspace_file_at_base')?.args).to.deep.equal({ id: 'w1', path: 'a.js' });
     // Act
     fire(review, 'acp-changes-collapse');
-    fire(review, 'acp-session-apply');
-    fire(review, 'acp-session-check-out');
+    fire(review, 'acp-changes-apply');
+    fire(review, 'acp-changes-check-out');
     await until(() => calls.some((c) => c.cmd === 'workspace_check_out_branch'));
     // Assert
     expect(review.expanded.size).to.equal(0);

@@ -120,7 +120,7 @@ describe('acp-adapter', () => {
 
   it('takes the session the agent named as the backend reports it', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'Analyze the tree', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'Analyze the tree', agentId: 'a', config: {} });
     /** @type {import('../types.js').Session} */
     const named = { ...$sessions.get()[0], title: 'Tree view gaps', titleSource: 'agent', agentTitle: 'Tree view gaps' };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'session', payload: named });
@@ -129,7 +129,7 @@ describe('acp-adapter', () => {
 
   it('asks for trust when the project agent was refused, keeping the error in the chat', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'repo', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'repo', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message: 'Not trusted' } });
     const launch = { agentId: 'repo', command: './run', args: [], env: {}, mcpServers: [] };
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'untrusted', payload: { launch, message: 'Not trusted' } });
@@ -140,7 +140,7 @@ describe('acp-adapter', () => {
 
   it('shows why a session stopped when agents.json lost its agent', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     const message = 'Agent "claude" is no longer configured';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'claude', message, ran: 'npx -y x' } });
@@ -149,7 +149,7 @@ describe('acp-adapter', () => {
 
   it('offers to turn a session\'s agent back on when the user turned it off', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'codex', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'codex', config: {} });
     const message = 'Codex is off';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'unconfigured', payload: { agentId: 'codex', message, ran: null, reason: 'off' } });
@@ -158,7 +158,7 @@ describe('acp-adapter', () => {
 
   it('keeps the notice that agents.json changed the running agent until it is restarted or changed back', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     const message = 'agents.json changed what Fake runs. Restart to use it.';
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message } });
     expect($sessionNotices.get()[id]).to.deep.equal({ kind: 'outdated', message });
@@ -175,7 +175,7 @@ describe('acp-adapter', () => {
 
   it('says which session a queued turn waits for until the turn starts', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'queued' } });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'queued', payload: { holder: { id: 'a', title: 'Fix the tree' } } });
     const notice = { kind: 'queued', message: 'Waiting for "Fix the tree" to finish', holder: { id: 'a', title: 'Fix the tree' } };
@@ -191,7 +191,7 @@ describe('acp-adapter', () => {
 
   it('warns that another running turn changed the same file until the turn ends', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'turn-start', payload: {} });
     handleSessionEvent({ sessionId: id, seq: 2, kind: 'status', payload: { status: 'working' } });
     handleSessionEvent({ sessionId: id, seq: 3, kind: 'overlap', payload: { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } } });
@@ -205,7 +205,7 @@ describe('acp-adapter', () => {
 
   it('puts back the notice an overlap covered once the turn ends', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'fake', config: {} });
     const outdated = { kind: 'outdated', message: 'agents.json changed what Fake runs. Restart to use it.' };
     const overlap = { path: 'src/a.js', other: { id: 'b', title: 'Fix the tree' } };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'agent-outdated', payload: { message: outdated.message } });
@@ -279,7 +279,7 @@ describe('acp-adapter', () => {
 
   it("keeps a running session's context usage, without its cost", () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     const cost = { amount: 0.04, currency: 'USD' };
     handleSessionEvent({ sessionId: id, seq: 1, kind: 'update', payload: { sessionUpdate: 'usage_update', used: 24000, size: 200000, cost } });
     expect($contextUsage.get()[id]).to.deep.equal({ used: 24000, size: 200000 });
@@ -390,7 +390,7 @@ describe('acp-adapter', () => {
 
     it('shows the agent asking to sign in until a start works', () => {
       const id = newSession('/p');
-      startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+      startSession(id, { title: 'T', agentId: 'fake', config: {} });
       handleSessionEvent({ sessionId: id, seq: 1, kind: 'status', payload: { status: 'error', message: 'Sign in to Fake' } });
       handleSessionEvent({ sessionId: id, seq: 2, kind: 'sign-in', payload: { agentId: 'fake', agentName: 'Fake', methods } });
       expect($sessionNotices.get()[id]).to.deep.equal({
@@ -421,7 +421,7 @@ describe('acp-adapter', () => {
       });
       try {
         const id = newSession('/p');
-        startSession(id, { title: 'T', agentId: 'fake', config: {}, mode: 'local' });
+        startSession(id, { title: 'T', agentId: 'fake', config: {} });
         const stream = await acpAdapter.sendMessage?.(
           /** @type {Parameters<NonNullable<typeof acpAdapter.sendMessage>>[0]} */ (
             /** @type {unknown} */ ({ id: 'm', conversationId: id, parts: [{ type: 'text', text: 'hello' }] })

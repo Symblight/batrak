@@ -1,6 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
-import { $projectTerminalPanels, $projectTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openTerminal } from '../../../stores/terminals/terminals.js';
+import { $folderTerminalPanels, $folderTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, openTerminal } from '../../../stores/terminals/terminals.js';
 import { $project } from '../../../stores/project/project.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
 import '../terminals-view.js';
@@ -21,8 +21,8 @@ describe('acp-terminals-view', () => {
 
   afterEach(() => {
     for (const id of Object.keys($terminals.get())) forgetTerminal(id);
-    $projectTerminalTabs.set({});
-    $projectTerminalPanels.set({});
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
     $terminalFocus.set(null);
     $project.set(null);
     clearMocks();

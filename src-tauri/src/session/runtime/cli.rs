@@ -232,21 +232,14 @@ impl Inner {
             CliStart::Resume => spec.resume(&acp_id),
         };
 
-        let env = env::for_session(&record)?;
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Preparing, None);
         }
-        let workspaces = self.workspaces.clone();
-        let workspace = record.workspace_id.clone();
-        let prepared = tokio::task::spawn_blocking(move || {
-            workspace.map_or(Ok(()), |id| workspaces.ready(&id))?;
-            env.prepare(&AtomicBool::new(false))
-        })
-        .await;
+        let prepared = self.prepare_folder(&record).await;
         if record.mode == Mode::Worktree {
             self.set_status(state, SessionStatus::Stopped, None);
         }
-        prepared.map_err(|e| e.to_string())??;
+        prepared?;
 
         let base_env = Arc::clone(&self.opts.base_env);
         let secrets = Arc::clone(&self.opts.secrets);

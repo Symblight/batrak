@@ -1,8 +1,8 @@
 import { $openingPath, $project } from '../../stores/project/project.js';
 import { $activeRoot, $rootId } from '../../stores/workspaces/workspaces.js';
-import { removeProjectTabs } from '../../stores/editor/editor.js';
+import { removeFolderTabs } from '../../stores/editor/editor.js';
 import { removeProjectTerminals } from '../../stores/terminals/terminals.js';
-import { removeProjectExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { removeFolderExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $projects, addProject, removeProject } from '../../stores/projects/projects.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
@@ -277,17 +277,17 @@ export const projects = Object.freeze({
     removeProject(id);
     if (!active) {
       void roots.close(id);
-      removeProjectTabs(id);
+      removeFolderTabs(id);
       removeProjectTerminals(id);
-      removeProjectExpandedFolders(id);
+      removeFolderExpandedFolders(id);
       return;
     }
     // Leave the removed project before forgetting its tabs and folders, so nothing can write them back while
     // the next one is scanned.
     close();
-    removeProjectTabs(id);
+    removeFolderTabs(id);
     removeProjectTerminals(id);
-    removeProjectExpandedFolders(id);
+    removeFolderExpandedFolders(id);
     if (next) projects.activate(next.path).catch((err) => app.reportError('Opening project failed', err));
   },
 

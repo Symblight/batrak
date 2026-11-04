@@ -16,7 +16,7 @@ import { composer } from '../../composer/composer.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $gitRepo, NO_REPO } from '../../../stores/git/git.js';
 import { $sessionNotices } from '../../../stores/session-runtime/session-runtime.js';
-import { $projectExpandedFolders } from '../../../stores/file-tree/file-tree.js';
+import { $folderExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { $activeWorkspaceId, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('../types.js').Session} Session */
@@ -158,7 +158,7 @@ describe('sessions views', () => {
   it("keeps a workspace's root open when its last chat is removed: the workspace stays", async () => {
     // Arrange
     projects.showRoot('/wt/one', 'r-w');
-    $sessions.set([session({ id: 'a', mode: 'worktree', workspaceId: 'w1', folder: '/wt/one' })]);
+    $sessions.set([session({ id: 'a', workspaceId: 'w1', folder: '/wt/one' })]);
 
     // Act
     await sessions.remove('a');
@@ -303,15 +303,15 @@ describe('sessions keeps the active session in its view', () => {
   });
 
   it("creates a draft's chat where its footer says: its own workspace by default, or Main (Local), which the window then shows", async () => {
-    /** @type {[string, import('../../composer/types.js').RunTarget | null, unknown, string, string][]} */
+    /** @type {[string, import('../../composer/types.js').RunTarget | null, unknown, string][]} */
     const cases = [
-      // [the draft's workspace, picked place, session_create's workspace, mode, shown workspace]
-      ['main', null, { kind: 'main' }, 'local', 'main'],
-      ['w1', null, { kind: 'existing', id: 'w1' }, 'worktree', 'w1'],
-      ['w1', { kind: 'local' }, { kind: 'main' }, 'local', 'main'],
+      // [the draft's workspace, picked place, session_create's workspace, shown workspace]
+      ['main', null, { kind: 'main' }, 'main'],
+      ['w1', null, { kind: 'existing', id: 'w1' }, 'w1'],
+      ['w1', { kind: 'local' }, { kind: 'main' }, 'main'],
     ];
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
-    for (const [workspaceId, target, workspace, mode, shown] of cases) {
+    for (const [workspaceId, target, workspace, shown] of cases) {
       // Arrange
       calls = [];
       const id = crypto.randomUUID();
@@ -331,7 +331,7 @@ describe('sessions keeps the active session in its view', () => {
       const why = `${workspaceId}, ${target?.kind ?? 'default'}`;
       const create = /** @type {Record<string, unknown> | undefined} */ (calls.find((c) => c.cmd === 'session_create')?.args);
       expect(create?.workspace, why).to.deep.equal(workspace);
-      expect([listed?.mode, listed?.workspaceId ?? 'main'], `${why}: listed meanwhile`).to.deep.equal([mode, shown]);
+      expect(listed?.workspaceId ?? 'main', `${why}: listed meanwhile`).to.equal(shown);
       expect(shownMeanwhile, `${why}: shown`).to.equal(shown);
       $sessions.set([]);
     }
@@ -442,7 +442,7 @@ describe('sessions keeps the active session in its view', () => {
         if (cmd === 'session_remove' && !known.has(sessionId)) throw new Error(`unknown session ${sessionId}`);
         return null;
       });
-      $projectExpandedFolders.setKey('/p', ['src']);
+      $folderExpandedFolders.setKey('/p', ['src']);
       const id = crypto.randomUUID();
       $draftSessions.set({ [id]: { projectId: '/p', workspaceId: 'main' } });
       $activeSessionId.set(id);
@@ -479,7 +479,7 @@ describe('sessions keeps the active session in its view', () => {
       if (view === 'chat') expect(sendFailed, 'its send fails').to.equal(true);
       expect([$sessions.get().some((s) => s.id === id), id in $draftSessions.get()], `${view}: gone`).to.deep.equal([false, false]);
       expect($notices.get().map((n) => n.message), `${view}: no failure`).to.deep.equal([]);
-      expect($projectExpandedFolders.get()['/p'], `${view}: Main's expanded folders stay`).to.deep.equal(['src']);
+      expect($folderExpandedFolders.get()['/p'], `${view}: Main's expanded folders stay`).to.deep.equal(['src']);
       expect(confirm.detail, `${view}: nothing of a worktree to delete yet`).to.equal('Files the agent changed in the project stay as they are.');
       expect($activeWorkspaceId.get(), `${view}: the window stays`).to.equal('main');
       setWorkspaces([]);

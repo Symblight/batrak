@@ -1,3 +1,4 @@
+export { MAIN, folderOfWorkspace } from './folder.js';
 import { isActiveElsewhere } from '../sessions/rules.js';
 
 /** @typedef {import('./types.js').Workspace} Workspace */

@@ -3049,6 +3049,25 @@ async fn a_worktree_sessions_cli_runs_in_its_checked_out_folder() {
 }
 
 #[tokio::test]
+async fn a_workspace_chats_cli_is_refused_while_its_folder_is_missing() {
+    let f = git_fixture("cli-missing");
+    f.give_cli_agents();
+    let terminals = terminals();
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let id = "5d0c1a52-1b8e-4f43-9a51-6a8c2e0f7b11";
+    let draft = f.draft("fake", WorkspaceChoice::Existing { id: ws.id.clone() });
+    f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
+    f.sessions.close_cli(id).await.unwrap();
+    std::fs::remove_dir_all(&ws.worktree_path).unwrap();
+
+    let refused = f.sessions.open_cli(id, None, window(&terminals)).await.unwrap_err();
+
+    assert!(refused.contains("folder is missing"), "{refused}");
+    assert_eq!(listed(&f, id).status, SessionStatus::Stopped);
+    assert!(!ws.worktree_path.exists(), "not checked out again");
+}
+
+#[tokio::test]
 async fn the_clis_exit_is_reported_and_frees_the_session() {
     let f = fixture("cli-exit", FakeAgentOptions::default());
     f.give_cli_agents();

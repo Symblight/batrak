@@ -17,6 +17,7 @@
  * @property {boolean} creating Its checkout runs.
  * @property {string | null} error Why its last checkout failed.
  * @property {boolean} missing Its folder was deleted outside Brama.
+ * @property {boolean} checkedOut Its first checkout succeeded once.
  */
 
 /**

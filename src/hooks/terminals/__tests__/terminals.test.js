@@ -3,8 +3,8 @@ import { expect } from '@esm-bundle/chai';
 import { noteSignIn } from '../../../stores/agents/agents.js';
 import { $activeSessionId, $sessions } from '../../../stores/sessions/sessions.js';
 import {
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalFocus,
   $terminalPanel,
   $terminalTabs,
@@ -63,7 +63,7 @@ const sent = (/** @type {string} */ cmd) => calls.filter((c) => c.cmd === cmd);
  * @returns {Session}
  */
 function session(fields) {
-  return /** @type {Session} */ ({ id: 's', projectId: '/p', mode: 'local', folder: '/p', worktreePath: null, ...fields });
+  return /** @type {Session} */ ({ id: 's', projectId: '/p', folder: '/p', ...fields });
 }
 
 /** A view's sink that keeps each output's `done`, and what it was told. */
@@ -118,8 +118,8 @@ describe('terminals', () => {
     stop?.();
     stop = null;
     for (const id of Object.keys($terminals.get())) forgetTerminal(id);
-    $projectTerminalTabs.set({});
-    $projectTerminalPanels.set({});
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
     $terminalFocus.set(null);
     clearMocks();
     setActiveWorkspace('/p', MAIN);
@@ -132,9 +132,9 @@ describe('terminals', () => {
   it("opens the rail's first terminal, New Terminal and a session's Open in → Terminal in the shown workspace's folder and panel", async () => {
     // Arrange
     const { terminals } = await started();
-    const wt = session({ id: 's1', mode: 'worktree', folder: '/wt/s1/app', worktreePath: '/wt/s1' });
+    const wt = session({ id: 's1', workspaceId: 'w1', folder: '/wt/s1/app' });
     $project.set({ path: '/p', name: 'p', rootId: null });
-    setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1/app' })], '/p');
+    setWorkspaces([/** @type {import('../../workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1/app', worktreePath: '/wt/s1' })], '/p');
     setActiveWorkspace('/p', 'w1');
     $sessions.set([wt]);
     // Act

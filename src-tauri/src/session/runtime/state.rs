@@ -28,9 +28,6 @@ pub(super) struct SessionState {
     pub(super) env: Mutex<Option<Arc<dyn SessionEnv>>>,
     /// The start in progress, aborted by Stop (dropping it kills the agent's process group).
     pub(super) starting: Mutex<Option<AbortHandle>>,
-    /// Set by Stop for the start in progress: its blocking `prepare` (a checkout) isn't aborted
-    /// with the task, so it checks this and undoes its work.
-    pub(super) prepare_cancel: Mutex<Option<Arc<AtomicBool>>>,
     /// Starts attempted so far. A caller notes it before waiting for a start in progress; when that
     /// start failed, the caller fails with it (`start_error`) instead of starting again.
     pub(super) start_attempts: AtomicU64,
@@ -193,7 +190,6 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         conn: Mutex::new(None),
         env: Mutex::new(None),
         starting: Mutex::new(None),
-        prepare_cancel: Mutex::new(None),
         start_attempts: AtomicU64::new(0),
         start_error: Mutex::new(None),
         generation: AtomicU64::new(0),

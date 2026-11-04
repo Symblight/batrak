@@ -3,9 +3,9 @@ import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
 import { $projects } from '../../../stores/projects/projects.js';
 import {
-  $projectTerminalPanelHeights,
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanelHeights,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   setTerminalPanelHeight,
   setTerminalPanelOpen,
 } from '../../../stores/terminals/terminals.js';
@@ -206,7 +206,7 @@ describe('projects', () => {
       await projects.activate('/work/a');
       await projects.activate('/work/b');
       for (const root of ['/work/a', '/work/b']) {
-        $projectTerminalTabs.setKey(root, { paths: ['view:terminal:t'], active: 'view:terminal:t', pinned: [] });
+        $folderTerminalTabs.setKey(root, { paths: ['view:terminal:t'], active: 'view:terminal:t', pinned: [] });
         setTerminalPanelOpen(root, true);
       }
       setTerminalPanelHeight(300);
@@ -214,9 +214,9 @@ describe('projects', () => {
       projects.remove('/work/a');
       projects.remove('/work/b');
 
-      expect($projectTerminalTabs.get()).to.deep.equal({});
-      expect($projectTerminalPanels.get()).to.deep.equal({});
-      expect($projectTerminalPanelHeights.get()).to.deep.equal({});
+      expect($folderTerminalTabs.get()).to.deep.equal({});
+      expect($folderTerminalPanels.get()).to.deep.equal({});
+      expect($folderTerminalPanelHeights.get()).to.deep.equal({});
     });
 
     it('asks before removing a project, and removes it only when confirmed', async () => {

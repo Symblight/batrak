@@ -17,17 +17,17 @@ function parseFolders(raw) {
 
 /**
  * Expanded folders of the file tree by the folder it lists (a project, or a workspace's
- * folder), one storage item each; root-relative paths. Per window, like the tabs (`$projectTabs`):
+ * folder), one storage item each; root-relative paths. Per window, like the tabs (`$folderTabs`):
  * only the listed folder's entry is shown (`$expandedFolders`), the others wait for it.
  */
-export const $projectExpandedFolders = persistentMapStore('brama:file-tree:expanded:', parseFolders);
+export const $folderExpandedFolders = persistentMapStore('brama:file-tree:expanded:', parseFolders);
 
 /**
  * Expanded folders of the listed folder, including ones whose parent isn't loaded yet. A workspace
  * with none of its own shows its project's: its folders are the project's, but a fresh checkout
  * lacks the ignored and untracked ones, which the tree would forget from the project's entry.
  */
-export const $expandedFolders = computed([$projectExpandedFolders, $project, $activeRoot], (folders, project, root) => {
+export const $expandedFolders = computed([$folderExpandedFolders, $project, $activeRoot], (folders, project, root) => {
   if (!project) return NONE;
   return (root.path !== project.path && root.path !== null && folders[root.path]) || folders[project.path] || NONE;
 });
@@ -40,13 +40,13 @@ export function setExpandedFolders(paths) {
   const workspace = root !== project;
   // Through `setKey`: `set()` would rewrite every project's item from this window's copy. A
   // workspace keeps `[]`, which a missing entry would turn back into its project's.
-  $projectExpandedFolders.setKey(root, paths.length || workspace ? paths : undefined);
+  $folderExpandedFolders.setKey(root, paths.length || workspace ? paths : undefined);
 }
 
 /**
  * Forgets the expanded folders of a project or a workspace's folder, e.g. when it is removed.
  * @param {string} root Its path.
  */
-export function removeProjectExpandedFolders(root) {
-  if (root in $projectExpandedFolders.get()) $projectExpandedFolders.setKey(root, undefined);
+export function removeFolderExpandedFolders(root) {
+  if (root in $folderExpandedFolders.get()) $folderExpandedFolders.setKey(root, undefined);
 }

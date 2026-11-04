@@ -1,13 +1,11 @@
 import { atom, computed } from 'nanostores';
 import { persistentMapStore, persistentStore } from '../persistent/persistent.js';
 import { $workspaces, MAIN } from '../workspaces/workspaces.js';
+import { folderOfWorkspace } from '../../hooks/workspaces/folder.js';
 
 /** @typedef {import('../../hooks/sessions/types.js').Session} Session */
 /** @typedef {import('../../hooks/sessions/types.js').SessionStatus} SessionStatus */
 /** @typedef {import('../../hooks/sessions/types.js').DraftSession} DraftSession */
-
-/** Statuses in which a session holds (or is getting) an agent process. */
-export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
 
 /** Every agent session, as the backend lists them (stored, then synced with the agents) plus the ones started here; written by the `sessions` hook. */
 export const $sessions = atom(/** @type {Session[]} */ ([]));
@@ -72,7 +70,7 @@ export const workspaceOfSession = (session) => session.workspaceId ?? MAIN;
  * @param {DraftSession} draft
  * @param {readonly import('../../hooks/workspaces/types.js').Workspace[]} workspaces
  */
-const draftFolder = (draft, workspaces) => workspaces.find((w) => w.id === draft.workspaceId)?.folder ?? draft.projectId;
+const draftFolder = (draft, workspaces) => folderOfWorkspace(draft.projectId, draft.workspaceId, workspaces) ?? draft.projectId;
 
 /** The session in the chat: a listed session or a draft. Also the chat's conversation id. */
 export const $activeSessionId = atom(/** @type {string | null} */ (null));
@@ -197,7 +195,7 @@ export function dropDrafts(workspaceId) {
 /**
  * A draft's first message: it becomes a listed session, `preparing` until the backend reports.
  * @param {string} id
- * @param {Pick<Session, 'title' | 'agentId' | 'config' | 'mode'>} fields
+ * @param {Pick<Session, 'title' | 'agentId' | 'config'>} fields
  * @param {string} [workspaceId] Where it's created, when not in the draft's own workspace (`main` for Main).
  */
 export function startSession(id, fields, workspaceId) {
@@ -214,9 +212,7 @@ export function startSession(id, fields, workspaceId) {
     status: 'preparing',
     folder: draftFolder(draft, $workspaces.get()),
     workspaceId: draft.workspaceId === MAIN ? null : draft.workspaceId,
-    worktreePath: null,
     branch: null,
-    baseCommit: null,
     createdAt: now,
     lastActivityAt: now,
     titleSource: 'prompt',
@@ -237,8 +233,7 @@ export function upsertSession(session) {
 }
 
 /**
- * A started session goes into the workspace created for it (New worktree) before the backend has it;
- * a worktree chat from then on.
+ * A started session goes into the workspace created for it (New worktree) before the backend has it.
  * @param {string} id
  * @param {Pick<import('../../hooks/workspaces/types.js').Workspace, 'id' | 'folder' | 'branch'>} workspace
  */
@@ -246,7 +241,7 @@ export function moveSession(id, workspace) {
   const sessions = $sessions.get();
   if (!sessions.some((s) => s.id === id)) return;
   const { id: workspaceId, folder, branch } = workspace;
-  $sessions.set(sessions.map((s) => (s.id === id ? { ...s, workspaceId, folder, branch, mode: 'worktree' } : s)));
+  $sessions.set(sessions.map((s) => (s.id === id ? { ...s, workspaceId, folder, branch } : s)));
 }
 
 /**

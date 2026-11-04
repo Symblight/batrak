@@ -4,19 +4,19 @@
 //! is created and never changes: `session/load` needs the same cwd.
 
 mod local;
-mod worktree;
+mod workspace;
 
 pub use local::LocalEnv;
-pub use worktree::{place_named, remove_orphan, slug, WorktreeEnv};
+pub use workspace::WorkspaceEnv;
 
 use std::fs::File;
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::AtomicBool;
 
 use serde::{Deserialize, Serialize};
 
 use super::SessionRecord;
 use crate::acp::process::{AgentCommand, AgentPipes, AgentProcess};
+use crate::workspace::WorkspaceRecord;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -39,9 +39,8 @@ pub struct Launch<'a> {
 
 pub trait SessionEnv: Send + Sync {
     fn mode(&self) -> Mode;
-    /// Gets the directory ready (a worktree checkout, a container). Blocking; stops early once
-    /// `cancel` turns true.
-    fn prepare(&self, cancel: &AtomicBool) -> Result<(), String>;
+    /// Checks the directory is ready for the agent (a workspace's worktree on its branch). Blocking.
+    fn prepare(&self) -> Result<(), String>;
     /// Whether `prepare` would refuse because the user took the session's place over (the project
     /// has a worktree's branch checked out). Blocking.
     fn held_elsewhere(&self) -> Result<bool, String> {
@@ -59,19 +58,39 @@ pub trait SessionEnv: Send + Sync {
     fn to_host_path(&self, agent_path: &Path) -> Result<PathBuf, String>;
 }
 
-/// Where a new session runs, fixed for its life and kept in its record.
+/// Where a new chat runs, fixed for its life and kept in its record.
 #[derive(Debug, Clone)]
 pub struct Placement {
+    pub mode: Mode,
     pub agent_cwd: PathBuf,
     pub worktree_path: Option<PathBuf>,
     pub branch: Option<String>,
     pub base_commit: Option<String>,
+    pub workspace_id: Option<String>,
 }
 
 impl Placement {
-    /// Main: the canonical `project` folder itself.
-    pub fn main(project: &Path) -> Placement {
-        Placement { agent_cwd: project.to_path_buf(), worktree_path: None, branch: None, base_commit: None }
+    /// A chat of `workspace`, in its folder (`worktree`), or of Main for `None`: the canonical
+    /// `project` folder itself (`local`).
+    pub fn of(project: &Path, workspace: Option<&WorkspaceRecord>) -> Placement {
+        match workspace {
+            None => Placement {
+                mode: Mode::Local,
+                agent_cwd: project.to_path_buf(),
+                worktree_path: None,
+                branch: None,
+                base_commit: None,
+                workspace_id: None,
+            },
+            Some(w) => Placement {
+                mode: Mode::Worktree,
+                agent_cwd: w.folder.clone(),
+                worktree_path: Some(w.worktree_path.clone()),
+                branch: Some(w.branch.clone()),
+                base_commit: Some(w.base_commit.clone()),
+                workspace_id: Some(w.id.clone()),
+            },
+        }
     }
 }
 
@@ -80,12 +99,10 @@ pub fn for_session(record: &SessionRecord) -> Result<Box<dyn SessionEnv>, String
     match record.mode {
         Mode::Local => Ok(Box::new(LocalEnv::new(record.project_path.clone()))),
         Mode::Worktree => {
-            let (Some(root), Some(branch), Some(base)) = (&record.worktree_path, &record.branch, &record.base_commit) else {
+            let (Some(root), Some(branch)) = (&record.worktree_path, &record.branch) else {
                 return Err(format!("session {}: its worktree is missing from its record", record.session_id));
             };
-            let env = WorktreeEnv::new(record.project_path.clone(), root.clone(), record.agent_cwd.clone(), branch.clone(), base.clone());
-            // A workspace's chat: the workspace checks the folder out and removes it.
-            Ok(Box::new(env.shared()))
+            Ok(Box::new(WorkspaceEnv::new(record.project_path.clone(), root.clone(), record.agent_cwd.clone(), branch.clone())))
         }
     }
 }

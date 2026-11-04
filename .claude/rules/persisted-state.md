@@ -18,7 +18,7 @@ paths:
 
 - Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$hiddenColumns`
   (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns), `$project` (`brama:project`, reopened
-  on launch by `projects.restore()`), `$projectTabs` (`brama:editor:tabs:<folder>`: Main's is the project path, a workspace's its folder; the
+  on launch by `projects.restore()`), `$folderTabs` (`brama:editor:tabs:<folder>`: Main's is the project path, a workspace's its folder; the
   shown folder's entry (`$shownFolder`, `stores/workspaces/`) is `$editorTabs`, which shows only files inside it (tabs of a workspace's files once kept in its project's entry move to the workspace's when its list loads); a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
@@ -35,12 +35,12 @@ paths:
   column's), with a footer of resolution, type and size. A markdown file is shown in `<acp-markdown-view>`
   (see "Markdown view" below); the Browser view is a mock for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
-  `$projectTerminalPanelHeights` (`brama:layout:terminal-panel:<folder>`, per window like the tabs,
+  `$folderTerminalPanelHeights` (`brama:layout:terminal-panel:<folder>`, per window like the tabs,
   one item per folder through `setKey()`: the terminal panel's height in px, clamped when read; the
-  panel's tabs (`$projectTerminalTabs`) and whether it is open (`$projectTerminalPanels`) are in memory
+  panel's tabs (`$folderTerminalTabs`) and whether it is open (`$folderTerminalPanels`) are in memory
   only, since shells don't outlive the page),
-  `$projectExpandedFolders` (`brama:file-tree:expanded:<project path>`, per window like the tabs; the
-  active project's entry is `$expandedFolders`, root-relative folders the file tree is controlled by: it
+  `$folderExpandedFolders` (`brama:file-tree:expanded:<folder>`, per window like the tabs; the
+  shown folder's entry is `$expandedFolders` (a workspace with none of its own shows its project's), root-relative folders the file tree is controlled by: it
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
   stored folders as their parents load),
   `$contextUsage` (`brama:sessions:context-usage:<session id>`, see `sessions.md`),

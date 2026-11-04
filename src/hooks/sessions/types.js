@@ -5,7 +5,6 @@
 
 /** @typedef {import('../composer/types.js').AcpConfigOption} AcpConfigOption */
 /** @typedef {import('../agents/types.js').LaunchConfig} LaunchConfig */
-/** @typedef {import('../composer/types.js').RunTargetKind} RunTargetKind */
 /** @typedef {import('../agents/types.js').SessionSignIn} SessionSignIn */
 /** @typedef {import('../terminals/types.js').TerminalExit} TerminalExit */
 /**
@@ -57,12 +56,9 @@
  * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal; activity it reports is that CLI's.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as
  *   last chosen or reported, by id; the agent is set to them whenever it starts.
- * @property {RunTargetKind} mode Where the agent runs; fixed for the session's life.
- * @property {string} folder Where the agent works: the project, or the project's folder in its worktree.
- * @property {string | null} [workspaceId] Its workspace; `null` or absent for Main.
- * @property {string | null} worktreePath `worktree` only: its root.
- * @property {string | null} branch `worktree` only: the session's own branch.
- * @property {string | null} baseCommit `worktree` only: the commit it started from.
+ * @property {string} folder Where the agent works: the project, or the project's folder in its workspace.
+ * @property {string | null} [workspaceId] Its workspace; `null` or absent for Main, the project's folder.
+ * @property {string | null} branch Its workspace's branch; `null` in Main.
  * @property {string} createdAt
  * @property {string} lastActivityAt The last prompt or turn end, else `createdAt`; the list's order.
  */

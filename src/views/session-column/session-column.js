@@ -92,9 +92,18 @@ export class AcpSessionColumn extends ViewElement {
     void workspaces.recreate(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
   }
 
+  /**
+   * Delete workspace…: asks with what deleting would touch; the dialog's Delete fires `acp-workspace-delete`.
+   * @param {string} id
+   */
+  async #confirmDelete(id) {
+    const found = await workspaces.deletePreview(id);
+    if (found) await this.renderRoot.querySelector('acp-workspace-delete-dialog')?.show(found.workspace, found.preview);
+  }
+
   /** @param {Event} e */
   #onDeleteRequest(e) {
-    void workspaces.confirmDelete(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id, this.renderRoot.querySelector('acp-workspace-delete-dialog'));
+    void this.#confirmDelete(/** @type {CustomEvent<{ id: string }>} */ (e).detail.id);
   }
 
   #onNextWaiting = () => {

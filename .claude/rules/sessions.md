@@ -78,18 +78,21 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   turns touched, running or ended less than `overlap_grace` (1 s) ago, sends each running one an
   `overlap` (once per file per turn; a banner notice until the turn ends, over an `info` /
   `outdated` one that comes back then). Mode logic sits behind `SessionEnv` (`session/env/`: `local`,
-  `worktree`); `env::place()` fixes where a new session runs (kept in its record), `for_session()`
-  builds its env. **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
+  `workspace`); `env::Placement::of(project, workspace)` fixes where a new chat runs (mode, folder,
+  worktree fields, `workspace_id`; kept in its record; used by `new_record` and a listing's
+  `listed_record`), `for_session()` builds its env, and `Inner::prepare_folder` (`start.rs`) gets
+  the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
   `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
   worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `brama/<slug>` (`-2`… when taken) from
   its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by
   `check_out` (in the background from `workspace_create`) or at its first chat's start
-  (`Workspaces::ready`, which every chat start waits on); commands in `commands/workspaces.rs`,
+  (`Workspaces::ready`, which every chat start waits on); checkout, removal and placing live in
+  `workspace/checkout.rs`; commands in `commands/workspaces.rs`,
   every change `workspaces://changed` (`{ projectPath }`), the page's `$workspaces`
   (`hooks/workspaces/`). A chat (`workspaceId`) runs in its workspace's folder (`mode: worktree`,
-  the worktree fields copied); its env is `WorktreeEnv::shared()`: `prepare` only checks the
-  folder (missing: "folder is missing", until `recreate_workspace`) and its branch, `discard` is a
-  no-op. `session_create` takes the chat's `workspace` (`WorkspaceChoice`, `new_record`): `main`
+  the worktree fields copied); its env is `WorkspaceEnv`: `prepare` only checks the
+  folder (missing: "folder is missing", until `recreate_workspace`) and switches a detached
+  worktree back on its branch (refused while the project has it); it never checks out or removes. `session_create` takes the chat's `workspace` (`WorkspaceChoice`, `new_record`): `main`
   (the project folder, `mode: local`, no git needed), or `existing` `{ id }` (refused for another
   project's). `workspace_create` stores a workspace at once (`Workspaces::place`); one created
   without a name is called after its branch ("Workspace 2"), `nameSource: agent`: its first chat's
@@ -99,7 +102,11 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   workspace; a base resolves as a local branch, then a remote-tracking one (`origin/main`), then
   any other name, and the new branch never tracks it. A workspace lists `creating` from its first
   announcement until its checkout ends, and `missing` whenever its folder isn't checked out (also
-  one never checked out, after a relaunch or a failed checkout), so Recreate folder runs it. Delete
+  one never checked out, after a relaunch or a failed checkout), so Recreate folder runs it.
+  `WorkspaceRecord::checkout_state()` (`Ready` / `NeverCheckedOut` / `Absent`) is the one test of
+  that: a record stores `checkedOut` once its first checkout succeeded (older records: true), so a
+  chat's start checks out only a workspace never checked out, and one deleted outside Brama
+  (folder and branch alike) stays missing until Recreate. Delete
   stops a running checkout (`Workspaces` keeps a cancel flag per workspace; git is stopped like a
   timeout, `exec::Options.cancel`) and undoes it. An empty folder an interrupted checkout left is
   replaced; one with files is named in the error. Every agent path goes through
@@ -108,7 +115,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   menu → Remove session) stops the agent, deletes the session in its agent (`session/delete`, or
   keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
   (its log); its folder stays. `Sessions::delete_workspace` removes each of its chats that way,
-  then `Workspaces::discard` (`WorktreeEnv::remove_with`) commits uncommitted work onto the branch
+  then `Workspaces::discard` (`checkout::remove`) commits uncommitted work onto the branch
   (`git::apply::snapshot_commit`: scratch index, no hooks, CAS `update-ref`, Brama's identity when
   git has none), removes the worktree, and deletes the branch unless Keep branch and it has
   commits past the base. A detached worktree (Check out branch) with uncommitted work is kept (a
@@ -154,7 +161,10 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
 - **Session folders:** `Session.folder` is where the agent works (the project, or the project's
   folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
-  (`folderOf()`, `$activeFolder`). A workspace's files open as tabs of its folder (each
+  (`folderOf()`, `$activeFolder`). Main's folder is the project, a workspace's its own:
+  `folderOfWorkspace()` (`hooks/workspaces/folder.js`) is the one rule behind `$activeRoot`,
+  `$shownFolder` and a draft's folder. A chat is a workspace's when it has a `workspaceId` (the
+  page reads no `mode`). A workspace's files open as tabs of its folder (each
   folder has its own tabs and terminals, `persisted-state.md`; deleting the workspace forgets them
   and its last chat; `read_file` reads its folder through `Sessions::contains`), marked with a branch
   icon, no diff gutter, re-read when its turn ends; its folder refs

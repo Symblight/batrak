@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { $expandedFolders, $projectExpandedFolders, removeProjectExpandedFolders, setExpandedFolders } from '../file-tree.js';
+import { $expandedFolders, $folderExpandedFolders, removeFolderExpandedFolders, setExpandedFolders } from '../file-tree.js';
 import { $sessions } from '../../sessions/sessions.js';
 import { setActiveWorkspace, setWorkspaces } from '../../workspaces/workspaces.js';
 import { $project } from '../../project/project.js';
@@ -22,8 +22,8 @@ describe('file tree expanded folders', () => {
     show(null);
     $sessions.set([]);
     setWorkspaces([]);
-    removeProjectExpandedFolders('/p');
-    removeProjectExpandedFolders(WORKTREE);
+    removeFolderExpandedFolders('/p');
+    removeFolderExpandedFolders(WORKTREE);
     $project.set(null);
   });
 
@@ -36,7 +36,7 @@ describe('file tree expanded folders', () => {
     // The workspace has no node_modules: the tree forgets it there only.
     setExpandedFolders(['src']);
     expect($expandedFolders.get()).to.deep.equal(['src']);
-    expect($projectExpandedFolders.get()['/p']).to.deep.equal(['src', 'node_modules']);
+    expect($folderExpandedFolders.get()['/p']).to.deep.equal(['src', 'node_modules']);
     setExpandedFolders([]);
     expect($expandedFolders.get()).to.deep.equal([], 'all collapsed stays collapsed');
 

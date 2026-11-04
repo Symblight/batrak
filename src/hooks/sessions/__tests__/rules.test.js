@@ -26,11 +26,8 @@ const SESSION = {
   status: 'idle',
   agentId: 'a',
   config: {},
-  mode: 'local',
   folder: '/p',
-  worktreePath: null,
   branch: null,
-  baseCommit: null,
   createdAt: '2026-10-20T00:00:00Z',
   lastActivityAt: '2026-10-20T00:00:00Z',
   titleSource: 'prompt',
@@ -153,16 +150,16 @@ describe('sessions model', () => {
     expect(viewDisabledReason(resumeOnly, false, 'Codex')).to.equal('');
   });
 
-  it('asks before removing: deleted in its agent, a running agent stopped, files stay; a worktree’s work goes to its branch', () => {
+  it('asks before removing: deleted in its agent, a running agent stopped, files stay; a workspace chat’s workspace stays', () => {
     // Act
     const running = removeSessionConfirm({ ...SESSION, status: 'working', agentName: 'Claude Code' });
-    const worktree = removeSessionConfirm({ ...SESSION, status: 'stopped', mode: 'worktree', branch: 'brama/fix-1' });
+    const workspace = removeSessionConfirm({ ...SESSION, status: 'stopped', workspaceId: 'w1' });
     // Assert
     expect(running.message).to.equal('"Fix the tree" will be deleted from Claude Code, for every app that uses it, and its agent stopped.');
     expect(running.detail).to.equal('Files the agent changed in the project stay as they are.');
     expect(running.destructive).to.equal(true);
-    expect(worktree.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
-    expect(worktree.detail).to.contain('brama/fix-1');
+    expect(workspace.message).to.equal('"Fix the tree" will be deleted from its agent, for every app that uses it.');
+    expect(workspace.detail).to.equal('Its workspace, and the files the agent changed there, stay as they are.');
   });
 
   it('lists pinned sessions first, each part most recently active first, leaving the given list as it was', () => {

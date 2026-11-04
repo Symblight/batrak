@@ -35,11 +35,6 @@
  */
 
 /**
- * Where a session runs (`Session.mode`): its project's folder or a worktree.
- * @typedef {'local' | 'worktree'} RunTargetKind
- */
-
-/**
  * Where a draft's first message creates its chat: the worktree workspace it's a draft of, a new
  * worktree workspace from `base` (`null`: Main's default branch), or Main (Local).
  * @typedef {{ kind: 'workspace' } | { kind: 'worktree', base: string | null } | { kind: 'local' }} RunTarget

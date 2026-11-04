@@ -10,9 +10,9 @@ describe('trust store', () => {
 
   it('keeps each refused session once until its project is answered', () => {
     const a = newSession('/a');
-    startSession(a, { title: 'A', agentId: 'x', config: {}, mode: 'local' });
+    startSession(a, { title: 'A', agentId: 'x', config: {} });
     const b = newSession('/b');
-    startSession(b, { title: 'B', agentId: 'x', config: {}, mode: 'local' });
+    startSession(b, { title: 'B', agentId: 'x', config: {} });
     awaitTrust(a);
     awaitTrust(a);
     awaitTrust(b);

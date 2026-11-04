@@ -106,7 +106,7 @@ describe('composer', () => {
     const id = newSession('/started');
     $activeSessionId.set(id);
     selectAgent('claude');
-    startSession(id, { title: 'T', agentId: 'claude', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'claude', config: {} });
     startComposer(id);
     expect($composer.get().agentId).to.equal('claude');
 

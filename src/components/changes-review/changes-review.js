@@ -42,8 +42,8 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-changes-collapse `null` Collapse all.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
- * @fires acp-session-apply `null` With `base`: Apply locally was pressed.
- * @fires acp-session-check-out `null` With `base`: Check out branch was confirmed.
+ * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.
+ * @fires acp-changes-check-out `null` With `base`: Check out branch was confirmed.
  */
 export class AcpChangesReview extends LitElement {
   static properties = {
@@ -178,7 +178,7 @@ export class AcpChangesReview extends LitElement {
       detail: 'The session goes on once the project is on another branch again.',
       confirmLabel: 'Check out',
     });
-    if (confirmed) this.#emit('acp-session-check-out', null);
+    if (confirmed) this.#emit('acp-changes-check-out', null);
   }
 
   /**
@@ -279,7 +279,7 @@ export class AcpChangesReview extends LitElement {
               class="acp-changes-review__session-action"
               variant="text"
               ?disabled=${total === 0}
-              @click=${() => this.#emit('acp-session-apply', null)}
+              @click=${() => this.#emit('acp-changes-apply', null)}
               >Apply locally</md-button
             >
             <md-button

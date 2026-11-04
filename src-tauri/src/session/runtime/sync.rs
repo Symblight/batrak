@@ -15,7 +15,7 @@ use super::{lock, new_state, Inner, LaunchKey, Launched, SessionState, Sessions,
 use crate::acp::process::AgentProcess;
 use crate::acp::{Catalog, CatalogOptions, ConnectError, ListedSession};
 use crate::config::AgentConfig;
-use crate::session::env::{self, Mode};
+use crate::session::env;
 use crate::session::{iso_from_millis, iso_now, parse_iso_millis, Session, SessionRecord, SessionStatus, TitleSource};
 use crate::storage::JsonFile;
 use crate::workspace::WorkspaceRecord;
@@ -449,15 +449,12 @@ fn listed_id(agent_id: &str, acp_id: &str) -> String {
 /// in Main.
 fn listed_record(project: &Path, workspace: Option<&WorkspaceRecord>, agent: &AgentConfig, item: &ListedSession) -> SessionRecord {
     let at = item.updated_at.as_deref().and_then(parse_iso_millis).map_or_else(iso_now, iso_from_millis);
-    let placement = workspace.map_or_else(
-        || env::Placement { agent_cwd: project.to_path_buf(), worktree_path: None, branch: None, base_commit: None },
-        WorkspaceRecord::placement,
-    );
+    let placement = env::Placement::of(project, workspace);
     SessionRecord {
         session_id: listed_id(&agent.id, &item.session_id),
         acp_session_id: Some(item.session_id.clone()),
         agent_id: agent.id.clone(),
-        mode: if workspace.is_some() { Mode::Worktree } else { Mode::Local },
+        mode: placement.mode,
         agent_cwd: placement.agent_cwd,
         project_path: project.to_path_buf(),
         title: String::new(),
@@ -473,7 +470,7 @@ fn listed_record(project: &Path, workspace: Option<&WorkspaceRecord>, agent: &Ag
         launch: None,
         agent_name: Some(agent.name.clone()),
         hidden: false,
-        workspace_id: workspace.map(|w| w.id.clone()),
+        workspace_id: placement.workspace_id,
     }
 }
 

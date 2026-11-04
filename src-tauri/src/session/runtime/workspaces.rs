@@ -92,7 +92,7 @@ impl Sessions {
     /// A workspace's folder and base commit, once its folder is there.
     fn checked_out(&self, id: &str) -> Result<(PathBuf, String), String> {
         let workspace = self.inner.workspaces.get(id)?;
-        if !workspace.folder.is_dir() {
+        if workspace.checkout_state() != crate::workspace::CheckoutState::Ready {
             return Err(format!("{}: the workspace's folder isn't checked out", workspace.folder.display()));
         }
         Ok((workspace.folder, workspace.base_commit))

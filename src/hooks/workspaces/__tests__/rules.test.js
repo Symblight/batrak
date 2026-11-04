@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { nextWaiting, noticesOf, orderWorkspaces, statusOf, statusesOf } from '../rules.js';
+import { folderOfWorkspace, nextWaiting, noticesOf, orderWorkspaces, statusOf, statusesOf } from '../rules.js';
 
 /** @typedef {import('../types.js').Workspace} Workspace */
 /** @typedef {import('../../sessions/types.js').Session} Session */
@@ -94,6 +94,20 @@ describe('workspaces rules', () => {
       expect(nextWaiting(order, /** @type {Record<string, import('../types.js').WorkspaceStatus>} */ (statuses), /** @type {string} */ (shown)), /** @type {string} */ (why)).to.equal(next);
     }
   });
+  it("folderOfWorkspace: Main's is the project, a listed workspace's its folder, one not listed (yet) none", () => {
+    // Arrange
+    const list = [workspace({ id: 'w1', folder: '/wt/one/app' })];
+    const cases = [
+      ['main', '/p'],
+      ['w1', '/wt/one/app'],
+      ['w2', null],
+    ];
+    for (const [id, folder] of cases) {
+      // Act + Assert
+      expect(folderOfWorkspace('/p', /** @type {string} */ (id), list), String(id)).to.equal(folder);
+    }
+  });
+
   it('noticesOf: what changed between two lists of a project, worth a snackbar', () => {
     const task = workspace({ id: 'w1', name: 'Fix login', branch: 'brama/fix-login', nameSource: 'user' });
     const cases = [

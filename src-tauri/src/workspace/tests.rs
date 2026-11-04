@@ -16,6 +16,7 @@ fn record(id: &str) -> WorkspaceRecord {
         base_branch: Some("main".to_owned()),
         created_at: "2026-11-03T10:00:00.000Z".to_owned(),
         last_active_at: None,
+        checked_out: true,
     }
 }
 
@@ -220,6 +221,27 @@ fn a_chat_start_does_the_first_checkout_after_a_failed_one_or_a_relaunch() {
     std::fs::remove_file(&failed.worktree_path).unwrap();
     workspaces.ready(&failed.id).unwrap();
     assert!(failed.folder.join("README.md").is_file(), "retried");
+    std::fs::remove_dir_all(data).unwrap();
+}
+
+#[test]
+fn a_folder_and_branch_deleted_outside_brama_stay_missing_until_recreate() {
+    use crate::git::test_repo::{run_in, TestRepo};
+    let repo = TestRepo::with_commit("ws-gone");
+    let data = temp_dir("ws-gone-data");
+    let ws = Workspaces::new(&data).create(&repo.path, "Gone", None).unwrap();
+    std::fs::remove_dir_all(&ws.worktree_path).unwrap();
+    run_in(&repo.path, &["worktree", "prune"]);
+    run_in(&repo.path, &["branch", "-qD", &ws.branch]);
+
+    // A chat's start after a relaunch.
+    let workspaces = Workspaces::new(&data);
+    workspaces.ready(&ws.id).unwrap();
+
+    assert!(!ws.worktree_path.exists(), "not checked out again");
+    assert!(workspaces.pages(&repo.path)[0].missing);
+    workspaces.check_out(&ws.id).unwrap();
+    assert!(ws.folder.join("README.md").is_file(), "Recreate checks it out");
     std::fs::remove_dir_all(data).unwrap();
 }
 

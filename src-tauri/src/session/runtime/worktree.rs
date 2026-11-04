@@ -25,7 +25,7 @@ impl Sessions {
                 if !path.is_dir() || self.owns_worktree(&path) {
                     continue;
                 }
-                if let Err(e) = env::remove_orphan(&path) {
+                if let Err(e) = crate::workspace::checkout::remove_orphan(&path) {
                     if e.contains("uncommitted") {
                         tracing::warn!("{e}");
                     } else {

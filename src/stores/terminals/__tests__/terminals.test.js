@@ -1,9 +1,9 @@
 import { expect } from '@esm-bundle/chai';
-import { $editorTabs, $projectTabs, openTab } from '../../editor/editor.js';
+import { $editorTabs, $folderTabs, openTab } from '../../editor/editor.js';
 import {
-  $projectTerminalPanelHeights,
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanelHeights,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalFocus,
   $terminalPanel,
   $terminalPanelHeight,
@@ -35,20 +35,20 @@ import { MAIN, setActiveWorkspace, setWorkspaces } from '../../workspaces/worksp
 describe('terminals', () => {
   afterEach(() => {
     $terminals.set({});
-    $projectTerminalTabs.set({});
-    $projectTerminalPanels.set({});
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
     $terminalFocus.set(null);
-    for (const root of ['/p', '/q', '', '/wt/task']) $projectTerminalPanelHeights.setKey(root, undefined);
+    for (const root of ['/p', '/q', '', '/wt/task']) $folderTerminalPanelHeights.setKey(root, undefined);
     setActiveWorkspace('/p', MAIN);
     setWorkspaces([]);
     $project.set(null);
-    $projectTabs.setKey('/p', undefined);
-    $projectTabs.setKey('', undefined);
+    $folderTabs.setKey('/p', undefined);
+    $folderTabs.setKey('', undefined);
   });
 
   it('opens a terminal’s tab at the end of the shown project’s panel, showing it and leaving the editor’s tabs alone', () => {
     $project.set({ path: '/p', name: 'p', rootId: null });
-    $projectTabs.setKey('/p', { paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
+    $folderTabs.setKey('/p', { paths: ['/p/a.js'], active: '/p/a.js', pinned: [] });
     expect($terminalPanel.get(), 'hidden until a terminal opens').to.deep.equal({ open: false });
     const first = openTerminal('/p', '/p', 'p');
     const id = openTerminal('/p/src', '/p', 'src');
@@ -101,8 +101,8 @@ describe('terminals', () => {
     expect($terminals.get()['sign-in-2'].folder).to.equal('/q');
     expect($terminalTabs.get().paths, 'the shown project').to.deep.equal([]);
     expect($terminalPanel.get(), 'its panel stays as it was').to.deep.equal({ open: false });
-    expect($projectTerminalTabs.get()['/q']).to.deep.equal({ paths: [terminalTabId('sign-in-2')], active: terminalTabId('sign-in-2'), pinned: [] });
-    expect($projectTerminalPanels.get()['/q']).to.deep.equal({ open: true });
+    expect($folderTerminalTabs.get()['/q']).to.deep.equal({ paths: [terminalTabId('sign-in-2')], active: terminalTabId('sign-in-2'), pinned: [] });
+    expect($folderTerminalPanels.get()['/q']).to.deep.equal({ open: true });
   });
 
   it('follows a terminal from its start to its exit, then forgets it', () => {
@@ -152,7 +152,7 @@ describe('terminals', () => {
     terminalGroup.openIn('/q', b);
     terminalGroup.closeIn('/q', b);
     expect($terminalTabs.get().paths).to.deep.equal([c, b, a]);
-    expect($projectTerminalTabs.get()['/q']).to.deep.equal({ paths: [a], active: a, pinned: [] });
+    expect($folderTerminalTabs.get()['/q']).to.deep.equal({ paths: [a], active: a, pinned: [] });
     $project.set({ path: '/q', name: 'q', rootId: null });
     expect($terminalTabs.get().paths).to.deep.equal([a]);
   });
@@ -213,7 +213,7 @@ describe('terminals', () => {
     it('moves a terminal’s tab to the editor’s tabs at an index, active and unpinned, its shell untouched', () => {
       // Arrange
       $project.set({ path: '/p', name: 'p', rootId: null });
-      $projectTabs.setKey('/p', { paths: ['/p/a.js', '/p/b.js'], active: '/p/a.js', pinned: [] });
+      $folderTabs.setKey('/p', { paths: ['/p/a.js', '/p/b.js'], active: '/p/a.js', pinned: [] });
       const first = openTerminal('/p', '/p', 'p');
       const second = openTerminal('/p', '/p', 'p');
       terminalGroup.setPinned(terminalTabId(second), true);

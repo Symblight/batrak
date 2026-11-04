@@ -1,6 +1,6 @@
 /** @typedef {import('../../hooks/tabs/types.js').EditorTabs} EditorTabs */
 
-/** Key in a group's per-project map of the tabs open while no project is. */
+/** Key in a group's per-folder map of the tabs open while no project is. */
 export const NO_PROJECT = '';
 
 /** @type {EditorTabs} */
@@ -39,17 +39,17 @@ function without({ paths, active, pinned }, path) {
 }
 
 /**
- * A group of tabs per project and the rules that open, close, move and pin them: the editor's
+ * A group of tabs per folder and the rules that open, close, move and pin them: the editor's
  * group, or the terminal panel's. The group's stores belong to the caller.
  * @param {Object} config
- * @param {import('nanostores').MapStore<Record<string, EditorTabs | undefined>>} config.$projects The
- *   tabs by project path (`NO_PROJECT` for none); written only through `setKey()`.
- * @param {{ get: () => EditorTabs }} config.$tabs The shown project's tabs, as the group presents them.
- * @param {() => string} config.shownKey The shown project's key in `$projects`.
+ * @param {import('nanostores').MapStore<Record<string, EditorTabs | undefined>>} config.$folders The
+ *   tabs by folder (`NO_PROJECT` for none); written only through `setKey()`.
+ * @param {{ get: () => EditorTabs }} config.$tabs The shown folder's tabs, as the group presents them.
+ * @param {() => string} config.shownKey The shown folder's key in `$folders`.
  */
-export function tabGroup({ $projects, $tabs, shownKey }) {
-  /** @param {EditorTabs} tabs Replaces the tabs of the shown project. */
-  const setTabs = (tabs) => $projects.setKey(shownKey(), tabs);
+export function tabGroup({ $folders, $tabs, shownKey }) {
+  /** @param {EditorTabs} tabs Replaces the tabs of the shown folder. */
+  const setTabs = (tabs) => $folders.setKey(shownKey(), tabs);
 
   /**
    * Opens a tab (appended to the strip) or switches to it.
@@ -74,8 +74,8 @@ export function tabGroup({ $projects, $tabs, shownKey }) {
   }
 
   /**
-   * Opens a tab, active, among a project's tabs, shown or not.
-   * @param {string | null} root The project's path; `null`: no project.
+   * Opens a tab, active, among a folder's tabs, shown or not.
+   * @param {string | null} root The folder; `null`: no project.
    * @param {string} path Tab id.
    */
   function openIn(root, path) {
@@ -84,13 +84,13 @@ export function tabGroup({ $projects, $tabs, shownKey }) {
       open(path);
       return;
     }
-    const tabs = $projects.get()[key] ?? NO_TABS;
-    $projects.setKey(key, { ...tabs, paths: tabs.paths.includes(path) ? tabs.paths : [...tabs.paths, path], active: path });
+    const tabs = $folders.get()[key] ?? NO_TABS;
+    $folders.setKey(key, { ...tabs, paths: tabs.paths.includes(path) ? tabs.paths : [...tabs.paths, path], active: path });
   }
 
   /**
-   * Closes a tab of any project, shown or not, e.g. a terminal whose shell exited.
-   * @param {string | null} root Project path; `null` for the tabs open with no project.
+   * Closes a tab of any folder, shown or not, e.g. a terminal whose shell exited.
+   * @param {string | null} root The folder; `null` for the tabs open with no project.
    * @param {string} path Tab id.
    */
   function closeIn(root, path) {
@@ -99,9 +99,9 @@ export function tabGroup({ $projects, $tabs, shownKey }) {
       close(path);
       return;
     }
-    const tabs = $projects.get()[key];
+    const tabs = $folders.get()[key];
     const rest = tabs && without(tabs, path);
-    if (rest) $projects.setKey(key, rest);
+    if (rest) $folders.setKey(key, rest);
   }
 
   /**
@@ -171,12 +171,12 @@ export function tabGroup({ $projects, $tabs, shownKey }) {
   }
 
   /**
-   * Forgets the tabs of a project, e.g. when it is removed from the app.
-   * @param {string} root Project path.
+   * Forgets the tabs of a folder, e.g. when its project is removed from the app.
+   * @param {string} root The folder.
    */
   function forget(root) {
-    // Through `setKey`: `set()` would rewrite every project's item from this window's copy.
-    if (root in $projects.get()) $projects.setKey(root, undefined);
+    // Through `setKey`: `set()` would rewrite every folder's item from this window's copy.
+    if (root in $folders.get()) $folders.setKey(root, undefined);
   }
 
   return { open, close, openIn, closeIn, closeOthers, closeToRight, closeAll, move, setPinned, activate, forget };

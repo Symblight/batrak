@@ -1,9 +1,8 @@
-import { $projectTabs } from '../../stores/editor/editor.js';
-import { $sessions } from '../../stores/sessions/sessions.js';
-import { $shownFolder } from '../../stores/workspaces/workspaces.js';
+import { $folderTabs } from '../../stores/editor/editor.js';
+import { $shownFolder, $workspaces } from '../../stores/workspaces/workspaces.js';
 import {
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalPanel,
   $terminalTabs,
   $terminals,
@@ -68,7 +67,7 @@ function previousClosed() {
 
 /** @param {TerminalFolder} folder */
 function openIn({ cwd, fallback }) {
-  openTerminal(cwd, fallback, folderLabel(cwd, $sessions.get()));
+  openTerminal(cwd, fallback, folderLabel(cwd, $workspaces.get()));
 }
 
 /** @param {string} id */
@@ -139,7 +138,7 @@ async function start(id, { cols, rows }) {
   try {
     /** @type {TerminalOpened} */
     const opened = await ipc.invoke('terminal_open', { id, cwd: info.cwd, fallback: info.fallback, cols, rows });
-    terminalStarted(id, opened, `${opened.shell} — ${folderLabel(opened.cwd, $sessions.get())}`);
+    terminalStarted(id, opened, `${opened.shell} — ${folderLabel(opened.cwd, $workspaces.get())}`);
     return true;
   } catch (err) {
     terminalFailed(id, String(err));
@@ -246,8 +245,8 @@ export const terminals = Object.freeze({
     previousClosed();
     // A terminal's tab is in its project's editor tabs or in its terminal panel's.
     const releaseGone = () => {
-      const editor = $projectTabs.get();
-      const panel = $projectTerminalTabs.get();
+      const editor = $folderTabs.get();
+      const panel = $folderTerminalTabs.get();
       const gone = Object.entries($terminals.get())
         .filter(([id, t]) => {
           const tab = tabs.terminalId(id);
@@ -258,10 +257,10 @@ export const terminals = Object.freeze({
       if (gone.length) release(gone);
     };
     const stops = [
-      $projectTabs.listen(releaseGone),
-      $projectTerminalTabs.listen((panel) => {
+      $folderTabs.listen(releaseGone),
+      $folderTerminalTabs.listen((panel) => {
         // A panel is never shown empty.
-        for (const [root, state] of Object.entries($projectTerminalPanels.get())) {
+        for (const [root, state] of Object.entries($folderTerminalPanels.get())) {
           if (state?.open && !panel[root]?.paths.length) setTerminalPanelOpen(root, false);
         }
         releaseGone();

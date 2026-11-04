@@ -5,9 +5,9 @@ import { $project } from '../../../stores/project/project.js';
 import { $activeRoot, $activeWorkspaceId, $shownFolder, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $activePath, $projectTabs, closeAllTabs } from '../../../stores/editor/editor.js';
-import { $projectTerminalPanelHeights, $projectTerminalTabs, $terminals, openTerminal } from '../../../stores/terminals/terminals.js';
-import { $projectExpandedFolders } from '../../../stores/file-tree/file-tree.js';
+import { $activePath, $folderTabs, closeAllTabs } from '../../../stores/editor/editor.js';
+import { $folderTerminalPanelHeights, $folderTerminalTabs, $terminals, openTerminal } from '../../../stores/terminals/terminals.js';
+import { $folderExpandedFolders } from '../../../stores/file-tree/file-tree.js';
 import { workspaces } from '../workspaces.js';
 
 /** @param {() => boolean} pred */
@@ -313,12 +313,12 @@ describe('workspaces hook', () => {
       selectSession('ws-chat');
       await until(() => $shownFolder.get() === '/wt/one');
       const terminal = openTerminal('/wt/one', '/work/a', 'one');
-      $projectTerminalPanelHeights.setKey('/wt/one', 300);
-      $projectTabs.setKey('/wt/one', { paths: ['/wt/one/a.js'], active: '/wt/one/a.js', pinned: [] });
-      $projectExpandedFolders.setKey('/wt/one', ['src']);
+      $folderTerminalPanelHeights.setKey('/wt/one', 300);
+      $folderTabs.setKey('/wt/one', { paths: ['/wt/one/a.js'], active: '/wt/one/a.js', pinned: [] });
+      $folderExpandedFolders.setKey('/wt/one', ['src']);
       const kept = () => [
-        $projectTabs.get()['/wt/one'] !== undefined,
-        $projectExpandedFolders.get()['/wt/one'] !== undefined,
+        $folderTabs.get()['/wt/one'] !== undefined,
+        $folderExpandedFolders.get()['/wt/one'] !== undefined,
         localStorage.getItem('brama:sessions:last:/wt/one') !== null,
       ];
 
@@ -327,7 +327,7 @@ describe('workspaces hook', () => {
 
       // Assert
       expect(order, 'its shells are gone before its folder goes').to.deep.equal([`close ${terminal}`, 'delete']);
-      expect([$terminals.get()[terminal], $projectTerminalTabs.get()['/wt/one'], $projectTerminalPanelHeights.get()['/wt/one']]).to.deep.equal([undefined, undefined, undefined]);
+      expect([$terminals.get()[terminal], $folderTerminalTabs.get()['/wt/one'], $folderTerminalPanelHeights.get()['/wt/one']]).to.deep.equal([undefined, undefined, undefined]);
       expect(kept(), fails ? 'a failed delete forgets nothing else' : 'all forgotten').to.deep.equal(Array(3).fill(fails));
 
       // Cleanup

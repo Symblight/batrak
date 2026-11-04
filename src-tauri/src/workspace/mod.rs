@@ -2,7 +2,7 @@
 //! worktree in app data on branch `brama/<slug>`, and chats (sessions) that run in its folder.
 //! Main, the project's own folder, is not stored.
 
-
+pub mod checkout;
 mod store;
 
 use std::collections::{HashMap, HashSet};
@@ -11,7 +11,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 use crate::git::exec::{self, Mode as GitMode};
-use crate::session::env::{self, SessionEnv};
 
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +47,25 @@ pub struct WorkspaceRecord {
     /// A turn of one of its chats started or ended.
     #[serde(default)]
     pub last_active_at: Option<String>,
+    /// Its first checkout succeeded: a folder not there since was deleted. Records older than
+    /// this field count as checked out.
+    #[serde(default = "checked_out_before")]
+    pub checked_out: bool,
+}
+
+fn checked_out_before() -> bool {
+    true
+}
+
+/// Where a workspace's folder stands (`WorkspaceRecord::checkout_state`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CheckoutState {
+    /// Checked out.
+    Ready,
+    /// Placed, its first checkout still to run (it failed, or the app quit first).
+    NeverCheckedOut,
+    /// Deleted after a checkout (outside Brama): missing until Recreate.
+    Absent,
 }
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -139,7 +157,7 @@ impl Workspaces {
             .map(|record| Workspace {
                 creating: creating.contains(&record.id),
                 error: failed.get(&record.id).cloned(),
-                missing: !creating.contains(&record.id) && !record.worktree_path.join(".git").exists(),
+                missing: !creating.contains(&record.id) && record.checkout_state() != CheckoutState::Ready,
                 record,
             })
             .collect()
@@ -179,7 +197,7 @@ impl Workspaces {
     /// The folder of a workspace checked out and not checking out now: what a window opens as its root.
     pub fn open_folder(&self, id: &str) -> Result<PathBuf, String> {
         let record = self.get(id)?;
-        if lock(&self.inner.creating).contains(id) || !record.folder.is_dir() {
+        if lock(&self.inner.creating).contains(id) || record.checkout_state() != CheckoutState::Ready {
             return Err(format!("{}: the workspace isn't checked out", record.folder.display()));
         }
         Ok(record.folder)
@@ -191,7 +209,7 @@ impl Workspaces {
     pub fn create(&self, project: &Path, name: &str, base: Option<&str>) -> Result<WorkspaceRecord, String> {
         let record = self.place(project, Some(name), base)?;
         self.check_out(&record.id)?;
-        Ok(record)
+        self.get(&record.id)
     }
 
     /// Stores a new workspace placed from `base` (default: the project's base branch), listed as
@@ -209,7 +227,7 @@ impl Workspaces {
             Some(base) => Some(base.to_owned()),
             None => default_base(git, project),
         };
-        let stem = name.map_or_else(|| "workspace".to_owned(), |n| env::slug(n, "workspace"));
+        let stem = name.map_or_else(|| "workspace".to_owned(), |n| checkout::slug(n, "workspace"));
         // One placement at a time: a name is taken once stored, before its checkout makes it.
         let _placing = lock(&self.inner.placing);
         let stored = self.inner.store.list(None);
@@ -217,22 +235,20 @@ impl Workspaces {
         let reserved = |root: &Path, branch: &str| {
             stored.iter().any(|w| w.worktree_path == root || (w.worktree_path.parent() == root.parent() && w.branch == branch))
         };
-        let placed = env::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)?;
-        let (Some(worktree_path), Some(branch), Some(base_commit)) = (placed.worktree_path, placed.branch, placed.base_commit) else {
-            return Err("a worktree placement without a worktree".to_owned());
-        };
+        let placed = checkout::place_named(project, &self.inner.worktrees, &stem, base_branch.as_deref(), &reserved)?;
         let record = WorkspaceRecord {
             id: new_id(),
             project_path: project.to_path_buf(),
-            name: name.map_or_else(|| placeholder_name(&branch), str::to_owned),
+            name: name.map_or_else(|| placeholder_name(&placed.branch), str::to_owned),
             name_source: if name.is_some() { NameSource::User } else { NameSource::Agent },
-            folder: placed.agent_cwd,
-            worktree_path,
-            branch,
-            base_commit,
+            folder: placed.folder,
+            worktree_path: placed.worktree_path,
+            branch: placed.branch,
+            base_commit: placed.base_commit,
             base_branch,
             created_at: crate::session::iso_now(),
             last_active_at: None,
+            checked_out: false,
         };
         lock(&self.inner.creating).insert(record.id.clone());
         if let Err(e) = self.inner.store.insert(record.clone()) {
@@ -258,7 +274,7 @@ impl Workspaces {
     pub fn ready(&self, id: &str) -> Result<(), String> {
         let gate = self.gate(id);
         let _held = lock(&gate);
-        if self.get(id)?.never_checked_out() {
+        if self.get(id)?.checkout_state() == CheckoutState::NeverCheckedOut {
             return self.check_out_held(id);
         }
         Ok(())
@@ -271,11 +287,18 @@ impl Workspaces {
             self.changed(&record.project_path);
         }
         let cancel = self.cancel_flag(id);
-        let result = record.env().prepare(&cancel);
+        let result = checkout::check_out(&record, &cancel);
         lock(&self.inner.creating).remove(id);
         self.changed(&record.project_path);
         match &result {
-            Ok(()) => drop(lock(&self.inner.failed).remove(id)),
+            Ok(()) => {
+                lock(&self.inner.failed).remove(id);
+                if !record.checked_out {
+                    if let Err(e) = self.inner.store.update(id, |r| r.checked_out = true) {
+                        tracing::warn!(workspace = %id, "storing the workspace's checkout failed: {e}");
+                    }
+                }
+            }
             Err(_) if cancel.load(Ordering::SeqCst) => tracing::info!(workspace = %id, "the workspace's checkout was stopped"),
             Err(e) => {
                 tracing::warn!(workspace = %id, "checking the workspace out failed: {e}");
@@ -309,6 +332,7 @@ impl Workspaces {
             base_branch: None,
             created_at: session.created_at.clone(),
             last_active_at: session.last_activity_at.clone(),
+            checked_out: true,
         };
         self.inner.store.insert(record.clone())?;
         tracing::info!(workspace = %record.id, session = %session.session_id, "a worktree session became a workspace");
@@ -361,7 +385,7 @@ impl Workspaces {
         let gate = self.gate(id);
         let _held = lock(&gate);
         let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Brama when the workspace was deleted.", record.name);
-        let removed = record.env().remove_with(&message, keep_branch);
+        let removed = checkout::remove(&record, &message, keep_branch);
         if let Err(e) = &removed {
             // Kept on disk (a detached worktree with work): the record goes all the same.
             tracing::warn!(workspace = %id, "removing the workspace's folder failed: {e}");
@@ -381,7 +405,7 @@ impl Workspaces {
     /// A folder that isn't there has neither. Blocking.
     pub fn changes_counts(&self, id: &str) -> Result<(usize, usize), String> {
         let record = self.get(id)?;
-        if !record.worktree_path.join(".git").exists() {
+        if record.checkout_state() != CheckoutState::Ready {
             return Ok((0, 0));
         }
         let git = crate::git::binary::git()?;
@@ -424,35 +448,15 @@ impl Drop for Deleting {
 }
 
 impl WorkspaceRecord {
-    /// Neither its worktree nor its branch is there: its first checkout is still to run. Blocking.
-    pub fn never_checked_out(&self) -> bool {
-        if self.worktree_path.join(".git").exists() {
-            return false;
+    /// Whether its folder is checked out, still to be, or gone. Blocking (looks for the folder).
+    pub fn checkout_state(&self) -> CheckoutState {
+        if checkout::is_checked_out(&self.worktree_path) {
+            CheckoutState::Ready
+        } else if self.checked_out {
+            CheckoutState::Absent
+        } else {
+            CheckoutState::NeverCheckedOut
         }
-        let Ok(git) = crate::git::binary::git() else { return false };
-        let rev = format!("refs/heads/{}", self.branch);
-        exec::run(git, &self.project_path, &exec::args(&[&"rev-parse", &"--verify", &"--quiet", &rev]), GitMode::Background).is_err()
-    }
-
-    /// Where its chats run.
-    pub fn placement(&self) -> env::Placement {
-        env::Placement {
-            agent_cwd: self.folder.clone(),
-            worktree_path: Some(self.worktree_path.clone()),
-            branch: Some(self.branch.clone()),
-            base_commit: Some(self.base_commit.clone()),
-        }
-    }
-
-    /// Its worktree as a session environment that checks it out.
-    pub fn env(&self) -> env::WorktreeEnv {
-        env::WorktreeEnv::new(
-            self.project_path.clone(),
-            self.worktree_path.clone(),
-            self.folder.clone(),
-            self.branch.clone(),
-            self.base_commit.clone(),
-        )
     }
 }
 

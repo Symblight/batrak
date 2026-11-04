@@ -10,9 +10,9 @@ import { $sessionReads, $unreadSessions } from '../../../stores/session-read/ses
 import { $activeSessionId, $draftSessions, $sessions, $sessionsLoaded, selectSession } from '../../../stores/sessions/sessions.js';
 import { $editorTabs, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
 import {
-  $projectTerminalPanelHeights,
-  $projectTerminalPanels,
-  $projectTerminalTabs,
+  $folderTerminalPanelHeights,
+  $folderTerminalPanels,
+  $folderTerminalTabs,
   $terminalPanel,
   $terminalPanelHeight,
   $terminalTabs,
@@ -401,11 +401,8 @@ describe('acp-app: mark all as read', () => {
     status: 'idle',
     agentId: 'a',
     config: {},
-    mode: 'local',
     folder: projectId,
-    worktreePath: null,
     branch: null,
-    baseCommit: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     lastActivityAt: '2026-01-02T00:00:00.000Z',
     titleSource: 'prompt',
@@ -625,9 +622,9 @@ describe('acp-app: terminal panel layout', () => {
   afterEach(() => {
     closeAllTabs();
     for (const id of Object.keys($terminals.get())) forgetTerminal(id);
-    $projectTerminalTabs.set({});
-    $projectTerminalPanels.set({});
-    $projectTerminalPanelHeights.setKey('/p', undefined);
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
+    $folderTerminalPanelHeights.setKey('/p', undefined);
     $hiddenColumns.set([]);
     $project.set(null);
     clearMocks();

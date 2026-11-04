@@ -38,11 +38,8 @@ describe('sessions', () => {
     status: 'stopped',
     agentId: 'a',
     config: {},
-    mode: 'local',
     folder: projectId,
-    worktreePath: null,
     branch: null,
-    baseCommit: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     lastActivityAt: '2026-01-01T00:00:00.000Z',
     ...fields,
@@ -51,7 +48,7 @@ describe('sessions', () => {
   it("replaces a project's sessions with a sync's, keeping other projects' and its sessions being created", () => {
     $sessions.set([listed('old', '/p'), listed('other', '/q')]);
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'a', config: {} });
     setProjectSessions('/p', [listed('t1', '/p'), listed('t2', '/p')]);
     expect($sessions.get().map((s) => s.id).sort()).to.deep.equal([id, 'other', 't1', 't2'].sort());
   });
@@ -112,7 +109,7 @@ describe('sessions', () => {
   it("brings a refused chat back as a draft beside one New chat opened meanwhile; New chat keeps the shown one, else takes the refused one", () => {
     // Arrange
     const refused = newSession('/p');
-    startSession(refused, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    startSession(refused, { title: 'T', agentId: 'a', config: {} });
     const opened = newSession('/p');
     $activeSessionId.set(refused);
 
@@ -132,7 +129,7 @@ describe('sessions', () => {
 
   it('starts a session active as of its creation', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'a', config: {} });
     const [session] = $sessions.get();
     expect(session.lastActivityAt).to.equal(session.createdAt);
     expect([session.titleSource, session.agentTitle]).to.deep.equal(['prompt', null]);
@@ -140,7 +137,7 @@ describe('sessions', () => {
 
   it("stamps a session with the backend's time, keeping the later of two that arrive out of order", () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'a', config: {} });
     touchSession(id, '2099-01-01T00:00:00.000Z');
     expect($sessions.get()[0].lastActivityAt).to.equal('2099-01-01T00:00:00.000Z');
     touchSession(id, '2098-12-31T23:59:59.999Z');
@@ -154,7 +151,7 @@ describe('sessions', () => {
 
   it('pins and unpins a session, and forgets the pin of a removed one', () => {
     const id = newSession('/p');
-    startSession(id, { title: 'T', agentId: 'a', config: {}, mode: 'local' });
+    startSession(id, { title: 'T', agentId: 'a', config: {} });
     setSessionPinned(id, true);
     setSessionPinned(id, true);
     expect($pinnedSessions.get()).to.deep.equal([id]);

@@ -115,14 +115,14 @@ try {
  * the folder they belong to; two windows on one take turns. Only the shown folder's entry is shown
  * (`$editorTabs`); the others wait here, untouched, until it is shown again.
  */
-export const $projectTabs = persistentMapStore(TABS_PREFIX, parseTabs);
+export const $folderTabs = persistentMapStore(TABS_PREFIX, parseTabs);
 
 /**
  * Tabs of the shown folder (`$shownFolder`), only files inside it; while none is shown, the tabs that
  * show no file (Settings).
  */
 export const $editorTabs = computed(
-  [$projectTabs, $shownFolder, $workspaces, $workspacesProject, $projectPath],
+  [$folderTabs, $shownFolder, $workspaces, $workspacesProject, $projectPath],
   (folders, shown, workspaces, listedFor, project) => {
     const folder = shown ?? NO_PROJECT;
     const tabs = folders[folder];
@@ -148,16 +148,16 @@ export const $editorTabs = computed(
 function moveWorkspaceTabs(project, list) {
   if (project === null) return;
   for (const { folder } of list) {
-    const from = $projectTabs.get()[project];
+    const from = $folderTabs.get()[project];
     const moved = from?.paths.filter((id) => parseTabId(id).kind === 'file' && id.startsWith(`${folder}/`)) ?? [];
     if (!from || !moved.length) continue;
-    const to = $projectTabs.get()[folder] ?? NO_TABS;
+    const to = $folderTabs.get()[folder] ?? NO_TABS;
     const added = moved.filter((id) => !to.paths.includes(id));
-    $projectTabs.setKey(
+    $folderTabs.setKey(
       folder,
       tabsOf([...to.paths, ...added], to.active ?? from.active, [...to.pinned, ...from.pinned.filter((id) => added.includes(id))]),
     );
-    $projectTabs.setKey(project, tabsOf(from.paths.filter((id) => !moved.includes(id)), from.active, from.pinned));
+    $folderTabs.setKey(project, tabsOf(from.paths.filter((id) => !moved.includes(id)), from.active, from.pinned));
   }
 }
 
@@ -165,7 +165,7 @@ $workspacesProject.subscribe((project) => moveWorkspaceTabs(project, $workspaces
 $workspaces.listen((list) => moveWorkspaceTabs($workspacesProject.get(), list));
 
 const group = tabGroup({
-  $projects: $projectTabs,
+  $folders: $folderTabs,
   $tabs: $editorTabs,
   shownKey: () => $shownFolder.get() ?? NO_PROJECT,
 });
@@ -175,18 +175,18 @@ export const {
   open: openTab,
   /** Closes a tab, activating a neighbour if it was the active one. */
   close: closeTab,
-  /** Opens a tab, active, among a project's tabs, shown or not (`null`: no project). */
-  openIn: openProjectTab,
-  /** Closes a tab of any project, shown or not. */
-  closeIn: closeProjectTab,
+  /** Opens a tab, active, among a folder's tabs, shown or not (`null`: no project). */
+  openIn: openFolderTab,
+  /** Closes a tab of any folder, shown or not. */
+  closeIn: closeFolderTab,
   closeOthers: closeOtherTabs,
   closeToRight: closeTabsToRight,
   closeAll: closeAllTabs,
   move: moveTab,
   setPinned: setTabPinned,
   activate: activateTab,
-  /** Forgets the tabs of a project, e.g. when it is removed from the app. */
-  forget: removeProjectTabs,
+  /** Forgets the tabs of a folder, e.g. when its project is removed or its workspace deleted. */
+  forget: removeFolderTabs,
 } = group;
 
 /** Id of the active tab; notifies only when it changes, not when other tabs open or close. */
