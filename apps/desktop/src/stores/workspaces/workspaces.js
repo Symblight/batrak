@@ -24,7 +24,7 @@ export function setWorkspaces(list, projectPath = null) {
 }
 
 /** The workspace shown per project path (`main` for Main). Per window, so each window keeps its own. */
-const $activeWorkspaceIds = persistentMapStore('brama:workspaces:active:', (raw) => (typeof raw === 'string' ? raw : null));
+const $activeWorkspaceIds = persistentMapStore('batrak:workspaces:active:', (raw) => (typeof raw === 'string' ? raw : null));
 
 /**
  * Shows a workspace of a project in this window.

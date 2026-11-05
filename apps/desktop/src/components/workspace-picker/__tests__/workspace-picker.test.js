@@ -7,7 +7,7 @@ import '../workspace-picker.js';
 /** @typedef {import('../../../hooks/workspaces/types.js').WorkspaceStatus} WorkspaceStatus */
 
 /** @param {string} id @param {string} name */
-const ws = (id, name) => /** @type {Workspace} */ ({ id, name, folder: `/data/wt/${id}/app`, branch: `brama/${id}` });
+const ws = (id, name) => /** @type {Workspace} */ ({ id, name, folder: `/data/wt/${id}/app`, branch: `batrak/${id}` });
 
 const LIST = [ws('w1', 'Fix login'), ws('w2', 'Add search')];
 

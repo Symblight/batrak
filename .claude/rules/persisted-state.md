@@ -16,9 +16,9 @@ paths:
 
 # Persisted state and tabs
 
-- Persisted today: `$columnWidths` (`brama:layout:column-widths`), `$hiddenColumns`
-  (`brama:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns; while a window shows no project, `$shownHiddenColumns` reads and those buttons write an unsaved set instead, which starts with both hidden), `$project` (`brama:project`, reopened
-  on launch by `projects.restore()`), `$folderTabs` (`brama:editor:tabs:<folder>`: Main's is the project path, a workspace's its folder; the
+- Persisted today: `$columnWidths` (`batrak:layout:column-widths`), `$hiddenColumns`
+  (`batrak:layout:hidden-columns`, shared; the toolbar's buttons toggle the sessions and file columns; while a window shows no project, `$shownHiddenColumns` reads and those buttons write an unsaved set instead, which starts with both hidden), `$project` (`batrak:project`, reopened
+  on launch by `projects.restore()`), `$folderTabs` (`batrak:editor:tabs:<folder>`: Main's is the project path, a workspace's its folder; the
   shown folder's entry (`$shownFolder`, `stores/workspaces/`) is `$editorTabs`, which shows only files inside it (tabs of a workspace's files once kept in its project's entry move to the workspace's when its list loads); a tab id is a file's path
   or a view's id (`SETTINGS_TAB_ID`, one long card of sections (Theme, Editor) with a list
   beside it that scrolls to them and follows the scroll; `openSettings(reveal)` sets `$settingsReveal`
@@ -35,31 +35,31 @@ paths:
   column's), with a footer of resolution, type and size. A markdown file is shown in `<acp-markdown-view>`
   (see "Markdown view" below); the Browser view is a mock for now. Pinned tabs (`EditorTabs.pinned`) lead the strip and survive Close Others / Close Tabs to the Right / Close All. Everything in `<acp-main-column>` opens as such a
   tab. View tabs need no project: with none open, `$editorTabs` is the `''` entry, which holds only them),
-  `$folderTerminalPanelHeights` (`brama:layout:terminal-panel:<folder>`, per window like the tabs,
+  `$folderTerminalPanelHeights` (`batrak:layout:terminal-panel:<folder>`, per window like the tabs,
   one item per folder through `setKey()`: the terminal panel's height in px, clamped when read; the
-  panel's tabs (`$folderTerminalTabs`, `brama:terminal-panel:tabs:<folder>`), whether it is open (`$folderTerminalPanels`, `brama:terminal-panel:open:<folder>`) and each terminal tab's terminal (`$savedTerminals`, `brama:terminals:<id>`: where it starts, no session's CLI or login): the tabs come back, each with a new shell once shown),
-  `$folderExpandedFolders` (`brama:file-tree:expanded:<folder>`, per window like the tabs; the
+  panel's tabs (`$folderTerminalTabs`, `batrak:terminal-panel:tabs:<folder>`), whether it is open (`$folderTerminalPanels`, `batrak:terminal-panel:open:<folder>`) and each terminal tab's terminal (`$savedTerminals`, `batrak:terminals:<id>`: where it starts, no session's CLI or login): the tabs come back, each with a new shell once shown),
+  `$folderExpandedFolders` (`batrak:file-tree:expanded:<folder>`, per window like the tabs; the
   shown folder's entry is `$expandedFolders` (a workspace with none of its own shows its project's), root-relative folders the file tree is controlled by: it
   sends the user's expand/collapse up (`acp-expanded-change`, the file column writes it) and expands
   stored folders as their parents load),
-  `$contextUsage` (`brama:sessions:context-usage:<session id>`, see `sessions.md`),
-  `$sessionReads` (`brama:sessions:read:<session id>`, shared: `{ seen: ISO | null }`, `null` marked
+  `$contextUsage` (`batrak:sessions:context-usage:<session id>`, see `sessions.md`),
+  `$sessionReads` (`batrak:sessions:read:<session id>`, shared: `{ seen: ISO | null }`, `null` marked
   unread by hand; dropped only by `forgetRead()` on remove / revert to draft) and `$readBaselines`
-  (`brama:sessions:baseline:<agent id>\n<project path>`, shared: an ISO time, written once when a sync
+  (`batrak:sessions:baseline:<agent id>\n<project path>`, shared: an ISO time, written once when a sync
   lists that agent for the project), see `sessions.md`,
-  `$searchDialogPrefs` (`brama:search:dialog`, shared: the search dialog's preview placement, view
-  and splits), `$projectSearch` (`brama:search:project:<project path>`, per window, one item per
+  `$searchDialogPrefs` (`batrak:search:dialog`, shared: the search dialog's preview placement, view
+  and splits), `$projectSearch` (`batrak:search:project:<project path>`, per window, one item per
   project through `setKey()`: the dialog's last query, options, folder and mask, and the project's
   10 recent searches; two windows on one project: last write wins),
-  `$projects` (`brama:projects`, shared; every opened folder is added, `projects.remove()` drops it
-  from the app only), `$collapsedProjects` (`brama:projects:collapsed`) and `$markdownModes` (`brama:markdown:mode:<project path>`, per window, one item per project through
+  `$projects` (`batrak:projects`, shared; every opened folder is added, `projects.remove()` drops it
+  from the app only), `$collapsedProjects` (`batrak:projects:collapsed`) and `$markdownModes` (`batrak:markdown:mode:<project path>`, per window, one item per project through
   `setKey()`: `{ [root-relative path]: 'raw' | 'split' | 'preview' }`, only modes other than the default,
-  an invalid one dropped on read), `$markdownSplit` (`brama:layout:markdown-split`, shared: the editor's
-  share of Split in percent, 20–80), `$settings` (`brama:settings`,
+  an invalid one dropped on read), `$markdownSplit` (`batrak:layout:markdown-split`, shared: the editor's
+  share of Split in percent, 20–80), `$settings` (`batrak:settings`,
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, the code editor's font, `markdownDefaultView` (`raw` / `split` / `preview`: how a markdown file never set
   opens; no control in Settings, so `raw` unless the stored value is edited) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
-  `prefers-color-scheme`, since Appearance can override the OS), `$projectAccents` (`brama:settings:project-accent:<project path>`, shared, one item per project through `setKey()`: `{ color, enabled }`, a project's own accent, which `$themeAccent` puts over the global one while `enabled`; switched off it keeps its color, and Theme's Reset forgets only the shown project's). Typedefs for each are in
+  `prefers-color-scheme`, since Appearance can override the OS), `$projectAccents` (`batrak:settings:project-accent:<project path>`, shared, one item per project through `setKey()`: `{ color, enabled }`, a project's own accent, which `$themeAccent` puts over the global one while `enabled`; switched off it keeps its color, and Theme's Reset forgets only the shown project's). Typedefs for each are in
   `src/hooks/settings/types.js`.
 
 ## Markdown view

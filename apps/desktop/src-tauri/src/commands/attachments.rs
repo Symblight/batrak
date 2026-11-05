@@ -13,8 +13,8 @@ use crate::roots::Roots;
 
 use super::blocking;
 
-/// Where attachments go, inside the session's folder.
-pub const ATTACHMENTS_DIR: &str = ".brama/attachments";
+/// Where attachments go, inside the session's folder's `config::DIR`.
+const ATTACHMENTS: &str = "attachments";
 /// An attachment larger than this isn't saved: one IPC request holds the whole file (the page checks
 /// first, so it never sends one).
 pub const MAX_BYTES: usize = 64 * 1024 * 1024;
@@ -27,13 +27,13 @@ pub fn save(folder: &Path, name: &str, bytes: &[u8], max: usize) -> Result<PathB
     if bytes.len() > max {
         return Err(format!("{name}: too large to attach (over {} MB)", max / (1024 * 1024)));
     }
-    let dir = folder.join(ATTACHMENTS_DIR);
+    let dir = folder.join(crate::config::DIR).join(ATTACHMENTS);
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    // A symlinked `.brama` or `attachments` mustn't lead the file out of the folder.
+    // A symlinked `.bt` or `attachments` mustn't lead the file out of the folder.
     let dir = dunce::canonicalize(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let root = dunce::canonicalize(folder).map_err(|e| format!("{}: {e}", folder.display()))?;
     if !dir.starts_with(&root) {
-        return Err(format!("{}: leads out of {}", ATTACHMENTS_DIR, root.display()));
+        return Err(format!("{}/{ATTACHMENTS}: leads out of {}", crate::config::DIR, root.display()));
     }
     // Created only where nothing is, a symlink included: never written through one.
     let ignore = dir.join(".gitignore");
@@ -132,9 +132,9 @@ mod tests {
         let folder = tmp("save");
         let folder = dunce::canonicalize(&folder).unwrap();
         let path = save(&folder, "shot.png", b"\x89PNG", 64).unwrap();
-        assert_eq!(path, folder.join(".brama/attachments/shot.png"));
+        assert_eq!(path, folder.join(".bt/attachments/shot.png"));
         assert_eq!(fs::read(&path).unwrap(), b"\x89PNG");
-        assert_eq!(fs::read_to_string(folder.join(".brama/attachments/.gitignore")).unwrap(), "*\n");
+        assert_eq!(fs::read_to_string(folder.join(".bt/attachments/.gitignore")).unwrap(), "*\n");
         let _ = fs::remove_dir_all(&folder);
     }
 
@@ -144,20 +144,20 @@ mod tests {
         save(&folder, "notes.md", b"a", 64).unwrap();
         assert_eq!(save(&folder, "notes.md", b"b", 64).unwrap().file_name().unwrap(), "notes-2.md");
         assert_eq!(save(&folder, "notes.md", b"c", 64).unwrap().file_name().unwrap(), "notes-3.md");
-        assert_eq!(fs::read(folder.join(".brama/attachments/notes.md")).unwrap(), b"a");
+        assert_eq!(fs::read(folder.join(".bt/attachments/notes.md")).unwrap(), b"a");
         let _ = fs::remove_dir_all(&folder);
     }
 
     #[test]
     fn keeps_a_name_inside_the_attachments() {
         let folder = dunce::canonicalize(tmp("names")).unwrap();
-        assert_eq!(save(&folder, "../../evil.sh", b"x", 64).unwrap(), folder.join(".brama/attachments/evil.sh"));
-        assert_eq!(save(&folder, "..\\win.txt", b"x", 64).unwrap(), folder.join(".brama/attachments/win.txt"));
-        assert_eq!(save(&folder, ".hidden", b"x", 64).unwrap(), folder.join(".brama/attachments/hidden"));
-        assert_eq!(save(&folder, "", b"x", 64).unwrap(), folder.join(".brama/attachments/attachment"));
+        assert_eq!(save(&folder, "../../evil.sh", b"x", 64).unwrap(), folder.join(".bt/attachments/evil.sh"));
+        assert_eq!(save(&folder, "..\\win.txt", b"x", 64).unwrap(), folder.join(".bt/attachments/win.txt"));
+        assert_eq!(save(&folder, ".hidden", b"x", 64).unwrap(), folder.join(".bt/attachments/hidden"));
+        assert_eq!(save(&folder, "", b"x", 64).unwrap(), folder.join(".bt/attachments/attachment"));
         assert_eq!(
             save(&folder, "Screenshot 2026-10-31 at 10:00.png", b"x", 64).unwrap(),
-            folder.join(".brama/attachments/Screenshot-2026-10-31-at-10-00.png"),
+            folder.join(".bt/attachments/Screenshot-2026-10-31-at-10-00.png"),
             "one word, no Windows-forbidden characters"
         );
         let _ = fs::remove_dir_all(&folder);
@@ -167,8 +167,8 @@ mod tests {
     #[test]
     fn never_follows_a_symlink_out_of_the_folder() {
         let (folder, outside) = (tmp("link"), tmp("link-out"));
-        fs::create_dir_all(folder.join(".brama")).unwrap();
-        std::os::unix::fs::symlink(&outside, folder.join(".brama/attachments")).unwrap();
+        fs::create_dir_all(folder.join(".bt")).unwrap();
+        std::os::unix::fs::symlink(&outside, folder.join(".bt/attachments")).unwrap();
         assert!(save(&folder, "a.txt", b"x", 64).unwrap_err().contains("leads out"));
         assert!(!outside.join("a.txt").exists());
         let _ = (fs::remove_dir_all(&folder), fs::remove_dir_all(&outside));
@@ -178,8 +178,8 @@ mod tests {
     #[test]
     fn never_writes_its_gitignore_through_a_symlink() {
         let (folder, outside) = (tmp("ignore-link"), tmp("ignore-out"));
-        fs::create_dir_all(folder.join(".brama/attachments")).unwrap();
-        std::os::unix::fs::symlink(outside.join("target"), folder.join(".brama/attachments/.gitignore")).unwrap();
+        fs::create_dir_all(folder.join(".bt/attachments")).unwrap();
+        std::os::unix::fs::symlink(outside.join("target"), folder.join(".bt/attachments/.gitignore")).unwrap();
         save(&folder, "a.txt", b"x", 64).unwrap();
         assert!(!outside.join("target").exists());
         let _ = (fs::remove_dir_all(&folder), fs::remove_dir_all(&outside));
@@ -189,7 +189,7 @@ mod tests {
     fn refuses_what_is_too_large() {
         let folder = tmp("large");
         assert!(save(&folder, "big.bin", &[0; 65], 64).unwrap_err().contains("too large"));
-        assert!(!folder.join(".brama/attachments/big.bin").exists());
+        assert!(!folder.join(".bt/attachments/big.bin").exists());
         let _ = fs::remove_dir_all(&folder);
     }
 

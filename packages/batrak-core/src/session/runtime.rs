@@ -165,7 +165,7 @@ impl Sessions {
         }
         let merged = self.inner.opts.configs.merged(Some(&project));
         let Some(agent_name) = merged.agent(&req.agent_id).map(|a| a.name.clone()) else {
-            return Err(format!("Unknown agent \"{}\": add it to .brama/agents.json", req.agent_id));
+            return Err(format!("Unknown agent \"{}\": add it to .bt/agents.json", req.agent_id));
         };
         if merged.enabled(&req.agent_id).is_none() {
             return Err(Absence::Off.message(&merged, &req.agent_id));

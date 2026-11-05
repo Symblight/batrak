@@ -21,7 +21,7 @@ async function until(pred) {
 const FILES = [{ path: 'a.js', kind: 'modified', staged: false, unstaged: true, origPath: null, added: 1, removed: 0 }];
 
 /** @param {string} id */
-const workspace = (id) => /** @type {never} */ ({ id, name: id, folder: `/wt/${id}`, branch: `brama/${id}`, baseCommit: `base-${id}` });
+const workspace = (id) => /** @type {never} */ ({ id, name: id, folder: `/wt/${id}`, branch: `batrak/${id}`, baseCommit: `base-${id}` });
 
 /**
  * @param {string} id
@@ -95,7 +95,7 @@ describe('acp-workspace-changes-tab', () => {
     $commentFocus.set(focus);
     await el.updateComplete;
     expect([review.comments === $comments.get(), review.commentFocus === focus], 'comments and the one to reveal').to.deep.equal([true, true]);
-    expect([review.root, review.base, review.branch]).to.deep.equal(['/wt/w1', 'base-w1', 'brama/w1']);
+    expect([review.root, review.base, review.branch]).to.deep.equal(['/wt/w1', 'base-w1', 'batrak/w1']);
     expect(calls.filter((c) => c.cmd === 'workspace_changes').map((c) => c.args.id)).to.deep.equal(['w1']);
     // Act: the other tab becomes the active one
     activateTab(workspaceChangesTabId('w2'));

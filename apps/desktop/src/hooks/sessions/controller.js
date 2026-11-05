@@ -452,7 +452,7 @@ function start(id, title) {
   // Only what was picked in the draft: the values it shows otherwise are another session's.
   const { agentId, chosen: config } = composerOf(id);
   if (agentId === null) {
-    setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .brama/agents.json to start a session.' });
+    setSessionNotice(id, { kind: 'info', message: 'Add an ACP agent to .bt/agents.json to start a session.' });
     return false;
   }
   // While it's a draft still: a listed session without a composer would get one from its record.

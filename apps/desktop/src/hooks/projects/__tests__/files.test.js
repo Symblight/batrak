@@ -22,7 +22,7 @@ describe('projects files', () => {
     const cases = [
       [() => projects.readFile('/p/a.js'), 'read_file', { path: '/p/a.js' }],
       [() => projects.readFileBytes('/p/a.png'), 'read_file_bytes', { path: '/p/a.png' }],
-      [() => projects.writeFile('/p/.brama/agents.json', '{}'), 'write_file', { path: '/p/.brama/agents.json', content: '{}' }],
+      [() => projects.writeFile('/p/.bt/agents.json', '{}'), 'write_file', { path: '/p/.bt/agents.json', content: '{}' }],
       [() => projects.listDir('root:/p', 'src'), 'list_dir', { rootId: 'root:/p', path: 'src' }],
       [() => projects.rescan('root:/p'), 'rescan_root', { rootId: 'root:/p' }],
     ];

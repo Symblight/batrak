@@ -195,7 +195,7 @@ describe('acp-app: the shown workspace', () => {
     mockIPC((cmd, args) => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
-      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'brama/task', creating: false, missing: false, error: null }];
+      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'batrak/task', creating: false, missing: false, error: null }];
       if (cmd === 'workspace_delete_preview') return { uncommitted: 0, commits: 1, working: [] };
       return startupAnswer(cmd, a);
     });
@@ -252,11 +252,11 @@ describe('acp-app: switching, creating and deleting workspaces', () => {
     mockIPC((cmd, args) => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
-      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'brama/task', createdAt: '2026-01-01T00:00:00.000Z', creating: false, missing: false, error: null }];
-      if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace', createdAt: '2026-01-02T00:00:00.000Z', creating: true, missing: false, error: null };
+      if (cmd === 'workspaces_list') return [{ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/one', branch: 'batrak/task', createdAt: '2026-01-01T00:00:00.000Z', creating: false, missing: false, error: null }];
+      if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace', nameSource: 'agent', folder: '/wt/two', branch: 'batrak/workspace', createdAt: '2026-01-02T00:00:00.000Z', creating: true, missing: false, error: null };
       if (cmd === 'workspace_delete_preview') return { uncommitted: 0, commits: 1, working: [] };
-      if (cmd === 'git_branches') return { local: a.rootId === 'r' ? ['main', 'dev'] : ['brama/task'], remotes: [], default: null };
-      if (cmd === 'git_head') return { branch: a.rootId === 'r' ? 'main' : 'brama/task', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null };
+      if (cmd === 'git_branches') return { local: a.rootId === 'r' ? ['main', 'dev'] : ['batrak/task'], remotes: [], default: null };
+      if (cmd === 'git_head') return { branch: a.rootId === 'r' ? 'main' : 'batrak/task', sha: 'abc', detached: false, upstream: null, ahead: 0, behind: 0, upstreamSha: null, remote: null };
       return startupAnswer(cmd, a);
     });
     $project.set({ path: '/p', name: 'p', rootId: 'r' });

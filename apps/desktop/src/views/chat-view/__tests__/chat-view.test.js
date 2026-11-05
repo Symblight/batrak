@@ -178,7 +178,7 @@ describe('acp-chat-view', () => {
     // Arrange
     /** @type {import('../../../hooks/workspaces/types.js').Workspace} */
     const workspace = {
-      id: 'w1', projectPath: '/p', name: 'W', nameSource: 'user', folder: '/wt/w1', worktreePath: '/wt/w1', branch: 'brama/w',
+      id: 'w1', projectPath: '/p', name: 'W', nameSource: 'user', folder: '/wt/w1', worktreePath: '/wt/w1', branch: 'batrak/w',
       baseCommit: 'c0', baseBranch: null, createdAt: '2026-01-01T00:00:00Z', creating: false, error: null, missing: true, checkedOut: true,
     };
     setWorkspaces([workspace], '/p');

@@ -11,7 +11,7 @@ import { folderOfWorkspace } from '../../hooks/workspaces/folder.js';
 export const $sessions = atom(/** @type {Session[]} */ ([]));
 
 /** Ids of the sessions pinned to the top of their project's list. Shared by every window. */
-export const $pinnedSessions = persistentStore('brama:sessions:pinned', /** @type {string[]} */ ([]), {
+export const $pinnedSessions = persistentStore('batrak:sessions:pinned', /** @type {string[]} */ ([]), {
   parse: (raw) => (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : null),
 });
 
@@ -92,7 +92,7 @@ export const $activeFolder = computed([$sessions, $draftSessions, $workspaces, $
  * back to it, also after a relaunch. Per window, like the tabs; a draft's id doesn't outlive the
  * launch, so `showWorkspace()` then falls back.
  */
-const $lastByFolder = persistentMapStore('brama:sessions:last:', (raw) => (typeof raw === 'string' ? raw : null));
+const $lastByFolder = persistentMapStore('batrak:sessions:last:', (raw) => (typeof raw === 'string' ? raw : null));
 
 /** The draft `showWorkspace()` opened because the workspace's last session wasn't listed (yet). */
 let stopgapDraft = /** @type {string | null} */ (null);

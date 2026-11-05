@@ -65,14 +65,14 @@ function parseView(raw) {
  * Each session's own view, by session id; a session without one is shown as its agent's
  * (`$agentViews`).
  */
-export const $sessionViews = persistentMapStore('brama:sessions:view:', parseView);
+export const $sessionViews = persistentMapStore('batrak:sessions:view:', parseView);
 
 /**
  * The agents whose sessions open in the terminal (the Agents tab's toggle), by agent id; the rest
  * open as Chat.
  * @type {import('nanostores').WritableAtom<Record<string, 'terminal'>>}
  */
-export const $agentViews = persistentStore('brama:agents:session-view', {}, {
+export const $agentViews = persistentStore('batrak:agents:session-view', {}, {
   parse: (raw) =>
     isRecord(raw) ? Object.fromEntries(Object.entries(raw).filter((entry) => entry[1] === 'terminal').map(([id]) => [id, 'terminal'])) : null,
 });

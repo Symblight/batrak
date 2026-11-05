@@ -283,7 +283,7 @@ describe('acp-agent-column', () => {
     internals.invoke = async (cmd, _args, options) => {
       if (cmd !== 'save_attachment') return null;
       saved.push({ headers: options?.headers });
-      return `/p/.brama/attachments/${decodeURIComponent(options?.headers?.name ?? '')}`;
+      return `/p/.bt/attachments/${decodeURIComponent(options?.headers?.name ?? '')}`;
     };
     $sessions.set([session()]);
     $activeSessionId.set('s1');
@@ -300,8 +300,8 @@ describe('acp-agent-column', () => {
       { folder: '%2Fp', name: 'log.txt' },
     ]);
     expect(inserted).to.deep.equal([
-      { path: '.brama/attachments/Screen Shot é.png', folder: false },
-      { path: '.brama/attachments/log.txt', folder: false },
+      { path: '.bt/attachments/Screen Shot é.png', folder: false },
+      { path: '.bt/attachments/log.txt', folder: false },
     ]);
   });
 
@@ -314,7 +314,7 @@ describe('acp-agent-column', () => {
       if (cmd !== 'save_attachment') return null;
       const name = decodeURIComponent(options?.headers?.name ?? '');
       if (name === 'bad.txt') throw new Error('bad.txt: disk full');
-      return `/p/.brama/attachments/${name}`;
+      return `/p/.bt/attachments/${name}`;
     };
     $sessions.set([session()]);
     $activeSessionId.set('s1');
@@ -326,7 +326,7 @@ describe('acp-agent-column', () => {
     const files = [new File(['x'], 'a.txt'), new File(['y'], 'bad.txt')];
     chat.dispatchEvent(new CustomEvent('acp-chat-attach', { detail: { files }, bubbles: true, composed: true }));
     await until(() => inserted.length > 0);
-    expect(inserted).to.deep.equal([{ path: '.brama/attachments/a.txt', folder: false }]);
+    expect(inserted).to.deep.equal([{ path: '.bt/attachments/a.txt', folder: false }]);
     expect($notices.get().map((n) => n.message).join()).to.contain('bad.txt: disk full');
   });
 

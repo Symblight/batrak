@@ -116,7 +116,7 @@ fn canonical_or_missing(path: &Path) -> std::io::Result<PathBuf> {
 }
 
 /// Where a save of `path` writes (canonical; a deleted file is created again) and the project
-/// whose `.brama/agents.json` it is, `None` for the user's agents.json. Nothing else is writable.
+/// whose `.bt/agents.json` it is, `None` for the user's agents.json. Nothing else is writable.
 fn writable(
     path: &str,
     user_file: Option<&Path>,
@@ -135,7 +135,7 @@ fn writable(
     }
 }
 
-/// Saves an agents.json from the editor: a project's `.brama/agents.json` inside an opened project, or
+/// Saves an agents.json from the editor: a project's `.bt/agents.json` inside an opened project, or
 /// the user's, created again if it was deleted. Nothing else is writable from the page yet. The agent
 /// list is re-read right away (`agents://changed`; `projectPath: null` for the user's file, which
 /// affects every project).
@@ -228,14 +228,14 @@ mod tests {
     use super::{checked_url, read_capped, read_text, writable};
     use std::path::{Path, PathBuf};
 
-    /// A temp folder (canonical) with a project at `p/` holding `.brama/`; removed on drop.
+    /// A temp folder (canonical) with a project at `p/` holding `.bt/`; removed on drop.
     struct Tmp(PathBuf);
 
     impl Tmp {
         fn new(name: &str) -> Tmp {
             let dir = std::env::temp_dir().join(format!("batrak-writable-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
-            std::fs::create_dir_all(dir.join("p/.brama")).unwrap();
+            std::fs::create_dir_all(dir.join("p/.bt")).unwrap();
             Tmp(dunce::canonicalize(dir).unwrap())
         }
 
@@ -257,7 +257,7 @@ mod tests {
     #[test]
     fn a_project_agents_file_is_writable_existing_or_deleted() {
         let tmp = Tmp::new("project");
-        let file = tmp.project().join(".brama/agents.json");
+        let file = tmp.project().join(".bt/agents.json");
         let expected = Ok((file.clone(), Some(tmp.project())));
         assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project()), expected, "deleted");
         std::fs::write(&file, "{}").unwrap();
@@ -279,12 +279,12 @@ mod tests {
         let tmp = Tmp::new("other");
         let project = tmp.project();
         std::fs::write(project.join("a.txt"), "").unwrap();
-        std::fs::create_dir(tmp.0.join(".brama")).unwrap();
+        std::fs::create_dir(tmp.0.join(".bt")).unwrap();
         for (path, why) in [
             (project.join("a.txt"), "another file"),
-            (project.join(".brama/other.json"), "another missing file"),
-            (project.join("gone/.brama/agents.json"), "a missing folder"),
-            (tmp.0.join(".brama/agents.json"), "outside the project"),
+            (project.join(".bt/other.json"), "another missing file"),
+            (project.join("gone/.bt/agents.json"), "a missing folder"),
+            (tmp.0.join(".bt/agents.json"), "outside the project"),
         ] {
             assert!(writable(path.to_str().unwrap(), None, tmp.in_project()).is_err(), "{why}");
         }

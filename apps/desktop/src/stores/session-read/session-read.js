@@ -7,8 +7,8 @@ import { isUnread } from '../../hooks/sessions/rules.js';
 /** @typedef {import('../../hooks/sessions/types.js').SessionRead} SessionRead */
 /** @typedef {import('../../hooks/sessions/types.js').SyncReport} SyncReport */
 
-const READ_PREFIX = 'brama:sessions:read:';
-const BASELINE_PREFIX = 'brama:sessions:baseline:';
+const READ_PREFIX = 'batrak:sessions:read:';
+const BASELINE_PREFIX = 'batrak:sessions:baseline:';
 /** A session seen this recently needs no new mark: each write is a `storage` event in every other window. */
 const SEEN_FRESH_MS = 1000;
 

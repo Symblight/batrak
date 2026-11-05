@@ -29,7 +29,7 @@ describe('acp-agents-tab', () => {
   beforeEach(() => {
     calls = [];
     answer = (cmd) =>
-      cmd === 'agents_view' ? VIEW : cmd === 'agents_remove' ? { token: 't' } : cmd === 'agents_add' ? 'new-id' : cmd === 'agents_config_file' ? '/p/.brama/agents.json' : cmd === 'agents_import_user' ? [] : null;
+      cmd === 'agents_view' ? VIEW : cmd === 'agents_remove' ? { token: 't' } : cmd === 'agents_add' ? 'new-id' : cmd === 'agents_config_file' ? '/p/.bt/agents.json' : cmd === 'agents_import_user' ? [] : null;
     mockIPC((cmd, args) => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       return answer(cmd);

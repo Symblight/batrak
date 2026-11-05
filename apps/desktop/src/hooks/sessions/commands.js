@@ -236,7 +236,7 @@ export function sessionOpenLog(sessionId) {
 }
 
 /**
- * Saves a file attached in the composer into `folder`'s attachments (`.brama/attachments/`, which
+ * Saves a file attached in the composer into `folder`'s attachments (`.bt/attachments/`, which
  * git ignores), where the agent reads it by its path.
  * @param {string} folder A folder of an open project or a session's.
  * @param {File} file

@@ -18,7 +18,7 @@ class FilesHost extends LitElement {
 }
 customElements.define('test-tab-files-host', FilesHost);
 
-const PATH = '/p/.brama/agents.json';
+const PATH = '/p/.bt/agents.json';
 
 /**
  * Polls until `pred` holds; fails after 2s.
@@ -42,7 +42,7 @@ function report({ added = [], removed = [], modified = [] }) {
 
 /** The watcher reports the file changed. */
 function changedOnDisk() {
-  return report({ modified: ['.brama/agents.json'] });
+  return report({ modified: ['.bt/agents.json'] });
 }
 
 describe('TabFilesController', () => {
@@ -241,7 +241,7 @@ describe('TabFilesController', () => {
   });
 
   describe('a file deleted on disk', () => {
-    const REL = '.brama/agents.json';
+    const REL = '.bt/agents.json';
 
     async function deleted() {
       delete disk[PATH];

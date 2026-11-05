@@ -41,7 +41,7 @@ pub struct Changes {
     /// The repository's state (HEAD, index, refs) changed: branch or status may differ even
     /// with no file in the tree touched, e.g. after a commit.
     pub git: bool,
-    /// `.brama/agents.json` may have changed: the agent list is re-read. Not sent.
+    /// `.bt/agents.json` may have changed: the agent list is re-read. Not sent.
     #[serde(skip)]
     pub config: bool,
 }
@@ -345,7 +345,7 @@ fn walker(dir: &Path) -> WalkBuilder {
     builder
 }
 
-/// `.brama/local/`: per-user app state, never part of the tree or a search.
+/// `.bt/local/`: per-user app state, never part of the tree or a search.
 fn is_bt_local(path: &Path) -> bool {
     path.file_name().is_some_and(|n| n == crate::config::LOCAL_DIR)
         && path.parent().and_then(Path::file_name).is_some_and(|n| n == crate::config::DIR)
@@ -576,17 +576,17 @@ mod tests {
     fn bt_local_is_left_out() {
         let root = temp_root("batrak-local");
         crate::config::ensure_project_dir(&root).unwrap();
-        fs::create_dir_all(root.join(".brama/local/state")).unwrap();
-        fs::write(root.join(".brama/local/state/x.json"), "{}").unwrap();
+        fs::create_dir_all(root.join(".bt/local/state")).unwrap();
+        fs::write(root.join(".bt/local/state/x.json"), "{}").unwrap();
         let mut snap = Snapshot::scan(&root);
-        let bt: Vec<_> = snap.list_dir(".brama").unwrap().into_iter().map(|e| e.name).collect();
+        let bt: Vec<_> = snap.list_dir(".bt").unwrap().into_iter().map(|e| e.name).collect();
         assert!(bt.contains(&"agents.json".to_owned()));
         assert!(!bt.contains(&"local".to_owned()), "{bt:?}");
-        assert!(snap.files().all(|e| !e.path.starts_with(".brama/local")));
+        assert!(snap.files().all(|e| !e.path.starts_with(".bt/local")));
 
         let mut changes = Changes::default();
-        snap.reconcile(BTreeSet::from([".brama".to_owned()]), &mut changes);
-        assert!(!changes.added.iter().any(|p| p.starts_with(".brama/local")), "{changes:?}");
+        snap.reconcile(BTreeSet::from([".bt".to_owned()]), &mut changes);
+        assert!(!changes.added.iter().any(|p| p.starts_with(".bt/local")), "{changes:?}");
         fs::remove_dir_all(root).unwrap();
     }
 

@@ -181,7 +181,7 @@ fn listed_version(f: &Fixture, agent: &str) -> Option<String> {
     configs.list(Some(&f.project)).agents.into_iter().find(|a| a.id == agent)?.version
 }
 
-/// A fixture whose project is a real repository: `a.txt` and `.brama/` committed on `main`.
+/// A fixture whose project is a real repository: `a.txt` and `.bt/` committed on `main`.
 fn git_fixture(name: &str) -> Fixture {
     git_fixture_with(name, listing())
 }
@@ -312,7 +312,7 @@ impl Fixture {
     /// Replaces `project`'s agents.json, as the watcher would report it.
     fn set_agents(&self, project: &Path, json: &str) {
         crate::config::ensure_project_dir(project).unwrap();
-        std::fs::write(project.join(".brama/agents.json"), json).unwrap();
+        std::fs::write(project.join(".bt/agents.json"), json).unwrap();
         self.sessions.inner.opts.configs.reload(project);
     }
 
@@ -564,7 +564,7 @@ async fn a_worktree_session_never_queues_behind_a_local_one() {
 #[tokio::test]
 async fn with_parallel_local_turns_two_turns_run_at_once() {
     let f = fixture("slot-parallel", FakeAgentOptions::default());
-    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join(".bt/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
     let (_, first) = f.create("first", "fake").unwrap();
     first.wait_status("idle").await;
     let (_, second) = f.create("second", "fake").unwrap();
@@ -905,7 +905,7 @@ async fn a_page_attaching_to_a_stopped_or_crashed_session_gets_no_snapshot() {
 #[tokio::test]
 async fn parallel_turns_that_change_the_same_file_each_hear_of_the_other_once() {
     let f = fixture("overlap", FakeAgentOptions::default());
-    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join(".bt/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
     std::fs::write(f.project.join("b.txt"), "b\n").unwrap();
     let mut events = Vec::new();
     for id in ["a", "b", "c"] {
@@ -977,7 +977,7 @@ async fn parallel_turns_that_change_the_same_file_each_hear_of_the_other_once() 
 #[tokio::test]
 async fn a_file_named_by_another_way_there_is_the_same_file() {
     let f = fixture("overlap-paths", FakeAgentOptions::default());
-    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join(".bt/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
     std::fs::create_dir_all(f.project.join("sub")).unwrap();
     let mut events = Vec::new();
     for id in ["a", "b"] {
@@ -1001,7 +1001,7 @@ async fn a_file_named_by_another_way_there_is_the_same_file() {
 #[tokio::test]
 async fn a_turn_that_only_read_a_file_did_not_change_it() {
     let f = fixture("overlap-read", FakeAgentOptions::default());
-    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join(".bt/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
     std::fs::write(f.project.join("a.txt"), "a\n").unwrap();
     let mut events = Vec::new();
     for id in ["a", "b"] {
@@ -1096,7 +1096,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 
     assert_eq!(f.sessions.workspaces().get(one.workspace_id.as_deref().unwrap()).unwrap().base_commit, head);
     let branch = one.branch.clone().unwrap();
-    assert!(branch.starts_with("brama/workspace"), "{branch}");
+    assert!(branch.starts_with("batrak/workspace"), "{branch}");
     assert_ne!(two.branch, one.branch);
     let wt = PathBuf::from(one.folder.clone());
     assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
@@ -1299,15 +1299,15 @@ async fn at_launch_worktrees_no_session_owns_are_removed_unless_they_hold_work()
     let group = kept.parent().unwrap().to_path_buf();
     let git = crate::git::test_repo::git_bin();
     let (orphan, dirty) = (group.join("orphan"), group.join("dirty"));
-    crate::git::worktree::add(&git, &f.project, &orphan, "brama/orphan", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
-    crate::git::worktree::add(&git, &f.project, &dirty, "brama/dirty", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
+    crate::git::worktree::add(&git, &f.project, &orphan, "batrak/orphan", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
+    crate::git::worktree::add(&git, &f.project, &dirty, "batrak/dirty", "main", &std::sync::atomic::AtomicBool::new(false)).unwrap();
     std::fs::write(dirty.join("work.txt"), "w").unwrap();
     std::fs::create_dir_all(f.dir.join("data/worktrees/empty-group")).unwrap();
 
     f.sessions.tidy_worktrees();
     assert!(kept.join("a.txt").exists(), "a session's own");
     assert!(!orphan.exists());
-    assert!(run_in(&f.project, &["branch", "--list", "brama/orphan"]).contains("brama/orphan"), "branches stay");
+    assert!(run_in(&f.project, &["branch", "--list", "batrak/orphan"]).contains("batrak/orphan"), "branches stay");
     assert_eq!(std::fs::read_to_string(dirty.join("work.txt")).unwrap(), "w");
     assert!(!f.dir.join("data/worktrees/empty-group").exists());
     assert!(!run_in(&f.project, &["worktree", "list"]).contains("orphan"));
@@ -1828,9 +1828,9 @@ async fn the_agent_cannot_rewrite_the_projects_agents_json() {
     let f = fixture("agents-json", FakeAgentOptions::default());
     let (_, events) = f.create("c", "fake").unwrap();
     events.wait_status("idle").await;
-    let file = f.project.join(".brama/agents.json");
+    let file = f.project.join(".bt/agents.json");
     let before = std::fs::read_to_string(&file).unwrap();
-    f.sessions.send_prompt("c", text(&format!("write {} x", f.path(".brama/agents.json")))).unwrap();
+    f.sessions.send_prompt("c", text(&format!("write {} x", f.path(".bt/agents.json")))).unwrap();
     events.wait_turn_end().await;
     let reply = events.texts().join("");
     assert!(reply.starts_with("error:") && reply.contains("agents.json"), "{reply}");
@@ -1937,7 +1937,7 @@ fn real_claude(name: &str) -> (Sessions, PathBuf, PathBuf) {
     crate::config::ensure_project_dir(&project).unwrap();
     let project = dunce::canonicalize(project).unwrap();
     std::fs::write(
-        project.join(".brama/agents.json"),
+        project.join(".bt/agents.json"),
         r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#,
     )
     .unwrap();
@@ -3439,7 +3439,7 @@ async fn a_workspace_outlives_its_only_chat() {
     let workspaces = f.sessions.workspaces().list(&f.project);
     assert_eq!(workspaces.len(), 1);
     let ws = &workspaces[0];
-    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "brama/workspace", Some("main")));
+    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "batrak/workspace", Some("main")));
     assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
     assert_eq!(PathBuf::from(&chat.folder), ws.folder, "its agent works in the workspace's folder");
     assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");
@@ -3497,7 +3497,7 @@ async fn turns_in_one_workspace_queue_on_its_folder_and_main_doesnt_wait_for_the
 #[tokio::test]
 async fn parallel_turns_in_one_workspace_hear_of_each_others_changes_in_its_folder() {
     let f = git_fixture("overlap-workspace");
-    std::fs::write(f.project.join(".brama/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
+    std::fs::write(f.project.join(".bt/workspace.json"), r#"{"version":1,"localTurns":"parallel"}"#).unwrap();
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
     let file = ws.folder.join("a.txt").to_string_lossy().into_owned();
     let (_, a) = f.create_in_workspace("a", &ws.id).unwrap();

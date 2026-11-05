@@ -150,11 +150,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    /// What this machine's records say of thread `$BRAMA_CODEX_THREAD`: `cargo test -p agent-codex real_session_activity -- --ignored --nocapture`.
+    /// What this machine's records say of thread `$BATRAK_CODEX_THREAD`: `cargo test -p agent-codex real_session_activity -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_session_activity() {
-        let thread = std::env::var("BRAMA_CODEX_THREAD").expect("BRAMA_CODEX_THREAD");
+        let thread = std::env::var("BATRAK_CODEX_THREAD").expect("BATRAK_CODEX_THREAD");
         let answer = Codex.session_activity(&thread);
         eprintln!("{thread}: {answer:?}");
         assert!(answer.is_some(), "no record of {thread} told");

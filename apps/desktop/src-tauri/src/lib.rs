@@ -208,7 +208,7 @@ mod tests {
             let dirs = Dirs::standard().unwrap();
 
             assert_eq!(dirs.data, path.app_data_dir().unwrap());
-            assert_eq!(dirs.config, path.config_dir().unwrap().join("brama"));
+            assert_eq!(dirs.config, path.config_dir().unwrap().join("batrak"));
             assert_eq!(dirs.logs, path.app_log_dir().unwrap());
         }
     }

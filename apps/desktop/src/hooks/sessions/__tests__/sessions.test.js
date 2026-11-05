@@ -356,7 +356,7 @@ describe('sessions keeps the active session in its view', () => {
       if (!known) $gitRepo.set(NO_REPO);
       mockIPC((cmd, args) => {
         calls.push({ cmd, args });
-        if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace-2', creating: true, missing: false, error: null };
+        if (cmd === 'workspace_create') return { id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'batrak/workspace-2', creating: true, missing: false, error: null };
         if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [{ remote: 'origin', branches: ['origin/main'] }], default: 'origin/main' };
         if (cmd === 'git_head') return { branch: 'dev', detached: false };
         if (cmd === 'session_open_cli') return { terminalId: 't-cli' };
@@ -467,7 +467,7 @@ describe('sessions keeps the active session in its view', () => {
 
       // Act
       await sessions.remove(id);
-      answer({ id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'brama/workspace-2', creating: true, missing: false, error: null });
+      answer({ id: 'w2', projectPath: '/p', name: 'Workspace 2', nameSource: 'agent', folder: '/wt/two', branch: 'batrak/workspace-2', creating: true, missing: false, error: null });
       const sendFailed = await send?.then(
         () => false,
         () => true,

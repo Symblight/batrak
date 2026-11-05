@@ -150,11 +150,11 @@ mod tests {
         let _ = std::fs::remove_dir_all(root);
     }
 
-    /// What this machine's records say of session `$BRAMA_COPILOT_SESSION`: `cargo test -p agent-copilot real_session_activity -- --ignored --nocapture`.
+    /// What this machine's records say of session `$BATRAK_COPILOT_SESSION`: `cargo test -p agent-copilot real_session_activity -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_session_activity() {
-        let session = std::env::var("BRAMA_COPILOT_SESSION").expect("BRAMA_COPILOT_SESSION");
+        let session = std::env::var("BATRAK_COPILOT_SESSION").expect("BATRAK_COPILOT_SESSION");
         let answer = Copilot.session_activity(&session);
         eprintln!("{session}: {answer:?}");
         assert!(answer.is_some(), "no record of {session} told");

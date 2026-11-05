@@ -8,6 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use super::WorkspaceRecord;
 use crate::git::exec::{self, Mode as GitMode};
 use crate::git::{binary, worktree};
+use crate::git::repo::BRANCH_PREFIX;
 
 /// Whether a worktree is checked out at `root`.
 pub fn is_checked_out(root: &Path) -> bool {
@@ -155,7 +156,7 @@ pub(super) struct Placed {
     pub base_commit: String,
 }
 
-/// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on `brama/<stem>`,
+/// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on `batrak/<stem>`,
 /// `-2`, `-3`… when the folder or the branch is taken, on disk or by `reserved` (a worktree root
 /// and branch placed but not checked out yet). `base` (a branch or commit, `None` for the
 /// project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
@@ -193,21 +194,21 @@ pub(super) fn place_named(
     // Canonical, as `confine` compares against it.
     let group = dunce::canonicalize(&group).map_err(|e| format!("{}: {e}", group.display()))?;
 
-    // The folder is named like the branch, `brama/` left out; both must be free.
+    // The folder is named like the branch, the prefix left out; both must be free.
     let taken = |leaf: &str| {
-        reserved(&group.join(leaf), &format!("brama/{leaf}"))
+        reserved(&group.join(leaf), &format!("{BRANCH_PREFIX}{leaf}"))
             || group.join(leaf).exists()
-            || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/brama/{leaf}")]).is_ok()
+            || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/{BRANCH_PREFIX}{leaf}")]).is_ok()
     };
     // Kept branches never free their numbers: the search goes on past them.
     let leaf = std::iter::once(stem.to_owned())
         .chain((2..1_000_000).map(|n| format!("{stem}-{n}")))
         .find(|leaf| !taken(leaf))
-        .ok_or_else(|| format!("brama/{stem}: every branch name is taken"))?;
+        .ok_or_else(|| format!("{BRANCH_PREFIX}{stem}: every branch name is taken"))?;
     let root = group.join(&leaf);
     // `join("")` would add a trailing slash to the agent's cwd.
     let folder = if inside.as_os_str().is_empty() { root.clone() } else { root.join(inside) };
-    Ok(Placed { folder, worktree_path: root, branch: format!("brama/{leaf}"), base_commit })
+    Ok(Placed { folder, worktree_path: root, branch: format!("{BRANCH_PREFIX}{leaf}"), base_commit })
 }
 
 /// Removes a worktree in app data that no workspace owns, unless it has uncommitted changes; its
@@ -284,7 +285,7 @@ mod tests {
         std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
         let home = temp_dir("cancel-checkout-home");
         let root = home.join("s");
-        let w = workspace(&repo, &root, "brama/cancel");
+        let w = workspace(&repo, &root, "batrak/cancel");
 
         let cancel = Arc::new(AtomicBool::new(false));
         let flag = Arc::clone(&cancel);
@@ -293,7 +294,7 @@ mod tests {
         cancel.store(true, Ordering::SeqCst);
         assert!(preparing.join().unwrap().unwrap_err().contains("cancelled"));
         assert!(!root.exists());
-        assert!(repo.git(&["branch", "--list", "brama/cancel"]).is_empty());
+        assert!(repo.git(&["branch", "--list", "batrak/cancel"]).is_empty());
         std::fs::remove_dir_all(home).unwrap();
     }
 
@@ -304,15 +305,15 @@ mod tests {
         let repo = TestRepo::with_commit("undo-locked");
         let home = temp_dir("undo-locked-home");
         let root = home.join("s");
-        let w = workspace(&repo, &root, "brama/locked");
+        let w = workspace(&repo, &root, "batrak/locked");
         let git = binary::git().unwrap();
-        worktree::add(git, &repo.path, &root, "brama/locked", &w.base_commit, &AtomicBool::new(false)).unwrap();
+        worktree::add(git, &repo.path, &root, "batrak/locked", &w.base_commit, &AtomicBool::new(false)).unwrap();
         repo.git(&["worktree", "lock", "--reason", "initializing", root.to_str().unwrap()]);
 
         undo_checkout(git, &w, false).unwrap();
 
         assert!(!root.exists(), "no folder");
-        assert!(repo.git(&["branch", "--list", "brama/locked"]).is_empty(), "no branch");
+        assert!(repo.git(&["branch", "--list", "batrak/locked"]).is_empty(), "no branch");
         std::fs::remove_dir_all(home).unwrap();
     }
 
@@ -322,13 +323,13 @@ mod tests {
         let worktrees = temp_dir("place-name-worktrees");
         let placed = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
         assert_eq!(placed.worktree_path.file_name().unwrap(), "fix-the-login");
-        assert_eq!(placed.branch, "brama/fix-the-login");
+        assert_eq!(placed.branch, "batrak/fix-the-login");
 
         // A folder left behind (an orphan kept for its uncommitted work) takes the next name.
         std::fs::create_dir_all(&placed.worktree_path).unwrap();
         let next = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
         assert_eq!(next.worktree_path.file_name().unwrap(), "fix-the-login-2");
-        assert_eq!(next.branch, "brama/fix-the-login-2");
+        assert_eq!(next.branch, "batrak/fix-the-login-2");
         std::fs::remove_dir_all(worktrees).unwrap();
     }
 
@@ -344,7 +345,7 @@ mod tests {
 
         let placed = place_named(&repo.path, &worktrees, "workspace", None, &taken).unwrap();
 
-        assert_eq!(placed.branch, "brama/workspace-151");
+        assert_eq!(placed.branch, "batrak/workspace-151");
         std::fs::remove_dir_all(worktrees).unwrap();
     }
 

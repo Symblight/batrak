@@ -173,13 +173,13 @@ mod tests {
         let path = parent.join("project/session-1");
         let git = git_bin();
 
-        add(&git, &repo.path, &path, "brama/session-1", "main", &AtomicBool::new(false)).unwrap();
-        assert!(add(&git, &repo.path, &path, "brama/other", "main", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
+        add(&git, &repo.path, &path, "batrak/session-1", "main", &AtomicBool::new(false)).unwrap();
+        assert!(add(&git, &repo.path, &path, "batrak/other", "main", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
         let entries = list(&git, &repo.path).unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].path, repo.path);
         let wt = entries.iter().find(|e| e.path == exec::canonical(&path)).unwrap();
-        assert_eq!(wt.branch.as_deref(), Some("brama/session-1"));
+        assert_eq!(wt.branch.as_deref(), Some("batrak/session-1"));
 
         // Ignored files don't block a removal.
         std::fs::write(path.join(".gitignore"), "build/\n").unwrap();
@@ -188,9 +188,9 @@ mod tests {
         std::fs::create_dir_all(path.join("build")).unwrap();
         std::fs::write(path.join("build/out.bin"), "x").unwrap();
 
-        remove(&git, &repo.path, &path, Some("brama/session-1"), BranchCleanup::Keep).unwrap();
+        remove(&git, &repo.path, &path, Some("batrak/session-1"), BranchCleanup::Keep).unwrap();
         assert!(!path.exists());
-        assert!(repo.git(&["branch", "--list", "brama/session-1"]).contains("brama/session-1"), "kept");
+        assert!(repo.git(&["branch", "--list", "batrak/session-1"]).contains("batrak/session-1"), "kept");
         std::fs::remove_dir_all(parent).unwrap();
     }
 
@@ -200,17 +200,17 @@ mod tests {
         let parent = temp_dir("wt-dirty-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/s", "main", &AtomicBool::new(false)).unwrap();
+        add(&git, &repo.path, &path, "batrak/s", "main", &AtomicBool::new(false)).unwrap();
 
         std::fs::write(path.join("new.txt"), "agent work").unwrap();
-        let err = remove(&git, &repo.path, &path, Some("brama/s"), BranchCleanup::Delete).unwrap_err();
+        let err = remove(&git, &repo.path, &path, Some("batrak/s"), BranchCleanup::Delete).unwrap_err();
         assert!(err.contains("uncommitted"), "{err}");
         assert!(path.join("new.txt").exists());
-        assert!(repo.git(&["branch", "--list", "brama/s"]).contains("brama/s"), "branch untouched");
+        assert!(repo.git(&["branch", "--list", "batrak/s"]).contains("batrak/s"), "branch untouched");
 
         std::fs::remove_file(path.join("new.txt")).unwrap();
-        remove(&git, &repo.path, &path, Some("brama/s"), BranchCleanup::Delete).unwrap();
-        assert!(repo.git(&["branch", "--list", "brama/s"]).is_empty(), "deleted");
+        remove(&git, &repo.path, &path, Some("batrak/s"), BranchCleanup::Delete).unwrap();
+        assert!(repo.git(&["branch", "--list", "batrak/s"]).is_empty(), "deleted");
         std::fs::remove_dir_all(parent).unwrap();
     }
 
@@ -220,17 +220,17 @@ mod tests {
         let parent = temp_dir("wt-attach-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/attach", "main", &AtomicBool::new(false)).unwrap();
+        add(&git, &repo.path, &path, "batrak/attach", "main", &AtomicBool::new(false)).unwrap();
         std::fs::write(path.join("work.txt"), "kept").unwrap();
         run_in(&path, &["add", "."]);
         run_in(&path, &["commit", "-qm", "agent"]);
         std::fs::remove_dir_all(&path).unwrap();
         prune(&git, &repo.path).unwrap();
 
-        attach(&git, &repo.path, &path, "brama/attach", &AtomicBool::new(false)).unwrap();
+        attach(&git, &repo.path, &path, "batrak/attach", &AtomicBool::new(false)).unwrap();
         assert_eq!(std::fs::read_to_string(path.join("work.txt")).unwrap(), "kept");
-        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "brama/attach");
-        assert!(attach(&git, &repo.path, &path, "brama/attach", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
+        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "batrak/attach");
+        assert!(attach(&git, &repo.path, &path, "batrak/attach", &AtomicBool::new(false)).unwrap_err().contains("already exists"));
         std::fs::remove_dir_all(parent).unwrap();
     }
 
@@ -240,11 +240,11 @@ mod tests {
         let parent = temp_dir("wt-gone-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/gone", "main", &AtomicBool::new(false)).unwrap();
+        add(&git, &repo.path, &path, "batrak/gone", "main", &AtomicBool::new(false)).unwrap();
         std::fs::remove_dir_all(&path).unwrap();
         assert!(list(&git, &repo.path).unwrap().iter().any(|e| e.prunable));
 
-        remove(&git, &repo.path, &path, Some("brama/gone"), BranchCleanup::Keep).unwrap();
+        remove(&git, &repo.path, &path, Some("batrak/gone"), BranchCleanup::Keep).unwrap();
         assert_eq!(list(&git, &repo.path).unwrap().len(), 1);
         std::fs::remove_dir_all(parent).unwrap();
     }
@@ -259,8 +259,8 @@ mod tests {
         std::fs::write(full.join("notes.txt"), "kept").unwrap();
         let git = git_bin();
 
-        add(&git, &repo.path, &empty, "brama/empty", "main", &AtomicBool::new(false)).unwrap();
-        let err = add(&git, &repo.path, &full, "brama/full", "main", &AtomicBool::new(false)).unwrap_err();
+        add(&git, &repo.path, &empty, "batrak/empty", "main", &AtomicBool::new(false)).unwrap();
+        let err = add(&git, &repo.path, &full, "batrak/full", "main", &AtomicBool::new(false)).unwrap_err();
 
         assert!(empty.join("README.md").is_file(), "checked out over the empty folder");
         assert!(err.contains(&full.display().to_string()) && err.contains("isn't a worktree"), "{err}");
@@ -276,13 +276,13 @@ mod tests {
         let parent = temp_dir("wt-locked-home");
         let path = parent.join("s");
         let git = git_bin();
-        add(&git, &repo.path, &path, "brama/locked", "main", &AtomicBool::new(false)).unwrap();
+        add(&git, &repo.path, &path, "batrak/locked", "main", &AtomicBool::new(false)).unwrap();
         run_in(&repo.path, &["worktree", "lock", "--reason", "initializing", path.to_str().unwrap()]);
         std::fs::remove_dir_all(&path).unwrap();
 
-        attach(&git, &repo.path, &path, "brama/locked", &AtomicBool::new(false)).unwrap();
+        attach(&git, &repo.path, &path, "batrak/locked", &AtomicBool::new(false)).unwrap();
 
-        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "brama/locked");
+        assert_eq!(run_in(&path, &["branch", "--show-current"]).trim(), "batrak/locked");
         assert!(!list(&git, &repo.path).unwrap().iter().any(|e| e.locked), "unlocked");
         std::fs::remove_dir_all(parent).unwrap();
     }

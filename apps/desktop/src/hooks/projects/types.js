@@ -36,7 +36,7 @@
  */
 
 /**
- * The open project's `.brama/workspace.json`.
+ * The open project's `.bt/workspace.json`.
  * @typedef {Object} ProjectSettings
  * @property {LocalTurns} localTurns
  */

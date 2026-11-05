@@ -7,7 +7,7 @@ import { chromeLauncher } from '@web/test-runner-chrome';
  * @type {import('@web/dev-server').Plugin}
  */
 const bindEventListener = {
-  name: 'brama:bind-event-listener',
+  name: 'batrak:bind-event-listener',
   transform(context) {
     if (!/\/bind-event-listener\/dist\/[\w-]+\.js$/.test(context.path)) return undefined;
     const body = /** @type {string} */ (context.body);
@@ -34,7 +34,7 @@ const bindEventListener = {
  * @type {import('@web/dev-server').Plugin}
  */
 const litCssInline = {
-  name: 'brama:lit-css-inline',
+  name: 'batrak:lit-css-inline',
   resolveImport({ source, context }) {
     if (!source.endsWith('.css?inline')) return undefined;
     // A package's stylesheet (`@xterm/xterm/css/xterm.css?inline`) is served from node_modules.
@@ -56,7 +56,7 @@ const litCssInline = {
  * @type {import('@web/dev-server').Plugin}
  */
 const rawText = {
-  name: 'brama:raw',
+  name: 'batrak:raw',
   resolveImport({ source }) {
     // Rewritten to a `?raw` URL of its own path, so node resolution doesn't drop the query.
     if (!source.endsWith('?raw') || !source.startsWith('@')) return undefined;

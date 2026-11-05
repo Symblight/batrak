@@ -31,7 +31,7 @@ describe('projects: path rules', () => {
     expect(isAbsolute('C:\\Users\\me\\a.md')).to.equal(true);
     expect(isAbsolute('\\\\server\\share\\a.md')).to.equal(true);
     expect(isAbsolute('src/a.js')).to.equal(false);
-    expect(isAbsolute('.brama')).to.equal(false);
+    expect(isAbsolute('.bt')).to.equal(false);
   });
 
   describe('shownPath', () => {

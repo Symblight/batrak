@@ -30,7 +30,7 @@ export function parseModes(raw) {
  * Each markdown file's mode by project path, one storage item per project; per window, like the tabs.
  * Only modes other than the default are kept. Written only through `setKey()`.
  */
-export const $markdownModes = persistentMapStore('brama:markdown:mode:', parseModes);
+export const $markdownModes = persistentMapStore('batrak:markdown:mode:', parseModes);
 
 /**
  * @param {string | null} projectPath

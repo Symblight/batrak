@@ -3,7 +3,7 @@ import { isRecord, persistentStore } from '../persistent/persistent.js';
 /** @typedef {import('../../hooks/projects/types.js').Project} Project */
 
 /** Projects listed in the session column. Shared by every window, like a recent-folders list. */
-export const $projects = persistentStore('brama:projects', /** @type {Project[]} */ ([]), {
+export const $projects = persistentStore('batrak:projects', /** @type {Project[]} */ ([]), {
   parse: (raw) => {
     if (!Array.isArray(raw)) return null;
     /** @type {Project[]} */
@@ -19,7 +19,7 @@ export const $projects = persistentStore('brama:projects', /** @type {Project[]}
 });
 
 /** Ids of projects whose session list is collapsed. */
-export const $collapsedProjects = persistentStore('brama:projects:collapsed', /** @type {string[]} */ ([]), {
+export const $collapsedProjects = persistentStore('batrak:projects:collapsed', /** @type {string[]} */ ([]), {
   parse: (raw) => (Array.isArray(raw) ? raw.filter((id) => typeof id === 'string') : null),
 });
 

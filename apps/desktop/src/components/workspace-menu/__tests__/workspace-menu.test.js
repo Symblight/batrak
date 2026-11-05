@@ -4,7 +4,7 @@ import '../workspace-menu.js';
 /** @typedef {import('../workspace-menu.js').AcpWorkspaceMenu} AcpWorkspaceMenu */
 /** @typedef {import('../../../hooks/workspaces/types.js').Workspace} Workspace */
 
-const TASK = /** @type {Workspace} */ ({ id: 'w1', name: 'Fix login', folder: '/data/wt/fix-login/app', branch: 'brama/fix-login' });
+const TASK = /** @type {Workspace} */ ({ id: 'w1', name: 'Fix login', folder: '/data/wt/fix-login/app', branch: 'batrak/fix-login' });
 
 /**
  * @param {Partial<AcpWorkspaceMenu>} props

@@ -175,7 +175,7 @@ impl RepoState {
 }
 
 /// Local branches a session can start from, most recently committed first; the sessions' own
-/// (`brama/…`) are left out. Empty outside a repository or before the first commit.
+/// (`batrak/…`) are left out. Empty outside a repository or before the first commit.
 pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     if info(git, root)?.is_none() {
         return Ok(Vec::new());
@@ -184,13 +184,16 @@ pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     let out = exec::run(git, root, &args, Mode::Background)?;
     Ok(String::from_utf8_lossy(&out)
         .lines()
-        .filter(|name| !name.is_empty() && !name.starts_with("brama/"))
+        .filter(|name| !name.is_empty() && !name.starts_with(BRANCH_PREFIX))
         .map(str::to_owned)
         .collect())
 }
 
+/// Starts the name of every branch a workspace creates.
+pub const BRANCH_PREFIX: &str = "batrak/";
+
 /// Branches a workspace can be based on: local ones and each remote's remote-tracking ones, most
-/// recently committed first, Batrak's own (`brama/…`) left out.
+/// recently committed first, Batrak's own (`batrak/…`) left out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchList {
@@ -223,7 +226,7 @@ pub fn branch_list(git: &Path, root: &Path) -> Result<BranchList, String> {
         let short = refname.trim_start_matches("refs/remotes/");
         let Some(remote) = names.iter().find(|n| short.strip_prefix(n.as_str()).is_some_and(|rest| rest.starts_with('/'))) else { continue };
         let branch = &short[remote.len() + 1..];
-        if branch == "HEAD" || branch.starts_with("brama/") {
+        if branch == "HEAD" || branch.starts_with(BRANCH_PREFIX) {
             continue;
         }
         match remotes.iter_mut().find(|r| &r.remote == remote) {
@@ -605,8 +608,8 @@ mod tests {
         assert_eq!(branch_list(&git, &dir).unwrap(), BranchList::default(), "outside a repository");
         let (repo, _bare) = TestRepo::with_remote("branch-list");
         repo.git(&["branch", "feature/x"]);
-        repo.git(&["branch", "brama/task"]);
-        repo.git(&["push", "-q", "origin", "feature/x", "brama/task"]);
+        repo.git(&["branch", "batrak/task"]);
+        repo.git(&["push", "-q", "origin", "feature/x", "batrak/task"]);
         // A remote whose name has a slash: its branches are its own, not `team`'s.
         repo.git(&["remote", "add", "team/b", _bare.to_str().unwrap()]);
         repo.git(&["fetch", "-q", "team/b"]);
@@ -655,7 +658,7 @@ mod tests {
         assert!(branches(&git, &dir).unwrap().is_empty(), "outside a repository");
         assert!(branches(&git, &TestRepo::new("branches-empty").path).unwrap().is_empty(), "before the first commit");
         let repo = TestRepo::with_commit("branches");
-        for branch in ["feature/x", "brama/session-1234"] {
+        for branch in ["feature/x", "batrak/session-1234"] {
             repo.git(&["branch", branch]);
         }
         let mut names = branches(&git, &repo.path).unwrap();

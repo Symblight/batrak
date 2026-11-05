@@ -36,7 +36,7 @@ async function until(pred) {
 
 describe('acp-code-view', () => {
   it('says when a file was deleted on disk, still showing it', async () => {
-    const path = '/p/.brama/agents.json';
+    const path = '/p/.bt/agents.json';
     /** @type {EditorTab} */
     const tab = { ...fileTab(path), loaded: true, content: '{}', deletedOnDisk: true };
     const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (
@@ -51,7 +51,7 @@ describe('acp-code-view', () => {
   });
 
   describe('Mod+S', () => {
-    const path = '/p/.brama/agents.json';
+    const path = '/p/.bt/agents.json';
     const mod = app.platform === 'mac' ? 'metaKey' : 'ctrlKey';
 
     /**
@@ -265,7 +265,7 @@ describe('acp-code-view', () => {
       const el = await fixture(html`<acp-code-view
         .tab=${fileTab(wtFile)}
         .root=${'/work/app'}
-        .workspaces=${[{ projectPath: '/work/app', folder, branch: 'brama/x' }]}
+        .workspaces=${[{ projectPath: '/work/app', folder, branch: 'batrak/x' }]}
       ></acp-code-view>`);
       await clickStatus(el, 'path', 0);
       const reveals = listen(el, 'acp-file-reveal');
@@ -367,7 +367,7 @@ describe('acp-code-view', () => {
 
     it('says nothing in a file that can be edited', async () => {
       // Arrange
-      const { view, isOpen } = await render('/p/.brama/agents.json');
+      const { view, isOpen } = await render('/p/.bt/agents.json');
       // Act
       fire(view.contentDOM, 'beforeinput');
       await settle();

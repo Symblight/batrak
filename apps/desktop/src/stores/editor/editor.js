@@ -74,22 +74,22 @@ export function parseTabs(raw) {
   return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null, pinned);
 }
 
-const TABS_PREFIX = 'brama:editor:tabs:';
+const TABS_PREFIX = 'batrak:editor:tabs:';
 
 /**
- * Moves tabs saved in one `brama:editor:tabs` item to an item per project. That item held either all
+ * Moves tabs saved in one `batrak:editor:tabs` item to an item per project. That item held either all
  * projects' tabs by path (which windows overwrote wholesale) or, before projects, the open folder's
  * `EditorTabs`.
  */
 function migrateLegacyTabs() {
-  const legacy = localStorage.getItem('brama:editor:tabs');
+  const legacy = localStorage.getItem('batrak:editor:tabs');
   if (legacy === null) return;
   /** @type {[string, unknown][]} */
   let entries = [];
   try {
     const raw = JSON.parse(legacy);
     if (parseTabs(raw)) {
-      const project = JSON.parse(localStorage.getItem('brama:project') ?? localStorage.getItem('brama:workspace') ?? 'null');
+      const project = JSON.parse(localStorage.getItem('batrak:project') ?? localStorage.getItem('batrak:workspace') ?? 'null');
       if (isRecord(project) && typeof project.path === 'string') entries = [[project.path, raw]];
     } else if (isRecord(raw)) {
       entries = Object.entries(raw);
@@ -102,7 +102,7 @@ function migrateLegacyTabs() {
       localStorage.setItem(TABS_PREFIX + root, JSON.stringify(value));
     }
   }
-  localStorage.removeItem('brama:editor:tabs');
+  localStorage.removeItem('batrak:editor:tabs');
 }
 
 try {

@@ -12,7 +12,7 @@ use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, Un
 
 use super::blocking;
 
-/// The agents of a project (its `.brama/agents.json`; the user's file without one), without their
+/// The agents of a project (its `.bt/agents.json`; the user's file without one), without their
 /// environment. `errors` lists files that don't parse.
 #[tauri::command]
 pub async fn agents_list(sessions: State<'_, crate::session::Sessions>, project_path: Option<String>) -> Result<AgentList, String> {
@@ -27,7 +27,7 @@ pub async fn agents_list(sessions: State<'_, crate::session::Sessions>, project_
     .await?
 }
 
-/// The agents.json "Add ACP agent…" opens: the project's `.brama/agents.json`, or the user's
+/// The agents.json "Add ACP agent…" opens: the project's `.bt/agents.json`, or the user's
 /// without a project; created with the defaults when missing. Absolute path.
 #[tauri::command]
 pub async fn agents_config_file(configs: State<'_, AgentConfigs>, project_path: Option<String>) -> Result<String, String> {

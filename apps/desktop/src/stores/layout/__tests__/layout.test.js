@@ -11,7 +11,7 @@ describe('layout: the markdown split', () => {
   it('keeps the editor’s share between a fifth and four fifths, shared in storage', () => {
     setMarkdownSplit(35);
     expect($markdownSplit.get()).to.equal(35);
-    expect(localStorage.getItem('brama:layout:markdown-split')).to.equal('35');
+    expect(localStorage.getItem('batrak:layout:markdown-split')).to.equal('35');
 
     setMarkdownSplit(5);
     expect($markdownSplit.get()).to.equal(20);

@@ -1,5 +1,5 @@
-//! Logs: one file per day in the app log dir (`~/Library/Logs/dev.brama.app` on macOS), the
-//! last `KEEP_FILES` kept, and stderr too in dev builds. `BRAMA_LOG` overrides the level with an
+//! Logs: one file per day in the app log dir (`~/Library/Logs/dev.batrak.app` on macOS), the
+//! last `KEEP_FILES` kept, and stderr too in dev builds. `BATRAK_LOG` overrides the level with an
 //! `EnvFilter` directive (`debug`, `batrak_core::git=trace`, `agent_acp=debug`). Our own warnings and errors also
 //! reach every window as `app://notice`, which shows them as snackbars.
 
@@ -46,7 +46,7 @@ pub fn init(dir: &Path, notifier: Option<Arc<dyn Notifier>>) -> Result<(), Strin
         .max_log_files(KEEP_FILES)
         .build(dir)
         .map_err(|e| format!("{}: {e}", dir.display()))?;
-    let filter = EnvFilter::try_from_env("BRAMA_LOG").unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
+    let filter = EnvFilter::try_from_env("BATRAK_LOG").unwrap_or_else(|_| EnvFilter::new(DEFAULT_FILTER));
     let file_layer = tracing_fmt::layer().with_writer(file).with_ansi(false).with_thread_names(true);
     let stderr_layer = cfg!(debug_assertions).then(|| tracing_fmt::layer().with_writer(std::io::stderr));
     tracing_subscriber::registry()
@@ -75,7 +75,7 @@ pub fn install_panic_hook() {
     }));
 }
 
-/// Forwards our crates' warnings and errors (`is_own`), and panics, to every window. Not under `BRAMA_LOG`:
+/// Forwards our crates' warnings and errors (`is_own`), and panics, to every window. Not under `BATRAK_LOG`:
 /// a quieter log must not hide failures from the user. `frontend` lines came from the page, which
 /// has shown them already.
 struct NoticeLayer {

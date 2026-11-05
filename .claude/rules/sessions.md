@@ -18,7 +18,7 @@ paths:
 **Sessions:** `stores/sessions/sessions.js` holds `$sessions` (listed), `$draftSessions` (id →
 `{ projectId, workspaceId }`: a new chat with no message yet, not listed) and `$activeSessionId`, which is also the chat's
 conversation id; `$activeSession` is `null` for a draft. The `sessions` hook keeps the active session in
-the shown workspace (`showWorkspace()`: its last shown session (`brama:sessions:last:<folder>`, Main's
+the shown workspace (`showWorkspace()`: its last shown session (`batrak:sessions:last:<folder>`, Main's
 the project path, per window, so it survives a relaunch), its newest, or a new draft of it), and the
 `workspaces` hook switches the shown workspace to the shown chat's when a chat of another one is
 shown (a banner). The Sessions column lists only the
@@ -71,7 +71,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   returns, a prompt sent meanwhile is `queued` (a `queued { holder }` event; saved as `idle`)
   and starts first come, first served; cancel, Stop, Remove, a crash or its agent leaving
   agents.json drop it from the queue (cancelled, never reaching the agent). A turn in Main never
-  waits for one in a workspace; no turn queues with the project's `.brama/workspace.json` `"localTurns":
+  waits for one in a workspace; no turn queues with the project's `.bt/workspace.json` `"localTurns":
   "parallel"` (read at each turn; set by editing the file, Settings has no control for it). Then the files each turn's tool calls change (diffs, and
   locations of calls whose kind isn't `read` / `search` / `fetch` / `think`; normalized, no `..`)
   are its `touched`, and a watcher batch of a folder (`Sessions::note_changes(folder, …)`, from
@@ -84,7 +84,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `listed_record`), `for_session()` builds its env, and `Inner::prepare_folder` (`start.rs`) gets
   the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
   `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
-  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `brama/<slug>` (`-2`… when taken) from
+  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `batrak/<slug>` (`-2`… when taken) from
   its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by
   `check_out` (in the background from `workspace_create`) or at its first chat's start
   (`Workspaces::ready`, which every chat start waits on); checkout, removal and placing live in
@@ -160,7 +160,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`chat.parseFileRef()`, `hooks/chat/file-refs.js`: `@path`, `path:12-23`, inline-code paths, links to files) become file chips
   and links (a folder is `@path/`), and a click on one, or on a tool call's location, fires
   `acp-file-open` (`<acp-app>` opens the tab and selects the file in the tree, expanding its folders);
-  a folder's (a folder chip, or a ref the project lists as a folder, like `@.brama`) fires
+  a folder's (a folder chip, or a ref the project lists as a folder, like `@.bt`) fires
   `acp-file-reveal` (no tab: selects and expands it in the tree, `AcpFileTree.reveal()`).
 - **Session folders:** `Session.folder` is where the agent works (the project, or the project's
   folder in its worktree). Chat refs, tool-call locations and composer chips are relative to it
@@ -188,9 +188,9 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `config_option_update` and every `session/set_config_option` answer, reach the page as
   `config-options` events (an agent with only legacy `modes` gets a stand-in `mode` option set
   through `session/set_mode`). `applyAgentOptions()` (`stores/composer/composer.js`) replaces the session's
-  options and caches them per agent (`brama:agents:config-options:2`, keeping the agent's defaults
+  options and caches them per agent (`batrak:agents:config-options:2`, keeping the agent's defaults
   as first learned), so a new session shows the real models before it starts. A new session starts
-  with the user's last picks for its agent (`brama:agents:last-picks`; never a permission mode,
+  with the user's last picks for its agent (`batrak:agents:last-picks`; never a permission mode,
   category `mode`); a listed session without a composer this launch (after a reload) gets one
   from its record: its agent, `config`, started. An agent with nothing cached is probed once per launch
   (`agents_probe_options` → `Sessions::probe_options`: started in `<app data>/probe`, `initialize` +
@@ -217,7 +217,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `idle` / `stopped` / `error`, so one taken mid-turn takes the rest of the turn (spec:
   `docs/specs/session-reattach.md`). Context usage (spec: `docs/specs/context-usage.md`) comes only from a running session's
   `usage_update`: `setContextUsage()` keeps its tokens (never the cost) in `$contextUsage`
-  (`stores/context-usage/context-usage.js`, `brama:sessions:context-usage:<session id>`, one item per session),
+  (`stores/context-usage/context-usage.js`, `batrak:sessions:context-usage:<session id>`, one item per session),
   so a session shows its last report after a reload or restart (no agent reports on
   `session/load`); `$activeContextUsage` feeds `<acp-context-meter>`, which shows only an empty
   ring until there is one.
@@ -245,7 +245,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   (`hooks/sessions/input.js`) decides a draft's first send (`draftTarget`: `startTerminal` or
   the chat). A file attached in the composer (picked, pasted) never stays an attachment:
   `<acp-chat>` hands it to the column (`acp-chat-attach`), which saves it into the session's
-  folder (`save_attachment`, `commands/attachments.rs`: `.brama/attachments/`, self-ignoring in
+  folder (`save_attachment`, `commands/attachments.rs`: `.bt/attachments/`, self-ignoring in
   git, one-word unique names claimed with `create_new`, 64 MB at most, never through a symlink;
   a draft's chips are absolute) and puts its path chip in, so both views send
   a path (an image read by path works in a CLI; the chat's own file reads are text only). An

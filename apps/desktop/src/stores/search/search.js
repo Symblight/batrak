@@ -35,7 +35,7 @@ export function parseSearchDialogPrefs(raw) {
 }
 
 /** The search dialog's layout: preview placement, result view and split sizes; shared by windows. */
-export const $searchDialogPrefs = persistentStore('brama:search:dialog', DEFAULT_PREFS, { parse: parseSearchDialogPrefs });
+export const $searchDialogPrefs = persistentStore('batrak:search:dialog', DEFAULT_PREFS, { parse: parseSearchDialogPrefs });
 
 /** @param {Partial<SearchDialogPrefs>} patch */
 export function setSearchDialogPrefs(patch) {
@@ -66,7 +66,7 @@ export function parseProjectSearch(raw) {
  * The search dialog's state and recent queries by project path, per window. Written only through
  * `setKey`: `set()` would rewrite every project's item from this window's copy.
  */
-export const $projectSearch = persistentMapStore('brama:search:project:', parseProjectSearch);
+export const $projectSearch = persistentMapStore('batrak:search:project:', parseProjectSearch);
 
 /**
  * @param {string} project Its path.

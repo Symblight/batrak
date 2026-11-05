@@ -21,7 +21,7 @@ describe('markdown view modes', () => {
     expect(modeOf('/p', 'b.md', 'raw')).to.equal('preview');
     expect(modeOf('/q', 'docs/a.md', 'raw')).to.equal('preview');
     expect(modeOf('/q', 'b.md', 'raw')).to.equal('raw');
-    expect(JSON.parse(localStorage.getItem('brama:markdown:mode:/p') ?? 'null')).to.deep.equal({ 'docs/a.md': 'split', 'b.md': 'preview' });
+    expect(JSON.parse(localStorage.getItem('batrak:markdown:mode:/p') ?? 'null')).to.deep.equal({ 'docs/a.md': 'split', 'b.md': 'preview' });
   });
 
   it('keeps only the modes that differ from the default, and forgets a project left with none', () => {
@@ -29,16 +29,16 @@ describe('markdown view modes', () => {
     setMode('/p', 'b.md', 'split', 'raw');
 
     setMode('/p', 'a.md', 'raw', 'raw');
-    expect(JSON.parse(localStorage.getItem('brama:markdown:mode:/p') ?? 'null')).to.deep.equal({ 'b.md': 'split' });
+    expect(JSON.parse(localStorage.getItem('batrak:markdown:mode:/p') ?? 'null')).to.deep.equal({ 'b.md': 'split' });
 
     setMode('/p', 'b.md', 'raw', 'raw');
-    expect(localStorage.getItem('brama:markdown:mode:/p')).to.equal(null);
+    expect(localStorage.getItem('batrak:markdown:mode:/p')).to.equal(null);
     expect($markdownModes.get()['/p']).to.equal(undefined);
   });
 
   it('writes nothing when a file stays as it is', () => {
     setMode('/p', 'a.md', 'raw', 'raw');
-    expect(localStorage.getItem('brama:markdown:mode:/p')).to.equal(null);
+    expect(localStorage.getItem('batrak:markdown:mode:/p')).to.equal(null);
 
     setMode('/p', 'a.md', 'split', 'raw');
     const before = $markdownModes.get();
@@ -48,9 +48,9 @@ describe('markdown view modes', () => {
 
   it('does not touch another project’s entry', () => {
     setMode('/q', 'a.md', 'preview', 'raw');
-    const before = localStorage.getItem('brama:markdown:mode:/q');
+    const before = localStorage.getItem('batrak:markdown:mode:/q');
     setMode('/p', 'a.md', 'split', 'raw');
-    expect(localStorage.getItem('brama:markdown:mode:/q')).to.equal(before);
+    expect(localStorage.getItem('batrak:markdown:mode:/q')).to.equal(before);
   });
 
   describe('reading what was stored', () => {
@@ -82,7 +82,7 @@ describe('markdown view modes', () => {
       setMode('/p', 'gone.md', 'preview', 'raw');
       pruneModes('/p', () => false);
       expect($markdownModes.get()['/p']).to.equal(undefined);
-      expect(localStorage.getItem('brama:markdown:mode:/p')).to.equal(null);
+      expect(localStorage.getItem('batrak:markdown:mode:/p')).to.equal(null);
     });
   });
 });

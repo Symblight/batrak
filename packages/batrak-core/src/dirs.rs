@@ -3,9 +3,9 @@
 use std::path::{Path, PathBuf};
 
 /// The app's bundle identifier, which names the data and log folders.
-const IDENTIFIER: &str = "dev.brama.app";
+const IDENTIFIER: &str = "dev.batrak.app";
 /// Points every folder at another root, for trying things out.
-const HOME_VAR: &str = "BRAMA_HOME";
+const HOME_VAR: &str = "BATRAK_HOME";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dirs {
@@ -38,7 +38,7 @@ impl Dirs {
         let logs = ::dirs::home_dir().ok_or_else(|| missing("home"))?.join("Library/Logs").join(IDENTIFIER);
         #[cfg(not(target_os = "macos"))]
         let logs = ::dirs::data_local_dir().ok_or_else(|| missing("local data"))?.join(IDENTIFIER).join("logs");
-        Ok(Dirs { data: data.join(IDENTIFIER), config: config.join("brama"), logs })
+        Ok(Dirs { data: data.join(IDENTIFIER), config: config.join("batrak"), logs })
     }
 
     /// Everything under `root`.
@@ -53,7 +53,7 @@ mod tests {
 
     #[test]
     fn the_home_variable_moves_every_folder_under_its_root() {
-        let root = std::env::temp_dir().join("try-brama");
+        let root = std::env::temp_dir().join("try-batrak");
 
         let dirs = Dirs::from_home(Some(root.clone())).unwrap();
 

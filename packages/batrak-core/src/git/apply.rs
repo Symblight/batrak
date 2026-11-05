@@ -173,7 +173,7 @@ mod tests {
     #[test]
     fn applies_uncommitted_and_untracked_work_unstaged() {
         let mut repo = TestRepo::with_commit("apply");
-        let wt = repo.worktree("apply-wt", "brama/apply");
+        let wt = repo.worktree("apply-wt", "batrak/apply");
         let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
         std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
         std::fs::write(wt.join("new.rs"), "fn main() {}\n").unwrap();
@@ -195,7 +195,7 @@ mod tests {
         repo.git(&["add", "."]);
         repo.git(&["commit", "-qm", "app"]);
         let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-        let wt = repo.worktree("since-wt", "brama/since");
+        let wt = repo.worktree("since-wt", "batrak/since");
         std::fs::write(wt.join("app/edit.txt"), "one\ntwo\n").unwrap();
         run_in(&wt, &["commit", "-qam", "agent"]);
         std::fs::remove_file(wt.join("app/gone.txt")).unwrap();
@@ -222,26 +222,26 @@ mod tests {
     #[test]
     fn a_snapshot_commits_uncommitted_and_untracked_work_onto_the_branch() {
         let mut repo = TestRepo::with_commit("snapshot");
-        let wt = repo.worktree("snapshot-wt", "brama/snap");
+        let wt = repo.worktree("snapshot-wt", "batrak/snap");
         let git = git_bin();
-        assert_eq!(snapshot_commit(&git, &wt, "brama/snap", "Work in progress").unwrap(), None, "nothing to keep");
+        assert_eq!(snapshot_commit(&git, &wt, "batrak/snap", "Work in progress").unwrap(), None, "nothing to keep");
 
         let before = run_in(&wt, &["rev-parse", "HEAD"]).trim().to_owned();
         std::fs::write(wt.join("README.md"), "edited\n").unwrap();
         std::fs::write(wt.join("new.txt"), "untracked\n").unwrap();
-        let sha = snapshot_commit(&git, &wt, "brama/snap", "Work in progress").unwrap().unwrap();
-        assert_eq!(repo.git(&["rev-parse", "brama/snap"]).trim(), sha);
-        assert_eq!(repo.git(&["rev-parse", "brama/snap^"]).trim(), before);
-        assert_eq!(repo.git(&["show", "brama/snap:new.txt"]), "untracked\n");
-        assert_eq!(repo.git(&["show", "brama/snap:README.md"]), "edited\n");
-        assert_eq!(repo.git(&["log", "-1", "--format=%s", "brama/snap"]).trim(), "Work in progress");
+        let sha = snapshot_commit(&git, &wt, "batrak/snap", "Work in progress").unwrap().unwrap();
+        assert_eq!(repo.git(&["rev-parse", "batrak/snap"]).trim(), sha);
+        assert_eq!(repo.git(&["rev-parse", "batrak/snap^"]).trim(), before);
+        assert_eq!(repo.git(&["show", "batrak/snap:new.txt"]), "untracked\n");
+        assert_eq!(repo.git(&["show", "batrak/snap:README.md"]), "edited\n");
+        assert_eq!(repo.git(&["log", "-1", "--format=%s", "batrak/snap"]).trim(), "Work in progress");
         assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main", "the checkout stays");
     }
 
     #[test]
     fn nothing_to_apply() {
         let mut repo = TestRepo::with_commit("apply-empty");
-        let wt = repo.worktree("apply-empty-wt", "brama/empty");
+        let wt = repo.worktree("apply-empty-wt", "batrak/empty");
         let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
         assert_eq!(apply_locally(&git_bin(), &wt, &base, &repo.path).unwrap(), ApplyOutcome::Empty);
     }
@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn diverged_target_gets_conflict_markers() {
         let mut repo = TestRepo::with_commit("apply-conflict");
-        let wt = repo.worktree("apply-conflict-wt", "brama/conflict");
+        let wt = repo.worktree("apply-conflict-wt", "batrak/conflict");
         let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
         std::fs::write(wt.join("README.md"), "from agent\n").unwrap();
         repo.write("README.md", "from user\n");
@@ -263,14 +263,14 @@ mod tests {
     #[test]
     fn checks_out_the_worktree_branch_in_the_main_checkout() {
         let mut repo = TestRepo::with_commit("checkout");
-        let wt = repo.worktree("checkout-wt", "brama/co");
+        let wt = repo.worktree("checkout-wt", "batrak/co");
         std::fs::write(wt.join("x.txt"), "x").unwrap();
         run_in(&wt, &["add", "."]);
         run_in(&wt, &["commit", "-qm", "agent"]);
         let git = git_bin();
 
-        check_out_branch(&git, &wt, "brama/co", &repo.path).unwrap();
-        assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "brama/co");
+        check_out_branch(&git, &wt, "batrak/co", &repo.path).unwrap();
+        assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "batrak/co");
         assert!(repo.path.join("x.txt").exists());
         let wt_entry = worktree::list(&git, &repo.path).unwrap().into_iter().find(|e| e.path == wt).unwrap();
         assert_eq!(wt_entry.branch, None, "worktree detached");
@@ -279,14 +279,14 @@ mod tests {
     #[test]
     fn failed_checkout_gives_the_worktree_its_branch_back() {
         let mut repo = TestRepo::with_commit("checkout-fail");
-        let wt = repo.worktree("checkout-fail-wt", "brama/back");
+        let wt = repo.worktree("checkout-fail-wt", "batrak/back");
         std::fs::write(wt.join("README.md"), "agent\n").unwrap();
         run_in(&wt, &["commit", "-qam", "agent"]);
         // A local edit the switch would overwrite.
         repo.write("README.md", "unsaved user work\n");
 
-        assert!(check_out_branch(&git_bin(), &wt, "brama/back", &repo.path).is_err());
-        assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), "brama/back");
+        assert!(check_out_branch(&git_bin(), &wt, "batrak/back", &repo.path).is_err());
+        assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), "batrak/back");
         assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
     }
 }

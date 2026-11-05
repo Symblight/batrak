@@ -294,11 +294,11 @@ mod tests {
         assert!(!is_live(gone, None), "it ended");
     }
 
-    /// What this machine's records say of session `$BRAMA_CLAUDE_SESSION`: `cargo test -p agent-claude real_session_activity -- --ignored --nocapture`.
+    /// What this machine's records say of session `$BATRAK_CLAUDE_SESSION`: `cargo test -p agent-claude real_session_activity -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_session_activity() {
-        let session = std::env::var("BRAMA_CLAUDE_SESSION").expect("BRAMA_CLAUDE_SESSION");
+        let session = std::env::var("BATRAK_CLAUDE_SESSION").expect("BATRAK_CLAUDE_SESSION");
         let answer = Claude.session_activity(&session);
         eprintln!("{session}: {answer:?}");
         assert!(answer.is_some(), "no live CLI of {session} told");
@@ -320,11 +320,11 @@ mod tests {
         root
     }
 
-    /// The subagents Claude Code recorded on this machine for session `$BRAMA_CLAUDE_SESSION`: `cargo test -p agent-claude real_subagent_records -- --ignored --nocapture`.
+    /// The subagents Claude Code recorded on this machine for session `$BATRAK_CLAUDE_SESSION`: `cargo test -p agent-claude real_subagent_records -- --ignored --nocapture`.
     #[test]
     #[ignore]
     fn real_subagent_records() {
-        let session = std::env::var("BRAMA_CLAUDE_SESSION").expect("BRAMA_CLAUDE_SESSION");
+        let session = std::env::var("BATRAK_CLAUDE_SESSION").expect("BATRAK_CLAUDE_SESSION");
         let found = Claude.subagents(&session);
         for s in &found {
             eprintln!("{s:?}");

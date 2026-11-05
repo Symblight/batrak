@@ -29,7 +29,7 @@ export function parseSavedTerminal(raw) {
 }
 
 /** Terminals of terminal tabs, by id, one storage item each; per window, like the tabs. Written from `$terminals`. */
-export const $savedTerminals = persistentMapStore('brama:terminals:', parseSavedTerminal);
+export const $savedTerminals = persistentMapStore('batrak:terminals:', parseSavedTerminal);
 
 /**
  * @param {Readonly<Record<string, SavedTerminal | undefined>>} saved
@@ -64,7 +64,7 @@ $terminals.listen((terminals) => {
  * The terminal panel's tabs by folder (`$shownFolder`'s keys): terminal tabs only, one storage item
  * each, written through `terminalGroup`.
  */
-export const $folderTerminalTabs = persistentMapStore('brama:terminal-panel:tabs:', parseTabs);
+export const $folderTerminalTabs = persistentMapStore('batrak:terminal-panel:tabs:', parseTabs);
 
 /** The shown folder's key in the per-folder maps; `NO_PROJECT` with none shown. */
 const shownKey = () => $shownFolder.get() ?? NO_PROJECT;
@@ -86,7 +86,7 @@ export const terminalGroup = tabGroup({
  * Whether each folder's terminal panel is shown, by folder (`NO_PROJECT` for none), one storage item
  * each; only a panel with terminals is ever open (the hook hides it with its last one).
  */
-export const $folderTerminalPanels = persistentMapStore('brama:terminal-panel:open:', (raw) =>
+export const $folderTerminalPanels = persistentMapStore('batrak:terminal-panel:open:', (raw) =>
   isRecord(raw) && typeof raw.open === 'boolean' ? { open: raw.open } : null,
 );
 
@@ -107,7 +107,7 @@ export const TERMINAL_PANEL_MIN_HEIGHT = 120;
 export const TERMINAL_PANEL_MAX_HEIGHT = 800;
 
 /** The panel's height by folder, one storage item each; per window, like the tabs. Written only through `setKey()`. */
-export const $folderTerminalPanelHeights = persistentMapStore('brama:layout:terminal-panel:', (raw) =>
+export const $folderTerminalPanelHeights = persistentMapStore('batrak:layout:terminal-panel:', (raw) =>
   typeof raw === 'number' && Number.isFinite(raw) ? clampHeight(raw) : null,
 );
 

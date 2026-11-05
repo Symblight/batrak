@@ -13,7 +13,7 @@ import { persistentAtom, persistentMap } from '@nanostores/persistent';
 /**
  * Atom kept as JSON in `localStorage` under `key`.
  * @template T
- * @param {string} key Prefixed `brama:`.
+ * @param {string} key Prefixed `batrak:`.
  * @param {T} initial
  * @param {PersistentStoreOptions<T>} options
  * @returns {import('nanostores').WritableAtom<T>}
@@ -37,7 +37,7 @@ export function persistentStore(key, initial, { parse, serialize = (value) => va
  * writes just that key, so windows sharing the prefix never overwrite each other's other entries.
  * Per window unless `listen`: other windows' writes are then picked up on the next mount only.
  * @template T
- * @param {string} prefix Prefixed `brama:`, ending in `:`.
+ * @param {string} prefix Prefixed `batrak:`, ending in `:`.
  * @param {(raw: unknown) => T | null} parse Validates one entry; `null` drops it.
  * @param {{ listen?: boolean }} [options] `listen`: follow other windows' writes (`storage` events; an entry
  *   they remove becomes `undefined`). Default `false`.

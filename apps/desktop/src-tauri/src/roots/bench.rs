@@ -1,5 +1,5 @@
 //! Manual timing on a real repository:
-//! `BRAMA_BENCH_ROOT=/path/to/repo cargo test --release bench -- --ignored --nocapture`
+//! `BATRAK_BENCH_ROOT=/path/to/repo cargo test --release bench -- --ignored --nocapture`
 
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -13,7 +13,7 @@ use super::quick_open;
 #[test]
 #[ignore]
 fn bench() {
-    let Ok(root) = std::env::var("BRAMA_BENCH_ROOT") else { return };
+    let Ok(root) = std::env::var("BATRAK_BENCH_ROOT") else { return };
     let root = PathBuf::from(root).canonicalize().unwrap();
 
     let t = Instant::now();
