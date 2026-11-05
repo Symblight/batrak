@@ -203,6 +203,26 @@ describe('acp-chat-view', () => {
     expect(el.chat?.blocked).to.equal(null);
   });
 
+  it("a refused first send goes back into the composer with its chips", async () => {
+    // Arrange
+    const el = await render();
+    const view = /** @type {NonNullable<AcpChatView['chat']>} */ (el.chat);
+    await view.composerReady();
+    const chat = /** @type {NonNullable<typeof view.chat>} */ (view.chat);
+    view.insertFiles([{ path: 'src/app.js', folder: false }]);
+    const sent = chat.input.getValue();
+    const composerState = /** @type {Parameters<typeof chat.store.add>[0]['composerState']} */ (chat.input.getState());
+    chat.input.clear();
+    chat.store.add({ id: 'm1', conversationId: 'd1', own: true, composerState, parts: [{ id: 'p1', type: 'text', text: sent.value }] });
+
+    // Act
+    fire(el, 'chx-delivery-end', { conversationId: 'd1', outcome: 'failed' });
+
+    // Assert
+    expect(chat.input.getValue()).to.deep.equal(sent);
+    expect(chat.store.getMessages('d1'), 'the draft shows no message').to.have.length(0);
+  });
+
   it('a switch to another session and back continues browsing, the draft kept', async () => {
     // Arrange
     /** @type {[string, boolean][]} */

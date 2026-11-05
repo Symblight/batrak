@@ -185,7 +185,8 @@ export class ChatSessionController {
     const sent = chat.store.getMessages(conversationId).filter((m) => m.own).at(-1);
     chat.store.clear(conversationId);
     if (sent && this.#activeId.value === conversationId && chat.input.isEmpty()) {
-      chat.input.setText(sent.parts.map((p) => p.text ?? p.label ?? '').join(''));
+      if (sent.composerState) chat.input.setState(sent.composerState);
+      else chat.input.setText(sent.parts.map((p) => p.text ?? p.label ?? '').join(''));
     }
   };
 
