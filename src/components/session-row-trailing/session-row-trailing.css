@@ -1,0 +1,59 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+}
+
+/* The list swaps these two while the row is hovered: the hover is on the tree's row, past this root. */
+.acp-session-row-trailing__rest {
+  display: var(--acp-session-row-trailing-rest, flex);
+  align-items: center;
+  gap: var(--acp-space-1-5);
+}
+
+.acp-session-row-trailing__actions {
+  display: var(--acp-session-row-trailing-actions, none);
+  align-items: center;
+  gap: var(--acp-space-0-5);
+}
+
+:host([menu-open]) .acp-session-row-trailing__rest {
+  display: none;
+}
+
+:host([menu-open]) .acp-session-row-trailing__actions {
+  display: flex;
+}
+
+.acp-session-row-trailing__pinned,
+.acp-session-row-trailing__branch {
+  flex: none;
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row-trailing__age {
+  flex: none;
+  font-size: var(--acp-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-session-row-trailing__status {
+  --acp-session-status-spinner-size: var(--acp-icon-size-xs);
+  flex: none;
+}
+
+/* 22px icon button, inside the row: 16px icon + 2px padding + the library's 1px transparent border. */
+.acp-session-row-trailing__button {
+  flex: none;
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
+
+  &::part(button) {
+    padding: var(--acp-space-0-5);
+  }
+}
+
+.acp-session-row-trailing__button-icon {
+  font-size: var(--acp-icon-size-sm);
+}

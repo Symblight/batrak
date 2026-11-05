@@ -1,0 +1,19 @@
+:host {
+  display: flex;
+}
+
+/* 28px icon buttons: 18px icon + 4px padding + the library's 1px border. */
+.acp-search-view-picker__button {
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+
+  &[selected] {
+    --md-icon-button-background-color: var(--acp-color-secondary-container);
+    --md-icon-button-foreground-color: var(--acp-color-on-secondary-container);
+  }
+}
+.acp-search-view-picker__button::part(button) {
+  padding: 4px;
+}
+.acp-search-view-picker__icon {
+  font-size: var(--acp-icon-size-md);
+}

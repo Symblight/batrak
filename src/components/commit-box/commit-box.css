@@ -1,0 +1,43 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+}
+
+.acp-commit-box__message {
+  width: 100%;
+  min-width: 0;
+  --md-text-field-background-color: var(--acp-column-background);
+}
+/* When narrow, the button wraps under Amend and fills the row: the spacer takes
+   (nearly) all free space beside it, the button all of its own line */
+.acp-commit-box__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-2);
+}
+.acp-commit-box__amend {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: 3px;
+  font-size: var(--acp-font-size-md);
+  line-height: 20px;
+  cursor: pointer;
+}
+.acp-commit-box__spacer {
+  flex: 1000 1 0;
+}
+.acp-commit-box__commit {
+  flex: 1 0 auto;
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+  --md-button-inline-start-space: 12px;
+  --md-button-inline-end-space: 16px;
+}
+.acp-commit-box__commit-icon {
+  font-size: var(--acp-icon-size-md);
+}

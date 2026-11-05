@@ -1,0 +1,29 @@
+name: Setup
+description: pnpm, Node and the frontend dependencies (some @symblight packages are git dependencies on Symblight/rich-components)
+
+runs:
+  using: composite
+  steps:
+    # Version from package.json's packageManager: later pnpm 10 releases (10.34.9 at
+    # least) allowlist a git-hosted package's build only by its exact commit spec, so they refuse
+    # rich-components' prepare.
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v7
+      with:
+        node-version: lts/*
+        cache: pnpm
+
+    # The lockfile pins rich-components over SSH, which needs a key even for a public repo:
+    # clone it over anonymous HTTPS instead.
+    - name: Fetch git dependencies over HTTPS
+      shell: bash
+      run: |
+        base="https://github.com/"
+        git config --global url."$base".insteadOf "https://git@github.com/"
+        git config --global --add url."$base".insteadOf "ssh://git@github.com/"
+        git config --global --add url."$base".insteadOf "git@github.com:"
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile

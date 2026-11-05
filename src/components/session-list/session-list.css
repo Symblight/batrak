@@ -1,0 +1,78 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-session-list__tree {
+  flex: 1;
+  min-height: 0;
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
+  --tvx-tree-item-indent: var(--acp-space-4);
+  --tvx-tree-item-inset: var(--acp-space-1);
+  --tvx-tree-item-padding-start: var(--acp-space-2);
+  --tvx-tree-item-padding-end: var(--acp-space-2);
+  --tvx-tree-item-shape: var(--acp-shape-corner-small);
+  --tvx-tree-item-icon-size: var(--acp-icon-size-xs);
+  --tvx-tree-item-selected-background-color: var(--acp-color-secondary-container);
+  --tvx-tree-item-selected-color: var(--acp-color-on-secondary-container);
+
+  /* A folder's chevron follows its count, a chat's is among its row's buttons. */
+  &::part(chevron) {
+    display: none;
+  }
+
+  /* The open row's fill (z-index: -1) stays above the row's background, below its content. */
+  &::part(row) {
+    isolation: isolate;
+  }
+
+  /* Custom properties go down to what the row holds, past the tree's shadow root and the row's. */
+  &::part(row):hover {
+    --_acp-session-list-folder-chevron: 1;
+    --acp-session-row-trailing-rest: none;
+    --acp-session-row-trailing-actions: flex;
+  }
+
+  &::part(trailing) {
+    font-size: var(--acp-font-size-xs);
+    font-variant-numeric: tabular-nums;
+    color: var(--acp-color-on-surface-variant);
+  }
+}
+
+.acp-session-list__loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-0-5);
+  padding: var(--acp-space-0-5) var(--acp-space-1) var(--acp-space-2);
+}
+
+.acp-session-list__skeleton-row {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+  height: 28px;
+  padding-inline: 28px var(--acp-space-3);
+}
+
+.acp-session-list__skeleton-title {
+  height: 12px;
+}
+
+.acp-session-list__skeleton-age {
+  width: 20px;
+  height: 12px;
+  margin-inline-start: auto;
+}
+
+.acp-session-list__empty {
+  padding: var(--acp-space-1) var(--acp-space-3) 10px 30px;
+  font-size: var(--acp-font-size-sm);
+  line-height: 20px;
+  color: var(--acp-color-on-surface-variant);
+}

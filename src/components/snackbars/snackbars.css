@@ -1,0 +1,79 @@
+:host {
+  position: fixed;
+  z-index: var(--acp-z-overlay);
+  inset-block-end: var(--acp-space-4);
+  inset-inline-end: calc(var(--acp-nav-rail-width) + var(--acp-space-4));
+  width: min(480px, calc(100vw - var(--acp-nav-rail-width) - 2 * var(--acp-space-4)));
+  display: flex;
+  /* Only the snackbars take clicks, not the gaps between them. */
+  pointer-events: none;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--acp-space-2);
+}
+
+.acp-snackbars__snackbar {
+  --md-snackbar-container-color: var(--acp-color-inverse-surface);
+  --md-snackbar-supporting-text-color: var(--acp-color-inverse-on-surface);
+  --md-snackbar-icon-color: var(--acp-color-inverse-on-surface);
+  --md-snackbar-min-inline-size: 0;
+  --md-snackbar-max-inline-size: 100%;
+  --md-snackbar-text-font: var(--acp-font-family);
+  --md-snackbar-text-size: var(--acp-font-size-md);
+  --md-snackbar-text-line-height: 1.25rem;
+  --_acp-snackbars-icon-color: var(--acp-color-inverse-primary);
+
+  pointer-events: auto;
+  animation: acp-snackbars-enter 150ms ease-out;
+}
+.acp-snackbars__snackbar_warn {
+  --_acp-snackbars-icon-color: var(--acp-notice-warn);
+}
+.acp-snackbars__snackbar_error {
+  --md-snackbar-container-color: var(--acp-color-error-container);
+  --md-snackbar-supporting-text-color: var(--acp-color-on-error-container);
+  --md-snackbar-icon-color: var(--acp-color-on-error-container);
+  --_acp-snackbars-icon-color: var(--acp-color-on-error-container);
+}
+
+.acp-snackbars__content {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--acp-space-2);
+}
+.acp-snackbars__icon {
+  flex: none;
+  font-size: var(--acp-icon-size-lg);
+  color: var(--_acp-snackbars-icon-color);
+}
+.acp-snackbars__message {
+  min-width: 0;
+  /* Long backend messages (paths, git arguments) stay readable but bounded. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  user-select: text;
+}
+.acp-snackbars__action {
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+}
+.acp-snackbars__count {
+  flex: none;
+  color: color-mix(in srgb, currentColor 72%, transparent);
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes acp-snackbars-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acp-snackbars__snackbar {
+    animation: none;
+  }
+}

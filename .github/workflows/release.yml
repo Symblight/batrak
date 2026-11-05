@@ -1,0 +1,59 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+
+permissions:
+  contents: write
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check the tag matches the app version
+        if: github.ref_type == 'tag'
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          pkg=$(node -p "require('./package.json').version")
+          cargo=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          if [ "$tag" != "$pkg" ] || [ "$tag" != "$cargo" ]; then
+            echo "::error::Tag v$tag, package.json $pkg, Cargo.toml $cargo: bump both before tagging"
+            exit 1
+          fi
+
+      - uses: ./.github/actions/setup
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      # A draft release with one universal DMG; publish it by hand after a check.
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Ad-hoc signature until there is a Developer ID certificate (Apple Silicon refuses
+          # unsigned apps); Gatekeeper still quarantines the download.
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: Brama v__VERSION__
+          releaseBody: |
+            Download `Brama_*_universal.dmg`, open it and drag Brama into Applications.
+
+            This build is not notarized yet: on first launch macOS reports it as damaged. Run
+            `xattr -dr com.apple.quarantine /Applications/Brama.app` once, then open it.
+          releaseDraft: true
+          prerelease: false
+          generateReleaseNotes: true
+          args: --target universal-apple-darwin --bundles app,dmg

@@ -1,0 +1,11 @@
+[package]
+name = "agent-antigravity"
+version = "0.1.0"
+edition = "2021"
+description = "Antigravity for Brama: a program the user installs from the registry's archive"
+
+[dependencies]
+agent-api = { path = "../agent-api" }
+
+[dev-dependencies]
+agent-api = { path = "../agent-api", features = ["test-support"] }

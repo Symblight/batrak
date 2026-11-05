@@ -1,0 +1,95 @@
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* The box the narrow layout is asked of, not the window. */
+.acp-markdown-view__stage {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  container: acp-markdown-view / inline-size;
+}
+
+/* A row of its own between the tabs and the content, the switcher at its end. */
+.acp-markdown-view__bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--acp-space-2);
+  padding: var(--acp-space-0-5) var(--acp-space-2);
+  background: var(--acp-column-background);
+  border-block-end: 1px solid var(--acp-color-outline-variant);
+}
+
+.acp-markdown-view__split {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+
+.acp-markdown-view__pane {
+  min-width: 0;
+}
+
+.acp-markdown-view__editor {
+  flex: 1;
+  min-height: 0;
+}
+
+/* The divider sits on the edge of the two panes, which have no gap between them. */
+.acp-markdown-view__handle {
+  z-index: var(--acp-z-raised);
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-markdown-view__handle_row {
+  margin-inline: calc(var(--acp-resize-handle-hit-width, 8px) / -2);
+}
+.acp-markdown-view__handle_column {
+  display: none;
+  margin-block: calc(var(--acp-resize-handle-hit-width, 8px) / -2);
+}
+
+/* Narrow: editor above, preview below, a horizontal divider. */
+@container acp-markdown-view (width < 560px) {
+  .acp-markdown-view__split {
+    flex-direction: column;
+  }
+  .acp-markdown-view__handle_row {
+    display: none;
+  }
+  .acp-markdown-view__handle_column:not([hidden]) {
+    display: block;
+  }
+}
+
+.acp-markdown-view__scroller {
+  flex: 1;
+  min-height: 0;
+  padding: var(--acp-space-4);
+  overflow: auto;
+  background: var(--acp-column-background);
+  font-size: var(--acp-font-size-md);
+}
+
+/* Read on its own: centered, a line no longer than 720px. */
+.acp-markdown-view__preview_centered {
+  max-inline-size: 720px;
+  margin-inline: auto;
+}
+
+/* Said at the start of the bar, away from the switcher. */
+.acp-markdown-view__rendering {
+  margin-inline-end: auto;
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}

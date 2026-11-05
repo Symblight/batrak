@@ -1,0 +1,64 @@
+[package]
+name = "brama"
+version = "0.1.0"
+description = "Brama — agent-first client for AI coding agents"
+edition = "2021"
+
+[workspace]
+# The core and each agent are crates (specs: docs/specs/cli.md, agent-plugins.md); all are default members, so
+# `cargo test --lib` and `cargo clippy --all-targets` here check every one.
+members = ["crates/*"]
+default-members = [".", "crates/*"]
+
+[lib]
+name = "brama_lib"
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+batrak-core = { path = "crates/batrak-core" }
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-clipboard-manager = "2"
+# Workspace snapshot: ignore-aware walk + file watching
+ignore = "0.4"
+notify-debouncer-full = "0.7"
+# Quick Open (fzf-style fuzzy scoring)
+nucleo-matcher = "0.3"
+# Find in Files (ripgrep as a library)
+grep-searcher = "0.1"
+grep-regex = "0.1"
+grep-matcher = "0.1"
+globset = "0.4"
+# canonicalize without Windows' `\\?\` prefix, in which `/` is not a separator
+dunce = "1"
+# Settings > Font: installed font families (the webview has no font enumeration API)
+fontdb = "0.24"
+# Logs: daily files in the app log dir (plus stderr in dev), panics included
+tracing = "0.1"
+tracing-appender = "0.2"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
+# Terminal tabs: the user's shell in a pseudo-terminal
+portable-pty = "0.9"
+
+# Stopping a timed-out commit's process group (git and its hooks)
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+# Optimize dependencies in dev builds: fuzzy matching, regex and directory walking are
+# 10x slower unoptimized, which makes Quick Open lag in `tauri dev`. Our own crate stays debug.
+[profile.dev.package."*"]
+opt-level = 2
+
+[dev-dependencies]
+batrak-core = { path = "crates/batrak-core", features = ["test-support"] }
+# A mock app, to compare `Dirs` with Tauri's path resolver
+tauri = { version = "2", features = ["test"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp"] }

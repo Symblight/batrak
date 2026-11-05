@@ -1,0 +1,37 @@
+:host {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  inline-size: 16px;
+  block-size: 16px;
+}
+
+.acp-subagent-status__spinner {
+  font-size: var(--acp-icon-size-xs);
+}
+
+.acp-subagent-status__done {
+  font-size: var(--acp-icon-size-xs);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-subagent-status__dot {
+  inline-size: 8px;
+  block-size: 8px;
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-outline);
+}
+
+:host([indicator='waiting']) .acp-subagent-status__dot {
+  background: var(--acp-color-tertiary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--acp-color-tertiary) 25%, transparent);
+}
+
+:host([indicator='failed']) .acp-subagent-status__dot {
+  background: var(--acp-color-error);
+}
+
+:host([indicator='unknown']) .acp-subagent-status__dot {
+  background: transparent;
+  border: 1.5px solid var(--acp-color-outline-variant);
+}

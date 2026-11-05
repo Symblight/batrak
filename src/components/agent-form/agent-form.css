@@ -1,0 +1,53 @@
+:host {
+  display: block;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-agent-form__form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-block: var(--acp-space-2) 0;
+}
+.acp-agent-form__subtitle {
+  font: var(--acp-font-weight-medium) 14px/20px var(--acp-font-family);
+}
+.acp-agent-form__input_mono {
+  --md-text-field-font-family: var(--acp-font-family-mono);
+}
+.acp-agent-form__lock {
+  font-size: var(--acp-icon-size-sm);
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-agent-form__check {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  margin-block: calc(-1 * var(--acp-space-1));
+  font: 400 14px/20px var(--acp-font-family);
+  color: var(--acp-color-on-surface);
+  cursor: pointer;
+}
+.acp-agent-form__hint {
+  font: 400 12px/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-agent-form__error {
+  font: 400 12px/16px var(--acp-font-family);
+  color: var(--acp-color-error);
+  overflow-wrap: anywhere;
+}
+.acp-agent-form__actions {
+  display: flex;
+  gap: var(--acp-space-2);
+}
+.acp-agent-form__spacer {
+  flex: 1;
+}
+.acp-agent-form__button {
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+}
+.acp-agent-form__button_danger {
+  --md-button-foreground-color: var(--acp-color-error);
+}

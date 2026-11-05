@@ -1,0 +1,58 @@
+:host {
+  container-type: inline-size;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  padding: 32px 24px;
+  background: var(--acp-column-background);
+  color: var(--acp-color-on-surface);
+}
+.acp-welcome__content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 480px;
+  text-align: center;
+
+  /* Too narrow for both buttons on one line: stack them full width, the primary one on top. */
+  @container (width < 480px) {
+    align-self: stretch;
+    max-width: 360px;
+    margin-inline: auto;
+  }
+}
+.acp-welcome__title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+  text-wrap: balance;
+}
+.acp-welcome__subtitle {
+  margin: var(--acp-space-2) 0 0;
+  font-size: var(--acp-font-size-lg);
+  line-height: 20px;
+  letter-spacing: 0.25px;
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-welcome__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--acp-space-3);
+  margin-top: 32px;
+
+  @container (width < 480px) {
+    flex-direction: column;
+    align-self: stretch;
+  }
+}
+.acp-welcome__action {
+  &[variant='outlined'] {
+    --md-button-border-color: var(--acp-color-outline-variant);
+  }
+}
+.acp-welcome__action-icon {
+  font-size: var(--acp-icon-size-md);
+}

@@ -1,0 +1,51 @@
+:host {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  flex: 1;
+  min-height: 0;
+  background: var(--acp-terminal-background, var(--acp-color-surface-container-lowest));
+  padding: var(--acp-tab-view-padding, 0);
+}
+.acp-terminal__screen {
+  /* Keeps xterm's layers (z-index up to 11) under the drop highlight. */
+  isolation: isolate;
+  flex: 1;
+  min-height: 0;
+  padding: var(--acp-space-1) var(--acp-space-2);
+}
+.acp-terminal__find {
+  position: absolute;
+  inset-block-start: var(--acp-space-2);
+  inset-inline-end: var(--acp-space-3);
+  z-index: var(--acp-z-overlay);
+  width: min(460px, calc(100% - 2 * var(--acp-space-3)));
+  box-sizing: border-box;
+}
+.acp-terminal__error {
+  padding: var(--acp-space-2);
+  color: var(--acp-color-error);
+  font-size: var(--acp-font-size-sm);
+}
+.acp-terminal__actions {
+  position: absolute;
+  inset-block-end: var(--acp-space-3);
+  inset-inline-end: var(--acp-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+}
+.acp-terminal__waiting {
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
+:host([dropping])::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  outline: 2px solid var(--acp-color-primary);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--acp-color-primary) 8%, transparent);
+}

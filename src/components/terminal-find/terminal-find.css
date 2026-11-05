@@ -1,0 +1,27 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  padding: var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container);
+  box-shadow: var(--acp-elevation-2);
+}
+.acp-terminal-find__bar {
+  flex: 1;
+  min-width: 0;
+}
+.acp-terminal-find__count {
+  flex: none;
+  padding-inline: var(--acp-space-1);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+  white-space: nowrap;
+}
+.acp-terminal-find__button {
+  flex: none;
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+}
+.acp-terminal-find__icon {
+  font-size: var(--acp-icon-size-md);
+}

@@ -1,0 +1,177 @@
+@import "@symblight/wc-material/theme/theme.css";
+
+:root {
+  color-scheme: light dark;
+
+  /* App colour roles — mapped onto wc-material MD3 system tokens,
+     which services/theme.js regenerates for the OS light/dark scheme */
+  --acp-color-primary: var(--md-sys-color-primary);
+  --acp-color-on-primary: var(--md-sys-color-on-primary);
+  --acp-color-primary-container: var(--md-sys-color-primary-container);
+  --acp-color-on-primary-container: var(--md-sys-color-on-primary-container);
+  --acp-color-secondary: var(--md-sys-color-secondary);
+  --acp-color-secondary-container: var(--md-sys-color-secondary-container);
+  --acp-color-on-secondary-container: var(--md-sys-color-on-secondary-container);
+  --acp-color-tertiary: var(--md-sys-color-tertiary);
+  --acp-color-tertiary-container: var(--md-sys-color-tertiary-container);
+  --acp-color-on-tertiary-container: var(--md-sys-color-on-tertiary-container);
+  --acp-color-error: var(--md-sys-color-error);
+  --acp-color-on-error: var(--md-sys-color-on-error);
+  --acp-color-error-container: var(--md-sys-color-error-container);
+  --acp-color-on-error-container: var(--md-sys-color-on-error-container);
+  --acp-color-inverse-surface: var(--md-sys-color-inverse-surface);
+  --acp-color-inverse-on-surface: var(--md-sys-color-inverse-on-surface);
+  --acp-color-inverse-primary: var(--md-sys-color-inverse-primary);
+  --acp-color-surface: var(--md-sys-color-surface);
+  --acp-color-surface-container-lowest: var(--md-sys-color-surface-container-lowest);
+  --acp-color-surface-container-low: var(--md-sys-color-surface-container-low);
+  --acp-color-surface-container: color-mix(
+    in oklch,
+    var(--md-sys-color-surface-container-low),
+    var(--md-sys-color-surface-container-high)
+  );
+  --acp-color-surface-container-high: var(--md-sys-color-surface-container-high);
+  --acp-color-surface-container-highest: var(--md-sys-color-surface-container-highest);
+  --acp-color-on-surface: var(--md-sys-color-on-surface);
+  --acp-color-on-surface-variant: var(--md-sys-color-on-surface-variant);
+  --acp-color-outline: var(--md-sys-color-outline);
+  --acp-color-outline-variant: var(--md-sys-color-outline-variant);
+
+  /* Backgrounds: the window behind the columns, and the columns on it (MD3 panes) */
+  --acp-app-background: var(--acp-color-surface-container);
+  --acp-column-background: var(--acp-color-surface);
+
+  /* Agent accent */
+  --acp-terminal-accent: #00855f;
+
+  /* Diff colours: MD3 has no "added"/"removed" roles. Shared by the Changes panel and editor diffs. */
+  --acp-vcs-add: #1b7a3d;
+  --acp-diff-add-fg: #0a5c2c;
+  --acp-diff-del-fg: #93211a;
+  /* "Ok" role (push, open pull request): MD3 has none, so it follows the diff greens. */
+  --acp-color-ok: var(--acp-vcs-add);
+  --acp-color-ok-container: color-mix(in srgb, var(--acp-vcs-add) 22%, var(--acp-color-surface));
+  --acp-color-on-ok-container: var(--acp-diff-add-fg);
+  --acp-search-hit: color-mix(in srgb, var(--acp-color-primary) 22%, transparent);
+  /* MD3 state layers: on-surface over the element's own background */
+  --acp-state-hover: color-mix(in srgb, var(--acp-color-on-surface) 8%, transparent);
+  --acp-state-focus: color-mix(in srgb, var(--acp-color-on-surface) 10%, transparent);
+  --acp-state-pressed: color-mix(in srgb, var(--acp-color-on-surface) 12%, transparent);
+  --acp-state-disabled: color-mix(in srgb, var(--acp-color-on-surface) 38%, transparent);
+  /* Warning icon on a snackbar (inverse surface: dark in the light theme). MD3 has no warning role. */
+  --acp-notice-warn: #ffb951;
+
+  /* Layout */
+  --acp-toolbar-height: 40px;
+  --acp-nav-rail-width: 48px;
+  /* Default column widths: shares of the window beside the nav rail (resized widths are stored in px) */
+  --acp-session-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.2);
+  --acp-file-tree-width: calc((100vw - var(--acp-nav-rail-width)) * 0.2);
+  --acp-agent-column-width: calc((100vw - var(--acp-nav-rail-width)) * 0.3);
+  --acp-column-gap: var(--acp-space-1);
+  /* The terminal panel under the agent and editor columns: its default height, and the room the columns above it keep */
+  --acp-terminal-panel-height: 280px;
+  --acp-middle-min-height: 160px;
+  --acp-column-toggle-duration: 125ms;
+  /* Column limits: the resize handles' CSS minimums and maximums */
+  --acp-session-column-min-width: 180px;
+  --acp-file-tree-min-width: 200px;
+  --acp-agent-column-min-width: 280px;
+  --acp-main-column-min-width: 74px;
+  /* The middle of the row (agent and editor columns): the room both need, or the agent column alone */
+  --acp-center-min-width: calc(var(--acp-agent-column-min-width) + var(--acp-column-gap) + var(--acp-main-column-min-width));
+  --acp-column-max-width: 524px;
+  /* The agent chat's readable widths in a wider column (<acp-chat> reads them as its public properties): its banner and composer, its messages */
+  --acp-chat-content-max-width: 810px;
+  --acp-chat-messages-max-width: 760px;
+
+  /* Motion */
+  --acp-motion-easing-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Stacking */
+  --acp-z-raised: 1;
+  --acp-z-overlay: 10;
+
+  /* Elevation */
+  --acp-elevation-2:
+    0 1px 2px color-mix(in srgb, black 30%, transparent),
+    0 2px 6px 2px color-mix(in srgb, black 15%, transparent);
+  --acp-elevation-3: 0 8px 24px color-mix(in srgb, var(--acp-color-on-surface) 24%, transparent);
+
+  /* Shape — wc-material MD3 corner scale */
+  --acp-shape-corner-extra-small: 4px;
+  --acp-shape-corner-small: 8px;
+  --acp-shape-corner-medium: var(--md-sys-shape-corner-medium);
+  --acp-shape-corner-full: var(--md-sys-shape-corner-full);
+
+  /* Spacing */
+  --acp-space-0-5: 2px;
+  --acp-space-1: 4px;
+  --acp-space-1-5: 6px;
+  --acp-space-2: 8px;
+  --acp-space-3: 12px;
+  --acp-space-4: 16px;
+
+  /* Typography */
+  --acp-font-family: 'Google Sans Flex', 'Google Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --acp-font-family-mono: 'Google Sans Code', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --cdx-code-editor-mono-font-family: var(--acp-font-family-mono);
+  --acp-font-size-xs: 11px;
+  --acp-font-size-sm: 12px;
+  --acp-font-size-md: 13px;
+  --acp-font-size-lg: 14px;
+  --acp-font-size-title: var(--acp-font-size-lg);
+  --acp-font-weight-medium: 500;
+  --acp-font-weight-title: 600;
+
+  /* Icon sizes: set as font-size on the icon's class */
+  --acp-icon-size-xs: 14px;
+  --acp-icon-size-sm: 16px;
+  --acp-icon-size-md: 18px;
+  --acp-icon-size-lg: 20px;
+
+  /* Dialogs: one standard for every md-dialog (frame and controls in src/styles/shadow.css; each
+     dialog's headline, text and footer use these) */
+  --acp-dialog-width: 400px;
+  --acp-dialog-width-wide: 480px;
+  --acp-dialog-shape: 16px;
+  --acp-dialog-headline-font: 500 18px/24px var(--acp-font-family);
+  --acp-dialog-text-font: 400 14px/20px var(--acp-font-family);
+  --acp-dialog-detail-font: 400 13px/18px var(--acp-font-family);
+  --acp-dialog-footer-space: var(--acp-space-4);
+
+  /* md-button vertical padding: compact chips and rows, regular actions */
+  --acp-button-block-space-compact: var(--acp-space-1);
+  --acp-button-block-space-regular: var(--acp-space-1-5);
+}
+
+/* Set by services/theme.js from the Appearance setting, which may differ from the OS scheme. */
+@scope (:root[data-theme='dark']) {
+  :scope {
+    --acp-terminal-accent: #4cdbae;
+    --acp-vcs-add: #81c995;
+    --acp-diff-add-fg: #a8dab5;
+    --acp-diff-del-fg: #f2b8b5;
+    --acp-search-hit: color-mix(in srgb, var(--acp-color-primary) 28%, transparent);
+    --acp-notice-warn: #8a5300;
+  }
+}
+
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--acp-app-background);
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+}
+
+/* Thin scrollbars in the page itself; shadow roots get theirs from shadow.css. */
+:root {
+  scrollbar-width: thin;
+  scrollbar-color: var(--acp-color-outline-variant) transparent;
+}

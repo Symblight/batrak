@@ -1,0 +1,55 @@
+:host {
+  container: acp-toolbar / inline-size;
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  box-sizing: border-box;
+  height: var(--acp-toolbar-height);
+  padding: 0 var(--acp-space-2);
+  background: var(--acp-app-background);
+}
+.acp-toolbar__git-error {
+  overflow: hidden;
+  font-family: var(--acp-font-family-mono);
+  font-size: var(--acp-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--acp-color-error);
+}
+.acp-toolbar__divider {
+  flex: none;
+  inline-size: 1px;
+  block-size: 20px;
+  background: var(--acp-color-outline-variant);
+}
+.acp-toolbar__spacer {
+  flex: 1;
+}
+/* MD3 icon button XS: 32px square, 8px radius, 20px icon. */
+.acp-toolbar__toggle {
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+
+  flex: none;
+
+  &[selected] {
+    --md-icon-button-background-color: var(--acp-color-secondary-container);
+    --md-icon-button-foreground-color: var(--acp-color-on-secondary-container);
+  }
+}
+.acp-toolbar__toggle::part(button) {
+  /* 5px + the library's 1px transparent border = 6px around the 20px icon. */
+  padding: 5px;
+}
+.acp-toolbar__toggle::part(button):focus-visible {
+  outline: 3px solid var(--acp-color-secondary);
+  outline-offset: 2px;
+}
+.acp-toolbar__toggle-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+/* `view_sidebar` has its panel on the right; mirrored for a column on the left. */
+.acp-toolbar__toggle-icon_start {
+  transform: scaleX(-1);
+}

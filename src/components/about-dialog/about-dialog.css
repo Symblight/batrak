@@ -1,0 +1,59 @@
+:host {
+  display: contents;
+}
+
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
+
+.acp-about-dialog__headline {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  column-gap: var(--acp-space-3);
+  align-items: center;
+}
+.acp-about-dialog__logo {
+  grid-row: span 2;
+  width: 40px;
+  height: 40px;
+}
+.acp-about-dialog__title {
+  font: var(--acp-dialog-headline-font);
+  color: var(--acp-color-on-surface);
+}
+.acp-about-dialog__subtitle {
+  font: var(--acp-dialog-detail-font);
+  color: var(--acp-color-on-surface-variant);
+}
+
+/* Label / value rows; values wrap anywhere (long paths). */
+.acp-about-dialog__rows {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--acp-space-1-5) var(--acp-space-4);
+  margin: 0;
+  font: var(--acp-dialog-detail-font);
+}
+.acp-about-dialog__label {
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-about-dialog__value {
+  margin: 0;
+  color: var(--acp-color-on-surface);
+  overflow-wrap: anywhere;
+}
+
+.acp-about-dialog__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-2);
+  width: 100%;
+}
+/* Show log files stays at the start; Close goes to the end. */
+.acp-about-dialog__action_close {
+  margin-inline-start: auto;
+}
+.acp-about-dialog__icon {
+  font-size: var(--acp-icon-size-md);
+}

@@ -1,0 +1,66 @@
+:host {
+  display: inline-flex;
+}
+
+/* A compact chip (24px): the color says how much the agent may do. */
+.acp-mode-picker__button {
+  --md-button-font-size: var(--acp-font-size-sm);
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+  --md-button-inline-start-space: 6px;
+  --md-button-inline-end-space: 2px;
+  --md-button-border-radius: var(--acp-shape-corner-small);
+
+  /* A narrow composer shows the mode's icon and arrow, then the icon only. */
+  @container acp-composer (width <= 360px) {
+    --md-button-inline-end-space: 6px;
+  }
+}
+
+.acp-mode-picker__icon {
+  font-size: 15px;
+}
+.acp-mode-picker__button_neutral {
+  --md-button-foreground-color: var(--acp-color-on-surface-variant);
+  --md-button-border-color: var(--acp-color-outline-variant);
+}
+.acp-mode-picker__button_plan {
+  --md-button-background-color: var(--acp-color-secondary-container);
+  --md-button-foreground-color: var(--acp-color-on-secondary-container);
+}
+.acp-mode-picker__button_agent {
+  --md-button-background-color: var(--acp-color-tertiary-container);
+  --md-button-foreground-color: var(--acp-color-on-tertiary-container);
+}
+.acp-mode-picker__button_full {
+  --md-button-background-color: var(--acp-color-error-container);
+  --md-button-foreground-color: var(--acp-color-on-error-container);
+}
+
+.acp-mode-picker__label {
+  white-space: nowrap;
+
+  @container acp-composer (width <= 440px) {
+    display: none;
+  }
+}
+
+.acp-mode-picker__arrow {
+  font-size: var(--acp-icon-size-xs);
+  vertical-align: middle;
+
+  @container acp-composer (width <= 360px) {
+    display: none;
+  }
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-mode-picker__menu {
+  --md-menu-min-width: 15rem;
+}
+
+.acp-mode-picker__item_danger {
+  --md-menu-item-label-text-color: var(--acp-color-error);
+  --md-menu-item-leading-icon-color: var(--acp-color-error);
+}

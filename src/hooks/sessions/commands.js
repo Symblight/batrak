@@ -1,0 +1,248 @@
+import { ipc } from '../ipc/ipc.js';
+
+/** @typedef {import('./types.js').Session} Session */
+/** @typedef {import('./types.js').SessionEnvelope} SessionEnvelope */
+/** @typedef {import('./types.js').PromptInput} PromptInput */
+/** @typedef {import('./types.js').SyncReport} SyncReport */
+/** @typedef {import('./types.js').SessionsSynced} SessionsSynced */
+
+/** The Rust commands of sessions, their folders and the project's settings. */
+
+/** @returns {Promise<Session[]>} The sessions as last stored or synced. */
+export function listSessions() {
+  return ipc.invoke('list_sessions');
+}
+
+/**
+ * Asks a project's agents (`agentIds`, else all) for its sessions; every window then hears them
+ * (`onSessionsSynced`). Joins a sync of the project already running.
+ * @param {string} projectPath
+ * @param {string[] | null} [agentIds]
+ * @returns {Promise<SyncReport>}
+ */
+export function sessionsSync(projectPath, agentIds = null) {
+  return ipc.invoke('sessions_sync', { projectPath, agentIds });
+}
+
+/**
+ * A project's sessions after a sync, in any window.
+ * @param {(synced: SessionsSynced) => void} callback
+ * @returns {Promise<() => void>} Stops listening.
+ */
+export function onSessionsSynced(callback) {
+  return ipc.listen('sessions://synced', callback);
+}
+
+/**
+ * A draft's first message: creates the session (under the draft's id) in its workspace and starts
+ * its agent in the background. Rejects when its workspace is another project's or unknown.
+ * @param {Object} session
+ * @param {string} session.sessionId
+ * @param {string} session.projectPath
+ * @param {string} session.agentId
+ * @param {string} session.title
+ * @param {Record<string, string>} session.config The agent's config options picked in the draft, by id.
+ * @param {string | null} session.workspaceId `null`: Main.
+ * @param {(event: SessionEnvelope) => void} onEvent The session's events in this window.
+ * @returns {Promise<Session>}
+ */
+export function sessionCreate({ sessionId, projectPath, agentId, title, config, workspaceId }, onEvent) {
+  return ipc.invoke('session_create', {
+    sessionId,
+    projectPath,
+    agentId,
+    title,
+    config,
+    workspaceId,
+    channel: channelOf(onEvent),
+  });
+}
+
+/**
+ * Sends a listed session's events to this window from now on, starting with its status.
+ * @param {string} sessionId
+ * @param {(event: SessionEnvelope) => void} onEvent
+ * @returns {Promise<Session>}
+ */
+export function sessionOpen(sessionId, onEvent) {
+  return ipc.invoke('session_open', { sessionId, channel: channelOf(onEvent) });
+}
+
+/**
+ * @param {(event: SessionEnvelope) => void} onEvent
+ * @returns {import('@tauri-apps/api/core').Channel<SessionEnvelope>}
+ */
+function channelOf(onEvent) {
+  return ipc.channel(onEvent);
+}
+
+/**
+ * Starts a turn; resolves once it's accepted (the agent starts first if it isn't running). Its
+ * updates and `turn-end` arrive as session events. Resolves to the stamp the prompt gave the
+ * session's `lastActivityAt`.
+ * @param {string} sessionId
+ * @param {PromptInput[]} prompt
+ * @returns {Promise<string>}
+ */
+export function sessionSendPrompt(sessionId, prompt) {
+  return ipc.invoke('session_send_prompt', { sessionId, prompt });
+}
+
+/**
+ * Cancels the running turn; pending permission requests are answered `cancelled`.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionCancel(sessionId) {
+  return ipc.invoke('session_cancel', { sessionId });
+}
+
+/**
+ * @param {string} sessionId
+ * @param {string} subagentId Its ACP session id.
+ */
+export function sessionCancelSubagent(sessionId, subagentId) {
+  return ipc.invoke('session_cancel_subagent', { sessionId, subagentId });
+}
+
+/**
+ * @param {string} sessionId
+ * @param {string} requestId
+ * @param {string | null} optionId `null` cancels the request.
+ * @returns {Promise<void>}
+ */
+export function sessionRespondPermission(sessionId, requestId, optionId) {
+  return ipc.invoke('session_respond_permission', { sessionId, requestId, optionId });
+}
+
+/**
+ * Stops the session's agent (its whole process tree).
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionStop(sessionId) {
+  return ipc.invoke('session_stop', { sessionId });
+}
+
+/**
+ * Sets the title a session is listed by (trimmed; an empty one is refused).
+ * @param {string} sessionId
+ * @param {string} title
+ * @returns {Promise<Session>} The session as it is then.
+ */
+export function sessionRename(sessionId, title) {
+  return ipc.invoke('session_rename', { sessionId, title });
+}
+
+/**
+ * Gives a renamed session back the title its agent gave it.
+ * @param {string} sessionId
+ * @returns {Promise<Session>} The session as it is then.
+ */
+export function sessionResetTitle(sessionId) {
+  return ipc.invoke('session_reset_title', { sessionId });
+}
+
+/**
+ * Removes a session for good: stops its agent and deletes its conversation and log. The project's
+ * files stay as they are.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionRemove(sessionId) {
+  return ipc.invoke('session_remove', { sessionId });
+}
+
+/**
+ * Stops and starts the agent again, continuing its ACP session where the agent supports it.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionRestart(sessionId) {
+  return ipc.invoke('session_restart', { sessionId });
+}
+
+/**
+ * A draft whose CLI starts it: what `session_create` would get.
+ * @typedef {Object} CliDraft
+ * @property {string} projectPath
+ * @property {string} agentId
+ * @property {string} title
+ * @property {Record<string, string>} [config]
+ * @property {string | null} workspaceId `null`: Main.
+ * @property {string} [prompt] Its first message, which the CLI starts with.
+ */
+
+/**
+ * Runs a session's agent CLI in a terminal (its Terminal view), continuing it by its ACP id; refused
+ * while its ACP agent runs, or while another window's CLI holds it. With `draft`, the CLI starts a new
+ * session under `sessionId` (a UUID).
+ * @param {string} sessionId
+ * @param {number} cols
+ * @param {number} rows
+ * @param {CliDraft} [draft]
+ * @returns {Promise<{ terminalId: string }>}
+ */
+export function sessionOpenCli(sessionId, cols, rows, draft) {
+  return ipc.invoke('session_open_cli', draft ? { sessionId, cols, rows, draft } : { sessionId, cols, rows });
+}
+
+/**
+ * Closes a session's CLI; resolves once its process is gone.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionCloseCli(sessionId) {
+  return ipc.invoke('session_close_cli', { sessionId });
+}
+
+/**
+ * @param {string} sessionId
+ * @returns {Promise<boolean>} Its CLI is working: a tool runs in it, or it reported activity just now.
+ */
+export function sessionCliBusy(sessionId) {
+  return ipc.invoke('session_cli_busy', { sessionId });
+}
+
+/**
+ * Starts a stopped session's agent, continuing its ACP session where the agent supports it.
+ * @param {string} sessionId
+ * @returns {Promise<boolean>} `false` when it stays stopped: the project has its worktree's
+ *   branch checked out.
+ */
+export function sessionResume(sessionId) {
+  return ipc.invoke('session_resume', { sessionId });
+}
+
+/**
+ * Sets the agent's model, thought level or mode; the options as they are then arrive as a
+ * `config-options` session event. Rejects when the agent isn't running or refuses the value.
+ * @param {string} sessionId
+ * @param {string} configId
+ * @param {string} value
+ * @returns {Promise<void>}
+ */
+export function sessionSetConfigOption(sessionId, configId, value) {
+  return ipc.invoke('session_set_config_option', { sessionId, configId, value });
+}
+
+/**
+ * Opens the agent's stderr log in the OS's viewer.
+ * @param {string} sessionId
+ * @returns {Promise<void>}
+ */
+export function sessionOpenLog(sessionId) {
+  return ipc.invoke('session_open_log', { sessionId });
+}
+
+/**
+ * Saves a file attached in the composer into `folder`'s attachments (`.brama/attachments/`, which
+ * git ignores), where the agent reads it by its path.
+ * @param {string} folder A folder of an open project or a session's.
+ * @param {File} file
+ * @returns {Promise<string>} Its absolute path.
+ */
+export async function saveAttachment(folder, file) {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return ipc.invoke('save_attachment', bytes, { headers: { folder: encodeURIComponent(folder), name: encodeURIComponent(file.name) } });
+}

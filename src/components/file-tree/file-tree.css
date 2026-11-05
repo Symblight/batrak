@@ -1,0 +1,57 @@
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  height: 100%;
+  background: var(--acp-column-background);
+}
+.acp-file-tree__tree {
+  flex: 1;
+  min-height: 0;
+  --tvx-tree-view-color-on-surface: var(--acp-color-on-surface);
+  --tvx-tree-view-color-on-surface-variant: var(--acp-color-on-surface-variant);
+  --tvx-tree-view-color-outline-variant: var(--acp-color-outline-variant);
+  --tvx-tree-view-color-primary: var(--acp-color-primary);
+
+  &[hidden] {
+    display: none;
+  }
+}
+.acp-file-tree__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: var(--acp-space-4);
+  font-size: var(--acp-font-size-sm);
+  text-align: center;
+  color: var(--acp-color-on-surface-variant);
+}
+/* Menu density comes from src/styles/shadow.css. */
+.acp-file-tree__menu-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+.acp-file-tree__skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+  padding: var(--acp-space-2) var(--acp-space-3);
+}
+.acp-file-tree__skeleton-row {
+  block-size: 12px;
+  inline-size: 70%;
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: color-mix(in srgb, var(--acp-color-on-surface) 8%, transparent);
+
+  &:nth-child(2n) {
+    inline-size: 55%;
+    margin-inline-start: var(--acp-space-4);
+  }
+  &:nth-child(3n) {
+    inline-size: 40%;
+    margin-inline-start: var(--acp-space-4);
+  }
+}

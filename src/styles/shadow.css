@@ -1,0 +1,145 @@
+/*
+ * The first stylesheet of every shadow root in the app, ours and the libraries' alike
+ * (`shadow-styles.js`): what must look the same everywhere. A component's own styles come after
+ * it and may refine it.
+ *
+ * Tag selectors on purpose: these reach elements inside third-party shadow roots (the menu in
+ * `md-select`, `chx-command-picker`'s), where no class of ours can. An outer-tree rule also beats
+ * the element's own `:host` defaults, which inherited custom properties don't.
+ */
+
+/* Thin scrollbars, colored like dividers. */
+:host,
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--acp-color-outline-variant) transparent;
+}
+
+/* Every menu, context menu and select: compact rows, the library's type sizes. */
+md-menu {
+  --md-menu-min-width: 11rem;
+  --md-menu-shape: var(--md-sys-shape-corner-medium, 0.75rem);
+  --md-menu-selected-container-color: var(--acp-color-tertiary-container);
+  --md-menu-selected-label-color: var(--acp-color-on-tertiary-container);
+}
+/* On the group itself: its `:host` sets the line height, so one inherited from the menu never lands. */
+md-menu-group,
+md-option-group {
+  --md-menu-group-label-line-height: 1.25rem;
+}
+/* The label's block padding is fixed inside the group's shadow root (no property); a `:host()` rule
+   outranks the library's own class. `md-option-group` extends `md-menu-group`, same template. */
+:host(md-menu-group) .md-menu-group__label,
+:host(md-option-group) .md-menu-group__label {
+  padding-block: 0.25rem 0.125rem;
+}
+md-menu-item,
+md-option {
+  --md-menu-item-min-block-size: 2rem;
+  --md-menu-item-padding-block: 0.25rem;
+  --md-menu-item-padding-inline: 0.625rem;
+  --md-menu-item-supporting-text-line-height: 1rem;
+  --md-menu-item-label-text-weight: 400;
+
+  margin-inline: 0.25rem;
+}
+
+/* Every snackbar: a 3.4rem minimum height (the library's is 3rem). The library fixes its padding, its minimum
+   height and the close button's size inside its shadow root, where only a rule of this specificity reaches them. */
+:host(md-snackbar) .md-snackbar {
+  min-block-size: 3.4rem;
+  padding-block: 0.25rem;
+  padding-inline: 0.75rem 0.25rem;
+}
+:host(md-snackbar) .md-snackbar__close {
+  margin-block: 0;
+  --md-icon-button-font-size: 1rem;
+}
+:host(md-snackbar) .md-snackbar__close::part(button) {
+  padding: 0.25rem;
+}
+
+/* The agent's replies read as a document across the list's full width, not a bubble; your own
+   messages keep theirs. */
+chx-message {
+  --chx-message-background-color: transparent;
+}
+chx-message:not([own]) {
+  --chx-message-max-width: none;
+  --chx-message-padding: var(--acp-space-1) 0;
+
+  align-self: stretch;
+}
+
+/* A readable line length in a wide chat, centered in the list's row (a flex column). `<acp-chat>`
+   resolves the width; it reaches here inherited through the chat's shadow roots. */
+chx-message-row {
+  box-sizing: border-box;
+  align-self: center;
+  width: 100%;
+  max-width: var(--_acp-chat-messages-max-width, none);
+}
+
+/* A reply's parts rise in as they stream in. Only while the row is busy, so history and rows
+   scrolled back into view appear still; opacity and transform only, so row heights don't move. */
+@scope (chx-message-row[aria-busy='true']) {
+  :scope > chx-message > * {
+    animation: acp-part-enter 500ms cubic-bezier(0.05, 0.7, 0.1, 1) backwards;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+}
+@keyframes acp-part-enter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* Every dialog: one frame and one control size (the scale is in tokens.css). A dialog sets only
+   its content; `wide` dialogs (lists of launches, About's paths) take the wide width. */
+md-dialog {
+  --md-dialog-container-color: var(--acp-color-surface-container-high);
+  --md-dialog-container-radius: var(--acp-dialog-shape);
+
+  color: var(--acp-color-on-surface);
+  font-family: var(--acp-font-family);
+}
+md-dialog::part(dialog) {
+  width: min(var(--acp-dialog-width), calc(100vw - 32px));
+}
+md-dialog[wide]::part(dialog) {
+  width: min(var(--acp-dialog-width-wide), calc(100vw - 32px));
+  max-inline-size: none;
+}
+md-dialog md-button {
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-regular);
+  --md-button-block-end-space: var(--acp-button-block-space-regular);
+}
+
+/* Every text field and select (md-select's own field is an md-text-field in its shadow root): one
+   dense outlined field, 36px. A component sets only what differs (a mono font, an inline rename's
+   tighter box). */
+md-text-field {
+  --md-text-field-top-space: 8px;
+  --md-text-field-bottom-space: 8px;
+  --md-text-field-inline-start-space: var(--acp-space-4);
+  --md-text-field-inline-end-space: var(--acp-space-4);
+  --md-text-field-font-size: var(--acp-font-size-lg);
+  --md-text-field-label-size: var(--acp-font-size-lg);
+  --md-text-field-line-height: 20px;
+  --md-text-field-letter-spacing: normal;
+  --md-text-field-foreground-color: var(--acp-color-on-surface);
+  --md-text-field-border-color: var(--acp-color-outline);
+  --md-text-field-primary-color: var(--acp-color-primary);
+  --md-outlined-text-field-shape: var(--acp-shape-corner-extra-small);
+
+  caret-color: var(--acp-color-primary);
+}
+/* The library's focused outline is 3px; MD3 asks for 2px. */
+md-text-field:focus-within::part(indicator) {
+  border-width: 2px;
+}

@@ -1,0 +1,9 @@
+:host {
+  display: inline;
+}
+
+.acp-marked-text__mark {
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--acp-color-primary) 22%, transparent);
+  color: inherit;
+}

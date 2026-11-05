@@ -1,0 +1,82 @@
+:host {
+  display: inline-flex;
+  flex: none;
+}
+/* MD3 compact text button: 24px, 8px radius, 12px label, 16px icon. */
+.acp-pull-request-chip__button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  box-sizing: border-box;
+  height: 24px;
+  padding-inline: var(--acp-space-1-5) var(--acp-space-2);
+  border: 0;
+  border-radius: var(--acp-shape-corner-small);
+  background: transparent;
+  color: var(--acp-color-on-surface);
+  font-family: inherit;
+  font-size: var(--acp-font-size-xs);
+  font-weight: var(--acp-font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover:not(:disabled) {
+    background-image: linear-gradient(var(--acp-state-hover), var(--acp-state-hover));
+  }
+  &:disabled {
+    cursor: default;
+    color: var(--acp-state-disabled);
+  }
+  /* No access isn't a button. */
+  &:is(span) {
+    cursor: default;
+    box-shadow: inset 0 0 0 1px var(--acp-color-outline-variant);
+    color: var(--acp-color-on-surface-variant);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 1px;
+  }
+}
+.acp-pull-request-chip__icon {
+  font-size: var(--acp-icon-size-sm);
+}
+.acp-pull-request-chip__button_create {
+  color: var(--acp-color-primary);
+}
+.acp-pull-request-chip__button_draft {
+  box-shadow: inset 0 0 0 1px var(--acp-color-outline-variant);
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-pull-request-chip__button_open {
+  background-color: var(--acp-color-ok-container);
+  color: var(--acp-color-on-ok-container);
+}
+.acp-pull-request-chip__button_merged {
+  background-color: var(--acp-color-tertiary-container);
+  color: var(--acp-color-on-tertiary-container);
+}
+.acp-pull-request-chip__button_closed {
+  background-color: var(--acp-color-error-container);
+  color: var(--acp-color-on-error-container);
+}
+/* The last answer while GitHub can't be reached. */
+.acp-pull-request-chip__button_stale {
+  opacity: 0.6;
+}
+.acp-pull-request-chip__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--acp-shape-corner-full);
+  flex: none;
+
+  &[data-checks='ok'] {
+    background: var(--acp-color-ok);
+  }
+  &[data-checks='fail'] {
+    background: var(--acp-color-error);
+  }
+  &[data-checks='run'] {
+    background: var(--acp-notice-warn);
+  }
+}

@@ -1,0 +1,43 @@
+:host {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-search-panel__fields {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+  padding-inline: var(--acp-space-3);
+}
+
+/* The app's dense field (shadow.css), with a placeholder instead of a floating label. */
+.acp-search-panel__field_query {
+  --md-text-field-font-family: var(--acp-font-family-mono);
+  --md-text-field-font-size: var(--acp-font-size-md);
+  --md-text-field-inline-end-space: 0;
+  --md-text-field-trailing-space: 4px;
+}
+.acp-search-panel__field::part(input)::placeholder {
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-search-panel__summary {
+  padding: var(--acp-space-3) var(--acp-space-4) var(--acp-space-1-5);
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 16px;
+  letter-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+.acp-search-panel__summary_error {
+  color: var(--acp-color-error);
+}
+
+.acp-search-panel__results {
+  flex: 1;
+}

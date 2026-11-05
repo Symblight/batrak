@@ -1,0 +1,8 @@
+:host {
+  display: block;
+}
+
+.acp-NAME__label {
+  font-size: var(--acp-font-size-sm);
+  color: var(--acp-color-on-surface-variant);
+}

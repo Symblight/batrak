@@ -1,0 +1,28 @@
+:host {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-0-5);
+}
+
+.acp-search-header__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--acp-font-size-lg);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 20px;
+}
+/* 28px icon buttons: 18px icon + 4px padding + the library's 1px border. */
+.acp-search-header__button {
+  --md-icon-button-font-size: var(--acp-icon-size-md);
+
+  &[selected] {
+    --md-icon-button-background-color: var(--acp-color-secondary-container);
+    --md-icon-button-foreground-color: var(--acp-color-on-secondary-container);
+  }
+}
+.acp-search-header__button::part(button) {
+  padding: 4px;
+}
+.acp-search-header__icon {
+  font-size: var(--acp-icon-size-md);
+}

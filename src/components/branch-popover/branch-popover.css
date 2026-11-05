@@ -1,0 +1,140 @@
+:host {
+  display: inline-flex;
+  flex: none;
+  min-width: 0;
+}
+.acp-branch-popover__icon {
+  flex: none;
+  font-size: var(--acp-icon-size-md);
+}
+.acp-branch-popover__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  box-sizing: border-box;
+  max-width: 220px;
+  height: 32px;
+  padding-inline: var(--acp-space-2);
+  border: 0;
+  border-radius: var(--acp-shape-corner-small);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+
+  &:hover {
+    background-image: linear-gradient(var(--acp-state-hover), var(--acp-state-hover));
+  }
+  &:focus-visible {
+    outline: 2px solid;
+    outline-offset: 1px;
+  }
+}
+.acp-branch-popover__chevron {
+  transition: transform 150ms ease;
+}
+.acp-branch-popover__chevron_open {
+  transform: rotate(180deg);
+}
+.acp-branch-popover__trigger-name {
+  overflow: hidden;
+  font-family: var(--acp-font-family-mono);
+  font-size: var(--acp-font-size-sm);
+  font-weight: var(--acp-font-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An auto popover in the top layer; FloatingController writes `left` / `top`. A block, its rows a
+   grid inside: a grid popover takes its full height in WebKit and stretches the rows over it. */
+.acp-branch-popover__popover {
+  position: fixed;
+  inset: auto;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  width: 380px;
+  max-width: calc(100vw - 16px);
+  margin: 0;
+  padding: var(--acp-space-2) var(--acp-space-3);
+  border: 0;
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container-high);
+  box-shadow: var(--acp-elevation-2);
+  color: var(--acp-color-on-surface);
+  font-size: var(--acp-font-size-md);
+}
+.acp-branch-popover__rows {
+  display: grid;
+  grid-template-columns: 96px minmax(0, 1fr) 32px;
+  align-content: start;
+  align-items: center;
+  gap: var(--acp-space-1) var(--acp-space-2);
+}
+/* Opens and closes like `md-menu`: fades in while growing down from its top edge. */
+@media (prefers-reduced-motion: no-preference) {
+  .acp-branch-popover__popover {
+    transform-origin: top;
+    transition:
+      opacity 150ms ease,
+      transform 200ms cubic-bezier(0.2, 0, 0, 1),
+      display 200ms allow-discrete,
+      overlay 200ms allow-discrete;
+
+    &:not(:popover-open) {
+      opacity: 0;
+      transform: scaleY(0.85);
+    }
+    @starting-style {
+      &:popover-open {
+        opacity: 0;
+        transform: scaleY(0.85);
+      }
+    }
+  }
+}
+.acp-branch-popover__label {
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
+.acp-branch-popover__value {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  min-height: 32px;
+  overflow: hidden;
+  font-size: var(--acp-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acp-branch-popover__value_mono {
+  display: block;
+  line-height: 32px;
+  font-family: var(--acp-font-family-mono);
+  font-weight: var(--acp-font-weight-medium);
+}
+.acp-branch-popover__action {
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+}
+.acp-branch-popover__action::part(button) {
+  padding: 5px;
+}
+.acp-branch-popover__action-icon {
+  font-size: var(--acp-icon-size-md);
+}
+.acp-branch-popover__pr_open,
+.acp-branch-popover__checks_ok {
+  color: var(--acp-color-ok);
+}
+.acp-branch-popover__pr_merged {
+  color: var(--acp-color-tertiary);
+}
+.acp-branch-popover__pr_draft,
+.acp-branch-popover__pr_closed {
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-branch-popover__checks_fail {
+  color: var(--acp-color-error);
+}
+.acp-branch-popover__checks_run {
+  color: var(--acp-notice-warn);
+}

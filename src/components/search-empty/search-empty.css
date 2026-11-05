@@ -1,0 +1,25 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--acp-space-1);
+  text-align: center;
+}
+
+.acp-search-empty__icon {
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-icon-size-lg);
+}
+.acp-search-empty__title {
+  margin: 0;
+  color: var(--acp-color-on-surface);
+  font-weight: var(--acp-font-weight-medium);
+}
+.acp-search-empty__text {
+  margin: 0;
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
+.acp-search-empty__code {
+  font-family: var(--acp-font-family-mono);
+}

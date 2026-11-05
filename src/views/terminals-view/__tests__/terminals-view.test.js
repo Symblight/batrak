@@ -1,0 +1,145 @@
+import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { expect, fixture, html } from '../../../../test/fixture.js';
+import { $folderTerminalPanels, $folderTerminalTabs, $terminalFocus, $terminalPanel, $terminalTabs, $terminals, focusTerminal, forgetTerminal, moveTerminalToEditor, openTerminal } from '../../../stores/terminals/terminals.js';
+import { $project } from '../../../stores/project/project.js';
+import { tabs } from '../../../hooks/tabs/tabs.js';
+import { closeAllTabs } from '../../../stores/editor/editor.js';
+import '../../main-column/main-column.js';
+import '../terminals-view.js';
+
+/** @typedef {import('../terminals-view.js').AcpTerminalsView} AcpTerminalsView */
+
+/** @param {() => boolean} done */
+async function until(done) {
+  for (let i = 0; i < 150 && !done(); i++) await new Promise((resolve) => setTimeout(resolve, 10));
+  expect(done()).to.equal(true);
+}
+
+describe('acp-terminals-view', () => {
+  beforeEach(() => {
+    mockIPC((cmd) => (cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : null));
+    $project.set({ path: '/p', name: 'p', rootId: null });
+  });
+
+  afterEach(() => {
+    for (const id of Object.keys($terminals.get())) forgetTerminal(id);
+    $folderTerminalTabs.set({});
+    $folderTerminalPanels.set({});
+    $terminalFocus.set(null);
+    $project.set(null);
+    clearMocks();
+  });
+
+  /** @returns {Promise<AcpTerminalsView>} */
+  async function render() {
+    return /** @type {AcpTerminalsView} */ (await fixture(html`<acp-terminals-view></acp-terminals-view>`));
+  }
+
+  const tabView = (/** @type {AcpTerminalsView} */ el) => /** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view:not([hidden])'));
+  /** The terminal views the tab view mounted, in tab order. */
+  const views = (/** @type {AcpTerminalsView} */ el) => [...(tabView(el).shadowRoot?.querySelectorAll('acp-terminal-view') ?? [])];
+  const mounted = (/** @type {AcpTerminalsView} */ el) => views(el).map((v) => v.getAttribute('terminal-id'));
+
+  it('shows the shown project’s terminals, every one mounted and the active one in front, and keeps the others mounted behind it', async () => {
+    // Arrange
+    const a = openTerminal('/p', '/p', 'a');
+    const b = openTerminal('/p', '/p', 'b');
+    const el = await render();
+
+    // Assert
+    expect(mounted(el)).to.deep.equal([a, b]);
+    expect(tabView(el).active).to.equal(tabs.terminalId(b));
+    expect(tabView(el).tabs.map((t) => t.kind)).to.deep.equal(['terminal', 'terminal']);
+
+    const [viewA] = views(el);
+
+    // Act: another project, with a terminal of its own, then back
+    $project.set({ path: '/q', name: 'q', rootId: null });
+    const c = openTerminal('/q', '/q', 'c');
+    await el.updateComplete;
+    const other = mounted(el);
+    $project.set({ path: '/p', name: 'p', rootId: null });
+    await el.updateComplete;
+
+    // Assert
+    expect(other).to.deep.equal([c]);
+    expect(mounted(el), 'as it was').to.deep.equal([a, b]);
+    expect(views(el)[0] === viewA, 'the same terminal, its scrollback with it').to.equal(true);
+    expect(tabView(el).active).to.equal(tabs.terminalId(b));
+  });
+
+  it('hands its tab view a dialog of its own to ask in', async () => {
+    // Arrange + Act
+    const el = await render();
+
+    // Assert
+    const dialog = el.querySelector('acp-confirm-dialog');
+    expect(dialog).to.exist;
+    expect(/** @type {HTMLElementTagNameMap['acp-tab-view']} */ (el.querySelector('acp-tab-view')).confirmDialog()).to.equal(dialog);
+  });
+
+  it('adds a terminal with + and hides the panel with −, which keeps its terminals', async () => {
+    // Arrange
+    const first = openTerminal('/p', '/p', 'a');
+    const el = await render();
+    const [add, hide] = /** @type {HTMLElement[]} */ ([...el.querySelectorAll('acp-terminal-action')]);
+
+    // Act
+    add.dispatchEvent(new CustomEvent('acp-terminal-new', { bubbles: true, composed: true }));
+    await until(() => $terminalTabs.get().paths.length === 2);
+    hide.dispatchEvent(new CustomEvent('acp-terminal-hide', { bubbles: true, composed: true }));
+    await el.updateComplete;
+
+    // Assert
+    expect($terminalPanel.get().open).to.equal(false);
+    expect($terminalTabs.get().paths[0]).to.equal(tabs.terminalId(first));
+    expect(mounted(el), 'still mounted').to.have.length(2);
+  });
+
+  it('turns the strip’s events into the terminal group’s actions: activate, reorder, pin and close', async () => {
+    // Arrange
+    const [a, b, c] = ['a', 'b', 'c'].map((label) => openTerminal('/p', '/p', label));
+    const [ta, tb, tc] = [a, b, c].map(tabs.terminalId);
+    const el = await render();
+    const send = (/** @type {string} */ type, /** @type {object} */ detail) => tabView(el).dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+
+    // Act + Assert
+    send('acp-tab-activate', { id: ta });
+    expect($terminalTabs.get().active).to.equal(ta);
+    expect($terminalFocus.get(), 'a tab clicked takes the keyboard').to.deep.equal({ terminalId: a });
+    send('acp-tab-move', { id: ta, index: 2 });
+    expect($terminalTabs.get().paths).to.deep.equal([tb, tc, ta]);
+    send('acp-tab-pin', { id: tc, pinned: true });
+    expect($terminalTabs.get().pinned).to.deep.equal([tc]);
+    send('acp-tab-close', { id: tb, scope: 'tab' });
+    expect($terminalTabs.get().paths).to.deep.equal([tc, ta]);
+    send('acp-tab-close', { id: ta, scope: 'others' });
+    expect($terminalTabs.get().paths, 'the pinned stay').to.deep.equal([tc, ta]);
+    send('acp-tab-close', { id: tc, scope: 'all' });
+    expect($terminalTabs.get().paths).to.deep.equal([tc]);
+  });
+
+  it('keeps a terminal’s shell stream when its tab moves to the editor, attaching and replaying nothing again', async () => {
+    // Arrange
+    /** @type {string[]} */
+    const commands = [];
+    mockIPC((cmd) => {
+      commands.push(cmd);
+      return cmd === 'terminal_open' ? { shell: 'zsh', cwd: '/p' } : null;
+    });
+    const id = openTerminal('/p', '/p', 'a');
+    const host = await fixture(html`<div style="display: flex; flex-direction: column; width: 800px; height: 600px">
+      <div style="height: 300px; display: flex"><acp-terminals-view></acp-terminals-view></div>
+      <div style="height: 300px; display: flex"><acp-main-column></acp-main-column></div>
+    </div>`);
+    await until(() => commands.includes('terminal_attach'));
+    // Act
+    moveTerminalToEditor(id, 0);
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Assert
+    const main = /** @type {HTMLElement} */ (host.querySelector('acp-main-column')?.querySelector('acp-tab-view'));
+    expect(main.shadowRoot?.querySelector('acp-terminal')?.shadowRoot?.querySelector('.xterm'), 'its screen, in the editor').to.not.equal(null);
+    expect(commands.filter((c) => c === 'terminal_attach')).to.have.length(1);
+    closeAllTabs();
+  });
+});

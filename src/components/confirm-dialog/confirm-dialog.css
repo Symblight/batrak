@@ -1,0 +1,45 @@
+:host {
+  display: contents;
+}
+
+/* The frame, width and buttons are every dialog's (src/styles/shadow.css). */
+.acp-confirm-dialog__dialog_top::part(dialog) {
+  /* md-dialog centers with `margin: auto` over `inset: 0`; a fixed top margin pins it up. */
+  margin-block-start: var(--acp-space-4);
+}
+
+.acp-confirm-dialog__headline {
+  margin: 0;
+  font: var(--acp-dialog-headline-font);
+  color: var(--acp-color-on-surface);
+}
+
+.acp-confirm-dialog__content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+  min-width: 0;
+}
+.acp-confirm-dialog__message {
+  margin: 0;
+  font: var(--acp-dialog-text-font);
+  color: var(--acp-color-on-surface);
+  overflow-wrap: anywhere;
+}
+.acp-confirm-dialog__detail {
+  margin: 0;
+  font: var(--acp-dialog-detail-font);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-confirm-dialog__footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--acp-space-2);
+  width: 100%;
+  padding-block-start: var(--acp-dialog-footer-space);
+}
+.acp-confirm-dialog__action_destructive {
+  --md-button-background-color: var(--acp-color-error);
+  --md-button-foreground-color: var(--acp-color-on-error);
+}

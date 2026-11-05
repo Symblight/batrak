@@ -1,0 +1,31 @@
+:host {
+  display: inline-flex;
+}
+
+:host(:not([indicator])) {
+  display: none;
+}
+
+.acp-session-status__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.acp-session-status__icon_permission {
+  color: var(--acp-color-tertiary);
+}
+
+.acp-session-status__icon_error {
+  color: var(--acp-color-error);
+}
+
+.acp-session-status__glyph {
+  font-size: var(--acp-icon-size-md);
+}
+
+.acp-session-status__spinner {
+  font-size: var(--acp-session-status-spinner-size, var(--acp-icon-size-sm));
+}

@@ -1,0 +1,264 @@
+:host {
+  display: block;
+  box-sizing: border-box;
+  min-height: 0;
+  width: 100%;
+  overflow-y: auto;
+  background: var(--acp-color-surface-container-lowest);
+  color: var(--acp-color-on-surface);
+  container: acp-agents-view / inline-size;
+  padding: var(--acp-tab-view-padding, 0);
+}
+
+.acp-agents-view__page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-2);
+  box-sizing: border-box;
+  max-width: 640px;
+  margin-inline: auto;
+  padding: var(--acp-space-4) var(--acp-space-4) var(--acp-space-4);
+}
+
+.acp-agents-view__header {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+
+  @container acp-agents-view (width < 420px) {
+    flex-wrap: wrap;
+  }
+}
+
+.acp-agents-view__title-text {
+  flex: 1;
+  margin: 0;
+  font: 400 24px/32px var(--acp-font-family);
+}
+
+.acp-agents-view__problem {
+  margin: 0;
+  padding: var(--acp-space-2) var(--acp-space-3);
+  border-radius: var(--acp-shape-corner-small);
+  background: var(--acp-color-error-container);
+  color: var(--acp-color-on-error-container);
+  font: 400 12px/16px var(--acp-font-family-mono);
+  overflow-wrap: anywhere;
+}
+
+/* A compact search bar: full corners, the app's type and icon sizes. */
+.acp-agents-view__search {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  height: 36px;
+  box-sizing: border-box;
+  padding-inline: var(--acp-space-3) var(--acp-space-0-5);
+  border-radius: var(--acp-shape-corner-full);
+  background: var(--acp-color-surface-container-high);
+
+  &:focus-within {
+    outline: 2px solid var(--acp-color-primary);
+    outline-offset: -2px;
+  }
+}
+
+.acp-agents-view__search-icon {
+  flex: none;
+  font-size: var(--acp-icon-size-md);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-agents-view__search-input {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: none;
+  color: var(--acp-color-on-surface);
+  font: 400 var(--acp-font-size-lg) / 20px var(--acp-font-family);
+  caret-color: var(--acp-color-primary);
+
+  &::placeholder {
+    color: var(--acp-color-on-surface-variant);
+  }
+  &::-webkit-search-cancel-button {
+    appearance: none;
+  }
+}
+
+.acp-agents-view__clear {
+  flex: none;
+}
+
+.acp-agents-view__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--acp-space-1-5);
+}
+
+/* Compact: the library's chip is 32px with 16px sides; its padding has no property, so `::part`. */
+.acp-agents-view__chip {
+  --md-chip-height: 1.5rem;
+  --md-chip-border-radius: var(--acp-shape-corner-small);
+  --md-chip-label-text-size: var(--acp-font-size-sm);
+  --md-chip-label-text-line-height: 1rem;
+
+  &::part(chip) {
+    padding-inline: var(--acp-space-2);
+  }
+}
+
+.acp-agents-view__count {
+  /* The chip's label is a flex row, which drops the space before it. */
+  margin-inline-start: var(--acp-space-1);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-agents-view__group {
+  display: flex;
+  flex-direction: column;
+  padding: var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-medium);
+  background: var(--acp-color-surface-container-low);
+}
+
+.acp-agents-view__group-header {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
+  padding-inline: var(--acp-space-2);
+}
+
+.acp-agents-view__group-title {
+  flex: 1;
+  margin: 0;
+  font: var(--acp-font-weight-medium) var(--acp-font-size-md)/18px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-agents-view__list {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.acp-agents-view__row {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  min-height: 44px;
+  box-sizing: border-box;
+  padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-1) var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-small);
+
+  &:hover {
+    background: var(--acp-state-hover);
+  }
+}
+
+.acp-agents-view__edit {
+  padding: var(--acp-space-2) var(--acp-space-2) var(--acp-space-3);
+}
+
+.acp-agents-view__glyph {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: var(--acp-color-surface-container-highest);
+}
+
+.acp-agents-view__glyph-icon {
+  font-size: var(--acp-icon-size-sm);
+}
+
+.acp-agents-view__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.acp-agents-view__title {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+  min-width: 0;
+}
+
+.acp-agents-view__name {
+  overflow: hidden;
+  font: 400 var(--acp-font-size-lg)/20px var(--acp-font-family);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acp-agents-view__details {
+  overflow: hidden;
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acp-agents-view__error {
+  overflow: hidden;
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-error);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.acp-agents-view__button {
+  flex: none;
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+}
+
+.acp-agents-view__icon {
+  font-size: var(--acp-icon-size-md);
+}
+
+.acp-agents-view__note {
+  margin: 0;
+  padding: 0 var(--acp-space-2) var(--acp-space-1);
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-agents-view__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--acp-space-1);
+  padding-block: var(--acp-space-2);
+}
+
+.acp-agents-view__footer {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-1);
+  padding: var(--acp-space-2) var(--acp-space-2) 0;
+  font: 400 var(--acp-font-size-sm)/16px var(--acp-font-family);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-agents-view__footer-text {
+  margin: 0;
+}
+
+.acp-agents-view__footer-state {
+  display: flex;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+}
+
+
+.acp-agents-view__item {
+  margin-block: var(--acp-space-1);
+}

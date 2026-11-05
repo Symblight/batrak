@@ -1,0 +1,27 @@
+{
+  "version": 1,
+  "defaultAgent": "claude-code",
+  "agents": {
+    "github-copilot-cli": {
+      "name": "Copilot",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@github/copilot@1.0.105",
+        "--acp"
+      ]
+    },
+    "claude-code": {
+      "name": "Claude Code",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@agentclientprotocol/claude-agent-acp"
+      ]
+    },
+    "antigravity-acp": {
+      "name": "Google Antigravity",
+      "command": "agy_acp_server.par"
+    }
+  }
+}

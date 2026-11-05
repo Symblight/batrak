@@ -1,0 +1,30 @@
+import { USER_ID, acpAdapter, forgetHistory, handleSessionEvent } from './adapter.js';
+import { cliInput, cliPromptOf } from './cli-input.js';
+import { saveAttachment } from './commands.js';
+import { controller } from './controller.js';
+import { input } from './input.js';
+import { inputOfComposer } from './input-parts.js';
+import { promptOf } from './prompt.js';
+import * as rules from './rules.js';
+
+/**
+ * Agent sessions: showing, syncing, starting and removing them, what the user gives one (Chat or
+ * its CLI), how their events become chat messages, and the rules about them.
+ */
+export const sessions = Object.freeze({
+  ...rules,
+  ...controller,
+  ...input,
+  inputOfComposer,
+  cliInput,
+  cliPromptOf,
+
+  USER_ID,
+  /** The adapter `<chx-chat>` talks to: sends prompts and replays a session's messages. */
+  adapter: acpAdapter,
+  promptOf,
+  handleSessionEvent,
+  forgetHistory,
+
+  saveAttachment,
+});

@@ -1,0 +1,87 @@
+:host {
+  display: flex;
+  flex: var(--acp-pane-flex, 1);
+  flex-direction: column;
+  width: var(--acp-pane-width, auto);
+  min-width: var(--acp-pane-min-width, 0);
+  max-width: var(--acp-pane-max-width, none);
+  height: var(--acp-pane-height, auto);
+  min-height: var(--acp-pane-min-height, 0);
+  max-height: var(--acp-pane-max-height, none);
+}
+
+:host([hidden]) {
+  display: none;
+}
+
+/* Custom properties inherit: without this, a pane nested in this one takes this one's size and limits. */
+.acp-pane__content {
+  --acp-pane-flex: initial;
+  --acp-pane-width: initial;
+  --acp-pane-min-width: initial;
+  --acp-pane-max-width: initial;
+  --acp-pane-height: initial;
+  --acp-pane-min-height: initial;
+  --acp-pane-max-height: initial;
+}
+
+/* Showing or hiding a pane with an edge: it grows from, or collapses to, nothing, its gap with it,
+   so the panes beside it slide instead of jumping. Shown by an animation (to the inline width, from
+   nothing) and hidden by a transition that only the hidden state declares, so a drag or a window
+   resize, which change the inline width, stay instant. */
+:host([edge='end']) {
+  animation: acp-pane-in-end var(--acp-column-toggle-duration) var(--acp-motion-easing-standard);
+}
+
+:host([edge='start']) {
+  animation: acp-pane-in-start var(--acp-column-toggle-duration) var(--acp-motion-easing-standard);
+}
+
+:host([edge][hidden]) {
+  flex-basis: 0;
+  width: 0;
+  min-width: 0;
+  opacity: 0;
+  transition-property: display, flex-basis, width, min-width, margin-inline-start, margin-inline-end, opacity;
+  transition-duration: var(--acp-column-toggle-duration);
+  transition-timing-function: var(--acp-motion-easing-standard);
+  transition-behavior: allow-discrete;
+}
+
+:host([edge='end'][hidden]) {
+  margin-inline-end: calc(-1 * var(--acp-column-gap));
+}
+
+:host([edge='start'][hidden]) {
+  margin-inline-start: calc(-1 * var(--acp-column-gap));
+}
+
+@keyframes acp-pane-in-end {
+  from {
+    flex-basis: 0;
+    width: 0;
+    min-width: 0;
+    margin-inline-end: calc(-1 * var(--acp-column-gap));
+    opacity: 0;
+  }
+}
+
+@keyframes acp-pane-in-start {
+  from {
+    flex-basis: 0;
+    width: 0;
+    min-width: 0;
+    margin-inline-start: calc(-1 * var(--acp-column-gap));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :host([edge]) {
+    animation: none;
+  }
+
+  :host([edge][hidden]) {
+    transition: none;
+  }
+}

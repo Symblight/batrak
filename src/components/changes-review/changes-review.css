@@ -1,0 +1,140 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  min-height: 0;
+  background: var(--acp-column-background);
+  color: var(--acp-color-on-surface);
+  padding: var(--acp-tab-view-padding, 0);
+}
+
+/* Toolbar: collapse all, all-files checkbox, summary, totals; view, navigation, revert, review */
+.acp-changes-review__toolbar {
+  flex: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+  min-height: 48px;
+  box-sizing: border-box;
+  padding: 10px var(--acp-space-3) var(--acp-space-1-5) var(--acp-space-2);
+}
+
+.acp-changes-review__tool {
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+
+.acp-changes-review__tool::part(button) {
+  padding: 5px;
+}
+
+.acp-changes-review__tool-icon {
+  font-size: var(--acp-icon-size-lg);
+}
+
+.acp-changes-review__session-action {
+  flex: none;
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+}
+
+.acp-changes-review__all {
+  flex: none;
+}
+
+.acp-changes-review__summary {
+  font-size: var(--acp-font-size-md);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+.acp-changes-review__spacer {
+  flex: 1;
+}
+
+/* Files */
+.acp-changes-review__list {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-0-5);
+  overflow: auto;
+  /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
+  padding: 0 var(--acp-space-2) 72px;
+}
+
+/* Expanded file: header row and diff in an outlined card, on the column's surface */
+.acp-changes-review__card {
+  flex: none;
+  margin-block: var(--acp-space-1);
+  border: 1px solid var(--acp-color-outline-variant);
+  border-radius: 12px;
+  background: var(--acp-column-background);
+}
+
+.acp-changes-review__diff {
+  border-top: 1px solid var(--acp-color-outline-variant);
+  border-radius: 0 0 11px 11px;
+  overflow: hidden;
+}
+
+.acp-changes-review__editor {
+  --cdx-content-border-radius: 0;
+  --cdx-content-min-height: 0;
+  --cdx-content-background-color: var(--acp-column-background);
+  /* Room for the diff sign (+ / −), drawn 2px into this padding, plus a gap before the code */
+  --cdx-line-padding-inline: 0.875rem;
+}
+
+.acp-changes-review__editor::part(chunk-action-accept),
+.acp-changes-review__editor::part(chunk-action-reject) {
+  display: none;
+}
+
+.acp-changes-review__diff-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 64px;
+  padding: var(--acp-space-3);
+  font-size: var(--acp-font-size-sm);
+  color: var(--acp-color-on-surface-variant);
+}
+
+/* Loading, empty, not a repository, error */
+.acp-changes-review__state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--acp-space-1);
+  padding: 24px;
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  text-align: center;
+  overflow-wrap: anywhere;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-changes-review__state-icon {
+  margin-bottom: var(--acp-space-1);
+  font-size: 28px;
+  color: var(--acp-vcs-add);
+}
+
+.acp-changes-review__state-title {
+  font-size: var(--acp-font-size-lg);
+  font-weight: var(--acp-font-weight-medium);
+  line-height: 20px;
+  color: var(--acp-color-on-surface);
+}
+
+.acp-changes-review__spinner {
+  font-size: 32px;
+}
+
