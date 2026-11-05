@@ -149,6 +149,22 @@ export function relativePath(from, to) {
 }
 
 /**
+ * An expanded file's diff from its two reads. A missing file against a baseline is a deletion, and a
+ * missing baseline a new file; a baseline with no text to diff, or a file with neither, says why.
+ * @param {Promise<string>} file The file now.
+ * @param {Promise<string | null>} base The file it's compared to; `null` when it wasn't there.
+ * @returns {Promise<import('../tabs/types.js').FileDiff>}
+ */
+export async function readDiff(file, base) {
+  const [content, baseline] = await Promise.allSettled([file, base]);
+  /** @param {unknown} reason */
+  const failed = (reason) => ({ content: '', baseline: '', error: String(reason), loading: false });
+  if (baseline.status === 'rejected') return failed(baseline.reason);
+  if (content.status === 'rejected' && baseline.value === null) return failed(content.reason);
+  return { content: content.status === 'fulfilled' ? content.value : '', baseline: baseline.value ?? '', error: '', loading: false };
+}
+
+/**
  * Changed files as the Changes tab's rows, sorted by path.
  * @param {readonly GitFileStatus[]} files
  * @returns {ChangeRow[]}

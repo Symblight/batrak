@@ -31,8 +31,9 @@ pub async fn git_status(
     blocking(move || root.git.status(binary::git()?, &root.path, root.epoch(), since, force)).await?
 }
 
-/// Text of a file at HEAD, the editor's diff baseline; `null` when it has none (not committed,
-/// binary, too large, or not in a repository). `path` is relative to the root.
+/// Text of a file at HEAD, the editor's diff baseline; `null` when it has none (not committed, or
+/// not in a repository). Fails, saying why, when it has no text to diff (binary, too large).
+/// `path` is relative to the root.
 #[tauri::command]
 pub async fn git_file_at_head(
     roots: State<'_, Roots>,

@@ -60,6 +60,15 @@
 }
 
 /* Loading, empty, not a repository, error */
+.acp-changes-panel__operation {
+  flex: none;
+  padding: var(--acp-space-1) var(--acp-space-2);
+  border-bottom: 1px solid var(--acp-color-outline-variant);
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  color: var(--acp-color-on-surface-variant);
+}
+
 .acp-changes-panel__state {
   flex: 1;
   display: flex;

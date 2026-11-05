@@ -9,6 +9,21 @@ import { git } from '../git.js';
 const file = (path, fields = {}) => ({ path, origPath: null, kind: 'modified', staged: false, unstaged: true, added: null, removed: null, ...fields });
 
 describe('git changes', () => {
+  it('builds a diff from its two reads, or says why there is none', async () => {
+    const shown = (/** @type {string} */ content, /** @type {string} */ baseline, error = '') => ({ content, baseline, error, loading: false });
+    const failing = () => Promise.reject('a.bin: binary, no diff to show');
+    const table = [
+      ['edited', Promise.resolve('new'), Promise.resolve('old'), shown('new', 'old')],
+      ['new', Promise.resolve('new'), Promise.resolve(null), shown('new', '')],
+      ['deleted', failing(), Promise.resolve('old'), shown('', 'old')],
+      ['untracked binary', failing(), Promise.resolve(null), shown('', '', 'a.bin: binary, no diff to show')],
+      ['committed binary', Promise.resolve('text'), failing(), shown('', '', 'a.bin: binary, no diff to show')],
+    ];
+    for (const [name, file, base, expected] of table) {
+      expect(await git.readDiff(/** @type {Promise<string>} */ (file), /** @type {Promise<string | null>} */ (base)), String(name)).to.deep.equal(expected);
+    }
+  });
+
   it('words the uncommitted files hint for one file and for several', () => {
     const cases = [
       [1, { label: 'Review 1 uncommitted file', value: 'Review the uncommitted file' }],

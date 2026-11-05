@@ -115,8 +115,9 @@ fn apply(root: &Root, events: &[notify_debouncer_full::DebouncedEvent]) -> Chang
 fn is_repo_state(inner: &str) -> bool {
     matches!(
         inner,
-        "" | "HEAD" | "index" | "packed-refs" | "MERGE_HEAD" | "REBASE_HEAD" | "CHERRY_PICK_HEAD" | "info/exclude"
+        "" | "HEAD" | "index" | "packed-refs" | "info/exclude"
     )
+        || crate::git::repo::OPERATION_MARKERS.iter().any(|(marker, _)| *marker == inner)
         || (inner.starts_with("refs/") && !inner.ends_with(".lock"))
 }
 
@@ -129,7 +130,7 @@ mod tests {
 
     #[test]
     fn repo_state_paths() {
-        for yes in ["", "HEAD", "index", "packed-refs", "refs/heads/main", "refs/remotes/origin/main", "MERGE_HEAD", "info/exclude"] {
+        for yes in ["", "HEAD", "index", "packed-refs", "refs/heads/main", "refs/remotes/origin/main", "MERGE_HEAD", "REVERT_HEAD", "rebase-merge", "info/exclude"] {
             assert!(is_repo_state(yes), "{yes}");
         }
         for no in ["index.lock", "refs/heads/main.lock", "objects/ab/cdef", "logs/HEAD", "COMMIT_EDITMSG", "FETCH_HEAD"] {

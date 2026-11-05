@@ -1,5 +1,16 @@
 /** @typedef {import('./types.js').GitRepoState} GitRepoState */
 
+/** @type {Record<import('./types.js').GitOperation, string>} */
+const OPERATIONS = { merge: 'Merge', rebase: 'Rebase', cherryPick: 'Cherry-pick', revert: 'Revert', bisect: 'Bisect' };
+
+/**
+ * What stopped midway in the repository, for the Changes pane; `null` when nothing did.
+ * @param {GitRepoState | null} repo
+ */
+export function operationLine(repo) {
+  return repo?.operation ? `${OPERATIONS[repo.operation]} in progress` : null;
+}
+
 /** @param {number} n @param {string} word */
 const count = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
 

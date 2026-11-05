@@ -361,7 +361,7 @@ export const workspaces = Object.freeze({
    * A workspace's file at its base commit: its diff's baseline.
    * @param {string} id
    * @param {string} path Relative to the workspace's folder.
-   * @returns {Promise<string | null>} `null` when it's new there, binary or too large.
+   * @returns {Promise<string | null>} `null` when it's new there. Fails, saying why, when it has no text to diff.
    */
   fileAtBase(id, path) {
     return ipc.invoke('workspace_file_at_base', { id, path });

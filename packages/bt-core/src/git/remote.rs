@@ -71,8 +71,16 @@ pub fn read(git: &Path, root: &Path, branch: Option<&str>) -> Result<Option<Remo
     Ok(Some(RemoteInfo { github: parse_github(url), url: strip_credentials(url), name }))
 }
 
-/// `https://user:token@host/…` → `https://host/…`; other URLs (`git@host:…`, paths) are kept.
+/// `https://user:token@host/…` → `https://host/…`, `ssh://user:password@host/…` → `ssh://user@host/…`;
+/// other URLs (`git@host:…`, paths) are kept.
 fn strip_credentials(url: &str) -> String {
+    if let Some(rest) = url.strip_prefix("ssh://") {
+        let (authority, path) = rest.split_once('/').unwrap_or((rest, ""));
+        if let Some((userinfo, host)) = authority.rsplit_once('@') {
+            let user = userinfo.split(':').next().unwrap_or(userinfo);
+            return format!("ssh://{user}@{host}/{path}");
+        }
+    }
     for scheme in ["https://", "http://"] {
         if let Some(rest) = url.strip_prefix(scheme) {
             let (authority, path) = rest.split_once('/').map_or((rest, None), |(a, p)| (a, Some(p)));
@@ -113,6 +121,13 @@ mod tests {
     use super::*;
 
     use crate::git::test_repo::{git_bin, TestRepo};
+
+    #[test]
+    fn an_ssh_password_never_leaves_either() {
+        assert_eq!(strip_credentials("ssh://git:secret@host/a.git"), "ssh://git@host/a.git");
+        assert_eq!(strip_credentials("ssh://git@host/a.git"), "ssh://git@host/a.git");
+        assert_eq!(strip_credentials("git@host:a.git"), "git@host:a.git");
+    }
 
     fn remote_of(repo: &TestRepo) -> Option<RemoteInfo> {
         let branch = repo.git(&["symbolic-ref", "-q", "--short", "HEAD"]);

@@ -308,6 +308,7 @@ export class AcpChangesPanel extends LitElement {
   render() {
     const total = this.#leaves.size;
     const included = this.#included.length;
+    const operation = git.operationLine(this.repo.repo);
     const summary = total === 0 ? 'No changed files' : `${total} ${total === 1 ? 'file' : 'files'} · ${included} selected`;
     return html`
       <div class="acp-changes-panel__tools">
@@ -331,6 +332,7 @@ export class AcpChangesPanel extends LitElement {
         </md-icon-button>
         <md-tooltip for="acp-changes-panel-refresh" show-delay="800">Refresh</md-tooltip>
       </div>
+      ${operation ? html`<div class="acp-changes-panel__operation" role="status">${operation}</div>` : nothing}
       ${this.#renderBody()}
       <footer class="acp-changes-panel__footer">
         <acp-commit-box .included=${included} @acp-commit-submit=${this.#onSubmit}></acp-commit-box>

@@ -7,7 +7,7 @@ use std::io::{self, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Condvar, Mutex, PoisonError};
+use std::sync::{mpsc, Arc, Condvar, Mutex, PoisonError};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -18,6 +18,9 @@ const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
 const TERM_GRACE: Duration = Duration::from_secs(3);
+/// After git is gone, how long its pipes may stay open: all it wrote is in them by then, and only a
+/// child left behind (a hook's, a filter's) keeps them open longer.
+const PIPE_GRACE: Duration = Duration::from_secs(2);
 /// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
 pub const MAX_OUTPUT: usize = 32 * 1024 * 1024;
 const MAX_STDERR: usize = 64 * 1024;
@@ -29,8 +32,9 @@ pub fn is_too_large(err: &str) -> bool {
     err.starts_with(TOO_LARGE)
 }
 
-/// git processes alive at once, app-wide; more callers wait. Each one also costs two or three
+/// Short git calls alive at once, app-wide; more callers wait. Each one also costs two or three
 /// pipe threads, and a burst (every restored tab asking for its baseline) must not fork dozens.
+/// Long calls take no slot: a few commits or checkouts must not stall every status for minutes.
 const MAX_CONCURRENT: usize = 4;
 
 struct Permits {
@@ -86,20 +90,16 @@ pub enum Mode {
     /// A refresh the user didn't ask for (status, diffs): must not take `index.lock`,
     /// or it races the user's own git.
     Background,
-    /// Runs the user's hooks or filters (a commit's `pre-commit`, LFS): a long timeout, and on it
-    /// the whole process group is stopped, gently first, so git removes its `index.lock` and no
-    /// hook keeps running.
+    /// Runs the user's hooks or filters (a commit's `pre-commit`, a checkout, LFS): a long timeout.
     Hooks,
-    /// Talks to a remote (a fetch the user asked for): credential helpers and ssh run, so like
-    /// `Hooks` the whole process group is stopped on its timeout.
+    /// Talks to a remote (a fetch the user asked for): credential helpers and ssh run.
     Network,
 }
 
 impl Mode {
-    /// git leads its own session and process group, stopped as a whole on a timeout: hooks and
-    /// credential helpers it started hold our output pipes open and would outlive a kill of git alone.
-    fn own_group(self) -> bool {
-        matches!(self, Mode::Hooks | Mode::Network)
+    /// Takes a slot of `MAX_CONCURRENT`.
+    fn short(self) -> bool {
+        matches!(self, Mode::Local | Mode::Background)
     }
 }
 
@@ -156,6 +156,9 @@ pub fn run_with(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Opti
         Ok(out) => tracing::debug!(cwd = %cwd.display(), args = %Args(args), status = %out.status, ?elapsed, "git"),
         // Stopped on purpose (a workspace deleted while it checks out): nothing the user must hear of.
         Err(e) if e == CANCELLED => tracing::debug!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git cancelled"),
+        // Nobody asked for it, and its caller shows the error where the answer would be: a slow repository
+        // must not raise a snackbar on every refresh.
+        Err(e) if mode == Mode::Background => tracing::debug!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {}", e.lines().next().unwrap_or_default()),
         // The first line: a timeout's error goes on with git's output, which may hold anything.
         Err(e) => tracing::warn!(cwd = %cwd.display(), args = %Args(args), ?elapsed, "git failed: {}", e.lines().next().unwrap_or_default()),
     }
@@ -180,7 +183,13 @@ impl fmt::Display for Args<'_> {
 fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Options) -> Result<Output, String> {
     let mut command = Command::new(git);
     // Paths with non-ASCII names print as-is instead of octal-escaped.
-    command.args(["-c", "core.quotepath=off"]).args(args).current_dir(cwd);
+    command.args(["-c", "core.quotepath=off"]);
+    // `core.fsmonitor` is a program named by the repository's config: a refresh nobody asked for must
+    // not run code from a folder that was only opened.
+    if mode == Mode::Background {
+        command.args(["-c", "core.fsmonitor=false"]);
+    }
+    command.args(args).current_dir(cwd);
     for key in SCRUBBED_ENV {
         command.env_remove(key);
     }
@@ -198,10 +207,12 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
         .stderr(Stdio::piped());
     no_window(&mut command);
     #[cfg(unix)]
-    if mode.own_group() {
+    {
         use std::os::unix::process::CommandExt;
-        // A session of its own: it leads its process group, and has no controlling terminal, so ssh
-        // fails at once instead of asking for a passphrase or a host key on the tty we were run from
+        // A session of its own: it leads its process group, stopped as a whole on a timeout, gently
+        // first so git removes its `index.lock` (hooks, filters and credential helpers hold our pipes
+        // and would outlive a kill of git alone), and has no controlling terminal, so ssh fails at
+        // once instead of asking for a passphrase or a host key on the tty we were run from
         // (`GIT_TERMINAL_PROMPT` doesn't reach ssh). The user's ssh settings stay as they are.
         // SAFETY: `setsid` is async-signal-safe and touches nothing of the parent.
         unsafe {
@@ -210,7 +221,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     }
 
     // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
-    let _permit = Permit::acquire();
+    let _permit = mode.short().then(Permit::acquire);
     let mut child = command.spawn().map_err(|e| format!("failed to run git: {e}"))?;
     let writer = opts.input.map(|input| {
         let mut stdin = child.stdin.take().expect("stdin is piped");
@@ -221,8 +232,8 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let max_output = opts.max_output.unwrap_or(MAX_OUTPUT);
     let stdout = child.stdout.take().expect("stdout is piped");
     let stderr = child.stderr.take().expect("stderr is piped");
-    let stdout = thread::spawn(move || read_capped(stdout, max_output));
-    let stderr = thread::spawn(move || read_capped(stderr, MAX_STDERR));
+    let stdout = Capture::start(stdout, max_output);
+    let stderr = Capture::start(stderr, MAX_STDERR);
 
     let timeout = match mode {
         Mode::Local | Mode::Background => LOCAL_TIMEOUT,
@@ -231,12 +242,12 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     };
     #[cfg(test)]
     let timeout = TEST_TIMEOUT.get().unwrap_or(timeout);
-    let status = wait_with_timeout(&mut child, timeout, mode.own_group(), opts.cancel);
+    let status = wait_with_timeout(&mut child, timeout, opts.cancel);
     if let Some(writer) = writer {
         let _ = writer.join();
     }
-    let (stdout, truncated) = stdout.join().unwrap_or_default();
-    let (stderr, _) = stderr.join().unwrap_or_default();
+    let (stdout, truncated) = stdout.finish();
+    let (stderr, _) = stderr.finish();
     let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
     let status = status.map_err(|e| stopped_message(e, &stderr))?;
     if truncated {
@@ -264,35 +275,49 @@ pub fn failure_message(out: &Output) -> String {
     }
 }
 
-/// Reads up to `cap` bytes, then drains the rest so the writer never blocks on a full pipe.
-fn read_capped(pipe: impl Read, cap: usize) -> (Vec<u8>, bool) {
-    let mut bytes = Vec::new();
-    let mut pipe = pipe;
-    if (&mut pipe).take(cap as u64 + 1).read_to_end(&mut bytes).is_err() {
-        return (bytes, false);
-    }
-    let truncated = bytes.len() > cap;
-    if truncated {
-        bytes.truncate(cap);
-        let _ = io::copy(&mut pipe, &mut io::sink());
-    }
-    (bytes, truncated)
+/// A pipe read on its own thread, so the writer never blocks on a full one: up to a cap, then
+/// drained. Finishing never waits on a child left holding the pipe; what arrived by then counts.
+struct Capture {
+    /// The bytes, and whether there were more than the cap.
+    read: Arc<Mutex<(Vec<u8>, bool)>>,
+    /// Disconnects at the end of the pipe.
+    ended: mpsc::Receiver<()>,
 }
 
-/// `group`: the child leads its own process group (`Mode::own_group`), stopped as a whole on
-/// timeout or once `cancel` is set.
-fn wait_with_timeout(child: &mut Child, timeout: Duration, group: bool, cancel: Option<&AtomicBool>) -> Result<ExitStatus, String> {
+impl Capture {
+    fn start(mut pipe: impl Read + Send + 'static, cap: usize) -> Capture {
+        let read = Arc::new(Mutex::new((Vec::new(), false)));
+        let (end, ended) = mpsc::channel::<()>();
+        let shared = Arc::clone(&read);
+        thread::spawn(move || {
+            let _end = end;
+            let mut chunk = vec![0; 64 * 1024];
+            while let Ok(n @ 1..) = pipe.read(&mut chunk) {
+                let mut read = shared.lock().unwrap_or_else(PoisonError::into_inner);
+                let room = cap.saturating_sub(read.0.len());
+                read.0.extend_from_slice(&chunk[..n.min(room)]);
+                read.1 |= n > room;
+            }
+        });
+        Capture { read, ended }
+    }
+
+    /// The bytes read and whether there were more; call once git is gone.
+    fn finish(self) -> (Vec<u8>, bool) {
+        let _ = self.ended.recv_timeout(PIPE_GRACE);
+        std::mem::take(&mut *self.read.lock().unwrap_or_else(PoisonError::into_inner))
+    }
+}
+
+/// Stops the child's whole process group on timeout or once `cancel` is set.
+fn wait_with_timeout(child: &mut Child, timeout: Duration, cancel: Option<&AtomicBool>) -> Result<ExitStatus, String> {
     let started = Instant::now();
     loop {
         match child.try_wait() {
             Ok(Some(status)) => return Ok(status),
             Ok(None) if started.elapsed() > timeout || cancel.is_some_and(|c| c.load(Ordering::SeqCst)) => {
                 let timed_out = started.elapsed() > timeout;
-                if group {
-                    stop_group(child);
-                } else {
-                    let _ = child.kill();
-                }
+                stop_group(child);
                 let _ = child.wait();
                 return Err(if timed_out { format!("git timed out after {}s", timeout.as_secs()) } else { CANCELLED.to_owned() });
             }
@@ -327,14 +352,15 @@ fn stop_group(child: &mut Child) {
     unsafe { libc::kill(-pid, libc::SIGKILL) };
 }
 
-/// Windows has no process groups to signal here: the git process alone is killed.
+/// Windows has no process groups to signal here: the git process alone is killed, and a child it
+/// left behind runs on (`Capture::finish` doesn't wait for it).
 #[cfg(not(unix))]
 fn stop_group(child: &mut Child) {
     let _ = child.kill();
 }
 
-/// A path in the temp directory for a file git reads or writes (a temporary index, a commit
-/// message); removed on drop.
+/// A path in the temp directory for a file or folder git reads or writes (a temporary index, a
+/// commit message, scratch objects); removed on drop.
 pub struct TempFile {
     pub path: PathBuf,
 }
@@ -349,7 +375,11 @@ impl TempFile {
 
 impl Drop for TempFile {
     fn drop(&mut self) {
-        let _ = std::fs::remove_file(&self.path);
+        if self.path.is_dir() {
+            let _ = std::fs::remove_dir_all(&self.path);
+        } else {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
@@ -376,6 +406,59 @@ pub fn canonical(path: &Path) -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A git that runs `script`, in a temp folder returned with it.
+    #[cfg(unix)]
+    fn fake_git(name: &str, script: &str) -> (PathBuf, PathBuf) {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = crate::git::test_repo::temp_dir(name);
+        let git = dir.join("git");
+        std::fs::write(&git, format!("#!/bin/sh\n{script}\n")).unwrap();
+        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
+        (git, dir)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_background_child_holding_the_pipes_doesnt_hold_the_call() {
+        // Left running by a hook or a filter, it keeps our pipes open after git is done.
+        let (git, dir) = fake_git("child-holds", "echo printed\nsleep 20 &\nexit 0");
+        let started = Instant::now();
+        let out = run(&git, &dir, &[OsStr::new("status")], Mode::Background).unwrap();
+        assert_eq!(out, b"printed\n", "what git printed is kept");
+        assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_timeout_in_any_mode_stops_the_children_of_git() {
+        let (git, dir) = fake_git("timeout-children", "sleep 20 &\nwait");
+        TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
+        let started = Instant::now();
+        let err = run(&git, &dir, &[OsStr::new("status")], Mode::Background).unwrap_err();
+        TEST_TIMEOUT.set(None);
+        assert!(err.contains("timed out"), "{err}");
+        assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn long_calls_leave_the_short_ones_their_slots() {
+        let (slow, dir) = fake_git("long-calls", "sleep 3");
+        let real = crate::git::test_repo::git_bin();
+        thread::scope(|scope| {
+            for _ in 0..MAX_CONCURRENT {
+                scope.spawn(|| run(&slow, &dir, &[OsStr::new("commit")], Mode::Hooks));
+            }
+            thread::sleep(Duration::from_millis(200));
+            let started = Instant::now();
+            run(&real, &dir, &[OsStr::new("--version")], Mode::Background).unwrap();
+            assert!(started.elapsed() < Duration::from_secs(2), "waited {:?}", started.elapsed());
+        });
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[cfg(unix)]
     #[test]
@@ -479,19 +562,34 @@ mod tests {
         }
     }
 
+    /// The levels of the events logged while it's the default subscriber.
+    struct Levels(Arc<Mutex<Vec<tracing::Level>>>);
+    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Levels {
+        fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
+            self.0.lock().unwrap().push(*event.metadata().level());
+        }
+    }
+
+    #[test]
+    fn only_a_call_the_user_asked_for_warns_when_it_fails() {
+        use tracing_subscriber::layer::SubscriberExt;
+        for (mode, warns) in [(Mode::Background, false), (Mode::Local, true)] {
+            let levels = Arc::new(Mutex::new(Vec::new()));
+            let subscriber = tracing_subscriber::registry().with(Levels(Arc::clone(&levels)));
+            let result = tracing::subscriber::with_default(subscriber, || {
+                run_with(Path::new("/no/such/git"), &std::env::temp_dir(), &[OsStr::new("status")], mode, &Options::default())
+            });
+            assert!(result.is_err());
+            let warned = levels.lock().unwrap().iter().any(|l| *l <= tracing::Level::WARN);
+            assert_eq!(warned, warns, "{mode:?}");
+        }
+    }
+
     #[cfg(unix)]
     #[test]
     fn a_cancelled_call_is_no_failure_the_user_hears_of() {
         use std::os::unix::fs::PermissionsExt;
-        use std::sync::{Arc, Mutex};
         use tracing_subscriber::layer::SubscriberExt;
-        /// The levels of the events logged while it's the default subscriber.
-        struct Levels(Arc<Mutex<Vec<tracing::Level>>>);
-        impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Levels {
-            fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
-                self.0.lock().unwrap().push(*event.metadata().level());
-            }
-        }
         // Arrange: a git that would run for long, already cancelled
         let dir = crate::git::test_repo::temp_dir("cancelled");
         let git = dir.join("git");
