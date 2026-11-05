@@ -18,10 +18,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 
 use serde::{Deserialize, Serialize};
 
-/// Tauri event after a project's agents.json changed on disk: `{ projectPath }`.
-pub const AGENTS_CHANGED_EVENT: &str = "agents://changed";
-/// How a sign-in goes (`agents_sign_in`): `{ projectPath, agentId, state, message, terminal }`.
-pub const AGENTS_SIGN_IN_EVENT: &str = "agents://sign-in";
+use crate::notify::Notifier;
 
 pub const DIR: &str = ".brama";
 pub const AGENTS_FILE: &str = "agents.json";
@@ -495,7 +492,13 @@ pub struct AgentConfigs {
     /// Held by each change of an agents.json, from its read to its reload: two at once would
     /// each write over the other's.
     edits: Arc<Mutex<()>>,
+    /// Told of each change.
+    notifier: Arc<dyn Notifier>,
+    /// Who follows a project's agents: its sessions.
+    followers: Arc<Mutex<Vec<Follower>>>,
 }
+
+type Follower = Arc<dyn Fn(&Path) + Send + Sync>;
 
 #[derive(Default)]
 struct Inner {
@@ -531,13 +534,11 @@ pub struct Pinned {
     pub version: String,
 }
 
-/// A removal `restore_agent` can undo with `token`; `project` is whose file changed (`None`: the user's).
+/// A removal `restore_agent` can undo with `token`.
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Removal {
     pub token: u64,
-    #[serde(skip)]
-    pub project: Option<PathBuf>,
 }
 
 /// A `NewAgent` with its launch decided.
@@ -604,6 +605,43 @@ impl AgentConfigs {
             registry: registry::Registry::empty(),
             inner: Arc::new(Mutex::new(inner)),
             edits: Arc::default(),
+            notifier: Arc::new(crate::notify::Silent),
+            followers: Arc::default(),
+        }
+    }
+
+    /// Tells `notifier` of each change (no one by default).
+    pub fn with_notifier(mut self, notifier: Arc<dyn Notifier>) -> AgentConfigs {
+        self.notifier = notifier;
+        self
+    }
+
+    pub fn notifier(&self) -> &Arc<dyn Notifier> {
+        &self.notifier
+    }
+
+    /// Calls `f` with the project of each change to its agents from now on.
+    pub fn follow_agents(&self, f: Follower) {
+        self.followers.lock().unwrap_or_else(PoisonError::into_inner).push(f);
+    }
+
+    /// An agents.json changed, or what its agents need (`None`: the user's, the agents of no
+    /// project): the front hears of it, and the project's sessions follow. Every reload that
+    /// changed the agents comes through here.
+    pub fn announce(&self, project: Option<&Path>) {
+        self.notifier.agents_changed(project);
+        let Some(project) = project else { return };
+        let followers = self.followers.lock().unwrap_or_else(PoisonError::into_inner).clone();
+        for follower in followers {
+            follower(project);
+        }
+    }
+
+    /// Asks the ACP registry now; everyone hears when its agents changed. The registry is the same
+    /// for every project: one `None` change has every list read again.
+    pub async fn check_registry(&self) {
+        if self.registry.check().await {
+            self.announce(None);
         }
     }
 
@@ -688,6 +726,7 @@ impl AgentConfigs {
             tracing::info!(agent = %agent_id, enabled, "agent switched");
             self.save_switches();
         }
+        self.announce(project);
         Ok(project.map(Path::to_path_buf))
     }
 
@@ -704,7 +743,7 @@ impl AgentConfigs {
     /// to the open project's `.brama/agents.json`, trusting it, or without a project to the user's
     /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         if agent.known.is_none() {
             return Err("only Claude, Codex, Copilot or Antigravity can be added".to_owned());
         }
@@ -734,6 +773,8 @@ impl AgentConfigs {
         })?;
         tracing::info!(agent = %id, "agent added");
         self.reload_and_trust(project, &id, &chosen)?;
+        drop(editing);
+        self.announce(project);
         Ok(id)
     }
 
@@ -783,7 +824,7 @@ impl AgentConfigs {
     /// project's MCP servers would start with is left for the trust dialog. `ids`: only those.
     /// Returns the ids copied.
     pub fn import_user_agents(&self, project: &Path, ids: Option<&[String]>) -> Result<Vec<String>, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         let supported: Vec<String> =
             self.list(Some(project)).user_agents.into_iter().filter(|a| a.registry_id.is_some()).map(|a| a.id).collect();
         let user_file = self.user_file.clone().ok_or("this system has no config folder")?;
@@ -810,6 +851,8 @@ impl AgentConfigs {
             self.trust(project, &launches)?;
         }
         tracing::info!(project = %project.display(), agents = ?copied, "the user's agents copied into the project");
+        drop(editing);
+        self.announce(Some(project));
         Ok(copied)
     }
 
@@ -891,7 +934,7 @@ impl AgentConfigs {
     /// Rewrites an agent's name and launch, keeping the rest of its entry; a project's new launch
     /// is trusted. Returns the project whose file changed.
     pub fn update_agent(&self, project: Option<&Path>, agent_id: &str, agent: &NewAgent) -> Result<Option<PathBuf>, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         let resolved = resolve(agent, &self.registry.known())?;
         let file = self.file_of(project)?;
         edit_file(&file, |root| {
@@ -904,13 +947,15 @@ impl AgentConfigs {
         })?;
         tracing::info!(agent = %agent_id, "agent edited");
         self.reload_and_trust(project, agent_id, &resolved)?;
+        drop(editing);
+        self.announce(project);
         Ok(project.map(Path::to_path_buf))
     }
 
     /// Makes an agent the default for new sessions: in the project's agents.json, or the user's
     /// without a project. Returns the project whose file changed.
     pub fn set_default(&self, project: Option<&Path>, agent_id: &str) -> Result<Option<PathBuf>, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         let merged = self.merged(project);
         let Some(agent) = merged.agent(agent_id) else { return Err(format!("unknown agent \"{agent_id}\"")) };
         if merged.enabled(agent_id).is_none() {
@@ -929,13 +974,15 @@ impl AgentConfigs {
         })?;
         tracing::info!(agent = %agent_id, "default agent set");
         self.reload_file(project);
+        drop(editing);
+        self.announce(project);
         Ok(project.map(Path::to_path_buf))
     }
 
     /// Removes an agent's entry from the project's agents.json (the user's without a project).
     /// `restore_agent(token)` puts it back.
     pub fn remove_agent(&self, project: Option<&Path>, agent_id: &str) -> Result<Removal, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         let file = self.file_of(project)?;
         let off = self.lock().switches.is_off(project, agent_id);
         let mut before = None;
@@ -948,19 +995,23 @@ impl AgentConfigs {
         tracing::info!(agent = %agent_id, "agent removed");
         self.reload_file(project);
         let (entry, position) = before.ok_or_else(|| format!("unknown agent \"{agent_id}\""))?;
-        let project = project.map(Path::to_path_buf);
-        let removed = Removed { file, project: project.clone(), id: agent_id.to_owned(), entry, position, off };
-        let mut inner = self.lock();
-        inner.next_token += 1;
-        let token = inner.next_token;
-        inner.removed.insert(token, removed);
-        Ok(Removal { token, project })
+        let removed = Removed { file, project: project.map(Path::to_path_buf), id: agent_id.to_owned(), entry, position, off };
+        let token = {
+            let mut inner = self.lock();
+            inner.next_token += 1;
+            let token = inner.next_token;
+            inner.removed.insert(token, removed);
+            token
+        };
+        drop(editing);
+        self.announce(project);
+        Ok(Removal { token })
     }
 
     /// Undoes a `remove_agent`: its entry back as it was, where it was. Returns the project whose
     /// file changed.
     pub fn restore_agent(&self, token: u64) -> Result<Option<PathBuf>, String> {
-        let _editing = self.editing();
+        let editing = self.editing();
         let removed = self.lock().removed.remove(&token).ok_or("nothing to restore")?;
         edit_file(&removed.file, |root| {
             let agents = agents_of(root)?;
@@ -973,6 +1024,8 @@ impl AgentConfigs {
             self.save_switches();
         }
         self.reload_file(removed.project.as_deref());
+        drop(editing);
+        self.announce(removed.project.as_deref());
         Ok(removed.project)
     }
 
@@ -1170,6 +1223,51 @@ mod tests {
     use super::*;
 
     /// Agent configs whose registry is `registry::tests::FIXTURE`.
+    /// Each change of an agents.json is told once, with its project; reading isn't a change.
+    #[test]
+    fn every_change_of_the_agents_is_announced_once_and_reading_is_not() {
+        let dir = std::env::temp_dir().join(format!("brama-announce-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        let project = dir.join("project");
+        ensure_project_dir(&project).unwrap();
+        let user = dir.join("user/agents.json");
+        fs::create_dir_all(user.parent().unwrap()).unwrap();
+        fs::write(&user, r#"{"version":1,"agents":{"mine":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#).unwrap();
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&heard);
+        let told = crate::notify::testing::OnAgents(move |project: Option<&Path>| sink.lock().unwrap().push(project.map(Path::to_path_buf)));
+        let configs = AgentConfigs::new(Some(user), None)
+            .with_registry(registry::Registry::of(registry::tests::FIXTURE))
+            .with_notifier(Arc::new(told));
+        let followed = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&followed);
+        configs.follow_agents(Arc::new(move |project: &Path| sink.lock().unwrap().push(project.to_path_buf())));
+        let scope = Some(project.as_path());
+        let new = NewAgent { known: Some("claude-acp".into()), ..serde_json::from_value(serde_json::json!({ "name": "" })).unwrap() };
+
+        assert!(!configs.list(scope).agents.iter().any(|a| a.id == "x"));
+        configs.merged(None);
+        assert!(heard.lock().unwrap().is_empty(), "reading is not a change");
+
+        let id = configs.add_agent(scope, &new).unwrap();
+        configs.update_agent(scope, &id, &new).unwrap();
+        configs.set_default(scope, &id).unwrap();
+        configs.set_enabled(scope, &id, false).unwrap();
+        configs.set_enabled(scope, &id, true).unwrap();
+        let removed = configs.remove_agent(scope, &id).unwrap();
+        configs.restore_agent(removed.token).unwrap();
+        configs.import_user_agents(&project, None).unwrap();
+
+        let of_project = Some(project.clone());
+        assert_eq!(*heard.lock().unwrap(), vec![of_project; 8], "add, edit, default, off, on, remove, restore, import");
+        assert_eq!(followed.lock().unwrap().len(), 8, "the project's followers hear each");
+
+        configs.add_agent(None, &new).unwrap();
+        assert_eq!(heard.lock().unwrap().last(), Some(&None), "the user's file");
+        assert_eq!(followed.lock().unwrap().len(), 8, "no project, nothing to follow");
+        fs::remove_dir_all(dir).unwrap();
+    }
+
     fn with_fixture(user_file: Option<PathBuf>, trust_file: Option<PathBuf>) -> AgentConfigs {
         AgentConfigs::new(user_file, trust_file).with_registry(registry::Registry::of(registry::tests::FIXTURE))
     }
@@ -1663,7 +1761,6 @@ mod tests {
         let ids = |project: Option<&Path>| configs.list(project).agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
 
         let removed = configs.remove_agent(Some(&project), "repo").unwrap();
-        assert_eq!(removed.project.as_deref(), Some(project.as_path()));
         assert_eq!(ids(Some(&project)), ["last"], "gone");
         assert!(!fs::read_to_string(&project_file).unwrap().contains("repo"));
         configs.restore_agent(removed.token).unwrap();
@@ -1672,7 +1769,6 @@ mod tests {
         assert!(configs.restore_agent(removed.token).is_err(), "once");
 
         let gone = configs.remove_agent(None, "b").unwrap();
-        assert_eq!(gone.project, None);
         assert_eq!(ids(None), ["a", "c"]);
         configs.restore_agent(gone.token).unwrap();
         let merged = configs.merged(None);

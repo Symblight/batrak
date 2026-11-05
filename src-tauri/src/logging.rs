@@ -7,9 +7,9 @@ use std::backtrace::Backtrace;
 use std::cell::Cell;
 use std::fmt::{self, Write};
 use std::path::Path;
+use std::sync::Arc;
 
-use serde::Serialize;
-use tauri::{AppHandle, Emitter};
+use crate::notify::{NoticeLevel, Notifier};
 use tracing::field::{Field, Visit};
 use tracing::{Event, Level, Subscriber};
 use tracing_appender::rolling::{RollingFileAppender, Rotation};
@@ -18,7 +18,6 @@ use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt as tracing_fmt, EnvFilter, Layer};
 
 const KEEP_FILES: usize = 7;
-const NOTICE_EVENT: &str = "app://notice";
 /// A notice is a snackbar line, not a log: longer text is cut (the log file keeps all of it).
 const MAX_NOTICE: usize = 500;
 
@@ -36,10 +35,10 @@ fn is_own(target: &str) -> bool {
     OWN_TARGETS.iter().any(|own| target.strip_prefix(own).is_some_and(|rest| rest.is_empty() || rest.starts_with("::")))
 }
 
-/// Starts logging to `dir`, and sends notices to `app`'s windows when given. Lines are written synchronously, without `non_blocking`'s worker:
+/// Starts logging to `dir`, and tells `notifier` of our failures when given. Lines are written synchronously, without `non_blocking`'s worker:
 /// the event loop exits the process without running destructors, so the worker's guard would
 /// never flush its last lines, a panic's among them.
-pub fn init(dir: &Path, app: Option<AppHandle>) -> Result<(), String> {
+pub fn init(dir: &Path, notifier: Option<Arc<dyn Notifier>>) -> Result<(), String> {
     let file = RollingFileAppender::builder()
         .rotation(Rotation::DAILY)
         .filename_prefix("brama")
@@ -52,7 +51,7 @@ pub fn init(dir: &Path, app: Option<AppHandle>) -> Result<(), String> {
     let stderr_layer = cfg!(debug_assertions).then(|| tracing_fmt::layer().with_writer(std::io::stderr));
     tracing_subscriber::registry()
         .with(file_layer.and_then(stderr_layer).with_filter(filter))
-        .with(app.map(|app| NoticeLayer { app }))
+        .with(notifier.map(|notifier| NoticeLayer { notifier }))
         .try_init()
         .map_err(|e| e.to_string())
 }
@@ -76,17 +75,11 @@ pub fn install_panic_hook() {
     }));
 }
 
-#[derive(Clone, Serialize)]
-struct Notice {
-    level: &'static str,
-    message: String,
-}
-
 /// Forwards our crates' warnings and errors (`is_own`), and panics, to every window. Not under `BRAMA_LOG`:
 /// a quieter log must not hide failures from the user. `frontend` lines came from the page, which
 /// has shown them already.
 struct NoticeLayer {
-    app: AppHandle,
+    notifier: Arc<dyn Notifier>,
 }
 
 thread_local! {
@@ -98,8 +91,8 @@ impl<S: Subscriber> Layer<S> for NoticeLayer {
     fn on_event(&self, event: &Event<'_>, _ctx: Context<'_, S>) {
         let meta = event.metadata();
         let level = match *meta.level() {
-            Level::ERROR => "error",
-            Level::WARN => "warn",
+            Level::ERROR => NoticeLevel::Error,
+            Level::WARN => NoticeLevel::Warn,
             _ => return,
         };
         let target = meta.target();
@@ -111,7 +104,7 @@ impl<S: Subscriber> Layer<S> for NoticeLayer {
         }
         let mut text = NoticeText::default();
         event.record(&mut text);
-        let _ = self.app.emit(NOTICE_EVENT, Notice { level, message: text.finish() });
+        self.notifier.notice(level, &text.finish());
         EMITTING.with(|emitting| emitting.set(false));
     }
 }

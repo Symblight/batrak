@@ -182,7 +182,7 @@ fn every_change_is_announced_with_its_project_and_the_page_sees_creating_and_mis
     let workspaces = Workspaces::new(&data);
     let heard = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
     let sink = Arc::clone(&heard);
-    workspaces.on_change(Arc::new(move |project: &std::path::Path| sink.lock().unwrap().push(project.to_path_buf())));
+    workspaces.notify_with(Arc::new(crate::notify::testing::OnWorkspaces(move |project: &std::path::Path| sink.lock().unwrap().push(project.to_path_buf()))));
 
     let ws = workspaces.place(&repo.path, Some("Task"), None).unwrap();
     assert!(!workspaces.pages(&repo.path)[0].missing, "placed, not checked out yet: not missing");
@@ -287,10 +287,10 @@ fn a_placed_workspace_lists_as_creating_from_its_first_announcement_until_its_ch
     let workspaces = Workspaces::new(&data);
     let seen = Arc::new(Mutex::new(Vec::<(bool, bool)>::new()));
     let (sink, observer) = (Arc::clone(&seen), workspaces.clone());
-    workspaces.on_change(Arc::new(move |project: &std::path::Path| {
+    workspaces.notify_with(Arc::new(crate::notify::testing::OnWorkspaces(move |project: &std::path::Path| {
         let pages = observer.pages(project);
         sink.lock().unwrap().extend(pages.iter().map(|w| (w.creating, w.missing)));
-    }));
+    })));
 
     let ws = workspaces.place(&repo.path, None, None).unwrap();
     let placed = workspaces.pages(&repo.path)[0].clone();

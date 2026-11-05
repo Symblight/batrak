@@ -8,6 +8,7 @@ mod git;
 mod github;
 mod logging;
 mod menu;
+mod notify;
 mod session;
 mod storage;
 mod terminal;
@@ -30,8 +31,10 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_menu(menu::build(app.handle())?)?;
             let dirs = dirs::Dirs::resolve()?;
+            let notifier: std::sync::Arc<dyn notify::Notifier> =
+                std::sync::Arc::new(commands::notifier::AppNotifier(app.handle().clone()));
             // The app still works without its log; the dev terminal shows why there is none.
-            match logging::init(&dirs.logs, Some(app.handle().clone())) {
+            match logging::init(&dirs.logs, Some(notifier.clone())) {
                 Ok(()) => tracing::info!(
                     version = %app.package_info().version,
                     os = std::env::consts::OS,
@@ -48,27 +51,20 @@ pub fn run() {
                 std::sync::Arc::new(config::registry::Http),
             );
             let configs =
-                config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json"))).with_registry(registry.clone());
-            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir.clone(), configs.clone()));
+                config::AgentConfigs::new(user_agents, Some(data_dir.join("trusted-agents.json"))).with_registry(registry).with_notifier(notifier);
+            let sessions = session::Sessions::new(session::SessionsOptions::for_app(data_dir.clone(), configs.clone(), tauri::async_runtime::handle().inner().clone()));
             let tidy = sessions.clone();
             tauri::async_runtime::spawn_blocking(move || tidy.tidy_worktrees());
-            let emitter = app.handle().clone();
-            let user_watch = config::watch::watch_user_file(configs.clone(), move || {
-                commands::agents::emit_changed(&emitter, None);
-            })
-            .unwrap_or_else(|e| {
+            let user_watch = config::watch::watch_user_file(configs.clone()).unwrap_or_else(|e| {
                 tracing::warn!("not watching the user's agents.json: {e}");
                 None
             });
             app.manage(UserAgentsWatch(std::sync::Mutex::new(user_watch)));
-            commands::agents::check_registry_daily(app.handle().clone(), registry);
-            let emitter = app.handle().clone();
+            commands::agents::check_registry_daily(configs.clone());
             app.manage(config::update::Updater::new(
                 configs.clone(),
                 std::sync::Arc::new(config::update::NpmPrefetch { dir: data_dir.join("npm") }),
-                std::sync::Arc::new(move |project: Option<&std::path::Path>| commands::agents::emit_changed(&emitter, project)),
             ));
-            commands::workspaces::announce(app.handle().clone(), &sessions);
             app.manage(sessions);
             app.manage(configs);
             app.manage(dirs);

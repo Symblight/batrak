@@ -271,6 +271,7 @@ fn options_for(dir: &Path, launcher: &Arc<FakeLauncher>) -> SessionsOptions {
             ])
         }),
         launcher: Arc::clone(launcher) as Arc<dyn Launcher>,
+        runtime: tokio::runtime::Handle::current(),
         initialize_timeout: Duration::from_secs(5),
         overlap_grace: OVERLAP_GRACE,
         output_stamp: api::OUTPUT_STAMP,
@@ -1942,7 +1943,7 @@ fn real_claude(name: &str) -> (Sessions, PathBuf, PathBuf) {
     let configs = AgentConfigs::new(None, None);
     let launches: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch).collect();
     configs.trust(&project, &launches).unwrap();
-    let mut opts = SessionsOptions::for_app(dir.join("data"), configs);
+    let mut opts = SessionsOptions::for_app(dir.join("data"), configs, tokio::runtime::Handle::current());
     opts.initialize_timeout = Duration::from_secs(180);
     let sessions = Sessions::new(opts);
     (sessions, project, dir)
@@ -3604,12 +3605,58 @@ async fn recreating_a_workspaces_deleted_folder_checks_it_out_from_its_branch() 
     events.wait_status("idle").await;
 }
 
+/// A change of a project's agents reaches its running sessions with no front asking.
+#[tokio::test]
+async fn a_session_hears_its_agent_was_turned_off_with_nobody_asking_it_to() {
+    let f = fixture("follow-agents", FakeAgentOptions::default());
+    let (_, events) = f.create("a", "fake").unwrap();
+    events.wait_status("idle").await;
+
+    f.sessions.inner.opts.configs.set_enabled(Some(&f.project), "fake", false).unwrap();
+
+    let off = events.wait_for("unconfigured", |e| e.kind == "unconfigured").await;
+    assert_eq!(off.payload["agentId"], "fake");
+}
+
+#[tokio::test]
+async fn the_front_hears_a_projects_sessions_after_each_sync() {
+    struct OnSynced(Arc<Mutex<Vec<(PathBuf, usize, String)>>>);
+    impl crate::notify::Notifier for OnSynced {
+        fn sessions_synced(&self, project: &Path, sessions: &[Session], report: &SyncReport) {
+            lock(&self.0).push((project.to_path_buf(), sessions.len(), report.project_path.clone()));
+        }
+    }
+    let heard = Arc::new(Mutex::new(Vec::new()));
+    let dir = std::env::temp_dir().join(format!("brama-sessions-synced-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    let launcher = Arc::new(FakeLauncher {
+        options: FakeAgentOptions::default(),
+        launches: AtomicUsize::new(0),
+        agents: Mutex::default(),
+        env: Mutex::default(),
+        commands: Mutex::default(),
+        held: Mutex::default(),
+    });
+    let mut options = options_for(&dir, &launcher);
+    options.configs = options.configs.with_notifier(Arc::new(OnSynced(Arc::clone(&heard))));
+    let sessions = Sessions::new(options);
+    let project = dir.join("project");
+    std::fs::create_dir_all(&project).unwrap();
+
+    let report = sessions.sync(&project, None).await;
+
+    let project_path = project.to_string_lossy().into_owned();
+    assert_eq!(report.project_path, project_path);
+    assert_eq!(*lock(&heard), [(project, 0, project_path)]);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
 #[tokio::test]
 async fn a_new_workspace_follows_its_first_chats_agent_title_until_renamed() {
     let f = git_fixture("ws-follow-title");
     let told = Arc::new(Mutex::new(Vec::<PathBuf>::new()));
     let sink = Arc::clone(&told);
-    f.sessions.workspaces().on_change(Arc::new(move |project: &Path| lock(&sink).push(project.to_path_buf())));
+    f.sessions.workspaces().notify_with(Arc::new(crate::notify::testing::OnWorkspaces(move |project: &Path| lock(&sink).push(project.to_path_buf()))));
     let (first, events) = f.create_in("a", "fake", f.new_workspace(None)).unwrap();
     let ws = first.workspace_id.unwrap();
     let (_, second) = f.create_in_workspace("b", &ws).unwrap();

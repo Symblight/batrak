@@ -1,8 +1,9 @@
-use tauri::{AppHandle, Emitter, State};
+use tauri::State;
 
-use crate::config::registry::{Registry, RegistryState};
+use crate::config::registry::RegistryState;
 use crate::config::update::{Updated, Updater};
 use crate::config::view::{AgentsView, Filter, RowState};
+use crate::notify::{SignInEvent, SignInProgress};
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -64,8 +65,8 @@ pub async fn agents_probe_options(
 #[tauri::command]
 #[allow(clippy::too_many_arguments)]
 pub async fn agents_sign_in(
-    app: AppHandle,
     window: tauri::Window,
+    configs: State<'_, AgentConfigs>,
     sessions: State<'_, crate::session::Sessions>,
     terminals: State<'_, crate::terminal::Terminals>,
     project_path: Option<String>,
@@ -86,21 +87,26 @@ pub async fn agents_sign_in(
     let tab = tab.filter(|tab| terminals.owns(window.label(), &tab.terminal_id));
     let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
     let terminal = sign_in.tab.clone();
-    let event = move |state: &str, message: Option<&str>| {
-        serde_json::json!({ "projectPath": path, "agentId": agent_id, "state": state, "message": message, "terminal": terminal })
+    let event = move |state: SignInProgress, message: Option<String>| SignInEvent {
+        project_path: path.clone(),
+        agent_id: agent_id.clone(),
+        state,
+        message,
+        terminal: terminal.clone(),
     };
-    let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, event("waiting", None));
+    let configs = configs.inner().clone();
+    configs.notifier().sign_in(&event(SignInProgress::Waiting, None));
     tauri::async_runtime::spawn(async move {
         let name = sign_in.agent_name.clone();
-        let payload = match sign_in.end().await {
+        let ended = match sign_in.end().await {
             crate::session::SignInEnd::Done => {
-                emit_changed(&app, project.as_deref());
-                event("done", Some(&format!("Signed in to {name}")))
+                configs.announce(project.as_deref());
+                event(SignInProgress::Done, Some(format!("Signed in to {name}")))
             }
-            crate::session::SignInEnd::Failed(e) => event("failed", Some(&e)),
-            crate::session::SignInEnd::Cancelled => event("cancelled", None),
+            crate::session::SignInEnd::Failed(e) => event(SignInProgress::Failed, Some(e)),
+            crate::session::SignInEnd::Cancelled => event(SignInProgress::Cancelled, None),
         };
-        let _ = app.emit(crate::config::AGENTS_SIGN_IN_EVENT, payload);
+        configs.notifier().sign_in(&ended);
     });
     Ok(tab)
 }
@@ -180,40 +186,16 @@ pub async fn agents_trust(
     .await?
 }
 
-/// An agents.json changed (`None`: the user's, the agents of no project): every window hears of
-/// it, and the project's sessions follow (`Sessions::sync_agents`). Every reload that changed the
-/// agents comes through here.
-pub(crate) fn emit_changed(app: &AppHandle, project: Option<&std::path::Path>) {
-    use tauri::Manager;
-    let project_path = project.map(|p| p.to_string_lossy().into_owned());
-    let _ = app.emit(crate::config::AGENTS_CHANGED_EVENT, serde_json::json!({ "projectPath": project_path }));
-    if let (Some(project), Some(sessions)) = (project, app.try_state::<crate::session::Sessions>()) {
-        let sessions = sessions.inner().clone();
-        let project = project.to_path_buf();
-        tauri::async_runtime::spawn(async move { sessions.sync_agents(&project).await });
-    }
-}
-
 /// Adds a supported registry agent (Claude, Codex, Copilot or Antigravity) with the registry's launch to
 /// the project's agents.json (trusted), or the user's without a project; returns its id.
 #[tauri::command]
 pub async fn agents_add(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     project_path: Option<String>,
     agent: NewAgent,
 ) -> Result<String, String> {
     let configs = configs.inner().clone();
-    let (id, project) = blocking(move || {
-        let project = match project_path {
-            Some(path) => Some(dunce::canonicalize(&path).map_err(|e| format!("{path}: {e}"))?),
-            None => None,
-        };
-        configs.add_agent(project.as_deref(), &agent).map(|id| (id, project))
-    })
-    .await??;
-    emit_changed(&app, project.as_deref());
-    Ok(id)
+    blocking(move || configs.add_agent(project_of(project_path)?.as_deref(), &agent)).await?
 }
 
 /// Canonical form of a project path the page sent.
@@ -226,29 +208,25 @@ fn project_of(project_path: Option<String>) -> Result<Option<std::path::PathBuf>
 /// Rewrites an agent's name and launch from Settings' edit form.
 #[tauri::command]
 pub async fn agents_update(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     project_path: Option<String>,
     agent_id: String,
     agent: NewAgent,
 ) -> Result<(), String> {
     let configs = configs.inner().clone();
-    let changed = blocking(move || configs.update_agent(project_of(project_path)?.as_deref(), &agent_id, &agent)).await??;
-    emit_changed(&app, changed.as_deref());
+    blocking(move || configs.update_agent(project_of(project_path)?.as_deref(), &agent_id, &agent)).await??;
     Ok(())
 }
 
 /// Makes an agent the default for new sessions (the project's agents.json, else the user's).
 #[tauri::command]
 pub async fn agents_set_default(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     project_path: Option<String>,
     agent_id: String,
 ) -> Result<(), String> {
     let configs = configs.inner().clone();
-    let changed = blocking(move || configs.set_default(project_of(project_path)?.as_deref(), &agent_id)).await??;
-    emit_changed(&app, changed.as_deref());
+    blocking(move || configs.set_default(project_of(project_path)?.as_deref(), &agent_id)).await??;
     Ok(())
 }
 
@@ -256,23 +234,20 @@ pub async fn agents_set_default(
 /// the returned token undoes it.
 #[tauri::command]
 pub async fn agents_remove(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     project_path: Option<String>,
     agent_id: String,
 ) -> Result<Removal, String> {
     let configs = configs.inner().clone();
     let removal = blocking(move || configs.remove_agent(project_of(project_path)?.as_deref(), &agent_id)).await??;
-    emit_changed(&app, removal.project.as_deref());
     Ok(removal)
 }
 
 /// Puts back what an `agents_remove` took out.
 #[tauri::command]
-pub async fn agents_restore(app: AppHandle, configs: State<'_, AgentConfigs>, token: u64) -> Result<(), String> {
+pub async fn agents_restore(configs: State<'_, AgentConfigs>, token: u64) -> Result<(), String> {
     let configs = configs.inner().clone();
-    let changed = blocking(move || configs.restore_agent(token)).await??;
-    emit_changed(&app, changed.as_deref());
+    blocking(move || configs.restore_agent(token)).await??;
     Ok(())
 }
 
@@ -281,7 +256,6 @@ pub async fn agents_restore(app: AppHandle, configs: State<'_, AgentConfigs>, to
 /// after its running turn).
 #[tauri::command]
 pub async fn agents_set_enabled(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     sessions: State<'_, crate::session::Sessions>,
     project_path: Option<String>,
@@ -294,8 +268,7 @@ pub async fn agents_set_enabled(
         (Some(project), false) => sessions.active_of(project, &agent_id),
         _ => 0,
     };
-    let changed = blocking(move || configs.set_enabled(project.as_deref(), &agent_id, enabled)).await??;
-    emit_changed(&app, changed.as_deref());
+    blocking(move || configs.set_enabled(project.as_deref(), &agent_id, enabled)).await??;
     Ok(stopped)
 }
 
@@ -344,28 +317,21 @@ pub async fn agents_view(
 /// Asks the ACP registry now (Check now); every window hears when its agents changed. Returns how
 /// the check went.
 #[tauri::command]
-pub async fn agents_registry_check(app: AppHandle, configs: State<'_, AgentConfigs>) -> Result<RegistryState, String> {
-    let registry = configs.registry().clone();
-    check_registry(&app, &registry).await;
-    Ok(registry.state())
-}
-
-async fn check_registry(app: &AppHandle, registry: &Registry) {
-    // The registry is the same for every project: one `null` change has every window re-read its list.
-    if registry.check().await {
-        emit_changed(app, None);
-    }
+pub async fn agents_registry_check(configs: State<'_, AgentConfigs>) -> Result<RegistryState, String> {
+    let configs = configs.inner().clone();
+    configs.check_registry().await;
+    Ok(configs.registry().state())
 }
 
 /// Checks the registry in the background whenever it is due (`Registry::due`): at launch, then
 /// as the app keeps running (asleep or not, a check is never more than a minute late).
-pub(crate) fn check_registry_daily(app: AppHandle, registry: Registry) {
+pub(crate) fn check_registry_daily(configs: AgentConfigs) {
     tauri::async_runtime::spawn(async move {
         let mut tick = tokio::time::interval(crate::config::registry::RETRY_EVERY);
         loop {
             tick.tick().await;
-            if registry.due() {
-                check_registry(&app, &registry).await;
+            if configs.registry().due() {
+                configs.check_registry().await;
             }
         }
     });
@@ -375,17 +341,14 @@ pub(crate) fn check_registry_daily(app: AppHandle, registry: Registry) {
 /// them), `agent_ids` only when given; returns their ids.
 #[tauri::command]
 pub async fn agents_import_user(
-    app: AppHandle,
     configs: State<'_, AgentConfigs>,
     project_path: String,
     agent_ids: Option<Vec<String>>,
 ) -> Result<Vec<String>, String> {
     let configs = configs.inner().clone();
-    let (ids, project) = blocking(move || {
+    blocking(move || {
         let project = dunce::canonicalize(&project_path).map_err(|e| format!("{project_path}: {e}"))?;
-        configs.import_user_agents(&project, agent_ids.as_deref()).map(|ids| (ids, project))
+        configs.import_user_agents(&project, agent_ids.as_deref())
     })
-    .await??;
-    emit_changed(&app, Some(&project));
-    Ok(ids)
+    .await?
 }

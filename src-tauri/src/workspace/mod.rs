@@ -92,12 +92,9 @@ struct Inner {
     cancels: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// Being deleted (`Deleting`): no chat joins them.
     deleting: Mutex<HashSet<String>>,
-    /// Told the project of every change (the app: `workspaces://changed` to every window).
-    on_change: Mutex<Option<OnChange>>,
+    /// Told the project of every change.
+    notifier: Mutex<Option<Arc<dyn crate::notify::Notifier>>>,
 }
-
-/// Told a project's workspaces changed.
-pub type OnChange = Arc<dyn Fn(&Path) + Send + Sync>;
 
 /// A workspace as the page lists it: its record and what this launch knows of its folder.
 #[derive(Debug, Clone, Serialize)]
@@ -126,20 +123,20 @@ impl Workspaces {
                 failed: Mutex::default(),
                 cancels: Mutex::default(),
                 deleting: Mutex::default(),
-                on_change: Mutex::default(),
+                notifier: Mutex::default(),
             }),
         }
     }
 
-    /// Calls `f` with the project of each change from now on.
-    pub fn on_change(&self, f: OnChange) {
-        *lock(&self.inner.on_change) = Some(f);
+    /// Tells `notifier` of each change from now on.
+    pub fn notify_with(&self, notifier: Arc<dyn crate::notify::Notifier>) {
+        *lock(&self.inner.notifier) = Some(notifier);
     }
 
     fn changed(&self, project: &Path) {
-        let f = lock(&self.inner.on_change).clone();
-        if let Some(f) = f {
-            f(project);
+        let notifier = lock(&self.inner.notifier).clone();
+        if let Some(notifier) = notifier {
+            notifier.workspaces_changed(project);
         }
     }
 

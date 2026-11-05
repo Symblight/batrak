@@ -9,6 +9,7 @@ pub mod fs;
 pub mod git;
 pub mod github;
 pub mod log;
+pub mod notifier;
 pub mod sessions;
 pub mod terminal;
 pub mod roots;

@@ -6,7 +6,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use tauri::ipc::Channel;
-use tauri::{AppHandle, Emitter, State, Window};
+use tauri::{State, Window};
 
 use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
@@ -30,14 +30,10 @@ pub async fn list_sessions(sessions: State<'_, Sessions>) -> Result<Vec<Session>
     Ok(sessions.list())
 }
 
-/// Every window hears a project's sessions after each sync.
-pub const SESSIONS_SYNCED_EVENT: &str = "sessions://synced";
-
 /// Asks the project's agents (`agent_ids`, else all) for its sessions; every window then hears
 /// the project's sessions and the report (`sessions://synced`). Joins a sync already running.
 #[tauri::command]
 pub async fn sessions_sync(
-    app: AppHandle,
     sessions: State<'_, Sessions>,
     project_path: String,
     agent_ids: Option<Vec<String>>,
@@ -47,11 +43,7 @@ pub async fn sessions_sync(
         move || dunce::canonicalize(&path).map_err(|e| format!("{path}: {e}"))
     })
     .await??;
-    let report = sessions.sync(&project, agent_ids.as_deref()).await;
-    let project_id = project.to_string_lossy().into_owned();
-    let listed: Vec<Session> = sessions.list().into_iter().filter(|s| s.project_id == project_id).collect();
-    let _ = app.emit(SESSIONS_SYNCED_EVENT, serde_json::json!({ "projectPath": project_id, "sessions": listed, "report": report }));
-    Ok(report)
+    Ok(sessions.sync(&project, agent_ids.as_deref()).await)
 }
 
 /// A draft's first message: creates the session under the draft's id, in `workspace_id` (`None`: Main; or a

@@ -54,7 +54,7 @@ impl Host for AppHandle {
         use tauri::Manager;
         let Some(configs) = self.try_state::<crate::config::AgentConfigs>() else { return };
         if configs.reload(project) {
-            crate::commands::agents::emit_changed(self, Some(project));
+            configs.announce(Some(project));
         }
     }
 

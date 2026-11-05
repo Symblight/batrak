@@ -64,6 +64,8 @@ pub struct SessionsOptions {
     /// The environment agents start from (the login shell's). Blocking.
     pub base_env: Arc<dyn Fn() -> HashMap<String, String> + Send + Sync>,
     pub launcher: Arc<dyn Launcher>,
+    /// Runs what follows a change heard on another thread (a file watcher's).
+    pub runtime: tokio::runtime::Handle,
     /// How long a starting agent may take to answer `initialize`, and each config option the
     /// session is set to.
     pub initialize_timeout: Duration,
@@ -83,7 +85,7 @@ pub(super) const OVERLAP_GRACE: Duration = Duration::from_secs(1);
 pub(super) const OUTPUT_STAMP: Duration = Duration::from_millis(1000);
 
 impl SessionsOptions {
-    pub fn for_app(data_dir: PathBuf, configs: AgentConfigs) -> SessionsOptions {
+    pub fn for_app(data_dir: PathBuf, configs: AgentConfigs, runtime: tokio::runtime::Handle) -> SessionsOptions {
         SessionsOptions {
             agents: Arc::clone(crate::agents::standard()),
             data_dir,
@@ -91,6 +93,7 @@ impl SessionsOptions {
             secrets: Arc::new(crate::config::env::OsKeychain),
             base_env: Arc::new(|| crate::config::env::login_shell_env().clone()),
             launcher: Arc::new(ProcessLauncher),
+            runtime,
             initialize_timeout: acp::INITIALIZE_TIMEOUT,
             overlap_grace: OVERLAP_GRACE,
             output_stamp: OUTPUT_STAMP,

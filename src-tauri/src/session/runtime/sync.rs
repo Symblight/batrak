@@ -119,7 +119,16 @@ impl Sessions {
     /// the project's sessions: each agent that's on, trusted and not waiting for a sign-in is
     /// asked in a scratch process, two at a time. A session an agent no longer lists, and that
     /// isn't running here, goes. The project's sessions are then in [`Sessions::list`].
+    /// The front then hears the project's sessions and the report.
     pub async fn sync(&self, project: &Path, agent_ids: Option<&[String]>) -> SyncReport {
+        let report = self.sync_or_join(project, agent_ids).await;
+        let project_id = project.to_string_lossy();
+        let listed: Vec<Session> = self.list().into_iter().filter(|s| s.project_id == project_id).collect();
+        self.inner.opts.configs.notifier().sessions_synced(project, &listed, &report);
+        report
+    }
+
+    async fn sync_or_join(&self, project: &Path, agent_ids: Option<&[String]>) -> SyncReport {
         // One sync per project at a time: join a running one that asks every agent this call
         // wants, else wait for it to end and look again.
         loop {

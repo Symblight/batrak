@@ -10,12 +10,11 @@ use super::AgentConfigs;
 
 const DEBOUNCE: Duration = Duration::from_millis(150);
 
-/// Re-reads the user's agents.json whenever it changes on disk and calls `on_change` when the
+/// Re-reads the user's agents.json whenever it changes on disk and announces it when the
 /// agents it gives differ. Watches its folder (created if missing), so the file may come and go;
 /// stops when the returned debouncer is dropped. `None` without a user file.
 pub fn watch_user_file(
     configs: AgentConfigs,
-    on_change: impl Fn() + Send + 'static,
 ) -> Result<Option<Debouncer<RecommendedWatcher, NoCache>>, String> {
     let Some(file) = configs.user_file().map(std::path::Path::to_path_buf) else { return Ok(None) };
     let Some(dir) = file.parent().map(std::path::Path::to_path_buf) else { return Ok(None) };
@@ -29,7 +28,7 @@ pub fn watch_user_file(
             // Editors save through a temp file renamed onto it: any event naming the file counts.
             let touched = events.iter().flat_map(|e| &e.paths).any(|p| p.file_name() == name.as_deref());
             if touched && configs.reload_user() {
-                on_change();
+                configs.announce(None);
             }
         },
         NoCache,
@@ -46,17 +45,19 @@ mod tests {
     use std::sync::mpsc;
 
     use super::*;
+    use crate::notify::testing::OnAgents;
 
     #[test]
     fn edits_on_disk_reach_the_agent_list() {
         let dir = std::env::temp_dir().join(format!("brama-user-agents-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let file = dir.join("brama").join("agents.json");
-        let configs = AgentConfigs::new(Some(file.clone()), None);
         let (tx, rx) = mpsc::channel();
-        let _watch = watch_user_file(configs.clone(), move || tx.send(()).unwrap()).unwrap().unwrap();
+        let told = OnAgents(move |project: Option<&std::path::Path>| tx.send(project.map(std::path::Path::to_path_buf)).unwrap());
+        let configs = AgentConfigs::new(Some(file.clone()), None).with_notifier(std::sync::Arc::new(told));
+        let _watch = watch_user_file(configs.clone()).unwrap().unwrap();
         let ids = || configs.list(None).agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
-        let changed = || rx.recv_timeout(Duration::from_secs(5)).expect("no change heard within 5s");
+        let changed = || assert_eq!(rx.recv_timeout(Duration::from_secs(5)).expect("no change heard within 5s"), None, "the user's file");
 
         fs::write(&file, r#"{"version":1,"agents":{"a":{"command":"a"},"b":{"command":"b"}}}"#).unwrap();
         changed();

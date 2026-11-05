@@ -54,7 +54,7 @@ paths:
     nothing). An old `"disabled"` key is read, ignored and reported as a problem. An agent that's off
     is listed (`AgentSummary.enabled: false`), not offered by the picker, never started or probed,
     and waits for no trust; `defaultAgent` is the effective one (the file's if it's on, else the
-    first that's on). `agents_set_enabled` goes through `emit_changed` and returns how many
+    first that's on). `AgentConfigs::set_enabled` announces the change, and `agents_set_enabled` returns how many
     sessions turning off stops (the snackbar counts them).
   - **The ACP registry** (`config/registry.rs`, the only user of `ureq`; spec as above): nothing
     is bundled; it is fetched at the first launch, the last answer kept in
@@ -94,7 +94,7 @@ paths:
     `projectPath: null`). The composer and the tab follow the list: a draft whose agent left it or
     was turned off gets the one a new session would, an edit form for it closes; sessions follow
     in the backend: every change that reaches `agents://changed` goes through
-    `commands::agents::emit_changed`, which runs `Sessions::sync_agents` for the project. A
+    `AgentConfigs::announce`: the front's `Notifier` hears it, and `Sessions`, which follows it, runs `sync_agents` for the project. A
     session whose agent left the file, or was turned off, is stopped at once, a running turn
     finished first, and is in `error` ("no longer configured" / "Codex is off", plus an
     `unconfigured { reason: removed | off }` event; the banner offers Turn on for `off`), shown

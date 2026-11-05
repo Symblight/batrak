@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use tauri::ipc::Response;
-use tauri::{AppHandle, State};
+use tauri::{State};
 
 use crate::config::AgentConfigs;
 use crate::session::Sessions;
@@ -141,7 +141,6 @@ fn writable(
 /// affects every project).
 #[tauri::command]
 pub async fn write_file(
-    app: AppHandle,
     roots: State<'_, Roots>,
     configs: State<'_, AgentConfigs>,
     path: String,
@@ -158,7 +157,7 @@ pub async fn write_file(
             None => configs.reload_user(),
         };
         if changed {
-            super::agents::emit_changed(&app, project.as_deref());
+            configs.announce(project.as_deref());
         }
         Ok(())
     })

@@ -34,9 +34,6 @@ pub struct Updated {
     pub downloaded: bool,
 }
 
-/// Called after agents.json was written: `emit_changed` in the app.
-pub type OnChanged = Arc<dyn Fn(Option<&Path>) + Send + Sync>;
-
 type Key = (Option<PathBuf>, String);
 type Running = Shared<BoxFuture<Result<Vec<Updated>, String>>>;
 
@@ -45,7 +42,6 @@ type Running = Shared<BoxFuture<Result<Vec<Updated>, String>>>;
 pub struct Updater {
     configs: AgentConfigs,
     prefetch: Arc<dyn Prefetch>,
-    changed: OnChanged,
     /// A single agent's update, which a second Update of it joins.
     running: Arc<Mutex<HashMap<Key, Running>>>,
     /// Agents being updated (one or all), for "Updating…".
@@ -53,8 +49,8 @@ pub struct Updater {
 }
 
 impl Updater {
-    pub fn new(configs: AgentConfigs, prefetch: Arc<dyn Prefetch>, changed: OnChanged) -> Updater {
-        Updater { configs, prefetch, changed, running: Arc::default(), updating: Arc::default() }
+    pub fn new(configs: AgentConfigs, prefetch: Arc<dyn Prefetch>) -> Updater {
+        Updater { configs, prefetch, running: Arc::default(), updating: Arc::default() }
     }
 
     /// Whether an update of the agent runs: from its write to the end of its download.
@@ -103,7 +99,7 @@ impl Updater {
         }
         let keys: Vec<Key> = pinned.iter().map(|p| (project.clone(), p.agent_id.clone())).collect();
         lock(&self.updating).extend(keys.iter().cloned());
-        (self.changed)(project.as_deref());
+        self.configs.announce(project.as_deref());
         let mut updated = Vec::new();
         for (pin, key) in pinned.into_iter().zip(&keys) {
             let downloaded = match self.prefetch.prefetch(pin.download.clone()).await {
@@ -228,15 +224,12 @@ mod tests {
             }}"#,
         )
         .unwrap();
-        let configs = AgentConfigs::new(Some(file.clone()), None).with_registry(Registry::of(registry::tests::FIXTURE));
-        let prefetch = Arc::new(prefetch);
         let changed = Arc::new(Mutex::new(Vec::new()));
         let heard = Arc::clone(&changed);
-        let updater = Updater::new(
-            configs.clone(),
-            Arc::clone(&prefetch) as Arc<dyn Prefetch>,
-            Arc::new(move |project: Option<&Path>| lock(&heard).push(project.map(Path::to_path_buf))),
-        );
+        let told = crate::notify::testing::OnAgents(move |project: Option<&Path>| lock(&heard).push(project.map(Path::to_path_buf)));
+        let configs = AgentConfigs::new(Some(file.clone()), None).with_registry(Registry::of(registry::tests::FIXTURE)).with_notifier(Arc::new(told));
+        let prefetch = Arc::new(prefetch);
+        let updater = Updater::new(configs.clone(), Arc::clone(&prefetch) as Arc<dyn Prefetch>);
         Fixture { dir, file, updater, configs, prefetch, changed }
     }
 

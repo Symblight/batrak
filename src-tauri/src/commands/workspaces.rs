@@ -1,23 +1,14 @@
 //! Workspace commands (docs/specs/workspaces.md). Every change reaches all windows as
-//! `workspaces://changed` (`{ projectPath }`), from `Workspaces::on_change`.
+//! `workspaces://changed` (`{ projectPath }`), through the `Notifier`.
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use tauri::{AppHandle, Emitter, State};
+use tauri::State;
 
 use crate::session::{DeletePreview, Sessions};
 use crate::workspace::Workspace;
 
 use super::blocking;
-
-pub const CHANGED_EVENT: &str = "workspaces://changed";
-
-/// Announces each change of a project's workspaces to every window.
-pub fn announce(app: AppHandle, sessions: &Sessions) {
-    sessions.workspaces().on_change(std::sync::Arc::new(move |project: &Path| {
-        let _ = app.emit(CHANGED_EVENT, serde_json::json!({ "projectPath": project }));
-    }));
-}
 
 fn canonical(project_path: &str) -> Result<PathBuf, String> {
     dunce::canonicalize(project_path).map_err(|e| format!("{project_path}: {e}"))

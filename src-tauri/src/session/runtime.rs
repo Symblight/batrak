@@ -91,6 +91,14 @@ impl Sessions {
         if migrated {
             sessions.inner.persist();
         }
+        let configs = &sessions.inner.opts.configs;
+        sessions.inner.workspaces.notify_with(Arc::clone(configs.notifier()));
+        let (following, runtime) = (Arc::downgrade(&sessions.inner), sessions.inner.opts.runtime.clone());
+        configs.follow_agents(Arc::new(move |project: &Path| {
+            let Some(inner) = following.upgrade() else { return };
+            let project = project.to_path_buf();
+            runtime.spawn(async move { Sessions { inner }.sync_agents(&project).await });
+        }));
         sessions
     }
 
