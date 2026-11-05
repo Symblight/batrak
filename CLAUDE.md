@@ -20,7 +20,7 @@ cd src-tauri && cargo test --lib real_npm -- --ignored        # a real `npm cach
 ## Architecture
 
 `src-tauri/` is a Cargo workspace: the app, the core it runs over (`crates/batrak-core`: config, sessions,
-workspaces, the git they need; no Tauri, spec: `docs/specs/cli.md`), plus one crate per agent kind under `src-tauri/crates/`
+workspaces, the git they need; no Tauri, spec: `docs/specs/cli.md`; `api.rs` holds what a front renders, and its tests spell out the JSON, so a change to it is a reviewed diff), plus one crate per agent kind under `src-tauri/crates/`
 (`agent-api`'s `Agent` trait, `agent-generic`, …; spec: `docs/specs/agent-plugins.md`), all default
 members, so the commands above check every crate. Agent-specific behavior goes in its crate, never in
 the app.

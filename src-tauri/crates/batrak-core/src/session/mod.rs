@@ -10,8 +10,8 @@ pub mod program;
 mod runtime;
 
 pub use runtime::{
-    CliDraft, CliOpened, DeletePreview, CreateSession, Envelope, EventSink, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
-    SessionsOptions, SyncReport,
+    AgentSync, CliDraft, CliOpened, DeletePreview, CreateSession, Envelope, EventSink, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
+    SessionsOptions, SyncOutcome, SyncReport,
 };
 
 use std::collections::BTreeMap;

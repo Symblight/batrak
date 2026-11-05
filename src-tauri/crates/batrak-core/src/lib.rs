@@ -5,6 +5,7 @@
 use agent_acp as acp;
 
 pub mod agents;
+pub mod api;
 pub mod config;
 pub mod dirs;
 pub mod git;

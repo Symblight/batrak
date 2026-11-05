@@ -552,5 +552,5 @@ pub use cli::{CliDraft, CliOpened};
 pub use api::{CreateSession, Envelope, EventSink, Launched, Launcher, PromptInput, SessionsOptions};
 pub use sign_in::{LoginTab, Probed, SignInEnd};
 use sign_in::{LaunchKey, SignInNeed, SignInRun};
-pub use sync::SyncReport;
+pub use sync::{AgentSync, SyncOutcome, SyncReport};
 pub use workspaces::DeletePreview;

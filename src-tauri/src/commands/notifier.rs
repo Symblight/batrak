@@ -105,16 +105,4 @@ mod tests {
         }
     }
 
-    #[test]
-    fn every_sign_in_state_reads_as_the_page_expects() {
-        for (state, word) in [
-            (SignInProgress::Waiting, "waiting"),
-            (SignInProgress::Done, "done"),
-            (SignInProgress::Failed, "failed"),
-            (SignInProgress::Cancelled, "cancelled"),
-        ] {
-            assert_eq!(serde_json::to_value(state).unwrap(), word);
-        }
-        assert_eq!(serde_json::to_value(NoticeLevel::Error).unwrap(), "error");
-    }
 }
