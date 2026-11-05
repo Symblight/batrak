@@ -384,6 +384,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ac07cdecf99051d9a5238b80f35af32cdeba5b336e55d957b318b50137e18da5"
 
 [[package]]
+name = "batrak-core"
+version = "0.1.0"
+dependencies = [
+ "agent-acp",
+ "agent-antigravity",
+ "agent-api",
+ "agent-claude",
+ "agent-codex",
+ "agent-copilot",
+ "agent-generic",
+ "agent-kit",
+ "dirs",
+ "dunce",
+ "futures",
+ "icu_normalizer",
+ "keyring",
+ "libc",
+ "notify-debouncer-full",
+ "semver",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+ "ureq",
+]
+
+[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -466,30 +494,18 @@ dependencies = [
 name = "brama"
 version = "0.1.0"
 dependencies = [
- "agent-acp",
- "agent-antigravity",
- "agent-api",
- "agent-claude",
- "agent-codex",
- "agent-copilot",
- "agent-generic",
- "agent-kit",
- "dirs",
+ "batrak-core",
  "dunce",
  "fontdb",
- "futures",
  "globset",
  "grep-matcher",
  "grep-regex",
  "grep-searcher",
- "icu_normalizer",
  "ignore",
- "keyring",
  "libc",
  "notify-debouncer-full",
  "nucleo-matcher",
  "portable-pty",
- "semver",
  "serde",
  "serde_json",
  "tauri",
@@ -500,7 +516,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-subscriber",
- "ureq",
  "windows-sys 0.61.2",
 ]
 

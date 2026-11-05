@@ -2,7 +2,7 @@
 
 use std::path::{Path, PathBuf};
 
-/// The bundle identifier in `tauri.conf.json`, which names the data and log folders.
+/// The app's bundle identifier, which names the data and log folders.
 const IDENTIFIER: &str = "dev.brama.app";
 /// Points every folder at another root, for trying things out.
 const HOME_VAR: &str = "BRAMA_HOME";
@@ -50,22 +50,6 @@ impl Dirs {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tauri::Manager;
-
-    #[test]
-    fn the_standard_folders_are_the_ones_tauri_resolves() {
-        let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let mut context = tauri::test::mock_context(tauri::test::noop_assets());
-        context.config_mut().identifier = conf["identifier"].as_str().unwrap().to_owned();
-        let app = tauri::test::mock_builder().build(context).unwrap();
-        let path = app.path();
-
-        let dirs = Dirs::standard().unwrap();
-
-        assert_eq!(dirs.data, path.app_data_dir().unwrap());
-        assert_eq!(dirs.config, path.config_dir().unwrap().join("brama"));
-        assert_eq!(dirs.logs, path.app_log_dir().unwrap());
-    }
 
     #[test]
     fn the_home_variable_moves_every_folder_under_its_root() {

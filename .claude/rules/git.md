@@ -1,6 +1,7 @@
 ---
 paths:
   - "src-tauri/src/git/**"
+  - "src-tauri/crates/batrak-core/src/git/**"
   - "src-tauri/src/commands/git.rs"
   - "src/hooks/git/**"
   - "src/stores/git/git.js"

@@ -1,6 +1,6 @@
 ---
 paths:
-  - "src-tauri/src/config/**"
+  - "src-tauri/crates/batrak-core/src/config/**"
   - "src-tauri/crates/agent-acp/src/auth.rs"
   - "src-tauri/crates/agent-*/**"
   - "src-tauri/src/commands/agents.rs"
@@ -13,7 +13,7 @@ paths:
 
 # Agents: config, registry, trust, sign-in
 
-- **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
+- **Config** (`src-tauri/crates/batrak-core/src/config/`): opening a project creates `.brama/` (`agents.json`,
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
   holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
   chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local

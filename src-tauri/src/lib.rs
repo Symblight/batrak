@@ -1,20 +1,12 @@
-/// The generic ACP driver, its own crate; `crate::acp::…` paths read as before.
-use agent_acp as acp;
-mod agents;
+use batrak_core::{config, dirs, notify, session, util, workspace};
+
 mod commands;
-mod config;
-mod dirs;
 mod git;
 mod github;
 mod logging;
 mod menu;
-mod notify;
-mod session;
-mod storage;
 mod terminal;
 mod roots;
-mod util;
-mod workspace;
 
 use tauri::Manager;
 
@@ -198,3 +190,27 @@ struct UserAgentsWatch(
         Option<notify_debouncer_full::Debouncer<notify_debouncer_full::notify::RecommendedWatcher, notify_debouncer_full::NoCache>>,
     >,
 );
+
+#[cfg(test)]
+mod tests {
+    mod dirs {
+        use tauri::Manager;
+
+        use batrak_core::dirs::Dirs;
+
+        #[test]
+        fn the_standard_folders_are_the_ones_tauri_resolves() {
+            let conf: serde_json::Value = serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+            let mut context = tauri::test::mock_context(tauri::test::noop_assets());
+            context.config_mut().identifier = conf["identifier"].as_str().unwrap().to_owned();
+            let app = tauri::test::mock_builder().build(context).unwrap();
+            let path = app.path();
+
+            let dirs = Dirs::standard().unwrap();
+
+            assert_eq!(dirs.data, path.app_data_dir().unwrap());
+            assert_eq!(dirs.config, path.config_dir().unwrap().join("brama"));
+            assert_eq!(dirs.logs, path.app_log_dir().unwrap());
+        }
+    }
+}

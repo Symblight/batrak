@@ -19,7 +19,8 @@ cd src-tauri && cargo test --lib real_npm -- --ignored        # a real `npm cach
 
 ## Architecture
 
-`src-tauri/` is a Cargo workspace: the app, plus one crate per agent kind under `src-tauri/crates/`
+`src-tauri/` is a Cargo workspace: the app, the core it runs over (`crates/batrak-core`: config, sessions,
+workspaces, the git they need; no Tauri, spec: `docs/specs/cli.md`), plus one crate per agent kind under `src-tauri/crates/`
 (`agent-api`'s `Agent` trait, `agent-generic`, …; spec: `docs/specs/agent-plugins.md`), all default
 members, so the commands above check every crate. Agent-specific behavior goes in its crate, never in
 the app.
@@ -162,7 +163,7 @@ is destroyed, and `close_window_roots` when its page loads again (before any ope
 `tracing` everywhere in Rust (`tracing::info!` / `warn!` / `debug!`, never `println!`), set up in
 `src-tauri/src/logging.rs`: daily files `brama.<date>.log` in the app log dir (macOS:
 `~/Library/Logs/dev.brama.app`, last 7 kept), plus stderr in dev builds. Default level is
-`brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the agent crates that log,
+`brama_lib=debug` in dev, `brama_lib=info` in release (and the same for the core, `batrak_core`, and the agent crates that log,
 `agent_acp`: `OWN_TARGETS` in `logging.rs`, where a new logging crate goes too); `BRAMA_LOG` overrides it (an `EnvFilter`
 directive). The panic hook logs every panic, from any thread, with a backtrace. The frontend logs through
 `app.log(level, message)` (`hooks/app/app.js`, `write_log` command, target `frontend`); `main.js`
@@ -173,14 +174,14 @@ git call; never log file contents.
 **Snackbars:** `<acp-snackbars>` (bottom-end, in `<acp-app>`) shows `$notices` (`stores/notices/notices.js`:
 `notify(level, message)`, the same message counts up instead of stacking, at most 4, info 5s / warn
 8s / errors until dismissed, held while hovered). A `tracing` layer (`NoticeLayer` in `logging.rs`)
-sends every warn/error of ours (`brama_lib`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
+sends every warn/error of ours (`brama_lib`, `batrak_core`, `agent_acp`) and panic to all windows as `app://notice`, whatever `BRAMA_LOG`
 says — so a `warn!` is user-visible: use it for real failures only. In the frontend, a failed action
 with no inline error goes through `app.reportError(what, err)` (`hooks/app/app.js`: logs + snackbar);
 uncaught errors and rejections show one too.
 
 ### Git
 
-`src-tauri/src/git/` drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential
+`src-tauri/crates/batrak-core/src/git/` (and the app's `src-tauri/src/git/`: commits, cached state) drives the `git` CLI (never libgit2), so the user's hooks, LFS and credential
 helpers apply.
 
 - Every call goes through `exec::run` / `run_with`: closed stdin, pipes drained on threads, a

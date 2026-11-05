@@ -1,0 +1,45 @@
+[package]
+name = "batrak-core"
+version = "0.1.0"
+edition = "2021"
+description = "What knows agents, with no front: their config, the ACP registry, trust, sign-in, updates, sessions, workspaces and their worktrees"
+
+[features]
+# `git::test_repo`, for a front's git tests
+test-support = []
+
+[dependencies]
+agent-api = { path = "../agent-api" }
+agent-acp = { path = "../agent-acp" }
+agent-antigravity = { path = "../agent-antigravity" }
+agent-claude = { path = "../agent-claude" }
+agent-codex = { path = "../agent-codex" }
+agent-copilot = { path = "../agent-copilot" }
+agent-generic = { path = "../agent-generic" }
+agent-kit = { path = "../agent-kit" }
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
+futures = "0.3"
+tracing = "0.1"
+# canonicalize without Windows' `\\?\` prefix, in which `/` is not a separator
+dunce = "1"
+# The app's data, config and log folders: the crate Tauri's own path resolver uses
+dirs = "7"
+# Following the user's agents.json
+notify-debouncer-full = "0.7"
+# `${keychain:name}` in agents.json env values
+keyring = "4.2"
+# The ACP agent registry (config/registry.rs only): fetched over rustls, versions compared by semver
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+semver = "1"
+# Accent-insensitive agent search (NFD); already in the tree through url/idna
+icu_normalizer = "2"
+
+# Stopping a timed-out commit's process group (git and its hooks), and the account's login shell
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
+[dev-dependencies]
+agent-acp = { path = "../agent-acp", features = ["test-support"] }
+tracing-subscriber = "0.3"

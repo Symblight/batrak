@@ -5,7 +5,7 @@ description = "Brama — agent-first client for AI coding agents"
 edition = "2021"
 
 [workspace]
-# Each agent is a crate (spec: docs/specs/agent-plugins.md); all are default members, so
+# The core and each agent are crates (specs: docs/specs/cli.md, agent-plugins.md); all are default members, so
 # `cargo test --lib` and `cargo clippy --all-targets` here check every one.
 members = ["crates/*"]
 default-members = [".", "crates/*"]
@@ -18,14 +18,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-agent-api = { path = "crates/agent-api" }
-agent-acp = { path = "crates/agent-acp" }
-agent-antigravity = { path = "crates/agent-antigravity" }
-agent-claude = { path = "crates/agent-claude" }
-agent-codex = { path = "crates/agent-codex" }
-agent-copilot = { path = "crates/agent-copilot" }
-agent-generic = { path = "crates/agent-generic" }
-agent-kit = { path = "crates/agent-kit" }
+batrak-core = { path = "crates/batrak-core" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -43,8 +36,6 @@ grep-matcher = "0.1"
 globset = "0.4"
 # canonicalize without Windows' `\\?\` prefix, in which `/` is not a separator
 dunce = "1"
-# The app's data, config and log folders: the crate Tauri's own path resolver uses
-dirs = "7"
 # Settings > Font: installed font families (the webview has no font enumeration API)
 fontdb = "0.24"
 # Logs: daily files in the app log dir (plus stderr in dev), panics included
@@ -52,16 +43,8 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
-futures = "0.3"
-# `${keychain:name}` in agents.json env values
-keyring = "4.2"
 # Terminal tabs: the user's shell in a pseudo-terminal
 portable-pty = "0.9"
-# The ACP agent registry (config/registry.rs only): fetched over rustls, versions compared by semver
-ureq = { version = "3", default-features = false, features = ["rustls"] }
-semver = "1"
-# Accent-insensitive agent search (NFD); already in the tree through url/idna
-icu_normalizer = "2"
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]
@@ -73,7 +56,7 @@ libc = "0.2"
 opt-level = 2
 
 [dev-dependencies]
-agent-acp = { path = "crates/agent-acp", features = ["test-support"] }
+batrak-core = { path = "crates/batrak-core", features = ["test-support"] }
 # A mock app, to compare `Dirs` with Tauri's path resolver
 tauri = { version = "2", features = ["test"] }
 
