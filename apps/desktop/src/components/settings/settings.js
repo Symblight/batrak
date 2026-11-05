@@ -366,7 +366,7 @@ export class AcpSettings extends LitElement {
           @change=${this.#onAppearanceChange}
         >
           ${APPEARANCES.map(
-            ({ value, label, icon }) => html`<md-segmented-button value=${value}>
+            ({ value, label, icon }) => html`<md-segmented-button class="acp-settings__segment" value=${value}>
               <md-icon slot="icon" class="acp-settings__segment-icon">${unsafeSVG(icon)}</md-icon>
               ${label}
             </md-segmented-button>`,
@@ -554,8 +554,8 @@ export class AcpSettings extends LitElement {
           .value=${settings.terminalTheme}
           @change=${(/** @type {CustomEvent<{ value: Settings['terminalTheme'] }>} */ e) => this.#change({ terminalTheme: e.detail.value })}
         >
-          <md-segmented-button value="app">From the app</md-segmented-button>
-          <md-segmented-button value="custom">Custom</md-segmented-button>
+          <md-segmented-button class="acp-settings__segment" value="app">From the app</md-segmented-button>
+          <md-segmented-button class="acp-settings__segment" value="custom">Custom</md-segmented-button>
         </md-segmented-button-group>
       </div>
       ${settings.terminalTheme === 'custom' && settings.terminalColors ? this.#renderTerminalColors(settings.terminalColors) : nothing}`;

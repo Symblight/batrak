@@ -162,14 +162,18 @@
   color: var(--acp-color-on-surface-variant);
 }
 
-/* Dense MD3 segmented button: 28px instead of 40px for the narrow column. */
+/* Dense MD3 segmented button: 28px instead of 40px, only as wide as its labels. */
 .acp-settings__segments {
   --md-segmented-button-group-height: 28px;
+  --md-segmented-button-icon-size: var(--acp-icon-size-sm);
+  align-self: flex-start;
+}
+/* On the segment, not the group: each segment's :host declares these, hiding inherited values. */
+.acp-settings__segment {
   --md-segmented-button-block-space: var(--acp-space-1);
   --md-segmented-button-inline-space: var(--acp-space-3);
   --md-segmented-button-label-text-size: var(--acp-font-size-sm);
   --md-segmented-button-label-text-line-height: 16px;
-  --md-segmented-button-icon-size: var(--acp-icon-size-sm);
 }
 .acp-settings__segment-icon {
   font-size: var(--acp-icon-size-sm);
