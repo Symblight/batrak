@@ -1,6 +1,6 @@
 ---
 paths:
-  - "packages/batrak-core/src/config/**"
+  - "packages/bt-core/src/config/**"
   - "packages/agent-acp/src/auth.rs"
   - "packages/agent-*/**"
   - "apps/desktop/src-tauri/src/commands/agents.rs"

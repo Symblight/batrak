@@ -1,5 +1,5 @@
 [package]
-name = "batrak-core"
+name = "bt-core"
 version = "0.1.0"
 edition = "2021"
 description = "What knows agents, with no front: their config, the ACP registry, trust, sign-in, updates, sessions, workspaces and their worktrees"

@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-Batrak is an agent-first client for AI coding agents over ACP: one core library, `batrak-core`,
+Batrak is an agent-first client for AI coding agents over ACP: one core library, `bt-core`,
 and two fronts over it, a desktop app and a CLI. `ARCHITECTURE.md` says how the pieces fit and
 where new code goes; read it before a change that adds a module or crosses a crate. The specs are
 in `docs/specs/` (`docs/specs/README.md` says how one is written).
@@ -15,9 +15,9 @@ Cargo runs from the repo root, pnpm from `apps/desktop`.
 cargo test --workspace                   # backend tests, every crate; must pass
 cargo clippy --all-targets               # no warnings
 cargo run -p batrak -- --version         # the CLI (a stub until docs/specs/cli.md)
-cargo test -p batrak-core real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
-cargo test -p batrak-core real_registry -- --ignored             # the real ACP registry and its ETag (network)
-cargo test -p batrak-core real_npm -- --ignored                  # a real `npm cache add` prefetch (network, npm)
+cargo test -p bt-core real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
+cargo test -p bt-core real_registry -- --ignored             # the real ACP registry and its ETag (network)
+cargo test -p bt-core real_npm -- --ignored                  # a real `npm cache add` prefetch (network, npm)
 
 cd apps/desktop
 pnpm dev             # Rsbuild dev server (port 1420; full reload, no HMR)
@@ -34,14 +34,14 @@ pnpm test            # frontend tests: @web/test-runner in Chrome; must pass
 ```
 apps/desktop/        the Tauri app: src-tauri/ (batrak_desktop: commands, window, editor, PTY terminals) and src/ (the Lit UI)
 apps/cli/            the `batrak` binary
-packages/batrak-core the library both apps use: sessions, workspaces, agents, config, the project's .bt/
+packages/bt-core the library both apps use: sessions, workspaces, agents, config, the project's .bt/
 packages/agent-*     the Agent trait (agent-api), the ACP driver (agent-acp), shared npx mechanics (agent-kit), one crate per agent kind
 docs/specs/          one spec per feature
 ```
 
 - **The one rule** (`ARCHITECTURE.md` §1): the core knows agents, sessions, workspaces and
   `.bt/`; a front knows its surface. Anything a second front would re-implement goes in
-  `batrak-core`. Anything that names a window, a tab, a PTY, a TTY or a DOM node goes in an app.
+  `bt-core`. Anything that names a window, a tab, a PTY, a TTY or a DOM node goes in an app.
   `packages/` never depends on `apps/`; no `tauri`, `clap` or terminal crate in a package.
 - **Agent-specific behavior goes in that agent's crate** (`packages/agent-*`, behind
   `agent_api::Agent`; spec `docs/specs/agent-plugins.md`), never in the core or an app. The core
@@ -49,7 +49,7 @@ docs/specs/          one spec per feature
 - **The core calls out only through its traits** (`Dirs`, `Notifier`, `EventSink`, `Launcher`,
   `SecretStore`, `ProgramRunner`; `ARCHITECTURE.md` §4) and answers the user's questions as events
   with options plus a method for the answer. Never a blocking question, never a UI concept.
-- **The contract is `batrak_core::api`**: the serde types both fronts render. A change there is a
+- **The contract is `bt_core::api`**: the serde types both fronts render. A change there is a
   reviewed diff of its snapshot test; fields are added with `#[serde(default)]`, never renamed.
 - **The frontend's rules** (layers, stores, styling, BEM, file structure) are in
   `apps/desktop/CLAUDE.md`, read when working under that folder.
@@ -81,7 +81,7 @@ test that reproduces it.
 - **Backend:** tests live next to the code (`#[cfg(test)] mod tests`, or `<module>/tests.rs` when
   long). Agent behavior is tested against the in-process fake agent
   (`packages/agent-acp/src/fake_agent.rs`, the `test-support` feature; extend its scripts rather
-  than mocking `Connection`), files against temp folders, git against `batrak-core`'s
+  than mocking `Connection`), files against temp folders, git against `bt-core`'s
   `git/test_repo.rs` (`test-support`). The core's traits have recording fakes. Test what a caller
   sees (events, statuses, files on disk), not internals.
 - **Frontend:** see `apps/desktop/CLAUDE.md`; writing or slimming a frontend suite uses the

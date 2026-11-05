@@ -1,4 +1,4 @@
-use batrak_core::{config, dirs, notify, session, util, workspace};
+use bt_core::{config, dirs, notify, session, util, workspace};
 
 mod commands;
 mod git;
@@ -195,7 +195,7 @@ mod tests {
     mod dirs {
         use tauri::Manager;
 
-        use batrak_core::dirs::Dirs;
+        use bt_core::dirs::Dirs;
 
         #[test]
         fn the_standard_folders_are_the_ones_tauri_resolves() {

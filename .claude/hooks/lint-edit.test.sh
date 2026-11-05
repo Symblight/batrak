@@ -18,11 +18,11 @@ check() { # expected tool path text
 
 # Rust
 check 2 Edit  /r/apps/desktop/src-tauri/src/foo.rs       'println!("x");'
-check 2 Edit  /r/packages/batrak-core/src/foo.rs 'println!("x");'
+check 2 Edit  /r/packages/bt-core/src/foo.rs 'println!("x");'
 check 2 Write /r/apps/desktop/src-tauri/src/foo.rs       'fn f() { dbg!(1); }'
 check 0 Edit  /r/apps/desktop/src-tauri/src/foo.rs       'tracing::info!("x");'
 check 0 Edit  /r/apps/desktop/src-tauri/src/roots/bench.rs 'println!("x");'
-check 0 Edit  /r/packages/batrak-core/src/session/runtime/tests.rs 'eprintln!("x");'
+check 0 Edit  /r/packages/bt-core/src/session/runtime/tests.rs 'eprintln!("x");'
 # CSS
 check 2 Edit  /r/apps/desktop/src/components/a/a.css     'a { display: none !important; }'
 check 2 Edit  /r/apps/desktop/src/components/a/a.css     'a { color: #fff; }'
