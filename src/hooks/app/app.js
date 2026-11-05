@@ -76,7 +76,7 @@ export const app = Object.freeze({
   /** Reads the versions into `$about`, once per window; a failure lets the next call retry. */
   loadAbout() {
     aboutLoading ??= ipc
-      .invoke('get_about')
+      .invoke('about')
       .then((about) => $about.set(/** @type {AboutInfo} */ (about)))
       .catch((err) => {
         aboutLoading = null;

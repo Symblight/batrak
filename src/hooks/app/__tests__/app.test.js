@@ -58,7 +58,7 @@ describe('app', () => {
       let failing = true;
       mockIPC((cmd) => {
         calls.push({ cmd, args: {} });
-        if (cmd === 'get_about') {
+        if (cmd === 'about') {
           if (failing) throw new Error('no backend');
           return ABOUT;
         }
@@ -70,7 +70,7 @@ describe('app', () => {
       await app.loadAbout();
       await app.loadAbout();
       expect($about.get()).to.deep.equal(ABOUT);
-      expect(calls.filter((c) => c.cmd === 'get_about').length).to.equal(2);
+      expect(calls.filter((c) => c.cmd === 'about').length).to.equal(2);
     });
   });
 
