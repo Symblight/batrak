@@ -8,11 +8,14 @@ runs:
     # least) allowlist a git-hosted package's build only by its exact commit spec, so they refuse
     # rich-components' prepare.
     - uses: pnpm/action-setup@v6
+      with:
+        package_json_file: apps/desktop/package.json
 
     - uses: actions/setup-node@v7
       with:
         node-version: lts/*
         cache: pnpm
+        cache-dependency-path: apps/desktop/pnpm-lock.yaml
 
     # The lockfile pins rich-components over SSH, which needs a key even for a public repo:
     # clone it over anonymous HTTPS instead.
@@ -26,4 +29,5 @@ runs:
 
     - name: Install dependencies
       shell: bash
+      working-directory: apps/desktop
       run: pnpm install --frozen-lockfile
