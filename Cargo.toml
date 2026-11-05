@@ -1,7 +1,7 @@
 [workspace]
 resolver = "2"       # a virtual root has no edition to imply it (ARCHITECTURE.md §10.3)
-members = ["packages/*", "apps/desktop/src-tauri"]
-default-members = ["packages/*", "apps/desktop/src-tauri"]
+members = ["packages/*", "apps/cli", "apps/desktop/src-tauri"]
+default-members = ["packages/*", "apps/cli", "apps/desktop/src-tauri"]
 
 # Dependencies optimized in dev builds (fuzzy matching, regex, directory walking are 10x slower
 # unoptimized); our own crates stay debug. Only the workspace root's profiles count.
