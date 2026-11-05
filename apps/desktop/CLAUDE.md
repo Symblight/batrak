@@ -1,7 +1,7 @@
 # CLAUDE.md — apps/desktop
 
 The desktop app: `src-tauri/` (package `batrak-desktop`, the Tauri commands, the window, the
-editor side and the PTY terminals, over `batrak-core`) and `src/` (the Lit UI). The root
+editor side and the PTY terminals, over `bt-core`) and `src/` (the Lit UI). The root
 `CLAUDE.md` holds the commands, the backend conventions, tests-first, working mode and commits;
 this file holds what is specific to the frontend. Paths below are relative to this folder.
 
@@ -21,7 +21,7 @@ module that imports `@tauri-apps/*`); each feature's Rust commands live in its h
 - `src/controllers/<feature>/` — Lit `ReactiveController`s (`PascalCaseController.js`), one folder per
   feature, never colocated with the component that first uses them. One `config` object typed by a
   `@typedef`.
-- `src/hooks/<feature>/types.js` — the feature's JSDoc typedefs; they mirror `batrak_core::api`'s types.
+- `src/hooks/<feature>/types.js` — the feature's JSDoc typedefs; they mirror `bt_core::api`'s types.
 - `src/styles/tokens.css` — global app tokens, imported once from `src/main.js`.
 
 Third-party elements: `@symblight/wc-material` (`md-*`), `@symblight/code-editor` (`cdx-*`),

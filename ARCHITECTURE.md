@@ -3,14 +3,14 @@
 Status: draft · 2026-11-05 · successor of Brama (`ACP-code-editor`); builds on its
 `docs/specs/cli.md`, `agent-plugins.md`, `workspaces.md`, `session-sync.md`, `subagents.md`.
 
-Batrak is an agent-first client for AI coding agents over ACP. One library, **`batrak-core`**,
+Batrak is an agent-first client for AI coding agents over ACP. One library, **`bt-core`**,
 holds everything about agents, sessions, workspaces and a project's `.bt/` folder. Two thin
 fronts render it: the **desktop app** (Tauri + a Lit web UI) and the **CLI** (`batrak`). Later
 features (spec-driven pipelines, MCP, routing) land in the core and show up in both fronts.
 
 ```
                           ┌─ apps/desktop   Tauri commands + events, the window, the editor (files, search, git, terminals), the Lit UI
-packages/batrak-core ─────┤
+packages/bt-core ─────┤
                           └─ apps/cli       clap verbs, a TTY renderer, inherit-stdio program runner
                           │
                           └─ packages/agent-api · agent-acp · agent-kit · agent-claude · agent-codex · agent-copilot · agent-antigravity · agent-generic
@@ -26,7 +26,7 @@ an ANSI color or a DOM node belongs in a front.
 Consequences:
 
 - The core has no binary and depends on no UI toolkit: no `tauri`, no `clap`, no terminal crate.
-  A grep for `tauri` over `packages/` finds nothing; `cargo test -p batrak-core` runs without a window.
+  A grep for `tauri` over `packages/` finds nothing; `cargo test -p bt-core` runs without a window.
 - The core calls **out** only through traits it declares (§4). A front implements them.
 - The core speaks **in** through methods, **out** through typed events. It never asks a question
   the way a UI would; it emits an event that carries the options and takes the answer as a method
@@ -51,7 +51,7 @@ Batrak/
 │   │   └── scripts/
 │   └── cli/                    the `batrak` binary (§7)
 ├── packages/                   what the apps share; a package never depends on an app
-│   ├── batrak-core/            the library (§3)
+│   ├── bt-core/            the library (§3)
 │   ├── agent-api/              the `Agent` trait and the types every agent crate shares; no I/O
 │   ├── agent-acp/              the generic ACP driver: process, connection, catalog, auth; the fake agent (test-support)
 │   ├── agent-kit/              what several agent crates share: npx launches, pinning, downloads
@@ -79,7 +79,7 @@ cargo run -p batrak -- status          # the CLI
 cd apps/desktop && pnpm typecheck && pnpm test && pnpm tauri dev
 ```
 
-## 3. `batrak-core`
+## 3. `bt-core`
 
 What it holds, module by module, and where each came from in Brama.
 
@@ -96,7 +96,7 @@ What it holds, module by module, and where each came from in Brama.
 | `dirs` | `Dirs { data, config, logs }` (§4.1) | three `app.path()` reads in `lib.rs` |
 | `api` | re-exports of every type a front renders (§5) | spread over the modules |
 
-The crate lives in `packages/batrak-core/`, beside the agent crates it depends on.
+The crate lives in `packages/bt-core/`, beside the agent crates it depends on.
 
 What stops this split today, measured from Brama's `crate::` paths on 2026-11-05. Everything else
 in these modules is already free of Tauri: only `commands/`, `lib.rs`, `menu.rs`, `logging.rs` and
@@ -206,7 +206,7 @@ A front attaches as a **client** (`ClientId`): a window label in the desktop, `c
 CLI. Sinks, program runners, terminal groups and "shown in another client" are keyed by it.
 Nothing in the core says "window".
 
-## 5. The contract: `batrak_core::api`
+## 5. The contract: `bt_core::api`
 
 One module re-exports every type a front renders: `Session`, `SessionStatus`, `Envelope`,
 `SyncReport`, `Workspace`, `WorkspaceRecord`, `AgentsView`, `AgentRow`, `RegistryRow`,
@@ -277,11 +277,11 @@ contract (§5). Exit codes: 0 after `turn-end`, 1 after `error`, 130 when cancel
 Each one is files in the project as the source of truth, read, written and watched by the core,
 rendered by the fronts. The agent never needs Batrak to continue.
 
-- **Specs** (`batrak-core` `project/specs`): `.bt/specs/<slug>/{requirements,design,tasks,verify}.md`,
+- **Specs** (`bt-core` `project/specs`): `.bt/specs/<slug>/{requirements,design,tasks,verify}.md`,
   status in front matter (`draft | review | approved`, `approved_by`, `approved_at`). The core
   parses them, watches them, and notifies `spec_changed`. Editing the file by hand equals the
   agent editing it; approving an earlier stage's file puts the later ones back to `review`.
-- **Pipelines as data** (`batrak-core` `project/pipelines`): `.bt/pipelines/<name>.json` with
+- **Pipelines as data** (`bt-core` `project/pipelines`): `.bt/pipelines/<name>.json` with
   `stages[] = { id, role, agent, model, skill, gate }` and `edges[] = { from, to, gate }`. The
   stepper, the Routing list and the later board are views of this file; the core is the only
   parser. A pipeline runner drives a session stage by stage: it sends the stage's skill prompt
@@ -297,12 +297,12 @@ rendered by the fronts. The agent never needs Batrak to continue.
   with hashes, in each agent's own format. Synced from Main into every workspace's worktree on
   install, create, open and change; a file edited in a worktree is kept and marked. Lives next to
   `Workspaces::ready`.
-- **MCP** (`batrak-core` `mcp`): `.mcp.json` reading and status; the merge of `mcpServers` into an agent's
+- **MCP** (`bt-core` `mcp`): `.mcp.json` reading and status; the merge of `mcpServers` into an agent's
   launch is already `config`'s. Adding one from a registry follows the ACP registry's pattern.
 - **Routing**: the pipelines' stages with their agent and model; later the board. No new storage:
   it is the same `pipelines/*.json` drawn as a graph.
 
-Each starts as a module of `batrak-core`; it becomes a package of its own under `packages/` only
+Each starts as a module of `bt-core`; it becomes a package of its own under `packages/` only
 when it needs dependencies the core should not carry.
 
 ## 9. From Brama to Batrak
@@ -319,7 +319,7 @@ second, as renames; the CLI third. One commit per step.
    pass unchanged.
 3. **`ProgramRunner`**: logins and `open_cli` leave the PTY module behind; the runtime's tests get
    a fake runner.
-4. **`batrak-core` as a crate** inside Brama's workspace; the app re-exports what `commands/`
+4. **`bt-core` as a crate** inside Brama's workspace; the app re-exports what `commands/`
    names. Acceptance: its tests run without Tauri; no `tauri` in the crate.
 5. **`api` module** and the contract snapshot test.
 6. **This repository**, in three commits or more, so the moves stay plain renames for blame:
@@ -355,10 +355,10 @@ and 1 skipped; `pnpm typecheck` and `cargo clippy --all-targets` clean.
 
 | Feature | Backend lands in | Page |
 | --- | --- | --- |
-| Chats: ACP sessions, turns, permissions, subagents, sync, replay, prompt history | `batrak-core` `session/` | moves as is |
-| Workspaces: worktrees, apply, check out, delete, recreate | `batrak-core` `workspace/`, `git/` | moves as is |
-| Agents tab: `agents.json`, registry, trust, on/off, updates, sign-in | `batrak-core` `config/`, `agents/`; the login's PTY through `ProgramRunner` | moves as is |
-| An agent's CLI in a terminal | `batrak-core` `session/`, through `ProgramRunner`; PTY in the desktop | moves as is |
+| Chats: ACP sessions, turns, permissions, subagents, sync, replay, prompt history | `bt-core` `session/` | moves as is |
+| Workspaces: worktrees, apply, check out, delete, recreate | `bt-core` `workspace/`, `git/` | moves as is |
+| Agents tab: `agents.json`, registry, trust, on/off, updates, sign-in | `bt-core` `config/`, `agents/`; the login's PTY through `ProgramRunner` | moves as is |
+| An agent's CLI in a terminal | `bt-core` `session/`, through `ProgramRunner`; PTY in the desktop | moves as is |
 | Terminals tab | desktop `terminal/` | moves as is |
 | File tree, Quick Open, Find in Files, Search pane | desktop `roots/` | moves as is |
 | Changes, commit, GitHub | desktop `git/{commit,cache}`, `github.rs`, over the core's `git/` | moves as is |
@@ -373,7 +373,7 @@ table once, a real agent included (`cargo test real_claude -- --ignored`).
 None of these fail a compile.
 
 - **Warnings stop reaching the user.** `logging.rs`'s `OWN_TARGETS` names `brama_lib` and
-  `agent_acp`, and `NoticeLayer` shows only those crates' warnings. Code that moves to `batrak_core`
+  `agent_acp`, and `NoticeLayer` shows only those crates' warnings. Code that moves to `bt_core`
   logs under a new target, so its failures would vanish from the snackbars and the default log level.
   Add the crate at step 4, and every later crate that logs.
 - **Quick Open gets 10x slower in dev.** `[profile.dev.package."*"]` must move to the root

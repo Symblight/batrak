@@ -12,7 +12,7 @@ crate-type = ["rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-batrak-core = { path = "../../../packages/batrak-core" }
+bt-core = { path = "../../../packages/bt-core" }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["preserve_order"] }
@@ -45,7 +45,7 @@ portable-pty = "0.9"
 libc = "0.2"
 
 [dev-dependencies]
-batrak-core = { path = "../../../packages/batrak-core", features = ["test-support"] }
+bt-core = { path = "../../../packages/bt-core", features = ["test-support"] }
 # A mock app, to compare `Dirs` with Tauri's path resolver
 tauri = { version = "2", features = ["test"] }
 

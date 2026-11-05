@@ -7,7 +7,7 @@ tool. The successor of Brama.
 ```
 apps/desktop    Tauri + Lit: chats, workspaces, editor, search, changes, terminals
 apps/cli        batrak: the same agents, sessions and workspaces from a terminal
-packages/       batrak-core and the agent crates, shared by both apps
+packages/       bt-core and the agent crates, shared by both apps
 docs/specs      one spec per feature
 ```
 
@@ -43,5 +43,5 @@ pnpm typecheck && pnpm test                  # the frontend's checks
 - `packages/` holds what the apps share. A package never depends on an app. Today every package
   is a Rust crate; a JavaScript package goes here too the day two apps share one.
 - Anything about agents, sessions, workspaces or a project's `.bt/` folder belongs in
-  `packages/batrak-core`. Anything that names a window, a tab, a PTY, a TTY or a DOM node belongs
+  `packages/bt-core`. Anything that names a window, a tab, a PTY, a TTY or a DOM node belongs
   in an app.
