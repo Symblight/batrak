@@ -1,8 +1,8 @@
 ---
 paths:
-  - "apps/desktop/src-tauri/src/session/**"
+  - "packages/batrak-core/src/session/**"
   - "packages/agent-acp/**"
-  - "apps/desktop/src-tauri/src/agents/**"
+  - "packages/batrak-core/src/agents/**"
   - "apps/desktop/src-tauri/src/commands/sessions.rs"
   - "apps/desktop/src/hooks/{sessions,chat,composer}/**"
   - "apps/desktop/src/stores/{sessions,session-sync,session-runtime,session-read,composer,context-usage,clock,chat}/**"

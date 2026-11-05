@@ -12,7 +12,7 @@ paths:
   - "docs/specs/terminal-panel.md"
   - "apps/desktop/src/hooks/file-drop/**"
   - "docs/specs/terminal-tab.md"
-  - "web-test-runner.config.mjs"
+  - "apps/desktop/web-test-runner.config.mjs"
 ---
 
 # Terminals

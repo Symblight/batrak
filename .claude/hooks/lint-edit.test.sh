@@ -17,29 +17,29 @@ check() { # expected tool path text
 }
 
 # Rust
-check 2 Edit  /r/src-tauri/src/foo.rs       'println!("x");'
+check 2 Edit  /r/apps/desktop/src-tauri/src/foo.rs       'println!("x");'
 check 2 Edit  /r/packages/batrak-core/src/foo.rs 'println!("x");'
-check 2 Write /r/src-tauri/src/foo.rs       'fn f() { dbg!(1); }'
-check 0 Edit  /r/src-tauri/src/foo.rs       'tracing::info!("x");'
-check 0 Edit  /r/src-tauri/src/roots/bench.rs 'println!("x");'
-check 0 Edit  /r/src-tauri/src/session/runtime/tests.rs 'eprintln!("x");'
+check 2 Write /r/apps/desktop/src-tauri/src/foo.rs       'fn f() { dbg!(1); }'
+check 0 Edit  /r/apps/desktop/src-tauri/src/foo.rs       'tracing::info!("x");'
+check 0 Edit  /r/apps/desktop/src-tauri/src/roots/bench.rs 'println!("x");'
+check 0 Edit  /r/packages/batrak-core/src/session/runtime/tests.rs 'eprintln!("x");'
 # CSS
-check 2 Edit  /r/src/components/a/a.css     'a { display: none !important; }'
-check 2 Edit  /r/src/components/a/a.css     'a { color: #fff; }'
-check 2 Edit  /r/src/components/a/a.css     '.acp-a__b--big { color: red; }'
-check 0 Edit  /r/src/styles/tokens.css      ':root { --x: #fff; } a { display: none !important; }'
-check 0 Edit  /r/src/components/a/a.css     'a { color: var(--acp-color-primary); } .acp-a__b_big { x: y }'
+check 2 Edit  /r/apps/desktop/src/components/a/a.css     'a { display: none !important; }'
+check 2 Edit  /r/apps/desktop/src/components/a/a.css     'a { color: #fff; }'
+check 2 Edit  /r/apps/desktop/src/components/a/a.css     '.acp-a__b--big { color: red; }'
+check 0 Edit  /r/apps/desktop/src/styles/tokens.css      ':root { --x: #fff; } a { display: none !important; }'
+check 0 Edit  /r/apps/desktop/src/components/a/a.css     'a { color: var(--acp-color-primary); } .acp-a__b_big { x: y }'
 # JS
-check 2 Edit  /r/src/components/a/a.js      'html`<button title="x"></button>`'
-check 2 Edit  /r/src/components/a/a.js      'this._size = null;'
-check 2 Edit  /r/src/components/a/a.js      'static styles = css`:host {}`;'
-check 2 Edit  /r/src/components/a/a.js      "import { \$x } from '../../stores/x/x.js';"
-check 2 Edit  /r/src/components/a/a.js      "import { StoreController } from '../../controllers/store/StoreController.js';"
-check 0 Edit  /r/src/views/a/a.js           "import { \$x } from '../../stores/x/x.js';"
-check 0 Edit  /r/src/components/a/a.js      '/** See `tokens.css`. */ this.#size = null;'
-check 0 Edit  /r/src/components/a/__tests__/a.test.js "expect(el.title).to.equal(''); import '../../stores/x/x.js'; this._x"
+check 2 Edit  /r/apps/desktop/src/components/a/a.js      'html`<button title="x"></button>`'
+check 2 Edit  /r/apps/desktop/src/components/a/a.js      'this._size = null;'
+check 2 Edit  /r/apps/desktop/src/components/a/a.js      'static styles = css`:host {}`;'
+check 2 Edit  /r/apps/desktop/src/components/a/a.js      "import { \$x } from '../../stores/x/x.js';"
+check 2 Edit  /r/apps/desktop/src/components/a/a.js      "import { StoreController } from '../../controllers/store/StoreController.js';"
+check 0 Edit  /r/apps/desktop/src/views/a/a.js           "import { \$x } from '../../stores/x/x.js';"
+check 0 Edit  /r/apps/desktop/src/components/a/a.js      '/** See `tokens.css`. */ this.#size = null;'
+check 0 Edit  /r/apps/desktop/src/components/a/__tests__/a.test.js "expect(el.title).to.equal(''); import '../../stores/x/x.js'; this._x"
 # Not ours
 check 0 Edit  /r/docs/specs/a.md            'println!("x"); title="x"'
-check 0 Edit  /r/src/components/a/a.js      'html`<md-tooltip for="a">x</md-tooltip>`'
+check 0 Edit  /r/apps/desktop/src/components/a/a.js      'html`<md-tooltip for="a">x</md-tooltip>`'
 
 exit $fail
