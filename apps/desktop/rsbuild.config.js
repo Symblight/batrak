@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from '@rsbuild/core';
 
 // The bundle and the favicon tag (`public/favicon.svg`) are injected into index.html.
@@ -77,7 +78,7 @@ function litCss() {
           .oneOf('css-inline')
           .use('lit-css')
           .before('css')
-          .loader(new URL('./scripts/lit-css-loader.cjs', import.meta.url).pathname);
+          .loader(fileURLToPath(new URL('./scripts/lit-css-loader.cjs', import.meta.url)));
       });
     },
   };
