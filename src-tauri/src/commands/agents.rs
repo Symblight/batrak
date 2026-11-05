@@ -1,9 +1,13 @@
+use std::sync::Arc;
+
 use tauri::State;
 
 use crate::config::registry::RegistryState;
 use crate::config::update::{Updated, Updater};
 use crate::config::view::{AgentsView, Filter, RowState};
 use crate::notify::{SignInEvent, SignInProgress};
+use crate::session::program::ProgramRunner;
+use crate::terminal::WindowRunner;
 use crate::config::{AgentConfigs, AgentList, LaunchConfig, NewAgent, Removal, UntrustedAgent};
 
 use super::blocking;
@@ -75,16 +79,10 @@ pub async fn agents_sign_in(
 ) -> Result<Option<crate::session::LoginTab>, String> {
     let project = project_of(project_path)?;
     let sessions = sessions.inner().clone();
-    let mut sign_in = sessions.sign_in(project.as_deref(), &agent_id, method_id.as_deref()).await?;
-    let tab = sign_in.tab.clone();
-    if let (Some(tab), Some(login)) = (&tab, sign_in.login.take()) {
-        if let Err(e) = open_login(&window, terminals.inner().clone(), sessions.clone(), tab, login).await {
-            sessions.cancel_sign_in(project.as_deref(), &agent_id);
-            return Err(e);
-        }
-    }
+    let runner: Arc<dyn ProgramRunner> = Arc::new(WindowRunner::new(terminals.inner().clone(), window.label()));
+    let sign_in = sessions.sign_in(project.as_deref(), &agent_id, method_id.as_deref(), Arc::clone(&runner)).await?;
     // A sign-in joined from another window keeps its login in the window that started it.
-    let tab = tab.filter(|tab| terminals.owns(window.label(), &tab.terminal_id));
+    let tab = sign_in.tab.clone().filter(|tab| runner.owns(&tab.terminal_id));
     let path = project.as_ref().map(|p| p.to_string_lossy().into_owned());
     let terminal = sign_in.tab.clone();
     let event = move |state: SignInProgress, message: Option<String>| SignInEvent {
@@ -109,35 +107,6 @@ pub async fn agents_sign_in(
         configs.notifier().sign_in(&ended);
     });
     Ok(tab)
-}
-
-/// Starts a login's terminal (the page attaches to it as a Terminal tab); its end goes to
-/// `Sessions::login_ended`.
-async fn open_login(
-    window: &tauri::Window,
-    terminals: crate::terminal::Terminals,
-    sessions: crate::session::Sessions,
-    tab: &crate::session::LoginTab,
-    login: crate::session::Login,
-) -> Result<(), String> {
-    use crate::session::LoginExit;
-    use crate::terminal::{OpenRequest, Program, TerminalEvent};
-    let (id, group) = (tab.terminal_id.clone(), window.label().to_owned());
-    blocking(move || {
-        let req = OpenRequest { id: &id, group: &group, cwd: &login.cwd, fallback: None, cols: 80, rows: 24 };
-        let program = Program { program: login.command.program, args: login.command.args, env: login.command.env };
-        let ended = id.clone();
-        let on_exit = Box::new(move |exit: Option<&TerminalEvent>| {
-            let exit = match exit {
-                None => LoginExit::Closed,
-                Some(TerminalEvent::Exit { code: Some(code), .. }) => LoginExit::Code(*code),
-                Some(TerminalEvent::Exit { signal, .. }) => LoginExit::Signal(signal.clone().unwrap_or_else(|| "a signal".to_owned())),
-            };
-            sessions.login_ended(&ended, exit);
-        });
-        terminals.open_program(&req, program, on_exit).map(drop)
-    })
-    .await?
 }
 
 /// Stops an agent's sign-in (closing its login's terminal); `false` when none ran.

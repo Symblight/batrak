@@ -1,6 +1,7 @@
 //! Agents that ask to sign in: launch keys, sign-ins (in the browser or a Terminal tab), held prompts, probes.
 
 use super::*;
+use crate::session::program::{Program, ProgramExit, ProgramRunner};
 
 /// The longest a sign-in may wait for the user in the browser.
 const SIGN_IN_LIMIT: Duration = Duration::from_secs(10 * 60);
@@ -51,20 +52,30 @@ pub struct LoginTab {
     pub command_line: String,
 }
 
-/// What a login tab's terminal runs: only for the call that started it. Its env holds the
-/// agent's resolved secrets, so it never leaves the backend.
-pub struct Login {
-    pub cwd: PathBuf,
-    pub command: acp::auth::LoginCommand,
+/// What a login tab's terminal runs. Its env holds the agent's resolved secrets, so it never leaves
+/// the backend.
+struct Login {
+    cwd: PathBuf,
+    command: acp::auth::LoginCommand,
 }
 
 /// How a login's terminal ended.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum LoginExit {
+enum LoginExit {
     Code(i32),
     Signal(String),
     /// Its tab was closed first: a cancel.
     Closed,
+}
+
+impl LoginExit {
+    fn of(exit: Option<&ProgramExit>) -> LoginExit {
+        match exit {
+            None => LoginExit::Closed,
+            Some(ProgramExit { code: Some(code), .. }) => LoginExit::Code(*code),
+            Some(ProgramExit { signal, .. }) => LoginExit::Signal(signal.clone().unwrap_or_else(|| "a signal".to_owned())),
+        }
+    }
 }
 
 /// A cancelled sign-in; a login's terminal is the caller's to close.
@@ -83,10 +94,8 @@ pub enum SignInEnd {
 /// A sign-in started (or joined) by `Sessions::sign_in`.
 pub struct SignIn {
     pub agent_name: String,
-    /// A login to show in a Terminal tab (also for a call that joined it).
+    /// A login shown in a Terminal tab (also for a call that joined it).
     pub tab: Option<LoginTab>,
-    /// What that tab runs, for the call that started it.
-    pub login: Option<Login>,
     done: watch::Receiver<Option<SignInEnd>>,
 }
 
@@ -153,7 +162,7 @@ impl Sessions {
     /// worked, every session waiting for it starts again and sends its held prompt. A `terminal`
     /// or `command` method isn't run here: the result's `login` is for a Terminal tab, whose end
     /// the caller reports (`login_ended`).
-    pub async fn sign_in(&self, project: Option<&Path>, agent_id: &str, method_id: Option<&str>) -> Result<SignIn, String> {
+    pub async fn sign_in(&self, project: Option<&Path>, agent_id: &str, method_id: Option<&str>, runner: Arc<dyn ProgramRunner>) -> Result<SignIn, String> {
         let agent = self.inner.startable(project, agent_id)?;
         let key = LaunchKey::of(&agent);
         if let Some(joined) = self.inner.join_sign_in(&key, &agent.name) {
@@ -175,20 +184,35 @@ impl Sessions {
         let (done, receiver) = watch::channel(None);
         let done = Arc::new(done);
         let agent_name = agent.name.clone();
-        let mut running = lock(&self.inner.signing_in);
         if let Some((tab, login)) = login {
-            running.insert(key, SignInRun { abort: None, login: Some(tab.clone()), done });
-            return Ok(SignIn { agent_name, tab: Some(tab), login: Some(login), done: receiver });
+            lock(&self.inner.signing_in).insert(key, SignInRun { abort: None, login: Some(tab.clone()), done });
+            if let Err(e) = self.run_login(&tab, login, runner).await {
+                self.cancel_sign_in(project, agent_id);
+                return Err(e);
+            }
+            return Ok(SignIn { agent_name, tab: Some(tab), done: receiver });
         }
+        let mut running = lock(&self.inner.signing_in);
         let method = method_id.map(str::to_owned);
         let task = tokio::spawn(Arc::clone(&self.inner).run_sign_in(agent, key.clone(), method, Arc::clone(&done)));
         running.insert(key, SignInRun { abort: Some(task.abort_handle()), login: None, done });
-        Ok(SignIn { agent_name, tab: None, login: None, done: receiver })
+        Ok(SignIn { agent_name, tab: None, done: receiver })
+    }
+
+    /// Starts a login where `runner` shows programs; its end goes to `login_ended`.
+    async fn run_login(&self, tab: &LoginTab, login: Login, runner: Arc<dyn ProgramRunner>) -> Result<(), String> {
+        let (id, sessions) = (tab.terminal_id.clone(), self.clone());
+        let on_exit = {
+            let id = id.clone();
+            Box::new(move |exit: Option<&ProgramExit>| sessions.login_ended(&id, LoginExit::of(exit)))
+        };
+        let program = Program { program: login.command.program, args: login.command.args, env: login.command.env, paste: None };
+        tokio::task::spawn_blocking(move || runner.run(&id, &login.cwd, program, None, on_exit)).await.map_err(|e| e.to_string())?
     }
 
     /// A login's terminal ended: exit 0 signed the agent in (its waiting sessions start again);
     /// another exit failed, a closed tab cancelled.
-    pub fn login_ended(&self, terminal_id: &str, exit: LoginExit) {
+    fn login_ended(&self, terminal_id: &str, exit: LoginExit) {
         let found = {
             let mut running = lock(&self.inner.signing_in);
             let key = running.iter().find(|(_, run)| run.login.as_ref().is_some_and(|l| l.terminal_id == terminal_id)).map(|(k, _)| k.clone());
@@ -257,7 +281,7 @@ impl Inner {
     fn join_sign_in(&self, key: &LaunchKey, agent_name: &str) -> Option<SignIn> {
         let running = lock(&self.signing_in);
         let run = running.get(key)?;
-        Some(SignIn { agent_name: agent_name.to_owned(), tab: run.login.clone(), login: None, done: run.done.subscribe() })
+        Some(SignIn { agent_name: agent_name.to_owned(), tab: run.login.clone(), done: run.done.subscribe() })
     }
 
     /// The Terminal tab and command of a `terminal` / `command` method: the agent's launch with

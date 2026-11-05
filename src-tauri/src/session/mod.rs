@@ -6,10 +6,11 @@
 //! own), and streams to the frontend through per-window channels.
 
 pub mod env;
+pub mod program;
 mod runtime;
 
 pub use runtime::{
-    CliDraft, CliOpened, DeletePreview, CliWindow, CreateSession, Envelope, EventSink, Login, LoginExit, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
+    CliDraft, CliOpened, DeletePreview, CreateSession, Envelope, EventSink, LoginTab, Probed, PromptInput, SignInEnd, Sessions,
     SessionsOptions, SyncReport,
 };
 

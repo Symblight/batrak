@@ -3,7 +3,7 @@
 //! id. One process per session at a time: while the CLI holds it, the ACP agent isn't started.
 
 use super::*;
-use crate::terminal::{OpenRequest, PasteWait, Program, TerminalEvent, Terminals};
+use crate::session::program::{PasteWait, Program, ProgramExit, ProgramRunner};
 
 /// How long closing the CLI waits for it to be gone.
 const CLOSE_WAIT: Duration = Duration::from_secs(3);
@@ -15,8 +15,8 @@ pub(in crate::session) struct CliHeld {
     terminal_id: String,
     /// Tells this hold from a later one of the same session.
     token: u64,
-    /// `None` while getting ready (a worktree's checkout).
-    terminals: Option<Terminals>,
+    /// Who shows it; `None` while getting ready (a worktree's checkout).
+    runner: Option<Arc<dyn ProgramRunner>>,
     gone: Arc<watch::Sender<bool>>,
     /// What it's doing, as its agent's records last told.
     pub(super) activity: Option<agent_api::SessionActivity>,
@@ -51,14 +51,6 @@ enum CliStart {
     New { prompt: Option<String> },
 }
 
-/// Where the CLI's terminal goes: the calling window's, at the page's size.
-pub struct CliWindow<'a> {
-    pub terminals: &'a Terminals,
-    pub group: &'a str,
-    pub cols: u16,
-    pub rows: u16,
-}
-
 /// The terminal id of a session's CLI.
 pub fn terminal_id(session_id: &str) -> String {
     format!("cli-{session_id}")
@@ -78,12 +70,12 @@ pub(super) const OTHER_WINDOW: &str = "Shown in the terminal of another window";
 static NEXT_HOLD: AtomicU64 = AtomicU64::new(0);
 
 impl Sessions {
-    /// Continues the session in its agent's CLI, in a terminal of the calling window, in its
+    /// Continues the session in its agent's CLI, on `runner` (the calling client's) at `size`, in its
     /// folder (a worktree's checked out first). Refused while its ACP agent runs (the caller stops
     /// it first), for an agent without a CLI, or one that can't start (off, untrusted). A `draft`
     /// creates the session under its id (a UUID), which becomes its ACP id: the CLI starts it
     /// under that id (`newArgs`). A CLI already running is answered with its terminal.
-    pub async fn open_cli(&self, id: &str, draft: Option<CliDraft>, window: CliWindow<'_>) -> Result<CliOpened, String> {
+    pub async fn open_cli(&self, id: &str, draft: Option<CliDraft>, runner: Arc<dyn ProgramRunner>, size: Option<(u16, u16)>) -> Result<CliOpened, String> {
         let (created, start) = match draft {
             Some(mut draft) if self.get(id).is_err() => {
                 let prompt = draft.prompt.take();
@@ -95,7 +87,7 @@ impl Sessions {
             Some(state) => Arc::clone(state),
             None => self.get(id)?,
         };
-        let opened = self.inner.open_cli(&state, start, window).await;
+        let opened = self.inner.open_cli(&state, start, runner, size).await;
         if opened.is_err() && created.is_some() {
             self.forget_failed_draft(&state).await;
         }
@@ -114,13 +106,13 @@ impl Sessions {
     /// it runs is in the terminal's foreground.
     pub fn cli_busy(&self, id: &str) -> Result<bool, String> {
         let state = self.get(id)?;
-        let Some((terminals, terminal_id, activity)) =
-            lock(&state.cli).as_ref().and_then(|h| Some((h.terminals.clone()?, h.terminal_id.clone(), h.activity)))
+        let Some((runner, terminal_id, activity)) =
+            lock(&state.cli).as_ref().and_then(|h| Some((h.runner.clone()?, h.terminal_id.clone(), h.activity)))
         else {
             return Ok(false);
         };
         let at_prompt = activity == Some(agent_api::SessionActivity::Idle);
-        Ok(!at_prompt || !terminals.busy(&[terminal_id]).is_empty())
+        Ok(!at_prompt || runner.busy(&terminal_id))
     }
 
     /// Undoes a draft created for a CLI that didn't start: unlisted, its files gone (its workspace
@@ -173,7 +165,7 @@ impl Sessions {
 }
 
 impl Inner {
-    async fn open_cli(self: &Arc<Self>, state: &Arc<SessionState>, start: CliStart, window: CliWindow<'_>) -> Result<CliOpened, String> {
+    async fn open_cli(self: &Arc<Self>, state: &Arc<SessionState>, start: CliStart, runner: Arc<dyn ProgramRunner>, size: Option<(u16, u16)>) -> Result<CliOpened, String> {
         let terminal_id = terminal_id(&state.id);
         let token = NEXT_HOLD.fetch_add(1, Ordering::SeqCst) + 1;
         {
@@ -181,8 +173,8 @@ impl Inner {
             let live = state.live.lock().await;
             let mut cli = lock(&state.cli);
             if let Some(held) = cli.as_ref() {
-                return match &held.terminals {
-                    Some(terminals) if terminals.owns(window.group, &held.terminal_id) => Ok(CliOpened { terminal_id: held.terminal_id.clone() }),
+                return match &held.runner {
+                    Some(_) if runner.owns(&held.terminal_id) => Ok(CliOpened { terminal_id: held.terminal_id.clone() }),
                     Some(_) => Err(OTHER_WINDOW.to_owned()),
                     None => Err("The terminal is getting ready".to_owned()),
                 };
@@ -191,9 +183,9 @@ impl Inner {
                 return Err("The agent is running in the chat: stop it first".to_owned());
             }
             let gone = Arc::new(watch::channel(false).0);
-            *cli = Some(CliHeld { terminal_id: terminal_id.clone(), token, terminals: None, gone, activity: None });
+            *cli = Some(CliHeld { terminal_id: terminal_id.clone(), token, runner: None, gone, activity: None });
         }
-        match self.start_cli(state, start, token, &terminal_id, &window).await {
+        match self.start_cli(state, start, token, &terminal_id, runner, size).await {
             Ok(()) => {
                 // A failure of the chat's agent would hide what its CLI is doing.
                 if state.status() == SessionStatus::Error {
@@ -210,7 +202,7 @@ impl Inner {
     }
 
     /// Resolves the CLI, gets the session's folder ready and starts the CLI there.
-    async fn start_cli(self: &Arc<Self>, state: &Arc<SessionState>, start: CliStart, token: u64, terminal_id: &str, window: &CliWindow<'_>) -> Result<(), String> {
+    async fn start_cli(self: &Arc<Self>, state: &Arc<SessionState>, start: CliStart, token: u64, terminal_id: &str, runner: Arc<dyn ProgramRunner>, size: Option<(u16, u16)>) -> Result<(), String> {
         let record = state.record();
         let merged = self.opts.configs.merged(Some(&record.project_path));
         let agent = match merged.enabled(&record.agent_id) {
@@ -260,27 +252,20 @@ impl Inner {
 
         let inner = Arc::downgrade(self);
         let session_id = state.id.clone();
-        let on_exit = Box::new(move |exit: Option<&TerminalEvent>| {
+        let on_exit = Box::new(move |exit: Option<&ProgramExit>| {
             if let Some(inner) = inner.upgrade() {
                 inner.cli_ended(&session_id, token, exit);
             }
         });
-        let terminals = window.terminals.clone();
-        let (id, group, cwd, cols, rows) = (terminal_id.to_owned(), window.group.to_owned(), record.agent_cwd.clone(), window.cols, window.rows);
-        let program = Program { program, args, env: process_env };
-        tokio::task::spawn_blocking(move || {
-            let req = OpenRequest { id: &id, group: &group, cwd: &cwd, fallback: None, cols, rows };
-            terminals.open_program(&req, program, on_exit)
-        })
+        let (id, cwd, starting) = (terminal_id.to_owned(), record.agent_cwd.clone(), Arc::clone(&runner));
+        let program = Program { program, args, env: process_env, paste: pasted.map(|prompt| (prompt, FIRST_PROMPT_WAIT)) };
+        tokio::task::spawn_blocking(move || starting.run(&id, &cwd, program, size, on_exit))
         .await
         .map_err(|e| e.to_string())??;
         tracing::info!(session = %state.id, agent = %agent.id, terminal = %terminal_id, "session continues in its agent's CLI");
-        if let Some(prompt) = pasted {
-            window.terminals.paste_when_ready(terminal_id, &prompt, FIRST_PROMPT_WAIT);
-        }
         let gone = match lock(&state.cli).as_mut().filter(|held| held.token == token) {
             Some(held) => {
-                held.terminals = Some(window.terminals.clone());
+                held.runner = Some(Arc::clone(&runner));
                 Some(held.gone.subscribe())
             }
             None => None,
@@ -293,7 +278,7 @@ impl Inner {
         }
         // Closed while it started (or already exited): its terminal goes too.
         if !kept {
-            window.terminals.close(&[terminal_id.to_owned()]);
+            runner.close(terminal_id);
         }
         Ok(())
     }
@@ -303,10 +288,10 @@ impl Inner {
         let (gone, terminal, token) = {
             let cli = lock(&state.cli);
             let Some(held) = cli.as_ref() else { return };
-            (held.gone.subscribe(), held.terminals.clone().map(|t| (t, held.terminal_id.clone())), held.token)
+            (held.gone.subscribe(), held.runner.clone().map(|r| (r, held.terminal_id.clone())), held.token)
         };
-        if let Some((terminals, terminal_id)) = terminal {
-            terminals.close(&[terminal_id]);
+        if let Some((runner, terminal_id)) = terminal {
+            runner.close(&terminal_id);
             let mut gone = gone;
             let _ = tokio::time::timeout(CLOSE_WAIT, gone.wait_for(|gone| *gone)).await;
         }
@@ -314,13 +299,13 @@ impl Inner {
     }
 
     /// A CLI's terminal ended: closed (`None`), or the CLI exited.
-    fn cli_ended(&self, session_id: &str, token: u64, exit: Option<&TerminalEvent>) {
+    fn cli_ended(&self, session_id: &str, token: u64, exit: Option<&ProgramExit>) {
         let Some(state) = lock(&self.sessions).get(session_id).cloned() else { return };
         self.end_cli(&state, token, exit);
     }
 
     /// Lets go of hold `token`, if it's still the session's: the agent may start again.
-    fn end_cli(&self, state: &Arc<SessionState>, token: u64, exit: Option<&TerminalEvent>) {
+    fn end_cli(&self, state: &Arc<SessionState>, token: u64, exit: Option<&ProgramExit>) {
         let held = {
             let mut cli = lock(&state.cli);
             if cli.as_ref().is_none_or(|held| held.token != token) {
@@ -330,17 +315,17 @@ impl Inner {
         };
         if let Some(held) = held {
             // What its agent lists from now on, up to the slack, is this CLI's last writes.
-            if held.terminals.is_some() {
+            if held.runner.is_some() {
                 *lock(&state.active_here) = parse_iso_millis(&iso_now());
             }
             held.gone.send_replace(true);
             // Exited on its own: its terminal (and its output kept for a reattach) goes too; the
             // page keeps what it shows.
-            if let (Some(TerminalEvent::Exit { .. }), Some(terminals)) = (exit, &held.terminals) {
-                terminals.close(std::slice::from_ref(&held.terminal_id));
+            if let (Some(_), Some(runner)) = (exit, &held.runner) {
+                runner.close(&held.terminal_id);
             }
         }
-        if let Some(TerminalEvent::Exit { code, signal }) = exit {
+        if let Some(ProgramExit { code, signal }) = exit {
             tracing::info!(session = %state.id, ?code, ?signal, "the agent's CLI exited");
             state.emit("cli-exited", json!({ "code": code, "signal": signal }));
         }

@@ -8,7 +8,7 @@ use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{State, Window};
 
-use crate::session::{CliDraft, CliOpened, CliWindow, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
+use crate::session::{CliDraft, CliOpened, CreateSession, Envelope, EventSink, PromptInput, Session, Sessions, SyncReport};
 
 use super::blocking;
 
@@ -160,8 +160,8 @@ pub async fn session_open_cli(
     rows: u16,
     draft: Option<CliDraft>,
 ) -> Result<CliOpened, String> {
-    let cli = CliWindow { terminals: terminals.inner(), group: window.label(), cols, rows };
-    sessions.open_cli(&session_id, draft, cli).await
+    let runner = Arc::new(crate::terminal::WindowRunner::new(terminals.inner().clone(), window.label()));
+    sessions.open_cli(&session_id, draft, runner, Some((cols, rows))).await
 }
 
 /// Closes a session's CLI and returns once it's gone; the chat can start its agent then.

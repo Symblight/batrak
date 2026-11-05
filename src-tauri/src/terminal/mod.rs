@@ -4,7 +4,11 @@
 //! shell's exit. The shell outlives its tab's DOM until the tab closes. Input and output are never
 //! logged (they hold passwords typed at prompts).
 
+mod runner;
 pub mod shell;
+
+pub use crate::session::program::PasteWait;
+pub use runner::WindowRunner;
 
 use std::collections::HashMap;
 use std::io::{Read, Write};
@@ -40,16 +44,6 @@ const PASTE_START: &[u8] = b"\x1b[200~";
 const PASTE_END: &[u8] = b"\x1b[201~";
 /// How often `paste_when_ready` looks whether the program reads.
 const READY_POLL: Duration = Duration::from_millis(50);
-
-/// When `paste_when_ready` takes a program as reading its input.
-#[derive(Debug, Clone, Copy)]
-pub struct PasteWait {
-    /// After its last output: settled once bracketed paste is on; reading anyway without it (ConPTY
-    /// may not pass `ESC[?2004h` through) after this much again.
-    pub quiet: Duration,
-    /// Given up, nothing pasted, when it has printed nothing this long after its start.
-    pub give_up: Duration,
-}
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)

@@ -5,6 +5,7 @@ use std::sync::atomic::AtomicUsize;
 use std::time::Instant;
 
 use super::*;
+use crate::session::program::{OnExit, Program, ProgramExit, ProgramRunner};
 use crate::acp::fake_agent::{self, FakeAgentOptions, FakeAgentState};
 use crate::git::apply::ApplyOutcome;
 use crate::git::test_repo::run_in;
@@ -136,6 +137,7 @@ struct Fixture {
     project: PathBuf,
     sessions: Sessions,
     launcher: Arc<FakeLauncher>,
+    programs: Programs,
 }
 
 impl Drop for Fixture {
@@ -164,7 +166,7 @@ fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
         held: Mutex::default(),
     });
     let sessions = Sessions::new(options_for(&dir, &launcher));
-    let f = Fixture { dir, project, sessions, launcher };
+    let f = Fixture { dir, project, sessions, launcher, programs: Programs::default() };
     f.give_agents(&f.project);
     f
 }
@@ -669,10 +671,9 @@ async fn a_cli_run_chats_running_subagents_reach_the_page_from_its_agents_record
     // Arrange
     let f = fixture("subagent-cli", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let (acp, events) = f.started_then_stopped("s1", "fake").await;
     // Act
-    f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
     events.wait_for("subagents", |e| e.kind == "subagents").await;
     // Assert
     assert_eq!(
@@ -2290,7 +2291,7 @@ async fn a_prompt_to_an_agent_that_asks_to_sign_in_is_held_not_lost() {
     assert_eq!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().methods.len(), 1);
 
     events.clear();
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap();
     assert_eq!(sign_in.end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world", "the held prompt was answered");
@@ -2313,8 +2314,8 @@ async fn signing_in_brings_back_every_waiting_session_of_the_agent() {
 
     first.clear();
     second.clear();
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
-    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap();
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap();
     assert_eq!(sign_in.end().await, SignInEnd::Done);
     assert_eq!(joined.end().await, SignInEnd::Done, "a second call joins the first");
     assert_eq!(first.wait_turn_end().await, "end_turn");
@@ -2365,7 +2366,7 @@ async fn a_failed_sign_in_keeps_the_prompt_waiting() {
     events.wait_status("error").await;
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
-    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await else {
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap().end().await else {
         panic!("signed in")
     };
     assert!(message.contains("login failed"), "{message}");
@@ -2378,7 +2379,7 @@ async fn a_failed_sign_in_keeps_the_prompt_waiting() {
 async fn a_sign_in_runs_only_a_trusted_launch_and_can_be_cancelled() {
     let f = fixture("sign-in-trust", needing_sign_in());
     f.set_agents(&f.project, r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./agent"}}}"#);
-    let refused = f.sessions.sign_in(Some(&f.project), "repo", Some("browser")).await.err().unwrap();
+    let refused = f.sessions.sign_in(Some(&f.project), "repo", Some("browser"), f.programs.client("main")).await.err().unwrap();
     assert!(refused.contains("trust"), "{refused}");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "nothing ran");
     assert!(f.sessions.cancel_sign_in(Some(&f.project), "repo").is_none(), "none runs");
@@ -2398,7 +2399,7 @@ async fn a_login_that_ran_out_mid_session_holds_the_prompt_until_signed_in_again
     events.wait_for("held", |e| e.kind == "held").await;
     assert_eq!(f.sessions.list()[0].status, SessionStatus::Error);
 
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap().end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world");
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 3, "the session's, the sign-in's, the session's again");
@@ -2438,7 +2439,7 @@ async fn an_agent_waiting_for_a_sign_in_isnt_started_again_by_a_probe() {
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 1, "not started again");
 
     signed_in.store(true, Ordering::SeqCst);
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None, f.programs.client("main")).await.unwrap().end().await, SignInEnd::Done);
     assert!(matches!(f.sessions.probe_options(Some(&f.project), "fake").await.unwrap(), Probed::Options(_)), "probed once signed in");
 }
 
@@ -2479,7 +2480,7 @@ async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
 
-    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await else {
+    let SignInEnd::Failed(message) = f.sessions.sign_in(Some(&f.project), "fake", None, f.programs.client("main")).await.unwrap().end().await else {
         panic!("signed in")
     };
     assert!(message.contains("still asks to sign in"), "{message}");
@@ -2488,7 +2489,7 @@ async fn retry_after_a_login_elsewhere_sends_the_held_prompt() {
 
     // A login in a terminal, which the app doesn't see.
     signed_in.store(true, Ordering::SeqCst);
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", None, f.programs.client("main")).await.unwrap().end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
     assert_eq!(events.texts().join(""), "Hello, world");
     let authenticated: usize = lock(&f.launcher.agents).iter().map(|a| a.authenticated.lock().unwrap().len()).sum();
@@ -2503,7 +2504,7 @@ async fn a_cancelled_sign_in_ends_cancelled_and_keeps_the_prompt_held() {
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
 
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap();
     while lock(&f.launcher.agents).iter().all(|a| a.authenticated.lock().unwrap().is_empty()) {
         tokio::time::sleep(Duration::from_millis(5)).await;
     }
@@ -2528,7 +2529,7 @@ async fn a_session_waiting_under_an_earlier_launch_comes_back_after_signing_in_t
     f.sessions.sync_agents(&f.project).await;
 
     events.clear();
-    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser")).await.unwrap().end().await, SignInEnd::Done);
+    assert_eq!(f.sessions.sign_in(Some(&f.project), "fake", Some("browser"), f.programs.client("main")).await.unwrap().end().await, SignInEnd::Done);
     events.wait_status("idle").await;
 }
 
@@ -2556,23 +2557,24 @@ async fn a_terminal_method_gives_a_login_to_run_and_its_exit_signs_in() {
     events.wait_for("held", |e| e.kind == "held").await;
     let launches = f.launcher.launches.load(Ordering::SeqCst);
 
-    let mut sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("tui"), f.programs.client("main")).await.unwrap();
     let tab = sign_in.tab.clone().unwrap();
     assert_eq!(tab.title, "Subscription");
     assert_eq!(tab.command_line, "fake-agent auth login");
-    let login = sign_in.login.take().unwrap();
-    assert_eq!(login.command.program, "fake-agent");
-    assert!(login.command.env.contains(&("MODE".to_owned(), "login".to_owned())), "the method's env");
-    assert!(login.command.env.contains(&("TOKEN".to_owned(), "s3cret-value".to_owned())), "the launch's, resolved");
-    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launches, "nothing ran yet");
+    let login = f.programs.program(&tab.terminal_id);
+    assert_eq!(login.program, "fake-agent");
+    assert!(login.env.contains(&("MODE".to_owned(), "login".to_owned())), "the method's env");
+    assert!(login.env.contains(&("TOKEN".to_owned(), "s3cret-value".to_owned())), "the launch's, resolved");
+    assert!(f.programs.owns("main", &tab.terminal_id), "the calling client's");
+    assert_eq!(f.launcher.launches.load(Ordering::SeqCst), launches, "no agent started for it");
     assert!(f.sessions.sign_in_state(Some(&f.project), "fake").unwrap().pending);
-    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("tui")).await.unwrap();
+    let joined = f.sessions.sign_in(Some(&f.project), "fake", Some("tui"), f.programs.client("other")).await.unwrap();
     assert_eq!(joined.tab.as_ref(), Some(&tab), "a second call shows the same tab");
-    assert!(joined.login.is_none(), "and runs nothing");
+    assert!(f.programs.owns("main", &tab.terminal_id), "and runs nothing: it stays its first client's");
 
     // The login wrote its credentials, then exited 0.
     signed_in.store(true, Ordering::SeqCst);
-    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(0));
+    f.programs.exit(&tab.terminal_id, Some(0), None);
     assert_eq!(sign_in.end().await, SignInEnd::Done);
     assert_eq!(joined.end().await, SignInEnd::Done);
     assert_eq!(events.wait_turn_end().await, "end_turn");
@@ -2587,19 +2589,23 @@ async fn a_failed_or_closed_login_keeps_the_prompt_held() {
     f.sessions.send_prompt("s", text("hello")).unwrap();
     events.wait_for("held", |e| e.kind == "held").await;
 
-    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let sign_in = f.sessions.sign_in(Some(&f.project), "fake", Some("cli"), f.programs.client("main")).await.unwrap();
     let tab = sign_in.tab.clone().unwrap();
     assert_eq!(tab.title, "CLI Login");
-    assert_eq!(sign_in.login.as_ref().unwrap().command.program, "/opt/cli");
-    f.sessions.login_ended(&tab.terminal_id, LoginExit::Code(1));
+    assert_eq!(f.programs.program(&tab.terminal_id).program, "/opt/cli");
+    f.programs.exit(&tab.terminal_id, Some(1), None);
     assert_eq!(sign_in.end().await, SignInEnd::Failed("CLI Login exited with 1".to_owned()));
 
-    let again = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let again = f.sessions.sign_in(Some(&f.project), "fake", Some("cli"), f.programs.client("main")).await.unwrap();
     let tab = again.tab.clone().unwrap();
-    f.sessions.login_ended(&tab.terminal_id, LoginExit::Closed);
+    f.programs.close(&tab.terminal_id);
     assert_eq!(again.end().await, SignInEnd::Cancelled);
 
-    let third = f.sessions.sign_in(Some(&f.project), "fake", Some("cli")).await.unwrap();
+    let ended = f.sessions.sign_in(Some(&f.project), "fake", Some("cli"), f.programs.client("main")).await.unwrap();
+    f.programs.exit(&ended.tab.clone().unwrap().terminal_id, None, Some("SIGKILL"));
+    assert_eq!(ended.end().await, SignInEnd::Failed("CLI Login was ended by SIGKILL".to_owned()));
+
+    let third = f.sessions.sign_in(Some(&f.project), "fake", Some("cli"), f.programs.client("main")).await.unwrap();
     let cancelled = f.sessions.cancel_sign_in(Some(&f.project), "fake").unwrap();
     assert_eq!(cancelled.terminal_id, third.tab.as_ref().map(|t| t.terminal_id.clone()), "its terminal is the caller's to close");
     assert_eq!(third.end().await, SignInEnd::Cancelled);
@@ -2832,64 +2838,83 @@ async fn an_agent_stays_up_between_syncs_to_list_again() {
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 2);
 }
 
-/// The fake agent with a CLI of its own: a shell that prints what it got and waits, or exits
-/// with 3 when its first argument is `--exit`.
+/// The fake agent with a CLI of its own.
 const CLI_AGENTS: &str = r#"{"version":1,"agents":{
     "fake":{"name":"Fake","command":"fake-agent","env":{"TOKEN":"${keychain:token}"},
-        "cli":{"command":"/bin/sh","args":["-c","echo \"ARGS:$*\" \"PWD:$(pwd)\" \"TOKEN:$TOKEN\"; [ \"$1\" = --exit ] && exit 3; sleep 30","cli"],
-            "resumeArgs":["--resume","{id}"],"newArgs":["--session-id","{id}"]}},
-    "reader":{"name":"Reader","command":"fake-agent",
-        "cli":{"command":"/bin/sh","args":["-c","stty -icanon -echo; printf 'ARGS:%s READY\\033[?2004h' \"$*\"; dd bs=1 count=16 2>/dev/null | tr '\\033' '^'; echo END","cli"],
-            "resumeArgs":["--resume","{id}"],"newArgs":["--session-id","{id}"]}},
-    "quitter":{"name":"Quitter","command":"fake-agent","cli":{"command":"/bin/sh","args":["-c","exit 3","cli"],"resumeArgs":["{id}"]}},
-    "plain":{"name":"Plain","command":"fake-agent"},
-    "missing":{"name":"Missing","command":"fake-agent","cli":{"command":"/nonexistent/brama-cli","resumeArgs":["{id}"],"newArgs":["{id}"]}}}}"#;
+        "cli":{"command":"fake-cli","resumeArgs":["--resume","{id}"],"newArgs":["--session-id","{id}"]}},
+    "quitter":{"name":"Quitter","command":"fake-agent","cli":{"command":"fake-cli","resumeArgs":["{id}"]}},
+    "plain":{"name":"Plain","command":"fake-agent"}}}"#;
 
-/// What a CLI's terminal shows, and how it ended.
-#[derive(Default)]
-struct Screen {
-    output: Mutex<Vec<u8>>,
-    events: Mutex<Vec<crate::terminal::TerminalEvent>>,
+/// The programs sessions ran, a client's own, as a recording `ProgramRunner` sees them.
+#[derive(Default, Clone)]
+struct Programs(Arc<Mutex<HashMap<String, Ran>>>);
+
+struct Ran {
+    client: String,
+    cwd: PathBuf,
+    program: Program,
+    on_exit: Option<OnExit>,
 }
 
-impl crate::terminal::TerminalSink for Screen {
-    fn output(&self, bytes: &[u8]) -> bool {
-        lock(&self.output).extend_from_slice(bytes);
-        true
+struct ClientPrograms {
+    programs: Programs,
+    client: String,
+}
+
+impl ProgramRunner for ClientPrograms {
+    fn run(&self, id: &str, cwd: &Path, program: Program, _size: Option<(u16, u16)>, on_exit: OnExit) -> Result<(), String> {
+        let ran = Ran { client: self.client.clone(), cwd: cwd.to_path_buf(), program, on_exit: Some(on_exit) };
+        lock(&self.programs.0).insert(id.to_owned(), ran);
+        Ok(())
     }
 
-    fn event(&self, event: &crate::terminal::TerminalEvent) -> bool {
-        lock(&self.events).push(event.clone());
-        true
+    fn close(&self, id: &str) {
+        self.programs.close(id);
+    }
+
+    fn busy(&self, _id: &str) -> bool {
+        false
+    }
+
+    fn owns(&self, id: &str) -> bool {
+        self.programs.owns(&self.client, id)
     }
 }
 
-impl Screen {
-    async fn wait_for(&self, text: &str) -> String {
-        let started = Instant::now();
-        loop {
-            let shown = String::from_utf8_lossy(&lock(&self.output)).into_owned();
-            if shown.contains(text) {
-                return shown;
-            }
-            assert!(started.elapsed() < Duration::from_secs(5), "no {text:?} in {shown:?}");
-            tokio::time::sleep(Duration::from_millis(10)).await;
+impl Programs {
+    fn client(&self, client: &str) -> Arc<dyn ProgramRunner> {
+        Arc::new(ClientPrograms { programs: self.clone(), client: client.to_owned() })
+    }
+
+    fn owns(&self, client: &str, id: &str) -> bool {
+        lock(&self.0).get(id).is_some_and(|ran| ran.client == client)
+    }
+
+    fn program(&self, id: &str) -> Program {
+        lock(&self.0)[id].program.clone()
+    }
+
+    /// What it got: its arguments, folder and the agent's secret.
+    fn shown(&self, id: &str) -> String {
+        let programs = lock(&self.0);
+        let ran = &programs[id];
+        let token = ran.program.env.iter().find(|(k, _)| k == "TOKEN").map_or("", |(_, v)| v.as_str());
+        format!("ARGS:{} PWD:{} TOKEN:{token}", ran.program.args.join(" "), ran.cwd.display())
+    }
+
+    /// It ended on its own.
+    fn exit(&self, id: &str, code: Option<i32>, signal: Option<&str>) {
+        let on_exit = lock(&self.0).get_mut(id).and_then(|ran| ran.on_exit.take());
+        on_exit.expect("it runs")(Some(&ProgramExit { code, signal: signal.map(str::to_owned) }));
+    }
+
+    /// Its terminal closed first.
+    fn close(&self, id: &str) {
+        let ran = lock(&self.0).remove(id);
+        if let Some(on_exit) = ran.and_then(|ran| ran.on_exit) {
+            on_exit(None);
         }
     }
-}
-
-fn terminals() -> crate::terminal::Terminals {
-    crate::terminal::Terminals::new(crate::terminal::TerminalsOptions { shell: None, version: "test".into() })
-}
-
-fn window(terminals: &crate::terminal::Terminals) -> CliWindow<'_> {
-    CliWindow { terminals, group: "main", cols: 200, rows: 24 }
-}
-
-fn attach(terminals: &crate::terminal::Terminals, terminal_id: &str) -> Arc<Screen> {
-    let screen = Arc::new(Screen::default());
-    terminals.attach(terminal_id, Arc::clone(&screen) as Arc<dyn crate::terminal::TerminalSink>).unwrap();
-    screen
 }
 
 fn listed(f: &Fixture, id: &str) -> Session {
@@ -2929,25 +2954,23 @@ impl Fixture {
 async fn a_session_continues_in_its_agents_cli_in_its_folder_with_its_env() {
     let f = fixture("cli", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let (_, events) = f.create("s1", "fake").unwrap();
     events.wait_status("idle").await;
-    let refused = f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap_err();
     assert!(refused.contains("running"), "{refused}");
 
     f.sessions.stop("s1").await.unwrap();
     let acp = listed(&f, "s1").acp_session_id.unwrap();
-    let opened = f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    let opened = f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
     assert_eq!(opened.terminal_id, "cli-s1");
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("ARGS:--resume {acp}")), "{shown}");
     assert!(shown.contains(&format!("PWD:{}", f.project.display())), "{shown}");
     assert!(shown.contains("TOKEN:s3cret-value"), "the agent's env: {shown}");
     assert!(listed(&f, "s1").in_terminal);
-    let again = f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    let again = f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
     assert_eq!(again, opened, "one CLI per session");
-    let other = CliWindow { terminals: &terminals, group: "other", cols: 80, rows: 24 };
-    let refused = f.sessions.open_cli("s1", None, other).await.unwrap_err();
+    let refused = f.sessions.open_cli("s1", None, f.programs.client("other"), None).await.unwrap_err();
     assert_eq!(refused, "Shown in the terminal of another window");
 
     // Every session the page gets says so.
@@ -2964,7 +2987,7 @@ async fn a_session_continues_in_its_agents_cli_in_its_folder_with_its_env() {
 
     f.sessions.close_cli("s1").await.unwrap();
     assert!(!listed(&f, "s1").in_terminal);
-    assert!(!terminals.owns("main", "cli-s1"), "its terminal is closed");
+    assert!(!f.programs.owns("main", "cli-s1"), "its terminal is closed");
     assert!(f.sessions.resume("s1").await.unwrap(), "the chat can start it again");
 }
 
@@ -2973,10 +2996,9 @@ async fn a_running_cli_chat_stays_listed_though_its_agent_doesnt_list_it_yet() {
     let f = git_fixture("cli-unlisted");
     f.give_cli_agents();
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
-    let terminals = terminals();
     let id = "2cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let workspace = Some(ws.id.clone());
-    f.sessions.open_cli(id, Some(f.draft("fake", workspace)), window(&terminals)).await.unwrap();
+    f.sessions.open_cli(id, Some(f.draft("fake", workspace)), f.programs.client("main"), None).await.unwrap();
 
     f.sessions.sync(&f.project, None).await;
 
@@ -2993,12 +3015,11 @@ async fn a_cli_run_chat_shows_what_its_agent_says_it_is_doing() {
     use agent_api::SessionActivity::{Idle, Running, WaitingForUser};
     let f = fixture("cli-activity", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let (acp, events) = f.started_then_stopped("s1", "fake").await;
     record_activity(&acp, Running);
 
     // Act + Assert: from its first read, then as the records change.
-    f.sessions.open_cli("s1", None, window(&terminals)).await.unwrap();
+    f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
     events.wait_for("running", |e| e.kind == "session" && e.payload["activity"] == "running").await;
     assert_eq!(listed(&f, "s1").status, SessionStatus::Stopped, "no ACP status");
     assert!(f.sessions.cli_busy("s1").unwrap(), "closing it would stop a turn");
@@ -3021,9 +3042,8 @@ async fn its_agents_list_never_reads_as_activity_of_a_chat_its_cli_runs_nor_righ
     let options = listing();
     let f = fixture("cli-working", options.clone());
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    f.sessions.open_cli(id, Some(f.draft("fake", None)), window(&terminals)).await.unwrap();
+    f.sessions.open_cli(id, Some(f.draft("fake", None)), f.programs.client("main"), None).await.unwrap();
     let now = crate::util::iso_now();
     stored_in(&options, &[(id, &f.project, None, Some(now.as_str()))]);
 
@@ -3047,14 +3067,13 @@ async fn continuing_a_failed_chat_in_its_cli_leaves_the_failure_behind() {
     // Arrange
     let f = fixture("cli-after-crash", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let (_, events) = f.create("c", "fake").unwrap();
     events.wait_status("idle").await;
     f.sessions.send_prompt("c", text("crash")).unwrap();
     events.wait_status("error").await;
 
     // Act
-    f.sessions.open_cli("c", None, window(&terminals)).await.unwrap();
+    f.sessions.open_cli("c", None, f.programs.client("main"), None).await.unwrap();
 
     // Assert
     assert_eq!(listed(&f, "c").status, SessionStatus::Stopped, "an error would hide what its CLI is doing");
@@ -3068,12 +3087,11 @@ async fn a_cli_that_didnt_start_doesnt_hide_another_apps_activity() {
     let now = crate::util::iso_now();
     stored_in(&options, &[("busy", &f.project, None, Some(now.as_str()))]);
     f.sessions.sync(&f.project, None).await;
-    let terminals = terminals();
     let until = listed(&f, "fake~busy").active_elsewhere_until;
     assert!(until.is_some());
 
     // Act
-    f.sessions.open_cli("fake~busy", None, window(&terminals)).await.unwrap_err();
+    f.sessions.open_cli("fake~busy", None, f.programs.client("main"), None).await.unwrap_err();
 
     // Assert
     assert_eq!(listed(&f, "fake~busy").active_elsewhere_until, until);
@@ -3083,10 +3101,9 @@ async fn a_cli_that_didnt_start_doesnt_hide_another_apps_activity() {
 async fn a_draft_starts_in_the_cli_under_its_own_id() {
     let f = fixture("cli-draft", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "0cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let opened = f.sessions.open_cli(id, Some(f.draft("fake", None)), window(&terminals)).await.unwrap();
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let opened = f.sessions.open_cli(id, Some(f.draft("fake", None)), f.programs.client("main"), None).await.unwrap();
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("ARGS:--session-id {id} PWD:")), "no prompt, nothing after the id: {shown}");
     let session = listed(&f, id);
     assert_eq!(session.acp_session_id.as_deref(), Some(id), "the CLI's id is its ACP id");
@@ -3094,93 +3111,88 @@ async fn a_draft_starts_in_the_cli_under_its_own_id() {
     assert_eq!(f.launcher.launches.load(Ordering::SeqCst), 0, "no ACP agent");
 
     let other = "1cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let refused = f.sessions.open_cli(other, Some(f.draft("quitter", None)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli(other, Some(f.draft("quitter", None)), f.programs.client("main"), None).await.unwrap_err();
     assert!(refused.contains("can't start a session"), "{refused}");
-    let refused = f.sessions.open_cli(other, Some(f.draft("plain", None)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli(other, Some(f.draft("plain", None)), f.programs.client("main"), None).await.unwrap_err();
     assert!(refused.contains("no terminal mode"), "{refused}");
-    let refused = f.sessions.open_cli("not-a-uuid", Some(f.draft("fake", None)), window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli("not-a-uuid", Some(f.draft("fake", None)), f.programs.client("main"), None).await.unwrap_err();
     assert!(refused.contains("UUID"), "{refused}");
     assert!(f.sessions.list().iter().all(|s| s.id == id), "nothing created for a refusal");
-    terminals.close(&[opened.terminal_id]);
+    f.programs.close(&opened.terminal_id);
 }
 
 #[tokio::test]
 async fn a_draft_sent_to_the_cli_starts_it_with_its_first_prompt() {
     let f = fixture("cli-draft-prompt", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let draft = CliDraft { prompt: Some("fix the build".into()), ..f.draft("fake", None) };
-    let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let opened = f.sessions.open_cli(id, Some(draft), f.programs.client("main"), None).await.unwrap();
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("ARGS:--session-id {id} fix the build")), "{shown}");
-    terminals.close(&[opened.terminal_id]);
+    f.programs.close(&opened.terminal_id);
 }
 
 #[tokio::test]
 async fn a_first_prompt_too_long_for_the_command_line_is_pasted_once_the_cli_reads() {
     let f = fixture("cli-draft-long", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "4cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let prompt = format!("fix {}", "x".repeat(agent_api::MAX_ARG_PROMPT));
-    let draft = CliDraft { prompt: Some(prompt), ..f.draft("reader", None) };
-    let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("END").await;
-    assert!(shown.contains(&format!("ARGS:--session-id {id} READY")), "not on the command line: {shown}");
-    assert!(shown.contains("^[200~fix xxxx"), "pasted, bracketed: {shown}");
-    terminals.close(&[opened.terminal_id]);
+    let draft = CliDraft { prompt: Some(prompt.clone()), ..f.draft("fake", None) };
+    let opened = f.sessions.open_cli(id, Some(draft), f.programs.client("main"), None).await.unwrap();
+    let program = f.programs.program(&opened.terminal_id);
+    assert_eq!(program.args, ["--session-id", id], "not on the command line");
+    assert_eq!(program.paste.map(|(text, _)| text), Some(prompt), "pasted once it reads");
+    f.programs.close(&opened.terminal_id);
 }
 
 #[tokio::test]
 async fn a_cli_starts_with_the_model_picked_in_the_composer() {
     let f = fixture("cli-draft-picks", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "5cb916db-26aa-40f2-86b5-1ba81b225fd2";
     let config = BTreeMap::from([("model".to_owned(), "opus".to_owned())]);
     let draft = CliDraft { prompt: Some("fix it".into()), config, ..f.draft("fake", None) };
-    let opened = f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let opened = f.sessions.open_cli(id, Some(draft), f.programs.client("main"), None).await.unwrap();
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("ARGS:--session-id {id} --model opus fix it")), "{shown}");
-    terminals.close(std::slice::from_ref(&opened.terminal_id));
+    f.programs.close(&opened.terminal_id);
     f.sessions.close_cli(id).await.unwrap();
 
     // Continued in the terminal later: the session's own picks again.
-    let opened = f.sessions.open_cli(id, None, window(&terminals)).await.unwrap();
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let opened = f.sessions.open_cli(id, None, f.programs.client("main"), None).await.unwrap();
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("ARGS:--resume {id} --model opus")), "{shown}");
-    terminals.close(&[opened.terminal_id]);
+    f.programs.close(&opened.terminal_id);
 }
 
 #[tokio::test]
 async fn a_worktree_sessions_cli_runs_in_its_checked_out_folder() {
     let f = git_fixture("cli-worktree");
     f.give_cli_agents();
-    let terminals = terminals();
     let id = "2cb916db-26aa-40f2-86b5-1ba81b225fd2";
-    let opened = f.sessions.open_cli(id, Some(f.draft("fake", f.new_workspace(None))), window(&terminals)).await.unwrap();
+    let opened = f.sessions.open_cli(id, Some(f.draft("fake", f.new_workspace(None))), f.programs.client("main"), None).await.unwrap();
     let folder = listed(&f, id).folder;
     assert_ne!(folder, f.project.to_string_lossy());
     assert!(Path::new(&folder).join("a.txt").is_file(), "checked out before the CLI starts");
-    let shown = attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+    let shown = f.programs.shown(&opened.terminal_id);
     assert!(shown.contains(&format!("PWD:{folder}")), "{shown}");
-    terminals.close(&[opened.terminal_id]);
+    f.programs.close(&opened.terminal_id);
 }
 
 #[tokio::test]
 async fn a_workspace_chats_cli_is_refused_while_its_folder_is_missing() {
     let f = git_fixture("cli-missing");
     f.give_cli_agents();
-    let terminals = terminals();
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
     let id = "5d0c1a52-1b8e-4f43-9a51-6a8c2e0f7b11";
     let draft = f.draft("fake", Some(ws.id.clone()));
-    f.sessions.open_cli(id, Some(draft), window(&terminals)).await.unwrap();
+    f.sessions.open_cli(id, Some(draft), f.programs.client("main"), None).await.unwrap();
     f.sessions.close_cli(id).await.unwrap();
     std::fs::remove_dir_all(&ws.worktree_path).unwrap();
 
-    let refused = f.sessions.open_cli(id, None, window(&terminals)).await.unwrap_err();
+    let refused = f.sessions.open_cli(id, None, f.programs.client("main"), None).await.unwrap_err();
 
     assert!(refused.contains("folder is missing"), "{refused}");
     assert_eq!(listed(&f, id).status, SessionStatus::Stopped);
@@ -3191,17 +3203,17 @@ async fn a_workspace_chats_cli_is_refused_while_its_folder_is_missing() {
 async fn the_clis_exit_is_reported_and_frees_the_session() {
     let f = fixture("cli-exit", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     let (_, events) = f.started_then_stopped("q", "quitter").await;
     events.clear();
-    f.sessions.open_cli("q", None, window(&terminals)).await.unwrap();
+    f.sessions.open_cli("q", None, f.programs.client("main"), None).await.unwrap();
+    f.programs.exit("cli-q", Some(3), None);
     let exited = events.wait_for("cli-exited", |e| e.kind == "cli-exited").await;
     assert_eq!(exited.payload, json!({ "code": 3, "signal": null }));
     assert!(!listed(&f, "q").in_terminal);
     let session = events.wait_for("the session after", |e| e.kind == "session" && e.payload["inTerminal"] == false).await;
     assert_eq!(session.payload["id"], "q");
     let started = Instant::now();
-    while terminals.owns("main", "cli-q") {
+    while f.programs.owns("main", "cli-q") {
         assert!(started.elapsed() < Duration::from_secs(5), "its terminal is closed once it exited");
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
@@ -3212,21 +3224,20 @@ async fn the_clis_exit_is_reported_and_frees_the_session() {
 async fn removing_the_session_or_turning_its_agent_off_closes_its_cli() {
     let f = fixture("cli-close", FakeAgentOptions::default());
     f.give_cli_agents();
-    let terminals = terminals();
     f.started_then_stopped("a", "fake").await;
     f.started_then_stopped("b", "fake").await;
     for id in ["a", "b"] {
-        let opened = f.sessions.open_cli(id, None, window(&terminals)).await.unwrap();
-        attach(&terminals, &opened.terminal_id).wait_for("TOKEN:").await;
+        let opened = f.sessions.open_cli(id, None, f.programs.client("main"), None).await.unwrap();
+        assert!(f.programs.owns("main", &opened.terminal_id));
     }
     assert!(f.sessions.cli_busy("a").is_ok());
 
     f.sessions.remove("a").await.unwrap();
-    assert!(!terminals.owns("main", "cli-a"));
+    assert!(!f.programs.owns("main", "cli-a"));
 
     f.sessions.inner.opts.configs.set_enabled(Some(&f.project), "fake", false).unwrap();
     f.sessions.sync_agents(&f.project).await;
-    assert!(!terminals.owns("main", "cli-b"));
+    assert!(!f.programs.owns("main", "cli-b"));
     assert!(!listed(&f, "b").in_terminal);
 }
 

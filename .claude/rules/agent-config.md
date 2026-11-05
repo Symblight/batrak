@@ -134,7 +134,7 @@ paths:
   `terminal`, which every window hears; a window joining another's login gets none back), which
   `openLoginTerminal()` shows as a running tab of the terminal panel of the folder shown when the sign-in started (`terminal-panel.md`; a login moved to the editor is shown there)
   (`TerminalInfo.login`: its command line as tooltip, no Restart: the sign-in runs it again); exit
-  0 signs in (`Sessions::login_ended`), another exit fails, closing the tab cancels, and a cancel
+  0 signs in (`Sessions::sign_in`, through the client's `ProgramRunner`), another exit fails, closing the tab cancels, and a cancel
   closes the tab (`noteSignIn()`). The banner offers every method but API keys, says which terminal
   to finish in (Show terminal only for this window's, `loginHere`), and with no method at all
   offers Open terminal, then Retry. The Agents tab's row offers Sign in (one method runs it, more
