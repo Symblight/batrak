@@ -48,6 +48,12 @@ const turns = new Map();
 const replays = new Map();
 /** Sessions whose turn the user stopped; its late updates are dropped until its `turn-end`. */
 const stopped = new Set();
+/**
+ * A prompt the backend took, by session id, until its `turn-end` or turn `error`. It runs one at a
+ * time, and Stop settles the chat's reply before the agent has stopped, so a send waits here.
+ * @type {Map<string, { ended: Promise<void>, end: () => void }>}
+ */
+const running = new Map();
 /** @type {Map<string, Promise<unknown>>} Sessions being created, by id; a send waits for it. */
 const creating = new Map();
 /** @type {SubscribeHandlers | null} */
@@ -65,6 +71,12 @@ const replaying = new Set();
 const subagentChats = new Map();
 /** @type {Map<string, MessageBuilder>} The chat's message holding each subagent's card, by the subagent's conversation id. */
 const subagentCards = new Map();
+
+/** @param {string} sessionId */
+function endRunning(sessionId) {
+  running.get(sessionId)?.end();
+  running.delete(sessionId);
+}
 
 /** @param {ChxChunk} chunk */
 function deliver(chunk) {
@@ -380,6 +392,7 @@ export function handleSessionEvent(event) {
         setSessionNotice(sessionId, under ? { kind: 'stop-reason', message, under } : { kind: 'stop-reason', message });
       }
       endTurn(sessionId, { cancelled: event.payload.stopReason === 'cancelled' });
+      endRunning(sessionId);
       return;
     }
     case 'session':
@@ -445,6 +458,7 @@ export function handleSessionEvent(event) {
         stopped.delete(sessionId);
         clearPermissionRequests(sessionId);
         endTurn(sessionId, { error: event.payload.message });
+        endRunning(sessionId);
       } else {
         setSessionNotice(sessionId, { kind: 'error', message: event.payload.message });
       }
@@ -491,6 +505,7 @@ export function forgetHistory(sessionId) {
  */
 export function forgetSession(sessionId) {
   endTurn(sessionId, { cancelled: true });
+  endRunning(sessionId);
   replays.delete(sessionId);
   loaded.delete(sessionId);
   replaying.delete(sessionId);
@@ -528,6 +543,8 @@ export const acpAdapter = {
     const sessionId = message.conversationId;
     if (!sessionId) throw new Error('No session');
     await creating.get(sessionId);
+    while (running.has(sessionId)) await running.get(sessionId)?.ended;
+    if (signal.aborted) throw new Error('Stopped');
     const prompt = promptOf(message);
     if (!prompt.length) throw new Error('Nothing to send');
     endReplay(sessionId);
@@ -546,6 +563,10 @@ export const acpAdapter = {
       started: false,
     };
     turns.set(sessionId, turn);
+    /** @type {() => void} */
+    let end = () => {};
+    const ended = new Promise((resolve) => (end = () => resolve(undefined)));
+    running.set(sessionId, { ended, end });
     signal.addEventListener(
       'abort',
       () => {
@@ -560,6 +581,7 @@ export const acpAdapter = {
       touchSession(sessionId, await sessionSendPrompt(sessionId, prompt));
     } catch (err) {
       if (turns.get(sessionId) === turn) turns.delete(sessionId);
+      endRunning(sessionId);
       throw err;
     }
     return stream;

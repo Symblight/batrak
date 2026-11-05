@@ -134,7 +134,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   maps updates to `<chx-chat>` chunks (text, `thought`, `tool_call`, `plan`) in the turn's stream,
   or replays them through `subscribe` outside a turn (`session/load`). Tool calls reach the page and the
   reattach log with only what a card shows (`keep_shown_fields`, `session/runtime/replay.rs`), plus `content` of a
-  `failed` one, whose text is its error; a turn that stops short (`stopNotice()`) leaves a `stop-reason` notice until the next turn starts. Permission requests and
+  `failed` one, whose text is its error; a turn that stops short (`stopNotice()`) leaves a `stop-reason` notice until the next turn starts. A send waits for the session's running prompt to end (`running` in `adapter.js`, until its `turn-end` or turn `error`): the backend runs one per session, and Stop settles the chat's reply before the agent has stopped; stopped while waiting, it's never sent. Permission requests and
   notices live in `stores/session-runtime/session-runtime.js`, shown by `<acp-session-banner>` (a queued
   turn's names the session it waits for, with Show session, and says when that one waits for
   your answer); `$agentList`
