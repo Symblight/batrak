@@ -21,8 +21,12 @@ impl Dirs {
         Self::from_home(std::env::var_os(HOME_VAR).filter(|home| !home.is_empty()).map(PathBuf::from))
     }
 
+    /// Made absolute: agents and git run these folders from other working directories.
     fn from_home(home: Option<PathBuf>) -> Result<Dirs, String> {
-        home.map_or_else(Self::standard, |root| Ok(Self::under(&root)))
+        match home {
+            Some(root) => Ok(Self::under(&std::path::absolute(&root).map_err(|e| format!("{}: {e}", root.display()))?)),
+            None => Self::standard(),
+        }
     }
 
     /// The app's folders, the same ones Tauri's path resolver gives for its identifier.
@@ -65,7 +69,7 @@ mod tests {
 
     #[test]
     fn the_home_variable_moves_every_folder_under_its_root() {
-        let root = PathBuf::from("/tmp/try-brama");
+        let root = std::env::temp_dir().join("try-brama");
 
         let dirs = Dirs::from_home(Some(root.clone())).unwrap();
 
