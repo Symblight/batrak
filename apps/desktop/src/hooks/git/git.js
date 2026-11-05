@@ -2,8 +2,8 @@ import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommit
 import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
-import { remoteLine } from './branch.js';
-import { changeRows, groupChanges, relativePath, statusOf, typeBadge, uncommittedHint } from './changes.js';
+import { operationLine, remoteLine } from './branch.js';
+import { changeRows, groupChanges, readDiff, relativePath, statusOf, typeBadge, uncommittedHint } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').RootChanges} RootChanges */
@@ -24,6 +24,8 @@ import { SerialTask } from './serial-task.js';
 
 /** File changes come in bursts (a build, a checkout): wait for a pause before asking git. */
 const REFRESH_DELAY_MS = 300;
+/** A burst that never pauses (an agent writing for minutes) still shows now and then. */
+const REFRESH_MAX_WAIT_MS = 2000;
 
 /** Open Changes views; files are scanned only while it's above zero. */
 let watchers = 0;
@@ -39,8 +41,8 @@ let followedRoot = null;
 const saved = new Map();
 /** @type {(() => void) | null} Stops the following that `start()` began. */
 let following = null;
-const headTask = new SerialTask(readHead);
-const changesTask = new SerialTask(readChanges);
+const headTask = new SerialTask(readHead, REFRESH_MAX_WAIT_MS);
+const changesTask = new SerialTask(readChanges, REFRESH_MAX_WAIT_MS);
 
 /**
  * Keeps the outgoing root's state while its root stays open, and shows the incoming one's, if
@@ -141,12 +143,14 @@ async function readChanges() {
  */
 export const git = Object.freeze({
   groupChanges,
+  readDiff,
   uncommittedHint,
   statusOf,
   changeRows,
   typeBadge,
   relativePath,
   remoteLine,
+  operationLine,
 
   /**
    * Starts following the active root; once however often it is called.
@@ -262,12 +266,13 @@ export const git = Object.freeze({
   },
 
   /**
-   * A file's text at HEAD, the editor's diff baseline.
+   * A file's text at HEAD, the editor's diff baseline; a listed rename's is under its old name.
    * @param {string} rootId
    * @param {string} path Relative.
-   * @returns {Promise<string | null>} `null` when not committed, binary, too large or not in a repository.
+   * @returns {Promise<string | null>} `null` when not committed or not in a repository. Fails, saying why, when it has no text to diff.
    */
   fileAtHead(rootId, path) {
-    return ipc.invoke('git_file_at_head', { rootId, path });
+    const listed = rootId === $rootId.get() ? $gitChanges.get().files.find((file) => file.path === path) : undefined;
+    return ipc.invoke('git_file_at_head', { rootId, path: listed?.origPath ?? path });
   },
 });

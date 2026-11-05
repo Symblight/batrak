@@ -32,6 +32,33 @@ pub struct RepoState {
     pub upstream_ref: Option<String>,
     /// The remote the branch syncs with (see [`remote::read`]); `None` when detached or without remotes.
     pub remote: Option<RemoteInfo>,
+    /// What stopped midway and waits to be finished in a terminal.
+    pub operation: Option<Operation>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub enum Operation {
+    Merge,
+    Rebase,
+    CherryPick,
+    Revert,
+    Bisect,
+}
+
+/// What in a git dir says an operation is under way. `rebase-*` are folders, and a rebase may leave
+/// `CHERRY_PICK_HEAD` too, so they come first.
+pub const OPERATION_MARKERS: [(&str, Operation); 6] = [
+    ("rebase-merge", Operation::Rebase),
+    ("rebase-apply", Operation::Rebase),
+    ("MERGE_HEAD", Operation::Merge),
+    ("CHERRY_PICK_HEAD", Operation::CherryPick),
+    ("REVERT_HEAD", Operation::Revert),
+    ("BISECT_LOG", Operation::Bisect),
+];
+
+fn operation_in(git_dir: &Path) -> Option<Operation> {
+    OPERATION_MARKERS.iter().find(|(marker, _)| git_dir.join(marker).exists()).map(|(_, operation)| *operation)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -102,14 +129,12 @@ pub fn info(git: &Path, root: &Path) -> Result<Option<RepoInfo>, String> {
 /// tree (cheap enough to refresh on every HEAD change); `None` outside a repository.
 #[cfg(test)]
 pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
-    if info(git, root)?.is_none() {
-        return Ok(None);
-    }
-    head_in(git, root).map(Some)
+    let Some(info) = info(git, root)? else { return Ok(None) };
+    head_in(git, root, &info).map(Some)
 }
 
 /// [`head`] for a `root` known to be in a repository.
-pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
+pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, String> {
     // Each of these exits non-zero for a legitimate "none": detached HEAD, no commits, no upstream.
     let optional = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Option<String>, String> {
         let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
@@ -119,6 +144,7 @@ pub fn head_in(git: &Path, root: &Path) -> Result<RepoState, String> {
     let branch = optional(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"])?;
     let sha = optional(&[&"rev-parse", &"-q", &"--verify", &"HEAD"])?;
     let mut state = RepoState::new(branch, sha);
+    state.operation = operation_in(&info.git_dir);
     if let Some(branch) = &state.branch {
         let reference = format!("refs/heads/{branch}");
         let format = "--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream)%00%(upstream:remotename)";
@@ -170,6 +196,7 @@ impl RepoState {
             upstream_remote: None,
             upstream_ref: None,
             remote: None,
+            operation: None,
         }
     }
 }
@@ -280,7 +307,7 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
     let (out, numstat) = std::thread::scope(|scope| {
         let numstat = scope.spawn(|| {
             // `--relative`: paths relative to `root` and only those under it, like the status entries.
-            let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"--no-renames"]);
+            let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative"]);
             exec::run(git, root, &args, Mode::Background)
         });
         let out = exec::run(
@@ -302,10 +329,13 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
         (out, numstat.join().unwrap_or_else(|_| Err("git diff panicked".to_owned())))
     });
     let out = out?;
-    let text = std::str::from_utf8(&out).map_err(|_| "git status printed non-UTF-8 paths".to_owned())?;
-    let mut status = parse(text, &info.prefix);
+    // Lossy: one file name in another encoding must not hide every other change.
+    let text = String::from_utf8_lossy(&out);
+    let mut status = parse(&text, &info.prefix);
+    status.repo.operation = operation_in(&info.git_dir);
     add_remote(git, root, &mut status.repo)?;
-    let counts = if status.repo.sha.is_some() { parse_numstat(&String::from_utf8_lossy(&numstat?)) } else { HashMap::new() };
+    // The counts are extras: without them (a timeout, over the cap) the files still list.
+    let counts = numstat.ok().filter(|_| status.repo.sha.is_some()).map_or_else(HashMap::new, |out| parse_numstat(&String::from_utf8_lossy(&out)));
     add_line_counts(root, &mut status, &counts);
     Ok(status)
 }
@@ -357,19 +387,25 @@ fn parse(text: &str, prefix: &str) -> Status {
     Status { repo, files }
 }
 
+/// Files counted by reading them, per scan: a build's output without a `.gitignore` must not read
+/// thousands of files while the status lock is held.
+const MAX_COUNTED_FILES: usize = 2000;
 /// Untracked files larger than this get no line count.
 const MAX_COUNTED_FILE: u64 = 1024 * 1024;
 
 /// Fills `added`/`removed`: tracked files from `counts` (`git diff HEAD --numstat`, index and working
 /// tree together), untracked files by counting their lines.
 fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (Option<u32>, Option<u32>)>) {
+    let mut left = MAX_COUNTED_FILES;
+    let mut read_count = |path: &str| {
+        left = left.checked_sub(1)?;
+        count_lines(&root.join(path)).map(|n| (Some(n), Some(0)))
+    };
     for file in &mut status.files {
         let counted = match file.kind {
-            FileKind::Untracked => count_lines(&root.join(&file.path)).map(|n| (Some(n), Some(0))),
+            FileKind::Untracked => read_count(&file.path),
             // No HEAD yet: everything staged is new.
-            FileKind::Added if status.repo.sha.is_none() => {
-                count_lines(&root.join(&file.path)).map(|n| (Some(n), Some(0)))
-            }
+            FileKind::Added if status.repo.sha.is_none() => read_count(&file.path),
             _ => counts.get(&file.path).copied(),
         };
         if let Some((added, removed)) = counted {
@@ -378,15 +414,18 @@ fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (O
     }
 }
 
-/// `added\tremoved\tpath\0` records; a binary file has `-` for both counts.
+/// `added\tremoved\tpath\0` records; a binary file has `-` for both counts. A rename has an empty
+/// path, then its source and destination as records of their own; it counts under its destination.
 pub(crate) fn parse_numstat(text: &str) -> HashMap<String, (Option<u32>, Option<u32>)> {
-    text.split('\0')
-        .filter_map(|record| {
-            let mut fields = record.splitn(3, '\t');
-            let (added, removed, path) = (fields.next()?, fields.next()?, fields.next()?);
-            Some((path.to_owned(), (added.parse().ok(), removed.parse().ok())))
-        })
-        .collect()
+    let mut counts = HashMap::new();
+    let mut records = text.split('\0');
+    while let Some(record) = records.next() {
+        let mut fields = record.splitn(3, '\t');
+        let (Some(added), Some(removed), Some(path)) = (fields.next(), fields.next(), fields.next()) else { continue };
+        let path = if path.is_empty() { records.nth(1).unwrap_or_default() } else { path };
+        counts.insert(path.to_owned(), (added.parse().ok(), removed.parse().ok()));
+    }
+    counts
 }
 
 /// Lines in a text file; `None` for a directory, a binary file or one over `MAX_COUNTED_FILE`.
@@ -458,6 +497,121 @@ mod tests {
         let dir = temp_dir("not-a-repo");
         assert_eq!(status(&git_bin(), &dir).unwrap(), None);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_name_that_is_not_utf8_doesnt_take_the_list_down() {
+        let repo = TestRepo::with_commit("not-utf8");
+        repo.write("edited.txt", "a\n");
+        let blob = repo.git(&["hash-object", "-w", "edited.txt"]);
+        let mut entry = format!("100644 {}\t", blob.trim()).into_bytes();
+        entry.extend_from_slice(b"caf\xe9.txt\0");
+        let opts = exec::Options { input: Some(&entry), ..Default::default() };
+        let args = exec::args(&[&"update-index", &"-z", &"--index-info"]);
+        assert!(exec::run_with(&git_bin(), &repo.path, &args, Mode::Local, &opts).unwrap().success());
+
+        let s = status_of(&repo.path);
+        assert!(s.files.iter().any(|f| f.path.starts_with("caf")), "{:?}", s.files);
+        assert_eq!(file(&s, "edited.txt").kind, FileKind::Untracked);
+    }
+
+    /// A git that fails `diff` and runs everything else: the status can't be made to pass while the
+    /// real `diff` fails.
+    #[cfg(unix)]
+    #[test]
+    fn line_counts_that_fail_leave_the_list_without_counts() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = TestRepo::with_commit("no-counts");
+        repo.write("README.md", "changed\n");
+        repo.write("new.txt", "one\ntwo\n");
+        let dir = temp_dir("no-counts-git");
+        let fake = dir.join("git");
+        let script = format!(
+            "#!/bin/sh\nfor a; do [ \"$a\" = diff ] && {{ echo boom >&2; exit 128; }}; done\nexec '{}' \"$@\"\n",
+            git_bin().display()
+        );
+        std::fs::write(&fake, script).unwrap();
+        std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let s = status(&fake, &repo.path).unwrap().expect("a repository");
+        let edited = file(&s, "README.md");
+        assert_eq!((edited.kind, edited.added, edited.removed), (FileKind::Modified, None, None));
+        assert_eq!(file(&s, "new.txt").added, Some(2), "an untracked file is counted without git");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_renamed_file_counts_only_its_edit() {
+        let repo = TestRepo::with_commit("rename-counts");
+        repo.write("old.txt", "one\ntwo\nthree\nfour\nfive\nsix\n");
+        repo.git(&["add", "old.txt"]);
+        repo.git(&["commit", "-qm", "old"]);
+        repo.git(&["mv", "old.txt", "new.txt"]);
+        repo.write("new.txt", "one\ntwo\nthree\nfour\nfive\nsix\nseven\n");
+        repo.git(&["add", "new.txt"]);
+
+        let s = status_of(&repo.path);
+        let renamed = file(&s, "new.txt");
+        assert_eq!((renamed.kind, renamed.added, renamed.removed), (FileKind::Renamed, Some(1), Some(0)));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_refresh_doesnt_run_the_repositorys_fsmonitor_hook() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = TestRepo::with_commit("fsmonitor");
+        let dir = temp_dir("fsmonitor-hook");
+        let (hook, ran) = (dir.join("hook"), dir.join("ran"));
+        std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\nexit 1\n", ran.display())).unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        repo.git(&["config", "core.fsmonitor", hook.to_str().unwrap()]);
+
+        status_of(&repo.path);
+
+        assert!(!ran.exists(), "opening a downloaded folder must not run its code");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn tells_which_operation_is_in_progress() {
+        let repo = TestRepo::with_commit("operation");
+        repo.git(&["config", "user.name", "Test"]);
+        repo.git(&["config", "user.email", "test@example.com"]);
+        let git = git_bin();
+        let operation = || status_of(&repo.path).repo.operation;
+        let head_operation = || head(&git, &repo.path).unwrap().unwrap().operation;
+        assert_eq!((operation(), head_operation()), (None, None));
+
+        repo.git(&["checkout", "-qb", "side"]);
+        repo.write("README.md", "side\n");
+        repo.git(&["commit", "-qam", "side"]);
+        repo.git(&["checkout", "-q", "main"]);
+        repo.write("README.md", "main\n");
+        repo.git(&["commit", "-qam", "main"]);
+
+        for (start, abort, expected) in [
+            (["merge", "side"], ["merge", "--abort"], Operation::Merge),
+            (["cherry-pick", "side"], ["cherry-pick", "--abort"], Operation::CherryPick),
+            (["rebase", "side"], ["rebase", "--abort"], Operation::Rebase),
+        ] {
+            let [command, branch] = start;
+            let out = exec::run_with(&git, &repo.path, &exec::args(&[&command, &branch]), Mode::Local, &exec::Options::default()).unwrap();
+            assert!(!out.success(), "{start:?} stops at the conflict");
+            assert_eq!((operation(), head_operation()), (Some(expected), Some(expected)), "{start:?}");
+            repo.git(&abort);
+            assert_eq!(operation(), None, "{abort:?}");
+        }
+    }
+
+    #[test]
+    fn a_flood_of_untracked_files_is_counted_only_so_far() {
+        let repo = TestRepo::with_commit("many-untracked");
+        for i in 0..MAX_COUNTED_FILES + 5 {
+            repo.write(&format!("new/{i}.txt"), "a\n");
+        }
+        let s = status_of(&repo.path);
+        assert_eq!(s.files.len(), MAX_COUNTED_FILES + 5, "all are listed");
+        assert_eq!(s.files.iter().filter(|f| f.added.is_some()).count(), MAX_COUNTED_FILES);
     }
 
     #[test]

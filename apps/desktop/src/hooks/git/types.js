@@ -20,7 +20,10 @@
  * @property {number} behind
  * @property {string | null} upstreamSha What the upstream branch pointed at when last fetched; the lease of a force push.
  * @property {GitRemoteInfo | null} remote The remote the branch syncs with; `null` when detached or without remotes.
+ * @property {GitOperation | null} [operation] What stopped midway and waits to be finished in a terminal.
  */
+
+/** @typedef {'merge' | 'rebase' | 'cherryPick' | 'revert' | 'bisect'} GitOperation */
 
 /**
  * @typedef {Object} GitRemoteInfo

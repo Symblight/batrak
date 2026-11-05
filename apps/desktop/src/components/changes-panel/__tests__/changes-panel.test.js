@@ -34,6 +34,26 @@ function listen(el, type) {
 }
 
 describe('acp-changes-panel', () => {
+  it('says when an operation stopped midway, and not otherwise', async () => {
+    // Arrange
+    const { el, root } = await render();
+    const shown = () => root.querySelector('[role="status"]')?.textContent;
+    const repoWith = (/** @type {import('../../../hooks/git/types.js').GitOperation | null} */ operation) => ({
+      repo: /** @type {import('../../../hooks/git/types.js').GitRepoState} */ ({ branch: null, upstream: null, operation }),
+      error: null,
+    });
+    // Act
+    el.repo = repoWith('rebase');
+    await el.updateComplete;
+    // Assert
+    expect(shown()).to.equal('Rebase in progress');
+    // Act
+    el.repo = repoWith(null);
+    await el.updateComplete;
+    // Assert
+    expect(shown()).to.equal(undefined);
+  });
+
   it('shows loading, an error, a folder that is no repository, and a clean tree, instead of the list; Refresh has a tooltip and asks to refresh', async () => {
     const loading = await render({ changes: { files: [], loaded: false, loading: true, error: null } });
     expect(loading.root.querySelector('md-progress-circular')?.getAttribute('aria-label')).to.equal('Loading changes');

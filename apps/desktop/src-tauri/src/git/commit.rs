@@ -54,6 +54,7 @@ pub fn commit(git: &Path, root: &Path, paths: &[String], message: &str, amend: b
         if amend {
             args.push(&"--amend");
         }
+        refuse_conflict_markers(git, root, paths)?;
         if in_progress(git, root)? {
             stage(&list)?;
             return run(&args, Mode::Hooks, None).map_err(|e| tail(&e)).and_then(|_| last_commit(git, root));
@@ -89,6 +90,21 @@ pub fn commit(git: &Path, root: &Path, paths: &[String], message: &str, amend: b
         }
         last_commit(git, root)
     })
+}
+
+/// Staging a conflicted file marks it resolved, so git would commit its markers without a word.
+fn refuse_conflict_markers(git: &Path, root: &Path, paths: &[String]) -> Result<(), String> {
+    let out = exec::run(git, root, &exec::args(&[&"diff", &"--name-only", &"--diff-filter=U", &"-z", &"--relative"]), Mode::Local)?;
+    let unmerged = String::from_utf8_lossy(&out);
+    let unresolved: Vec<&str> = unmerged
+        .split('\0')
+        .filter(|path| paths.iter().any(|picked| picked == path))
+        .filter(|path| fs::read(root.join(path)).is_ok_and(|text| text.split(|&b| b == b'\n').any(|line| line.starts_with(b"<<<<<<< "))))
+        .collect();
+    if unresolved.is_empty() {
+        return Ok(());
+    }
+    Err(format!("resolve the conflict markers first: {}", unresolved.join(", ")))
 }
 
 /// A merge, cherry-pick or revert is waiting to be committed.
@@ -212,6 +228,43 @@ mod tests {
         assert_eq!(repo.git(&["log", "-1", "--format=%p"]).split(' ').count(), 2, "a merge commit");
         assert_eq!(repo.git(&["show", "HEAD:a.txt"]), "resolved\n");
         assert_eq!(repo.git(&["status", "--porcelain"]), "");
+    }
+
+    /// `side` and `main` both change `a.txt`, and `main` is checked out. `a.txt` holds what `main` has.
+    fn two_sides_of_a_txt(repo: &TestRepo) {
+        repo.write("a.txt", "a\n");
+        repo.git(&["add", "a.txt"]);
+        repo.git(&["commit", "-qm", "a"]);
+        repo.git(&["checkout", "-qb", "side"]);
+        repo.write("a.txt", "side\n");
+        repo.git(&["commit", "-qam", "side"]);
+        repo.git(&["checkout", "-q", "main"]);
+        repo.write("a.txt", "main\n");
+        repo.git(&["commit", "-qam", "main"]);
+    }
+
+    #[test]
+    fn refuses_a_file_that_still_has_conflict_markers() {
+        // A merge in progress, and a conflict with none (a three-way apply, a stash pop).
+        let merge = TestRepo::with_commit("commit-markers-merge");
+        two_sides_of_a_txt(&merge);
+        let _ = exec::run_with(&git_bin(), &merge.path, &exec::args(&[&"merge", &"-q", &"side"]), Mode::Local, &Options::default());
+        let apply = TestRepo::with_commit("commit-markers-apply");
+        two_sides_of_a_txt(&apply);
+        let patch = apply.git(&["diff", "side~1", "side"]);
+        let opts = Options { input: Some(patch.as_bytes()), ..Default::default() };
+        let _ = exec::run_with(&git_bin(), &apply.path, &exec::args(&[&"apply", &"--3way"]), Mode::Local, &opts);
+
+        for repo in [&merge, &apply] {
+            let head = repo.git(&["rev-parse", "HEAD"]);
+            let err = commit_in(repo, &["a.txt"], "Too soon", false).unwrap_err();
+            assert!(err.contains("conflict markers") && err.contains("a.txt"), "{err}");
+            assert_eq!(repo.git(&["rev-parse", "HEAD"]), head, "nothing committed");
+
+            repo.write("a.txt", "resolved\n");
+            commit_in(repo, &["a.txt"], "Resolved", false).unwrap();
+            assert_eq!(repo.git(&["show", "HEAD:a.txt"]), "resolved\n");
+        }
     }
 
     #[test]

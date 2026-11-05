@@ -22,18 +22,32 @@ pub enum ApplyOutcome {
 /// Runs git commands against a scratch index holding the worktree's files as they are now,
 /// uncommitted and untracked ones included (ignored ones not). Seeded from the worktree's own index,
 /// so `add -A` hashes only changed files; that index is never touched. `worktree` may be a folder in it.
+/// Without `keep_objects` what `add -A` writes goes to a scratch folder too: only looking at the work
+/// must not grow the repository.
 fn with_snapshot<T>(
     git: &Path,
     worktree: &Path,
+    keep_objects: bool,
     f: impl FnOnce(&dyn Fn(&[&dyn AsRef<OsStr>]) -> Result<Vec<u8>, String>) -> Result<T, String>,
 ) -> Result<T, String> {
     let index = TempFile::new("index");
-    let real = exec::run(git, worktree, &exec::args(&[&"rev-parse", &"--path-format=absolute", &"--git-path", &"index"]), Mode::Background)?;
-    let seeded = std::fs::copy(PathBuf::from(String::from_utf8_lossy(&real).trim()), &index.path).is_ok();
-    let env: [(&str, &OsStr); 1] = [("GIT_INDEX_FILE", index.path.as_os_str())];
+    let git_path = |name: &'static str| -> Result<PathBuf, String> {
+        let out = exec::run(git, worktree, &exec::args(&[&"rev-parse", &"--path-format=absolute", &"--git-path", &name]), Mode::Background)?;
+        Ok(PathBuf::from(String::from_utf8_lossy(&out).trim()))
+    };
+    let seeded = std::fs::copy(git_path("index")?, &index.path).is_ok();
+    let scratch_objects = TempFile::new("objects");
+    let objects = git_path("objects")?;
+    let mut env: Vec<(&str, &OsStr)> = vec![("GIT_INDEX_FILE", index.path.as_os_str())];
+    if !keep_objects {
+        std::fs::create_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
+        env.push(("GIT_OBJECT_DIRECTORY", scratch_objects.path.as_os_str()));
+        env.push(("GIT_ALTERNATE_OBJECT_DIRECTORIES", objects.as_os_str()));
+    }
     let opts = Options { env: &env, ..Default::default() };
+    // `add -A` runs clean filters (LFS) over every changed file.
     let run = |args: &[&dyn AsRef<OsStr>]| -> Result<Vec<u8>, String> {
-        let out = exec::run_with(git, worktree, &exec::args(args), Mode::Local, &opts)?;
+        let out = exec::run_with(git, worktree, &exec::args(args), Mode::Hooks, &opts)?;
         if out.success() { Ok(out.stdout) } else { Err(exec::failure_message(&out)) }
     };
     if !seeded {
@@ -54,7 +68,7 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
         return Err(format!("{}: not on branch {branch}", worktree.display()));
     }
     with_mutation(git, worktree, || {
-        with_snapshot(git, worktree, |run| {
+        with_snapshot(git, worktree, true, |run| {
             let tree = text(run(&[&"write-tree"])?);
             let head = text(run(&[&"rev-parse", &"--verify", &"HEAD^{commit}"])?);
             if tree == text(run(&[&"rev-parse", &"HEAD^{tree}"])?) {
@@ -78,16 +92,19 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
 }
 
 /// Patch from `base` to the worktree's current files, uncommitted and untracked ones included
-/// (ignored files are not). The worktree's own index is untouched.
+/// (ignored files are not). The worktree's own index is untouched. The user's diff settings stay out
+/// of it: `git apply` takes only a plain patch with `a/` and `b/` prefixes.
 pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
-    with_snapshot(git, worktree, |run| run(&[&"diff", &"--cached", &"--binary", &base]))
+    with_snapshot(git, worktree, false, |run| {
+        run(&[&"diff", &"--cached", &"--binary", &"--no-ext-diff", &"--no-color", &"--src-prefix=a/", &"--dst-prefix=b/", &base])
+    })
 }
 
 /// Files under `dir` (a worktree or a folder in one; paths relative to it) that differ from
 /// `base`: its commits and uncommitted work together, with line counts. Renames show as a deletion
 /// and an addition. Sorted by path.
 pub fn changed_since(git: &Path, dir: &Path, base: &str) -> Result<Vec<FileStatus>, String> {
-    with_snapshot(git, dir, |run| {
+    with_snapshot(git, dir, false, |run| {
         let diff = |format: &'static str| run(&[&"diff", &"--cached", &format, &"-z", &"--relative", &"--no-renames", &base]);
         let names = diff("--name-status")?;
         let counts = repo::parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
@@ -123,7 +140,7 @@ pub fn apply_locally(git: &Path, worktree: &Path, base: &str, target: &Path) -> 
                 args.push(&"--3way");
             }
             let opts = Options { input: Some(&patch), ..Default::default() };
-            exec::run_with(git, target, &exec::args(&args), Mode::Local, &opts)
+            exec::run_with(git, target, &exec::args(&args), Mode::Hooks, &opts)
         };
         if apply(false)?.success() {
             return Ok(ApplyOutcome::Clean);
@@ -152,9 +169,9 @@ pub fn apply_locally(git: &Path, worktree: &Path, base: &str, target: &Path) -> 
 /// branch in one checkout at a time). If the switch fails the worktree gets its branch back.
 pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path) -> Result<(), String> {
     with_mutation(git, target, || {
-        exec::run(git, worktree, &exec::args(&[&"switch", &"--detach"]), Mode::Local)?;
-        if let Err(err) = exec::run(git, target, &exec::args(&[&"switch", &branch]), Mode::Local) {
-            exec::run(git, worktree, &exec::args(&[&"switch", &branch]), Mode::Local)
+        exec::run(git, worktree, &exec::args(&[&"switch", &"--detach"]), Mode::Hooks)?;
+        if let Err(err) = exec::run(git, target, &exec::args(&[&"switch", &branch]), Mode::Hooks) {
+            exec::run(git, worktree, &exec::args(&[&"switch", &branch]), Mode::Hooks)
                 .map_err(|undo| format!("{err}; restoring the worktree's branch also failed: {undo}"))?;
             return Err(err);
         }
@@ -162,7 +179,6 @@ pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path
     })
 }
 
-/// A scratch index file, deleted on drop.
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -184,6 +200,38 @@ mod tests {
         assert!(repo.path.join("new.rs").exists());
         assert!(repo.git(&["diff", "--cached", "--name-only"]).is_empty(), "nothing staged");
         assert!(run_in(&wt, &["diff", "--cached", "--name-only"]).is_empty(), "worktree index untouched");
+    }
+
+    #[test]
+    fn looking_at_a_worktrees_changes_leaves_no_objects_in_the_repository() {
+        let mut repo = TestRepo::with_commit("no-objects");
+        let wt = repo.worktree("no-objects-wt", "batrak/no-objects");
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
+        std::fs::write(wt.join("new.txt"), "new\n").unwrap();
+        let before = repo.git(&["count-objects"]);
+
+        assert_eq!(changed_since(&git_bin(), &wt, &base).unwrap().len(), 2);
+        assert!(!changes_since(&git_bin(), &wt, &base).unwrap().is_empty());
+
+        assert_eq!(repo.git(&["count-objects"]), before);
+    }
+
+    #[test]
+    fn the_users_diff_settings_leave_the_applied_work_alone() {
+        for (key, value) in [("diff.noprefix", "true"), ("diff.mnemonicPrefix", "true"), ("color.ui", "always"), ("diff.external", "echo external")] {
+            let mut repo = TestRepo::with_commit("apply-config");
+            repo.write("pkg/a.txt", "one\n");
+            repo.git(&["add", "pkg/a.txt"]);
+            repo.git(&["commit", "-qm", "pkg"]);
+            let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+            let wt = repo.worktree("apply-config-wt", "batrak/config");
+            std::fs::write(wt.join("pkg/a.txt"), "two\n").unwrap();
+            repo.git(&["config", key, value]);
+
+            assert_eq!(apply_locally(&git_bin(), &wt, &base, &repo.path).unwrap(), ApplyOutcome::Clean, "{key}");
+            assert_eq!(std::fs::read_to_string(repo.path.join("pkg/a.txt")).unwrap(), "two\n", "{key}");
+        }
     }
 
     #[test]
