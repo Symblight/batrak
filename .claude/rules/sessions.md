@@ -41,7 +41,8 @@ agent; a hidden one's agent is stopped after 10 min idle (`IDLE_STOP_MS`). The c
 (`src/controllers/chat-session/`, on `<acp-chat-view>`, reaching the chat through `<acp-chat>`'s
 `chat`): `activeConversationId`, the draft's first send (put back into
 the composer when the backend refuses the session), and each session's unsent composer text and files.
-Statuses come from the backend's session events. A draft shows only the composer, centered; the message
+Statuses come from the backend's session events. A draft shows only a title and the composer, centered, with a hint to review the shown folder's
+uncommitted files when it has any (`docs/specs/new-session-hints.md`); the message
 list appears with the first message. Replies come over ACP (see below and `agent-config.md`); messages live only
 in the chat element and the agent, which replays them (`session/load`) when it starts again.
 
