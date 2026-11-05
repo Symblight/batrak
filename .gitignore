@@ -1,17 +1,30 @@
-# Dependencies and build output
-node_modules
-dist
-src-tauri/target
-src-tauri/gen
+# Rust
+target/
+
+# Frontend
+node_modules/
+apps/desktop/dist/
+apps/desktop/.rsbuild/
+
+# Tauri
+apps/desktop/src-tauri/gen/
+
+# Local app data when BATRAK_HOME points into the repo
+.batrak-home/
 
 # Editors and OS
-.idea
-.vscode
 .DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
 
-# Local config and logs
+# Logs and env
+*.log
 .env
 .env.*
 !.env.example
-*.log
+
+# Claude Code local settings
 .claude/settings.local.json

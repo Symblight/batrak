@@ -1,12 +1,11 @@
 ---
 paths:
-  - "src-tauri/src/git/**"
-  - "src-tauri/crates/batrak-core/src/git/**"
-  - "src-tauri/src/commands/git.rs"
-  - "src/hooks/git/**"
-  - "src/stores/git/git.js"
-  - "src/controllers/{changes-review,workspace-changes}/**"
-  - "src/components/changes-*/**"
+  - "apps/desktop/src-tauri/src/git/**"
+  - "apps/desktop/src-tauri/src/commands/git.rs"
+  - "apps/desktop/src/hooks/git/**"
+  - "apps/desktop/src/stores/git/git.js"
+  - "apps/desktop/src/controllers/{changes-review,workspace-changes}/**"
+  - "apps/desktop/src/components/changes-*/**"
   - "docs/specs/agent-git.md"
 ---
 

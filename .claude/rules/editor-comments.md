@@ -1,10 +1,10 @@
 ---
 paths:
-  - "src/stores/{comments,chat}/**"
-  - "src/controllers/{comments,selection-actions,floating}/**"
-  - "src/components/{comment-bar,selection-actions,code-view}/**"
-  - "src/views/{main-column,editor-view}/**"
-  - "src/hooks/comments/**"
+  - "apps/desktop/src/stores/{comments,chat}/**"
+  - "apps/desktop/src/controllers/{comments,selection-actions,floating}/**"
+  - "apps/desktop/src/components/{comment-bar,selection-actions,code-view}/**"
+  - "apps/desktop/src/views/{main-column,editor-view}/**"
+  - "apps/desktop/src/hooks/comments/**"
 ---
 
 # Agent comments and selection actions

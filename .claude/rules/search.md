@@ -1,13 +1,13 @@
 ---
 paths:
-  - "src/components/search-dialog/**"
-  - "src/components/search-panel/**"
-  - "src/components/search-options/**"
-  - "src/components/search-results/**"
-  - "src/controllers/find-in-files/**"
-  - "src/hooks/search/**"
-  - "src/stores/search/search.js"
-  - "src-tauri/src/roots/search.rs"
+  - "apps/desktop/src/components/search-dialog/**"
+  - "apps/desktop/src/components/search-panel/**"
+  - "apps/desktop/src/components/search-options/**"
+  - "apps/desktop/src/components/search-results/**"
+  - "apps/desktop/src/controllers/find-in-files/**"
+  - "apps/desktop/src/hooks/search/**"
+  - "apps/desktop/src/stores/search/search.js"
+  - "apps/desktop/src-tauri/src/roots/search.rs"
   - "docs/specs/search-dialog.md"
 ---
 

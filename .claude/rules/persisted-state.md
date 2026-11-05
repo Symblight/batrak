@@ -1,17 +1,17 @@
 ---
 paths:
-  - "src/stores/**"
-  - "src/hooks/tabs/**"
-  - "src/controllers/tab-content/**"
-  - "src/components/tab-view/**"
-  - "src/views/main-column/**"
-  - "src/components/image-preview/**"
-  - "src/components/settings/**"
-  - "src/hooks/settings/**"
-  - "src/stores/markdown-view/**"
-  - "src/hooks/markdown/**"
-  - "src/hooks/markdown-view/**"
-  - "src/components/markdown*/**"
+  - "apps/desktop/src/stores/**"
+  - "apps/desktop/src/hooks/tabs/**"
+  - "apps/desktop/src/controllers/tab-content/**"
+  - "apps/desktop/src/components/tab-view/**"
+  - "apps/desktop/src/views/main-column/**"
+  - "apps/desktop/src/components/image-preview/**"
+  - "apps/desktop/src/components/settings/**"
+  - "apps/desktop/src/hooks/settings/**"
+  - "apps/desktop/src/stores/markdown-view/**"
+  - "apps/desktop/src/hooks/markdown/**"
+  - "apps/desktop/src/hooks/markdown-view/**"
+  - "apps/desktop/src/components/markdown*/**"
 ---
 
 # Persisted state and tabs

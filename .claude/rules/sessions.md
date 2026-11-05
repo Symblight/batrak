@@ -1,15 +1,15 @@
 ---
 paths:
-  - "src-tauri/crates/batrak-core/src/session/**"
-  - "src-tauri/crates/agent-acp/**"
-  - "src-tauri/crates/batrak-core/src/agents/**"
-  - "src-tauri/src/commands/sessions.rs"
-  - "src/hooks/{sessions,chat,composer}/**"
-  - "src/stores/{sessions,session-sync,session-runtime,session-read,composer,context-usage,clock,chat}/**"
-  - "src/views/agent-column/**"
-  - "src/views/chat-view/**"
-  - "src/components/{chat,session-*,markdown,part-thinking,context-meter,mode-picker,agent-picker,model-picker}/**"
-  - "src/controllers/{chat-session,chat-parts,workspace-changes,session-actions}/**"
+  - "apps/desktop/src-tauri/src/session/**"
+  - "packages/agent-acp/**"
+  - "apps/desktop/src-tauri/src/agents/**"
+  - "apps/desktop/src-tauri/src/commands/sessions.rs"
+  - "apps/desktop/src/hooks/{sessions,chat,composer}/**"
+  - "apps/desktop/src/stores/{sessions,session-sync,session-runtime,session-read,composer,context-usage,clock,chat}/**"
+  - "apps/desktop/src/views/agent-column/**"
+  - "apps/desktop/src/views/chat-view/**"
+  - "apps/desktop/src/components/{chat,session-*,markdown,part-thinking,context-meter,mode-picker,agent-picker,model-picker}/**"
+  - "apps/desktop/src/controllers/{chat-session,chat-parts,workspace-changes,session-actions}/**"
   - "docs/specs/{session-sync,parallel-sessions,context-usage,worktree-default,session-input,session-read-state}.md"
 ---
 
@@ -46,7 +46,7 @@ list appears with the first message. Replies come over ACP (see below and `agent
 in the chat element and the agent, which replays them (`session/load`) when it starts again.
 
 - **The list** (`<acp-session-list>`): one `tvx-tree-view`: Unread and Read folders (`splitByRead()`), chats under them, a chat's subagents under it, Show more as Read's last row (the sessions are in memory; it reveals the next `SESSIONS_PAGE` and moves focus to the first). A click selects, a double-click or Enter opens (`acp-session-select`, `acp-subagent-open`), and the open row keeps a lighter fill of its own while another is selected, since the tree highlights only the selected row); F2 or the menu renames (the tree's editing). `::part(row):hover` sets custom properties that reach what the row holds, which swaps `<acp-session-row-trailing>`'s age and status for Mark as read (unread only), Pin and the menu button, and shows a folder's chevron; the tree's own chevrons are hidden. Folder and subagent open state isn't persisted.
-- **Sessions** (`src-tauri/crates/batrak-core/src/session/`; `runtime.rs` holds `Sessions` and the lifecycle calls,
+- **Sessions** (`src-tauri/src/session/`; `runtime.rs` holds `Sessions` and the lifecycle calls,
   `runtime/` one module per concern, each adding to `Sessions` / `Inner`: `api`, `state`, `start`,
   `turn`, `sign_in`, `agents`, `host`, `worktree`, `sync`, `slots`): the agents own the sessions (spec:
   `docs/specs/session-sync.md`). `Sessions::sync` (`session/runtime/sync.rs`, `sessions_sync` →
@@ -82,7 +82,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `workspace`); `env::Placement::of(project, workspace)` fixes where a new chat runs (mode, folder,
   worktree fields, `workspace_id`; kept in its record; used by `new_record` and a listing's
   `listed_record`), `for_session()` builds its env, and `Inner::prepare_folder` (`start.rs`) gets
-  the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/crates/batrak-core/src/workspace/`, spec: `docs/specs/workspaces.md`):
+  the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
   `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
   worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `brama/<slug>` (`-2`… when taken) from
   its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by

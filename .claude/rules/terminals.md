@@ -1,16 +1,16 @@
 ---
 paths:
-  - "src-tauri/src/terminal/**"
-  - "src-tauri/src/commands/terminal.rs"
-  - "src/hooks/terminals/**"
-  - "src/stores/terminals/terminals.js"
-  - "src/stores/tab-group/**"
-  - "src/components/terminal/**"
-  - "src/components/terminal-action/**"
-  - "src/views/terminals-view/**"
-  - "src/views/terminal-view/**"
+  - "apps/desktop/src-tauri/src/terminal/**"
+  - "apps/desktop/src-tauri/src/commands/terminal.rs"
+  - "apps/desktop/src/hooks/terminals/**"
+  - "apps/desktop/src/stores/terminals/terminals.js"
+  - "apps/desktop/src/stores/tab-group/**"
+  - "apps/desktop/src/components/terminal/**"
+  - "apps/desktop/src/components/terminal-action/**"
+  - "apps/desktop/src/views/terminals-view/**"
+  - "apps/desktop/src/views/terminal-view/**"
   - "docs/specs/terminal-panel.md"
-  - "src/hooks/file-drop/**"
+  - "apps/desktop/src/hooks/file-drop/**"
   - "docs/specs/terminal-tab.md"
   - "web-test-runner.config.mjs"
 ---
@@ -18,7 +18,7 @@ paths:
 # Terminals
 
 Specs: `docs/specs/terminal-tab.md` (the shell) and `docs/specs/terminal-panel.md` (where it lives). A terminal runs the user's default shell
-(`util::default_shell()`: `$SHELL`, the account's shell, `/bin/zsh`; agents' login-shell
+(`terminal::shell::default_shell()`: `$SHELL`, the account's shell, `/bin/zsh`; agents' login-shell
 environment uses the same) as a login shell in a PTY (`src-tauri/src/terminal/`, `portable-pty`),
 started in the shown folder (Main's or the workspace's, `$shownFolder`), else the project, else home (New Terminal: ⌃\`, the macOS
 *Terminal* menu, the panel's `+`, and the nav rail's first click), a session's folder (session menu → Open in → Terminal), or a file tree row's folder (its menu → Open in → Terminal). The backend refuses a

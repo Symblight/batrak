@@ -1,19 +1,19 @@
 ---
 paths:
-  - "src-tauri/crates/batrak-core/src/config/**"
-  - "src-tauri/crates/agent-acp/src/auth.rs"
-  - "src-tauri/crates/agent-*/**"
-  - "src-tauri/src/commands/agents.rs"
-  - "src/hooks/agents/**"
-  - "src/stores/{agents,trust}/**"
-  - "src/components/agents-view/**"
-  - "src/components/{agent-form,agent-picker}/**"
+  - "apps/desktop/src-tauri/src/config/**"
+  - "packages/agent-acp/src/auth.rs"
+  - "packages/agent-*/**"
+  - "apps/desktop/src-tauri/src/commands/agents.rs"
+  - "apps/desktop/src/hooks/agents/**"
+  - "apps/desktop/src/stores/{agents,trust}/**"
+  - "apps/desktop/src/components/agents-view/**"
+  - "apps/desktop/src/components/{agent-form,agent-picker}/**"
   - "docs/specs/{agents-tab,agent-sign-in}.md"
 ---
 
 # Agents: config, registry, trust, sign-in
 
-- **Config** (`src-tauri/crates/batrak-core/src/config/`): opening a project creates `.brama/` (`agents.json`,
+- **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
   holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
   chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local
@@ -54,7 +54,7 @@ paths:
     nothing). An old `"disabled"` key is read, ignored and reported as a problem. An agent that's off
     is listed (`AgentSummary.enabled: false`), not offered by the picker, never started or probed,
     and waits for no trust; `defaultAgent` is the effective one (the file's if it's on, else the
-    first that's on). `AgentConfigs::set_enabled` announces the change, and `agents_set_enabled` returns how many
+    first that's on). `agents_set_enabled` goes through `emit_changed` and returns how many
     sessions turning off stops (the snackbar counts them).
   - **The ACP registry** (`config/registry.rs`, the only user of `ureq`; spec as above): nothing
     is bundled; it is fetched at the first launch, the last answer kept in
@@ -94,7 +94,7 @@ paths:
     `projectPath: null`). The composer and the tab follow the list: a draft whose agent left it or
     was turned off gets the one a new session would, an edit form for it closes; sessions follow
     in the backend: every change that reaches `agents://changed` goes through
-    `AgentConfigs::announce`: the front's `Notifier` hears it, and `Sessions`, which follows it, runs `sync_agents` for the project. A
+    `commands::agents::emit_changed`, which runs `Sessions::sync_agents` for the project. A
     session whose agent left the file, or was turned off, is stopped at once, a running turn
     finished first, and is in `error` ("no longer configured" / "Codex is off", plus an
     `unconfigured { reason: removed | off }` event; the banner offers Turn on for `off`), shown
@@ -134,7 +134,7 @@ paths:
   `terminal`, which every window hears; a window joining another's login gets none back), which
   `openLoginTerminal()` shows as a running tab of the terminal panel of the folder shown when the sign-in started (`terminal-panel.md`; a login moved to the editor is shown there)
   (`TerminalInfo.login`: its command line as tooltip, no Restart: the sign-in runs it again); exit
-  0 signs in (`Sessions::sign_in`, through the client's `ProgramRunner`), another exit fails, closing the tab cancels, and a cancel
+  0 signs in (`Sessions::login_ended`), another exit fails, closing the tab cancels, and a cancel
   closes the tab (`noteSignIn()`). The banner offers every method but API keys, says which terminal
   to finish in (Show terminal only for this window's, `loginHere`), and with no method at all
   offers Open terminal, then Retry. The Agents tab's row offers Sign in (one method runs it, more
