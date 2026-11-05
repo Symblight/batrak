@@ -14,10 +14,9 @@ import { $activeSession, $activeSessionId, $draftSessions, $sessions } from '../
  */
 
 /**
- * What a session left in the composer. Text only: chips go back as their labels, since `setText()` is the
- * only way in.
+ * What a session left in the composer.
  * @typedef {Object} ComposerDraft
- * @property {string} text
+ * @property {unknown} state `input.getState()`: the text with its chips and pastes.
  * @property {File[]} files
  */
 
@@ -199,8 +198,8 @@ export class ChatSessionController {
     // Runs before the re-render, so the composer still holds the old session's content.
     const chat = this.#config.chat();
     if (chat && oldId) {
-      const draft = { text: chat.input.getValue().value, files: chat.attachments.getFiles() };
-      if (draft.text.trim() || draft.files.length) this.#drafts.set(oldId, draft);
+      const files = chat.attachments.getFiles();
+      if (chat.input.getValue().value.trim() || files.length) this.#drafts.set(oldId, { state: chat.input.getState(), files });
       else this.#drafts.delete(oldId);
     }
     if (id === null) return;
@@ -210,7 +209,8 @@ export class ChatSessionController {
     await shown.updateComplete;
     const draft = this.#drafts.get(id);
     this.#drafts.delete(id);
-    shown.input.setText(draft?.text ?? '');
+    if (draft) shown.input.setState(draft.state);
+    else shown.input.setText('');
     shown.attachments.clear();
     if (draft?.files.length) shown.attachments.add(draft.files);
     this.#putBack(shown, id);
