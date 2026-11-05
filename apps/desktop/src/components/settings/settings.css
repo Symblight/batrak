@@ -7,6 +7,18 @@
   color: var(--acp-color-on-surface);
   container: acp-settings / inline-size;
   padding: var(--acp-tab-view-padding, 0);
+  --_acp-settings-nav-width: 152px;
+  --_acp-settings-panel-width: 520px;
+}
+
+/* The nav and the card as one block, centered in the column. Its width is theirs plus the scroller's padding. */
+.acp-settings__container {
+  display: flex;
+  width: 100%;
+  max-width: calc(
+    var(--_acp-settings-nav-width) + var(--_acp-settings-panel-width) + var(--acp-space-1) + var(--acp-space-4)
+  );
+  margin-inline: auto;
 }
 
 /* Sections at the start, the card scrolling beside them. */
@@ -15,7 +27,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--acp-space-0-5);
-  width: 152px;
+  width: var(--_acp-settings-nav-width);
   box-sizing: border-box;
   padding: var(--acp-space-4) var(--acp-space-2) var(--acp-space-4) var(--acp-space-3);
 
@@ -80,7 +92,7 @@
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
-  max-width: 520px;
+  max-width: var(--_acp-settings-panel-width);
   background: var(--acp-color-surface-container-low);
   border-radius: var(--acp-shape-corner-medium);
   overflow: hidden;
@@ -150,14 +162,18 @@
   color: var(--acp-color-on-surface-variant);
 }
 
-/* Dense MD3 segmented button: 28px instead of 40px for the narrow column. */
+/* Dense MD3 segmented button: 28px instead of 40px, only as wide as its labels. */
 .acp-settings__segments {
   --md-segmented-button-group-height: 28px;
+  --md-segmented-button-icon-size: var(--acp-icon-size-sm);
+  align-self: flex-start;
+}
+/* On the segment, not the group: each segment's :host declares these, hiding inherited values. */
+.acp-settings__segment {
   --md-segmented-button-block-space: var(--acp-space-1);
   --md-segmented-button-inline-space: var(--acp-space-3);
   --md-segmented-button-label-text-size: var(--acp-font-size-sm);
   --md-segmented-button-label-text-line-height: 16px;
-  --md-segmented-button-icon-size: var(--acp-icon-size-sm);
 }
 .acp-settings__segment-icon {
   font-size: var(--acp-icon-size-sm);

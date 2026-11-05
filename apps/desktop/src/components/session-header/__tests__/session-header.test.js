@@ -66,6 +66,7 @@ describe('acp-session-header', () => {
 
   it('shows a draft as a new session, with no menu', async () => {
     const { root } = await render(html`<acp-session-header draft></acp-session-header>`);
+    expect(root.querySelector('.acp-session-header__view') === null, 'no view switch until it has started').to.equal(true);
     expect(root.querySelector('.acp-session-header__title')?.textContent).to.equal('New session');
     expect(root.querySelector('.acp-session-header__title-button')).to.equal(null);
     expect(root.querySelector('acp-session-menu')).to.equal(null);
@@ -171,6 +172,16 @@ describe('acp-session-header', () => {
       await el.updateComplete;
       expect(root.activeElement).to.equal(root.querySelector('.acp-session-header__title-button'));
     });
+  });
+
+  it('hides the view switch until the agent has the session, then shows it', async () => {
+    const connecting = /** @type {import('../../../hooks/sessions/types.js').Session} */ ({ id: 's1', status: 'starting', acpSessionId: null });
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T" .session=${connecting}></acp-session-header>`);
+    expect(root.querySelector('.acp-session-header__view')).to.equal(null);
+
+    el.session = { ...connecting, status: 'idle', acpSessionId: 'acp' };
+    await el.updateComplete;
+    expect(root.querySelector('.acp-session-header__view')).not.to.equal(null);
   });
 
   it('switches a chat session to its terminal, and back', async () => {

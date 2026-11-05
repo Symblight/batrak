@@ -4,11 +4,14 @@ import '../settings.js';
 
 /** @typedef {import('../settings.js').AcpSettings} AcpSettings */
 
-/** A short tab, so the sections scroll. */
-async function render() {
+/**
+ * A short tab, so the sections scroll.
+ * @param {number} [height]
+ */
+async function render(height = 320) {
   const el = /** @type {AcpSettings} */ (
     await fixture(
-      html`<acp-settings style="height: 320px" .settings=${settingsHook.defaults} .fonts=${[]}></acp-settings>`,
+      html`<acp-settings style="height: ${height}px" .settings=${settingsHook.defaults} .fonts=${[]}></acp-settings>`,
     )
   );
   return { el, root: /** @type {ShadowRoot} */ (el.shadowRoot) };
@@ -49,7 +52,7 @@ describe('acp-settings', () => {
   it('lists its sections and follows the scroll', async () => {
     const { el, root } = await render();
     const items = [...root.querySelectorAll('.acp-settings__nav-item')];
-    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor', 'Terminal']);
+    expect(items.map((i) => i.textContent?.trim())).to.deep.equal(['Theme', 'Editor', 'Terminal', 'Agents']);
     expect(current(root)).to.equal('Theme');
 
     const scroller = scrollerOf(root);
@@ -63,10 +66,35 @@ describe('acp-settings', () => {
     expect(current(root)).to.equal('Theme');
   });
 
+  it('marks the section picked even when the end of the scroll stops short of it, until scrolled away', async () => {
+    // Arrange
+    const { el, root } = await render(600);
+    const scroller = scrollerOf(root);
+    const item = (/** @type {string} */ label) => /** @type {HTMLElement} */ ([...root.querySelectorAll('.acp-settings__nav-item')].find((i) => i.textContent?.trim() === label));
+    // Act
+    item('Terminal').click();
+    await rendered(el);
+    // Assert
+    expect(scroller.scrollTop + scroller.clientHeight, 'at the end').to.be.greaterThan(scroller.scrollHeight - 2);
+    expect(current(root)).to.equal('Terminal');
+    // Act
+    item('Agents').click();
+    await rendered(el);
+    // Assert
+    expect(current(root), 'no scroll is left to report it').to.equal('Agents');
+    // Act
+    item('Terminal').click();
+    scroller.scrollTo({ top: 0 });
+    scroller.scrollTo({ top: scroller.scrollHeight });
+    await rendered(el);
+    // Assert
+    expect(current(root), 'scrolled there by hand').to.equal('Agents');
+  });
+
   it('explains its controls in tooltips, not titles', async () => {
     const { root } = await render();
     const items = [...root.querySelectorAll('.acp-settings__nav-item')];
-    expect(items.map(tooltipOf)).to.deep.equal(['Theme', 'Editor', 'Terminal']);
+    expect(items.map(tooltipOf)).to.deep.equal(['Theme', 'Editor', 'Terminal', 'Agents']);
     expect(tooltipOf(root.querySelector('.acp-settings__icon-button'))).to.equal('Pick a color');
     expect(tooltipOf(root.querySelector('.acp-settings__link'))).to.equal('Not available yet');
     expect(root.querySelector('[title]')).to.equal(null);
@@ -87,10 +115,18 @@ describe('acp-settings', () => {
     expect(current(root)).to.equal('Editor');
   });
 
-  it('leaves the agents to their own tab', async () => {
-    const { root } = await render();
-    expect(root.querySelector('[data-section="agents"]') !== null, 'no Agents section').to.equal(false);
-    expect([...root.querySelectorAll('md-button')].some((b) => b.textContent?.includes('Edit agents.json'))).to.equal(false);
+  it('links to the Agents tab from its Agents section, with nothing there to reset', async () => {
+    // Arrange
+    const { el, root } = await render();
+    const section = /** @type {HTMLElement} */ (root.querySelector('[data-section="agents"]'));
+    const buttons = [...section.querySelectorAll('md-button')];
+    let asked = 0;
+    el.addEventListener('acp-agents-manage', () => asked++);
+    // Act
+    /** @type {HTMLElement} */ (buttons[0]).click();
+    // Assert
+    expect(buttons.map((b) => b.textContent?.trim())).to.deep.equal(['Edit ACP agents']);
+    expect(asked).to.equal(1);
   });
 
   describe('the project accent', () => {

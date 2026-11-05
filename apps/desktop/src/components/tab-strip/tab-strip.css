@@ -5,12 +5,13 @@
 }
 /* The scroller is ours, not md-tabs', so wheel handling and scrollIntoView have a scroller we own.
    Flipped vertically (and the tabs back) so its very thin scrollbar sits on top; the flipped padding
-   is the gap above the tabs. `scrollbar-width` and `scrollbar-color` must stay `auto`, or WebKit ignores the pseudo-elements. */
+   is the gap above the tabs. `scrollbar-width` and `scrollbar-color` must stay `auto`, or WebKit ignores the pseudo-elements.
+   `overflow-x: scroll` keeps the scrollbar's height reserved, or the tabs shift when they start to overflow. */
 .acp-tab-strip__scroller {
   flex: 1 1 auto;
   min-width: 0;
   padding: 0 var(--acp-space-2) var(--acp-space-0-5);
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
   overscroll-behavior-x: contain;
   scroll-behavior: smooth;

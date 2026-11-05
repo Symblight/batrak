@@ -30,6 +30,20 @@ describe('session-views', () => {
     $agentList.set({ ...$agentList.get(), agents: [] });
   });
 
+  it('shows a session as Chat, and refuses a switch, until the agent has it', () => {
+    const connecting = { ...session('a'), status: /** @type {const} */ ('starting'), acpSessionId: null };
+    $sessions.set([connecting]);
+    $activeSessionId.set('a');
+    setSessionView('a', 'terminal');
+    expect(viewOfSession('a')).to.equal('chat');
+    expect($activeView.get().view).to.equal('chat');
+    expect($activeView.get().disabled).not.to.equal('');
+
+    $sessions.set([{ ...connecting, status: 'idle', acpSessionId: 'acp' }]);
+    expect(viewOfSession('a'), 'its own view from then').to.equal('terminal');
+    expect($activeView.get()).to.deep.equal({ view: 'terminal', disabled: '' });
+  });
+
   it('keeps each session\'s own view, and forgets one that is its agent\'s', () => {
     setSessionView('a', 'terminal');
     expect($sessionViews.get()).to.deep.equal({ a: 'terminal' });

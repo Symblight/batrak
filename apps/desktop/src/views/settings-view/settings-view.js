@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { agents } from '../../hooks/agents/agents.js';
 import { settings as settingsHook } from '../../hooks/settings/settings.js';
-import { $activePath, $settingsReveal, SETTINGS_TAB_ID, settingsRevealed } from '../../stores/editor/editor.js';
+import { $activePath, $settingsReveal, openAgents, SETTINGS_TAB_ID, settingsRevealed } from '../../stores/editor/editor.js';
 import { $systemFonts } from '../../stores/fonts/fonts.js';
 import { $project } from '../../stores/project/project.js';
 import {
@@ -89,6 +89,12 @@ export class AcpSettingsView extends ViewElement {
     settingsRevealed(/** @type {CustomEvent<{ reveal: SettingsReveal }>} */ (e).detail.reveal);
   }
 
+  /** @param {Event} e */
+  #onAgentsManage(e) {
+    e.stopPropagation();
+    openAgents();
+  }
+
   render() {
     return html`<acp-settings
       .settings=${this.#settings.value}
@@ -101,6 +107,7 @@ export class AcpSettingsView extends ViewElement {
       @acp-settings-project-accent-enabled=${this.#onProjectAccentEnabled}
       @acp-settings-reset=${this.#onReset}
       @acp-settings-revealed=${this.#onRevealed}
+      @acp-agents-manage=${this.#onAgentsManage}
     ></acp-settings>`;
   }
 }

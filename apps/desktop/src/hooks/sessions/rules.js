@@ -1,7 +1,7 @@
 
 /** Statuses in which a session holds (or is getting) an agent process. */
 export const RUNNING = new Set(['preparing', 'starting', 'idle', 'working', 'queued', 'waiting']);
-export { canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
+export { awaitsAgent, canUseTerminal, ownView, viewDisabledReason, viewOf } from '../../stores/session-views/session-views.js';
 
 /** @typedef {import('../app/types.js').ConfirmOptions} ConfirmOptions */
 /** @typedef {import('./types.js').Session} Session */

@@ -2,6 +2,7 @@ import { expect } from '@esm-bundle/chai';
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { sessions } from '../sessions.js';
 import { trackSeen } from '../seen.js';
+import { acpAdapter, handleSessionEvent } from '../adapter.js';
 import { $agentList } from '../../../stores/agents/agents.js';
 import { $historyResets } from '../../../stores/chat/chat.js';
 import { $activeShownView, $agentViews, $sessionViews, forgetSessionView, setAgentView } from '../../../stores/session-views/session-views.js';
@@ -266,6 +267,32 @@ describe('sessions keeps the active session in its view', () => {
     expect($activeShownView.get()).to.equal('terminal');
   });
 
+  it("doesn't stop an agent still connecting: the CLI opens once it has the session and its first turn ended", async () => {
+    // Arrange
+    $sessions.set([session({ status: 'starting', acpSessionId: null })]);
+    $activeSessionId.set('s1');
+    setAgentView('claude', 'terminal');
+    const message = /** @type {Parameters<NonNullable<typeof acpAdapter.sendMessage>>[0]} */ (
+      /** @type {unknown} */ ({ id: 'm', conversationId: 's1', parts: [{ type: 'text', text: 'hello' }] })
+    );
+    await acpAdapter.sendMessage?.(message, { signal: new AbortController().signal });
+    calls = [];
+
+    // Act, Assert
+    await sessions.reconcile();
+    expect(sent(), 'still connecting').to.deep.equal([]);
+
+    // Ready: idle for a moment, its first message on its way to the agent.
+    $sessions.set([session({ status: 'idle', acpSessionId: 'acp' })]);
+    await sessions.reconcile();
+    expect(sent(), 'its first message goes first').to.deep.equal([]);
+    expect($activeShownView.get()).to.equal('chat');
+
+    handleSessionEvent(/** @type {import('../types.js').SessionEnvelope} */ ({ sessionId: 's1', seq: 1, kind: 'turn-end', payload: { stopReason: 'end_turn', at: '' } }));
+    await sessions.reconcile();
+    expect(sent()).to.deep.equal(['session_stop', 'session_open_cli']);
+  });
+
   it('leaves a running turn alone, and opens the CLI once it ends', async () => {
     $sessions.set([session({ status: 'working' })]);
     $activeSessionId.set('s1');
@@ -332,6 +359,7 @@ describe('sessions keeps the active session in its view', () => {
 
       // Assert
       const why = `${workspaceId}, ${target?.kind ?? 'default'}`;
+      expect(listed?.acpSessionId, 'its agent has it only once started').to.equal(null);
       const create = /** @type {Record<string, unknown> | undefined} */ (calls.find((c) => c.cmd === 'session_create')?.args);
       expect(create?.workspaceId, why).to.equal(workspace);
       expect(listed?.workspaceId ?? 'main', `${why}: listed meanwhile`).to.equal(shown);
