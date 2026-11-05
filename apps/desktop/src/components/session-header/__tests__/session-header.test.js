@@ -174,6 +174,16 @@ describe('acp-session-header', () => {
     });
   });
 
+  it('hides the view switch until the agent has the session, then shows it', async () => {
+    const connecting = /** @type {import('../../../hooks/sessions/types.js').Session} */ ({ id: 's1', status: 'starting', acpSessionId: null });
+    const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T" .session=${connecting}></acp-session-header>`);
+    expect(root.querySelector('.acp-session-header__view')).to.equal(null);
+
+    el.session = { ...connecting, status: 'idle', acpSessionId: 'acp' };
+    await el.updateComplete;
+    expect(root.querySelector('.acp-session-header__view')).not.to.equal(null);
+  });
+
   it('switches a chat session to its terminal, and back', async () => {
     const { el, root } = await render(html`<acp-session-header session-id="s1" session-title="T"></acp-session-header>`);
     const events = record(el, 'acp-session-view');

@@ -78,6 +78,15 @@ function endRunning(sessionId) {
   running.delete(sessionId);
 }
 
+/**
+ * Whether the backend took a prompt of the session and hasn't ended its turn: also the moment its
+ * status says `idle` between its agent's start and the turn's.
+ * @param {string} sessionId
+ */
+export function turnTaken(sessionId) {
+  return running.has(sessionId);
+}
+
 /** @param {ChxChunk} chunk */
 function deliver(chunk) {
   if (handlers) handlers.onChunk(chunk);

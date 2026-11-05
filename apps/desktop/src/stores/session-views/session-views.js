@@ -18,6 +18,15 @@ export function canUseTerminal(terminal, draft) {
 }
 
 /**
+ * Whether its agent has yet to give a started session its id. Its CLI can't resume it without one,
+ * and stopping the agent for the CLI would drop the first message on its way.
+ * @param {import('../../hooks/sessions/types.js').Session | null | undefined} session
+ */
+export function awaitsAgent(session) {
+  return session?.acpSessionId === null;
+}
+
+/**
  * How a session is shown: its own view, else its agent's; always `chat` when its agent's CLI can't
  * show it.
  * @param {SessionView | undefined} own The session's own (`$sessionViews`).
@@ -112,6 +121,7 @@ function terminalOf(agentId) {
  */
 export function viewOfSession(id) {
   const session = $sessions.get().find((s) => s.id === id);
+  if (awaitsAgent(session)) return 'chat';
   const agentId = session ? session.agentId : composerOf(id).agentId;
   return viewOf($sessionViews.get()[id], agentView(agentId), terminalOf(agentId), session === undefined);
 }
@@ -150,6 +160,7 @@ export const $activeView = computed(
     /** @type {SessionView} */
     const chat = 'chat';
     if (id === null) return { view: chat, disabled: '' };
+    if (awaitsAgent(session)) return { view: chat, disabled: 'Connecting to the agent' };
     const draft = session === null;
     const agentId = session?.agentId ?? composer.agentId;
     const terminal = terminalOf(agentId);
