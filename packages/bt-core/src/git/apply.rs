@@ -37,12 +37,12 @@ fn with_snapshot<T>(
     };
     let seeded = std::fs::copy(git_path("index")?, &index.path).is_ok();
     let scratch_objects = TempFile::new("objects");
-    let objects = git_path("objects")?;
+    let alternates = alternate_entry(&git_path("objects")?);
     let mut env: Vec<(&str, &OsStr)> = vec![("GIT_INDEX_FILE", index.path.as_os_str())];
     if !keep_objects {
         std::fs::create_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
         env.push(("GIT_OBJECT_DIRECTORY", scratch_objects.path.as_os_str()));
-        env.push(("GIT_ALTERNATE_OBJECT_DIRECTORIES", objects.as_os_str()));
+        env.push(("GIT_ALTERNATE_OBJECT_DIRECTORIES", alternates.as_os_str()));
     }
     let opts = Options { env: &env, ..Default::default() };
     // `add -A` runs clean filters (LFS) over every changed file.
@@ -55,6 +55,15 @@ fn with_snapshot<T>(
     }
     run(&[&"add", &"-A"])?;
     f(&run)
+}
+
+/// `path` as the one entry of `GIT_ALTERNATE_OBJECT_DIRECTORIES`, a list split on `:` (`;` on Windows)
+/// where an entry starting with a double quote is taken as C-quoted.
+fn alternate_entry(path: &Path) -> std::ffi::OsString {
+    match path.to_str() {
+        Some(text) if text.contains([':', ';', '"']) => format!("\"{}\"", text.replace('\\', "\\\\").replace('"', "\\\"")).into(),
+        _ => path.into(),
+    }
 }
 
 /// Commits the worktree's uncommitted and untracked work (ignored files aren't) onto `branch`,
@@ -96,7 +105,19 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
 /// of it: `git apply` takes only a plain patch with `a/` and `b/` prefixes.
 pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
     with_snapshot(git, worktree, false, |run| {
-        run(&[&"diff", &"--cached", &"--binary", &"--no-ext-diff", &"--no-color", &"--src-prefix=a/", &"--dst-prefix=b/", &base])
+        run(&[
+            &"diff",
+            &"--cached",
+            &"--binary",
+            &"--no-ext-diff",
+            &"--no-textconv",
+            &"--no-color",
+            &"--no-relative",
+            &"--submodule=short",
+            &"--src-prefix=a/",
+            &"--dst-prefix=b/",
+            &base,
+        ])
     })
 }
 
@@ -219,7 +240,14 @@ mod tests {
 
     #[test]
     fn the_users_diff_settings_leave_the_applied_work_alone() {
-        for (key, value) in [("diff.noprefix", "true"), ("diff.mnemonicPrefix", "true"), ("color.ui", "always"), ("diff.external", "echo external")] {
+        for (key, value) in [
+            ("diff.noprefix", "true"),
+            ("diff.mnemonicPrefix", "true"),
+            ("color.ui", "always"),
+            ("diff.external", "echo external"),
+            ("diff.relative", "true"),
+            ("diff.up.textconv", "sed s/t/T/"),
+        ] {
             let mut repo = TestRepo::with_commit("apply-config");
             repo.write("pkg/a.txt", "one\n");
             repo.git(&["add", "pkg/a.txt"]);
@@ -227,11 +255,40 @@ mod tests {
             let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
             let wt = repo.worktree("apply-config-wt", "batrak/config");
             std::fs::write(wt.join("pkg/a.txt"), "two\n").unwrap();
+            repo.write(".git/info/attributes", "*.txt diff=up\n");
             repo.git(&["config", key, value]);
 
-            assert_eq!(apply_locally(&git_bin(), &wt, &base, &repo.path).unwrap(), ApplyOutcome::Clean, "{key}");
+            // From a folder of each: the project's folder inside its repository.
+            assert_eq!(apply_locally(&git_bin(), &wt.join("pkg"), &base, &repo.path.join("pkg")).unwrap(), ApplyOutcome::Clean, "{key}");
             assert_eq!(std::fs::read_to_string(repo.path.join("pkg/a.txt")).unwrap(), "two\n", "{key}");
         }
+    }
+
+    #[test]
+    fn the_users_submodule_format_stays_out_of_the_patch() {
+        let mut repo = TestRepo::with_commit("apply-submodule");
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let wt = repo.worktree("apply-submodule-wt", "batrak/submodule");
+        let sub = wt.join("sub");
+        std::fs::create_dir(&sub).unwrap();
+        run_in(&sub, &["init", "-q", "-b", "main"]);
+        run_in(&sub, &["commit", "-q", "--allow-empty", "-m", "sub"]);
+        repo.git(&["config", "diff.submodule", "log"]);
+
+        let patch = changes_since(&git_bin(), &wt, &base).unwrap();
+        assert!(String::from_utf8_lossy(&patch).contains("Subproject commit"), "{}", String::from_utf8_lossy(&patch));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_colon_in_the_repositorys_path_is_only_a_colon() {
+        let mut repo = TestRepo::with_commit("co:lon");
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let wt = repo.worktree("colon-wt", "batrak/colon");
+        std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
+
+        let files = changed_since(&git_bin(), &wt, &base).unwrap();
+        assert_eq!(files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["README.md"]);
     }
 
     #[test]

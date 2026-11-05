@@ -13,14 +13,16 @@ describe('git changes', () => {
     const shown = (/** @type {string} */ content, /** @type {string} */ baseline, error = '') => ({ content, baseline, error, loading: false });
     const failing = () => Promise.reject('a.bin: binary, no diff to show');
     const table = [
-      ['edited', Promise.resolve('new'), Promise.resolve('old'), shown('new', 'old')],
-      ['new', Promise.resolve('new'), Promise.resolve(null), shown('new', '')],
-      ['deleted', failing(), Promise.resolve('old'), shown('', 'old')],
-      ['untracked binary', failing(), Promise.resolve(null), shown('', '', 'a.bin: binary, no diff to show')],
-      ['committed binary', Promise.resolve('text'), failing(), shown('', '', 'a.bin: binary, no diff to show')],
+      ['edited', false, Promise.resolve('new'), Promise.resolve('old'), shown('new', 'old')],
+      ['new', false, Promise.resolve('new'), Promise.resolve(null), shown('new', '')],
+      ['deleted', true, failing(), Promise.resolve('old'), shown('', 'old')],
+      ['turned binary', false, failing(), Promise.resolve('old'), shown('', '', 'a.bin: binary, no diff to show')],
+      ['untracked binary', false, failing(), Promise.resolve(null), shown('', '', 'a.bin: binary, no diff to show')],
+      ['committed binary', false, Promise.resolve('text'), failing(), shown('', '', 'a.bin: binary, no diff to show')],
     ];
-    for (const [name, file, base, expected] of table) {
-      expect(await git.readDiff(/** @type {Promise<string>} */ (file), /** @type {Promise<string | null>} */ (base)), String(name)).to.deep.equal(expected);
+    for (const [name, deleted, file, base, expected] of table) {
+      const diff = await git.readDiff(/** @type {Promise<string>} */ (file), /** @type {Promise<string | null>} */ (base), /** @type {boolean} */ (deleted));
+      expect(diff, String(name)).to.deep.equal(expected);
     }
   });
 
