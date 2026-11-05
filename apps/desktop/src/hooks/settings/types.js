@@ -4,7 +4,7 @@
  * @property {SettingsAnchor} section
  */
 
-/** @typedef {'theme' | 'editor' | 'terminal'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
+/** @typedef {'theme' | 'editor' | 'terminal' | 'agents'} SettingsAnchor A section of the Settings tab, as its navigation lists them. */
 
 /**
  * Column width in px by `acp-resize-handle` name (unique app-wide); a missing column uses its CSS default.

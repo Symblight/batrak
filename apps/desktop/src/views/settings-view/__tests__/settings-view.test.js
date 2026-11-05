@@ -3,7 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $systemFonts } from '../../../stores/fonts/fonts.js';
 import { $project } from '../../../stores/project/project.js';
 import { $projectAccent, $settings, clearProjectAccent } from '../../../stores/settings/settings.js';
-import { $settingsReveal, activateTab, closeTab, openAgents, openSettings, SETTINGS_TAB_ID, AGENTS_TAB_ID } from '../../../stores/editor/editor.js';
+import { $activePath, $settingsReveal, activateTab, closeTab, openAgents, openSettings, SETTINGS_TAB_ID, AGENTS_TAB_ID } from '../../../stores/editor/editor.js';
 import { settings as settingsHook } from '../../../hooks/settings/settings.js';
 import '../settings-view.js';
 
@@ -50,7 +50,7 @@ describe('acp-settings-view', () => {
   /**
    * @param {Element} from
    * @param {string} type
-   * @param {object} detail
+   * @param {object | null} detail
    */
   function fire(from, type, detail) {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
@@ -118,6 +118,19 @@ describe('acp-settings-view', () => {
     expect($settings.get().markdownScrollSync, 'markdown too').to.equal(true);
     expect($settings.get().appearance, 'other sections are kept').to.equal('dark');
     expect($settings.get().terminalFont, 'the terminal section too').to.equal('Fira');
+    expect(leaked).to.deep.equal([]);
+  });
+
+  it('opens the Agents tab when the settings ask, without the event leaving', async () => {
+    // Arrange
+    const { el, settings } = await render();
+    /** @type {Event[]} */
+    const leaked = [];
+    el.addEventListener('acp-agents-manage', (e) => leaked.push(e));
+    // Act
+    fire(settings, 'acp-agents-manage', null);
+    // Assert
+    expect($activePath.get()).to.equal(AGENTS_TAB_ID);
     expect(leaked).to.deep.equal([]);
   });
 
