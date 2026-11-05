@@ -125,9 +125,32 @@
   --md-button-block-start-space: var(--acp-button-block-space-compact);
   --md-button-block-end-space: var(--acp-button-block-space-compact);
 }
-/* A session with no message yet: only the composer, centered. */
+/* A session with no message yet: only the title and the composer, centered, a little above the middle. */
 .acp-chat__chat_empty {
   justify-content: center;
+  padding-block-end: 6%;
+
+  /* No message list to fade, and the shadow would cover the title's lower half. */
+  & .acp-chat__banner {
+    box-shadow: none;
+  }
+}
+.acp-chat__hints {
+  margin-block-end: var(--acp-space-2);
+}
+.acp-chat__hint-icon {
+  margin-inline-end: var(--acp-space-1);
+  color: var(--acp-color-primary);
+  font-size: var(--acp-icon-size-sm);
+  vertical-align: middle;
+}
+.acp-chat__title {
+  margin: 0 0 var(--acp-space-4);
+  color: var(--acp-color-on-surface);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 32px;
+  text-align: center;
 }
 /* The scroller spans the chat (its scrollbar at the edge); the rows keep the composer's inset
    (`chx-chat` pads it 1rem), so the messages line up with the field. */

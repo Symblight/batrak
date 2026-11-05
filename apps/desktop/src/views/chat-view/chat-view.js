@@ -13,6 +13,7 @@ import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
 import { composer as composerRules } from '../../hooks/composer/composer.js';
 import { git } from '../../hooks/git/git.js';
+import { $uncommittedCount } from '../../stores/git/git.js';
 import { $activeContextUsage } from '../../stores/context-usage/context-usage.js';
 import { openAgents } from '../../stores/editor/editor.js';
 import { $activeFolder, $activeSession, $activeSessionId, $draftSessions } from '../../stores/sessions/sessions.js';
@@ -62,6 +63,7 @@ export class AcpChatView extends ViewElement {
     },
   });
   #workspacesEnabled = new StoreController(this, { store: $workspacesEnabled });
+  #uncommitted = new StoreController(this, { store: $uncommittedCount });
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
@@ -86,6 +88,8 @@ export class AcpChatView extends ViewElement {
   #fetchedFor = new Set();
   /** @type {string | null} The root whose branches `branches` holds (or is being listed for). */
   #listedFor = null;
+  /** @type {(() => void) | null} Stops `git.watchChanges()`. */
+  #unwatchChanges = null;
 
   constructor() {
     super();
@@ -114,7 +118,29 @@ export class AcpChatView extends ViewElement {
     return { target, workspaceName, worktrees, branches: this.branches, base, load: this.#loadBranches };
   }
 
+  /** A draft is on screen: its hint counts the shown folder's uncommitted files. */
+  get #countsChanges() {
+    const id = this.#activeSessionId.value;
+    return id !== null && id in this.#drafts.value && !this.concealed && this.isConnected;
+  }
+
+  #syncChangesWatch() {
+    if (this.#countsChanges) this.#unwatchChanges ??= git.watchChanges();
+    else {
+      this.#unwatchChanges?.();
+      this.#unwatchChanges = null;
+    }
+  }
+
+  /** The hint's files are in the shown folder, whatever place the draft had picked. */
+  #onHintUse() {
+    const id = this.#activeSessionId.value;
+    const draft = id === null ? undefined : this.#drafts.value[id];
+    if (id !== null && draft) setRunTarget(id, composerRules.runTargetOf(undefined, draft.workspaceId));
+  }
+
   willUpdate() {
+    this.#syncChangesWatch();
     // New worktree shown for a draft: Main's branches listed, for its default base.
     const id = this.#activeSessionId.value;
     if (id !== null && id !== this.#branchesFor && this.#place?.target.kind === 'worktree') {
@@ -287,11 +313,13 @@ export class AcpChatView extends ViewElement {
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('acp-subagent-open', this.#onSubagentOpen);
+    this.#syncChangesWatch();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('acp-subagent-open', this.#onSubagentOpen);
+    this.#syncChangesWatch();
   }
 
   /** @param {Event} e The subagent's bar asks to stop it. */
@@ -332,6 +360,7 @@ export class AcpChatView extends ViewElement {
       .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
       .blocked=${workspace?.missing ? { message: 'Recreate the folder to continue', workspaceId: workspace.id } : null}
       .place=${this.#place}
+      .uncommitted=${this.#countsChanges ? this.#uncommitted.value : 0}
       .permission=${hasSession ? this.#permission.value : null}
       .notice=${hasSession ? this.#notice.value : null}
       .signInRun=${hasSession ? this.#signInRun() : null}
@@ -349,6 +378,7 @@ export class AcpChatView extends ViewElement {
       @acp-config-option=${this.#onConfigOption}
       @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-run-target-change=${this.#onRunTarget}
+      @acp-chat-hint-use=${this.#onHintUse}
       @acp-link-open=${this.#onLinkOpen}
       @acp-subagent-stop=${this.#onSubagentStop}
       @acp-subagent-close=${() => showSubagent(null)}

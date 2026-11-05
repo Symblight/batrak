@@ -46,6 +46,17 @@ export function statusOf(kind) {
 }
 
 /**
+ * The uncommitted files hint: what its button says, and the prompt it puts in the composer.
+ * @param {number} count
+ * @returns {{ label: string, value: string }}
+ */
+export function uncommittedHint(count) {
+  return count === 1
+    ? { label: 'Review 1 uncommitted file', value: 'Review the uncommitted file' }
+    : { label: `Review ${count} uncommitted files`, value: `Review the ${count} uncommitted files` };
+}
+
+/**
  * Groups changed files like `git status`: tracked changes, then untracked files; each sorted by
  * path, with line counts summed per group. Empty groups are left out.
  * @param {readonly GitFileStatus[]} files
