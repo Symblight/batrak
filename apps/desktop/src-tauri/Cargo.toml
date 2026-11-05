@@ -1,11 +1,11 @@
 [package]
-name = "batrak-desktop"
+name = "bt-desktop"
 version = "0.1.0"
 description = "Batrak — agent-first client for AI coding agents"
 edition = "2021"
 
 [lib]
-name = "batrak_desktop"
+name = "bt_desktop"
 crate-type = ["rlib"]
 
 [build-dependencies]

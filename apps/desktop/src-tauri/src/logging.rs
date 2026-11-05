@@ -23,12 +23,12 @@ const MAX_NOTICE: usize = 500;
 
 /// Our crates' log targets: the app's, the core's, and the agent crates' that log (`agent-acp`). Their lines get
 /// the app's level, and their warnings and errors reach the windows.
-const OWN_TARGETS: [&str; 3] = ["batrak_desktop", "bt_core", "agent_acp"];
+const OWN_TARGETS: [&str; 3] = ["bt_desktop", "bt_core", "agent_acp"];
 
 #[cfg(debug_assertions)]
-const DEFAULT_FILTER: &str = "info,batrak_desktop=debug,bt_core=debug,agent_acp=debug";
+const DEFAULT_FILTER: &str = "info,bt_desktop=debug,bt_core=debug,agent_acp=debug";
 #[cfg(not(debug_assertions))]
-const DEFAULT_FILTER: &str = "warn,batrak_desktop=info,bt_core=info,agent_acp=info";
+const DEFAULT_FILTER: &str = "warn,bt_desktop=info,bt_core=info,agent_acp=info";
 
 /// Whether a line is one of our crates' (`OWN_TARGETS`, or a module of one).
 fn is_own(target: &str) -> bool {
@@ -154,10 +154,10 @@ mod tests {
 
     #[test]
     fn our_crates_lines_are_ours_wherever_they_log() {
-        for target in ["batrak_desktop", "batrak_desktop::git", "bt_core", "bt_core::session::runtime", "agent_acp", "agent_acp::connection"] {
+        for target in ["bt_desktop", "bt_desktop::git", "bt_core", "bt_core::session::runtime", "agent_acp", "agent_acp::connection"] {
             assert!(is_own(target), "{target}");
         }
-        for target in ["hyper", "agent_acpx", "batrak_desktops", "bt_corex"] {
+        for target in ["hyper", "agent_acpx", "bt_desktops", "bt_corex"] {
             assert!(!is_own(target), "{target}");
         }
         for target in OWN_TARGETS {
