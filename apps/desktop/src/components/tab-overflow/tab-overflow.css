@@ -45,10 +45,17 @@
 .acp-tab-overflow__button {
   flex: none;
   margin-inline-end: var(--acp-space-1);
-  --md-icon-button-font-size: var(--acp-icon-size-md);
+  --md-icon-button-border-radius: var(--acp-shape-corner-small);
+  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+
+  /* Like the toolbar's Expand editor: 5px + the library's 1px border = 32px square around the 20px icon. */
+  &::part(button) {
+    padding: 5px;
+  }
 }
 .acp-tab-overflow__icon {
-  font-size: var(--acp-icon-size-md);
+  font-size: var(--acp-icon-size-lg);
 }
 .acp-tab-overflow__menu {
   --md-menu-min-width: 12rem;
