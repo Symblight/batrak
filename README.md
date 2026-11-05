@@ -2,7 +2,7 @@
 
 An agent-first client for AI coding agents over [ACP](https://agentclientprotocol.com): one core
 that runs agents, sessions and workspaces, and two fronts over it, a desktop app and a command-line
-tool. The successor of Brama.
+tool.
 
 ```
 apps/desktop    Tauri + Lit: chats, workspaces, editor, search, changes, terminals
@@ -16,8 +16,7 @@ a spec is written.
 
 ## Status
 
-The repository is being set up. The code arrives from Brama in the steps of `ARCHITECTURE.md` §9;
-until then the folders are empty.
+The repository is being set up, in the steps of `ARCHITECTURE.md` §9.
 
 ## Build and run
 

@@ -108,7 +108,7 @@ paths:
     gone ("Claude Code (removed)" in the picker, `agentInfo(id, name)`); `.bt/local/` is never in the
     snapshot.
   - **Secrets and trust:** `env` values take `${env:NAME}` (login-shell env) and `${keychain:name}`
-    (service `brama`), resolved only at spawn: secrets never reach logs, IPC or files. The project's
+    (service `batrak`), resolved only at spawn: secrets never reach logs, IPC or files. The project's
     file is the repository's, so it can't make the app run anything on its own: an agent whose `command`
     / `args` / `env` it sets, or any start while it lists `mcpServers`, needs the user's trust in that
     exact `LaunchConfig` for that project (`agents_trust`, kept in `<app data>/trusted-agents.json`; a
