@@ -23,6 +23,7 @@ import dataObjectIcon from '@material-design-icons/svg/outlined/data_object.svg?
 import paletteIcon from '@material-design-icons/svg/outlined/palette.svg?raw';
 import codeIcon from '@material-design-icons/svg/outlined/code.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import agentsIcon from '@material-design-icons/svg/outlined/smart_toy.svg?raw';
 import styles from './settings.css?inline';
 
 /** @typedef {import('../../hooks/settings/types.js').Appearance} Appearance */
@@ -39,6 +40,7 @@ const SECTIONS = [
   { id: 'theme', label: 'Theme', icon: paletteIcon },
   { id: 'editor', label: 'Editor', icon: codeIcon },
   { id: 'terminal', label: 'Terminal', icon: terminalIcon },
+  { id: 'agents', label: 'Agents', icon: agentsIcon },
 ];
 
 /** @type {boolean} The terminal's Colors row, hidden until it is finished. */
@@ -67,6 +69,9 @@ const TERMINAL_COLORS = [
   { key: 'brightWhite', label: 'Bright white' },
 ];
 
+/** How far short of the scroller's end still counts as the end, in px. */
+const END_SLACK = 2;
+
 /** How far below the scroller's top a section counts as the one being read. */
 const SPY_OFFSET = 24;
 
@@ -79,12 +84,13 @@ const APPEARANCES = [
 
 /**
  * @tag acp-settings
- * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor, Terminal) and a list that scrolls to them.
+ * @summary App settings, shown as a tab in the main column: one card of sections (Theme, Editor, Terminal, Agents) and a list that scrolls to them.
  * @fires acp-settings-change `{ patch }` A `Partial<Settings>`; the accent as typed, the font size unclamped.
  * @fires acp-settings-project-accent `{ accent }` For the project shown: the color as typed.
  * @fires acp-settings-project-accent-enabled `{ enabled }` For the project shown.
  * @fires acp-settings-reset `{ section }`
  * @fires acp-settings-revealed `{ reveal }` The `reveal` asked for was shown.
+ * @fires acp-agents-manage `null` Edit ACP agents: the Agents tab opens.
  */
 export class AcpSettings extends LitElement {
   static properties = {
@@ -126,6 +132,10 @@ export class AcpSettings extends LitElement {
     this.fontSizeDrafts = {};
   }
 
+  /** @type {SettingsAnchor | null} The section asked for that the end of the scroll can't bring to the top. */
+  #endSection = null;
+  #wasAtEnd = false;
+
   /** @param {Partial<Settings>} patch */
   #change(patch) {
     this.dispatchEvent(new CustomEvent('acp-settings-change', { detail: { patch }, bubbles: true, composed: true }));
@@ -159,9 +169,12 @@ export class AcpSettings extends LitElement {
     const scroller = this.#scroller;
     const section = this.renderRoot.querySelector(`[data-section="${id}"]`);
     if (!scroller || !section) return;
-    const top = section.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop;
+    const top = section.getBoundingClientRect().top - scroller.getBoundingClientRect().top + scroller.scrollTop - parseFloat(getComputedStyle(scroller).paddingTop);
+    this.#endSection = top >= scroller.scrollHeight - scroller.clientHeight - END_SLACK ? id : null;
+    // Already at the end, no `scroll` will come to mark it.
+    if (this.#endSection) this.current = id;
     const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    scroller.scrollTo({ top: top - parseFloat(getComputedStyle(scroller).paddingTop), behavior: reduced ? 'instant' : behavior });
+    scroller.scrollTo({ top, behavior: reduced ? 'instant' : behavior });
   }
 
   /** @param {SettingsReveal} reveal */
@@ -170,17 +183,19 @@ export class AcpSettings extends LitElement {
     this.dispatchEvent(new CustomEvent('acp-settings-revealed', { detail: { reveal }, bubbles: true, composed: true }));
   }
 
-  /** Marks the section being read: the last one whose top has passed the scroller's, or the last at the end. */
+  /** Marks the section being read: the last one whose top has passed the scroller's; at the end, the one asked for or the last. */
   #onScroll = () => {
     const scroller = /** @type {HTMLElement} */ (this.#scroller);
     const top = scroller.getBoundingClientRect().top + SPY_OFFSET;
-    const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 2;
+    const atEnd = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - END_SLACK;
+    if (this.#wasAtEnd && !atEnd) this.#endSection = null;
+    this.#wasAtEnd = atEnd;
     let current = SECTIONS[0].id;
     for (const { id } of SECTIONS) {
       const section = this.renderRoot.querySelector(`[data-section="${id}"]`);
       if (atEnd || (section && section.getBoundingClientRect().top <= top)) current = id;
     }
-    this.current = current;
+    this.current = (atEnd && this.#endSection) || current;
   };
 
   /** Opens the system color panel of the swatch beside the button, a native color input. */
@@ -572,6 +587,20 @@ export class AcpSettings extends LitElement {
     </section>`;
   }
 
+  #renderAgents() {
+    return html`<section class="acp-settings__group" aria-label="Agents" data-section="agents">
+      <div class="acp-settings__group-header">
+        <h3 class="acp-settings__group-title">Agents</h3>
+        <md-button
+          class="acp-settings__header-button"
+          variant="text"
+          @click=${() => this.dispatchEvent(new CustomEvent('acp-agents-manage', { detail: null, bubbles: true, composed: true }))}
+          >Edit ACP agents</md-button
+        >
+      </div>
+    </section>`;
+  }
+
   #renderNav() {
     return html`<nav class="acp-settings__nav" aria-label="Settings sections">
       ${SECTIONS.map(
@@ -604,6 +633,8 @@ export class AcpSettings extends LitElement {
             ${this.#renderEditor(settings)}
             <hr class="acp-settings__divider" />
             ${this.#renderTerminal(settings)}
+            <hr class="acp-settings__divider" />
+            ${this.#renderAgents()}
           </div>
           <footer class="acp-settings__footer">
             <span id="acp-settings-edit-json" class="acp-settings__link" aria-disabled="true">
