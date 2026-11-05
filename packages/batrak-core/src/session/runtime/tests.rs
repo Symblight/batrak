@@ -149,7 +149,7 @@ impl Drop for Fixture {
 fn fixture(name: &str, options: FakeAgentOptions) -> Fixture {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("brama-sessions-{name}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-sessions-{name}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let project = dir.join("project");
     std::fs::create_dir_all(project.join(".git")).unwrap();
@@ -1866,7 +1866,7 @@ async fn session_ids_are_names_not_paths() {
 
 #[test]
 fn reads_lines_without_loading_more_than_the_limit() {
-    let dir = std::env::temp_dir().join(format!("brama-read-lines-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-read-lines-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
     let small = dir.join("small.txt");
@@ -1889,7 +1889,7 @@ fn reads_lines_without_loading_more_than_the_limit() {
 
 #[test]
 fn prompt_blocks_map_mentions_and_selections_and_refuse_escapes() {
-    let dir = std::env::temp_dir().join(format!("brama-blocks-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-blocks-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("src")).unwrap();
     std::fs::write(dir.join("src/my file.rs"), "l1\nl2\nl3\nl4\n").unwrap();
@@ -1930,7 +1930,7 @@ fn prompt_input_from_the_page() {
 
 /// Sessions with the real Claude Code agent (`claude`) in a fresh project under a temp `name`.
 fn real_claude(name: &str) -> (Sessions, PathBuf, PathBuf) {
-    let dir = std::env::temp_dir().join(format!("brama-{name}-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let project = dir.join("project");
     std::fs::create_dir_all(&project).unwrap();
@@ -2077,7 +2077,7 @@ async fn real_claude_agent_end_to_end() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
-/// What the real Claude Code sends for a subagent (ACP subagent sessions, which Brama declares):
+/// What the real Claude Code sends for a subagent (ACP subagent sessions, which Batrak declares):
 /// prints the `subagent_update`s, `session_message`s and the subagent's own updates, and whether
 /// `session/list` gains a session. Needs what `real_claude_agent_end_to_end` does.
 #[tokio::test(flavor = "multi_thread")]
@@ -2814,7 +2814,7 @@ async fn a_session_its_agent_saw_active_just_now_is_active_elsewhere_for_a_while
     assert_eq!(f.ask("here", &events, "hello").await, "Hello, world");
     f.sessions.stop("here").await.unwrap();
     f.sessions.sync(&f.project, None).await;
-    assert_eq!(until(&f.sessions, "here"), None, "its last activity was Brama's");
+    assert_eq!(until(&f.sessions, "here"), None, "its last activity was Batrak's");
 }
 
 #[tokio::test]
@@ -3638,7 +3638,7 @@ async fn the_front_hears_a_projects_sessions_after_each_sync() {
         }
     }
     let heard = Arc::new(Mutex::new(Vec::new()));
-    let dir = std::env::temp_dir().join(format!("brama-sessions-synced-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-sessions-synced-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     let launcher = Arc::new(FakeLauncher {
         options: FakeAgentOptions::default(),

@@ -62,7 +62,7 @@ mod tests {
 
     #[test]
     fn round_trips_and_survives_a_corrupt_file() {
-        let dir = std::env::temp_dir().join(format!("brama-storage-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-storage-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         let file = JsonFile::new(dir.join("sessions.json"));
         assert_eq!(file.load::<Vec<String>>(), Vec::<String>::new());

@@ -49,7 +49,7 @@ mod tests {
 
     #[test]
     fn edits_on_disk_reach_the_agent_list() {
-        let dir = std::env::temp_dir().join(format!("brama-user-agents-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-user-agents-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let file = dir.join("brama").join("agents.json");
         let (tx, rx) = mpsc::channel();

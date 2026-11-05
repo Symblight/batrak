@@ -1226,7 +1226,7 @@ mod tests {
     /// Each change of an agents.json is told once, with its project; reading isn't a change.
     #[test]
     fn every_change_of_the_agents_is_announced_once_and_reading_is_not() {
-        let dir = std::env::temp_dir().join(format!("brama-announce-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-announce-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         let project = dir.join("project");
         ensure_project_dir(&project).unwrap();
@@ -1273,7 +1273,7 @@ mod tests {
     }
 
     fn temp_project(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("brama-config-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-config-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         dir

@@ -58,10 +58,10 @@ describe('acp-settings-view', () => {
 
   it('gives the settings the project shown, and sets its accent', async () => {
     // Arrange
-    $project.set({ path: '/view-project', name: 'Brama', rootId: null });
+    $project.set({ path: '/view-project', name: 'Batrak', rootId: null });
     const el = /** @type {AcpSettingsView} */ (await fixture(html`<acp-settings-view></acp-settings-view>`));
     const settings = /** @type {HTMLElementTagNameMap['acp-settings']} */ (el.querySelector('acp-settings'));
-    expect(settings.projectName).to.equal('Brama');
+    expect(settings.projectName).to.equal('Batrak');
     // Act
     settings.dispatchEvent(new CustomEvent('acp-settings-project-accent', { detail: { accent: '#AA00BB' }, bubbles: true, composed: true }));
     await settings.updateComplete;

@@ -233,7 +233,7 @@ mod tests {
 
     impl Tmp {
         fn new(name: &str) -> Tmp {
-            let dir = std::env::temp_dir().join(format!("brama-writable-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("batrak-writable-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(dir.join("p/.brama")).unwrap();
             Tmp(dunce::canonicalize(dir).unwrap())
@@ -292,7 +292,7 @@ mod tests {
 
     #[test]
     fn reads_bytes_up_to_the_cap() {
-        let dir = std::env::temp_dir().join(format!("brama-read-bytes-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-read-bytes-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("a.png");
         std::fs::write(&file, [0x89, b'P', b'N', b'G', 0xff]).unwrap();
@@ -304,7 +304,7 @@ mod tests {
 
     #[test]
     fn only_a_regular_file_is_read() {
-        let dir = std::env::temp_dir().join(format!("brama-read-regular-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-read-regular-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(&dir).unwrap();
         let folder = read_capped(&dir, 1024).unwrap_err();
@@ -324,7 +324,7 @@ mod tests {
 
     #[test]
     fn text_is_utf8_kept_as_it_is_on_disk() {
-        let dir = std::env::temp_dir().join(format!("brama-read-text-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-read-text-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();
         let file = dir.join("a.txt");
         let bom_and_crlf = b"\xef\xbb\xbfa\r\nb".to_vec();

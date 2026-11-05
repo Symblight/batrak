@@ -26,7 +26,7 @@
  */
 
 /**
- * About Brama; mirrors `commands::about::AboutInfo`.
+ * About Batrak; mirrors `commands::about::AboutInfo`.
  * @typedef {Object} AboutInfo
  * @property {string} version
  * @property {string} os Name and version, e.g. `macOS 26.1`.

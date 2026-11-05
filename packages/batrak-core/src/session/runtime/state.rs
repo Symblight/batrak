@@ -40,7 +40,7 @@ pub(super) struct SessionState {
     pub(super) stopping: AtomicBool,
     /// Between `turn-start` and the turn's end.
     pub(super) in_turn: AtomicBool,
-    /// When Brama last saw activity in it (a prompt, a turn's end), in ms: later activity the agent
+    /// When Batrak last saw activity in it (a prompt, a turn's end), in ms: later activity the agent
     /// reports was another app's.
     pub(super) active_here: Mutex<Option<i64>>,
     /// When its output was last stamped (`activity`), to stamp it at most once per `output_stamp`.

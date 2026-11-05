@@ -499,7 +499,7 @@ export class AcpSettings extends LitElement {
       >
         <span class="acp-settings__line-number">1</span><span
           ><span class="acp-settings__keyword">const</span> greeting =
-          <span class="acp-settings__string">"Hello, Brama"</span>;</span
+          <span class="acp-settings__string">"Hello, Batrak"</span>;</span
         >
         <span class="acp-settings__line-number">2</span><span
           ><span class="acp-settings__keyword">export</span> <span class="acp-settings__keyword">default</span>

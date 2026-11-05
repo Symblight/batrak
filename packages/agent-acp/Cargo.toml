@@ -2,7 +2,7 @@
 name = "agent-acp"
 version = "0.1.0"
 edition = "2021"
-description = "Brama's generic ACP driver: an agent process over its stdio (Connection, Catalog, sign-in methods)"
+description = "Batrak's generic ACP driver: an agent process over its stdio (Connection, Catalog, sign-in methods)"
 
 [features]
 # The in-process fake agent the app's tests drive.

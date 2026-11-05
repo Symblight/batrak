@@ -106,7 +106,7 @@ mod tests {
 
     /// A Copilot home with `session`'s event log of these event types.
     fn event_log(name: &str, session: &str, types: &[&str]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("brama-copilot-activity-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("batrak-copilot-activity-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("session-state").join(session);
         std::fs::create_dir_all(&dir).unwrap();

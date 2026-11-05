@@ -61,7 +61,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   every 30 s at most), for agents that didn't list once `$agentList` changes, on Resync
   (`<acp-session-sync>` in the session list), and every 20 s for the shown project's listing agents
   (quiet, window visible). `Session.activeElsewhereUntil`: its agent saw activity that wasn't
-  Brama's, plus 2 min, never while its CLI runs here nor from that CLI's writes; `isActiveElsewhere(session, $now)` (`stores/clock/clock.js`, 10 s ticks) shows it
+  Batrak's, plus 2 min, never while its CLI runs here nor from that CLI's writes; `isActiveElsewhere(session, $now)` (`stores/clock/clock.js`, 10 s ticks) shows it
   with the working spinner while it doesn't run here. A chat its CLI runs has `Session.activity` instead (spec: `docs/specs/session-activity.md`): its agent crate's `session_activity()`, read every 3 s (`watch_cli_records`, `session/runtime/cli.rs`), `null` where the agent can't tell, so no spinner; `sessionIndicator()` and the workspace's `statusOf()` read it. Showing a session waits for its agent's
   sync before resuming, and doesn't resume one active elsewhere (the banner's Resume does). The agent starts on the first message, or when its session is
   shown (`resume`: a stopped one only, no `stopped` event; quietly left stopped while the project
@@ -106,7 +106,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   one never checked out, after a relaunch or a failed checkout), so Recreate folder runs it.
   `WorkspaceRecord::checkout_state()` (`Ready` / `NeverCheckedOut` / `Absent`) is the one test of
   that: a record stores `checkedOut` once its first checkout succeeded (older records: true), so a
-  chat's start checks out only a workspace never checked out, and one deleted outside Brama
+  chat's start checks out only a workspace never checked out, and one deleted outside Batrak
   (folder and branch alike) stays missing until Recreate. Delete
   stops a running checkout (`Workspaces` keeps a cancel flag per workspace; git is stopped like a
   timeout, `exec::Options.cancel`) and undoes it. An empty folder an interrupted checkout left is
@@ -117,7 +117,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   keeps it `hidden` in `sessions.json` where the agent can't), unlists it, deletes `sessions/<id>/`
   (its log); its folder stays. `Sessions::delete_workspace` removes each of its chats that way,
   then `Workspaces::discard` (`checkout::remove`) commits uncommitted work onto the branch
-  (`git::apply::snapshot_commit`: scratch index, no hooks, CAS `update-ref`, Brama's identity when
+  (`git::apply::snapshot_commit`: scratch index, no hooks, CAS `update-ref`, Batrak's identity when
   git has none), removes the worktree, and deletes the branch unless Keep branch and it has
   commits past the base. A detached worktree (Check out branch) with uncommitted work is kept (a
   warning). Apply to Main / Check out branch / Changes act per workspace and hold every chat's
@@ -207,7 +207,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   keeps its own values (`SessionRecord.config`, by option id: the draft's picks at create, then
   every answer and update): a new start of its agent is set to them (`apply_config`, inside the
   start Stop aborts, each answer bounded by `initialize_timeout`) before anyone gets the connection, so an agent that forgets its model on restart or `session/load` doesn't drop it.
-- **History**: Brama stores no messages. A session's conversation is its agent's replay
+- **History**: Batrak stores no messages. A session's conversation is its agent's replay
   (`session/load`, when it's shown), shown once per launch (`adapter.js` `loaded`: a later load
   after an idle stop adds nothing); an agent with only `session/resume` continues it without
   history (the banner says so). A page that opens a session whose agent runs (a reload, another

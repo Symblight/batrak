@@ -343,7 +343,7 @@ impl TempFile {
     pub fn new(kind: &str) -> TempFile {
         static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
         let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        TempFile { path: std::env::temp_dir().join(format!("brama-{kind}-{}-{n}", std::process::id())) }
+        TempFile { path: std::env::temp_dir().join(format!("batrak-{kind}-{}-{n}", std::process::id())) }
     }
 }
 

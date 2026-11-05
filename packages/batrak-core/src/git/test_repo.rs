@@ -14,7 +14,7 @@ pub fn git_bin() -> PathBuf {
 /// A unique, empty temporary directory, removed by `TestRepo`'s drop.
 pub fn temp_dir(name: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!(
-        "brama-git-{name}-{}-{}",
+        "batrak-git-{name}-{}-{}",
         std::process::id(),
         NEXT.fetch_add(1, Ordering::Relaxed)
     ));

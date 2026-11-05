@@ -105,7 +105,7 @@ mod tests {
 
     /// A Codex home with one thread's rollout of these lines, in a day's folder.
     fn rollout(name: &str, day: &str, thread: &str, lines: &[String]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("brama-codex-activity-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("batrak-codex-activity-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("sessions").join(day);
         std::fs::create_dir_all(&dir).unwrap();

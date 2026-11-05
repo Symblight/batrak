@@ -16,7 +16,7 @@ pub fn terminal_env(base: impl IntoIterator<Item = (OsString, OsString)>, versio
     };
     set("TERM", "xterm-256color");
     set("COLORTERM", "truecolor");
-    set("TERM_PROGRAM", "Brama");
+    set("TERM_PROGRAM", "Batrak");
     set("TERM_PROGRAM_VERSION", version);
     if !has_locale {
         set("LANG", "en_US.UTF-8");
@@ -39,7 +39,7 @@ mod tests {
             env.into_iter().map(|(k, v)| (k.into_string().unwrap(), v.into_string().unwrap())).collect();
         assert_eq!(env["TERM"], "xterm-256color");
         assert_eq!(env["COLORTERM"], "truecolor");
-        assert_eq!(env["TERM_PROGRAM"], "Brama");
+        assert_eq!(env["TERM_PROGRAM"], "Batrak");
         assert_eq!(env["TERM_PROGRAM_VERSION"], "1.2.3");
         assert_eq!(env["PATH"], "/usr/bin");
         assert!(!env.contains_key("GIT_DIR") && !env.contains_key("GIT_INDEX_FILE"));

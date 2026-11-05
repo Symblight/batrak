@@ -92,7 +92,7 @@ mod tests {
 
     impl Tmp {
         fn new(name: &str) -> Tmp {
-            let dir = std::env::temp_dir().join(format!("brama-dropped-{name}-{}", std::process::id()));
+            let dir = std::env::temp_dir().join(format!("batrak-dropped-{name}-{}", std::process::id()));
             let _ = std::fs::remove_dir_all(&dir);
             std::fs::create_dir_all(dir.join("docs")).unwrap();
             std::fs::write(dir.join("a.png"), b"\x89PNG").unwrap();

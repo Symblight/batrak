@@ -141,7 +141,7 @@ impl Sessions {
             match crate::config::cli::cli_for(&self.inner.opts.agents, agent, &draft.config) {
                 None => return Err(format!("{} has no terminal mode", agent.name)),
                 Some(spec) if spec.new_args.is_none() => {
-                    return Err(format!("{}'s CLI can't start a session Brama names: send a first message in the chat", agent.name));
+                    return Err(format!("{}'s CLI can't start a session Batrak names: send a first message in the chat", agent.name));
                 }
                 Some(_) => {}
             }
@@ -226,7 +226,7 @@ impl Inner {
                 if !on_argv {
                     pasted = prompt;
                 }
-                command.ok_or_else(|| format!("{}'s CLI can't start a session Brama names", agent.name))?
+                command.ok_or_else(|| format!("{}'s CLI can't start a session Batrak names", agent.name))?
             }
             CliStart::Resume => spec.resume(&acp_id),
         };

@@ -94,7 +94,7 @@ describe('agents: rules', () => {
     const withSecrets = trustConfirm({ projectPath: '/work/demo', agents: [plain, secret, secret] });
     // Assert
     expect(options).to.include({ headline: 'Trust this project?', confirmLabel: 'Trust project', cancelLabel: 'Not now', placement: 'top' });
-    expect(options.message).to.equal('Brama provides features that may run potentially malicious code from "demo".');
+    expect(options.message).to.equal('Batrak provides features that may run potentially malicious code from "demo".');
     expect(options.detail).to.equal("If you don't trust the source, choose Not now to only browse its code: its agents won't start.");
     expect(withSecrets.detail, 'each item once').to.equal(
       "Its agents would read these keychain items: openai, github. If you don't trust the source, choose Not now to only browse its code: its agents won't start.",

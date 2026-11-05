@@ -1,11 +1,11 @@
 [package]
-name = "brama"
+name = "batrak-desktop"
 version = "0.1.0"
-description = "Brama — agent-first client for AI coding agents"
+description = "Batrak — agent-first client for AI coding agents"
 edition = "2021"
 
 [lib]
-name = "brama_lib"
+name = "batrak_desktop"
 crate-type = ["rlib"]
 
 [build-dependencies]

@@ -190,7 +190,7 @@ pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
 }
 
 /// Branches a workspace can be based on: local ones and each remote's remote-tracking ones, most
-/// recently committed first, Brama's own (`brama/…`) left out.
+/// recently committed first, Batrak's own (`brama/…`) left out.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchList {

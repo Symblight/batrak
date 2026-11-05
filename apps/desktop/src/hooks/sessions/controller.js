@@ -161,7 +161,7 @@ async function init() {
   openAll(sessions);
   // A session's conversation is its agent's replay when it's shown: showing a session syncs its
   // agent's list, then resumes its stopped agent unless another app may be running it (asked first,
-  // or Brama would load a session a terminal is writing); the one it replaces is stopped once idle.
+  // or Batrak would load a session a terminal is writing); the one it replaces is stopped once idle.
   /** @type {string | null} */
   let shown = null;
   $activeSessionId.subscribe((id) => {

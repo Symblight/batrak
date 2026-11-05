@@ -21,7 +21,7 @@ pub const CHECK_EVERY: Duration = Duration::from_secs(24 * 60 * 60);
 pub const RETRY_EVERY: Duration = Duration::from_secs(60);
 const TIMEOUT: Duration = Duration::from_secs(15);
 
-/// One agent of the registry that Brama can run or show.
+/// One agent of the registry that Batrak can run or show.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RegistryAgent {
@@ -55,7 +55,7 @@ pub struct Npx {
 }
 
 /// A program the user installed, run from PATH as `<command> <args>`: the registry ships it as
-/// an archive, which Brama doesn't download.
+/// an archive, which Batrak doesn't download.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Program {
@@ -117,7 +117,7 @@ impl RegistryAgent {
     }
 }
 
-/// The registry's agents Brama offers (an agent crate names them, `AgentHub::for_registry_id`, and installs them as the registry distributes them), each with its `npx` launch or this
+/// The registry's agents Batrak offers (an agent crate names them, `AgentHub::for_registry_id`, and installs them as the registry distributes them), each with its `npx` launch or this
 /// platform's archive; the others, and one that doesn't read, are left out.
 pub fn parse(text: &str) -> Result<Vec<RegistryAgent>, String> {
     #[derive(Deserialize)]
@@ -256,7 +256,7 @@ pub fn not_installed(agents: &[RegistryAgent], command: &str) -> Option<String> 
     let agent = program_of(agents, command)?;
     let Launch::Program(program) = &agent.launch else { return None };
     Some(format!(
-        "{} isn't installed: download {}, unpack it and put {} on PATH, then restart Brama",
+        "{} isn't installed: download {}, unpack it and put {} on PATH, then restart Batrak",
         agent.name, program.archive, program.command
     ))
 }
@@ -547,7 +547,7 @@ pub(crate) mod tests {
     use std::collections::VecDeque;
 
     /// A registry of the supported agents (Antigravity's archive for every platform the tests run
-    /// on), and others Brama leaves out: one it doesn't offer, a `binary`, a `uvx` and a broken one.
+    /// on), and others Batrak leaves out: one it doesn't offer, a `binary`, a `uvx` and a broken one.
     pub(crate) const FIXTURE: &str = r#"{"version":"1.0.0","agents":[
         {"id":"claude-acp","name":"Claude Agent","version":"0.94.0","description":"ACP wrapper for Anthropic's Claude",
          "authors":["Anthropic","Zed Industries"],"distribution":{"npx":{"package":"@agentclientprotocol/claude-agent-acp@0.94.0"}}},
@@ -597,7 +597,7 @@ pub(crate) mod tests {
     }
 
     fn temp(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("brama-registry-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-registry-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         dir
     }

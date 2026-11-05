@@ -1,4 +1,4 @@
-//! About Brama: the app's version, what it runs on and where its logs are.
+//! About Batrak: the app's version, what it runs on and where its logs are.
 
 use serde::Serialize;
 use tauri::{AppHandle, Manager};

@@ -2,7 +2,7 @@
 name = "agent-kit"
 version = "0.1.0"
 edition = "2021"
-description = "What several Brama agent crates share: npx launches, pinning, downloading a version"
+description = "What several Batrak agent crates share: npx launches, pinning, downloading a version"
 
 [dependencies]
 agent-api = { path = "../agent-api" }

@@ -302,7 +302,7 @@ export const projects = Object.freeze({
     if (!project) return false;
     const confirmed = await dialog.confirm({
       headline: 'Remove project?',
-      message: `${project.name} will be removed from Brama.`,
+      message: `${project.name} will be removed from Batrak.`,
       detail: 'The folder on disk stays.',
       confirmLabel: 'Remove',
       destructive: true,

@@ -1,5 +1,5 @@
 //! Antigravity: the registry ships it as an archive whose program (`agy_acp_server.par`) the user
-//! installs and updates on PATH. Brama never downloads it; it has no CLI to continue a session in.
+//! installs and updates on PATH. Batrak never downloads it; it has no CLI to continue a session in.
 
 use std::path::Path;
 

@@ -299,6 +299,6 @@ mod tests {
     }
 
     fn tempfile_in_temp(kind: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("brama-agent-{kind}-{}.log", std::process::id()))
+        std::env::temp_dir().join(format!("batrak-agent-{kind}-{}.log", std::process::id()))
     }
 }

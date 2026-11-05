@@ -43,7 +43,7 @@ function linkedPackages(dirs) {
       alias[`${path.posix.join(name, subpath)}$`] = path.join(root, file);
     }
     roots.push(root);
-    console.info(`[brama] ${name} → ${root}`);
+    console.info(`[batrak] ${name} → ${root}`);
   }
   return {
     name: 'brama:linked-packages',

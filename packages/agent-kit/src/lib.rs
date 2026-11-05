@@ -127,7 +127,7 @@ mod tests {
     #[test]
     fn the_last_line_that_tells_decides_however_far_back() {
         // Arrange: a line being written, and more after the telling line than one read holds.
-        let path = std::env::temp_dir().join(format!("brama-kit-last-told-{}", std::process::id()));
+        let path = std::env::temp_dir().join(format!("batrak-kit-last-told-{}", std::process::id()));
         let filler = "other\n".repeat(100_000);
         std::fs::write(&path, format!("tell 1\n{filler}tell 2\n{filler}tell 3 cut off")).unwrap();
         let told = |line: &str| line.strip_prefix("tell ").filter(|rest| !rest.contains("cut")).map(str::to_owned);

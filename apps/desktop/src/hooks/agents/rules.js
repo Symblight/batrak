@@ -113,7 +113,7 @@ export function trustConfirm(prompt) {
   const asks = secrets.length ? `Its agents would read these keychain items: ${secrets.join(', ')}. ` : '';
   return {
     headline: 'Trust this project?',
-    message: `Brama provides features that may run potentially malicious code from "${project}".`,
+    message: `Batrak provides features that may run potentially malicious code from "${project}".`,
     detail: `${asks}If you don't trust the source, choose Not now to only browse its code: its agents won't start.`,
     confirmLabel: 'Trust project',
     cancelLabel: 'Not now',
