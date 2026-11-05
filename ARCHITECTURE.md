@@ -44,7 +44,7 @@ Batrak/
 ├── Cargo.toml                  one workspace: packages/*, apps/cli, apps/desktop/src-tauri; all default members
 ├── apps/                       what a user runs; each app is a thin front over the packages
 │   ├── desktop/
-│   │   ├── src-tauri/          `batrak_desktop` (lib) + main: commands/, lib.rs, menu, logging, roots/, editor git, PTY terminals
+│   │   ├── src-tauri/          `bt_desktop` (lib) + main: commands/, lib.rs, menu, logging, roots/, editor git, PTY terminals
 │   │   ├── src/                the Lit frontend: views/, components/, controllers/, hooks/, stores/, styles/
 │   │   ├── test/               frontend test helpers
 │   │   ├── package.json  pnpm-lock.yaml  rsbuild.config.js  jsconfig.json  web-test-runner.config.mjs  index.html

@@ -388,35 +388,6 @@ name = "batrak"
 version = "0.1.0"
 
 [[package]]
-name = "batrak-desktop"
-version = "0.1.0"
-dependencies = [
- "bt-core",
- "dunce",
- "fontdb",
- "globset",
- "grep-matcher",
- "grep-regex",
- "grep-searcher",
- "ignore",
- "libc",
- "notify-debouncer-full",
- "nucleo-matcher",
- "portable-pty",
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tokio",
- "tracing",
- "tracing-appender",
- "tracing-subscriber",
- "windows-sys 0.61.2",
-]
-
-[[package]]
 name = "bit-set"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -562,6 +533,35 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "ureq",
+]
+
+[[package]]
+name = "bt-desktop"
+version = "0.1.0"
+dependencies = [
+ "bt-core",
+ "dunce",
+ "fontdb",
+ "globset",
+ "grep-matcher",
+ "grep-regex",
+ "grep-searcher",
+ "ignore",
+ "libc",
+ "notify-debouncer-full",
+ "nucleo-matcher",
+ "portable-pty",
+ "serde",
+ "serde_json",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tokio",
+ "tracing",
+ "tracing-appender",
+ "tracing-subscriber",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

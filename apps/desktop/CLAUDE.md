@@ -1,6 +1,6 @@
 # CLAUDE.md — apps/desktop
 
-The desktop app: `src-tauri/` (package `batrak-desktop`, the Tauri commands, the window, the
+The desktop app: `src-tauri/` (package `bt-desktop`, the Tauri commands, the window, the
 editor side and the PTY terminals, over `bt-core`) and `src/` (the Lit UI). The root
 `CLAUDE.md` holds the commands, the backend conventions, tests-first, working mode and commits;
 this file holds what is specific to the frontend. Paths below are relative to this folder.

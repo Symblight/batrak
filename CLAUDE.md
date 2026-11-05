@@ -32,7 +32,7 @@ pnpm test            # frontend tests: @web/test-runner in Chrome; must pass
 ## Layout
 
 ```
-apps/desktop/        the Tauri app: src-tauri/ (batrak_desktop: commands, window, editor, PTY terminals) and src/ (the Lit UI)
+apps/desktop/        the Tauri app: src-tauri/ (bt_desktop: commands, window, editor, PTY terminals) and src/ (the Lit UI)
 apps/cli/            the `batrak` binary
 packages/bt-core the library both apps use: sessions, workspaces, agents, config, the project's .bt/
 packages/agent-*     the Agent trait (agent-api), the ACP driver (agent-acp), shared npx mechanics (agent-kit), one crate per agent kind
