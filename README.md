@@ -1,8 +1,10 @@
 # Batrak
 
-An agent-first client for AI coding agents over [ACP](https://agentclientprotocol.com): one core
-that runs agents, sessions and workspaces, and two fronts over it, a desktop app and a command-line
-tool.
+An agent-first client for AI coding agents: one core that runs agents, sessions and workspaces, and
+two fronts over it, a desktop app and a command-line tool.
+
+Agents connect over [ACP](https://agentclientprotocol.com) today. Connecting agents directly with an
+API key is planned.
 
 ```
 apps/desktop    Tauri + Lit: chats, workspaces, editor, search, changes, terminals
