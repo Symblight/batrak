@@ -3,7 +3,7 @@ import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { remoteLine } from './branch.js';
-import { changeRows, groupChanges, relativePath, statusOf, typeBadge } from './changes.js';
+import { changeRows, groupChanges, relativePath, statusOf, typeBadge, uncommittedHint } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').RootChanges} RootChanges */
@@ -141,6 +141,7 @@ async function readChanges() {
  */
 export const git = Object.freeze({
   groupChanges,
+  uncommittedHint,
   statusOf,
   changeRows,
   typeBadge,

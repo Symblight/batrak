@@ -4,7 +4,8 @@ import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/ses
 import { $project } from '../../../stores/project/project.js';
 import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { $composer, forgetComposer, setRunTarget } from '../../../stores/composer/composer.js';
-import { $gitRepo, NO_REPO } from '../../../stores/git/git.js';
+import { $gitChanges, $gitRepo, NO_CHANGES, NO_REPO } from '../../../stores/git/git.js';
+import { git } from '../../../hooks/git/git.js';
 import { $activeSubagent, $subagents, showSubagent } from '../../../stores/session-runtime/session-runtime.js';
 import { sessions } from '../../../hooks/sessions/sessions.js';
 import '../chat-view.js';
@@ -48,6 +49,7 @@ describe('acp-chat-view', () => {
 
   afterEach(() => {
     $gitRepo.set(NO_REPO);
+    $gitChanges.set(NO_CHANGES);
     $activeSessionId.set(null);
     $draftSessions.set({});
     $sessions.set([]);
@@ -308,6 +310,49 @@ describe('acp-chat-view', () => {
     ]);
     expect(meanwhile, 'its base kept while listed again').to.equal('main');
     forgetComposer('d2');
+  });
+
+  it("counts the shown folder's uncommitted files while a draft shows, and stops scanning after it", async () => {
+    // Arrange
+    answer = (cmd) => (cmd === 'git_status' ? { version: 1, unchanged: false, status: { repo: {}, files: [{ path: 'a' }, { path: 'b' }] } } : null);
+    const scans = () => calls.filter((c) => c.cmd === 'git_status').length;
+    const chat = (/** @type {AcpChatView} */ el) => /** @type {HTMLElementTagNameMap['acp-chat']} */ (el.querySelector('acp-chat'));
+
+    // Act
+    const el = await render();
+    await until(() => chat(el).uncommitted === 2);
+    $activeSessionId.set(null);
+    await el.updateComplete;
+    const before = scans();
+    git.refreshChanges();
+    await new Promise((r) => setTimeout(r, 20));
+
+    // Assert
+    expect(scans(), 'nothing watches once no draft shows').to.equal(before);
+    expect(chat(el).uncommitted, 'none to offer').to.equal(0);
+  });
+
+  it("a used hint runs the draft in the shown folder, where the files are", async () => {
+    const cases = [
+      { workspaceId: 'main', picked: { kind: 'worktree', base: 'dev' }, expected: 'local' },
+      { workspaceId: 'w1', picked: { kind: 'worktree', base: null }, expected: 'workspace' },
+      { workspaceId: 'w1', picked: { kind: 'local' }, expected: 'workspace' },
+      { workspaceId: 'main', picked: { kind: 'local' }, expected: 'local' },
+    ];
+    answer = (cmd) => (cmd === 'git_branches' ? { local: ['main'], remotes: [], default: 'main' } : null);
+    for (const { workspaceId, picked, expected } of cases) {
+      // Arrange
+      $draftSessions.set({ d1: { projectId: '/p', workspaceId } });
+      setRunTarget('d1', /** @type {import('../../../hooks/composer/types.js').RunTarget} */ (picked));
+      const el = await render();
+
+      // Act
+      /** @type {HTMLElement} */ (el.querySelector('acp-chat')).dispatchEvent(new CustomEvent('acp-chat-hint-use', { bubbles: true, composed: true }));
+
+      // Assert
+      expect($composer.get().runTarget?.kind, JSON.stringify(picked)).to.equal(expected);
+      forgetComposer('d1');
+    }
   });
 
   it('drops an answer for the branches of a project no longer shown', async () => {

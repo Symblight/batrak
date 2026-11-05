@@ -130,6 +130,69 @@ describe('acp-chat', () => {
     expect(note(untagged)?.textContent ?? null, 'a name alone says nothing').to.equal(null);
   });
 
+  it('asks for the next task above the composer until the first message', async () => {
+    // Arrange + Act
+    const draft = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty></acp-chat>`));
+    const started = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
+
+    // Assert
+    expect(draft.renderRoot.querySelector('h2')?.textContent).to.equal("What's the next task?");
+    expect(started.renderRoot.querySelector('h2'), 'none once started').to.equal(null);
+  });
+
+  it('offers to review uncommitted files only on a draft that can send and has some', async () => {
+    const cases = [
+      { props: { empty: true, uncommitted: 3 }, label: 'Review 3 uncommitted files' },
+      { props: { empty: true, uncommitted: 0 }, label: null },
+      { props: { empty: false, uncommitted: 3 }, label: null },
+      { props: { empty: true, uncommitted: 3, blocked: { message: 'Gone', workspaceId: 'w1' } }, label: null },
+    ];
+    for (const { props, label } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
+
+      // Act
+      Object.assign(el, props);
+      await el.updateComplete;
+
+      // Assert
+      const list = /** @type {HTMLElement | null} */ (el.renderRoot.querySelector('chx-suggestion-list'));
+      expect(list?.querySelector('chx-suggestion')?.textContent?.trim() ?? null, JSON.stringify(props)).to.equal(label);
+      if (list) expect([list.slot, list.hidden], 'above the field, visible').to.deep.equal(['suggestions', false]);
+    }
+  });
+
+  it('a click on the hint fills the composer without sending, keeping a draft already typed', async () => {
+    const cases = [
+      { typed: '', lines: ['Review the 3 uncommitted files'] },
+      { typed: 'Look at login first', lines: ['Look at login first', 'Review the 3 uncommitted files'] },
+    ];
+    for (const { typed, lines } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .uncommitted=${3}></acp-chat>`));
+      await el.composerReady();
+      const composer = /** @type {import('lit').LitElement} */ (el.renderRoot.querySelector('chx-message-composer'));
+      if (typed) /** @type {HTMLElement & { setText: (text: string) => void }} */ (composer.renderRoot.querySelector('chx-textbox')).setText(typed);
+      /** @type {string[]} */
+      const fired = [];
+      el.addEventListener('acp-chat-hint-use', (e) => fired.push(e.type));
+      el.addEventListener('chx-send-message', (e) => fired.push(e.type));
+
+      // Act
+      /** @type {HTMLElement} */ (el.renderRoot.querySelector('chx-suggestion')).click();
+      await el.updateComplete;
+
+      // Assert
+      /** @type {string[]} */
+      const shown = [];
+      docOf(el).descendants((node) => {
+        if (node.type.name === 'line') shown.push(node.textContent);
+      });
+      expect(shown).to.deep.equal(lines);
+      expect(fired).to.deep.equal(['acp-chat-hint-use']);
+    }
+  });
+
   it("hands a draft's footer where it runs, beside the full-access note; a started session has none", async () => {
     // Arrange
     const load = async () => {};
