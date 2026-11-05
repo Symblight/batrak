@@ -266,13 +266,12 @@ export const git = Object.freeze({
   },
 
   /**
-   * A file's text at HEAD, the editor's diff baseline; a listed rename's is under its old name.
+   * A file's text at HEAD, the editor's diff baseline.
    * @param {string} rootId
    * @param {string} path Relative.
    * @returns {Promise<string | null>} `null` when not committed or not in a repository. Fails, saying why, when it has no text to diff.
    */
   fileAtHead(rootId, path) {
-    const listed = rootId === $rootId.get() ? $gitChanges.get().files.find((file) => file.path === path) : undefined;
-    return ipc.invoke('git_file_at_head', { rootId, path: listed?.origPath ?? path });
+    return ipc.invoke('git_file_at_head', { rootId, path });
   },
 });

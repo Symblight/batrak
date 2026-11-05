@@ -201,7 +201,8 @@ export class WorkspaceChangesController {
     const load = ++this.#loadCount;
     this.#loads.set(rel, load);
     if (!this.#diffs.has(rel)) this.#setDiff(rel, { content: '', baseline: '', error: '', loading: true });
-    const diff = await git.readDiff(projects.readFile(`${workspace.folder}/${rel}`), workspaces.fileAtBase(id, rel));
+    const deleted = this.#changes.files.some((file) => file.path === rel && file.kind === 'deleted');
+    const diff = await git.readDiff(projects.readFile(`${workspace.folder}/${rel}`), workspaces.fileAtBase(id, rel), deleted);
     if (id !== this.#workspaceId || this.#loads.get(rel) !== load) return;
     this.#setDiff(rel, diff);
   }

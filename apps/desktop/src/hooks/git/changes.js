@@ -149,18 +149,19 @@ export function relativePath(from, to) {
 }
 
 /**
- * An expanded file's diff from its two reads. A missing file against a baseline is a deletion, and a
- * missing baseline a new file; a baseline with no text to diff, or a file with neither, says why.
+ * An expanded file's diff from its two reads. A missing baseline is a new file. A read that fails says
+ * why there is no diff, unless the file is listed as deleted: then it failed for being gone.
  * @param {Promise<string>} file The file now.
  * @param {Promise<string | null>} base The file it's compared to; `null` when it wasn't there.
+ * @param {boolean} deleted It's listed as deleted.
  * @returns {Promise<import('../tabs/types.js').FileDiff>}
  */
-export async function readDiff(file, base) {
+export async function readDiff(file, base, deleted) {
   const [content, baseline] = await Promise.allSettled([file, base]);
   /** @param {unknown} reason */
   const failed = (reason) => ({ content: '', baseline: '', error: String(reason), loading: false });
   if (baseline.status === 'rejected') return failed(baseline.reason);
-  if (content.status === 'rejected' && baseline.value === null) return failed(content.reason);
+  if (content.status === 'rejected' && !deleted) return failed(content.reason);
   return { content: content.status === 'fulfilled' ? content.value : '', baseline: baseline.value ?? '', error: '', loading: false };
 }
 

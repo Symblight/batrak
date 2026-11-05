@@ -257,7 +257,9 @@ export class ChangesReviewController {
     if (!this.#diffs.has(id)) this.#setDiff(id, { content: '', baseline: '', error: '', loading: true });
     const rootId = projects.rootId();
     const path = projects.absPath(id);
-    const diff = await git.readDiff(projects.readFile(path), rootId ? git.fileAtHead(rootId, id) : Promise.resolve(null));
+    const file = this.#files.get(id);
+    const base = rootId ? git.fileAtHead(rootId, file?.origPath ?? id) : Promise.resolve(null);
+    const diff = await git.readDiff(projects.readFile(path), base, file?.kind === 'deleted');
     if (this.#loads.get(id) !== load) return;
     this.#setDiff(id, diff);
   }

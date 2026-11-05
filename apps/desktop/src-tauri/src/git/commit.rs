@@ -94,11 +94,15 @@ pub fn commit(git: &Path, root: &Path, paths: &[String], message: &str, amend: b
 
 /// Staging a conflicted file marks it resolved, so git would commit its markers without a word.
 fn refuse_conflict_markers(git: &Path, root: &Path, paths: &[String]) -> Result<(), String> {
-    let out = exec::run(git, root, &exec::args(&[&"diff", &"--name-only", &"--diff-filter=U", &"-z", &"--relative"]), Mode::Local)?;
-    let unmerged = String::from_utf8_lossy(&out);
-    let unresolved: Vec<&str> = unmerged
-        .split('\0')
-        .filter(|path| paths.iter().any(|picked| picked == path))
+    // `ls-files`: `diff` would run clean filters over every dirty file, on every commit.
+    let out = exec::run(git, root, &exec::args(&[&"ls-files", &"-u", &"-z"]), Mode::Local)?;
+    let listing = String::from_utf8_lossy(&out);
+    // `<mode> <object> <stage>\t<path>`, one per stage, relative to `root`.
+    let unmerged: HashSet<&str> = listing.split('\0').filter_map(|entry| Some(entry.split_once('\t')?.1)).collect();
+    let unresolved: Vec<&str> = paths
+        .iter()
+        .map(String::as_str)
+        .filter(|path| unmerged.contains(path))
         .filter(|path| fs::read(root.join(path)).is_ok_and(|text| text.split(|&b| b == b'\n').any(|line| line.starts_with(b"<<<<<<< "))))
         .collect();
     if unresolved.is_empty() {
@@ -265,6 +269,28 @@ mod tests {
             commit_in(repo, &["a.txt"], "Resolved", false).unwrap();
             assert_eq!(repo.git(&["show", "HEAD:a.txt"]), "resolved\n");
         }
+    }
+
+    /// The check runs on every commit: a dirty file under a slow filter must not cost it a clean run.
+    #[cfg(unix)]
+    #[test]
+    fn looking_for_conflicts_runs_no_filter() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = TestRepo::with_commit("commit-filter");
+        let ran = repo.path.join(".git/filter-ran");
+        let filter = repo.path.join(".git/clean-filter");
+        std::fs::write(&filter, format!("#!/bin/sh\ntouch '{}'\ncat\n", ran.display())).unwrap();
+        std::fs::set_permissions(&filter, std::fs::Permissions::from_mode(0o755)).unwrap();
+        repo.write("a.dat", "a\n");
+        repo.git(&["add", "a.dat"]);
+        repo.git(&["commit", "-qm", "a"]);
+        repo.git(&["config", "filter.slow.clean", filter.to_str().unwrap()]);
+        repo.write(".git/info/attributes", "*.dat filter=slow\n");
+        repo.write("a.dat", "changed\n");
+
+        refuse_conflict_markers(&git_bin(), &repo.path, &["a.dat".to_owned()]).unwrap();
+
+        assert!(!ran.exists());
     }
 
     #[test]

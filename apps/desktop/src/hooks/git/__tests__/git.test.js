@@ -303,16 +303,14 @@ describe('git', () => {
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
   });
 
-  it('reads a renamed file at HEAD under its old name', async () => {
+  it('reads the path it is given at HEAD, whatever the list of changes says: the list may predate HEAD', async () => {
     // Arrange
     const git = await started();
     const rootId = await open();
     $gitChanges.set({ files: [{ ...FILE, path: 'new.js', kind: 'renamed', origPath: 'old.js' }], loaded: true, loading: false, error: null });
-    answers.git_file_at_head = () => 'old text';
     // Act
-    const text = await git.fileAtHead(rootId, 'new.js');
+    await git.fileAtHead(rootId, 'new.js');
     // Assert
-    expect(text).to.equal('old text');
-    expect(sent('git_file_at_head')).to.deep.equal([{ rootId, path: 'old.js' }]);
+    expect(sent('git_file_at_head')).to.deep.equal([{ rootId, path: 'new.js' }]);
   });
 });

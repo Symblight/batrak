@@ -307,7 +307,7 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
     let (out, numstat) = std::thread::scope(|scope| {
         let numstat = scope.spawn(|| {
             // `--relative`: paths relative to `root` and only those under it, like the status entries.
-            let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative"]);
+            let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"--no-renames"]);
             exec::run(git, root, &args, Mode::Background)
         });
         let out = exec::run(
@@ -336,6 +336,7 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
     add_remote(git, root, &mut status.repo)?;
     // The counts are extras: without them (a timeout, over the cap) the files still list.
     let counts = numstat.ok().filter(|_| status.repo.sha.is_some()).map_or_else(HashMap::new, |out| parse_numstat(&String::from_utf8_lossy(&out)));
+    let counts = with_rename_counts(git, root, &status, counts);
     add_line_counts(root, &mut status, &counts);
     Ok(status)
 }
@@ -387,15 +388,33 @@ fn parse(text: &str, prefix: &str) -> Status {
     Status { repo, files }
 }
 
+/// Lines added and removed, by path; `None` when unknown (binary).
+pub(crate) type LineCounts = HashMap<String, (Option<u32>, Option<u32>)>;
+
 /// Files counted by reading them, per scan: a build's output without a `.gitignore` must not read
 /// thousands of files while the status lock is held.
 const MAX_COUNTED_FILES: usize = 2000;
 /// Untracked files larger than this get no line count.
 const MAX_COUNTED_FILE: u64 = 1024 * 1024;
 
+/// `counts` with the files the status calls renamed counted as just their edit. Those alone: `diff`
+/// may pair a new file with a deleted one the status lists apart. A second read, so only when needed.
+fn with_rename_counts(git: &Path, root: &Path, status: &Status, mut counts: LineCounts) -> LineCounts {
+    if status.files.iter().any(|file| file.kind == FileKind::Renamed) {
+        let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"-M"]);
+        if let Ok(out) = exec::run(git, root, &args, Mode::Background) {
+            let renames = parse_numstat(&String::from_utf8_lossy(&out));
+            for file in status.files.iter().filter(|file| file.kind == FileKind::Renamed) {
+                counts.extend(renames.get_key_value(&file.path).map(|(path, count)| (path.clone(), *count)));
+            }
+        }
+    }
+    counts
+}
+
 /// Fills `added`/`removed`: tracked files from `counts` (`git diff HEAD --numstat`, index and working
 /// tree together), untracked files by counting their lines.
-fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (Option<u32>, Option<u32>)>) {
+fn add_line_counts(root: &Path, status: &mut Status, counts: &LineCounts) {
     let mut left = MAX_COUNTED_FILES;
     let mut read_count = |path: &str| {
         left = left.checked_sub(1)?;
@@ -416,7 +435,7 @@ fn add_line_counts(root: &Path, status: &mut Status, counts: &HashMap<String, (O
 
 /// `added\tremoved\tpath\0` records; a binary file has `-` for both counts. A rename has an empty
 /// path, then its source and destination as records of their own; it counts under its destination.
-pub(crate) fn parse_numstat(text: &str) -> HashMap<String, (Option<u32>, Option<u32>)> {
+pub(crate) fn parse_numstat(text: &str) -> LineCounts {
     let mut counts = HashMap::new();
     let mut records = text.split('\0');
     while let Some(record) = records.next() {
@@ -541,6 +560,22 @@ mod tests {
     }
 
     #[test]
+    fn a_copy_and_a_deletion_git_could_pair_count_as_what_the_list_says() {
+        let repo = TestRepo::with_commit("rename-apart");
+        repo.write("old.txt", "one\ntwo\nthree\n");
+        repo.git(&["add", "old.txt"]);
+        repo.git(&["commit", "-qm", "old"]);
+        repo.write("new.txt", "one\ntwo\nthree\n");
+        repo.git(&["add", "new.txt"]);
+        std::fs::remove_file(repo.path.join("old.txt")).unwrap();
+
+        let s = status_of(&repo.path);
+        let (new, old) = (file(&s, "new.txt"), file(&s, "old.txt"));
+        assert_eq!((new.kind, new.added, new.removed), (FileKind::Added, Some(3), Some(0)));
+        assert_eq!((old.kind, old.added, old.removed), (FileKind::Deleted, Some(0), Some(3)));
+    }
+
+    #[test]
     fn a_renamed_file_counts_only_its_edit() {
         let repo = TestRepo::with_commit("rename-counts");
         repo.write("old.txt", "one\ntwo\nthree\nfour\nfive\nsix\n");
@@ -568,7 +603,7 @@ mod tests {
 
         status_of(&repo.path);
 
-        assert!(!ran.exists(), "opening a downloaded folder must not run its code");
+        assert!(!ran.exists(), "the hook ran on a refresh");
         std::fs::remove_dir_all(dir).unwrap();
     }
 

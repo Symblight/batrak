@@ -92,6 +92,18 @@ describe('acp-changes-tab', () => {
     expect(review.commentFocus === focus).to.equal(true);
   });
 
+  it('reads a renamed file at HEAD under its old name', async () => {
+    // Arrange
+    const { el, review } = await render();
+    $gitChanges.set({ ...CHANGES, files: [{ ...CHANGES.files[0], path: 'new.js', kind: 'renamed', origPath: 'old.js' }] });
+    await el.updateComplete;
+    // Act
+    fire(review, 'acp-change-expand', { id: 'new.js' });
+    await until(() => review.diffs.get('new.js')?.loading === false);
+    // Assert
+    expect(calls.find((c) => c.cmd === 'git_file_at_head')?.args).to.deep.equal({ rootId: 'r1', path: 'old.js' });
+  });
+
   it('turns the review’s events into expanding, collapsing and picking files, and none leaves the view', async () => {
     // Arrange
     const { el, review } = await render();
