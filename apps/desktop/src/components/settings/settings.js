@@ -594,7 +594,8 @@ export class AcpSettings extends LitElement {
   render() {
     const settings = this.settings;
     if (!settings) return nothing;
-    return html`${this.#renderNav()}
+    return html`<div class="acp-settings__container">
+      ${this.#renderNav()}
       <div class="acp-settings__scroller" @scroll=${this.#onScroll}>
         <div class="acp-settings__panel">
           <div class="acp-settings__body">
@@ -612,7 +613,8 @@ export class AcpSettings extends LitElement {
             <md-tooltip for="acp-settings-edit-json" show-delay="800">Not available yet</md-tooltip>
           </footer>
         </div>
-      </div>`;
+      </div>
+    </div>`;
   }
 }
 
