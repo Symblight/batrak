@@ -66,6 +66,7 @@ describe('acp-session-header', () => {
 
   it('shows a draft as a new session, with no menu', async () => {
     const { root } = await render(html`<acp-session-header draft></acp-session-header>`);
+    expect(root.querySelector('.acp-session-header__view') === null, 'no view switch until it has started').to.equal(true);
     expect(root.querySelector('.acp-session-header__title')?.textContent).to.equal('New session');
     expect(root.querySelector('.acp-session-header__title-button')).to.equal(null);
     expect(root.querySelector('acp-session-menu')).to.equal(null);

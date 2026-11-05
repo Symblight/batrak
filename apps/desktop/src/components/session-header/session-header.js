@@ -51,7 +51,7 @@ export class AcpSessionHeader extends LitElement {
     this.sessionId = '';
     /** @type {string} */
     this.sessionTitle = '';
-    /** @type {boolean} A new session before its first message: no menu yet. */
+    /** @type {boolean} A new session before its first message: no menu or view switch yet. */
     this.draft = false;
     /** @type {boolean} The first prompt's words, until the agent names the session. */
     this.provisional = false;
@@ -185,9 +185,9 @@ export class AcpSessionHeader extends LitElement {
       <md-tooltip for="acp-session-header-title" show-delay="800" placement="bottom">${this.sessionTitle}</md-tooltip>`;
   }
 
-  /** Continue in terminal / in chat. */
+  /** Continue in terminal / in chat; a draft has nothing to continue yet. */
   #renderViewToggle() {
-    if (this.renaming) return nothing;
+    if (this.draft || this.renaming) return nothing;
     const terminal = this.view === 'terminal';
     const label = terminal ? 'Continue in chat' : 'Continue in terminal';
     const disabled = this.viewDisabled !== '';
