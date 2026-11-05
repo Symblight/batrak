@@ -61,7 +61,7 @@ pub enum CheckoutState {
     Ready,
     /// Placed, its first checkout still to run (it failed, or the app quit first).
     NeverCheckedOut,
-    /// Deleted after a checkout (outside Brama): missing until Recreate.
+    /// Deleted after a checkout (outside Batrak): missing until Recreate.
     Absent,
 }
 
@@ -106,7 +106,7 @@ pub struct Workspace {
     pub creating: bool,
     /// Why its last checkout failed.
     pub error: Option<String>,
-    /// Its folder is gone (deleted outside Brama); Recreate checks it out again.
+    /// Its folder is gone (deleted outside Batrak); Recreate checks it out again.
     pub missing: bool,
 }
 
@@ -379,7 +379,7 @@ impl Workspaces {
         self.cancel_flag(id).store(true, Ordering::SeqCst);
         let gate = self.gate(id);
         let _held = lock(&gate);
-        let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Brama when the workspace was deleted.", record.name);
+        let message = format!("Work in progress from workspace \"{}\"\n\nSaved by Batrak when the workspace was deleted.", record.name);
         let removed = checkout::remove(&record, &message, keep_branch);
         if let Err(e) = &removed {
             // Kept on disk (a detached worktree with work): the record goes all the same.

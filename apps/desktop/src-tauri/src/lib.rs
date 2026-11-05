@@ -31,7 +31,7 @@ pub fn run() {
                     os = std::env::consts::OS,
                     arch = std::env::consts::ARCH,
                     dir = %dirs.logs.display(),
-                    "Brama started"
+                    "Batrak started"
                 ),
                 Err(e) => eprintln!("logging disabled: {e}"),
             }
@@ -171,7 +171,7 @@ pub fn run() {
             commands::terminal::close_window_terminals,
         ])
         .build(tauri::generate_context!())
-        .expect("error while building Brama")
+        .expect("error while building Batrak")
         .run(|app, event| {
             // No agent process or shell outlives the app: every session's and terminal's process
             // group is stopped.

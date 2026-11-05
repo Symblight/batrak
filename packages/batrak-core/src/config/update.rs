@@ -212,7 +212,7 @@ mod tests {
     }
 
     fn fixture(name: &str, prefetch: FakePrefetch) -> Fixture {
-        let dir = std::env::temp_dir().join(format!("brama-update-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-update-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let file = dir.join("agents.json");
@@ -271,10 +271,10 @@ mod tests {
     #[tokio::test]
     #[ignore]
     async fn real_npm_prefetch_downloads_and_says_why_it_failed() {
-        let dir = std::env::temp_dir().join(format!("brama-npm-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-npm-{}", std::process::id()));
         let npm = NpmPrefetch { dir: dir.clone() };
         npm.prefetch(agent_kit::npm_prefetch("is-number", "7.0.0")).await.unwrap();
-        let failed = npm.prefetch(agent_kit::npm_prefetch("@brama-test/no-such-package", "0.0.1")).await.unwrap_err();
+        let failed = npm.prefetch(agent_kit::npm_prefetch("@batrak-test/no-such-package", "0.0.1")).await.unwrap_err();
         assert!(failed.contains("404"), "{failed}");
         let _ = fs::remove_dir_all(dir);
     }

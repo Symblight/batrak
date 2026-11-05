@@ -9,7 +9,7 @@ use super::{spawn_in, Launch, Mode, SessionEnv};
 use crate::acp::process::{AgentPipes, AgentProcess};
 use crate::workspace::checkout;
 
-/// Why a workspace's chat doesn't start: its folder was deleted outside Brama.
+/// Why a workspace's chat doesn't start: its folder was deleted outside Batrak.
 const FOLDER_MISSING: &str = "the workspace's folder is missing; recreate it to go on";
 
 pub struct WorkspaceEnv {

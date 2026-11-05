@@ -28,7 +28,7 @@ fn bench() {
     }
 
     let files: Vec<_> = snapshot.files().map(|e| (e.path.clone(), e.size)).collect();
-    for (label, query, regex) in [("literal", "kmalloc", false), ("rare", "brama_not_there", false), ("regex", r"\bstatic\s+int\s+\w+_probe\(", true)] {
+    for (label, query, regex) in [("literal", "kmalloc", false), ("rare", "batrak_not_there", false), ("regex", r"\bstatic\s+int\s+\w+_probe\(", true)] {
         let options = SearchOptions {
             query: query.into(),
             case_sensitive: false,
@@ -58,7 +58,7 @@ fn bench() {
 
     // Cancellation: stop a full scan for a missing string shortly after it starts.
     let options = SearchOptions {
-        query: "brama_not_there".into(),
+        query: "batrak_not_there".into(),
         case_sensitive: false,
         whole_word: false,
         regex: false,

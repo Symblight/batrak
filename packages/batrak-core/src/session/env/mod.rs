@@ -164,7 +164,7 @@ mod tests {
     use super::*;
 
     fn project(name: &str) -> PathBuf {
-        let dir = std::env::temp_dir().join(format!("brama-confine-{name}-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-confine-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&dir);
         std::fs::create_dir_all(dir.join("src")).unwrap();
         std::fs::create_dir_all(dir.join(".git")).unwrap();
@@ -201,7 +201,7 @@ mod tests {
     #[test]
     fn rejects_symlinks_that_leave_the_folder() {
         let root = project("symlink");
-        let outside = root.with_file_name(format!("brama-confine-outside-{}", std::process::id()));
+        let outside = root.with_file_name(format!("batrak-confine-outside-{}", std::process::id()));
         std::fs::create_dir_all(&outside).unwrap();
         std::fs::write(outside.join("secret.txt"), "s").unwrap();
         std::os::unix::fs::symlink(outside.join("secret.txt"), root.join("link.txt")).unwrap();

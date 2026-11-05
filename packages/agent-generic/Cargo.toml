@@ -2,7 +2,7 @@
 name = "agent-generic"
 version = "0.1.0"
 edition = "2021"
-description = "Any ACP agent Brama has no crate for: plain ACP, no CLI"
+description = "Any ACP agent Batrak has no crate for: plain ACP, no CLI"
 
 [dependencies]
 agent-api = { path = "../agent-api" }

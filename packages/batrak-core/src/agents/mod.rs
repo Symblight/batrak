@@ -31,7 +31,7 @@ impl AgentHub {
         AgentHub { agents }
     }
 
-    /// The crate of the registry agent with this id: Brama offers only the registry's agents a crate
+    /// The crate of the registry agent with this id: Batrak offers only the registry's agents a crate
     /// names (`Agent::registry_id`).
     pub fn for_registry_id(&self, id: &str) -> Option<&dyn Agent> {
         self.agents.iter().find(|a| a.registry_id() == Some(id)).map(AsRef::as_ref)

@@ -62,7 +62,7 @@ impl Drop for Fixture {
 fn fixture(name: &str) -> Fixture {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let n = NEXT.fetch_add(1, Ordering::SeqCst);
-    let dir = std::env::temp_dir().join(format!("brama-terminal-{name}-{}-{n}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("batrak-terminal-{name}-{}-{n}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("project/src")).unwrap();
     std::fs::write(dir.join("project/a.txt"), "a").unwrap();

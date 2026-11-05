@@ -11,7 +11,7 @@ import { $activeSession, $activeSessionId, $sessions } from '../sessions/session
 /**
  * Whether a session can be shown in its agent's CLI.
  * @param {AgentTerminal | null | undefined} terminal Its agent's (`AgentSummary.terminal`).
- * @param {boolean} draft No message yet: the CLI must start it under an id Brama chooses.
+ * @param {boolean} draft No message yet: the CLI must start it under an id Batrak chooses.
  */
 export function canUseTerminal(terminal, draft) {
   return terminal != null && (draft ? terminal.new : terminal.resume);

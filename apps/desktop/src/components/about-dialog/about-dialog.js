@@ -11,7 +11,7 @@ import styles from './about-dialog.css?inline';
 
 /**
  * @tag acp-about-dialog
- * @summary About Brama: the app's version, what it runs on and its log files.
+ * @summary About Batrak: the app's version, what it runs on and its log files.
  * @fires acp-reveal-path `{ path }` Show log files.
  */
 export class AcpAboutDialog extends LitElement {
@@ -47,7 +47,7 @@ export class AcpAboutDialog extends LitElement {
     return html`<md-dialog class="acp-about-dialog__dialog" wide>
       <div slot="headline" class="acp-about-dialog__headline">
         <img class="acp-about-dialog__logo" src="/favicon.svg" alt="" />
-        <span class="acp-about-dialog__title">Brama</span>
+        <span class="acp-about-dialog__title">Batrak</span>
         <span class="acp-about-dialog__subtitle">${about ? `Version ${about.version}` : nothing}</span>
       </div>
       ${about

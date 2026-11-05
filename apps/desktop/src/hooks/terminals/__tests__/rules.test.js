@@ -32,15 +32,15 @@ describe('terminals: rules', () => {
 
   it('names a folder after itself, or a workspace’s after its worktree (either separator)', () => {
     // Arrange
-    const posix = [{ worktreePath: '/wt/brama-1a2b' }];
-    const windows = [{ worktreePath: 'C:\\wt\\brama-1a2b' }];
+    const posix = [{ worktreePath: '/wt/batrak-1a2b' }];
+    const windows = [{ worktreePath: 'C:\\wt\\batrak-1a2b' }];
     const cases = [
       ['/home/me/app', posix, 'app'],
-      ['/wt/brama-1a2b/app', posix, 'brama-1a2b'],
-      ['/wt/brama-1a2b', posix, 'brama-1a2b'],
-      ['/wt/brama-1a2bc', posix, 'brama-1a2bc'],
-      ['C:\\wt\\brama-1a2b\\app', windows, 'brama-1a2b'],
-      ['C:\\wt\\brama-1a2bc', windows, 'brama-1a2bc'],
+      ['/wt/batrak-1a2b/app', posix, 'batrak-1a2b'],
+      ['/wt/batrak-1a2b', posix, 'batrak-1a2b'],
+      ['/wt/batrak-1a2bc', posix, 'batrak-1a2bc'],
+      ['C:\\wt\\batrak-1a2b\\app', windows, 'batrak-1a2b'],
+      ['C:\\wt\\batrak-1a2bc', windows, 'batrak-1a2bc'],
     ];
     for (const [folder, workspaces, label] of cases) {
       // Act + Assert

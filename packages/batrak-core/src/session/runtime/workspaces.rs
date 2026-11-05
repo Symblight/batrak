@@ -125,7 +125,7 @@ impl Sessions {
         Ok(held)
     }
 
-    /// Checks a workspace's folder out again from its branch, after it was deleted outside Brama
+    /// Checks a workspace's folder out again from its branch, after it was deleted outside Batrak
     /// (or its first checkout failed). Its chats start again from then on.
     pub async fn recreate_workspace(&self, id: &str) -> Result<(), String> {
         let workspaces = self.inner.workspaces.clone();

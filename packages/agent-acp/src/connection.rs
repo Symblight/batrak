@@ -532,7 +532,7 @@ where
     // outside it, its responder parked in `pending`.
     let builder = Client
         .builder()
-        .name("brama")
+        .name("batrak")
         .on_receive_notification(
             async move |notification: SessionNotification, _cx| {
                 if let SessionUpdate::SubagentUpdate(announced) = &notification.update {
@@ -625,7 +625,7 @@ where
                 .subagents(SubagentCapabilities::new())
                 .meta(serde_json::Map::from_iter([("terminal-auth".to_owned(), serde_json::Value::Bool(true))])),
         )
-        .client_info(Implementation::new("brama", env!("CARGO_PKG_VERSION")));
+        .client_info(Implementation::new("batrak", env!("CARGO_PKG_VERSION")));
     let init = match tokio::time::timeout(initialize_timeout, cx.send_request(initialize).block_task()).await
     {
         Err(_) => {

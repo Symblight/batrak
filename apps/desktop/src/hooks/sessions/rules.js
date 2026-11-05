@@ -37,7 +37,7 @@ export const INDICATOR_LABELS = /** @type {const} */ ({
  * @param {SessionStatus} status
  * @param {boolean} permissionPending A permission request of it waits for the user.
  * @param {boolean} [activeElsewhere] Another app may be running it (`isActiveElsewhere()`).
- * @param {boolean} [inTerminal] Its agent's CLI runs it in Brama's terminal.
+ * @param {boolean} [inTerminal] Its agent's CLI runs it in Batrak's terminal.
  * @param {SessionActivity | null} [activity] What that CLI is doing, as its agent tells.
  * @returns {SessionIndicator | null}
  */
@@ -51,7 +51,7 @@ export function sessionIndicator(status, permissionPending, activeElsewhere = fa
   return null;
 }
 
-/** Activity this close after a session was seen still reads as seen: agents write their own files a little after Brama's stamp. The backend's `OWN_ACTIVITY_SLACK_MS`. */
+/** Activity this close after a session was seen still reads as seen: agents write their own files a little after Batrak's stamp. The backend's `OWN_ACTIVITY_SLACK_MS`. */
 export const READ_SLACK_MS = 5000;
 
 /** The backend stamps a session's output at most this often (`activity` events). */
@@ -107,7 +107,7 @@ export function ageLabel(at, now) {
 
 /**
  * Whether another app (a terminal) may be running a session now: it doesn't run here, and its agent
- * saw activity in it that wasn't Brama's, recently enough (`Session.activeElsewhereUntil`).
+ * saw activity in it that wasn't Batrak's, recently enough (`Session.activeElsewhereUntil`).
  * @param {Session} session
  * @param {number} now ms.
  */

@@ -1,6 +1,6 @@
 //! The agents own the sessions: a sync asks each agent of a project for its sessions there
-//! (`session/list`, in a scratch process) and makes them the project's list, kept with what Brama
-//! adds (its id, run target, picks, a user title). Brama stores the list, never messages.
+//! (`session/list`, in a scratch process) and makes them the project's list, kept with what Batrak
+//! adds (its id, run target, picks, a user title). Batrak stores the list, never messages.
 //! Removing a session deletes it in its agent (`session/delete`).
 
 use std::collections::{HashMap, HashSet};
@@ -31,7 +31,7 @@ const MAX_LISTED: usize = 500;
 const ELSEWHERE_MS: i64 = 2 * 60_000;
 /// An agent kept up for listing is stopped once no sync used it for this long.
 const CATALOG_IDLE: Duration = Duration::from_secs(90);
-/// Activity the agent reports up to this long after Brama's own is Brama's own.
+/// Activity the agent reports up to this long after Batrak's own is Batrak's own.
 const OWN_ACTIVITY_SLACK_MS: i64 = 5_000;
 
 /// How one sync went, agent by agent.
@@ -406,7 +406,7 @@ impl Inner {
     }
 
     /// Deletes a removed session in its agent (`session/delete`); `false` when it couldn't (the
-    /// agent can't delete, can't run, or failed): it's then hidden in Brama instead.
+    /// agent can't delete, can't run, or failed): it's then hidden in Batrak instead.
     pub(super) async fn delete_in_agent(&self, record: &SessionRecord, acp_id: &str) -> bool {
         let agent = match self.startable(Some(&record.project_path), &record.agent_id) {
             Ok(agent) => agent,
@@ -436,11 +436,11 @@ impl Inner {
                 false
             }
             Ok(Err(e)) => {
-                tracing::warn!("{} didn't delete the session ({e}); it's hidden in Brama", agent.name);
+                tracing::warn!("{} didn't delete the session ({e}); it's hidden in Batrak", agent.name);
                 false
             }
             Err(_) => {
-                tracing::warn!("{} didn't delete the session in time; it's hidden in Brama", agent.name);
+                tracing::warn!("{} didn't delete the session in time; it's hidden in Batrak", agent.name);
                 false
             }
         }
@@ -517,7 +517,7 @@ fn update_from_list(state: &SessionState, item: &ListedSession) -> bool {
 }
 
 /// A session as the page gets it: whether its CLI holds it and what that CLI is doing, else until
-/// when another app may be running it, when its agent saw activity in it that wasn't Brama's own.
+/// when another app may be running it, when its agent saw activity in it that wasn't Batrak's own.
 /// Takes the record's lock: call it with none held.
 pub(super) fn listed(state: &SessionState) -> Session {
     let mut session = Session::of_record(&lock(&state.record));

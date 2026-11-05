@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Brama",
+  "productName": "Batrak",
   "version": "../package.json",
   "identifier": "dev.brama.app",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Brama",
+        "title": "Batrak",
         "width": 1440,
         "height": 900,
         "dragDropEnabled": true

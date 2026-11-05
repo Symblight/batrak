@@ -170,7 +170,7 @@ impl Inner {
         Ok(agent)
     }
 
-    /// Whether the agent's crate lets Brama start it without the user acting on it
+    /// Whether the agent's crate lets Batrak start it without the user acting on it
     /// (`Agent::starts_in_background`).
     pub(super) fn starts_in_background(&self, agent: &AgentConfig) -> bool {
         self.opts.agents.for_launch(&crate::agents::launch_of(agent)).starts_in_background()

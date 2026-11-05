@@ -152,7 +152,7 @@ mod tests {
 
     #[test]
     fn external_changes_reach_the_snapshot() {
-        let dir = std::env::temp_dir().join(format!("brama-watch-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-watch-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(dir.join("src")).unwrap();
         fs::write(dir.join(".gitignore"), "*.log\n").unwrap();

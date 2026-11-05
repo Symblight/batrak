@@ -251,7 +251,7 @@ describe('acp-agents-view', () => {
     const cases = [
       [{}, { query: 'Hermes', filter: 'all' }, 'No agents match “Hermes”.', null],
       [{ registryState: { checkedAt: null, offline: false, checking: true } }, ALL, 'Getting the agents from the ACP registry…', 'Not checked yet'],
-      [{ registryState: { checkedAt: null, offline: true, checking: false } }, ALL, 'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.', null],
+      [{ registryState: { checkedAt: null, offline: true, checking: false } }, ALL, 'Couldn’t reach the ACP registry, which lists the agents. Batrak tries again every minute.', null],
     ];
     for (const [state, query, message, footer] of cases) {
       const { root } = await render({ view: { ...none, ...state }, query });

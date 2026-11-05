@@ -97,7 +97,7 @@ describe('acp-settings', () => {
     /** @param {import('../../../hooks/settings/types.js').ProjectAccent | null} projectAccent */
     async function renderProject(projectAccent) {
       const el = /** @type {AcpSettings} */ (
-        await fixture(html`<acp-settings .settings=${settingsHook.defaults} .fonts=${[]} .projectName=${'Brama'} .projectAccent=${projectAccent}></acp-settings>`)
+        await fixture(html`<acp-settings .settings=${settingsHook.defaults} .fonts=${[]} .projectName=${'Batrak'} .projectAccent=${projectAccent}></acp-settings>`)
       );
       const root = /** @type {ShadowRoot} */ (el.shadowRoot);
       /** @type {(string | boolean)[]} */

@@ -288,7 +288,7 @@ impl Sessions {
     }
 
     /// Removes a session for good: its agent is stopped (a running turn ends `cancelled`), it's
-    /// deleted in its agent (`session/delete`), or hidden in Brama where the agent can't, it's no
+    /// deleted in its agent (`session/delete`), or hidden in Batrak where the agent can't, it's no
     /// longer listed, and its log is deleted. Its folder is discarded by its
     /// environment: `local` keeps the project as it is, `worktree` keeps a worktree with
     /// uncommitted changes and a branch with commits.

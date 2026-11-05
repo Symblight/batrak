@@ -38,7 +38,7 @@ pub struct CliSpec {
 pub struct TerminalMode {
     /// It continues a session by id.
     pub resume: bool,
-    /// It starts a new one under an id Brama chooses.
+    /// It starts a new one under an id Batrak chooses.
     pub new: bool,
 }
 
@@ -98,9 +98,9 @@ pub struct Launch {
 /// How an agent is installed and updated.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Install {
-    /// npx runs this package; Brama pins its version and downloads an update ahead of a start.
+    /// npx runs this package; Batrak pins its version and downloads an update ahead of a start.
     Npx { package: &'static str },
-    /// A program the user installs and updates (the registry ships an archive); Brama never
+    /// A program the user installs and updates (the registry ships an archive); Batrak never
     /// downloads it.
     Program,
 }
@@ -199,7 +199,7 @@ pub enum SessionActivity {
 pub trait Agent: Send + Sync + 'static {
     /// Stable id of the kind (`claude`, `copilot`, `codex`, `antigravity`, `generic`).
     fn kind(&self) -> &'static str;
-    /// Its id in the ACP registry, if it's one Brama offers there.
+    /// Its id in the ACP registry, if it's one Batrak offers there.
     fn registry_id(&self) -> Option<&'static str> {
         None
     }
@@ -207,7 +207,7 @@ pub trait Agent: Send + Sync + 'static {
     fn install(&self) -> Option<Install> {
         None
     }
-    /// The update of a launch with these `args` to `version`; `None` when Brama doesn't update it
+    /// The update of a launch with these `args` to `version`; `None` when Batrak doesn't update it
     /// (a program the user installs, or a launch it can't pin).
     fn update(&self, _args: &[String], _version: &str) -> Option<Update> {
         None
@@ -215,7 +215,7 @@ pub trait Agent: Send + Sync + 'static {
     /// Whether this crate drives an agent with this launch.
     fn matches(&self, launch: &Launch) -> bool;
 
-    /// Whether Brama may start it without the user acting on it (an options probe, a session
+    /// Whether Batrak may start it without the user acting on it (an options probe, a session
     /// sync, resuming a session shown at launch). `false` for one that, started signed out, signs
     /// in in the browser on its own: it then starts only for a message, Restart, Retry or Sign in.
     fn starts_in_background(&self) -> bool {
@@ -254,7 +254,7 @@ pub mod conformance {
     /// Panics unless `agent` keeps the contract any crate can be checked on without its files: an
     /// id it doesn't know, or that isn't an id, gets no answer.
     pub fn check(agent: &dyn Agent) {
-        for id in ["brama-conformance-no-such-session", "", "..", "../projects", "a/b", "a\\b"] {
+        for id in ["batrak-conformance-no-such-session", "", "..", "../projects", "a/b", "a\\b"] {
             let answer = agent.session_activity(id);
             assert_eq!(answer, None, "{} answered for session id {id:?}", agent.kind());
         }

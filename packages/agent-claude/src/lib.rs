@@ -197,7 +197,7 @@ mod tests {
 
     /// A Claude config dir whose live registry holds these files (name, content).
     fn registry(name: &str, files: &[(&str, String)]) -> PathBuf {
-        let root = std::env::temp_dir().join(format!("brama-claude-activity-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("batrak-claude-activity-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("sessions")).unwrap();
         for (file, content) in files {
@@ -306,7 +306,7 @@ mod tests {
 
     /// A Claude config dir with one session's subagents: (id, meta JSON, first transcript line's timestamp, transcript age).
     fn claude_dir(name: &str, session: &str, agents: &[(&str, &str, &str, std::time::Duration)]) -> std::path::PathBuf {
-        let root = std::env::temp_dir().join(format!("brama-claude-subagents-{name}-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("batrak-claude-subagents-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         let dir = root.join("projects").join("-work-project").join(session).join("subagents");
         std::fs::create_dir_all(&dir).unwrap();

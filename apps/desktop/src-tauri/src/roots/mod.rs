@@ -394,7 +394,7 @@ mod tests {
 
     #[test]
     fn a_workspace_roots_changes_reach_its_folders_chats_and_reload_no_agents() {
-        let base = std::env::temp_dir().join(format!("brama-workspace-batch-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-workspace-batch-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join(".brama")).unwrap();
         let host = Recorder::default();
@@ -416,7 +416,7 @@ mod tests {
 
     #[test]
     fn a_rescan_finds_what_the_watcher_missed_and_reports_it() {
-        let base = std::env::temp_dir().join(format!("brama-rescan-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-rescan-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("src")).unwrap();
         let (tx, rx) = std::sync::mpsc::channel();
@@ -444,7 +444,7 @@ mod tests {
 
     #[test]
     fn a_watcher_batch_waits_for_a_rescan_in_progress() {
-        let base = std::env::temp_dir().join(format!("brama-rescan-race-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-rescan-race-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("src")).unwrap();
         let rescanning = std::thread::current().id();
@@ -481,7 +481,7 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn a_batch_reading_the_disk_keeps_the_snapshot_free() {
-        let base = std::env::temp_dir().join(format!("brama-batch-unlocked-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-batch-unlocked-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(base.join("sub")).unwrap();
         let roots = Roots::default();
@@ -514,7 +514,7 @@ mod tests {
 
     #[test]
     fn a_cancelled_open_fails_as_superseded_and_registers_nothing() {
-        let base = std::env::temp_dir().join(format!("brama-superseded-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-superseded-{}", std::process::id()));
         std::fs::create_dir_all(base.join("src")).unwrap();
         let roots = Roots::default();
         let err = roots.open_with(&base, "main", &AtomicBool::new(true), Kind::Project, |_, _| {}).err();
@@ -525,7 +525,7 @@ mod tests {
 
     #[test]
     fn a_workspace_root_is_no_project() {
-        let base = std::env::temp_dir().join(format!("brama-workspace-root-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-workspace-root-{}", std::process::id()));
         std::fs::create_dir_all(base.join("proj")).unwrap();
         std::fs::create_dir_all(base.join("worktree")).unwrap();
         let roots = Roots::default();
@@ -542,7 +542,7 @@ mod tests {
 
     #[test]
     fn search_slots_cancel_only_their_own() {
-        let base = std::env::temp_dir().join(format!("brama-search-slots-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-search-slots-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
         std::fs::create_dir_all(&base).unwrap();
         std::fs::write(base.join("a.txt"), "needle\n").unwrap();
@@ -584,7 +584,7 @@ mod tests {
 
     #[test]
     fn contains_only_paths_inside_open_roots() {
-        let base = std::env::temp_dir().join(format!("brama-contains-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-contains-{}", std::process::id()));
         let root = base.join("proj");
         std::fs::create_dir_all(&root).unwrap();
         std::fs::create_dir_all(base.join("proj-other")).unwrap();
@@ -602,7 +602,7 @@ mod tests {
 
     #[test]
     fn closing_a_window_closes_only_its_roots() {
-        let base = std::env::temp_dir().join(format!("brama-group-{}", std::process::id()));
+        let base = std::env::temp_dir().join(format!("batrak-group-{}", std::process::id()));
         std::fs::create_dir_all(base.join("a")).unwrap();
         std::fs::create_dir_all(base.join("b")).unwrap();
         let roots = Roots::default();

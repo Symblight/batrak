@@ -73,7 +73,7 @@
  * What an agent's CLI can do for a session's Terminal view.
  * @typedef {Object} AgentTerminal
  * @property {boolean} resume It continues a session by its ACP id.
- * @property {boolean} new It starts a session under an id Brama chooses.
+ * @property {boolean} new It starts a session under an id Batrak chooses.
  */
 
 /**
@@ -214,7 +214,7 @@
  */
 
 /**
- * An agent the composer can start a session with; Brama's list, not ACP's.
+ * An agent the composer can start a session with; Batrak's list, not ACP's.
  * @typedef {Object} AgentInfo
  * @property {string} id
  * @property {string} name

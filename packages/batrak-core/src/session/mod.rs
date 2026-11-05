@@ -1,4 +1,4 @@
-//! Agent sessions: agent + workspace. The agents own the sessions (`session/list`); Brama lists
+//! Agent sessions: agent + workspace. The agents own the sessions (`session/list`); Batrak lists
 //! what they say ([`Sessions::sync`]), stores that list to show it at launch, and adds what they
 //! can't know (where a session runs, its picks, the user's title). Messages are never stored:
 //! the agent replays them (`session/load`). A session's agent process starts with its first
@@ -61,7 +61,7 @@ impl SessionStatus {
     }
 }
 
-/// A session as Brama lists it: from its agent's list or a create, stored in `sessions.json` in
+/// A session as Batrak lists it: from its agent's list or a create, stored in `sessions.json` in
 /// app data (no messages).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -133,7 +133,7 @@ pub struct Session {
     pub agent_id: String,
     pub agent_name: Option<String>,
     pub acp_session_id: Option<String>,
-    /// Until when another app may be running it: its agent saw activity in it that wasn't Brama's
+    /// Until when another app may be running it: its agent saw activity in it that wasn't Batrak's
     /// (2 min after that). Counts only while it doesn't run here.
     pub active_elsewhere_until: Option<String>,
     /// Its agent's own CLI runs it in a terminal here (`Sessions::open_cli`).

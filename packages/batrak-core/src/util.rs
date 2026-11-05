@@ -25,7 +25,7 @@ pub fn write_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
     let dir = path.parent().ok_or_else(|| std::io::Error::other("no parent folder"))?;
     std::fs::create_dir_all(dir)?;
     let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.brama-{}.tmp", std::process::id()));
+    let tmp = dir.join(format!(".{name}.batrak-{}.tmp", std::process::id()));
     let result = (|| {
         let mut file = std::fs::File::create(&tmp)?;
         file.write_all(content)?;
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn atomic_write_replaces_and_creates() {
-        let root = std::env::temp_dir().join(format!("brama-write-{}", std::process::id()));
+        let root = std::env::temp_dir().join(format!("batrak-write-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(root.join("src")).unwrap();
         std::fs::write(root.join("src/a.txt"), "a").unwrap();

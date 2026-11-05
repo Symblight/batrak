@@ -46,7 +46,7 @@ fn with_snapshot<T>(
 /// Commits the worktree's uncommitted and untracked work (ignored files aren't) onto `branch`,
 /// which must be the one it has checked out, so the work outlives the worktree. Built in a scratch
 /// index, with no hooks; the branch moves only if no one moved it meanwhile. Without a git identity
-/// the commit is Brama's. `None` when there's nothing uncommitted.
+/// the commit is Batrak's. `None` when there's nothing uncommitted.
 pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str) -> Result<Option<String>, String> {
     let text = |out: Vec<u8>| String::from_utf8_lossy(&out).trim().to_owned();
     let current = exec::run(git, worktree, &exec::args(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"]), Mode::Background);
@@ -61,10 +61,10 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
                 return Ok(None);
             }
             let has_identity = exec::run_with(git, worktree, &exec::args(&[&"var", &"GIT_COMMITTER_IDENT"]), Mode::Background, &Options::default())?.success();
-            let brama = OsStr::new("Brama");
-            let email = OsStr::new("brama@localhost");
+            let batrak = OsStr::new("Batrak");
+            let email = OsStr::new("batrak@localhost");
             let identity: [(&str, &OsStr); 4] =
-                [("GIT_AUTHOR_NAME", brama), ("GIT_AUTHOR_EMAIL", email), ("GIT_COMMITTER_NAME", brama), ("GIT_COMMITTER_EMAIL", email)];
+                [("GIT_AUTHOR_NAME", batrak), ("GIT_AUTHOR_EMAIL", email), ("GIT_COMMITTER_NAME", batrak), ("GIT_COMMITTER_EMAIL", email)];
             let opts = Options { env: if has_identity { &[] } else { &identity }, ..Default::default() };
             let out = exec::run_with(git, worktree, &exec::args(&[&"commit-tree", &tree, &"-p", &head, &"-m", &message]), Mode::Local, &opts)?;
             if !out.success() {

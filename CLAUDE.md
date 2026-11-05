@@ -7,11 +7,6 @@ and two fronts over it, a desktop app and a CLI. `ARCHITECTURE.md` says how the 
 where new code goes; read it before a change that adds a module or crosses a crate. The specs are
 in `docs/specs/` (`docs/specs/README.md` says how one is written).
 
-**Status:** the code is arriving from Brama (`../ACP-code-editor`) by `docs/specs/repo-move.md`.
-Until it has, the folders under `apps/` and `packages/` are empty, and the rules in
-`.claude/rules/` describe the target layout: their `paths:` globs are Batrak's, their prose still
-names Brama's module paths.
-
 ## Commands
 
 Cargo runs from the repo root, pnpm from `apps/desktop`.

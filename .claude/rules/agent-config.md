@@ -68,7 +68,7 @@ paths:
     must distribute it as the crate installs it, `Agent::install`; the rest are left out), and can be added (`AgentList.known`, pinned
     launches). Claude, Codex and Copilot run with `npx`; Antigravity, a `binary` in the registry,
     runs its archive's program (`cmd`'s file name, `agy_acp_server.par`) from PATH
-    (`Launch::Program`, this platform's args): the user installs and updates it, Brama never
+    (`Launch::Program`, this platform's args): the user installs and updates it, Batrak never
     downloads an agent; a start that doesn't find it says so with the archive's link
     (`registry::not_installed`). Antigravity is never started in the background
     (`Agent::starts_in_background` false: signed out, its `session/new` / `load` opens Google's

@@ -191,7 +191,7 @@ fn every_change_is_announced_with_its_project_and_the_page_sees_creating_and_mis
     assert!(!page.creating && !page.missing && page.error.is_none());
     workspaces.rename(&ws.id, "Renamed").unwrap();
     std::fs::remove_dir_all(&ws.worktree_path).unwrap();
-    assert!(workspaces.pages(&repo.path)[0].missing, "deleted outside Brama");
+    assert!(workspaces.pages(&repo.path)[0].missing, "deleted outside Batrak");
     workspaces.discard(&ws.id, true).unwrap();
 
     let heard = heard.lock().unwrap();
@@ -224,7 +224,7 @@ fn a_chat_start_does_the_first_checkout_after_a_failed_one_or_a_relaunch() {
 }
 
 #[test]
-fn a_folder_and_branch_deleted_outside_brama_stay_missing_until_recreate() {
+fn a_folder_and_branch_deleted_outside_batrak_stay_missing_until_recreate() {
     use crate::git::test_repo::{run_in, TestRepo};
     let repo = TestRepo::with_commit("ws-gone");
     let data = temp_dir("ws-gone-data");
@@ -272,7 +272,7 @@ fn a_workspaces_folder_opens_only_while_checked_out() {
     assert_eq!(workspaces.open_folder(&ws.id), Ok(ws.folder.clone()));
 
     std::fs::remove_dir_all(&ws.worktree_path).unwrap();
-    assert!(workspaces.open_folder(&ws.id).is_err(), "deleted outside Brama");
+    assert!(workspaces.open_folder(&ws.id).is_err(), "deleted outside Batrak");
     assert!(workspaces.open_folder("nope").is_err());
     workspaces.discard(&ws.id, false).unwrap();
     std::fs::remove_dir_all(data).unwrap();

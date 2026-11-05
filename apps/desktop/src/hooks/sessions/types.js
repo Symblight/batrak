@@ -28,7 +28,7 @@
 
 /**
  * The status icon a session shows in its header and list row (`sessionIndicator()`). `terminal`: its
- * agent's CLI runs it in Brama's terminal; `terminal-working`: and that CLI is busy.
+ * agent's CLI runs it in Batrak's terminal; `terminal-working`: and that CLI is busy.
  * @typedef {'permission' | 'error' | 'running' | 'queued' | 'elsewhere' | 'terminal' | 'terminal-working'} SessionIndicator
  */
 
@@ -56,9 +56,9 @@
  * @property {string | null} [agentName] Its agent's name as agents.json last gave it.
  * @property {string | null} [acpSessionId] The agent's own id of it; `null` until its agent first started.
  * @property {string | null} [activeElsewhereUntil] Until when another app (a terminal) may be running it:
- *   its agent saw activity in it that wasn't Brama's. Counts only while it doesn't run here
+ *   its agent saw activity in it that wasn't Batrak's. Counts only while it doesn't run here
  *   (`isActiveElsewhere()`).
- * @property {boolean} [inTerminal] Its agent's CLI runs it in a Brama terminal.
+ * @property {boolean} [inTerminal] Its agent's CLI runs it in a Batrak terminal.
  * @property {SessionActivity | null} [activity] What that CLI is doing, as its agent tells; `null`: no
  *   CLI, or its agent can't tell.
  * @property {Record<string, string>} config The agent's config options (model, thought level, mode) as

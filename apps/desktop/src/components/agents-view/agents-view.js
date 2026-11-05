@@ -49,7 +49,7 @@ const CHIPS = [
 
 /**
  * @tag acp-agents-view
- * @summary The Agents tab: the installed agents (switch, Update, menu), the user's own agents and the ACP registry's that Brama supports, searched and filtered by the backend.
+ * @summary The Agents tab: the installed agents (switch, Update, menu), the user's own agents and the ACP registry's that Batrak supports, searched and filtered by the backend.
  * @fires acp-agents-query `{ query, filter }`
  * @fires acp-agent-enable `{ agentId, enabled }` From a card.
  * @fires acp-agent-session-view `{ agentId, view }` From a card: whether its sessions open in the terminal.
@@ -382,7 +382,7 @@ export class AcpAgentsView extends LitElement {
     // Agents are known only from the registry, so before its first answer nothing is listed.
     const note = !checkedAt
       ? offline
-        ? 'Couldn’t reach the ACP registry, which lists the agents. Brama tries again every minute.'
+        ? 'Couldn’t reach the ACP registry, which lists the agents. Batrak tries again every minute.'
         : 'Getting the agents from the ACP registry…'
       : query
         ? `No agents match “${query}”.`

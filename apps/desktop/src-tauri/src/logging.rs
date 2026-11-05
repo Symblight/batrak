@@ -23,12 +23,12 @@ const MAX_NOTICE: usize = 500;
 
 /// Our crates' log targets: the app's, the core's, and the agent crates' that log (`agent-acp`). Their lines get
 /// the app's level, and their warnings and errors reach the windows.
-const OWN_TARGETS: [&str; 3] = ["brama_lib", "batrak_core", "agent_acp"];
+const OWN_TARGETS: [&str; 3] = ["batrak_desktop", "batrak_core", "agent_acp"];
 
 #[cfg(debug_assertions)]
-const DEFAULT_FILTER: &str = "info,brama_lib=debug,batrak_core=debug,agent_acp=debug";
+const DEFAULT_FILTER: &str = "info,batrak_desktop=debug,batrak_core=debug,agent_acp=debug";
 #[cfg(not(debug_assertions))]
-const DEFAULT_FILTER: &str = "warn,brama_lib=info,batrak_core=info,agent_acp=info";
+const DEFAULT_FILTER: &str = "warn,batrak_desktop=info,batrak_core=info,agent_acp=info";
 
 /// Whether a line is one of our crates' (`OWN_TARGETS`, or a module of one).
 fn is_own(target: &str) -> bool {
@@ -41,7 +41,7 @@ fn is_own(target: &str) -> bool {
 pub fn init(dir: &Path, notifier: Option<Arc<dyn Notifier>>) -> Result<(), String> {
     let file = RollingFileAppender::builder()
         .rotation(Rotation::DAILY)
-        .filename_prefix("brama")
+        .filename_prefix("batrak")
         .filename_suffix("log")
         .max_log_files(KEEP_FILES)
         .build(dir)
@@ -154,10 +154,10 @@ mod tests {
 
     #[test]
     fn our_crates_lines_are_ours_wherever_they_log() {
-        for target in ["brama_lib", "brama_lib::git", "batrak_core", "batrak_core::session::runtime", "agent_acp", "agent_acp::connection"] {
+        for target in ["batrak_desktop", "batrak_desktop::git", "batrak_core", "batrak_core::session::runtime", "agent_acp", "agent_acp::connection"] {
             assert!(is_own(target), "{target}");
         }
-        for target in ["hyper", "agent_acpx", "brama_libs", "batrak_corex"] {
+        for target in ["hyper", "agent_acpx", "batrak_desktops", "batrak_corex"] {
             assert!(!is_own(target), "{target}");
         }
         for target in OWN_TARGETS {
@@ -168,7 +168,7 @@ mod tests {
     // The only test that installs the global subscriber and hook; other tests' lines land here too.
     #[test]
     fn panics_reach_the_log_file() {
-        let dir = std::env::temp_dir().join(format!("brama-log-test-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("batrak-log-test-{}", std::process::id()));
         init(&dir, None).unwrap();
         install_panic_hook();
         let _ = std::thread::Builder::new().name("worker".into()).spawn(|| panic!("boom 42")).unwrap().join();

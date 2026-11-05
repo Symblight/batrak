@@ -13,12 +13,12 @@ import '../session-list.js';
 function session(id, fields = {}) {
   return {
     id,
-    projectId: '/home/me/brama',
+    projectId: '/home/me/batrak',
     title: `Session ${id}`,
     status: 'idle',
     agentId: 'a',
     config: {},
-    folder: '/home/me/brama',
+    folder: '/home/me/batrak',
     branch: null,
     createdAt: '2026-01-01T00:00:00.000Z',
     lastActivityAt: '2026-01-01T00:00:00.000Z',
