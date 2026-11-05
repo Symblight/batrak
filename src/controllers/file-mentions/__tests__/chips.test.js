@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { buildBrowseItem, buildEntryItem, buildMenuItem, codeChip, codeChipAttrs, commentLines, fileChipAttrs, recalledDoc } from '../chips.js';
+import { buildBrowseItem, buildEntryItem, buildMenuItem, codeChip, commentLines, fileChipAttrs, recalledDoc } from '../chips.js';
 import { COMMAND_CHIP_TEMPLATE } from '../../chat-parts/ChatPartsController.js';
 
 /**
@@ -35,8 +35,6 @@ describe('composer chips', () => {
     const file = (path) => ({ type: 'chip', attrs: fileChipAttrs(path, false) });
     /** @param {string} path */
     const folder = (path) => ({ type: 'chip', attrs: fileChipAttrs(path, true) });
-    /** @param {string} path @param {string} lines */
-    const selection = (path, lines) => ({ type: 'chip', attrs: codeChipAttrs(path, lines) });
     /** @param {string} label */
     const command = (label) => ({ type: 'chip', attrs: { templateId: COMMAND_CHIP_TEMPLATE, label, icon: null, data: {} } });
     /** @param {string} code @param {number} lines @param {string} lang */
@@ -46,8 +44,7 @@ describe('composer chips', () => {
       ['plain\n\nlines', [[text('plain')], [], [text('lines')]], 'text and line breaks'],
       ['see @src/a.js now', [[text('see '), file('src/a.js'), text(' now')]], 'a file chip'],
       ['in @src/ please', [[text('in '), folder('src'), text(' please')]], 'a folder chip'],
-      ['src/a.js:12-23 why', [[selection('src/a.js', '12-23'), text(' why')]], 'a selection chip'],
-      ['src/a.js:12', [[selection('src/a.js', '12')]], 'a selection of one line'],
+      ['src/a.js:12-23 why', [[text('src/a.js:12-23 why')]], 'lines stay text: they may be a pasted stack trace'],
       ['/review the rest', [[command('/review'), text(' the rest')]], 'a command chip at the start'],
       ['run /review now', [[text('run /review now')]], 'a command only at the start'],
       ['/etc/hosts is odd', [[text('/etc/hosts is odd')]], 'a path is not a command'],

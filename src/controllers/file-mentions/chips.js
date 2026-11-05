@@ -47,27 +47,20 @@ export function buildMenuItem(value, headline, supportingText) {
 /**
  * A file chip naming lines of code: `src/app.js:12`, or `src/app.js:12-23` for several. The label is
  * what the agent reads.
- * @param {string} rel
- * @param {string} lines
- */
-export function codeChipAttrs(rel, lines) {
-  const name = rel.slice(rel.lastIndexOf('/') + 1);
-  return {
-    templateId: FILE_CHIP_TEMPLATE,
-    label: `${rel}:${lines}`,
-    icon: fileIcon.svgFor(name),
-    data: { path: rel, lines },
-  };
-}
-
-/**
  * @param {PmSchema} schema
  * @param {ChatInsert} insert
  * @param {string | null} root The project's path; the chip names a file inside it relative to it.
  */
 export function codeChip(schema, { path, fromLine, toLine }, root) {
+  const rel = projects.rel(root, path) ?? path;
+  const name = rel.slice(rel.lastIndexOf('/') + 1);
   const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
-  return schema.nodes.chip.create(codeChipAttrs(projects.rel(root, path) ?? path, lines));
+  return schema.nodes.chip.create({
+    templateId: FILE_CHIP_TEMPLATE,
+    label: `${rel}:${lines}`,
+    icon: fileIcon.svgFor(name),
+    data: { path: rel, lines },
+  });
 }
 
 /**
@@ -87,19 +80,25 @@ export function fileChipAttrs(path, folder) {
   };
 }
 
-const LEADING_COMMAND = /^\/[\w-]+(?=\s|$)/;
+const LEADING_COMMAND = /^\/[\w-]+(?::[\w-]+)*(?=\s|$)/;
+const MENTION = /(^|\s)@(\S*[^\s.,;:!?])/g;
+const HAS_EXTENSION = /[^.]\.[A-Za-z][\w-]*$/;
+// Names with no extension `fileIcon` has no logo for; any other bare `@word` is likelier a person or an annotation.
+const BARE_FILE_NAME = /^(?:Makefile|Gemfile|Rakefile|Justfile|Procfile|LICENSE|README)$/;
 
 /**
- * A replayed prompt as the composer's document: what `promptOfInput()` wrote, read back. A bare
- * `src/app.js` stays text: a chip sends a mention to the agent, which would change what the prompt says.
+ * A replayed prompt as the composer's document: what `promptOfInput()` wrote, read back. Only `@`
+ * mentions of what looks like a file or folder become chips. A bare `src/app.js` stays text, and so
+ * does `src/app.js:12`, which can't be told from a line of a pasted stack trace: its chip would send
+ * the lines as a resource, changing the prompt, and fail the send when the file is gone.
  * @param {import('../../hooks/sessions/message-builder.js').ChxMessage} message
  * @returns {{ type: 'doc', content: object[] }}
  */
 export function recalledDoc(message) {
   /** @type {{ type: string, text?: string, attrs?: object }[][]} */
   const lines = [[]];
-  /** @param {object} attrs */
-  const addChip = (attrs) => lines[lines.length - 1].push({ type: 'chip', attrs });
+  /** @param {string} type @param {object} attrs */
+  const addNode = (type, attrs) => lines[lines.length - 1].push({ type, attrs });
   /** @param {string} text Merged with the text before it: a line's text is one node. */
   const addText = (text) =>
     text.split('\n').forEach((part, index) => {
@@ -109,20 +108,29 @@ export function recalledDoc(message) {
       if (part && last?.type === 'text') last.text += part;
       else if (part) line.push({ type: 'text', text: part });
     });
+  /** @param {string} text */
+  const addMentioned = (text) => {
+    let last = 0;
+    for (const match of text.matchAll(MENTION)) {
+      const folder = match[2].endsWith('/');
+      const path = folder ? match[2].slice(0, -1) : match[2];
+      const name = path.slice(path.lastIndexOf('/') + 1);
+      if (!path || (!folder && !HAS_EXTENSION.test(name) && !BARE_FILE_NAME.test(name) && !fileIcon.has(name))) continue;
+      addText(text.slice(last, match.index + match[1].length));
+      addNode('chip', fileChipAttrs(path, folder));
+      last = match.index + match[0].length;
+    }
+    addText(text.slice(last));
+  };
 
   const text = message.parts.map((part) => part.text ?? '').join('');
   const command = LEADING_COMMAND.exec(text)?.[0] ?? '';
-  if (command) addChip({ templateId: COMMAND_CHIP_TEMPLATE, label: command, icon: null, data: {} });
+  if (command) addNode('chip', { templateId: COMMAND_CHIP_TEMPLATE, label: command, icon: null, data: {} });
   for (const part of chat.splitFencedCode(text.slice(command.length))) {
     if (part.type === 'code') {
-      const attrs = { text: part.text, lines: part.text.split('\n').length, data: { kind: 'code', lang: part.lang } };
-      lines[lines.length - 1].push({ type: 'paste', attrs });
-      continue;
-    }
-    for (const { text: written, ref } of chat.splitFileRefs(part.text)) {
-      if (ref?.fromLine != null) addChip(codeChipAttrs(ref.path, chat.linesOf(ref)));
-      else if (ref?.mention) addChip(fileChipAttrs(ref.path, ref.folder));
-      else addText(written);
+      addNode('paste', { text: part.text, lines: part.text.split('\n').length, data: { kind: 'code', lang: part.lang } });
+    } else {
+      addMentioned(part.text);
     }
   }
   return { type: 'doc', content: lines.map((content) => (content.length ? { type: 'line', content } : { type: 'line' })) };
