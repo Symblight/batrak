@@ -1,6 +1,6 @@
 # Batrak — architecture
 
-Status: draft · 2026-11-05 · successor of Brama (`ACP-code-editor`); builds on its
+Status: draft · 2026-11-05 · builds on
 `docs/specs/cli.md`, `agent-plugins.md`, `workspaces.md`, `session-sync.md`, `subagents.md`.
 
 Batrak is an agent-first client for AI coding agents over ACP. One library, **`bt-core`**,
@@ -65,7 +65,7 @@ reused by another front, say); until then the desktop's frontend stays inside `a
 there is no root `package.json`. The dependency direction is one way: an app depends on packages,
 a package never on an app or on another app's files.
 
-**The project's service folder is `.bt/`** (Brama's `.brama/`): `agents.json`, `workspace.json`,
+**The project's service folder is `.bt/`**: `agents.json`, `workspace.json`,
 `local/`, `attachments/`, and later `specs/`, `pipelines/`, `tools.json`. Two letters keep chat refs
 and paths short (`@.bt/specs/snackbar/tasks.md`). `.bk` was rejected: it is BitKeeper's repository
 folder, and `*.bk` is a common backup ignore pattern that would hide the folder from git.
@@ -81,24 +81,24 @@ cd apps/desktop && pnpm typecheck && pnpm test && pnpm tauri dev
 
 ## 3. `bt-core`
 
-What it holds, module by module, and where each came from in Brama.
+What it holds, module by module.
 
-| Module | Holds | From Brama |
-| --- | --- | --- |
-| `session/` | `Sessions`: lifecycle, turns, permissions, turn slots per folder, sync with the agents' own lists, replay for a client that attaches, subagents, sign-in, the agent's CLI, worktree helpers | `src-tauri/src/session/` |
-| `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch | `src-tauri/src/workspace/` |
-| `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher | `src-tauri/src/config/` |
-| `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates | `src-tauri/src/agents/` |
-| `git/` | the git the sessions need: `exec` (one path for every call), `lock`, `binary`, `repo` and the `remote` it reads, `worktree`, `apply`, `blob` (a workspace's file at its base); `test_repo` behind `test-support`, since the desktop's git tests use it too | `src-tauri/src/git/{exec,lock,binary,repo,remote,worktree,apply,blob,test_repo}` |
-| `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) | `src-tauri/src/storage/` |
-| `project/` | the project's `.bt/` folder: creating it, `workspace.json`, and later `specs/`, `pipelines/`, `tools.json` (§8) | `config/mod.rs` (`ensure_project_dir`, `project_settings`) |
-| `util` | `checked_rel`, `write_atomic`, ISO time, `default_shell` | parked in `roots/`, `session/env`, `session/mod.rs`, `terminal/shell.rs` |
-| `dirs` | `Dirs { data, config, logs }` (§4.1) | three `app.path()` reads in `lib.rs` |
-| `api` | re-exports of every type a front renders (§5) | spread over the modules |
+| Module | Holds |
+| --- | --- |
+| `session/` | `Sessions`: lifecycle, turns, permissions, turn slots per folder, sync with the agents' own lists, replay for a client that attaches, subagents, sign-in, the agent's CLI, worktree helpers |
+| `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch |
+| `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher |
+| `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates |
+| `git/` | the git the sessions need: `exec` (one path for every call), `lock`, `binary`, `repo` and the `remote` it reads, `worktree`, `apply`, `blob` (a workspace's file at its base); `test_repo` behind `test-support`, since the desktop's git tests use it too |
+| `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) |
+| `project/` | the project's `.bt/` folder: creating it, `workspace.json`, and later `specs/`, `pipelines/`, `tools.json` (§8) |
+| `util` | `checked_rel`, `write_atomic`, ISO time, `default_shell` |
+| `dirs` | `Dirs { data, config, logs }` (§4.1) |
+| `api` | re-exports of every type a front renders (§5) |
 
 The crate lives in `packages/bt-core/`, beside the agent crates it depends on.
 
-What stops this split today, measured from Brama's `crate::` paths on 2026-11-05. Everything else
+What stops this split today, measured from the `crate::` paths on 2026-11-05. Everything else
 in these modules is already free of Tauri: only `commands/`, `lib.rs`, `menu.rs`, `logging.rs` and
 `roots/mod.rs` name it.
 
@@ -181,7 +181,7 @@ A question to the user is an event with options, answered by a method
 
 ### 4.4 `Launcher`, `SecretStore`, `Fetch`, `Prefetch`
 
-As in Brama: the agent process (a fake in tests), `${env:…}` / `${keychain:…}` resolution at spawn
+The agent process (a fake in tests), `${env:…}` / `${keychain:…}` resolution at spawn
 only, the registry's HTTP, the npm prefetch of an update.
 
 ### 4.5 `ProgramRunner`: a program the user watches
@@ -248,7 +248,7 @@ and changes nothing above.
   core: `roots/` (snapshot, watcher, Quick Open, Find in Files, open-root groups per window),
   editor git (`commit`, `cache`), `github.rs`, `fs`, attachments,
   drops, fonts, about, and `terminal/` (PTY tabs; implements `ProgramRunner`).
-- `src/`: the Lit UI as in Brama. `hooks/ipc/ipc.js` is the only module that imports
+- `src/`: the Lit UI. `hooks/ipc/ipc.js` is the only module that imports
   `@tauri-apps/*`; each feature's hook owns its command names; containers subscribe to stores,
   everything else is presentational. Its own rules live in `apps/desktop/CLAUDE.md` and
   `docs/specs/frontend-structure.md`.
@@ -305,9 +305,9 @@ rendered by the fronts. The agent never needs Batrak to continue.
 Each starts as a module of `bt-core`; it becomes a package of its own under `packages/` only
 when it needs dependencies the core should not carry.
 
-## 9. From Brama to Batrak
+## 9. Build order
 
-The order matters: the seams first, in Brama, with its suites proving nothing changed; the move
+The order matters: the seams first, with the suites proving nothing changed; the move
 second, as renames; the CLI third. One commit per step.
 
 1. **Utilities home** (`util`, `Dirs`): three back-edges go (sessions → roots' path check,
@@ -319,15 +319,12 @@ second, as renames; the CLI third. One commit per step.
    pass unchanged.
 3. **`ProgramRunner`**: logins and `open_cli` leave the PTY module behind; the runtime's tests get
    a fake runner.
-4. **`bt-core` as a crate** inside Brama's workspace; the app re-exports what `commands/`
+4. **`bt-core` as a crate** inside the existing workspace; the app re-exports what `commands/`
    names. Acceptance: its tests run without Tauri; no `tauri` in the crate.
 5. **`api` module** and the contract snapshot test.
-6. **This repository**, in three commits or more, so the moves stay plain renames for blame:
-   - **History.** This repository has no commits yet, so it takes Brama's: set this folder's drafts
-     aside, `git remote add brama ../ACP-code-editor`, `git fetch brama main`, `git reset --hard
-     brama/main`, then put the drafts back. Only what Brama has committed comes across.
+6. **This repository**, in two commits or more, so the moves stay plain renames for blame:
    - **Move, no renames.** `git mv` into §2, nothing else, and every check passes (§10).
-   - **Rename the identifiers** (§10.3), in a commit of its own.
+   - **Rename the identifiers**, in a commit of its own.
 7. **CLI, read-only and config first**: the verbs that need no cross-process work.
 8. **Two processes** (§6), then `run`, `send`, `resume`, `sign-in` and the TTY renderer. New code
    from here on: this is where the desktop's behavior can first change, and §6 changes how it
@@ -336,11 +333,11 @@ second, as renames; the CLI third. One commit per step.
 
 ## 10. Keeping today's features
 
-Steps 1–6 add nothing a user can see. Batrak at the end of step 6 is Brama under another name.
+Steps 1–6 add nothing a user can see.
 
 ### 10.1 The gate for every step
 
-Baseline, Brama on 2026-11-05: `cargo test --lib` 377 passed and 5 ignored; `pnpm test` 1129 passed
+Baseline on 2026-11-05: `cargo test --lib` 377 passed and 5 ignored; `pnpm test` 1129 passed
 and 1 skipped; `pnpm typecheck` and `cargo clippy --all-targets` clean.
 
 - A step passes when all four checks pass and neither test count drops. A test moves with its code;
@@ -372,7 +369,7 @@ table once, a real agent included (`cargo test real_claude -- --ignored`).
 
 None of these fail a compile.
 
-- **Warnings stop reaching the user.** `logging.rs`'s `OWN_TARGETS` names `brama_lib` and
+- **Warnings stop reaching the user.** `logging.rs`'s `OWN_TARGETS` names the app's own crate and
   `agent_acp`, and `NoticeLayer` shows only those crates' warnings. Code that moves to `bt_core`
   logs under a new target, so its failures would vanish from the snackbars and the default log level.
   Add the crate at step 4, and every later crate that logs.
@@ -383,22 +380,12 @@ None of these fail a compile.
 - **Paths outside the code**: `.github/workflows/*.yml` (`working-directory`, the rust cache's
   `workspaces: src-tauri`, `release.yml`'s version check reading `src-tauri/Cargo.toml`),
   `.claude/` (hooks, the `verify` skill, the rules' `paths:`), `tauri.conf.json`,
-  `.gitignore` (`.claude/settings.local.json` is ignored in Brama and not here yet).
-- **Names to change together**: `.brama/` (117 references), the `brama:` `localStorage` keys, the
-  user's `<config>/brama/agents.json`, `dev.brama.app`, `BRAMA_LOG`, `BRAMA_BENCH_ROOT`,
-  `BRAMA_CLAUDE_SESSION`, `brama_lib`, and anything naming worktrees or branches `brama…`.
-- **Keychain secrets stop resolving.** `config/env.rs`'s `KEYCHAIN_SERVICE` is `"brama"`, and a
-  user's `${keychain:name}` items are stored under it. Renaming it makes every one fail at an agent's
-  start, with "no keychain item". Rename it only with the import (§11), or read both names.
+  `.gitignore`.
 - **Names that stay**: the `acp-*` elements and events (they name the protocol, not the product),
   `@symblight/*`, the agent crates.
 
 ## 11. Open decisions
 
-- **Brama's data**: `dev.brama.app` app data and projects' `.brama/` folders are not read by
-  Batrak unless we add a one-time import (`batrak import-brama`). Without one, a first launch has
-  none of the app's own records: titles, workspaces, trust, switches or layout. Each agent still
-  holds its own history. Decide before step 6.
 - **Frontend package root**: pnpm lives in `apps/desktop/`; a root `package.json` with a pnpm
   workspace only once a JS package appears under `packages/`.
 - **`Dirs::standard()` without Tauri**: `directories` must give the same folders Tauri does on

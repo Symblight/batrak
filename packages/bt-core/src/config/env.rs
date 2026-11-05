@@ -7,9 +7,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 /// Keychain service under which `${keychain:name}` entries are looked up (account = `name`).
-/// Still Brama's name on purpose: users' items are stored under it, and renaming it makes each one fail
-/// at an agent's start. It changes only together with an import of Brama's data.
-pub const KEYCHAIN_SERVICE: &str = "brama";
+/// Users' items are stored under it, so renaming it makes each one fail at an agent's start.
+pub const KEYCHAIN_SERVICE: &str = "batrak";
 
 /// The environment of a login shell, read once; the app's own environment when that fails.
 /// Blocking (runs the shell): call off the async runtime.
