@@ -9,12 +9,13 @@ CLAUDE.md requires all four checks to pass before work is reported done.
 
 ## 1. Run the checks
 
-Run the frontend and backend in parallel (separate Bash calls in one message), from the repo root:
+Run the backend and frontend in parallel (separate Bash calls in one message). Cargo runs from the
+repo root, pnpm from `apps/desktop`:
 
-- `cd src-tauri && cargo test --lib 2>&1 | tail -40`
-- `cd src-tauri && cargo clippy --all-targets 2>&1 | grep -E '^(warning|error)' -A6 | head -80; echo "clippy exit: ${PIPESTATUS[0]}"`
-- `pnpm typecheck 2>&1 | tail -40`
-- `pnpm test 2>&1 | tail -60`
+- `cargo test --workspace 2>&1 | tail -40`
+- `cargo clippy --all-targets 2>&1 | grep -E '^(warning|error)' -A6 | head -80; echo "clippy exit: ${PIPESTATUS[0]}"`
+- `cd apps/desktop && pnpm typecheck 2>&1 | tail -40`
+- `cd apps/desktop && pnpm test 2>&1 | tail -60`
 
 Clippy passes only with **no warnings**, not just exit 0. `pnpm test` runs real Chrome; a single timeout
 can be flaky, so rerun once before calling it a failure, and say that you did.
@@ -29,7 +30,8 @@ it unasked.
 
 ## 3. Report
 
-A short table: check → pass / fail (counts, e.g. `cargo test: 412 passed`).
+A short table: check → pass / fail (counts, e.g. `cargo test: 412 passed`). Test counts never drop
+unless the task deleted a test on purpose; say so if they did.
 
 Then, as CLAUDE.md asks, say which behavior was verified:
 - **by a test** (name the tests added or changed),

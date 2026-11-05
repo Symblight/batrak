@@ -7,6 +7,8 @@ argument-hint: <tag-name e.g. acp-foo-bar> [view]
 
 # New component
 
+Every path below is relative to `apps/desktop/` (the frontend lives there); run `pnpm` from that folder.
+
 Arguments: the tag (`acp-foo-bar`) and optionally `view` (a container in `src/views/`). Default: a
 presentational component in `src/components/`. If the tag is missing or already exists in
 `src/elements.d.ts`, stop and ask.

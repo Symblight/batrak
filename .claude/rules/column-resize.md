@@ -1,10 +1,10 @@
 ---
 paths:
-  - "src/controllers/resize/**"
-  - "src/components/column-split/**"
-  - "src/components/resize-handle/**"
-  - "src/stores/layout/layout.js"
-  - "src-tauri/tauri.conf.json"
+  - "apps/desktop/src/controllers/resize/**"
+  - "apps/desktop/src/components/column-split/**"
+  - "apps/desktop/src/components/resize-handle/**"
+  - "apps/desktop/src/stores/layout/layout.js"
+  - "apps/desktop/src-tauri/tauri.conf.json"
 ---
 
 # Column resizing

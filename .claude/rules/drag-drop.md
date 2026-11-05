@@ -1,8 +1,8 @@
 ---
 paths:
-  - "src/controllers/sortable/**"
-  - "src/controllers/drop-target/**"
-  - "src/components/tab-strip/**"
+  - "apps/desktop/src/controllers/sortable/**"
+  - "apps/desktop/src/controllers/drop-target/**"
+  - "apps/desktop/src/components/tab-strip/**"
 ---
 
 # Drag and drop
