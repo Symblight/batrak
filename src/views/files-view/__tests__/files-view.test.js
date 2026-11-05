@@ -7,6 +7,7 @@ import { $folderExpandedFolders, setExpandedFolders } from '../../../stores/file
 import { $openRoots, $openingPath, $project } from '../../../stores/project/project.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
+import { $terminals, removeProjectTerminals } from '../../../stores/terminals/terminals.js';
 import '../files-view.js';
 
 /** @typedef {import('../files-view.js').AcpFilesView} AcpFilesView */
@@ -229,6 +230,40 @@ describe('acp-files-view', () => {
     await refreshing;
     // Assert
     expect(reloaded).to.deep.equal([]);
+  });
+
+  it('carries out what the tree asks for a row: show it, a terminal there, copy its path', async () => {
+    // Arrange
+    const { el, tree } = await render();
+    const original = navigator.clipboard.writeText;
+    /** @type {string[]} */
+    const copied = [];
+    navigator.clipboard.writeText = async (text) => void copied.push(text);
+    /** @type {string[]} */
+    const escaped = [];
+    const parent = /** @type {HTMLElement} */ (el.parentElement);
+    const note = (/** @type {Event} */ e) => escaped.push(e.type);
+    const types = ['acp-reveal-path', 'acp-open-terminal', 'acp-copy'];
+    for (const type of types) parent.addEventListener(type, note);
+    /** @param {string} type @param {object} detail */
+    const ask = (type, detail) => tree.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+
+    try {
+      // Act
+      ask('acp-reveal-path', { path: '/p/a.txt' });
+      ask('acp-open-terminal', { path: '/p/src' });
+      ask('acp-copy', { text: '/p/a.txt' });
+
+      // Assert
+      expect(calls.filter((c) => c.cmd === 'reveal_path').map((c) => c.args)).to.deep.equal([{ path: '/p/a.txt' }]);
+      expect(Object.values($terminals.get()).map((t) => t.cwd)).to.deep.equal(['/p/src']);
+      expect(copied).to.deep.equal(['/p/a.txt']);
+      expect(escaped, 'answered here, not again by a column').to.deep.equal([]);
+    } finally {
+      navigator.clipboard.writeText = original;
+      for (const type of types) parent.removeEventListener(type, note);
+      removeProjectTerminals('/p');
+    }
   });
 
   it('reveals a file in the tree', async () => {

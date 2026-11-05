@@ -1,6 +1,9 @@
 import { html } from 'lit';
+import myLocationIcon from '@material-design-icons/svg/outlined/my_location.svg?raw';
 import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
+import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
+import { $activePath } from '../../stores/editor/editor.js';
 import { $activeRoot } from '../../stores/workspaces/workspaces.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 import '../../components/panel/panel.js';
@@ -16,7 +19,8 @@ import '../git-changes/git-changes.js';
 /** @type {Record<SideView, string>} */
 const SIDE_TITLES = { files: 'Files', search: 'Search', changes: 'Changes' };
 
-const REFRESH = { icon: refreshIcon, label: 'Refresh files', tooltip: 'Refresh' };
+const SELECT_OPENED = { id: 'select-opened', icon: myLocationIcon, label: 'Select opened file' };
+const REFRESH = { id: 'refresh', icon: refreshIcon, label: 'Refresh files', tooltip: 'Refresh' };
 
 /**
  * @tag acp-file-column
@@ -29,6 +33,7 @@ export class AcpFileColumn extends ViewElement {
   };
 
   #activeRoot = new StoreController(this, { store: $activeRoot });
+  #activePath = new StoreController(this, { store: $activePath });
 
   constructor() {
     super();
@@ -81,15 +86,35 @@ export class AcpFileColumn extends ViewElement {
     }
   }
 
+  /** @returns {string | null} The active tab's file relative to the listed folder; `null` for a view's tab or a file elsewhere. */
+  get #openedRel() {
+    const active = this.#activePath.value;
+    return active === null ? null : projects.relPath(active);
+  }
+
+  get #actions() {
+    if (this.sideView !== 'files' || this.#activeRoot.value.rootId === null) return [];
+    return [
+      { ...SELECT_OPENED, disabled: this.#openedRel === null },
+      { ...REFRESH, disabled: this.refreshing },
+    ];
+  }
+
+  /** @param {Event} e */
+  #onHeaderAction = (e) => {
+    const { id } = /** @type {CustomEvent<{ id: string }>} */ (e).detail;
+    if (id === REFRESH.id) this.#refreshTree();
+    const rel = this.#openedRel;
+    if (id === SELECT_OPENED.id && rel !== null) this.reveal(rel);
+  };
+
   render() {
-    const tree = this.#activeRoot.value;
     return html`<acp-panel>
       <acp-panel-header
         slot="header"
         heading=${SIDE_TITLES[this.sideView]}
-        .action=${this.sideView === 'files' && tree.rootId !== null ? REFRESH : null}
-        ?action-disabled=${this.refreshing}
-        @acp-panel-header-action=${this.#refreshTree}
+        .actions=${this.#actions}
+        @acp-panel-header-action=${this.#onHeaderAction}
       ></acp-panel-header>
       <acp-pane ?hidden=${this.sideView !== 'files'}><acp-files-view></acp-files-view></acp-pane>
       <acp-pane ?hidden=${this.sideView !== 'search'}>

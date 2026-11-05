@@ -30,6 +30,10 @@
   flex: none;
 }
 
+:host(:hover) ::slotted([slot='header']) {
+  --acp-panel-header-action-opacity: 1;
+}
+
 ::slotted([hidden]) {
   display: none;
 }

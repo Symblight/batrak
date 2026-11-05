@@ -1,11 +1,21 @@
+import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
+import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
+import '@symblight/wc-material/icon';
+import '@symblight/wc-material/menu';
 import '@symblight/wc-material/tooltip';
+import copyIcon from '@material-design-icons/svg/outlined/content_copy.svg?raw';
+import folderOpenIcon from '@material-design-icons/svg/outlined/folder_open.svg?raw';
+import openInIcon from '@material-design-icons/svg/outlined/open_in_new.svg?raw';
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
+import { ContextMenuController } from '../../controllers/context-menu/ContextMenuController.js';
 import '../file-icon/file-icon.js';
 import styles from './file-tree.css?inline';
 
 /** @typedef {import('../../hooks/projects/types.js').RootEntry} RootEntry */
+/** @typedef {import('../../hooks/app/types.js').Platform} Platform */
 /** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean }} TreeItem */
 /** @typedef {(rootId: string, rel: string) => Promise<RootEntry[]>} ListDir A folder's entries; `''` is the root. */
 
@@ -44,6 +54,9 @@ function parentOf(path) {
  *   expands; controlled by its `expanded` folders.
  * @fires acp-file-open `{ path }`
  * @fires acp-expanded-change `{ paths }` Root-relative folders to keep expanded.
+ * @fires acp-reveal-path `{ path }` A row's menu: show it in the file manager.
+ * @fires acp-open-terminal `{ path }` A row's menu: a terminal in this folder (a file's own).
+ * @fires acp-copy `{ text }` A row's menu: its absolute path.
  */
 export class AcpFileTree extends LitElement {
   static properties = {
@@ -52,6 +65,7 @@ export class AcpFileTree extends LitElement {
     listDir: { attribute: false },
     expanded: { attribute: false },
     opening: { type: Boolean },
+    platform: {},
   };
 
   static styles = styles;
@@ -68,7 +82,15 @@ export class AcpFileTree extends LitElement {
     this.expanded = [];
     /** Its folder's root is being scanned: the tree hides at once, a skeleton shows after `SKELETON_DELAY`. */
     this.opening = false;
+    /** @type {Platform} Names the file manager in a row's menu. */
+    this.platform = app.platform;
   }
+
+  /** @type {ContextMenuController<string>} A row's menu; its target is the row's root-relative path. */
+  #menu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('md-menu'),
+    onSelect: (value, rel) => this.#onMenuSelect(value, rel),
+  });
 
   /** @type {ReturnType<typeof setTimeout> | undefined} */
   #skeletonTimer = undefined;
@@ -306,6 +328,81 @@ export class AcpFileTree extends LitElement {
       <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
   }
 
+  /** @param {MouseEvent} e */
+  async #onContextMenu(e) {
+    const id = this.#tree?.nodes.getIdFromEvent(e);
+    if (typeof id !== 'string') return;
+    if (e.button === 2) {
+      this.#menu.onContextMenu(id, e);
+      return;
+    }
+    // Shift+F10 or the ContextMenu key, on the focused row: its coordinates vary by browser.
+    e.preventDefault();
+    await this.#menu.openFrom(id, /** @type {HTMLElement} */ (e.composedPath()[0]));
+    this.renderRoot.querySelector('md-menu')?.focusFirstItem();
+  }
+
+  /** @param {Event} e */
+  #onMenuClosed(e) {
+    if (e.target !== e.currentTarget) return;
+    const rel = this.#menu.target;
+    this.#menu.onClosed();
+    // Opened without a `for`, it has nowhere to return focus.
+    if (rel !== null && this.#menu.target === null && document.activeElement === document.body) this.#tree?.navigation.focusItem(rel);
+  }
+
+  /**
+   * @param {string} value
+   * @param {string} rel The row's.
+   */
+  #onMenuSelect(value, rel) {
+    const path = projects.abs(this.root, rel);
+    if (value === 'reveal') this.#emit('acp-reveal-path', { path });
+    else if (value === 'copy-path') this.#emit('acp-copy', { text: path });
+    else if (value === 'open-terminal') {
+      const item = /** @type {TreeItem | null | undefined} */ (this.#tree?.nodes.getItem(rel));
+      this.#emit('acp-open-terminal', { path: item?.isDir ? path : projects.abs(this.root, parentOf(rel)) });
+    }
+  }
+
+  /**
+   * @param {string} type
+   * @param {object} detail
+   */
+  #emit(type, detail) {
+    this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+  }
+
+  /**
+   * @param {string} value
+   * @param {string} icon
+   * @param {string} label
+   */
+  #menuItem(value, icon, label) {
+    return html`<md-menu-item value=${value}>
+      <md-icon slot="leading" class="acp-file-tree__menu-icon">${unsafeSVG(icon)}</md-icon>
+      ${label}
+    </md-menu-item>`;
+  }
+
+  #renderMenu() {
+    return html`<md-menu
+      class="acp-file-tree__menu"
+      aria-label=${this.#menu.target ?? 'File'}
+      @select=${this.#menu.onSelect}
+      @closed=${this.#onMenuClosed}
+    >
+      <md-menu-item value="open-in">
+        <md-icon slot="leading" class="acp-file-tree__menu-icon">${unsafeSVG(openInIcon)}</md-icon>
+        Open in
+        <md-menu slot="submenu" class="acp-file-tree__menu" aria-label="Open in">
+          ${this.#menuItem('reveal', folderOpenIcon, app.fileManagers[this.platform])} ${this.#menuItem('open-terminal', terminalIcon, 'Terminal')}
+        </md-menu>
+      </md-menu-item>
+      ${this.#menuItem('copy-path', copyIcon, 'Copy path')}
+    </md-menu>`;
+  }
+
   /** @param {Event} e */
   #onSelectionChange(e) {
     if (this.#revealing) return;
@@ -350,7 +447,9 @@ export class AcpFileTree extends LitElement {
         @tvx-selection-change=${this.#onSelectionChange}
         @tvx-children-loaded=${this.#onChildrenLoaded}
         @tvx-expansion-change=${this.#onExpansionChange}
+        @contextmenu=${this.#onContextMenu}
       ></tvx-tree-view>
+      ${this.#renderMenu()}
     `;
   }
 }

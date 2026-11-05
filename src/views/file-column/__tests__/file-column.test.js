@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { closeAllTabs, openSettings, openTab } from '../../../stores/editor/editor.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
 import { $sessions, selectSession } from '../../../stores/sessions/sessions.js';
 import { $workspaceOpening, $workspaces, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
@@ -34,6 +35,7 @@ describe('acp-file-column', () => {
 
   afterEach(() => {
     clearMocks();
+    closeAllTabs();
     setActiveWorkspace('/p', 'main');
     selectSession(null);
     $sessions.set([]);
@@ -45,15 +47,56 @@ describe('acp-file-column', () => {
 
   const render = async () => /** @type {AcpFileColumn} */ (await fixture(html`<acp-file-column></acp-file-column>`));
 
-  it("titles its panel by the shown pane and offers a refresh only for the project's files", async () => {
+  /**
+   * @param {AcpFileColumn} el
+   * @param {string} id An action of the column's header.
+   */
+  const action = (el, id) => /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.querySelector('acp-panel-header')).actions.find((a) => a.id === id);
+
+  /**
+   * @param {AcpFileColumn} el
+   * @param {string} id An action of the column's header.
+   */
+  const press = (el, id) =>
+    el.querySelector('acp-panel-header')?.dispatchEvent(new CustomEvent('acp-panel-header-action', { detail: { id }, bubbles: true, composed: true }));
+
+  it("titles its panel by the shown pane and offers its actions only for the project's files", async () => {
     const el = await render();
     const header = () => /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.querySelector('acp-panel-header'));
     expect(header().heading).to.equal('Files');
-    expect(header().action?.label).to.equal('Refresh files');
+    expect(header().actions.map((a) => a.label)).to.deep.equal(['Select opened file', 'Refresh files']);
     el.sideView = 'changes';
     await el.updateComplete;
     expect(header().heading).to.equal('Changes');
-    expect(header().action).to.equal(null);
+    expect(header().actions).to.deep.equal([]);
+  });
+
+  it('selects the opened file in the tree, and offers it only for a file of the listed folder', async () => {
+    // Arrange
+    const el = await render();
+    const view = /** @type {HTMLElementTagNameMap['acp-files-view']} */ (el.querySelector('acp-files-view'));
+    /** @type {string[]} */
+    const revealed = [];
+    view.reveal = (rel) => revealed.push(rel);
+
+    // Assert: no tab, a view's tab, a file elsewhere
+    expect(action(el, 'select-opened')?.disabled, 'no tab').to.equal(true);
+    for (const open of [() => openSettings(), () => openTab('/elsewhere/a.js')]) {
+      open();
+      await el.updateComplete;
+      expect(action(el, 'select-opened')?.disabled).to.equal(true);
+    }
+
+    // Act
+    openTab('/p/src/deep/a.js');
+    await el.updateComplete;
+    press(el, 'select-opened');
+    await el.updateComplete;
+
+    // Assert
+    expect(action(el, 'select-opened')?.disabled).to.equal(false);
+    expect(revealed).to.deep.equal(['src/deep/a.js']);
+    expect(calls.some((c) => c.cmd === 'rescan_root'), 'not a refresh').to.equal(false);
   });
 
   it('refreshes the files from its header while disabling the action, and reveals a path in the tree', async () => {
@@ -66,28 +109,25 @@ describe('acp-file-column', () => {
       return cmd === 'list_dir' ? [] : null;
     });
     const el = await render();
-    const header = /** @type {HTMLElementTagNameMap['acp-panel-header']} */ (el.querySelector('acp-panel-header'));
     const view = /** @type {HTMLElementTagNameMap['acp-files-view']} */ (el.querySelector('acp-files-view'));
     /** @type {unknown[]} */
     const revealed = [];
     view.reveal = (rel, options) => revealed.push([rel, options]);
     // Act
-    header.dispatchEvent(new CustomEvent('acp-panel-header-action', { bubbles: true, composed: true }));
+    press(el, 'refresh');
     await until(() => calls.some((c) => c.cmd === 'rescan_root'));
     await el.updateComplete;
     // Assert
-    expect(header.hasAttribute('action-disabled'), 'while it runs').to.equal(true);
+    expect(action(el, 'refresh')?.disabled, 'while it runs').to.equal(true);
     // Act: asked again meanwhile
-    header.dispatchEvent(new CustomEvent('acp-panel-header-action', { bubbles: true, composed: true }));
+    press(el, 'refresh');
     await new Promise((r) => setTimeout(r, 0));
     await el.updateComplete;
     // Assert
-    expect(header.hasAttribute('action-disabled'), 'a second ask does not end the first').to.equal(true);
+    expect(action(el, 'refresh')?.disabled, 'a second ask does not end the first').to.equal(true);
     // Act
     finishScan();
-    await until(() => {
-      return !header.hasAttribute('action-disabled');
-    });
+    await until(() => action(el, 'refresh')?.disabled === false);
     // Assert
     expect(calls.filter((c) => c.cmd === 'rescan_root').map((c) => c.args)).to.deep.equal([{ rootId: 'r' }]);
     // Act: from another pane

@@ -20,6 +20,17 @@
   margin-block: calc(-1 * var(--acp-space-1));
   --md-icon-button-font-size: var(--acp-icon-size-md);
   --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+  /* Kept in the layout and the tab order, so a keyboard reaches them. <acp-panel> sets the variable while hovered. */
+  opacity: var(--acp-panel-header-action-opacity, 0);
+  transition: opacity 150ms var(--acp-motion-easing-standard);
+
+  &:focus-within {
+    opacity: 1;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    transition: none;
+  }
 }
 
 .acp-panel-header__action::part(button) {

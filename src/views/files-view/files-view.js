@@ -1,6 +1,7 @@
 import { html } from 'lit';
 import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
+import { terminals } from '../../hooks/terminals/terminals.js';
 import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $activeRoot } from '../../stores/workspaces/workspaces.js';
 import { $openingPath } from '../../stores/project/project.js';
@@ -12,7 +13,7 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
  * @tag acp-files-view
- * @summary The file tree wired to its data: the shown folder (the project's, or the shown workspace's), its expanded folders, the folders listed again when files change on disk, and Refresh.
+ * @summary The file tree wired to its data: the shown folder (the project's, or the shown workspace's), its expanded folders, the folders listed again when files change on disk, Refresh, and what a row's menu asks for.
  */
 export class AcpFilesView extends ViewElement {
   #activeRoot = new StoreController(this, { store: $activeRoot });
@@ -65,6 +66,25 @@ export class AcpFilesView extends ViewElement {
     }
   }
 
+  /** @param {Event} e */
+  #onReveal = (e) => {
+    e.stopPropagation();
+    const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
+    projects.reveal(path).catch((err) => app.reportError(`${app.revealLabel} failed`, err));
+  };
+
+  /** @param {Event} e */
+  #onOpenTerminal = (e) => {
+    e.stopPropagation();
+    terminals.openAt(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
+  };
+
+  /** @param {Event} e */
+  #onCopy = (e) => {
+    e.stopPropagation();
+    app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the path failed');
+  };
+
   render() {
     const root = this.#activeRoot.value;
     return html`<acp-file-tree
@@ -77,6 +97,9 @@ export class AcpFilesView extends ViewElement {
         e.stopPropagation();
         setExpandedFolders(e.detail.paths);
       }}
+      @acp-reveal-path=${this.#onReveal}
+      @acp-open-terminal=${this.#onOpenTerminal}
+      @acp-copy=${this.#onCopy}
     ></acp-file-tree>`;
   }
 }

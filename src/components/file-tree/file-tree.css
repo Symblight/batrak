@@ -30,6 +30,10 @@
   text-align: center;
   color: var(--acp-color-on-surface-variant);
 }
+/* Menu density comes from src/styles/shadow.css. */
+.acp-file-tree__menu-icon {
+  font-size: var(--acp-icon-size-lg);
+}
 .acp-file-tree__skeleton {
   display: flex;
   flex-direction: column;

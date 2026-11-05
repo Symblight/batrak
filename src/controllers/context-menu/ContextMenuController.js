@@ -32,6 +32,8 @@ export class ContextMenuController {
   #config;
   /** @type {T | null} */
   #target = null;
+  /** @type {WeakSet<object>} Picks handed over, by their event detail: md-menu repeats a submenu's. */
+  #picked = new WeakSet();
 
   /**
    * @param {ContextMenuHost} host
@@ -136,8 +138,10 @@ export class ContextMenuController {
   onSelect = (/** @type {Event} */ e) => {
     // The item's `select` bubbles here too; `md-menu` re-dispatches it, so take only the menu's own.
     if (e.target !== e.currentTarget) return;
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    if (this.#target !== null) this.#config.onSelect(value, this.#target);
+    const detail = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    if (this.#picked.has(detail)) return;
+    this.#picked.add(detail);
+    if (this.#target !== null) this.#config.onSelect(detail.value, this.#target);
   };
 
   onClosed = () => {
