@@ -199,7 +199,7 @@ export class ChatSessionController {
     const chat = this.#config.chat();
     if (chat && oldId) {
       const files = chat.attachments.getFiles();
-      if (chat.input.getValue().value.trim() || files.length) this.#drafts.set(oldId, { state: chat.input.getState(), files });
+      if (chat.input.getValue().value.trim() || files.length || chat.input.isBrowsing()) this.#drafts.set(oldId, { state: chat.input.getState(), files });
       else this.#drafts.delete(oldId);
     }
     if (id === null) return;

@@ -13,7 +13,7 @@ import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
-import { buildMenuItem, codeChip, commentLines, fileChipAttrs } from '../../controllers/file-mentions/chips.js';
+import { buildMenuItem, codeChip, commentLines, fileChipAttrs, recalledDoc } from '../../controllers/file-mentions/chips.js';
 import { chat } from '../../hooks/chat/chat.js';
 import { composer } from '../../hooks/composer/composer.js';
 import '../agent-picker/agent-picker.js';
@@ -355,6 +355,8 @@ export class AcpChat extends LitElement {
           ?disabled=${this.blocked !== null}
           ?hidden=${this.subagent !== null}
           busy-action="stop"
+          prompt-history
+          .promptDoc=${recalledDoc}
         >
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
             <md-icon class="acp-chat__attach-icon">${unsafeSVG(addIcon)}</md-icon>

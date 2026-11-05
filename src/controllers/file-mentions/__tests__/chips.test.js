@@ -1,5 +1,6 @@
 import { expect } from '@esm-bundle/chai';
-import { buildBrowseItem, buildEntryItem, buildMenuItem, codeChip, commentLines, fileChipAttrs } from '../chips.js';
+import { buildBrowseItem, buildEntryItem, buildMenuItem, codeChip, codeChipAttrs, commentLines, fileChipAttrs, recalledDoc } from '../chips.js';
+import { COMMAND_CHIP_TEMPLATE } from '../../chat-parts/ChatPartsController.js';
 
 /**
  * A stand-in for the composer's schema: nodes record what they were created with.
@@ -24,6 +25,46 @@ describe('composer chips', () => {
     expect(file.templateId).to.equal(folder.templateId);
     expect(file.icon, 'a file icon').to.match(/^<svg/);
     expect(folder.icon).to.not.equal(file.icon);
+  });
+
+  it('rebuilds a replayed prompt from its text: chips, pastes and lines', () => {
+    // Arrange
+    /** @param {string} text */
+    const text = (text) => ({ type: 'text', text });
+    /** @param {string} path */
+    const file = (path) => ({ type: 'chip', attrs: fileChipAttrs(path, false) });
+    /** @param {string} path */
+    const folder = (path) => ({ type: 'chip', attrs: fileChipAttrs(path, true) });
+    /** @param {string} path @param {string} lines */
+    const selection = (path, lines) => ({ type: 'chip', attrs: codeChipAttrs(path, lines) });
+    /** @param {string} label */
+    const command = (label) => ({ type: 'chip', attrs: { templateId: COMMAND_CHIP_TEMPLATE, label, icon: null, data: {} } });
+    /** @param {string} code @param {number} lines @param {string} lang */
+    const code = (code, lines, lang) => ({ type: 'paste', attrs: { text: code, lines, data: { kind: 'code', lang } } });
+    /** @type {[string, unknown[][], string][]} */
+    const cases = [
+      ['plain\n\nlines', [[text('plain')], [], [text('lines')]], 'text and line breaks'],
+      ['see @src/a.js now', [[text('see '), file('src/a.js'), text(' now')]], 'a file chip'],
+      ['in @src/ please', [[text('in '), folder('src'), text(' please')]], 'a folder chip'],
+      ['src/a.js:12-23 why', [[selection('src/a.js', '12-23'), text(' why')]], 'a selection chip'],
+      ['src/a.js:12', [[selection('src/a.js', '12')]], 'a selection of one line'],
+      ['/review the rest', [[command('/review'), text(' the rest')]], 'a command chip at the start'],
+      ['run /review now', [[text('run /review now')]], 'a command only at the start'],
+      ['/etc/hosts is odd', [[text('/etc/hosts is odd')]], 'a path is not a command'],
+      ['look\n```js\na\nb\n```\nthen', [[text('look'), code('a\nb', 2, 'js'), text('then')]], 'a fence is a paste'],
+      ['bare src/app.js stays', [[text('bare src/app.js stays')]], 'a bare path stays one text'],
+    ];
+
+    for (const [written, content, why] of cases) {
+      // Act
+      const doc = recalledDoc({ id: 'm', own: true, createdAt: 0, parts: [{ id: 'p', type: 'text', text: written }] });
+
+      // Assert
+      expect(doc, why).to.deep.equal({
+        type: 'doc',
+        content: content.map((line) => (line.length ? { type: 'line', content: line } : { type: 'line' })),
+      });
+    }
   });
 
   it('labels a code chip with its file relative to the project and its lines', () => {

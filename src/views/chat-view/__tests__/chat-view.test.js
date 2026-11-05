@@ -13,6 +13,10 @@ import '../chat-view.js';
 const REPO = { repo: /** @type {import('../../../hooks/git/types.js').GitRepoState} */ ({ sha: 'abc' }), error: null };
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
+/**
+ * @typedef {{ dom: HTMLElement, dispatch: (tr: unknown) => void,
+ *   state: { doc: { content: { size: number } }, tr: { delete: (from: number, to: number) => unknown } } }} EditorViewLike
+ */
 
 /** @param {() => boolean} pred */
 async function until(pred) {
@@ -197,6 +201,52 @@ describe('acp-chat-view', () => {
 
     // Assert
     expect(el.chat?.blocked).to.equal(null);
+  });
+
+  it('a switch to another session and back continues browsing, the draft kept', async () => {
+    // Arrange
+    /** @type {[string, boolean][]} */
+    const cases = [
+      ['hello', false],
+      ['', true],
+    ];
+    for (const [shown, emptied] of cases) {
+      const el = await render();
+      await el.updateComplete;
+      const chat = /** @type {NonNullable<AcpChatView['chat']>} */ (el.chat);
+      await chat.composerReady();
+      const input = /** @type {NonNullable<typeof chat.chat>} */ (chat.chat).input;
+      /** @type {NonNullable<typeof chat.chat>} */ (chat.chat).store.add({
+        id: 'm1',
+        conversationId: 'd1',
+        own: true,
+        parts: [{ id: 'p1', type: 'text', text: 'hello' }],
+      });
+      input.setText('my draft');
+      const composer = /** @type {import('lit').LitElement} */ (chat.renderRoot.querySelector('chx-message-composer'));
+      const textbox = /** @type {HTMLElement & { editor: { view: EditorViewLike } }} */ (
+        composer.renderRoot.querySelector('chx-textbox')
+      );
+      const { view } = textbox.editor;
+      /** @param {string} key */
+      const press = (key) => view.dom.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true }));
+      press('ArrowUp');
+      if (emptied) view.dispatch(view.state.tr.delete(1, view.state.doc.content.size - 1));
+
+      // Act
+      $draftSessions.set({ ...$draftSessions.get(), d2: { projectId: '/p', workspaceId: 'main' } });
+      $activeSessionId.set('d2');
+      await until(() => !input.isBrowsing());
+      $activeSessionId.set('d1');
+      await until(() => input.isBrowsing());
+      const back = input.getValue().value;
+      press('ArrowDown');
+
+      // Assert
+      expect(back).to.equal(shown);
+      expect(input.getValue().value).to.equal('my draft');
+      /** @type {NonNullable<typeof chat.chat>} */ (chat.chat).store.clear('d1');
+    }
   });
 
   it("gives a draft's footer its place, keeps a pick in the draft, and bases New worktree on Main's branches, listed at each opening of its base menu and fetched before the first per draft", async () => {

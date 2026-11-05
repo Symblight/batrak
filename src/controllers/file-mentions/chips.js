@@ -1,5 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
-import { FILE_CHIP_TEMPLATE } from '../chat-parts/ChatPartsController.js';
+import { chat } from '../../hooks/chat/chat.js';
+import { COMMAND_CHIP_TEMPLATE, FILE_CHIP_TEMPLATE } from '../chat-parts/ChatPartsController.js';
 import '@symblight/wc-material/icon';
 import descriptionIcon from '@material-design-icons/svg/outlined/description.svg?raw';
 import chevronIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
@@ -46,20 +47,27 @@ export function buildMenuItem(value, headline, supportingText) {
 /**
  * A file chip naming lines of code: `src/app.js:12`, or `src/app.js:12-23` for several. The label is
  * what the agent reads.
+ * @param {string} rel
+ * @param {string} lines
+ */
+export function codeChipAttrs(rel, lines) {
+  const name = rel.slice(rel.lastIndexOf('/') + 1);
+  return {
+    templateId: FILE_CHIP_TEMPLATE,
+    label: `${rel}:${lines}`,
+    icon: fileIcon.svgFor(name),
+    data: { path: rel, lines },
+  };
+}
+
+/**
  * @param {PmSchema} schema
  * @param {ChatInsert} insert
  * @param {string | null} root The project's path; the chip names a file inside it relative to it.
  */
 export function codeChip(schema, { path, fromLine, toLine }, root) {
-  const rel = projects.rel(root, path) ?? path;
-  const name = rel.slice(rel.lastIndexOf('/') + 1);
   const lines = fromLine === toLine ? `${fromLine}` : `${fromLine}-${toLine}`;
-  return schema.nodes.chip.create({
-    templateId: FILE_CHIP_TEMPLATE,
-    label: `${rel}:${lines}`,
-    icon: fileIcon.svgFor(name),
-    data: { path: rel, lines },
-  });
+  return schema.nodes.chip.create(codeChipAttrs(projects.rel(root, path) ?? path, lines));
 }
 
 /**
@@ -77,6 +85,47 @@ export function fileChipAttrs(path, folder) {
     icon: fileIcon.svgFor(name, folder),
     data,
   };
+}
+
+const LEADING_COMMAND = /^\/[\w-]+(?=\s|$)/;
+
+/**
+ * A replayed prompt as the composer's document: what `promptOfInput()` wrote, read back. A bare
+ * `src/app.js` stays text: a chip sends a mention to the agent, which would change what the prompt says.
+ * @param {import('../../hooks/sessions/message-builder.js').ChxMessage} message
+ * @returns {{ type: 'doc', content: object[] }}
+ */
+export function recalledDoc(message) {
+  /** @type {{ type: string, text?: string, attrs?: object }[][]} */
+  const lines = [[]];
+  /** @param {object} attrs */
+  const addChip = (attrs) => lines[lines.length - 1].push({ type: 'chip', attrs });
+  /** @param {string} text Merged with the text before it: a line's text is one node. */
+  const addText = (text) =>
+    text.split('\n').forEach((part, index) => {
+      if (index > 0) lines.push([]);
+      const line = lines[lines.length - 1];
+      const last = line.at(-1);
+      if (part && last?.type === 'text') last.text += part;
+      else if (part) line.push({ type: 'text', text: part });
+    });
+
+  const text = message.parts.map((part) => part.text ?? '').join('');
+  const command = LEADING_COMMAND.exec(text)?.[0] ?? '';
+  if (command) addChip({ templateId: COMMAND_CHIP_TEMPLATE, label: command, icon: null, data: {} });
+  for (const part of chat.splitFencedCode(text.slice(command.length))) {
+    if (part.type === 'code') {
+      const attrs = { text: part.text, lines: part.text.split('\n').length, data: { kind: 'code', lang: part.lang } };
+      lines[lines.length - 1].push({ type: 'paste', attrs });
+      continue;
+    }
+    for (const { text: written, ref } of chat.splitFileRefs(part.text)) {
+      if (ref?.fromLine != null) addChip(codeChipAttrs(ref.path, chat.linesOf(ref)));
+      else if (ref?.mention) addChip(fileChipAttrs(ref.path, ref.folder));
+      else addText(written);
+    }
+  }
+  return { type: 'doc', content: lines.map((content) => (content.length ? { type: 'line', content } : { type: 'line' })) };
 }
 
 /**

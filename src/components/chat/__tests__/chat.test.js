@@ -29,6 +29,33 @@ function chipsOf(chat) {
 }
 
 describe('acp-chat', () => {
+  it('Up brings a replayed prompt back with its chips and paste', async () => {
+    // Arrange
+    const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat .root=${'/p'}></acp-chat>`));
+    await el.composerReady();
+    el.chat?.store.add({
+      id: 'm',
+      own: true,
+      parts: [{ id: 'p', type: 'text', text: '/review @src/a.js and src/b.js:3\n```js\nx\n```' }],
+    });
+    const composer = /** @type {import('lit').LitElement} */ (el.renderRoot.querySelector('chx-message-composer'));
+    const textbox = /** @type {HTMLElement & { editor: { view: { dom: HTMLElement } } }} */ (
+      composer.renderRoot.querySelector('chx-textbox')
+    );
+
+    // Act
+    textbox.editor.view.dom.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowUp', bubbles: true, cancelable: true }));
+
+    // Assert
+    expect(chipsOf(el).map((chip) => chip.label)).to.deep.equal(['/review', 'a.js', 'src/b.js:3']);
+    /** @type {string[]} */
+    const pastes = [];
+    docOf(el).descendants((node) => {
+      if (node.type.name === 'paste') pastes.push(node.type.name);
+    });
+    expect(pastes).to.have.length(1);
+  });
+
   it('inserts dropped files and folders as chips, like ones picked with @', async () => {
     const chat = /** @type {AcpChat} */ (await fixture(html`<acp-chat .root=${'/p'}></acp-chat>`));
     expect(await chat.composerReady()).to.equal(true);
