@@ -9,6 +9,7 @@ import '@symblight/wc-material/tooltip';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
 import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import chatIcon from '@material-design-icons/svg/outlined/chat.svg?raw';
+import { awaitsAgent } from '../../hooks/sessions/rules.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import '../session-menu/session-menu.js';
 import '../session-status/session-status.js';
@@ -185,9 +186,9 @@ export class AcpSessionHeader extends LitElement {
       <md-tooltip for="acp-session-header-title" show-delay="800" placement="bottom">${this.sessionTitle}</md-tooltip>`;
   }
 
-  /** Continue in terminal / in chat; a draft has nothing to continue yet. */
+  /** Continue in terminal / in chat; a draft, or a session its agent doesn't have yet, has nothing to continue. */
   #renderViewToggle() {
-    if (this.draft || this.renaming) return nothing;
+    if (this.draft || this.renaming || awaitsAgent(this.session)) return nothing;
     const terminal = this.view === 'terminal';
     const label = terminal ? 'Continue in chat' : 'Continue in terminal';
     const disabled = this.viewDisabled !== '';

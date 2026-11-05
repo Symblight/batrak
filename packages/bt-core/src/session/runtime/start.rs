@@ -104,6 +104,8 @@ impl Inner {
             _ => None,
         };
         self.set_status(state, SessionStatus::Idle, message);
+        // A new session's ACP id: the page offers its CLI from then.
+        state.emit("session", serde_json::to_value(state.page()).unwrap_or_default());
         Ok(conn)
     }
 

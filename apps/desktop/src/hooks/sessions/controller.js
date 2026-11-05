@@ -3,7 +3,7 @@ import { listSessions, sessionCliBusy, onSessionsSynced, sessionCreate, sessionO
 import { actions } from './actions.js';
 import { CLI_SIZE, openCli, restartCli, cliBusy, toChat } from './cli.js';
 import { cancelIdleStop, stopWhenIdle } from './idle.js';
-import { forgetSession, handleSessionEvent, trackCreate } from './adapter.js';
+import { forgetSession, handleSessionEvent, trackCreate, turnTaken } from './adapter.js';
 import { agents } from '../agents/agents.js';
 import { projects } from '../projects/projects.js';
 import { terminals } from '../terminals/terminals.js';
@@ -85,7 +85,7 @@ export function placeOf(id) {
  * A draft's first message lists it where it goes; the window shows that workspace with it.
  * @param {string} id
  * @param {Place} place
- * @param {Pick<Session, 'title' | 'agentId' | 'config'>} fields
+ * @param {Pick<Session, 'title' | 'agentId' | 'config' | 'acpSessionId'>} fields
  */
 function startDraft(id, place, fields) {
   unknownToBackend.add(id);
@@ -264,7 +264,7 @@ async function reconcileNow(force) {
     const session = $sessions.get().find((s) => s.id === id);
     // A draft shows its composer: its first message starts the CLI (`startInTerminal`).
     if (!session) return false;
-    if (!force && inTurn(session.status, $activePermission.get() !== null)) return false;
+    if (!force && (turnTaken(id) || inTurn(session.status, $activePermission.get() !== null))) return false;
     await openCli(id);
     return true;
   }
@@ -456,7 +456,7 @@ function start(id, title) {
     return false;
   }
   // While it's a draft still: a listed session without a composer would get one from its record.
-  startDraft(id, place, { title, agentId, config });
+  startDraft(id, place, { title, agentId, config, acpSessionId: null });
   const { projectPath } = place;
   const create = async () => {
     let workspaceId;

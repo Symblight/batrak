@@ -367,6 +367,15 @@ fn status_of(f: &Fixture, id: &str) -> SessionStatus {
 }
 
 #[tokio::test]
+async fn a_new_session_tells_the_page_its_acp_id_once_its_agent_is_ready() {
+    let f = fixture("acp-id", FakeAgentOptions::default());
+    let (session, events) = f.create("s1", "fake").unwrap();
+    assert_eq!(session.acp_session_id, None);
+    let told = events.wait_for("the session with its ACP id", |e| e.kind == "session" && e.payload["acpSessionId"].is_string()).await;
+    assert_eq!(told.payload["status"], "idle");
+}
+
+#[tokio::test]
 async fn a_turn_streams_updates_in_order_between_turn_start_and_turn_end() {
     let f = fixture("turn", FakeAgentOptions::default());
     let (session, events) = f.create("s1", "fake").unwrap();
@@ -2225,8 +2234,7 @@ async fn the_agents_title_replaces_the_prompts_and_comes_from_its_list_after_a_r
     assert_eq!((created.title.as_str(), created.title_source), ("Session t", TitleSource::Prompt));
     assert_eq!(f.ask("t", &events, "title Tree view gaps").await, "titled");
 
-    let changed = events.wait_for("session", |e| e.kind == "session").await;
-    assert_eq!(changed.payload["title"], "Tree view gaps");
+    let changed = events.wait_for("session", |e| e.kind == "session" && e.payload["title"] == "Tree view gaps").await;
     assert_eq!(changed.payload["titleSource"], "agent");
     f.sessions.shutdown();
 

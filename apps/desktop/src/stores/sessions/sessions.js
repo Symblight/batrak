@@ -195,7 +195,7 @@ export function dropDrafts(workspaceId) {
 /**
  * A draft's first message: it becomes a listed session, `preparing` until the backend reports.
  * @param {string} id
- * @param {Pick<Session, 'title' | 'agentId' | 'config'>} fields
+ * @param {Pick<Session, 'title' | 'agentId' | 'config' | 'acpSessionId'>} fields
  * @param {string} [workspaceId] Where it's created, when not in the draft's own workspace (`main` for Main).
  */
 export function startSession(id, fields, workspaceId) {
