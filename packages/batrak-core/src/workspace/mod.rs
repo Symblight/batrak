@@ -1,5 +1,5 @@
 //! Workspaces: a project's tasks (docs/specs/workspaces.md). A workspace has a name, its own git
-//! worktree in app data on branch `brama/<slug>`, and chats (sessions) that run in its folder.
+//! worktree in app data on branch `batrak/<slug>`, and chats (sessions) that run in its folder.
 //! Main, the project's own folder, is not stored.
 
 pub mod checkout;
@@ -208,7 +208,7 @@ impl Workspaces {
 
     /// Stores a new workspace placed from `base` (default: the project's base branch), listed as
     /// `creating` from the start: the caller runs its checkout (`check_out`) next. Without a `name` it's called after its branch
-    /// (`brama/workspace-2`: "Workspace 2") and its first chat names it (`NameSource::Agent`); a
+    /// (`batrak/workspace-2`: "Workspace 2") and its first chat names it (`NameSource::Agent`); a
     /// given name is the user's.
     /// Refuses a project without git or a commit. Blocking.
     pub fn place(&self, project: &Path, name: Option<&str>, base: Option<&str>) -> Result<WorkspaceRecord, String> {
@@ -475,7 +475,7 @@ fn default_base(git: &Path, project: &Path) -> Option<String> {
     })
 }
 
-/// An unnamed workspace's name, from its branch: `brama/workspace-2` → "Workspace 2".
+/// An unnamed workspace's name, from its branch: `batrak/workspace-2` → "Workspace 2".
 fn placeholder_name(branch: &str) -> String {
     match branch.rsplit_once('-') {
         Some((_, n)) if n.chars().all(|c| c.is_ascii_digit()) => format!("Workspace {n}"),

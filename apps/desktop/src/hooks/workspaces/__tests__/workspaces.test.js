@@ -65,8 +65,8 @@ describe('workspaces hook', () => {
         if (cmd !== 'workspaces_list') return null;
         const { projectPath } = /** @type {{ projectPath: string }} */ (args);
         lists++;
-        const task = { id: 'w1', projectPath, name: 'Fix login', branch: 'brama/fix-login', nameSource: 'user' };
-        return lists === 1 ? [task] : [task, { ...task, id: 'w2', name: 'Add search', branch: 'brama/add-search' }];
+        const task = { id: 'w1', projectPath, name: 'Fix login', branch: 'batrak/fix-login', nameSource: 'user' };
+        return lists === 1 ? [task] : [task, { ...task, id: 'w2', name: 'Add search', branch: 'batrak/add-search' }];
       },
       { shouldMockEvents: true },
     );
@@ -82,7 +82,7 @@ describe('workspaces hook', () => {
 
     // Assert
     expect(shown, 'the list as shown').to.deep.equal([]);
-    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Created workspace "Add search" on brama/add-search']]);
+    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Created workspace "Add search" on batrak/add-search']]);
     $notices.set([]);
   });
 
@@ -319,7 +319,7 @@ describe('workspaces hook', () => {
       const kept = () => [
         $folderTabs.get()['/wt/one'] !== undefined,
         $folderExpandedFolders.get()['/wt/one'] !== undefined,
-        localStorage.getItem('brama:sessions:last:/wt/one') !== null,
+        localStorage.getItem('batrak:sessions:last:/wt/one') !== null,
       ];
 
       // Act
@@ -354,7 +354,7 @@ describe('workspaces hook', () => {
 
   it('says what applying a workspace to Main did, and what checking out its branch did', async () => {
     // Arrange
-    $workspaces.set([/** @type {import('../types.js').Workspace} */ (/** @type {unknown} */ ({ id: 'w1', name: 'Fix tabs', branch: 'brama/fix-1' }))]);
+    $workspaces.set([/** @type {import('../types.js').Workspace} */ (/** @type {unknown} */ ({ id: 'w1', name: 'Fix tabs', branch: 'batrak/fix-1' }))]);
     /** @type {(cmd: string) => unknown} */
     let answer = () => null;
     clearMocks();
@@ -381,7 +381,7 @@ describe('workspaces hook', () => {
     $notices.set([]);
     await workspaces.checkOut('w1');
     // Assert
-    expect($notices.get()[0]?.message).to.equal('Checked out brama/fix-1 in Main');
+    expect($notices.get()[0]?.message).to.equal('Checked out batrak/fix-1 in Main');
     // Act
     $notices.set([]);
     answer = (cmd) => (cmd === 'workspace_check_out_branch' ? new Error('dirty worktree') : null);

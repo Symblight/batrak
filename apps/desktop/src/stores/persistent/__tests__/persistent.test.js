@@ -15,25 +15,25 @@ function otherWindow(key, newValue) {
 
 describe('persistentMapStore', () => {
   it('follows other windows when it listens: their writes and removals', () => {
-    const store = persistentMapStore('brama:test:listening:', parse, { listen: true });
+    const store = persistentMapStore('batrak:test:listening:', parse, { listen: true });
     const stop = store.listen(() => {});
 
-    otherWindow('brama:test:listening:a', '3');
+    otherWindow('batrak:test:listening:a', '3');
     expect(store.get()).to.deep.equal({ a: 3 });
-    otherWindow('brama:test:listening:b', '"not a number"');
+    otherWindow('batrak:test:listening:b', '"not a number"');
     expect(store.get().b, 'an entry that does not parse reads as missing').to.equal(undefined);
-    otherWindow('brama:test:listening:a', null);
+    otherWindow('batrak:test:listening:a', null);
     expect(store.get().a).to.equal(undefined);
-    otherWindow('brama:test:elsewhere:c', '1');
+    otherWindow('batrak:test:elsewhere:c', '1');
     expect('c' in store.get(), 'another prefix').to.equal(false);
     stop();
   });
 
   it('is per window by default: other windows are picked up on the next mount only', () => {
-    const store = persistentMapStore('brama:test:alone:', parse);
+    const store = persistentMapStore('batrak:test:alone:', parse);
     const stop = store.listen(() => {});
 
-    otherWindow('brama:test:alone:a', '3');
+    otherWindow('batrak:test:alone:a', '3');
     expect(store.get()).to.deep.equal({});
     stop();
   });

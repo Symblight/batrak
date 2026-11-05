@@ -131,7 +131,7 @@ describe('seen tracking', () => {
 
     // Marked unread in another window, which shows the session too.
     clock = T0 + 30_000;
-    window.dispatchEvent(new StorageEvent('storage', { key: 'brama:sessions:read:s2', newValue: JSON.stringify({ seen: null }) }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'batrak:sessions:read:s2', newValue: JSON.stringify({ seen: null }) }));
     expect(mark('s2')).to.equal(iso(T0 + 30_000));
     expect(unread()).to.deep.equal([]);
   });

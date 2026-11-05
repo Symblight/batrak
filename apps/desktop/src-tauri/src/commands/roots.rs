@@ -44,7 +44,7 @@ pub async fn open_root(
         let root = roots.open(app, &PathBuf::from(path), &group)?;
         // A read-only folder still opens; it just has no project config.
         if let Err(e) = crate::config::ensure_project_dir(&root.path) {
-            tracing::info!("no .brama folder: {e}");
+            tracing::info!("no .bt folder: {e}");
         }
         Ok::<_, String>(root)
     })

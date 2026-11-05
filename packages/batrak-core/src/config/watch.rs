@@ -51,7 +51,7 @@ mod tests {
     fn edits_on_disk_reach_the_agent_list() {
         let dir = std::env::temp_dir().join(format!("batrak-user-agents-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
-        let file = dir.join("brama").join("agents.json");
+        let file = dir.join("batrak").join("agents.json");
         let (tx, rx) = mpsc::channel();
         let told = OnAgents(move |project: Option<&std::path::Path>| tx.send(project.map(std::path::Path::to_path_buf)).unwrap());
         let configs = AgentConfigs::new(Some(file.clone()), None).with_notifier(std::sync::Arc::new(told));
@@ -67,7 +67,7 @@ mod tests {
         changed();
         assert_eq!(ids(), ["b"], "an agent removed in the file leaves the list");
 
-        fs::write(dir.join("brama").join("other.json"), "{}").unwrap();
+        fs::write(dir.join("batrak").join("other.json"), "{}").unwrap();
         fs::remove_file(&file).unwrap();
         changed();
         assert!(ids().is_empty());

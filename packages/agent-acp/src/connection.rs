@@ -121,7 +121,7 @@ pub struct CatalogOptions {
 }
 
 /// Id of the option standing in for an agent's legacy `modes` when it has no config options.
-pub const MODE_OPTION_ID: &str = "_brama_mode";
+pub const MODE_OPTION_ID: &str = "_batrak_mode";
 
 struct Shared {
     host: Arc<dyn ClientHost>,

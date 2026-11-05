@@ -177,7 +177,7 @@ describe('terminals', () => {
     expect(inMain, "Main has none of the workspace's").to.deep.equal([[], false, null]);
     expect([$terminalTabs.get().paths, $terminalPanel.get().open, $terminalPanelHeight.get()]).to.deep.equal([[terminalTabId(id)], true, 300]);
     expect($terminals.get()[id]?.folder, 'filed under its folder, not closed').to.equal('/wt/task');
-    expect(localStorage.getItem('brama:layout:terminal-panel:/wt/task')).to.equal('300');
+    expect(localStorage.getItem('batrak:layout:terminal-panel:/wt/task')).to.equal('300');
   });
 
   describe('the terminal panel', () => {
@@ -195,7 +195,7 @@ describe('terminals', () => {
       expect(other, 'another project has its own, clamped to the most').to.deep.equal([{ open: false }, TERMINAL_PANEL_MAX_HEIGHT]);
       expect($terminalPanel.get(), 'back as it was').to.deep.equal({ open: true });
       expect($terminalPanelHeight.get(), 'clamped to the least; a NaN changes nothing').to.equal(TERMINAL_PANEL_MIN_HEIGHT);
-      expect(localStorage.getItem('brama:layout:terminal-panel:/p')).to.equal(String(TERMINAL_PANEL_MIN_HEIGHT));
+      expect(localStorage.getItem('batrak:layout:terminal-panel:/p')).to.equal(String(TERMINAL_PANEL_MIN_HEIGHT));
     });
 
     it('closes a terminal’s tab wherever it is: in the panel, or in the editor’s tabs it was moved to', () => {
@@ -278,12 +278,12 @@ describe('terminals', () => {
     it('comes back from storage in a new page, with its terminal yet to start', async () => {
       // Arrange
       const saved = { cwd: '/p', fallback: null, label: 'zsh — p', folder: '/p', projectPath: '/p' };
-      localStorage.setItem('brama:terminals:back', JSON.stringify(saved));
+      localStorage.setItem('batrak:terminals:back', JSON.stringify(saved));
       // Act: the module as a page loads it
       const page = await import(`../terminals.js?page=${Date.now()}`);
       const restored = page.$terminals.get().back;
       // Assert
-      localStorage.removeItem('brama:terminals:back');
+      localStorage.removeItem('batrak:terminals:back');
       expect(restored).to.include({ cwd: '/p', status: 'starting', label: 'zsh — p' });
     });
 

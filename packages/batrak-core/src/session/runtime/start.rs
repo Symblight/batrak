@@ -243,7 +243,7 @@ impl Inner {
         }
         let name = merged.agent(agent_id).map_or(agent_id, |a| a.name.as_str());
         let command = std::iter::once(launch.command.as_str()).chain(launch.args.iter().map(String::as_str)).collect::<Vec<_>>();
-        let mut message = format!("This project's .brama/agents.json sets what \"{name}\" runs: {}", command.join(" "));
+        let mut message = format!("This project's .bt/agents.json sets what \"{name}\" runs: {}", command.join(" "));
         let servers: Vec<&str> = launch.mcp_servers.iter().filter_map(|s| s["name"].as_str()).collect();
         if merged.project_mcp && !servers.is_empty() {
             message.push_str(&format!(", with MCP servers {}", servers.join(", ")));

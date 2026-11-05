@@ -20,7 +20,7 @@ function parseFolders(raw) {
  * folder), one storage item each; root-relative paths. Per window, like the tabs (`$folderTabs`):
  * only the listed folder's entry is shown (`$expandedFolders`), the others wait for it.
  */
-export const $folderExpandedFolders = persistentMapStore('brama:file-tree:expanded:', parseFolders);
+export const $folderExpandedFolders = persistentMapStore('batrak:file-tree:expanded:', parseFolders);
 
 /**
  * Expanded folders of the listed folder, including ones whose parent isn't loaded yet. A workspace

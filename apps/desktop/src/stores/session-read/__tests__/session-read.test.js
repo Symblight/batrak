@@ -164,28 +164,28 @@ describe('session-read', () => {
     expect($readBaselines.get()['claude\n/p'], 'the first one stays').to.equal(iso(T0));
 
     // Another window wrote one this window has not heard of yet.
-    localStorage.setItem('brama:sessions:baseline:codex\n/p', JSON.stringify(iso(T0)));
+    localStorage.setItem('batrak:sessions:baseline:codex\n/p', JSON.stringify(iso(T0)));
     recordBaselines(report(iso(T0 + 120_000), { codex: 'listed' }));
-    expect(localStorage.getItem('brama:sessions:baseline:codex\n/p')).to.equal(JSON.stringify(iso(T0)));
-    localStorage.removeItem('brama:sessions:baseline:codex\n/p');
+    expect(localStorage.getItem('batrak:sessions:baseline:codex\n/p')).to.equal(JSON.stringify(iso(T0)));
+    localStorage.removeItem('batrak:sessions:baseline:codex\n/p');
 
     // A stored value that isn't a time doesn't hold the place of a baseline.
-    localStorage.setItem('brama:sessions:baseline:gemini\n/p', JSON.stringify('yesterday'));
+    localStorage.setItem('batrak:sessions:baseline:gemini\n/p', JSON.stringify('yesterday'));
     recordBaselines(report(iso(T0), { gemini: 'listed' }));
-    expect(localStorage.getItem('brama:sessions:baseline:gemini\n/p')).to.equal(JSON.stringify(iso(T0)));
-    localStorage.removeItem('brama:sessions:baseline:gemini\n/p');
+    expect(localStorage.getItem('batrak:sessions:baseline:gemini\n/p')).to.equal(JSON.stringify(iso(T0)));
+    localStorage.removeItem('batrak:sessions:baseline:gemini\n/p');
   });
 
   it('keeps marks across a reload, and follows the other windows\' marks', () => {
     $sessions.set([session('a', { lastActivityAt: iso(T0 + 60_000) })]);
     markSeen('a', T0);
-    const reloaded = persistentMapStore('brama:sessions:read:', parseSessionRead);
+    const reloaded = persistentMapStore('batrak:sessions:read:', parseSessionRead);
     expect(reloaded.get()).to.deep.equal({ a: { seen: iso(T0) } });
     expect(unread()).to.deep.equal(['a']);
 
-    window.dispatchEvent(new StorageEvent('storage', { key: 'brama:sessions:read:a', newValue: JSON.stringify({ seen: iso(T0 + 60_000) }) }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'batrak:sessions:read:a', newValue: JSON.stringify({ seen: iso(T0 + 60_000) }) }));
     expect(unread(), 'read in another window').to.deep.equal([]);
-    window.dispatchEvent(new StorageEvent('storage', { key: 'brama:sessions:read:a', newValue: JSON.stringify({ seen: null }) }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'batrak:sessions:read:a', newValue: JSON.stringify({ seen: null }) }));
     expect(unread(), 'marked unread in another window').to.deep.equal(['a']);
 
     expect(parseSessionRead({ seen: 'yesterday' }), 'not a time').to.equal(null);

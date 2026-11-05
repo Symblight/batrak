@@ -7,7 +7,7 @@ import { $project } from '../project/project.js';
 /** @typedef {import('../../hooks/settings/types.js').HiddenColumns} HiddenColumns */
 
 /** Shared by every window, so a resize shows up in all of them. */
-export const $columnWidths = persistentStore('brama:layout:column-widths', /** @type {ColumnWidths} */ ({}), {
+export const $columnWidths = persistentStore('batrak:layout:column-widths', /** @type {ColumnWidths} */ ({}), {
   parse: (raw) => {
     if (!isRecord(raw)) return null;
     /** @type {ColumnWidths} */
@@ -18,7 +18,7 @@ export const $columnWidths = persistentStore('brama:layout:column-widths', /** @
 });
 
 /** Shared like the widths: hiding a column hides it in every window. */
-export const $hiddenColumns = persistentStore('brama:layout:hidden-columns', /** @type {HiddenColumns} */ ([]), {
+export const $hiddenColumns = persistentStore('batrak:layout:hidden-columns', /** @type {HiddenColumns} */ ([]), {
   parse: (raw) => (Array.isArray(raw) ? raw.filter((name) => typeof name === 'string') : null),
 });
 
@@ -62,7 +62,7 @@ export function parseMarkdownSplit(raw) {
 }
 
 /** The editor's share of a markdown tab in Split, in percent: one value for the window's markdown tabs, shared like the widths. */
-export const $markdownSplit = persistentStore('brama:layout:markdown-split', MARKDOWN_SPLIT_DEFAULT, { parse: parseMarkdownSplit });
+export const $markdownSplit = persistentStore('batrak:layout:markdown-split', MARKDOWN_SPLIT_DEFAULT, { parse: parseMarkdownSplit });
 
 /** @param {number} percent The editor's share; kept within the limits. */
 export function setMarkdownSplit(percent) {

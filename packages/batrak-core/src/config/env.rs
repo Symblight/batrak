@@ -7,6 +7,8 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::OnceLock;
 
 /// Keychain service under which `${keychain:name}` entries are looked up (account = `name`).
+/// Still Brama's name on purpose: users' items are stored under it, and renaming it makes each one fail
+/// at an agent's start. It changes only together with an import of Brama's data.
 pub const KEYCHAIN_SERVICE: &str = "brama";
 
 /// The environment of a login shell, read once; the app's own environment when that fails.
@@ -31,7 +33,7 @@ fn read_login_shell_env() -> Result<HashMap<String, String>, String> {
     use std::process::{Command, Stdio};
     use std::time::{Duration, Instant};
 
-    const MARKER: &str = "__BRAMA_ENV_7f3a__";
+    const MARKER: &str = "__BATRAK_ENV_7f3a__";
     const TIMEOUT: Duration = Duration::from_secs(10);
     let shell = crate::util::default_shell().to_string_lossy().into_owned();
     // Interactive too: version managers (nvm, fnm, asdf) usually set PATH in the rc file.

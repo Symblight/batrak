@@ -5,7 +5,7 @@ import '../workspace-delete-dialog.js';
 /** @typedef {import('../../../hooks/workspaces/types.js').Workspace} Workspace */
 /** @typedef {import('../../../hooks/workspaces/types.js').DeletePreview} DeletePreview */
 
-const TASK = /** @type {Workspace} */ ({ id: 'w1', name: 'Fix login', branch: 'brama/fix-login' });
+const TASK = /** @type {Workspace} */ ({ id: 'w1', name: 'Fix login', branch: 'batrak/fix-login' });
 
 /**
  * @param {DeletePreview} preview
@@ -31,8 +31,8 @@ describe('acp-workspace-delete-dialog', () => {
     /** @type {[DeletePreview, string | null, boolean, string | null][]} */
     const cases = [
       // [preview, note, Keep branch shown, working line]
-      [{ uncommitted: 3, commits: 0, working: [] }, '3 uncommitted files will be saved as a commit on brama/fix-login', true, null],
-      [{ uncommitted: 1, commits: 0, working: ['A'] }, '1 uncommitted file will be saved as a commit on brama/fix-login', true, '1 chat is working and will be stopped'],
+      [{ uncommitted: 3, commits: 0, working: [] }, '3 uncommitted files will be saved as a commit on batrak/fix-login', true, null],
+      [{ uncommitted: 1, commits: 0, working: ['A'] }, '1 uncommitted file will be saved as a commit on batrak/fix-login', true, '1 chat is working and will be stopped'],
       [{ uncommitted: 0, commits: 2, working: ['A', 'B'] }, null, true, '2 chats are working and will be stopped'],
       [{ uncommitted: 0, commits: 0, working: [] }, null, false, null],
     ];

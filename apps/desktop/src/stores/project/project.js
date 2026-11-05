@@ -5,10 +5,10 @@ import { isRecord, persistentStore } from '../persistent/persistent.js';
 
 /** Moves the folder stored under the key used before workspaces were projects' tasks. */
 function migrateLegacyKey() {
-  const legacy = localStorage.getItem('brama:workspace');
+  const legacy = localStorage.getItem('batrak:workspace');
   if (legacy === null) return;
-  if (localStorage.getItem('brama:project') === null) localStorage.setItem('brama:project', legacy);
-  localStorage.removeItem('brama:workspace');
+  if (localStorage.getItem('batrak:project') === null) localStorage.setItem('batrak:project', legacy);
+  localStorage.removeItem('batrak:workspace');
 }
 
 try {
@@ -21,7 +21,7 @@ try {
  * The opened folder, reopened on launch by `projects.restore()`. Per window: `rootId` is
  * never stored, and another window's folder must not replace this one's.
  */
-export const $project = persistentStore('brama:project', /** @type {OpenProject | null} */ (null), {
+export const $project = persistentStore('batrak:project', /** @type {OpenProject | null} */ (null), {
   parse: (raw) =>
     isRecord(raw) && typeof raw.path === 'string' && typeof raw.name === 'string'
       ? { path: raw.path, name: raw.name, rootId: null }

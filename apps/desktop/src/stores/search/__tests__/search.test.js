@@ -65,8 +65,8 @@ describe('search stores', () => {
   it('writes one item per project through setKey', () => {
     saveProjectSearch('/p', STATE);
     saveProjectSearch('/q', { ...STATE, query: 'baz' });
-    expect(JSON.parse(localStorage.getItem('brama:search:project:/p') ?? 'null')).to.deep.equal({ ...STATE, recent: [] });
-    expect(JSON.parse(localStorage.getItem('brama:search:project:/q') ?? 'null').query).to.equal('baz');
+    expect(JSON.parse(localStorage.getItem('batrak:search:project:/p') ?? 'null')).to.deep.equal({ ...STATE, recent: [] });
+    expect(JSON.parse(localStorage.getItem('batrak:search:project:/q') ?? 'null').query).to.equal('baz');
   });
 
   it("validates a stored project's state", () => {

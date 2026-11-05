@@ -50,12 +50,12 @@ export function parseSettings(raw) {
 }
 
 /** Shared by every window. Each field falls back to its default on its own, so one bad value keeps the rest. */
-export const $settings = persistentStore('brama:settings', DEFAULTS, { parse: parseSettings });
+export const $settings = persistentStore('batrak:settings', DEFAULTS, { parse: parseSettings });
 
 export const $appearance = computed($settings, (settings) => settings.appearance);
 export const $accent = computed($settings, (settings) => settings.accent);
 /** A project's own accent by its path, shared by every window. */
-const $projectAccents = persistentMapStore('brama:settings:project-accent:', parseProjectAccent, { listen: true });
+const $projectAccents = persistentMapStore('batrak:settings:project-accent:', parseProjectAccent, { listen: true });
 /** The shown project's own accent, on or off; `null` when it never had one, or no project is shown. */
 export const $projectAccent = computed([$projectPath, $projectAccents], (path, accents) => (path && accents[path]) || null);
 /** The accent this window is painted with. */

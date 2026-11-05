@@ -47,7 +47,7 @@ export const perf = Object.freeze({
     return () => cancelFrame(handle);
   },
 
-  /** Logs every stall to the app log at `info`: seen in dev builds, in a release build with `BRAMA_LOG=info`. */
+  /** Logs every stall to the app log at `info`: seen in dev builds, in a release build with `BATRAK_LOG=info`. */
   start() {
     return perf.watchStalls({
       onStall: ({ gap }) => app.log('info', `main thread blocked for ${Math.round(gap)} ms`),

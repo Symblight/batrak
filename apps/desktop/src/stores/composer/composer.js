@@ -20,7 +20,7 @@ import { isRecord, persistentStore } from '../persistent/persistent.js';
  * one), so each agent is probed once again.
  */
 const $agentOptions = persistentStore(
-  'brama:agents:config-options:2',
+  'batrak:agents:config-options:2',
   /** @type {Readonly<Record<string, ConfigOption[]>>} */ ({}),
   {
     parse: (raw) =>
@@ -52,7 +52,7 @@ function parsePicks(raw) {
  * agent's own, never in one another session was given. Shared by every window.
  */
 const $lastPicks = persistentStore(
-  'brama:agents:last-picks',
+  'batrak:agents:last-picks',
   /** @type {Readonly<Record<string, Readonly<Record<string, string>>>>} */ ({}),
   { parse: parsePicks },
 );

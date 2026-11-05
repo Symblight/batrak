@@ -101,7 +101,7 @@ describe('editor', () => {
 
       // Assert
       expect(seen, "a file outside the workspace's folder isn't its tab").to.deep.equal([['/wt/task/b.js'], ['/p/a.js'], ['/wt/task/b.js']]);
-      expect(JSON.parse(localStorage.getItem('brama:editor:tabs:/wt/task') ?? 'null')?.paths).to.include('/wt/task/b.js');
+      expect(JSON.parse(localStorage.getItem('batrak:editor:tabs:/wt/task') ?? 'null')?.paths).to.include('/wt/task/b.js');
     });
 
     it("moves tabs of a workspace's files from its project's entry to the workspace's once it's listed", () => {

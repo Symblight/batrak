@@ -13,12 +13,12 @@ paths:
 
 # Agents: config, registry, trust, sign-in
 
-- **Config** (`src-tauri/src/config/`): opening a project creates `.brama/` (`agents.json`,
+- **Config** (`src-tauri/src/config/`): opening a project creates `.bt/` (`agents.json`,
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
   holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
   chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local
-  branches, sessions' `brama/…` left out). A project's agents are its
-  `.brama/agents.json` and nothing else; `<config dir>/brama/agents.json` is the agents of no
+  branches, sessions' `batrak/…` left out). A project's agents are its
+  `.bt/agents.json` and nothing else; `<config dir>/batrak/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
   and Manage agents…; a draft's send is refused with a notice).
@@ -89,7 +89,7 @@ paths:
     spec: `docs/specs/agent-plugins.md`). A second Update of an agent joins
     the running one. The tab shows "Updating…" from the call until it returns (`$agentsPending`)
     and while the backend says an update runs (another window's).
-  - **Following the list:** the watcher flags `.brama/agents.json` (`Changes.config`) → reload →
+  - **Following the list:** the watcher flags `.bt/agents.json` (`Changes.config`) → reload →
     `agents://changed`; the user's file has its own watcher (`config/watch.rs`, its folder,
     `projectPath: null`). The composer and the tab follow the list: a draft whose agent left it or
     was turned off gets the one a new session would, an edit form for it closes; sessions follow
@@ -105,7 +105,7 @@ paths:
     whose launch (command, args, env, MCP servers) the file changes keeps running; the page hears it
     once (`agent-outdated`, the banner's `outdated` notice with Restart, kept through turns; `null` when
     changed back). `Session.agentName` (kept at each start) names a started session's agent once it's
-    gone ("Claude Code (removed)" in the picker, `agentInfo(id, name)`); `.brama/local/` is never in the
+    gone ("Claude Code (removed)" in the picker, `agentInfo(id, name)`); `.bt/local/` is never in the
     snapshot.
   - **Secrets and trust:** `env` values take `${env:NAME}` (login-shell env) and `${keychain:name}`
     (service `brama`), resolved only at spawn: secrets never reach logs, IPC or files. The project's

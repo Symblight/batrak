@@ -1,5 +1,5 @@
-//! Agent configuration: a project's agents are its `.brama/agents.json`; the user's
-//! `<config dir>/brama/agents.json` is the agents of no project. Nothing is configured by default. The last valid
+//! Agent configuration: a project's agents are its `.bt/agents.json`; the user's
+//! `<config dir>/batrak/agents.json` is the agents of no project. Nothing is configured by default. The last valid
 //! version of each file is kept, so a typo mid-edit doesn't drop the agents.
 
 pub mod cli;
@@ -20,9 +20,9 @@ use serde::{Deserialize, Serialize};
 
 use crate::notify::Notifier;
 
-pub const DIR: &str = ".brama";
+pub const DIR: &str = ".bt";
 pub const AGENTS_FILE: &str = "agents.json";
-/// Per-user, untracked state inside `.brama/`; the snapshot never shows it.
+/// Per-user, untracked state inside `.bt/`; the snapshot never shows it.
 pub const LOCAL_DIR: &str = "local";
 
 const DEFAULT_AGENTS: &str = "{\n  \"version\": 1,\n  \"agents\": {}\n}\n";
@@ -30,7 +30,7 @@ const DEFAULT_WORKSPACE: &str = "{\n  \"version\": 1,\n  \"localTurns\": \"queue
 const WORKSPACE_FILE: &str = "workspace.json";
 const DEFAULT_GITIGNORE: &str = "local/\n";
 
-/// Creates `.brama/` with default files when they're missing; never overwrites one.
+/// Creates `.bt/` with default files when they're missing; never overwrites one.
 pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
     let dir = project.join(DIR);
     fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -49,7 +49,7 @@ pub fn ensure_project_dir(project: &Path) -> Result<(), String> {
     Ok(())
 }
 
-/// `.brama/workspace.json`: how the project's chats share a folder. Its old `defaultMode` (a run
+/// `.bt/workspace.json`: how the project's chats share a folder. Its old `defaultMode` (a run
 /// target) is ignored: a chat's workspace decides where it runs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -478,7 +478,7 @@ impl FileState {
 /// Agent configs of every project seen, plus the user-level file. Cheap to clone.
 #[derive(Clone)]
 pub struct AgentConfigs {
-    /// `<config dir>/brama/agents.json`; `None` when the OS has no config dir.
+    /// `<config dir>/batrak/agents.json`; `None` when the OS has no config dir.
     user_file: Option<PathBuf>,
     /// `trusted-agents.json` in app data; `None` keeps trust in memory only (tests).
     trust_file: Option<Arc<crate::storage::JsonFile>>,
@@ -740,7 +740,7 @@ impl AgentConfigs {
     }
 
     /// Adds a supported registry agent (an agent crate names its registry id, `AgentHub::for_registry_id`), with the registry's pinned launch,
-    /// to the open project's `.brama/agents.json`, trusting it, or without a project to the user's
+    /// to the open project's `.bt/agents.json`, trusting it, or without a project to the user's
     /// agents.json. Returns its id, unique in that file: the agent's own, else made from the name.
     pub fn add_agent(&self, project: Option<&Path>, agent: &NewAgent) -> Result<String, String> {
         let editing = self.editing();
@@ -802,7 +802,7 @@ impl AgentConfigs {
         }
     }
 
-    /// The agents.json that holds `project`'s agents: its `.brama/agents.json` (created when
+    /// The agents.json that holds `project`'s agents: its `.bt/agents.json` (created when
     /// missing), or the user's without a project.
     fn file_of(&self, project: Option<&Path>) -> Result<PathBuf, String> {
         match project {
@@ -1072,12 +1072,12 @@ impl AgentConfigs {
         }
     }
 
-    /// `<config dir>/brama/agents.json`, whether it exists or not.
+    /// `<config dir>/batrak/agents.json`, whether it exists or not.
     pub fn user_file(&self) -> Option<&Path> {
         self.user_file.as_deref()
     }
 
-    /// The agents.json to edit: the project's `.brama/agents.json`, or the user's without a
+    /// The agents.json to edit: the project's `.bt/agents.json`, or the user's without a
     /// project. Created with the defaults when missing; never overwritten.
     pub fn editable_file(&self, project: Option<&Path>) -> Result<PathBuf, String> {
         match project {
@@ -1198,7 +1198,7 @@ impl Inner {
     }
 }
 
-/// Whether an absolute path is a project's `.brama/agents.json`; returns the project.
+/// Whether an absolute path is a project's `.bt/agents.json`; returns the project.
 pub fn project_of_agents_file(path: &Path) -> Option<&Path> {
     let dir = path.parent()?;
     (path.file_name()? == AGENTS_FILE && dir.file_name()? == DIR).then(|| dir.parent()).flatten()
@@ -1210,7 +1210,7 @@ pub fn is_agents_path(rel: &str) -> bool {
     rel == DIR || rel == format!("{DIR}/{AGENTS_FILE}")
 }
 
-/// Whether a root-relative path lies in `.brama/local/`, which the snapshot leaves out.
+/// Whether a root-relative path lies in `.bt/local/`, which the snapshot leaves out.
 pub fn is_local_path(rel: &str) -> bool {
     rel.strip_prefix(DIR)
         .and_then(|rest| rest.strip_prefix('/'))
@@ -1285,7 +1285,7 @@ mod tests {
         assert_eq!(project_settings(&project).local_turns, LocalTurns::Queue, "no file");
         ensure_project_dir(&project).unwrap();
         assert_eq!(project_settings(&project).local_turns, LocalTurns::Queue, "the default file");
-        let file = project.join(".brama/workspace.json");
+        let file = project.join(".bt/workspace.json");
         fs::write(&file, r#"{"version":1,"defaultMode":"local","localTurns":"parallel"}"#).unwrap();
         assert_eq!(project_settings(&project), ProjectSettings { local_turns: LocalTurns::Parallel }, "an old defaultMode is ignored");
         for other in [r#""queue""#, r#""both""#, "3", "null"] {
@@ -1300,10 +1300,10 @@ mod tests {
     fn creates_defaults_once_and_never_overwrites() {
         let project = temp_project("defaults");
         ensure_project_dir(&project).unwrap();
-        let agents = project.join(".brama/agents.json");
+        let agents = project.join(".bt/agents.json");
         assert_eq!(fs::read_to_string(&agents).unwrap(), DEFAULT_AGENTS);
-        assert_eq!(fs::read_to_string(project.join(".brama/workspace.json")).unwrap(), DEFAULT_WORKSPACE);
-        assert_eq!(fs::read_to_string(project.join(".brama/.gitignore")).unwrap(), "local/\n");
+        assert_eq!(fs::read_to_string(project.join(".bt/workspace.json")).unwrap(), DEFAULT_WORKSPACE);
+        assert_eq!(fs::read_to_string(project.join(".bt/.gitignore")).unwrap(), "local/\n");
 
         fs::write(&agents, "{\"version\":1,\"agents\":{\"x\":{\"command\":\"x\"}}}").unwrap();
         ensure_project_dir(&project).unwrap();
@@ -1355,7 +1355,7 @@ mod tests {
     fn invalid_file_reports_position_and_keeps_the_last_valid_version() {
         let project = temp_project("invalid");
         ensure_project_dir(&project).unwrap();
-        let file = project.join(".brama/agents.json");
+        let file = project.join(".bt/agents.json");
         fs::write(&file, r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"mine"}}}"#).unwrap();
         let configs = AgentConfigs::new(None, None);
         assert!(configs.merged(Some(&project)).agent("mine").is_some());
@@ -1417,7 +1417,7 @@ mod tests {
         let base = temp_project("trust-cli");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        let file = project.join(".brama/agents.json");
+        let file = project.join(".bt/agents.json");
         let user = r#"{"version":1,"agents":{"claude":{"command":"npx","args":["-y","@agentclientprotocol/claude-agent-acp"]}}}"#;
         let user_file = base.join("user.json");
         fs::write(&user_file, user).unwrap();
@@ -1477,7 +1477,7 @@ mod tests {
         let base = temp_project("trust");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        let file = project.join(".brama/agents.json");
+        let file = project.join(".bt/agents.json");
         fs::write(&file, r#"{"version":1,"agents":{"repo":{"command":"./run-agent"}}}"#).unwrap();
         let trust_file = base.join("data/trusted-agents.json");
         let configs = AgentConfigs::new(None, Some(trust_file.clone()));
@@ -1505,7 +1505,7 @@ mod tests {
         let user_file = base.join("user.json");
         fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"command":"mine"}}}"#).unwrap();
         fs::write(
-            project.join(".brama/agents.json"),
+            project.join(".bt/agents.json"),
             r#"{"version":1,"agents":{"repo":{"name":"Repo","command":"./run-agent","args":["--acp"]},"other":{"command":"./other"}}}"#,
         )
         .unwrap();
@@ -1544,7 +1544,7 @@ mod tests {
     #[test]
     fn editable_file_is_created_once_for_the_user_and_the_project() {
         let base = temp_project("editable");
-        let configs = AgentConfigs::new(Some(base.join("config/brama/agents.json")), None);
+        let configs = AgentConfigs::new(Some(base.join("config/batrak/agents.json")), None);
         let user = configs.editable_file(None).unwrap();
         assert_eq!(fs::read_to_string(&user).unwrap(), DEFAULT_AGENTS);
         fs::write(&user, "{\"version\":1,\"agents\":{\"u\":{\"command\":\"u\"}}}").unwrap();
@@ -1556,7 +1556,7 @@ mod tests {
         let project = base.join("p");
         fs::create_dir_all(&project).unwrap();
         let file = configs.editable_file(Some(&project)).unwrap();
-        assert_eq!(file, project.join(".brama/agents.json"));
+        assert_eq!(file, project.join(".bt/agents.json"));
         assert_eq!(project_of_agents_file(&file), Some(project.as_path()));
         assert_eq!(project_of_agents_file(&project.join("agents.json")), None);
         fs::remove_dir_all(base).unwrap();
@@ -1585,7 +1585,7 @@ mod tests {
     #[test]
     fn add_agent_writes_the_users_file_and_keeps_what_it_had() {
         let base = temp_project("add");
-        let user_file = base.join("config/brama/agents.json");
+        let user_file = base.join("config/batrak/agents.json");
         let configs = with_fixture(Some(user_file.clone()), None);
         let agent = NewAgent { known: Some("codex-acp".into()), ..Default::default() };
         assert_eq!(configs.add_agent(None, &agent).unwrap(), "codex-acp", "creates the file");
@@ -1624,7 +1624,7 @@ mod tests {
         let pick = NewAgent { known: Some("claude-acp".into()), ..Default::default() };
 
         assert_eq!(configs.add_agent(Some(&project), &pick).unwrap(), "claude-acp");
-        let text = fs::read_to_string(project.join(".brama/agents.json")).unwrap();
+        let text = fs::read_to_string(project.join(".bt/agents.json")).unwrap();
         assert!(text.contains("\"claude-acp\"") && text.contains("@agentclientprotocol/claude-agent-acp@0.94.0"), "pinned: {text}");
         assert!(!user_file.exists(), "the user's file is left alone");
         let merged = configs.merged(Some(&project));
@@ -1644,7 +1644,7 @@ mod tests {
             r#"{"version":1,"agents":{"mine":{"name":"Mine","command":"mine","env":{"K":"${keychain:k}"}},"both":{"command":"user"}}}"#,
         )
         .unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"both":{"command":"project"}}}"#).unwrap();
         let configs = with_fixture(Some(user_file.clone()), None);
         let offered = |project: Option<&Path>| configs.list(project).user_agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
@@ -1673,7 +1673,7 @@ mod tests {
         let base = temp_project("trust-chosen");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(
             &project_file,
             r#"{"version":1,"agents":{"repo":{"command":"./run","env":{"T":"${keychain:github}"}}},
@@ -1705,7 +1705,7 @@ mod tests {
         ensure_project_dir(&project).unwrap();
         let user_file = base.join("user.json");
         fs::write(&user_file, r#"{"version":1,"agents":{"mine":{"command":"old","args":["-x"],"env":{"K":"${env:K}"}}}}"#).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"repo":{"command":"./run","env":{"K":"${env:K}"}}}}"#).unwrap();
         let configs = with_fixture(Some(user_file.clone()), None);
 
@@ -1734,7 +1734,7 @@ mod tests {
         let base = temp_project("default");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        fs::write(project.join(".brama/agents.json"), r#"{"version":1,"agents":{"a":{"command":"a"},"b":{"command":"b"}}}"#).unwrap();
+        fs::write(project.join(".bt/agents.json"), r#"{"version":1,"agents":{"a":{"command":"a"},"b":{"command":"b"}}}"#).unwrap();
         let user_file = base.join("user.json");
         fs::write(&user_file, r#"{"version":1,"defaultAgent":"a","agents":{"a":{"command":"a"},"b":{"command":"b"}}}"#).unwrap();
         let configs = AgentConfigs::new(Some(user_file.clone()), None);
@@ -1755,7 +1755,7 @@ mod tests {
         ensure_project_dir(&project).unwrap();
         let user_file = base.join("user.json");
         fs::write(&user_file, r#"{"version":1,"agents":{"a":{"command":"a"},"b":{"command":"b","env":{"K":"v"}},"c":{"command":"c"}}}"#).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"repo":{"command":"./run"},"last":{"command":"./last"}}}"#).unwrap();
         let configs = AgentConfigs::new(Some(user_file.clone()), None);
         let ids = |project: Option<&Path>| configs.list(project).agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
@@ -1816,7 +1816,7 @@ mod tests {
         ensure_project_dir(&project).unwrap();
         let user_file = base.join("user.json");
         fs::write(&user_file, r#"{"version":1,"defaultAgent":"mine","agents":{"mine":{"command":"mine"},"both":{"command":"user"}}}"#).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(&project_file, r#"{"version":1,"agents":{"both":{"command":"project"},"repo":{"command":"./run"}}}"#).unwrap();
         let configs = AgentConfigs::new(Some(user_file.clone()), None);
         let ids = |project: Option<&Path>| configs.list(project).agents.into_iter().map(|a| a.id).collect::<Vec<_>>();
@@ -1881,7 +1881,7 @@ mod tests {
         let base = temp_project("switch-prune");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         let both = r#"{"version":1,"agents":{"repo":{"command":"./run"},"other":{"command":"./other"}}}"#;
         fs::write(&project_file, both).unwrap();
         let user_file = base.join("user.json");
@@ -1910,7 +1910,7 @@ mod tests {
     fn a_deleted_agents_file_keeps_the_switches() {
         let project = temp_project("switch-deleted");
         ensure_project_dir(&project).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         let text = r#"{"version":1,"agents":{"repo":{"command":"./run"}}}"#;
         fs::write(&project_file, text).unwrap();
         let configs = AgentConfigs::new(None, None);
@@ -1948,7 +1948,7 @@ mod tests {
     fn an_agent_that_is_off_waits_for_no_trust() {
         let project = temp_project("switch-trust");
         ensure_project_dir(&project).unwrap();
-        fs::write(project.join(".brama/agents.json"), r#"{"version":1,"agents":{"repo":{"command":"./run"},"other":{"command":"./other"}}}"#).unwrap();
+        fs::write(project.join(".bt/agents.json"), r#"{"version":1,"agents":{"repo":{"command":"./run"},"other":{"command":"./other"}}}"#).unwrap();
         let configs = AgentConfigs::new(None, None);
         configs.set_enabled(Some(&project), "repo", false).unwrap();
         let waiting: Vec<_> = configs.untrusted(&project).into_iter().map(|u| u.launch.agent_id).collect();
@@ -2061,7 +2061,7 @@ mod tests {
         let base = temp_project("pin-trust");
         let project = base.join("p");
         ensure_project_dir(&project).unwrap();
-        let project_file = project.join(".brama/agents.json");
+        let project_file = project.join(".bt/agents.json");
         fs::write(
             &project_file,
             r#"{"version":1,"agents":{
@@ -2117,9 +2117,9 @@ mod tests {
 
     #[test]
     fn local_and_agents_paths() {
-        assert!(is_local_path(".brama/local") && is_local_path(".brama/local/x.json"));
-        assert!(!is_local_path(".brama/locale") && !is_local_path(".brama/agents.json") && !is_local_path("local"));
-        assert!(is_agents_path(".brama/agents.json") && is_agents_path(".brama"));
-        assert!(!is_agents_path(".brama/workspace.json"));
+        assert!(is_local_path(".bt/local") && is_local_path(".bt/local/x.json"));
+        assert!(!is_local_path(".bt/locale") && !is_local_path(".bt/agents.json") && !is_local_path("local"));
+        assert!(is_agents_path(".bt/agents.json") && is_agents_path(".bt"));
+        assert!(!is_agents_path(".bt/workspace.json"));
     }
 }

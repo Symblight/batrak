@@ -41,7 +41,7 @@ fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
 
 /// What a root's change batches reach outside its snapshot.
 pub trait Host: Send + Sync + 'static {
-    /// `.brama/agents.json` of a project changed on disk.
+    /// `.bt/agents.json` of a project changed on disk.
     fn agents_changed(&self, project: &Path);
     /// Files changed in a folder that chats run in: running local turns there that both changed one hear of it.
     fn files_changed(&self, folder: &Path, changed: &[String]);
@@ -70,7 +70,7 @@ impl Host for AppHandle {
     }
 }
 
-/// A project's folder, or a workspace's: a workspace's `.brama/` is its branch's copy and configures nothing.
+/// A project's folder, or a workspace's: a workspace's `.bt/` is its branch's copy and configures nothing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Project,
@@ -396,12 +396,12 @@ mod tests {
     fn a_workspace_roots_changes_reach_its_folders_chats_and_reload_no_agents() {
         let base = std::env::temp_dir().join(format!("batrak-workspace-batch-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&base);
-        std::fs::create_dir_all(base.join(".brama")).unwrap();
+        std::fs::create_dir_all(base.join(".bt")).unwrap();
         let host = Recorder::default();
         let roots = Roots::default();
         let root = roots.open_kind(host.clone(), &base, "main", Kind::Workspace).unwrap();
 
-        std::fs::write(base.join(".brama/agents.json"), "{}").unwrap();
+        std::fs::write(base.join(".bt/agents.json"), "{}").unwrap();
 
         let deadline = Instant::now() + std::time::Duration::from_secs(5);
         while lock(&host.0).is_empty() {
@@ -409,7 +409,7 @@ mod tests {
             std::thread::sleep(std::time::Duration::from_millis(50));
         }
         let heard = lock(&host.0).clone();
-        assert_eq!(heard, [format!("files {} .brama/agents.json", root.path.display())]);
+        assert_eq!(heard, [format!("files {} .bt/agents.json", root.path.display())]);
         roots.close(&root.id);
         std::fs::remove_dir_all(&base).unwrap();
     }
@@ -532,7 +532,7 @@ mod tests {
         let project = roots.open_kind(Recorder::default(), &base.join("proj"), "main", Kind::Project).unwrap();
         let workspace = roots.open_kind(Recorder::default(), &base.join("worktree"), "main", Kind::Workspace).unwrap();
 
-        let agents = |root: &Root| root.path.join(".brama/agents.json");
+        let agents = |root: &Root| root.path.join(".bt/agents.json");
         assert!(roots.contains_project(&agents(&project)));
         assert!(roots.contains(&agents(&workspace)), "its files are readable");
         assert!(!roots.contains_project(&agents(&workspace)), "but it isn't a project");

@@ -11,7 +11,7 @@ fn record(id: &str) -> WorkspaceRecord {
         name_source: NameSource::User,
         folder: PathBuf::from("/data/worktrees/app-1/fix-login"),
         worktree_path: PathBuf::from("/data/worktrees/app-1/fix-login"),
-        branch: "brama/fix-login".to_owned(),
+        branch: "batrak/fix-login".to_owned(),
         base_commit: "abc".to_owned(),
         base_branch: Some("main".to_owned()),
         created_at: "2026-11-03T10:00:00.000Z".to_owned(),
@@ -49,7 +49,7 @@ fn a_named_workspace_is_placed_on_its_branch_from_the_base_and_checked_out() {
 
     let ws = workspaces.create(&repo.path, "Fix login", None).unwrap();
 
-    assert_eq!(ws.branch, "brama/fix-login");
+    assert_eq!(ws.branch, "batrak/fix-login");
     assert_eq!(ws.worktree_path.file_name().unwrap(), "fix-login");
     assert!(ws.folder.join("README.md").is_file(), "checked out");
     assert!(!ws.folder.join("feature.txt").exists(), "from the base branch (main), not HEAD");
@@ -57,7 +57,7 @@ fn a_named_workspace_is_placed_on_its_branch_from_the_base_and_checked_out() {
     assert_eq!(workspaces.list(&repo.path), vec![ws.clone()]);
 
     let taken = workspaces.create(&repo.path, "Fix login", Some("feature")).unwrap();
-    assert_eq!(taken.branch, "brama/fix-login-2", "the branch and folder are taken");
+    assert_eq!(taken.branch, "batrak/fix-login-2", "the branch and folder are taken");
     assert!(taken.folder.join("feature.txt").is_file(), "from the chosen base");
     std::fs::remove_dir_all(data).unwrap();
 }
@@ -72,8 +72,8 @@ fn an_unnamed_workspace_is_called_after_its_branch_and_named_by_its_agent() {
     let first = workspaces.place(&repo.path, None, None).unwrap();
     let second = workspaces.place(&repo.path, None, None).unwrap();
 
-    assert_eq!((first.name.as_str(), first.branch.as_str()), ("Workspace", "brama/workspace"));
-    assert_eq!((second.name.as_str(), second.branch.as_str()), ("Workspace 2", "brama/workspace-2"));
+    assert_eq!((first.name.as_str(), first.branch.as_str()), ("Workspace", "batrak/workspace"));
+    assert_eq!((second.name.as_str(), second.branch.as_str()), ("Workspace 2", "batrak/workspace-2"));
     assert_eq!(first.name_source, NameSource::Agent, "its chat names it");
     std::fs::remove_dir_all(data).unwrap();
 }
@@ -134,7 +134,7 @@ fn deleting_saves_uncommitted_work_and_keeps_or_deletes_the_branch() {
     let unused = workspaces.create(&repo.path, "Unused", None).unwrap();
     workspaces.discard(&unused.id, true).unwrap();
     assert!(!unused.worktree_path.exists());
-    assert!(!branches().contains("brama/unused"));
+    assert!(!branches().contains("batrak/unused"));
     assert!(workspaces.get(&unused.id).is_err(), "the record goes");
 
     // Uncommitted work: a snapshot commit on the branch, which stays.
@@ -142,8 +142,8 @@ fn deleting_saves_uncommitted_work_and_keeps_or_deletes_the_branch() {
     std::fs::write(dirty.folder.join("README.md"), "unsaved").unwrap();
     workspaces.discard(&dirty.id, true).unwrap();
     assert!(!dirty.worktree_path.exists());
-    assert_eq!(run_in(&repo.path, &["show", "brama/dirty:README.md"]), "unsaved");
-    assert!(run_in(&repo.path, &["log", "-1", "--format=%B", "brama/dirty"]).contains("Work in progress from workspace \"Dirty\""));
+    assert_eq!(run_in(&repo.path, &["show", "batrak/dirty:README.md"]), "unsaved");
+    assert!(run_in(&repo.path, &["log", "-1", "--format=%B", "batrak/dirty"]).contains("Work in progress from workspace \"Dirty\""));
 
     // Commits, Keep branch off: the branch goes.
     let done = workspaces.create(&repo.path, "Done", None).unwrap();
@@ -151,7 +151,7 @@ fn deleting_saves_uncommitted_work_and_keeps_or_deletes_the_branch() {
     run_in(&done.folder, &["add", "."]);
     run_in(&done.folder, &["commit", "-qm", "work"]);
     workspaces.discard(&done.id, false).unwrap();
-    assert!(!branches().contains("brama/done"));
+    assert!(!branches().contains("batrak/done"));
     assert!(run_in(&repo.path, &["status", "--porcelain"]).is_empty(), "the project is untouched");
     std::fs::remove_dir_all(data).unwrap();
 }
@@ -255,7 +255,7 @@ fn a_name_placed_but_not_checked_out_yet_is_taken() {
     let second = workspaces.place(&repo.path, Some("Fix login"), None).unwrap();
 
     assert_ne!(first.worktree_path, second.worktree_path);
-    assert_eq!((first.branch.as_str(), second.branch.as_str()), ("brama/fix-login", "brama/fix-login-2"));
+    assert_eq!((first.branch.as_str(), second.branch.as_str()), ("batrak/fix-login", "batrak/fix-login-2"));
     std::fs::remove_dir_all(data).unwrap();
 }
 
@@ -359,7 +359,7 @@ fn deleting_a_workspace_while_its_checkout_runs_stops_it_and_leaves_no_folder_or
     assert!(deleting.elapsed() < Duration::from_secs(5), "waited {:?} for the checkout", deleting.elapsed());
     assert!(checking_out.join().unwrap().is_err(), "the checkout was stopped");
     assert!(!ws.worktree_path.exists(), "no folder");
-    assert!(!run_in(&repo.path, &["branch", "--format=%(refname:short)"]).contains("brama/slow"), "no branch");
+    assert!(!run_in(&repo.path, &["branch", "--format=%(refname:short)"]).contains("batrak/slow"), "no branch");
     assert!(workspaces.get(&ws.id).is_err());
     std::fs::remove_dir_all(data).unwrap();
 }

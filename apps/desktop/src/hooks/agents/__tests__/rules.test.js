@@ -72,11 +72,11 @@ describe('agents: rules', () => {
   it("tells a project's and the user's agents.json from other files", () => {
     const cases = [
       // [path, agents file, the user's]
-      ['/work/demo/.brama/agents.json', true, false],
-      ['C:\\work\\demo\\.brama\\agents.json', true, false],
-      ['/Users/me/Library/Application Support/brama/agents.json', true, true],
+      ['/work/demo/.bt/agents.json', true, false],
+      ['C:\\work\\demo\\.bt\\agents.json', true, false],
+      ['/Users/me/Library/Application Support/batrak/agents.json', true, true],
       ['/work/demo/agents.json', false, false],
-      ['/work/demo/.brama/workspace.json', false, false],
+      ['/work/demo/.bt/workspace.json', false, false],
     ];
     for (const [path, agents, user] of cases) {
       // Act + Assert

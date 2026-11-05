@@ -161,10 +161,10 @@ describe('acp-changes-review', () => {
   });
 
   it("explains a session's Apply and Check out in tooltips, and lists its changes read-only", async () => {
-    const { root, rows } = await render({ base: 'abc1234def', branch: 'brama/fix-1' });
+    const { root, rows } = await render({ base: 'abc1234def', branch: 'batrak/fix-1' });
     expect([...root.querySelectorAll('.acp-changes-review__session-action')].map(tooltipOf)).to.deep.equal([
       'Bring the changes into the project, unstaged',
-      'Check brama/fix-1 out in the project',
+      'Check batrak/fix-1 out in the project',
     ]);
     expect(rows().every((r) => !r.selectable), 'nothing to pick').to.equal(true);
     expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('3 files changed since abc1234');
@@ -173,7 +173,7 @@ describe('acp-changes-review', () => {
 
   it('leaves asking about Check out branch to its view: fires at once, and renders no dialog', async () => {
     // Arrange
-    const { el, root } = await render({ base: 'abc1234def', branch: 'brama/fix-1' });
+    const { el, root } = await render({ base: 'abc1234def', branch: 'batrak/fix-1' });
     /** @type {string[]} */
     const fired = [];
     el.addEventListener('acp-changes-check-out', (e) => fired.push(e.type));

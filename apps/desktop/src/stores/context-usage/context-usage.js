@@ -18,7 +18,7 @@ export function parseContextUsage(raw) {
  * Each session's last `usage_update`, by session id: written only while its agent runs, kept across
  * reloads and restarts (an agent reports nothing when it loads a session again).
  */
-export const $contextUsage = persistentMapStore('brama:sessions:context-usage:', parseContextUsage);
+export const $contextUsage = persistentMapStore('batrak:sessions:context-usage:', parseContextUsage);
 
 /** The active session's context usage; `null` for a draft or before its agent reported one. */
 export const $activeContextUsage = computed([$contextUsage, $activeSessionId], (usage, id) => (id === null ? null : (usage[id] ?? null)));

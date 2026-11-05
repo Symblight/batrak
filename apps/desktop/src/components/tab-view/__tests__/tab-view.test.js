@@ -157,7 +157,7 @@ describe('acp-tab-view', () => {
   });
 
   describe('saving a file changed on disk', () => {
-    const path = '/p/.brama/agents.json';
+    const path = '/p/.bt/agents.json';
     /** @type {EditorTab} */
     const changed = { ...fileTab(path), loaded: true, content: '{}', draft: '{ "x": 1 }', changedOnDisk: true };
 

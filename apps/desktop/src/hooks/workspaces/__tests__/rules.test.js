@@ -8,7 +8,7 @@ const NOW = Date.parse('2026-11-03T12:00:00.000Z');
 
 /** @param {Partial<Workspace>} extra */
 const workspace = (extra) =>
-  /** @type {Workspace} */ ({ id: 'w', name: 'Task', branch: 'brama/task', createdAt: '2026-11-01T00:00:00.000Z', creating: false, error: null, missing: false, ...extra });
+  /** @type {Workspace} */ ({ id: 'w', name: 'Task', branch: 'batrak/task', createdAt: '2026-11-01T00:00:00.000Z', creating: false, error: null, missing: false, ...extra });
 
 /** @param {Partial<Session>} extra */
 const chat = (extra) => /** @type {Session} */ ({ id: 's', status: 'stopped', lastActivityAt: '2026-11-01T00:00:00.000Z', ...extra });
@@ -111,10 +111,10 @@ describe('workspaces rules', () => {
   });
 
   it('noticesOf: what changed between two lists of a project, worth a snackbar', () => {
-    const task = workspace({ id: 'w1', name: 'Fix login', branch: 'brama/fix-login', nameSource: 'user' });
+    const task = workspace({ id: 'w1', name: 'Fix login', branch: 'batrak/fix-login', nameSource: 'user' });
     const cases = [
       // [before, after, notices, why]
-      [[], [task], ['Created workspace "Fix login" on brama/fix-login'], 'a new one'],
+      [[], [task], ['Created workspace "Fix login" on batrak/fix-login'], 'a new one'],
       [[task], [], ['Deleted workspace "Fix login"'], 'one gone'],
       [[task], [{ ...task, name: 'Login form' }], ['Renamed workspace "Fix login" to "Login form"'], 'renamed by the user'],
       [[{ ...task, nameSource: 'agent' }], [{ ...task, nameSource: 'agent', name: 'Login form' }], [], 'its agent titled it'],

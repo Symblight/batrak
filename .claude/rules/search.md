@@ -57,8 +57,8 @@ Spec: `docs/specs/search-dialog.md`.
 
 ## Persistence
 
-- `$searchDialogPrefs` (`brama:search:dialog`, shared): preview placement, view, splits; written by
+- `$searchDialogPrefs` (`batrak:search:dialog`, shared): preview placement, view, splits; written by
   `setSearchDialogPrefs(patch)` on the dialog's `-prefs`.
-- `$projectSearch` (`brama:search:project:<project path>`, per window, `setKey()` only): the last
+- `$projectSearch` (`batrak:search:project:<project path>`, per window, `setKey()` only): the last
   query, options, folder and mask (`saveProjectSearch` on every `-query`) and 10 recent queries
   (`addRecentSearch` when a match is opened or the search is popped out to the pane).

@@ -223,7 +223,7 @@ export const git = Object.freeze({
 
   /**
    * Branches a workspace can be based on: local and remote-tracking ones, most recently committed
-   * first (Batrak's own `brama/…` left out), and the remote's default.
+   * first (Batrak's own `batrak/…` left out), and the remote's default.
    * @param {string} rootId
    * @returns {Promise<import('./types.js').BranchList>}
    */

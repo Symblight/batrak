@@ -327,7 +327,7 @@ export class ChatPartsController {
 
   /**
    * A file opens (`acp-file-open`), a folder is revealed (`acp-file-reveal`). Text can't tell a
-   * folder from a file (`@.brama`), so the project's listing decides. A worktree session's file opens
+   * folder from a file (`@.bt`), so the project's listing decides. A worktree session's file opens
    * from its worktree; its folder is revealed as the project's, which the tree shows.
    * @param {string} path As the message names it: relative to the session's folder, or absolute.
    * @param {number | null} line

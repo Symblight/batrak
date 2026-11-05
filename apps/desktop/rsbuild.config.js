@@ -17,11 +17,11 @@ export default defineConfig({
   tools: {
     rspack: { watchOptions: { ignored: ['**/src-tauri/**', '**/node_modules/**'] } },
   },
-  plugins: [litCss(), linkedPackages({ '@symblight/chat': process.env.BRAMA_CHAT_DIR })],
+  plugins: [litCss(), linkedPackages({ '@symblight/chat': process.env.BATRAK_CHAT_DIR })],
 });
 
 /**
- * Points each package whose local checkout is given (`BRAMA_CHAT_DIR=../rich-components/packages/chat
+ * Points each package whose local checkout is given (`BATRAK_CHAT_DIR=../rich-components/packages/chat
  * pnpm dev`) at that checkout's `dist`, for testing it before it's pushed. The installed copy stays in
  * node_modules. Imports from inside a checkout look in the app's node_modules first, so it shares the
  * app's `lit` and `wc-material` instead of loading its own (two wc-materials define every `md-*` tag
@@ -46,7 +46,7 @@ function linkedPackages(dirs) {
     console.info(`[batrak] ${name} → ${root}`);
   }
   return {
-    name: 'brama:linked-packages',
+    name: 'batrak:linked-packages',
     setup(api) {
       if (!roots.length) return;
       api.modifyBundlerChain((chain) => {
@@ -69,7 +69,7 @@ function linkedPackages(dirs) {
  */
 function litCss() {
   return {
-    name: 'brama:lit-css',
+    name: 'batrak:lit-css',
     setup(api) {
       api.modifyBundlerChain((chain) => {
         chain.module
