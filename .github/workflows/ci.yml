@@ -16,6 +16,9 @@ permissions:
 jobs:
   frontend:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/desktop
     steps:
       - uses: actions/checkout@v7
 
@@ -31,9 +34,6 @@ jobs:
 
   backend:
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v7
 
@@ -41,19 +41,17 @@ jobs:
 
       # tauri::generate_context! embeds dist/ at compile time, tests included.
       - run: pnpm build
-        working-directory: .
+        working-directory: apps/desktop
 
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
 
       - run: cargo clippy --all-targets -- -D warnings
 
-      - run: cargo test --lib
+      - run: cargo test --workspace
 
   # The app ships on these too: they must at least build, and their terminals work.
   backend-other-platforms:
@@ -62,9 +60,6 @@ jobs:
       matrix:
         os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: src-tauri
     steps:
       - uses: actions/checkout@v7
 
@@ -76,14 +71,12 @@ jobs:
 
       # tauri::generate_context! embeds dist/ at compile time, tests included.
       - run: pnpm build
-        working-directory: .
+        working-directory: apps/desktop
 
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
 
       - run: cargo check --all-targets
 
-      - run: 'cargo test --lib -- terminal:: dirs::'
+      - run: 'cargo test --workspace --lib -- terminal:: dirs::'
