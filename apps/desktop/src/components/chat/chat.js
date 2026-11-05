@@ -10,12 +10,14 @@ import '@symblight/wc-material/icon';
 import addIcon from '@material-design-icons/svg/outlined/add.svg?raw';
 import folderOffIcon from '@material-design-icons/svg/outlined/folder_off.svg?raw';
 import publicIcon from '@material-design-icons/svg/outlined/public.svg?raw';
+import differenceIcon from '@material-design-icons/svg/outlined/difference.svg?raw';
 import styles from './chat.css?inline';
 import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsController.js';
 import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
 import { buildMenuItem, codeChip, commentLines, fileChipAttrs, recalledDoc } from '../../controllers/file-mentions/chips.js';
 import { chat } from '../../hooks/chat/chat.js';
 import { composer } from '../../hooks/composer/composer.js';
+import { git } from '../../hooks/git/git.js';
 import '../agent-picker/agent-picker.js';
 import '../context-meter/context-meter.js';
 import '../mode-picker/mode-picker.js';
@@ -28,6 +30,8 @@ import '../subagent-bar/subagent-bar.js';
 /** @typedef {import('@symblight/chat/composer').ChxAttachments} ChxAttachments */
 /** @typedef {import('../../controllers/file-mentions/chips.js').ComposerTextbox} ComposerTextbox */
 /** @typedef {import('../../controllers/file-mentions/chips.js').PmSchema} PmSchema */
+/** @typedef {import('../../controllers/file-mentions/chips.js').PmNode} PmNode */
+/** @typedef {import('../../controllers/file-mentions/chips.js').PmTransaction} PmTransaction */
 /** @typedef {import('../../hooks/sessions/types.js').ContextUsage} ContextUsage */
 /** @typedef {import('../../hooks/search/types.js').QuickOpenItem} QuickOpenItem */
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
@@ -57,11 +61,23 @@ const SLASH_COMMANDS = ['clear', 'compact', 'init', 'review'];
 const splitOnSend = createSplitOnSendHandler(chat.MESSAGE_PART_RULES);
 
 /**
+ * Lines after the draft, or in place of an empty one.
+ * @param {PmTransaction} tr
+ * @param {PmNode[]} lines
+ */
+function appendLines(tr, lines) {
+  const { doc } = tr;
+  const empty = doc.childCount === 1 && doc.child(0).content.size === 0;
+  return empty ? tr.replaceWith(0, doc.content.size, lines) : tr.insert(doc.content.size, lines);
+}
+
+/**
  * @tag acp-chat
- * @summary Agent chat for the active session (only the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and mode's access.
+ * @summary Agent chat for the active session (only a title and the composer, centered, until its first message): message list plus a composer with `@` file mentions, `/` commands, attachments, paste chips, and the agent's model, mode, context and mode's access.
  * @fires acp-chat-file-query `{ query }` Files and folders for `@` to search for; `null` drops the search.
  * @fires acp-chat-attach `{ files }` Files attached (picked, pasted): saved, they come back as path chips (`insertFiles()`).
  * @fires acp-workspace-recreate `{ id }` Recreate folder, while `blocked`.
+ * @fires acp-chat-hint-use `{}` The uncommitted files hint put its prompt in the composer.
  * @fires acp-subagent-close `null` From the subagent's bar.
  * @fires acp-subagent-stop `{ subagentId }` From the subagent's bar.
  */
@@ -69,7 +85,7 @@ export class AcpChat extends LitElement {
   static properties = {
     /** `<chx-chat>`'s `activeConversationId`: the active session's id. */
     conversationId: { attribute: false },
-    /** The active session is a draft with no message yet: only the composer shows. */
+    /** The active session is a draft with no message yet: only a title and the composer show. */
     empty: { type: Boolean },
     adapter: { attribute: false },
     userId: { attribute: false },
@@ -88,6 +104,8 @@ export class AcpChat extends LitElement {
     blocked: { attribute: false },
     /** A draft's: where it runs. */
     place: { attribute: false },
+    /** A draft's: how many files its folder has uncommitted. */
+    uncommitted: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
@@ -138,6 +156,8 @@ export class AcpChat extends LitElement {
     this.blocked = null;
     /** @type {ChatPlace | null} */
     this.place = null;
+    /** @type {number} */
+    this.uncommitted = 0;
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
@@ -187,11 +207,7 @@ export class AcpChat extends LitElement {
     const chips = inserts.filter((i) => !i.body).flatMap((i) => [codeChip(schema, i, this.root), schema.text(' ')]);
     if (chips.length) tr = tr.replaceWith(selection.from, selection.to, chips);
     const lines = inserts.filter((i) => i.body).flatMap((i) => commentLines(schema, i, this.root));
-    if (lines.length) {
-      const { doc } = tr;
-      const empty = doc.childCount === 1 && doc.child(0).content.size === 0;
-      tr = empty ? tr.replaceWith(0, doc.content.size, lines) : tr.insert(doc.content.size, lines);
-    }
+    if (lines.length) tr = appendLines(tr, lines);
     view.dispatch(tr);
     if (lines.length) textbox.focusEnd();
     else textbox.focus(); // the caret stays after the chips
@@ -269,6 +285,31 @@ export class AcpChat extends LitElement {
     picker.addOptions(options);
   };
 
+  /**
+   * Keeps a draft already typed: the list's own handling in the composer would replace it.
+   * @param {Event} e
+   */
+  #onHint = (e) => {
+    e.stopPropagation();
+    const textbox = this.#readyTextbox;
+    const view = textbox?.editor?.view;
+    if (!textbox || !view) return;
+    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    const { schema, tr } = view.state;
+    view.dispatch(appendLines(tr, [schema.nodes.line.create(null, [schema.text(value)])]));
+    textbox.focusEnd();
+    this.#emit('acp-chat-hint-use', {});
+  };
+
+  /** The uncommitted files hint, on a draft that can send and has some. */
+  #renderHint() {
+    if (!this.empty || this.blocked || this.uncommitted === 0) return nothing;
+    const { label, value } = git.uncommittedHint(this.uncommitted);
+    return html`<chx-suggestion-list slot="suggestions" class="acp-chat__hints" @chx-suggestion-select=${this.#onHint}>
+      <chx-suggestion .value=${value}><md-icon class="acp-chat__hint-icon">${unsafeSVG(differenceIcon)}</md-icon>${label}</chx-suggestion>
+    </chx-suggestion-list>`;
+  }
+
   #onRecreate = () => {
     if (this.blocked) this.#emit('acp-workspace-recreate', { id: this.blocked.workspaceId });
   };
@@ -331,6 +372,7 @@ export class AcpChat extends LitElement {
           <acp-part-thinking slot="streaming" class="acp-chat__streaming"></acp-part-thinking>
           <chx-scroll-to-bottom-affordance slot="scroll-to-bottom"></chx-scroll-to-bottom-affordance>
         </chx-message-list>
+        ${empty ? html`<h2 slot="input-banner" class="acp-chat__title">What's the next task?</h2>` : nothing}
         <acp-session-banner
           slot="input-banner"
           class="acp-chat__banner"
@@ -358,6 +400,7 @@ export class AcpChat extends LitElement {
           prompt-history
           .promptDoc=${recalledDoc}
         >
+          ${this.#renderHint()}
           <md-icon-button slot="leading" aria-label="Attach files" @click=${() => this.#attachments.open()}>
             <md-icon class="acp-chat__attach-icon">${unsafeSVG(addIcon)}</md-icon>
           </md-icon-button>

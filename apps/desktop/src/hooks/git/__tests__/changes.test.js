@@ -9,6 +9,19 @@ import { git } from '../git.js';
 const file = (path, fields = {}) => ({ path, origPath: null, kind: 'modified', staged: false, unstaged: true, added: null, removed: null, ...fields });
 
 describe('git changes', () => {
+  it('words the uncommitted files hint for one file and for several', () => {
+    const cases = [
+      [1, { label: 'Review 1 uncommitted file', value: 'Review the uncommitted file' }],
+      [3, { label: 'Review 3 uncommitted files', value: 'Review the 3 uncommitted files' }],
+    ];
+    for (const [count, expected] of cases) {
+      // Act
+      const hint = git.uncommittedHint(/** @type {number} */ (count));
+      // Assert
+      expect(hint).to.deep.equal(expected);
+    }
+  });
+
   it('groups files like git status, each sorted by path, with the line counts summed and empty groups left out', () => {
     const groups = git.groupChanges([
       file('src/z.js', { added: 3, removed: 1 }),

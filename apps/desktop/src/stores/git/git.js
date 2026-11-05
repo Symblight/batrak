@@ -15,6 +15,9 @@ export const $gitRepo = atom(NO_REPO);
 /** Changed files of the active root, while the Changes panel is open; written by the `git` hook. */
 export const $gitChanges = atom(NO_CHANGES);
 
+/** How many files `$gitChanges` lists; 0 until they load and when the scan failed. */
+export const $uncommittedCount = computed($gitChanges, (changes) => (changes.loaded && !changes.error ? changes.files.length : 0));
+
 /**
  * Changed files picked for the next commit, by root-relative path; shared by the Changes panel and tab.
  * Starts empty, and is emptied when another project opens.
