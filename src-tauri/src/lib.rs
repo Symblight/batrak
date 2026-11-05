@@ -3,6 +3,7 @@ use agent_acp as acp;
 mod agents;
 mod commands;
 mod config;
+mod dirs;
 mod git;
 mod github;
 mod logging;
@@ -11,6 +12,7 @@ mod session;
 mod storage;
 mod terminal;
 mod roots;
+mod util;
 mod workspace;
 
 use tauri::Manager;
@@ -27,20 +29,20 @@ pub fn run() {
         .setup(|app| {
             #[cfg(target_os = "macos")]
             app.set_menu(menu::build(app.handle())?)?;
-            let dir = app.path().app_log_dir()?;
+            let dirs = dirs::Dirs::resolve()?;
             // The app still works without its log; the dev terminal shows why there is none.
-            match logging::init(&dir, Some(app.handle().clone())) {
+            match logging::init(&dirs.logs, Some(app.handle().clone())) {
                 Ok(()) => tracing::info!(
                     version = %app.package_info().version,
                     os = std::env::consts::OS,
                     arch = std::env::consts::ARCH,
-                    dir = %dir.display(),
+                    dir = %dirs.logs.display(),
                     "Brama started"
                 ),
                 Err(e) => eprintln!("logging disabled: {e}"),
             }
-            let user_agents = app.path().config_dir().ok().map(|dir| dir.join("brama").join(config::AGENTS_FILE));
-            let data_dir = app.path().app_data_dir()?;
+            let user_agents = Some(dirs.config.join(config::AGENTS_FILE));
+            let data_dir = dirs.data.clone();
             let registry = config::registry::Registry::new(
                 Some(data_dir.join("acp-registry.json")),
                 std::sync::Arc::new(config::registry::Http),
@@ -69,6 +71,7 @@ pub fn run() {
             commands::workspaces::announce(app.handle().clone(), &sessions);
             app.manage(sessions);
             app.manage(configs);
+            app.manage(dirs);
             app.manage(terminal::Terminals::new(terminal::TerminalsOptions {
                 shell: None,
                 version: app.package_info().version.to_string(),

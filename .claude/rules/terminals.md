@@ -18,7 +18,7 @@ paths:
 # Terminals
 
 Specs: `docs/specs/terminal-tab.md` (the shell) and `docs/specs/terminal-panel.md` (where it lives). A terminal runs the user's default shell
-(`terminal::shell::default_shell()`: `$SHELL`, the account's shell, `/bin/zsh`; agents' login-shell
+(`util::default_shell()`: `$SHELL`, the account's shell, `/bin/zsh`; agents' login-shell
 environment uses the same) as a login shell in a PTY (`src-tauri/src/terminal/`, `portable-pty`),
 started in the shown folder (Main's or the workspace's, `$shownFolder`), else the project, else home (New Terminal: ⌃\`, the macOS
 *Terminal* menu, the panel's `+`, and the nav rail's first click), a session's folder (session menu → Open in → Terminal), or a file tree row's folder (its menu → Open in → Terminal). The backend refuses a

@@ -18,7 +18,7 @@ pub struct AboutInfo {
 #[tauri::command]
 pub async fn about(app: AppHandle) -> Result<AboutInfo, String> {
     let version = app.package_info().version.to_string();
-    let log_dir = app.path().app_log_dir().ok().map(|dir| dir.to_string_lossy().into_owned());
+    let log_dir = Some(app.state::<crate::dirs::Dirs>().logs.to_string_lossy().into_owned());
     blocking(move || AboutInfo {
         version,
         os: os_name(),

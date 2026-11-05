@@ -90,7 +90,7 @@ impl Sessions {
     /// A workspace's file (relative to its folder) at its base commit; `None` when it wasn't
     /// there, is binary or too large. Blocking.
     pub fn workspace_file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
-        crate::roots::checked_rel(path)?;
+        crate::util::checked_rel(path)?;
         let (dir, base) = self.checked_out(id)?;
         crate::git::blob::file_at(crate::git::binary::git()?, &dir, &base, path)
     }

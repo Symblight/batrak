@@ -243,7 +243,7 @@ impl Workspaces {
             branch: placed.branch,
             base_commit: placed.base_commit,
             base_branch,
-            created_at: crate::session::iso_now(),
+            created_at: crate::util::iso_now(),
             checked_out: false,
         };
         lock(&self.inner.creating).insert(record.id.clone());

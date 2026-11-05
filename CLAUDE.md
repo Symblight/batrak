@@ -190,7 +190,7 @@ helpers apply.
   (`exec::MAX_CONCURRENT`); more callers wait for a slot.
 - Anything that changes a repository runs inside `lock::with_mutation`, keyed by the common git
   dir, so a checkout and its worktrees are serialized together.
-- Commands take root-relative paths only after `roots::checked_rel()`.
+- Commands take root-relative paths only after `util::checked_rel()`.
 
 ## Tests first
 

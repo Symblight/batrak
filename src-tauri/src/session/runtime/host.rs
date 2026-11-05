@@ -194,6 +194,6 @@ impl ClientHost for SessionHost {
             tracing::info!(path = %path.display(), "agent file access refused: agents.json");
             return Err(FsError::Denied(format!("{}: agents.json is the user's to edit", path.display())));
         }
-        env::write_atomic(&host, content.as_bytes()).map_err(|e| FsError::Io(format!("{}: {e}", path.display())))
+        crate::util::write_atomic(&host, content.as_bytes()).map_err(|e| FsError::Io(format!("{}: {e}", path.display())))
     }
 }

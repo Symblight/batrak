@@ -474,6 +474,7 @@ dependencies = [
  "agent-copilot",
  "agent-generic",
  "agent-kit",
+ "dirs",
  "dunce",
  "fontdb",
  "futures",

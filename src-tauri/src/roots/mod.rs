@@ -34,22 +34,6 @@ struct ChangedPayload<'a> {
     changes: Changes,
 }
 
-/// Checks a root-relative path from the frontend: `/`-separated, no `..`, `.` or empty
-/// segments, not absolute, and not inside `.git`. Every command taking a relative path calls it.
-pub fn checked_rel(rel: &str) -> Result<&str, String> {
-    let ok = !rel.is_empty()
-        && !rel.contains('\\')
-        && !rel.contains('\0')
-        && !Path::new(rel).is_absolute()
-        && rel.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
-        && rel.split('/').next() != Some(".git");
-    if ok {
-        Ok(rel)
-    } else {
-        Err(format!("{rel:?}: not a path inside the root"))
-    }
-}
-
 /// Locks ignoring poisoning: a panicked reader must not take the whole root down.
 fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
     m.lock().unwrap_or_else(PoisonError::into_inner)
@@ -596,16 +580,6 @@ mod tests {
         roots.close(&root.id);
         assert!(panel_again.load(Ordering::Relaxed) && dialog_again.load(Ordering::Relaxed), "closing cancels all");
         std::fs::remove_dir_all(&base).unwrap();
-    }
-
-    #[test]
-    fn checked_rel_rejects_paths_leaving_the_root() {
-        for ok in ["a.txt", "src/main.rs", ".gitignore", "a/.git-keep", "dir with space/ф.txt"] {
-            assert_eq!(checked_rel(ok), Ok(ok), "{ok}");
-        }
-        for bad in ["", "/etc/passwd", "../x", "a/../../x", "a//b", "./a", "a/", ".git/config", ".git", "a\\b", "C:\\x"] {
-            assert!(checked_rel(bad).is_err(), "{bad:?}");
-        }
     }
 
     #[test]

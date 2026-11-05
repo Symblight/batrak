@@ -108,7 +108,7 @@ pub struct Program {
 pub type OnExit = Box<dyn FnOnce(Option<&TerminalEvent>) + Send>;
 
 pub struct TerminalsOptions {
-    /// The shell to run; `None` = the user's default (`shell::default_shell()`).
+    /// The shell to run; `None` = the user's default (`util::default_shell()`).
     pub shell: Option<PathBuf>,
     /// `TERM_PROGRAM_VERSION`.
     pub version: String,
@@ -251,7 +251,7 @@ impl Terminals {
         let cwd = resolve_cwd(req.cwd, req.fallback, allowed)?;
         let shell = match &program {
             Some(program) => PathBuf::from(&program.program),
-            None => self.inner.opts.shell.clone().unwrap_or_else(shell::default_shell),
+            None => self.inner.opts.shell.clone().unwrap_or_else(crate::util::default_shell),
         };
         let shell_name = shell.file_name().map_or_else(|| shell.to_string_lossy(), |n| n.to_string_lossy()).into_owned();
         let size = PtySize { rows: req.rows.max(1), cols: req.cols.max(1), pixel_width: 0, pixel_height: 0 };

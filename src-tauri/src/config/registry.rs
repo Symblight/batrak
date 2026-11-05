@@ -453,7 +453,7 @@ impl Registry {
     pub fn state(&self) -> RegistryState {
         let state = self.lock();
         RegistryState {
-            checked_at: state.checked_at.map(crate::session::iso_from_millis),
+            checked_at: state.checked_at.map(crate::util::iso_from_millis),
             offline: state.offline,
             checking: state.checking,
         }

@@ -152,7 +152,7 @@ pub async fn write_file(
     blocking(move || {
         let (canonical, project) =
             writable(&path, configs.user_file(), |p| roots.contains_project(p))?;
-        crate::session::env::write_atomic(&canonical, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
+        crate::util::write_atomic(&canonical, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
         let changed = match &project {
             Some(project) => configs.reload(project),
             None => configs.reload_user(),

@@ -1,57 +1,6 @@
-//! Which shell a terminal (and the login-shell environment agents get) runs, and its environment.
+//! A terminal's environment.
 
 use std::ffi::OsString;
-use std::path::{Path, PathBuf};
-
-/// The user's default shell: `$SHELL`, else the account's login shell, else the platform's.
-pub fn default_shell() -> PathBuf {
-    #[cfg(windows)]
-    {
-        if let Some(comspec) = std::env::var_os("COMSPEC").filter(|s| !s.is_empty()) {
-            return PathBuf::from(comspec);
-        }
-    }
-    choose(std::env::var("SHELL").ok().as_deref(), account_shell(), &is_executable)
-}
-
-/// `env` when executable, else `account` when executable, else `/bin/zsh` (macOS) / `/bin/sh`.
-fn choose(env: Option<&str>, account: Option<PathBuf>, executable: &dyn Fn(&Path) -> bool) -> PathBuf {
-    env.filter(|s| !s.is_empty())
-        .map(PathBuf::from)
-        .filter(|p| executable(p))
-        .or_else(|| account.filter(|p| executable(p)))
-        .unwrap_or_else(|| PathBuf::from(if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/sh" }))
-}
-
-#[cfg(unix)]
-fn account_shell() -> Option<PathBuf> {
-    use std::os::unix::ffi::OsStrExt;
-    // SAFETY: getpwuid returns a pointer into static storage or null; it's read at once.
-    unsafe {
-        let entry = libc::getpwuid(libc::getuid());
-        if entry.is_null() || (*entry).pw_shell.is_null() {
-            return None;
-        }
-        let shell = std::ffi::CStr::from_ptr((*entry).pw_shell).to_bytes();
-        (!shell.is_empty()).then(|| PathBuf::from(std::ffi::OsStr::from_bytes(shell)))
-    }
-}
-
-#[cfg(not(unix))]
-fn account_shell() -> Option<PathBuf> {
-    None
-}
-
-#[cfg(unix)]
-fn is_executable(path: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::metadata(path).is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
-}
-
-#[cfg(not(unix))]
-fn is_executable(path: &Path) -> bool {
-    path.is_file()
-}
 
 /// A terminal's environment: `base` (the app's) without git's redirects, plus what a terminal
 /// emulator sets. `LANG` only when no locale is set (a GUI app starts with none).
@@ -78,29 +27,6 @@ pub fn terminal_env(base: impl IntoIterator<Item = (OsString, OsString)>, versio
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    fn fallback() -> PathBuf {
-        PathBuf::from(if cfg!(target_os = "macos") { "/bin/zsh" } else { "/bin/sh" })
-    }
-
-    #[test]
-    fn the_shell_variable_wins_then_the_accounts_shell_then_the_platforms() {
-        let all = |_: &Path| true;
-        let account = Some(PathBuf::from("/usr/bin/fish"));
-        assert_eq!(choose(Some("/bin/bash"), account.clone(), &all), PathBuf::from("/bin/bash"));
-        assert_eq!(choose(Some(""), account.clone(), &all), PathBuf::from("/usr/bin/fish"));
-        assert_eq!(choose(None, account.clone(), &all), PathBuf::from("/usr/bin/fish"));
-        let only_fish = |p: &Path| p == Path::new("/usr/bin/fish");
-        assert_eq!(choose(Some("/gone/bash"), account, &only_fish), PathBuf::from("/usr/bin/fish"), "not executable");
-        assert_eq!(choose(None, None, &all), fallback());
-        assert_eq!(choose(Some("/gone"), Some(PathBuf::from("/gone2")), &|_| false), fallback());
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn the_default_shell_is_executable() {
-        assert!(is_executable(&default_shell()));
-    }
 
     fn env_of(base: &[(&str, &str)]) -> std::collections::HashMap<OsString, OsString> {
         terminal_env(base.iter().map(|(k, v)| (OsString::from(k), OsString::from(v))), "1.2.3").into_iter().collect()

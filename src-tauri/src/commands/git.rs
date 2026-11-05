@@ -4,7 +4,8 @@ use tauri::State;
 
 use crate::git::cache::StatusReply;
 use crate::git::{binary, blob, commit, repo};
-use crate::roots::{checked_rel, Roots};
+use crate::roots::Roots;
+use crate::util::checked_rel;
 
 use super::blocking;
 

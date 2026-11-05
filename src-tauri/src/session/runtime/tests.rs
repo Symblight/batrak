@@ -2794,12 +2794,12 @@ async fn a_sync_for_some_agents_joins_a_running_full_sync() {
 async fn a_session_its_agent_saw_active_just_now_is_active_elsewhere_for_a_while_unless_it_was_here() {
     let options = listing();
     let f = fixture("sync-elsewhere", options.clone());
-    let now = crate::session::iso_now();
+    let now = crate::util::iso_now();
     stored_in(&options, &[("busy", &f.project, None, Some(now.as_str())), ("old", &f.project, None, Some("2026-01-01T00:00:00Z"))]);
     f.sessions.sync(&f.project, None).await;
     let until = |sessions: &Sessions, id: &str| sessions.list().into_iter().find(|s| s.id == id).unwrap().active_elsewhere_until;
-    let now_ms = crate::session::parse_iso_millis(&now).unwrap();
-    assert_eq!(until(&f.sessions, "fake~busy"), Some(crate::session::iso_from_millis(now_ms + 2 * 60_000)), "its activity and two minutes");
+    let now_ms = crate::util::parse_iso_millis(&now).unwrap();
+    assert_eq!(until(&f.sessions, "fake~busy"), Some(crate::util::iso_from_millis(now_ms + 2 * 60_000)), "its activity and two minutes");
     let old = until(&f.sessions, "fake~old").unwrap();
     assert!(old.as_str() < now.as_str(), "long over: {old}");
 
@@ -3023,7 +3023,7 @@ async fn its_agents_list_never_reads_as_activity_of_a_chat_its_cli_runs_nor_righ
     let terminals = terminals();
     let id = "3cb916db-26aa-40f2-86b5-1ba81b225fd2";
     f.sessions.open_cli(id, Some(f.draft("fake", None)), window(&terminals)).await.unwrap();
-    let now = crate::session::iso_now();
+    let now = crate::util::iso_now();
     stored_in(&options, &[(id, &f.project, None, Some(now.as_str()))]);
 
     // Act
@@ -3064,7 +3064,7 @@ async fn a_cli_that_didnt_start_doesnt_hide_another_apps_activity() {
     // Arrange
     let options = listing();
     let f = fixture("cli-refused", options.clone());
-    let now = crate::session::iso_now();
+    let now = crate::util::iso_now();
     stored_in(&options, &[("busy", &f.project, None, Some(now.as_str()))]);
     f.sessions.sync(&f.project, None).await;
     let terminals = terminals();

@@ -159,30 +159,6 @@ pub fn confine(host_dir: &Path, path: &Path, access: Access) -> Result<PathBuf, 
     Ok(real)
 }
 
-/// Writes `content` to `path` atomically: a temp file in the same folder, then a rename over it.
-/// Missing parent folders are created. `path` comes from [`confine`].
-pub fn write_atomic(path: &Path, content: &[u8]) -> std::io::Result<()> {
-    use std::io::Write;
-    let dir = path.parent().ok_or_else(|| std::io::Error::other("no parent folder"))?;
-    std::fs::create_dir_all(dir)?;
-    let name = path.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
-    let tmp = dir.join(format!(".{name}.brama-{}.tmp", std::process::id()));
-    let result = (|| {
-        let mut file = File::create(&tmp)?;
-        file.write_all(content)?;
-        file.sync_all()?;
-        // Keep the file's mode (an executable script stays executable).
-        if let Ok(meta) = std::fs::metadata(path) {
-            std::fs::set_permissions(&tmp, meta.permissions())?;
-        }
-        std::fs::rename(&tmp, path)
-    })();
-    if result.is_err() {
-        let _ = std::fs::remove_file(&tmp);
-    }
-    result
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,17 +214,5 @@ mod tests {
         assert_eq!(confine(&root, &root.join("inner.txt"), Access::Read).unwrap(), root.join("src/a.txt"));
         std::fs::remove_dir_all(root).unwrap();
         std::fs::remove_dir_all(outside).unwrap();
-    }
-
-    #[test]
-    fn atomic_write_replaces_and_creates() {
-        let root = project("write");
-        write_atomic(&root.join("src/a.txt"), b"new").unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("src/a.txt")).unwrap(), "new");
-        write_atomic(&root.join("x/y/z.txt"), b"z").unwrap();
-        assert_eq!(std::fs::read_to_string(root.join("x/y/z.txt")).unwrap(), "z");
-        let leftovers: Vec<_> = std::fs::read_dir(root.join("src")).unwrap().filter_map(Result::ok).collect();
-        assert_eq!(leftovers.len(), 1, "no temp file left");
-        std::fs::remove_dir_all(root).unwrap();
     }
 }

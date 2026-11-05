@@ -16,7 +16,8 @@ use crate::acp::process::AgentProcess;
 use crate::acp::{Catalog, CatalogOptions, ConnectError, ListedSession};
 use crate::config::AgentConfig;
 use crate::session::env;
-use crate::session::{iso_from_millis, iso_now, parse_iso_millis, Session, SessionRecord, SessionStatus, TitleSource};
+use crate::util::{iso_from_millis, iso_now, parse_iso_millis};
+use crate::session::{Session, SessionRecord, SessionStatus, TitleSource};
 use crate::storage::JsonFile;
 use crate::workspace::WorkspaceRecord;
 

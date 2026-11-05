@@ -43,6 +43,8 @@ grep-matcher = "0.1"
 globset = "0.4"
 # canonicalize without Windows' `\\?\` prefix, in which `/` is not a separator
 dunce = "1"
+# The app's data, config and log folders: the crate Tauri's own path resolver uses
+dirs = "7"
 # Settings > Font: installed font families (the webview has no font enumeration API)
 fontdb = "0.24"
 # Logs: daily files in the app log dir (plus stderr in dev), panics included
@@ -72,6 +74,8 @@ opt-level = 2
 
 [dev-dependencies]
 agent-acp = { path = "crates/agent-acp", features = ["test-support"] }
+# A mock app, to compare `Dirs` with Tauri's path resolver
+tauri = { version = "2", features = ["test"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Diagnostics_ToolHelp"] }

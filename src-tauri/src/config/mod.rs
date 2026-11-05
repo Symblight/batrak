@@ -424,7 +424,7 @@ fn edit_file(
     change(root)?;
     let mut out = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
     out.push('\n');
-    crate::session::env::write_atomic(path, out.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
+    crate::util::write_atomic(path, out.as_bytes()).map_err(|e| format!("{}: {e}", path.display()))
 }
 
 /// The `agents` object of an agents.json, added when missing.
