@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::git::cache::StatusReply;
-use crate::git::{binary, blob, commit, repo};
+use crate::git::{binary, blob, branches, commit, repo, revert};
 use crate::roots::Roots;
 use crate::util::checked_rel;
 
@@ -31,8 +31,9 @@ pub async fn git_status(
     blocking(move || root.git.status(binary::git()?, &root.path, root.epoch(), since, force)).await?
 }
 
-/// Text of a file at HEAD, the editor's diff baseline; `null` when it has none (not committed,
-/// binary, too large, or not in a repository). `path` is relative to the root.
+/// Text of a file at HEAD, the editor's diff baseline; `null` when it has none (not committed, or
+/// not in a repository). Fails, saying why, when it has no text to diff (binary, too large).
+/// `path` is relative to the root.
 #[tauri::command]
 pub async fn git_file_at_head(
     roots: State<'_, Roots>,
@@ -46,9 +47,9 @@ pub async fn git_file_at_head(
 
 /// Branches a workspace can be based on: local and remote-tracking ones, and the remote's default.
 #[tauri::command]
-pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<repo::BranchList, String> {
+pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<branches::BranchList, String> {
     let root = roots.get(&root_id)?;
-    blocking(move || repo::branch_list(binary::git()?, &root.path)).await?
+    blocking(move || branches::branch_list(binary::git()?, &root.path)).await?
 }
 
 /// Fetches every remote of the root's repository (New workspace's refresh), pruning deleted branches.
@@ -56,7 +57,7 @@ pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<re
 pub async fn git_fetch(roots: State<'_, Roots>, root_id: String) -> Result<(), String> {
     let root = roots.get(&root_id)?;
     tracing::info!(root = %root.path.display(), "fetching remotes");
-    blocking(move || repo::fetch(binary::git()?, &root.path)).await?
+    blocking(move || branches::fetch(binary::git()?, &root.path)).await?
 }
 
 /// Message of the last commit, which Amend starts from; `null` before the first commit.
@@ -88,4 +89,21 @@ pub async fn git_commit(
     let done = blocking(move || commit::commit(binary::git()?, &root.path, &paths, &message, amend)).await??;
     tracing::info!(sha = %done.sha, files = count, amend, "committed");
     Ok(done)
+}
+
+/// Makes changed files match HEAD, both sides of a rename among `paths`. Their work stays in one ref.
+#[tauri::command]
+pub async fn git_revert_files(roots: State<'_, Roots>, root_id: String, paths: Vec<String>) -> Result<(), String> {
+    let root = roots.get(&root_id)?;
+    for path in &paths {
+        checked_rel(path)?;
+    }
+    let count = paths.len();
+    let saved = blocking(move || {
+        let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
+        revert::revert_files(binary::git()?, &root.path, &paths)
+    })
+    .await??;
+    tracing::info!(saved = %saved, paths = count, "reverted files");
+    Ok(())
 }

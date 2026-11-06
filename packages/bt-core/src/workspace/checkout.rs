@@ -8,7 +8,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use super::WorkspaceRecord;
 use crate::git::exec::{self, Mode as GitMode};
 use crate::git::{binary, worktree};
-use crate::git::repo::BRANCH_PREFIX;
+use crate::git::branches::BRANCH_PREFIX;
 
 /// Whether a worktree is checked out at `root`.
 pub fn is_checked_out(root: &Path) -> bool {

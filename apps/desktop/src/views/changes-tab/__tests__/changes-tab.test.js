@@ -3,7 +3,8 @@ import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
-import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
+import { $commitSelection, $diffLayout, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
+import { $notices } from '../../../stores/notices/notices.js';
 import { $project } from '../../../stores/project/project.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import '../changes-tab.js';
@@ -56,6 +57,7 @@ describe('acp-changes-tab', () => {
     $comments.set({});
     $commentFocus.set(null);
     $project.set(null);
+    $diffLayout.set('unified');
     clearMocks();
   });
 
@@ -74,6 +76,104 @@ describe('acp-changes-tab', () => {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
 
+  it('asks before reverting a file, reverts it only on yes, and shows why when it fails', async () => {
+    // Arrange
+    $notices.set([]);
+    $gitChanges.set(CHANGES);
+    const { el, review } = await render();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+    /** @type {string[]} */
+    const asked = [];
+    let answer = false;
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return answer;
+    };
+    const reverts = () => calls.filter((c) => c.cmd === 'git_revert_files').map((c) => c.args.paths);
+    // Act
+    fire(review, 'acp-change-revert', { id: 'a.js' });
+    await until(() => asked.length === 1);
+    await new Promise((r) => setTimeout(r));
+    const afterNo = reverts();
+    answer = true;
+    fire(review, 'acp-change-revert', { id: 'b.js' });
+    await until(() => reverts().length === 1);
+    // Assert
+    expect(afterNo).to.deep.equal([]);
+    expect(asked).to.deep.equal(['Revert a.js?', 'Delete new file b.js?']);
+    expect(reverts()).to.deep.equal([['b.js']]);
+    // Arrange: git refuses
+    clearMocks();
+    mockIPC((cmd) => {
+      if (cmd === 'git_revert_files') throw new Error('it has a conflict');
+      return cmd === 'git_status' ? { version: 1, unchanged: true, status: null } : null;
+    });
+    // Act
+    fire(review, 'acp-change-revert', { id: 'a.js' });
+    await until(() => $notices.get().length === 1);
+    // Assert
+    expect($notices.get()[0].message).to.equal('Couldn’t revert a.js: it has a conflict');
+  });
+
+  it('asks before rolling back the picked files, rolls back only those on yes and unpicks them, keeps them picked when it fails', async () => {
+    // Arrange
+    $notices.set([]);
+    const third = { ...FILES[0], path: 'c.js' };
+    $gitChanges.set({ ...CHANGES, files: [...FILES, third] });
+    $commitSelection.set(new Set(['a.js', 'b.js']));
+    const { el, review } = await render();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+    /** @type {string[]} */
+    const asked = [];
+    let answer = false;
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return answer;
+    };
+    const rollbacks = () => calls.filter((c) => c.cmd === 'git_revert_files').map((c) => c.args.paths);
+    // Act
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => asked.length === 1);
+    await new Promise((r) => setTimeout(r));
+    const afterNo = rollbacks();
+    answer = true;
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => $commitSelection.get().size === 0);
+    // Assert
+    expect(afterNo).to.deep.equal([]);
+    expect(asked).to.deep.equal(['Roll back 2 files?', 'Roll back 2 files?']);
+    expect(rollbacks()).to.deep.equal([['a.js', 'b.js']]);
+    // Arrange: git refuses
+    $commitSelection.set(new Set(['a.js', 'b.js']));
+    clearMocks();
+    mockIPC((cmd) => {
+      if (cmd === 'git_revert_files') throw new Error('a.js has a conflict');
+      return cmd === 'git_status' ? { version: 1, unchanged: true, status: null } : null;
+    });
+    // Act
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => $notices.get().length === 1);
+    // Assert
+    expect($notices.get()[0].message).to.equal('Couldn’t revert 2 files: a.js has a conflict');
+    expect([...$commitSelection.get()]).to.deep.equal(['a.js', 'b.js']);
+  });
+
+  it('scans again, even with nothing seen changing, when the review asks for a refresh', async () => {
+    // Arrange
+    const { review } = await render();
+    openChanges();
+    const statuses = () => calls.filter((c) => c.cmd === 'git_status');
+    await until(() => statuses().length === 1);
+    let leaked = false;
+    document.addEventListener('acp-changes-refresh', () => (leaked = true), { once: true });
+    // Act
+    fire(review, 'acp-changes-refresh');
+    await until(() => statuses().length === 2);
+    // Assert
+    expect(statuses()[1].args.force).to.equal(true);
+    expect(leaked).to.equal(false);
+  });
+
   it('gives the review the project’s changes, repository, picks and comments, and the project folder as its root', async () => {
     // Arrange
     const { el, review } = await render();
@@ -90,6 +190,31 @@ describe('acp-changes-tab', () => {
     expect(review.root).to.equal('/p');
     expect(review.comments).to.equal($comments.get());
     expect(review.commentFocus === focus).to.equal(true);
+  });
+
+  it('shows the saved diff layout and saves the one the review asks for', async () => {
+    // Arrange
+    $diffLayout.set('split');
+    const { el, review } = await render();
+    expect(review.diffLayout).to.equal('split');
+    // Act
+    fire(review, 'acp-diff-layout', { layout: 'unified' });
+    await el.updateComplete;
+    // Assert
+    expect($diffLayout.get()).to.equal('unified');
+    expect(review.diffLayout).to.equal('unified');
+  });
+
+  it('reads a renamed file at HEAD under its old name', async () => {
+    // Arrange
+    const { el, review } = await render();
+    $gitChanges.set({ ...CHANGES, files: [{ ...CHANGES.files[0], path: 'new.js', kind: 'renamed', origPath: 'old.js' }] });
+    await el.updateComplete;
+    // Act
+    fire(review, 'acp-change-expand', { id: 'new.js' });
+    await until(() => review.diffs.get('new.js')?.loading === false);
+    // Assert
+    expect(calls.find((c) => c.cmd === 'git_file_at_head')?.args).to.deep.equal({ rootId: 'r1', path: 'old.js' });
   });
 
   it('turns the review’s events into expanding, collapsing and picking files, and none leaves the view', async () => {

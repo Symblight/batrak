@@ -9,6 +9,25 @@ import { git } from '../git.js';
 const file = (path, fields = {}) => ({ path, origPath: null, kind: 'modified', staged: false, unstaged: true, added: null, removed: null, ...fields });
 
 describe('git changes', () => {
+  it('builds a diff from its two reads, or says why there is none', async () => {
+    const shown = (/** @type {string} */ content, /** @type {string} */ baseline, error = '') => ({ content, baseline, error, loading: false });
+    const failing = () => Promise.reject('a.bin: binary, no diff to show');
+    const table = [
+      ['edited', false, Promise.resolve('new'), Promise.resolve('old'), shown('new', 'old')],
+      ['new', false, Promise.resolve('new'), Promise.resolve(null), shown('new', '')],
+      ['deleted', true, failing(), Promise.resolve('old'), shown('', 'old')],
+      ['gone, listed as something else', false, Promise.reject('a.js: No such file or directory (os error 2)'), Promise.resolve('old'), shown('', 'old')],
+      ['gone with its folder, on Windows', false, Promise.reject('a.js: The system cannot find the path specified. (os error 3)'), Promise.resolve('old'), shown('', 'old')],
+      ['turned binary', false, failing(), Promise.resolve('old'), shown('', '', 'a.bin: binary, no diff to show')],
+      ['untracked binary', false, failing(), Promise.resolve(null), shown('', '', 'a.bin: binary, no diff to show')],
+      ['committed binary', false, Promise.resolve('text'), failing(), shown('', '', 'a.bin: binary, no diff to show')],
+    ];
+    for (const [name, deleted, file, base, expected] of table) {
+      const diff = await git.readDiff(/** @type {Promise<string>} */ (file), /** @type {Promise<string | null>} */ (base), /** @type {boolean} */ (deleted));
+      expect(diff, String(name)).to.deep.equal(expected);
+    }
+  });
+
   it('words the uncommitted files hint for one file and for several', () => {
     const cases = [
       [1, { label: 'Review 1 uncommitted file', value: 'Review the uncommitted file' }],
@@ -60,33 +79,48 @@ describe('git changes', () => {
     }
   });
 
-  it('badges a file by its type: known short forms, the first three letters of others, a dot for none', () => {
-    /** @type {[string, string][]} */
+  it('asks about a revert in the terms of what it does to the file', () => {
+    // Arrange
+    /** @type {[import('../types.js').GitFileStatus, string, string, RegExp][]} */
     const cases = [
-      ['app.js', 'JS'],
-      ['app.MJS', 'JS'],
-      ['view.tsx', 'TSX'],
-      ['style.css', '{}'],
-      ['package.json', '{}'],
-      ['Cargo.toml', 'TOML'],
-      ['ci.yml', 'YML'],
-      ['notes.markdown', 'MAR'],
-      ['Makefile', '·'],
-      ['.gitignore', '·'],
+      [file('src/a.js'), 'Revert a.js?', 'Revert', /back to HEAD/],
+      [file('src/a.js', { kind: 'deleted' }), 'Revert a.js?', 'Revert', /back to HEAD/],
+      [file('src/a.js', { kind: 'added' }), 'Delete new file a.js?', 'Delete', /isn’t in HEAD/],
+      [file('src/a.js', { kind: 'untracked' }), 'Delete new file a.js?', 'Delete', /isn’t in HEAD/],
+      [file('src/a.js', { kind: 'renamed', origPath: 'old/a.js' }), 'Revert a.js?', 'Revert', /old\/a\.js/],
     ];
-    for (const [name, badge] of cases) expect(git.typeBadge(name), name).to.equal(badge);
+    for (const [changed, headline, confirmLabel, message] of cases) {
+      // Act
+      const prompt = git.revertPrompt([changed]);
+      // Assert
+      expect([prompt.headline, prompt.confirmLabel, prompt.destructive], changed.kind).to.deep.equal([headline, confirmLabel, true]);
+      expect(prompt.message, changed.kind).to.match(message);
+      expect(prompt.detail, changed.kind).to.include('refs/batrak/reverted');
+    }
   });
 
-  it('writes a renamed file’s old path relative to its folder', () => {
-    /** @type {[string, string, string][]} */
+  it('asks about rolling back several files by how many, and says how many of them are deleted', () => {
+    // Act
+    const edited = git.revertPrompt([file('a.js'), file('b.js')]);
+    const someNew = git.revertPrompt([file('a.js'), file('b.js', { kind: 'untracked' }), file('c.js', { kind: 'added' })]);
+    // Assert
+    expect([edited.headline, edited.confirmLabel, edited.destructive]).to.deep.equal(['Roll back 2 files?', 'Rollback', true]);
+    expect(edited.message).to.not.include('deleted');
+    expect(someNew.headline).to.equal('Roll back 3 files?');
+    expect(someNew.message).to.include('2 new files aren’t in HEAD and are deleted');
+    expect(someNew.detail).to.include('refs/batrak/reverted');
+  });
+
+  it('says where a renamed file came from: the folder when its name stayed, else its old path', () => {
+    /** @type {[string, string, string, { from: string, to: string }][]} */
     const cases = [
-      ['src', 'src/a.js', 'a.js'],
-      ['src/new', 'src/old/name.css', '../old/name.css'],
-      ['', 'old.js', 'old.js'],
-      ['a/b', 'c.js', '../../c.js'],
-      ['src', 'src/deep/x.js', 'deep/x.js'],
+      ['.bt', 'agents.json', '.brama/agents.json', { from: '.brama', to: '.bt' }],
+      ['src', 'a.js', 'a.js', { from: '.', to: 'src' }],
+      ['', 'a.js', 'src/a.js', { from: 'src', to: '.' }],
+      ['src', 'new.js', 'src/old.js', { from: 'src/old.js', to: 'src' }],
+      ['', 'new.js', 'old.js', { from: 'old.js', to: '.' }],
     ];
-    for (const [from, to, expected] of cases) expect(git.relativePath(from, to), `${from} → ${to}`).to.equal(expected);
+    for (const [dir, name, origPath, expected] of cases) expect(git.renameLabel(dir, name, origPath), origPath).to.deep.equal(expected);
   });
 
   it('sorts changed files into rows with their name (the last path segment) and folder, a top-level file with none', () => {

@@ -1,0 +1,22 @@
+/* A button and a popover: no box of its own where it's placed. */
+:host {
+  display: contents;
+}
+
+.acp-changes-menu__button {
+  flex: none;
+  --md-icon-button-font-size: var(--acp-changes-menu-icon-size, var(--acp-icon-size-sm));
+  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+
+.acp-changes-menu__button::part(button) {
+  padding: 5px;
+}
+
+.acp-changes-menu__icon {
+  font-size: var(--acp-changes-menu-icon-size, var(--acp-icon-size-sm));
+}
+
+.acp-changes-menu__item-icon {
+  font-size: var(--acp-icon-size-sm);
+}

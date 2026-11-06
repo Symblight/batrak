@@ -4,11 +4,12 @@ use std::path::Path;
 
 use super::exec::{self, Mode, Options};
 
-/// Larger committed files get no baseline: the editor would diff them slowly anyway.
+/// Larger committed files get no diff: the editor would compute it slowly anyway.
 const MAX_BLOB: usize = 5 * 1024 * 1024;
 
-/// Text of `rel` (relative to `root`) at HEAD; `None` when it isn't in HEAD (new file, no
-/// commits, not a repository), is binary, or is over `MAX_BLOB`.
+/// Text of `rel` (relative to `root`) at HEAD; `None` when it isn't in HEAD (new file, no commits,
+/// not a repository). Fails, saying why, when it's there but can't be diffed as text: binary, over
+/// `MAX_BLOB`, not UTF-8, or stored in Git LFS (the blob is a pointer, not the file).
 pub fn file_at_head(git: &Path, root: &Path, rel: &str) -> Result<Option<String>, String> {
     file_at(git, root, "HEAD", rel)
 }
@@ -21,16 +22,19 @@ pub fn file_at(git: &Path, root: &Path, rev: &str, rel: &str) -> Result<Option<S
     let opts = Options { max_output: Some(MAX_BLOB), ..Default::default() };
     let out = match exec::run_with(git, root, &exec::args(&[&"cat-file", &"blob", &spec]), Mode::Background, &opts) {
         Ok(out) => out,
-        Err(err) if exec::is_too_large(&err) => return Ok(None),
+        Err(err) if exec::is_too_large(&err) => return Err(format!("{rel}: too large to show a diff")),
         Err(err) => return Err(err),
     };
     if !out.success() {
         return Ok(None);
     }
     if out.stdout.contains(&0) {
-        return Ok(None);
+        return Err(format!("{rel}: binary, no diff to show"));
     }
-    Ok(String::from_utf8(out.stdout).ok())
+    if out.stdout.starts_with(b"version https://git-lfs.github.com/spec/") {
+        return Err(format!("{rel}: stored in Git LFS, no diff to show"));
+    }
+    String::from_utf8(out.stdout).map(Some).map_err(|_| format!("{rel}: not UTF-8, no diff to show"))
 }
 
 #[cfg(test)]
@@ -52,11 +56,22 @@ mod tests {
         assert_eq!(file_at_head(&git, &repo.path, "pkg/a b.txt").unwrap().as_deref(), Some("committed\n"));
         assert_eq!(file_at_head(&git, &repo.path.join("pkg"), "a b.txt").unwrap().as_deref(), Some("committed\n"));
         assert_eq!(file_at_head(&git, &repo.path, "new.txt").unwrap(), None);
-        assert_eq!(file_at_head(&git, &repo.path, "bin.dat").unwrap(), None);
+        assert!(file_at_head(&git, &repo.path, "bin.dat").unwrap_err().contains("binary"));
 
         let empty = TestRepo::new("blob-empty");
         empty.write("a.txt", "a");
         assert_eq!(file_at_head(&git, &empty.path, "a.txt").unwrap(), None);
+
+        repo.write("big.txt", &"x".repeat(MAX_BLOB + 1));
+        repo.write("pointer.bin", "version https://git-lfs.github.com/spec/v1\noid sha256:ab\nsize 9\n");
+        repo.write("latin.txt", "");
+        std::fs::write(repo.path.join("latin.txt"), b"caf\xe9\n").unwrap();
+        repo.git(&["add", "big.txt", "pointer.bin", "latin.txt"]);
+        repo.git(&["commit", "-qm", "more"]);
+        for (path, why) in [("big.txt", "too large"), ("pointer.bin", "LFS"), ("latin.txt", "UTF-8")] {
+            let err = file_at_head(&git, &repo.path, path).unwrap_err();
+            assert!(err.contains(path) && err.contains(why), "{err}");
+        }
 
         let plain = temp_dir("blob-plain");
         assert_eq!(file_at_head(&git, &plain, "a.txt").unwrap(), None);

@@ -27,8 +27,8 @@ importers:
         specifier: github:Symblight/rich-components#path:/packages/chat
         version: https://codeload.github.com/Symblight/rich-components/tar.gz/6ffc03988e25361b9531d1b869b72f579ba6615e#path:/packages/chat(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@symblight/code-editor':
-        specifier: github:Symblight/rich-components#path:/packages/code-editor
-        version: https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/code-editor(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/merge@6.12.2)(@codemirror/search@6.7.2)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
+        specifier: github:Symblight/rich-components#db8f2f9fe0c703dd410bea05bb5b518a18256228&path:/packages/code-editor
+        version: https://codeload.github.com/Symblight/rich-components/tar.gz/db8f2f9fe0c703dd410bea05bb5b518a18256228#path:/packages/code-editor(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/merge@6.12.2)(@codemirror/search@6.7.2)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@symblight/md-colors':
         specifier: ^0.2.0
         version: 0.2.0
@@ -646,8 +646,8 @@ packages:
     peerDependencies:
       lit: '>=3.0.0'
 
-  '@symblight/code-editor@https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/code-editor':
-    resolution: {path: /packages/code-editor, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114}
+  '@symblight/code-editor@https://codeload.github.com/Symblight/rich-components/tar.gz/db8f2f9fe0c703dd410bea05bb5b518a18256228#path:/packages/code-editor':
+    resolution: {path: /packages/code-editor, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/db8f2f9fe0c703dd410bea05bb5b518a18256228}
     version: 0.1.0
     peerDependencies:
       '@codemirror/autocomplete': ^6.20.3
@@ -2860,7 +2860,7 @@ snapshots:
       - '@open-wc/form-helpers'
       - rollup
 
-  '@symblight/code-editor@https://codeload.github.com/Symblight/rich-components/tar.gz/2f27f420b138e28a9d3e92665617e2399934b114#path:/packages/code-editor(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/merge@6.12.2)(@codemirror/search@6.7.2)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
+  '@symblight/code-editor@https://codeload.github.com/Symblight/rich-components/tar.gz/db8f2f9fe0c703dd410bea05bb5b518a18256228#path:/packages/code-editor(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/merge@6.12.2)(@codemirror/search@6.7.2)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
     dependencies:
       '@codemirror/autocomplete': 6.20.4
       '@codemirror/commands': 6.11.1

@@ -1,12 +1,16 @@
 import { html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
-import { $commitSelection, $gitChanges, $gitRepo, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $diffLayout, $gitChanges, $gitRepo, pickForCommit, setCommitSelection, setDiffLayout } from '../../stores/git/git.js';
 import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
+import { git } from '../../hooks/git/git.js';
 import '../../components/changes-review/changes-review.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
+
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 
 /**
  * @tag acp-changes-tab
@@ -20,6 +24,7 @@ export class AcpChangesTab extends ViewElement {
   #comments = new StoreController(this, { store: $comments });
   #commentFocus = new StoreController(this, { store: $commentFocus });
   #project = new StoreController(this, { store: $project });
+  #diffLayout = new StoreController(this, { store: $diffLayout });
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-changes-review']>} */
   #reviewRef = createRef();
 
@@ -44,6 +49,12 @@ export class AcpChangesTab extends ViewElement {
     };
   }
 
+  /** @param {readonly GitFileStatus[]} files */
+  #revert(files) {
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+    return git.revertAsking(files, (options) => dialog.confirm(options));
+  }
+
   render() {
     const byId = AcpChangesTab.#byId;
     return html`<acp-changes-review
@@ -56,11 +67,25 @@ export class AcpChangesTab extends ViewElement {
       .root=${this.#project.value?.path ?? null}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
+      .diffLayout=${this.#diffLayout.value}
       @acp-change-toggle=${byId((id) => this.#review.toggle(id))}
       @acp-change-expand=${byId((id) => this.#review.expand(id))}
+      @acp-change-revert=${byId((id) => this.#revert(this.#changes.value.files.filter((f) => f.path === id)))}
+      @acp-changes-rollback=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        this.#revert(this.#changes.value.files.filter((f) => this.#selection.value.has(f.path)));
+      }}
+      @acp-changes-refresh=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        git.refreshChanges();
+      }}
       @acp-changes-collapse=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         this.#review.collapseAll();
+      }}
+      @acp-diff-layout=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        setDiffLayout(/** @type {CustomEvent<{ layout: import('../../hooks/git/types.js').DiffLayout }>} */ (e).detail.layout);
       }}
       @acp-commit-pick=${(/** @type {Event} */ e) => {
         e.stopPropagation();
@@ -71,7 +96,8 @@ export class AcpChangesTab extends ViewElement {
         e.stopPropagation();
         setCommitSelection(/** @type {CustomEvent<{ ids: string[] }>} */ (e).detail.ids);
       }}
-    ></acp-changes-review>`;
+    ></acp-changes-review>
+      <acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }
 

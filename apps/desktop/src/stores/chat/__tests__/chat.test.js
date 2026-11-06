@@ -1,11 +1,15 @@
 import { expect } from '@esm-bundle/chai';
 import { $pendingInput, addDrop, addToChat, forgetPendingInput, hasPendingInput, takePendingInput } from '../chat.js';
+import { $hiddenColumns } from '../../layout/layout.js';
+import { $project } from '../../project/project.js';
 import { $activeSessionId } from '../../sessions/sessions.js';
 
 describe('pending input', () => {
   afterEach(() => {
     $pendingInput.set({});
     $activeSessionId.set(null);
+    $hiddenColumns.set([]);
+    $project.set(null);
   });
 
   const code = (/** @type {string} */ path) => ({ path, fromLine: 1, toLine: 1, body: '' });
@@ -26,6 +30,22 @@ describe('pending input', () => {
   it('keeps nothing while no session shows: nothing could take it', () => {
     addToChat([code('/p/a.js')]);
     expect($pendingInput.get()).to.deep.equal({});
+  });
+
+  it('shows a hidden agent column when code is added, and leaves it hidden when nothing is', () => {
+    // Arrange
+    $activeSessionId.set('s1');
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    $hiddenColumns.set(['agent', 'side']);
+
+    // Act
+    addToChat([]);
+    const afterNothing = $hiddenColumns.get();
+    addToChat([code('/p/a.js')]);
+
+    // Assert
+    expect(afterNothing).to.deep.equal(['agent', 'side']);
+    expect($hiddenColumns.get()).to.deep.equal(['side']);
   });
 
   it("forgets a removed session's", () => {

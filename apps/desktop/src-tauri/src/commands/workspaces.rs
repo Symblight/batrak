@@ -82,7 +82,7 @@ pub async fn workspace_check_out_branch(sessions: State<'_, Sessions>, id: Strin
 
 /// The workspace's changed files since its base, relative to its folder.
 #[tauri::command]
-pub async fn workspace_changes(sessions: State<'_, Sessions>, id: String) -> Result<Vec<crate::git::repo::FileStatus>, String> {
+pub async fn workspace_changes(sessions: State<'_, Sessions>, id: String) -> Result<Vec<crate::git::status::FileStatus>, String> {
     let sessions = sessions.inner().clone();
     blocking(move || sessions.workspace_changes(&id)).await?
 }

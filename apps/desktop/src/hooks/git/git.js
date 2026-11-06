@@ -1,9 +1,10 @@
-import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspaces/workspaces.js';
+import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
-import { remoteLine } from './branch.js';
-import { changeRows, groupChanges, relativePath, statusOf, typeBadge, uncommittedHint } from './changes.js';
+import { operationLine, remoteLine } from './branch.js';
+import { changeRows, groupChanges, readDiff, renameLabel, revertPrompt, statusOf, uncommittedHint } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').RootChanges} RootChanges */
@@ -24,6 +25,8 @@ import { SerialTask } from './serial-task.js';
 
 /** File changes come in bursts (a build, a checkout): wait for a pause before asking git. */
 const REFRESH_DELAY_MS = 300;
+/** A burst that never pauses (an agent writing for minutes) still shows now and then. */
+const REFRESH_MAX_WAIT_MS = 2000;
 
 /** Open Changes views; files are scanned only while it's above zero. */
 let watchers = 0;
@@ -39,8 +42,8 @@ let followedRoot = null;
 const saved = new Map();
 /** @type {(() => void) | null} Stops the following that `start()` began. */
 let following = null;
-const headTask = new SerialTask(readHead);
-const changesTask = new SerialTask(readChanges);
+const headTask = new SerialTask(readHead, REFRESH_MAX_WAIT_MS);
+const changesTask = new SerialTask(readChanges, REFRESH_MAX_WAIT_MS);
 
 /**
  * Keeps the outgoing root's state while its root stays open, and shows the incoming one's, if
@@ -141,12 +144,14 @@ async function readChanges() {
  */
 export const git = Object.freeze({
   groupChanges,
+  readDiff,
+  revertPrompt,
   uncommittedHint,
   statusOf,
   changeRows,
-  typeBadge,
-  relativePath,
+  renameLabel,
   remoteLine,
+  operationLine,
 
   /**
    * Starts following the active root; once however often it is called.
@@ -223,6 +228,40 @@ export const git = Object.freeze({
   },
 
   /**
+   * Makes changed files match HEAD, all or none; both sides of a rename. Their work stays in a ref.
+   * @param {readonly import('./types.js').GitFileStatus[]} files
+   * @returns {Promise<void>}
+   */
+  async revertFiles(files) {
+    const rootId = $rootId.get();
+    if (rootId === null) throw new Error('No project is open');
+    try {
+      const paths = files.flatMap((file) => (file.origPath ? [file.path, file.origPath] : [file.path]));
+      await ipc.invoke('git_revert_files', { rootId, paths });
+    } finally {
+      git.refreshChanges();
+    }
+  },
+
+  /**
+   * Throwing work away, asked about first: makes the files match HEAD, then no longer picked for a commit. A failure is shown.
+   * @param {readonly import('./types.js').GitFileStatus[]} files
+   * @param {(options: import('../app/types.js').ConfirmOptions) => Promise<boolean>} confirm The view's dialog.
+   * @returns {Promise<void>}
+   */
+  async revertAsking(files, confirm) {
+    const [first] = files;
+    if (!first || !(await confirm(revertPrompt(files)))) return;
+    try {
+      await git.revertFiles(files);
+      pickForCommit(files.map((file) => file.path), false);
+    } catch (err) {
+      const what = files.length === 1 ? first.path.slice(first.path.lastIndexOf('/') + 1) : `${files.length} files`;
+      app.reportError(`Couldn’t revert ${what}`, err);
+    }
+  },
+
+  /**
    * Branches a workspace can be based on: local and remote-tracking ones, most recently committed
    * first (Batrak's own `batrak/…` left out), and the remote's default.
    * @param {string} rootId
@@ -265,7 +304,7 @@ export const git = Object.freeze({
    * A file's text at HEAD, the editor's diff baseline.
    * @param {string} rootId
    * @param {string} path Relative.
-   * @returns {Promise<string | null>} `null` when not committed, binary, too large or not in a repository.
+   * @returns {Promise<string | null>} `null` when not committed or not in a repository. Fails, saying why, when it has no text to diff.
    */
   fileAtHead(rootId, path) {
     return ipc.invoke('git_file_at_head', { rootId, path });

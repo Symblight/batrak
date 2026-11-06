@@ -10,7 +10,7 @@
   color: var(--acp-color-on-surface);
 }
 
-/* Tools row: all-files checkbox, summary, refresh */
+/* Tools row: all-files checkbox, summary, menu */
 .acp-changes-panel__tools {
   flex: none;
   display: flex;
@@ -37,15 +37,8 @@
 .acp-changes-panel__spacer {
   flex: 1;
 }
-.acp-changes-panel__refresh {
-  --md-icon-button-font-size: var(--acp-icon-size-lg);
-  --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
-}
-.acp-changes-panel__refresh::part(button) {
-  padding: 5px;
-}
-.acp-changes-panel__refresh-icon {
-  font-size: var(--acp-icon-size-lg);
+.acp-changes-panel__menu {
+  --acp-changes-menu-icon-size: var(--acp-icon-size-lg);
 }
 
 /* Tree */
@@ -60,6 +53,15 @@
 }
 
 /* Loading, empty, not a repository, error */
+.acp-changes-panel__operation {
+  flex: none;
+  padding: var(--acp-space-1) var(--acp-space-2);
+  border-bottom: 1px solid var(--acp-color-outline-variant);
+  font-size: var(--acp-font-size-sm);
+  line-height: 16px;
+  color: var(--acp-color-on-surface-variant);
+}
+
 .acp-changes-panel__state {
   flex: 1;
   display: flex;
@@ -92,6 +94,6 @@
 /* Footer: the commit form */
 .acp-changes-panel__footer {
   flex: none;
-  padding: var(--acp-space-3);
+  padding: var(--acp-space-2);
   border-top: 1px solid var(--acp-color-outline-variant);
 }

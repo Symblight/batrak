@@ -1188,6 +1188,37 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
     assert!(prompt_blocks(&*env, vec![PromptInput::Mention { path: outside }]).unwrap_err().contains("outside"));
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn a_newer_list_of_a_workspaces_changes_stops_the_one_it_replaces() {
+    let f = git_fixture("wt-supersede");
+    let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
+    let (_, events) = f.create_in_workspace("c", &ws.id).unwrap();
+    events.wait_status("idle").await;
+    // A filter that hangs until the second list.
+    let (go, started) = (f.dir.join("go"), f.dir.join("started"));
+    let filter = format!("sh -c '[ -e \"{}\" ] || {{ touch \"{}\"; sleep 30; }}; cat'", go.display(), started.display());
+    run_in(&ws.folder, &["config", "filter.slow.clean", &filter]);
+    std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
+    std::fs::write(ws.folder.join(".gitattributes"), "a.txt filter=slow\n").unwrap();
+
+    let first = {
+        let (sessions, id) = (f.sessions.clone(), ws.id.clone());
+        std::thread::spawn(move || sessions.workspace_changes(&id))
+    };
+    while !started.exists() {
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    std::fs::write(&go, "").unwrap();
+    let began = std::time::Instant::now();
+    let second = f.sessions.workspace_changes(&ws.id).unwrap();
+    let first = first.join().unwrap().unwrap_err();
+
+    assert!(first.starts_with(crate::git::exec::CANCELLED), "{first}");
+    assert!(began.elapsed() < std::time::Duration::from_secs(9), "took {:?}", began.elapsed());
+    assert!(second.iter().any(|file| file.path == "a.txt"));
+}
+
 #[tokio::test]
 async fn a_workspaces_changes_are_listed_against_its_base() {
     let f = git_fixture("wt-changes");
@@ -3571,7 +3602,7 @@ async fn a_workspaces_git_actions_wait_for_none_of_its_chats_and_hold_them_all()
     run_in(&ws.folder, &["add", "."]);
     run_in(&ws.folder, &["commit", "-qm", "agent"]);
     std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
-    let names = |files: Vec<crate::git::repo::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
+    let names = |files: Vec<crate::git::status::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
     assert_eq!(names(f.sessions.workspace_changes(&ws.id).unwrap()), ["a.txt", "committed.txt"]);
     assert_eq!(f.sessions.workspace_file_at_base(&ws.id, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
 

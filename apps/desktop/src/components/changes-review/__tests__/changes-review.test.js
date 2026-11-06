@@ -50,7 +50,7 @@ describe('acp-changes-review', () => {
       [true, false, true],
       [false, false, true],
     ]);
-    expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('1/3 files selected');
+    expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('1 of 3 selected');
     const totals = /** @type {HTMLElementTagNameMap['acp-diff-counts']} */ (root.querySelector('.acp-changes-review__toolbar acp-diff-counts'));
     expect([totals.added, totals.removed]).to.deep.equal([4, 1]);
     const all = /** @type {HTMLElementTagNameMap['md-checkbox']} */ (root.querySelector('.acp-changes-review__all'));
@@ -59,7 +59,8 @@ describe('acp-changes-review', () => {
 
   it('shows an expanded file as a card with its diff, or a loading or failed state instead of the editor, and the toolbar collapses all', async () => {
     const { el, root, rows } = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]) });
-    const card = root.querySelector('.acp-changes-review__card');
+    expect(root.querySelectorAll('.acp-changes-review__card').length, 'every file is a card').to.be.greaterThan(1);
+    const card = root.querySelector('.acp-changes-review__card_open');
     expect(card?.querySelector('acp-change-row')?.row?.id).to.equal('src/b.js');
     expect(rows().filter((r) => r.expanded).map((r) => r.row?.id)).to.deep.equal(['src/b.js']);
     expect(card?.querySelector('cdx-code-editor')?.getAttribute('filename')).to.equal('src/b.js');
@@ -106,6 +107,18 @@ describe('acp-changes-review', () => {
     await el.updateComplete;
     all.dispatchEvent(new Event('change', { bubbles: true }));
     expect(selects).to.deep.equal([{ ids: ['new.txt', 'src/b.js', 'src/z.js'] }, { ids: [] }]);
+  });
+
+  it('gives its menu how many listed files are picked; a session’s changes have no menu', async () => {
+    // Arrange
+    const { el, root } = await render({ selection: new Set(['new.txt', 'gone.txt']) });
+    // Act
+    const picked = root.querySelector('acp-changes-menu')?.picked;
+    el.base = 'abc1234def';
+    await el.updateComplete;
+    // Assert
+    expect(picked).to.equal(1);
+    expect(root.querySelector('acp-changes-menu')).to.equal(null);
   });
 
   it('turns a row’s Edit into opening the file at its absolute path, and lets the row’s own events through', async () => {
@@ -184,5 +197,53 @@ describe('acp-changes-review', () => {
     // Assert
     expect(fired).to.deep.equal(['acp-changes-check-out']);
     expect(root.querySelector('acp-confirm-dialog')).to.equal(null);
+  });
+
+  describe('diff layout', () => {
+    /** @param {Partial<HTMLElementTagNameMap['acp-changes-review']>} props */
+    async function renderDiff(props) {
+      const view = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]), ...props });
+      return {
+        ...view,
+        editorLayout: () => view.root.querySelector('cdx-code-editor')?.getAttribute('diff-layout'),
+        segments: () => /** @type {HTMLElementTagNameMap['md-segmented-button'][]} */ ([...view.root.querySelectorAll('.acp-changes-review__segment')]),
+      };
+    }
+
+    it('shows the chosen layout on the diffs and the toggle, and asks for the other one only when it is pressed', async () => {
+      // Arrange
+      const { el, editorLayout, segments } = await renderDiff({ diffLayout: 'split' });
+      const asked = listen(el, 'acp-diff-layout');
+      await Promise.all(segments().map((b) => b.updateComplete));
+      // Assert: Split is shown, and selected
+      expect(editorLayout()).to.equal('split');
+      expect(segments().map((b) => [b.textContent?.trim(), b.selected])).to.deep.equal([
+        ['Unified', false],
+        ['Split', true],
+      ]);
+      // Act: the shown one, then the other one
+      segments()[1].click();
+      segments()[0].click();
+      // Assert
+      expect(asked).to.deep.equal([{ layout: 'unified' }]);
+
+      // Act: the view answers
+      el.diffLayout = 'unified';
+      await el.updateComplete;
+      // Assert
+      expect(editorLayout()).to.equal('unified');
+    });
+
+    it('shows Split however narrow the tab is', async () => {
+      // Arrange
+      const { el, editorLayout, segments } = await renderDiff({ diffLayout: 'split' });
+      // Act
+      el.style.width = '400px';
+      for (let i = 0; i < 3; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+      await el.updateComplete;
+      // Assert
+      expect(editorLayout()).to.equal('split');
+      expect(segments()[1].textContent?.trim()).to.equal('Split');
+    });
   });
 });

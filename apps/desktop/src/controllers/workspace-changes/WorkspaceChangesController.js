@@ -1,3 +1,4 @@
+import { git } from '../../hooks/git/git.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { StoreController } from '../store/StoreController.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
@@ -152,7 +153,9 @@ export class WorkspaceChangesController {
     try {
       changes = { files: await workspaces.listChanges(id), loaded: true, loading: false, error: null };
     } catch (err) {
-      changes = { files: [], loaded: true, loading: false, error: String(err) };
+      // Stopped by a newer list, perhaps another window's: the files shown are the best there is.
+      const stopped = String(err).startsWith('cancelled');
+      changes = stopped ? { ...this.#changes, loading: false } : { files: [], loaded: true, loading: false, error: String(err) };
     }
     if (id !== this.#workspaceId || list !== this.#listCount) return;
     this.#changes = changes;
@@ -200,17 +203,10 @@ export class WorkspaceChangesController {
     const load = ++this.#loadCount;
     this.#loads.set(rel, load);
     if (!this.#diffs.has(rel)) this.#setDiff(rel, { content: '', baseline: '', error: '', loading: true });
-    const [content, baseline] = await Promise.all([
-      projects.readFile(`${workspace.folder}/${rel}`).catch(() => null),
-      workspaces.fileAtBase(id, rel).catch(() => null),
-    ]);
+    const deleted = this.#changes.files.some((file) => file.path === rel && file.kind === 'deleted');
+    const diff = await git.readDiff(projects.readFile(`${workspace.folder}/${rel}`), workspaces.fileAtBase(id, rel), deleted);
     if (id !== this.#workspaceId || this.#loads.get(rel) !== load) return;
-    this.#setDiff(
-      rel,
-      content === null && baseline === null
-        ? { content: '', baseline: '', error: `${rel}: neither in the worktree nor at its base`, loading: false }
-        : { content: content ?? '', baseline: baseline ?? '', error: '', loading: false },
-    );
+    this.#setDiff(rel, diff);
   }
 
   /**
