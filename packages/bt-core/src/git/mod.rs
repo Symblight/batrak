@@ -8,6 +8,7 @@ pub mod exec;
 pub mod lock;
 pub mod remote;
 pub mod repo;
+pub mod temp_file;
 pub mod worktree;
 
 #[cfg(any(test, feature = "test-support"))]
