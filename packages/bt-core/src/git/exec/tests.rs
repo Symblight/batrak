@@ -180,9 +180,22 @@ fn non_zero_exit_carries_git_message() {
 #[test]
 fn scrubbed_variables_include_repository_redirects() {
     // Setting them process-wide would leak into tests running in parallel, so check the list.
-    for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
+    for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_NAMESPACE"] {
         assert!(SCRUBBED_ENV.contains(&key), "{key}");
     }
+}
+
+#[test]
+fn scrubbed_variables_cover_what_git_itself_calls_repository_local() {
+    // Against the real git, so that an upgrade adding a variable shows up here.
+    let args = [OsStr::new("rev-parse"), OsStr::new("--local-env-vars")];
+    let out = run(&crate::git::test_repo::git_bin(), &std::env::temp_dir(), &args, Mode::Local).unwrap();
+    let out = String::from_utf8(out).unwrap();
+
+    let missing: Vec<&str> = out.lines().filter(|name| !SCRUBBED_ENV.contains(name)).collect();
+
+    assert!(out.lines().any(|name| name == "GIT_DIR"), "git printed: {out}");
+    assert!(missing.is_empty(), "repository-local in this git, missing from SCRUBBED_ENV: {missing:?}");
 }
 
 #[cfg(unix)]

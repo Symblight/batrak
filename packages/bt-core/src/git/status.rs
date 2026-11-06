@@ -104,7 +104,7 @@ fn parse(text: &str, prefix: &str) -> Status {
     repo.detached = false;
     let mut files = Vec::new();
     let mut records = text.split('\0').filter(|r| !r.is_empty());
-    let rel = |path: &str| path.strip_prefix(prefix).map(str::to_owned);
+    let rel = |path: &str| path.strip_prefix(prefix).filter(|rest| !rest.is_empty()).map(str::to_owned);
 
     while let Some(record) = records.next() {
         if let Some(header) = record.strip_prefix("# ") {
@@ -128,11 +128,14 @@ fn parse(text: &str, prefix: &str) -> Status {
                 let [_, xy, .., path] = fields[..] else { continue };
                 (FileKind::Conflicted, xy, path, None)
             }
-            Some(b'?') => (FileKind::Untracked, "??", &record[2..], None),
+            Some(b'?') => {
+                let Some(path) = record.get(2..) else { continue };
+                (FileKind::Untracked, "??", path, None)
+            }
             _ => continue,
         };
         let Some(path) = rel(path) else { continue };
-        let (x, y) = (xy.as_bytes()[0], xy.as_bytes()[1]);
+        let [x, y, ..] = *xy.as_bytes() else { continue };
         files.push(FileStatus {
             path,
             kind,
@@ -261,6 +264,33 @@ pub(super) mod tests {
             let call = log.lines().find(|line| line.contains(" status ")).unwrap();
             assert_eq!(call.contains("-c core.fsmonitor=true"), kept, "{value:?}: {call}");
             std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+
+    #[test]
+    fn a_record_it_cant_read_is_skipped_and_the_others_still_list() {
+        let unreadable = [
+            "1",
+            "1 M x",
+            "1  x",
+            "2 R",
+            // A rename's source is its own record, and goes with it.
+            "2 M x\0old.txt",
+            "u M x",
+            "?",
+            "??",
+            "? ",
+            // `[2..]` would land inside the `é`.
+            "?\u{e9}",
+            "1 .M N... 100644 100644 100644 aaa bbb ",
+        ];
+        for record in unreadable {
+            let text = format!("? before.txt\0{record}\0? after.txt\0");
+
+            let status = parse(&text, "");
+
+            let paths: Vec<&str> = status.files.iter().map(|f| f.path.as_str()).collect();
+            assert_eq!(paths, ["before.txt", "after.txt"], "{record:?}");
         }
     }
 

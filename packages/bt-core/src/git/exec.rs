@@ -40,16 +40,26 @@ thread_local! {
     pub static TEST_TIMEOUT: std::cell::Cell<Option<Duration>> = const { std::cell::Cell::new(None) };
 }
 
-/// Inherited variables that would point git at another repository or index than `cwd`'s.
+/// Variables that belong to one repository, set when we're started from a git hook or alias: inherited,
+/// they'd apply another repository's index, config or grafts to `cwd`'s. What `git rev-parse
+/// --local-env-vars` lists (a test keeps up with it), and `GIT_NAMESPACE`, which it doesn't.
 pub const SCRUBBED_ENV: &[&str] = &[
     "GIT_DIR",
     "GIT_WORK_TREE",
+    "GIT_IMPLICIT_WORK_TREE",
     "GIT_INDEX_FILE",
     "GIT_OBJECT_DIRECTORY",
     "GIT_ALTERNATE_OBJECT_DIRECTORIES",
     "GIT_COMMON_DIR",
     "GIT_NAMESPACE",
+    "GIT_CONFIG",
     "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_GRAFT_FILE",
+    "GIT_NO_REPLACE_OBJECTS",
+    "GIT_REPLACE_REF_BASE",
+    "GIT_PREFIX",
+    "GIT_SHALLOW_FILE",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
