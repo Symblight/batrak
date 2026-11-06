@@ -111,7 +111,7 @@ describe('acp-branch-popover', () => {
       return { card, root, picker, popover };
     }
 
-    it('lists the branches, says Local changes while nothing is compared, and the branch once one is', async () => {
+    it('lists the branches, names the current one’s local work while nothing is compared, and the branch once one is', async () => {
       // Arrange
       /** @type {() => Promise<void>} */
       const loadBranches = async () => {};
@@ -123,13 +123,13 @@ describe('acp-branch-popover', () => {
       await picker.updateComplete;
       // Assert
       expect(before).to.not.equal(undefined);
-      expect(picker.offLabel).to.equal('Local changes');
+      expect(picker.offLabel).to.equal('spec/git-remote-sync - local');
       expect(picker.list).to.equal(BRANCHES);
       expect(picker.load).to.equal(loadBranches);
       expect(picker.value).to.equal('origin/main');
     });
 
-    it('a pick asks for that comparison and closes the card; Local changes asks for none', async () => {
+    it('a pick asks for that comparison and closes the card; the local choice asks for none', async () => {
       // Arrange
       const { card, picker, popover } = await comparing();
       /** @type {unknown[]} */
@@ -159,6 +159,13 @@ describe('acp-branch-popover', () => {
       popover.hidePopover();
       // Assert
       expect(menu.open).to.equal(false);
+    });
+
+    it('names the commit of a detached HEAD for its local work', async () => {
+      // Arrange + Act
+      const { root } = await shown({ ...REPO, branch: null, detached: true });
+      // Assert
+      expect(/** @type {HTMLElementTagNameMap['acp-branch-picker']} */ (root.querySelector('acp-branch-picker')).offLabel).to.equal('abc1234 - local');
     });
 
     it('isn’t offered before the first commit', async () => {

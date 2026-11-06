@@ -116,13 +116,14 @@ export class AcpBranchPopover extends LitElement {
         : html`<span></span>`}`;
   }
 
-  #renderCompare() {
+  /** @param {string} name The current branch, or a detached HEAD's commit. */
+  #renderCompare(name) {
     return html`<span class="acp-branch-popover__label">Compare to</span>
       <span class="acp-branch-popover__value">
         <acp-branch-picker
           class="acp-branch-popover__compare"
           .label=${''}
-          .offLabel=${'Local changes'}
+          .offLabel=${`${name} - local`}
           .list=${this.branches}
           .value=${this.compareTo}
           .load=${this.loadBranches}
@@ -176,7 +177,7 @@ export class AcpBranchPopover extends LitElement {
           <span class="acp-branch-popover__label">Remote</span>
           <span class="acp-branch-popover__value">${git.remoteLine(repo)}</span>
           <span></span>
-          ${repo.sha ? this.#renderCompare() : nothing}
+          ${repo.sha ? this.#renderCompare(name) : nothing}
           ${this.pr ? this.#renderPullRequest(this.pr) : nothing}
         </div>
       </div>`;
