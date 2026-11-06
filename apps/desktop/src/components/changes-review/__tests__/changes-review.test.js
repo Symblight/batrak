@@ -50,7 +50,7 @@ describe('acp-changes-review', () => {
       [true, false, true],
       [false, false, true],
     ]);
-    expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('1/3 files selected');
+    expect(root.querySelector('.acp-changes-review__summary')?.textContent).to.equal('1 of 3 selected');
     const totals = /** @type {HTMLElementTagNameMap['acp-diff-counts']} */ (root.querySelector('.acp-changes-review__toolbar acp-diff-counts'));
     expect([totals.added, totals.removed]).to.deep.equal([4, 1]);
     const all = /** @type {HTMLElementTagNameMap['md-checkbox']} */ (root.querySelector('.acp-changes-review__all'));
@@ -59,7 +59,8 @@ describe('acp-changes-review', () => {
 
   it('shows an expanded file as a card with its diff, or a loading or failed state instead of the editor, and the toolbar collapses all', async () => {
     const { el, root, rows } = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]) });
-    const card = root.querySelector('.acp-changes-review__card');
+    expect(root.querySelectorAll('.acp-changes-review__card').length, 'every file is a card').to.be.greaterThan(1);
+    const card = root.querySelector('.acp-changes-review__card_open');
     expect(card?.querySelector('acp-change-row')?.row?.id).to.equal('src/b.js');
     expect(rows().filter((r) => r.expanded).map((r) => r.row?.id)).to.deep.equal(['src/b.js']);
     expect(card?.querySelector('cdx-code-editor')?.getAttribute('filename')).to.equal('src/b.js');
@@ -193,7 +194,7 @@ describe('acp-changes-review', () => {
       return {
         ...view,
         editorLayout: () => view.root.querySelector('cdx-code-editor')?.getAttribute('diff-layout'),
-        segments: () => /** @type {HTMLButtonElement[]} */ ([...view.root.querySelectorAll('.acp-changes-review__segment')]),
+        segments: () => /** @type {HTMLElementTagNameMap['md-segmented-button'][]} */ ([...view.root.querySelectorAll('.acp-changes-review__segment')]),
       };
     }
 
@@ -201,11 +202,12 @@ describe('acp-changes-review', () => {
       // Arrange
       const { el, editorLayout, segments } = await renderDiff({ diffLayout: 'split' });
       const asked = listen(el, 'acp-diff-layout');
-      // Assert: Split is shown, and pressed
+      await Promise.all(segments().map((b) => b.updateComplete));
+      // Assert: Split is shown, and selected
       expect(editorLayout()).to.equal('split');
-      expect(segments().map((b) => [b.textContent?.trim(), b.getAttribute('aria-pressed')])).to.deep.equal([
-        ['Unified', 'false'],
-        ['Split', 'true'],
+      expect(segments().map((b) => [b.textContent?.trim(), b.selected])).to.deep.equal([
+        ['Unified', false],
+        ['Split', true],
       ]);
       // Act: the shown one, then the other one
       segments()[1].click();

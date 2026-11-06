@@ -79,23 +79,6 @@ describe('git changes', () => {
     }
   });
 
-  it('badges a file by its type: known short forms, the first three letters of others, a dot for none', () => {
-    /** @type {[string, string][]} */
-    const cases = [
-      ['app.js', 'JS'],
-      ['app.MJS', 'JS'],
-      ['view.tsx', 'TSX'],
-      ['style.css', '{}'],
-      ['package.json', '{}'],
-      ['Cargo.toml', 'TOML'],
-      ['ci.yml', 'YML'],
-      ['notes.markdown', 'MAR'],
-      ['Makefile', '·'],
-      ['.gitignore', '·'],
-    ];
-    for (const [name, badge] of cases) expect(git.typeBadge(name), name).to.equal(badge);
-  });
-
   it('asks about a revert in the terms of what it does to the file', () => {
     // Arrange
     /** @type {[import('../types.js').GitFileStatus, string, string, RegExp][]} */
@@ -116,16 +99,16 @@ describe('git changes', () => {
     }
   });
 
-  it('writes a renamed file’s old path relative to its folder', () => {
-    /** @type {[string, string, string][]} */
+  it('says where a renamed file came from: the folder when its name stayed, else its old path', () => {
+    /** @type {[string, string, string, { from: string, to: string }][]} */
     const cases = [
-      ['src', 'src/a.js', 'a.js'],
-      ['src/new', 'src/old/name.css', '../old/name.css'],
-      ['', 'old.js', 'old.js'],
-      ['a/b', 'c.js', '../../c.js'],
-      ['src', 'src/deep/x.js', 'deep/x.js'],
+      ['.bt', 'agents.json', '.brama/agents.json', { from: '.brama', to: '.bt' }],
+      ['src', 'a.js', 'a.js', { from: '.', to: 'src' }],
+      ['', 'a.js', 'src/a.js', { from: 'src', to: '.' }],
+      ['src', 'new.js', 'src/old.js', { from: 'src/old.js', to: 'src' }],
+      ['', 'new.js', 'old.js', { from: 'old.js', to: '.' }],
     ];
-    for (const [from, to, expected] of cases) expect(git.relativePath(from, to), `${from} → ${to}`).to.equal(expected);
+    for (const [dir, name, origPath, expected] of cases) expect(git.renameLabel(dir, name, origPath), origPath).to.deep.equal(expected);
   });
 
   it('sorts changed files into rows with their name (the last path segment) and folder, a top-level file with none', () => {

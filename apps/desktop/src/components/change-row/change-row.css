@@ -6,12 +6,13 @@
 .acp-change-row__row {
   display: flex;
   align-items: center;
-  gap: var(--acp-space-2);
+  gap: var(--acp-space-1-5);
   min-width: 0;
-  height: 40px;
+  height: 32px;
   box-sizing: border-box;
-  padding: 0 var(--acp-space-1) 0 var(--acp-space-2);
-  border-radius: var(--acp-shape-corner-full);
+  padding: 0 var(--acp-space-1);
+  /* Inside the card's 12px corner and 1px border. */
+  border-radius: 11px;
   cursor: pointer;
   outline: none;
 
@@ -24,37 +25,42 @@
   }
 }
 
-/* The expanded file's header: sits in the card on its surface, square below. */
+/* The expanded file's header: square above the diff, opaque because the diff scrolls under it. */
 .acp-change-row__row_header {
   border-radius: 11px 11px 0 0;
-  background: transparent;
+  background: var(--acp-column-background);
 
   &:hover {
-    background: transparent;
+    background: var(--acp-column-background);
   }
 }
 
 .acp-change-row__chevron {
   flex: none;
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-md);
   color: var(--acp-color-on-surface-variant);
 }
 
 .acp-change-row__pick {
   flex: none;
+  /* Its 11px touch-target padding would set the row's spacing. */
+  padding: 0;
 }
 
-.acp-change-row__badge {
+.acp-change-row__status {
   flex: none;
-  min-width: 18px;
+  width: 16px;
   height: 16px;
-  box-sizing: border-box;
-  padding: 0 3px;
-  border-radius: 3px;
-  background: var(--acp-color-surface-container-highest);
-  font: 500 9px/16px var(--acp-font-family-mono);
-  letter-spacing: 0.2px;
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: color-mix(in srgb, var(--_acp-change-row-status) 16%, transparent);
+  font: 700 10px/16px var(--acp-font-family-mono);
   text-align: center;
+  color: var(--_acp-change-row-status);
+}
+
+.acp-change-row__icon {
+  flex: none;
+  font-size: var(--acp-icon-size-sm);
   color: var(--acp-color-on-surface-variant);
 }
 
@@ -68,6 +74,7 @@
 }
 
 .acp-change-row__name_deleted {
+  font-weight: 400;
   text-decoration: line-through;
   color: var(--acp-color-on-surface-variant);
 }
@@ -88,15 +95,18 @@
 }
 
 .acp-change-row__renamed {
-  text-decoration: line-through;
-  color: color-mix(in srgb, var(--acp-color-on-surface-variant) 70%, transparent);
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-change-row__renamed-to {
+  color: var(--acp-color-tertiary);
 }
 
 .acp-change-row__actions {
   flex: none;
   display: none;
 }
-/* Edit and Revert show for the row under the pointer, the row with focus in it, and an expanded header. */
+/* Open file and Revert show for the row under the pointer, the row with focus in it, and an expanded header. */
 :host(:hover) .acp-change-row__actions,
 :host(:focus-within) .acp-change-row__actions,
 :host([expanded]) .acp-change-row__actions {
@@ -104,16 +114,16 @@
 }
 
 .acp-change-row__action {
-  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
   --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
 
 .acp-change-row__action::part(button) {
-  padding: 5px;
+  padding: var(--acp-space-1);
 }
 
 .acp-change-row__action-icon {
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-change-row__spacer {

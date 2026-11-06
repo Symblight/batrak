@@ -9,6 +9,7 @@ import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
+import '@symblight/wc-material/segmented-button';
 import '@symblight/wc-material/tooltip';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
@@ -165,6 +166,13 @@ export class AcpChangesReview extends LitElement {
     this.#emit('acp-commit-select', { ids: ids.every((id) => this.selection.has(id)) ? [] : ids });
   }
 
+  /** @param {Event} e */
+  #onLayoutChange(e) {
+    e.stopPropagation();
+    const { value } = /** @type {CustomEvent<{ value: DiffLayout }>} */ (e).detail;
+    this.#emit('acp-diff-layout', { layout: value });
+  }
+
   /** @param {Event} e A row's Edit. */
   #onEdit(e) {
     e.stopPropagation();
@@ -178,6 +186,7 @@ export class AcpChangesReview extends LitElement {
    */
   #renderRow(row, expanded) {
     return html`<acp-change-row
+      class=${expanded ? 'acp-changes-review__row_sticky' : ''}
       data-id=${row.id}
       .row=${row}
       .expanded=${expanded}
@@ -220,26 +229,11 @@ export class AcpChangesReview extends LitElement {
 
   /** @param {ChangeRow} row */
   #renderEntry(row) {
-    if (!this.expanded.has(row.id)) return this.#renderRow(row, false);
-    return html`<div class="acp-changes-review__card">
-      ${this.#renderRow(row, true)}
-      <div class="acp-changes-review__diff">${this.#renderDiff(row)}</div>
+    const open = this.expanded.has(row.id);
+    return html`<div class="acp-changes-review__card ${open ? 'acp-changes-review__card_open' : ''}">
+      ${this.#renderRow(row, open)}
+      ${open ? html`<div class="acp-changes-review__diff">${this.#renderDiff(row)}</div>` : nothing}
     </div>`;
-  }
-
-  /**
-   * @param {DiffLayout} layout
-   * @param {string} label
-   */
-  #renderSegment(layout, label) {
-    return html`<button
-      type="button"
-      class="acp-changes-review__segment"
-      aria-pressed=${this.diffLayout === layout ? 'true' : 'false'}
-      @click=${() => layout !== this.diffLayout && this.#emit('acp-diff-layout', { layout })}
-    >
-      ${label}
-    </button>`;
   }
 
   #renderToolbar() {
@@ -255,6 +249,30 @@ export class AcpChangesReview extends LitElement {
       if (file.removed !== null) removed = (removed ?? 0) + file.removed;
     }
     return html`<header class="acp-changes-review__toolbar">
+      ${this.base === null
+        ? html`<md-checkbox
+              class="acp-changes-review__all"
+              aria-label="Select all changed files"
+              ?disabled=${total === 0}
+              .checked=${total > 0 && picked === total}
+              .indeterminate=${picked > 0 && picked < total}
+              @change=${this.#onToggleAll}
+            ></md-checkbox>
+            <span class="acp-changes-review__summary">${picked} of ${total} selected</span>`
+        : html`<span class="acp-changes-review__summary"
+            >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
+          >`}
+      <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
+      <span class="acp-changes-review__spacer"></span>
+      <md-segmented-button-group
+        class="acp-changes-review__segments"
+        label="Diff layout"
+        .value=${this.diffLayout}
+        @change=${this.#onLayoutChange}
+      >
+        <md-segmented-button class="acp-changes-review__segment" value="unified">Unified</md-segmented-button>
+        <md-segmented-button class="acp-changes-review__segment" value="split">Split</md-segmented-button>
+      </md-segmented-button-group>
       <md-icon-button
         id="acp-changes-review-collapse"
         class="acp-changes-review__tool"
@@ -265,25 +283,6 @@ export class AcpChangesReview extends LitElement {
         <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
       </md-icon-button>
       <md-tooltip for="acp-changes-review-collapse" show-delay="800">Collapse all</md-tooltip>
-      ${this.base === null
-        ? html`<md-checkbox
-              class="acp-changes-review__all"
-              aria-label="Select all changed files"
-              ?disabled=${total === 0}
-              .checked=${total > 0 && picked === total}
-              .indeterminate=${picked > 0 && picked < total}
-              @change=${this.#onToggleAll}
-            ></md-checkbox>
-            <span class="acp-changes-review__summary">${picked}/${total} files selected</span>`
-        : html`<span class="acp-changes-review__summary"
-            >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
-          >`}
-      <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
-      <span class="acp-changes-review__spacer"></span>
-      <div class="acp-changes-review__segments" role="group" aria-label="Diff layout">
-        ${this.#renderSegment('unified', 'Unified')}
-        ${this.#renderSegment('split', 'Split')}
-      </div>
       ${this.base !== null
         ? html`<md-button
               id="acp-changes-review-apply"

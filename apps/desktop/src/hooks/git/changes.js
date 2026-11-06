@@ -139,28 +139,16 @@ const TYPE_BADGES = /** @type {Record<string, string>} */ ({
 });
 
 /**
- * The badge naming a file's type: known extensions by their usual short form, others by their
- * first three letters, `·` for a name without one.
- * @param {string} name
+ * Where a renamed file came from: the folder when its name stayed, else its old path.
+ * @param {string} dir Its folder now, root-relative (`''` at the top).
+ * @param {string} name Its name now.
+ * @param {string} origPath Root-relative.
+ * @returns {{ from: string, to: string }}
  */
-export function typeBadge(name) {
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0) return '·';
-  const ext = name.slice(dot + 1).toLowerCase();
-  return TYPE_BADGES[ext] ?? ext.slice(0, 3).toUpperCase();
-}
-
-/**
- * Path of `to` relative to the folder `from`, both root-relative: `../old/name.css`.
- * @param {string} from
- * @param {string} to
- */
-export function relativePath(from, to) {
-  const a = from ? from.split('/') : [];
-  const b = to.split('/');
-  let common = 0;
-  while (common < a.length && common < b.length - 1 && a[common] === b[common]) common++;
-  return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
+export function renameLabel(dir, name, origPath) {
+  const slash = origPath.lastIndexOf('/');
+  const sameName = origPath.slice(slash + 1) === name;
+  return { from: sameName ? origPath.slice(0, Math.max(slash, 0)) || '.' : origPath, to: dir || '.' };
 }
 
 /** The read failed for the file not being there: Rust's `NotFound` errors, on every platform. */
