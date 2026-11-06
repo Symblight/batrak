@@ -46,7 +46,7 @@ fn with_snapshot<T>(
     let alternates = alternate_entry(&git_path("objects")?);
     let mut env: Vec<(&str, &OsStr)> = vec![("GIT_INDEX_FILE", index.path.as_os_str())];
     if !keep_objects {
-        private_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
+        std::fs::create_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
         env.push(("GIT_OBJECT_DIRECTORY", scratch_objects.path.as_os_str()));
         env.push(("GIT_ALTERNATE_OBJECT_DIRECTORIES", alternates.as_os_str()));
     }
@@ -60,18 +60,6 @@ fn with_snapshot<T>(
     }
     run(&[&"add", &"-A"])?;
     f(&run)
-}
-
-/// A folder only its owner can read: it holds the worktree's uncommitted files, and the temp folder may
-/// be shared with other users.
-fn private_dir(path: &Path) -> std::io::Result<()> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::DirBuilderExt;
-        std::fs::DirBuilder::new().mode(0o700).create(path)
-    }
-    #[cfg(not(unix))]
-    std::fs::create_dir(path)
 }
 
 /// `path` as the one entry of `GIT_ALTERNATE_OBJECT_DIRECTORIES`, a list split on `:` (`;` on Windows)
@@ -440,13 +428,17 @@ mod tests {
         let wt = repo.worktree("private-wt", "batrak/private");
         std::fs::write(wt.join("README.md"), "a secret\n").unwrap();
 
-        let mode = with_snapshot(&git_bin(), &wt, false, Mode::Background, None, |run| {
+        let private = with_snapshot(&git_bin(), &wt, false, Mode::Background, None, |run| {
             let objects = run(&[&"rev-parse", &"--git-path", &"objects"])?;
             let objects = PathBuf::from(String::from_utf8_lossy(&objects).trim());
-            Ok(std::fs::metadata(objects).map_err(|e| e.to_string())?.permissions().mode())
+            let private = objects.parent().ok_or("no parent")?.to_owned();
+            let mode = std::fs::metadata(&private).map_err(|e| e.to_string())?.permissions().mode();
+            Ok((private, mode))
         })
         .unwrap();
 
-        assert_eq!(mode & 0o777, 0o700);
+        // macOS's own temp folder is 0700 too: the parent must be a folder of its own.
+        assert_ne!(dunce::canonicalize(&private.0).ok(), dunce::canonicalize(std::env::temp_dir()).ok());
+        assert_eq!(private.1 & 0o777, 0o700);
     }
 }
