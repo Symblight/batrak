@@ -11,6 +11,8 @@ import '../../components/changes-review/changes-review.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
+
 /**
  * @tag acp-changes-tab
  * @summary The project's Changes tab wired to its data: the changed files, the repository, the files picked for a commit, each file's diff and the comments.
@@ -49,15 +51,21 @@ export class AcpChangesTab extends ViewElement {
   }
 
   /**
-   * Throwing work away is asked about first.
-   * @param {string} id
+   * Throwing work away is asked about first. Reverted files are no longer picked for a commit.
+   * @param {readonly GitFileStatus[]} files
    */
-  async #revert(id) {
-    const file = this.#changes.value.files.find((f) => f.path === id);
-    if (!file) return;
+  async #revert(files) {
+    const [first] = files;
+    if (!first) return;
     const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
-    if (!(await dialog.confirm(git.revertPrompt(file)))) return;
-    await git.revertFile(file).catch((err) => app.reportError(`Couldn’t revert ${id.slice(id.lastIndexOf('/') + 1)}`, err));
+    if (!(await dialog.confirm(git.revertPrompt(files)))) return;
+    try {
+      await git.revertFiles(files);
+      pickForCommit(files.map((file) => file.path), false);
+    } catch (err) {
+      const what = files.length === 1 ? first.path.slice(first.path.lastIndexOf('/') + 1) : `${files.length} files`;
+      app.reportError(`Couldn’t revert ${what}`, err);
+    }
   }
 
   render() {
@@ -75,7 +83,15 @@ export class AcpChangesTab extends ViewElement {
       .diffLayout=${this.#diffLayout.value}
       @acp-change-toggle=${byId((id) => this.#review.toggle(id))}
       @acp-change-expand=${byId((id) => this.#review.expand(id))}
-      @acp-change-revert=${byId((id) => this.#revert(id))}
+      @acp-change-revert=${byId((id) => this.#revert(this.#changes.value.files.filter((f) => f.path === id)))}
+      @acp-changes-rollback=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        this.#revert(this.#changes.value.files.filter((f) => this.#selection.value.has(f.path)));
+      }}
+      @acp-changes-refresh=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        git.refreshChanges();
+      }}
       @acp-changes-collapse=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         this.#review.collapseAll();

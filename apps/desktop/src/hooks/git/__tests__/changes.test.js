@@ -91,12 +91,24 @@ describe('git changes', () => {
     ];
     for (const [changed, headline, confirmLabel, message] of cases) {
       // Act
-      const prompt = git.revertPrompt(changed);
+      const prompt = git.revertPrompt([changed]);
       // Assert
       expect([prompt.headline, prompt.confirmLabel, prompt.destructive], changed.kind).to.deep.equal([headline, confirmLabel, true]);
       expect(prompt.message, changed.kind).to.match(message);
       expect(prompt.detail, changed.kind).to.include('refs/batrak/reverted');
     }
+  });
+
+  it('asks about rolling back several files by how many, and says how many of them are deleted', () => {
+    // Act
+    const edited = git.revertPrompt([file('a.js'), file('b.js')]);
+    const someNew = git.revertPrompt([file('a.js'), file('b.js', { kind: 'untracked' }), file('c.js', { kind: 'added' })]);
+    // Assert
+    expect([edited.headline, edited.confirmLabel, edited.destructive]).to.deep.equal(['Roll back 2 files?', 'Rollback', true]);
+    expect(edited.message).to.not.include('deleted');
+    expect(someNew.headline).to.equal('Roll back 3 files?');
+    expect(someNew.message).to.include('2 new files aren’t in HEAD and are deleted');
+    expect(someNew.detail).to.include('refs/batrak/reverted');
   });
 
   it('says where a renamed file came from: the folder when its name stayed, else its old path', () => {

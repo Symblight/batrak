@@ -46,14 +46,21 @@ export function statusOf(kind) {
 }
 
 /**
- * What to ask before reverting a file: a file HEAD doesn't have is deleted.
- * @param {GitFileStatus} file
+ * What to ask before reverting files: a file HEAD doesn't have is deleted.
+ * @param {readonly GitFileStatus[]} files
  * @returns {import('../app/types.js').ConfirmOptions}
  */
-export function revertPrompt(file) {
-  const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+export function revertPrompt(files) {
   const detail = 'A copy stays in git under refs/batrak/reverted.';
-  if (file.kind === 'added' || file.kind === 'untracked') {
+  const isNew = (/** @type {GitFileStatus} */ { kind }) => kind === 'added' || kind === 'untracked';
+  const [file] = files;
+  if (files.length !== 1 || !file) {
+    const created = files.filter(isNew).length;
+    const deleted = created === 0 ? '' : created === 1 ? ' 1 new file isn’t in HEAD and is deleted.' : ` ${created} new files aren’t in HEAD and are deleted.`;
+    return { headline: `Roll back ${files.length} files?`, message: `Their changes are thrown away and they go back to HEAD.${deleted}`, detail, confirmLabel: 'Rollback', destructive: true };
+  }
+  const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+  if (isNew(file)) {
     return { headline: `Delete new file ${name}?`, message: 'It isn’t in HEAD, so reverting deletes it.', detail, confirmLabel: 'Delete', destructive: true };
   }
   const message = file.origPath ? `It goes back to ${file.origPath}, as in HEAD.` : 'Its changes are thrown away and it goes back to HEAD.';
