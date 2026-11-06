@@ -16,6 +16,8 @@ describe('git changes', () => {
       ['edited', false, Promise.resolve('new'), Promise.resolve('old'), shown('new', 'old')],
       ['new', false, Promise.resolve('new'), Promise.resolve(null), shown('new', '')],
       ['deleted', true, failing(), Promise.resolve('old'), shown('', 'old')],
+      ['gone, listed as something else', false, Promise.reject('a.js: No such file or directory (os error 2)'), Promise.resolve('old'), shown('', 'old')],
+      ['gone with its folder, on Windows', false, Promise.reject('a.js: The system cannot find the path specified. (os error 3)'), Promise.resolve('old'), shown('', 'old')],
       ['turned binary', false, failing(), Promise.resolve('old'), shown('', '', 'a.bin: binary, no diff to show')],
       ['untracked binary', false, failing(), Promise.resolve(null), shown('', '', 'a.bin: binary, no diff to show')],
       ['committed binary', false, Promise.resolve('text'), failing(), shown('', '', 'a.bin: binary, no diff to show')],

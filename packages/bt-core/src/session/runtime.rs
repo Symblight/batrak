@@ -58,6 +58,8 @@ struct Inner {
     slots: TurnSlots,
     /// Launches that answered AuthRequired, until one signs in or starts.
     sign_ins_needed: Mutex<HashMap<LaunchKey, SignInNeed>>,
+    /// The newest list of each workspace's changes, by workspace: the next one stops it.
+    change_lists: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// Sign-ins running, one per launch.
     signing_in: Mutex<HashMap<LaunchKey, SignInRun>>,
     /// Numbers login terminals (`sign-in-<n>`).
@@ -83,6 +85,7 @@ impl Sessions {
                 sync: sync::SyncState::default(),
                 slots: TurnSlots::default(),
                 sign_ins_needed: Mutex::default(),
+                change_lists: Mutex::default(),
                 signing_in: Mutex::default(),
                 next_login: AtomicU64::new(0),
                 workspaces,

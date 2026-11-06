@@ -184,8 +184,8 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     let mut command = Command::new(git);
     // Paths with non-ASCII names print as-is instead of octal-escaped.
     command.args(["-c", "core.quotepath=off"]);
-    // `core.fsmonitor` is a program named by the repository's config: a refresh nobody asked for must
-    // not run code from a folder that was only opened.
+    // `core.fsmonitor` can name a program in the repository's config: a refresh nobody asked for must
+    // not run code from a folder that was only opened. A later `-c` wins: see `repo::status_in`.
     if mode == Mode::Background {
         command.args(["-c", "core.fsmonitor=false"]);
     }
@@ -292,7 +292,13 @@ impl Capture {
         thread::spawn(move || {
             let _end = end;
             let mut chunk = vec![0; 64 * 1024];
-            while let Ok(n @ 1..) = pipe.read(&mut chunk) {
+            loop {
+                let n = match pipe.read(&mut chunk) {
+                    Ok(0) => break,
+                    Ok(n) => n,
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => break,
+                };
                 let mut read = shared.lock().unwrap_or_else(PoisonError::into_inner);
                 let room = cap.saturating_sub(read.0.len());
                 read.0.extend_from_slice(&chunk[..n.min(room)]);
@@ -646,5 +652,25 @@ exec sleep 30
         let out =
             run_with(&git_bin(), &repo.path, &args(&[&"hash-object", &"--stdin"]), Mode::Local, &opts).unwrap();
         assert_eq!(out.stdout_str().unwrap().trim(), "b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0");
+    }
+
+    #[test]
+    fn a_read_interrupted_by_a_signal_goes_on() {
+        struct Interrupted(u8);
+        impl Read for Interrupted {
+            fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
+                self.0 += 1;
+                match self.0 {
+                    1 => Err(io::ErrorKind::Interrupted.into()),
+                    2 => {
+                        into[..4].copy_from_slice(b"rest");
+                        Ok(4)
+                    }
+                    _ => Ok(0),
+                }
+            }
+        }
+
+        assert_eq!(Capture::start(Interrupted(0), 100).finish(), (b"rest".to_vec(), false));
     }
 }
