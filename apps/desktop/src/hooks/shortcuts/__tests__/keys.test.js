@@ -29,6 +29,7 @@ describe('shortcut keys', () => {
       ['F10', 'F10'],
       ['`', 'Backquote'],
       [',', 'Comma'],
+      ['↵', 'Enter'],
       ['§', null],
     ];
     for (const [key, code] of cases) {

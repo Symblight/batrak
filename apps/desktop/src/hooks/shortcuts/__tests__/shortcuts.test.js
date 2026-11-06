@@ -18,6 +18,8 @@ describe('shortcuts', () => {
       ['searchInFiles', 'windows', 'Ctrl+Shift+F'],
       ['searchInFiles', 'linux', 'Ctrl+Shift+F'],
       ['quickOpen', 'mac', '⌘P'],
+      ['commit', 'mac', '⌘↵'],
+      ['commit', 'windows', 'Ctrl+↵'],
       ['quickOpen', 'linux', 'Ctrl+P'],
       ['newTerminal', 'mac', '⌃`'],
       ['newTerminal', 'windows', 'Ctrl+`'],

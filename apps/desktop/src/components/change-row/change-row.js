@@ -5,25 +5,24 @@ import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/tooltip';
 import chevronRightIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
-import editIcon from '@material-design-icons/svg/outlined/edit.svg?raw';
 import expandMoreIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
+import fileOpenIcon from '@material-design-icons/svg/outlined/file_open.svg?raw';
 import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import { git } from '../../hooks/git/git.js';
 import '../diff-counts/diff-counts.js';
+import '../file-icon/file-icon.js';
 import styles from './change-row.css?inline';
 
 /** @typedef {import('../../hooks/git/changes.js').ChangeRow} ChangeRow */
 
-/** Disabled controls of features that don't exist yet say so on hover. */
-const NOT_YET = 'Not available yet';
-
 /**
  * @tag acp-change-row
- * @summary A changed file in the Changes tab: chevron, a checkbox to pick it for the commit, its type badge, name, folder and rename, the lines it adds and removes, and Edit and Revert while hovered, focused or expanded (shown by CSS).
+ * @summary A changed file in the Changes tab: chevron, a checkbox to pick it for the commit, its status letter and icon, name, folder or rename, the lines it adds and removes, and Open file and Revert while hovered, focused or expanded (shown by CSS).
  * @fires acp-change-toggle `{ id }` The row was clicked, or Enter / Space: expand or collapse its diff.
  * @fires acp-change-expand `{ id }` ArrowRight on a collapsed row.
  * @fires acp-commit-pick `{ ids, picked }`
- * @fires acp-change-edit `{ id }` Edit was pressed.
+ * @fires acp-change-edit `{ id }` Open file was pressed.
+ * @fires acp-change-revert `{ id }` Revert was pressed; its view asks first.
  */
 export class AcpChangeRow extends LitElement {
   static properties = {
@@ -44,7 +43,7 @@ export class AcpChangeRow extends LitElement {
     this.expanded = false;
     /** @type {boolean} Picked for the next commit. */
     this.picked = false;
-    /** @type {boolean} It can be picked (not a worktree session's read-only changes). */
+    /** @type {boolean} It can be picked and reverted (not a worktree session's read-only changes). */
     this.selectable = true;
     /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
     this.tabStop = true;
@@ -84,6 +83,9 @@ export class AcpChangeRow extends LitElement {
     if (!row) return nothing;
     const { file } = row;
     const deleted = file.kind === 'deleted';
+    const conflicted = file.kind === 'conflicted';
+    const status = git.statusOf(file.kind);
+    const rename = file.origPath ? git.renameLabel(row.dir, row.name, file.origPath) : null;
     const id = 'acp-change-row';
     return html`<div
         class="acp-change-row__row ${this.expanded ? 'acp-change-row__row_header' : ''}"
@@ -105,37 +107,46 @@ export class AcpChangeRow extends LitElement {
                 this.#emit('acp-commit-pick', { ids: [row.id], picked: /** @type {HTMLInputElement} */ (e.target).checked })}
             ></md-checkbox>`
           : nothing}
-        <span class="acp-change-row__badge" aria-hidden="true">${git.typeBadge(row.name)}</span>
+        <span id="${id}-status" class="acp-change-row__status" style="--_acp-change-row-status: ${status.color}" role="img" aria-label=${status.label}>${status.letter}</span>
+        <acp-file-icon class="acp-change-row__icon" .name=${row.name}></acp-file-icon>
         <span id="${id}-name" class="acp-change-row__name ${deleted ? 'acp-change-row__name_deleted' : ''}">${row.name}</span>
-        <span class="acp-change-row__dir">${row.dir}</span>
-        ${file.origPath
-          ? html`<span id="${id}-renamed" class="acp-change-row__renamed">(${git.relativePath(row.dir, file.origPath)})</span>`
-          : nothing}
+        ${rename
+          ? html`<span id="${id}-renamed" class="acp-change-row__renamed">${rename.from} → <span class="acp-change-row__renamed-to">${rename.to}</span></span>`
+          : html`<span class="acp-change-row__dir">${row.dir}</span>`}
         <acp-diff-counts .added=${file.added} .removed=${file.removed}></acp-diff-counts>
         <span class="acp-change-row__spacer"></span>
         <span class="acp-change-row__actions" @click=${(/** @type {Event} */ e) => e.stopPropagation()}>
               <md-icon-button
                 class="acp-change-row__action"
                 id="${id}-edit"
-                aria-label=${`Edit ${row.name}`}
+                aria-label=${`Open ${row.name}`}
                 ?disabled=${deleted}
                 @click=${() => this.#emit('acp-change-edit', { id: row.id })}
               >
-                <md-icon class="acp-change-row__action-icon">${unsafeSVG(editIcon)}</md-icon>
+                <md-icon class="acp-change-row__action-icon">${unsafeSVG(fileOpenIcon)}</md-icon>
               </md-icon-button>
-              <md-icon-button id="${id}-revert" class="acp-change-row__action" aria-label=${`Revert ${row.name}`} disabled>
-                <md-icon class="acp-change-row__action-icon">${unsafeSVG(undoIcon)}</md-icon>
-              </md-icon-button>
+              ${this.selectable
+                ? html`<md-icon-button
+                    id="${id}-revert"
+                    class="acp-change-row__action"
+                    aria-label=${`Revert ${row.name}`}
+                    ?disabled=${conflicted}
+                    @click=${() => this.#emit('acp-change-revert', { id: row.id })}
+                  >
+                    <md-icon class="acp-change-row__action-icon">${unsafeSVG(undoIcon)}</md-icon>
+                  </md-icon-button>`
+                : nothing}
             </span>
       </div>
       <md-tooltip for="${id}-name" show-delay="800" style="width: max-content; max-inline-size: none">${file.path}</md-tooltip>
-      ${file.origPath
+      ${rename
         ? html`<md-tooltip for="${id}-renamed" show-delay="800" style="width: max-content; max-inline-size: none"
             >Renamed from ${file.origPath}</md-tooltip
           >`
         : nothing}
-      <md-tooltip for="${id}-edit" show-delay="800">Edit</md-tooltip>
-      <md-tooltip for="${id}-revert" show-delay="800">${NOT_YET}</md-tooltip>`;
+      <md-tooltip for="${id}-status" show-delay="800">${status.label}</md-tooltip>
+      <md-tooltip for="${id}-edit" show-delay="800">Open file</md-tooltip>
+      ${this.selectable ? html`<md-tooltip for="${id}-revert" show-delay="800">${conflicted ? 'Resolve the conflict first' : 'Revert'}</md-tooltip>` : nothing}`;
   }
 }
 

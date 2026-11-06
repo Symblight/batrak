@@ -42,9 +42,12 @@ describe('acp-change-row', () => {
     expect(row.tabIndex).to.equal(-1);
   });
 
-  it('shows the type badge, name, folder, counts and a picked checkbox with the full path in a tooltip, a rename relative to the folder, and a deleted file struck out', async () => {
+  it('shows the status letter and file icon, name, folder, counts and a picked checkbox with the full path in a tooltip, a rename relative to the folder, and a deleted file struck out', async () => {
     const { root, row } = await render({ picked: true });
-    expect(root.querySelector('.acp-change-row__badge')?.textContent).to.equal('JS');
+    const status = root.querySelector('.acp-change-row__status');
+    expect(status?.textContent).to.equal('M');
+    expect(tooltipOf(status)).to.equal('Modified');
+    expect(/** @type {HTMLElementTagNameMap['acp-file-icon'] | null} */ (root.querySelector('acp-file-icon'))?.name).to.equal('b.js');
     expect(root.querySelector('.acp-change-row__name')?.textContent).to.equal('b.js');
     expect(root.querySelector('.acp-change-row__dir')?.textContent).to.equal('src');
     expect(tooltipOf(root.querySelector('.acp-change-row__name'))).to.equal('src/b.js');
@@ -55,28 +58,49 @@ describe('acp-change-row', () => {
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
 
     const renamed = await render({ row: { ...rowOf({ path: 'src/new/b.js', origPath: 'src/old/b.js' }), dir: 'src/new' } });
-    expect(renamed.root.querySelector('.acp-change-row__renamed')?.textContent).to.equal('(../old/b.js)');
+    expect(renamed.root.querySelector('.acp-change-row__status')?.textContent).to.equal('M');
+    expect(renamed.root.querySelector('.acp-change-row__renamed')?.textContent).to.equal('src/old → src/new');
+    expect(renamed.root.querySelector('.acp-change-row__dir'), 'the rename says the folder').to.equal(null);
     expect(tooltipOf(renamed.root.querySelector('.acp-change-row__renamed'))).to.equal('Renamed from src/old/b.js');
 
     const deleted = await render({ row: rowOf({ kind: 'deleted' }) });
     expect(deleted.root.querySelector('.acp-change-row__name_deleted')).to.not.equal(null);
-    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (deleted.root.querySelector('.acp-change-row__action')).disabled, 'Edit is disabled').to.equal(true);
+    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (deleted.root.querySelector('.acp-change-row__action')).disabled, 'Open file is disabled').to.equal(true);
   });
 
-  it('has Edit and Revert with tooltips (shown by CSS while hovered, focused or expanded), and Edit asks to open the file without toggling', async () => {
+  it('has Open file and Revert with tooltips (shown by CSS while hovered, focused or expanded), and Open file asks to open the file without toggling', async () => {
     const { el, root } = await render();
     const edits = listen(el, 'acp-change-edit');
     const toggles = listen(el, 'acp-change-toggle');
     const actions = [...root.querySelectorAll('.acp-change-row__action')];
-    expect(actions.map(tooltipOf)).to.deep.equal(['Edit', 'Not available yet']);
-    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (actions[1]).disabled, 'Revert does not exist yet').to.equal(true);
+    expect(actions.map(tooltipOf)).to.deep.equal(['Open file', 'Revert']);
     /** @type {HTMLElement} */ (actions[0]).click();
     expect(edits).to.deep.equal([{ id: 'src/b.js' }]);
-    expect(toggles, 'Edit does not toggle the row').to.deep.equal([]);
+    expect(toggles, 'Open file does not toggle the row').to.deep.equal([]);
     expect(el.hasAttribute('expanded'), 'a collapsed row').to.equal(false);
     el.expanded = true;
     await el.updateComplete;
     expect(el.hasAttribute('expanded'), 'the attribute the header styling keys on').to.equal(true);
+  });
+
+  it('asks to revert without toggling, except a conflicted file, which it says to resolve, and a read-only row, which has no Revert', async () => {
+    // Arrange
+    const revertOf = (/** @type {ShadowRoot} */ root) => /** @type {HTMLElementTagNameMap['md-icon-button'] | null} */ (root.querySelector('[aria-label^="Revert"]'));
+    const { el, root } = await render();
+    const reverts = listen(el, 'acp-change-revert');
+    const toggles = listen(el, 'acp-change-toggle');
+    // Act
+    revertOf(root)?.click();
+    // Assert
+    expect(reverts).to.deep.equal([{ id: 'src/b.js' }]);
+    expect(toggles).to.deep.equal([]);
+
+    const conflicted = await render({ row: rowOf({ kind: 'conflicted' }) });
+    expect(revertOf(conflicted.root)?.disabled).to.equal(true);
+    expect(tooltipOf(revertOf(conflicted.root))).to.equal('Resolve the conflict first');
+
+    const readOnly = await render({ selectable: false });
+    expect(revertOf(readOnly.root)).to.equal(null);
   });
 
   it('toggles on a click, Enter or Space, expands on ArrowRight and collapses on ArrowLeft only while expanded', async () => {

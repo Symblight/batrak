@@ -158,6 +158,7 @@ pub fn run() {
             commands::git::git_branches,
             commands::git::git_fetch,
             commands::git::git_commit,
+            commands::git::git_revert_files,
             commands::github::github_account,
             commands::github::github_pull_request,
             commands::terminal::terminal_open,

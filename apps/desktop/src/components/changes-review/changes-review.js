@@ -9,10 +9,12 @@ import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
+import '@symblight/wc-material/segmented-button';
 import '@symblight/wc-material/tooltip';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
 import '../change-row/change-row.js';
+import '../changes-menu/changes-menu.js';
 import { codeEditor } from '../code-view/code-editor.js';
 import '../diff-counts/diff-counts.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
@@ -23,6 +25,7 @@ import styles from './changes-review.css?inline';
 /** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/git/types.js').DiffLayout} DiffLayout */
 /** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
@@ -39,6 +42,10 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-change-toggle `{ id }` A row was clicked: expand or collapse its diff.
  * @fires acp-change-expand `{ id }`
  * @fires acp-changes-collapse `null` Collapse all.
+ * @fires acp-diff-layout `{ layout }` A layout other than the chosen one was pressed.
+ * @fires acp-change-revert `{ id }` A row's Revert was pressed; its view asks first.
+ * @fires acp-changes-rollback `null` From its menu, for the picked files.
+ * @fires acp-changes-refresh `null` From its menu.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
  * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.
@@ -56,6 +63,7 @@ export class AcpChangesReview extends LitElement {
     branch: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
+    diffLayout: { attribute: false },
   };
 
   static styles = styles;
@@ -100,6 +108,8 @@ export class AcpChangesReview extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
+    /** @type {DiffLayout} */
+    this.diffLayout = 'unified';
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
@@ -159,6 +169,13 @@ export class AcpChangesReview extends LitElement {
     this.#emit('acp-commit-select', { ids: ids.every((id) => this.selection.has(id)) ? [] : ids });
   }
 
+  /** @param {Event} e */
+  #onLayoutChange(e) {
+    e.stopPropagation();
+    const { value } = /** @type {CustomEvent<{ value: DiffLayout }>} */ (e).detail;
+    this.#emit('acp-diff-layout', { layout: value });
+  }
+
   /** @param {Event} e A row's Edit. */
   #onEdit(e) {
     e.stopPropagation();
@@ -172,6 +189,7 @@ export class AcpChangesReview extends LitElement {
    */
   #renderRow(row, expanded) {
     return html`<acp-change-row
+      class=${expanded ? 'acp-changes-review__row_sticky' : ''}
       data-id=${row.id}
       .row=${row}
       .expanded=${expanded}
@@ -193,6 +211,7 @@ export class AcpChangesReview extends LitElement {
     return html`<cdx-code-editor
       class="acp-changes-review__editor"
       read-only
+      diff-layout=${this.diffLayout}
       aria-label=${`Diff of ${row.name}`}
       .plugins=${codeEditor.plugins}
       filename=${row.file.path}
@@ -213,10 +232,10 @@ export class AcpChangesReview extends LitElement {
 
   /** @param {ChangeRow} row */
   #renderEntry(row) {
-    if (!this.expanded.has(row.id)) return this.#renderRow(row, false);
-    return html`<div class="acp-changes-review__card">
-      ${this.#renderRow(row, true)}
-      <div class="acp-changes-review__diff">${this.#renderDiff(row)}</div>
+    const open = this.expanded.has(row.id);
+    return html`<div class="acp-changes-review__card ${open ? 'acp-changes-review__card_open' : ''}">
+      ${this.#renderRow(row, open)}
+      ${open ? html`<div class="acp-changes-review__diff">${this.#renderDiff(row)}</div>` : nothing}
     </div>`;
   }
 
@@ -251,13 +270,25 @@ export class AcpChangesReview extends LitElement {
               .checked=${total > 0 && picked === total}
               .indeterminate=${picked > 0 && picked < total}
               @change=${this.#onToggleAll}
-            ></md-checkbox>
-            <span class="acp-changes-review__summary">${picked}/${total} files selected</span>`
-        : html`<span class="acp-changes-review__summary"
-            >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
-          >`}
+            ></md-checkbox>`
+        : nothing}
+      <span class="acp-changes-review__summary"
+        >${this.base === null
+          ? `${picked} of ${total} selected`
+          : `${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}`}</span
+      >
       <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
       <span class="acp-changes-review__spacer"></span>
+      <md-segmented-button-group
+        class="acp-changes-review__segments"
+        label="Diff layout"
+        .value=${this.diffLayout}
+        @change=${this.#onLayoutChange}
+      >
+        <md-segmented-button class="acp-changes-review__segment" value="unified">Unified</md-segmented-button>
+        <md-segmented-button class="acp-changes-review__segment" value="split">Split</md-segmented-button>
+      </md-segmented-button-group>
+      ${this.base === null ? html`<acp-changes-menu .picked=${picked}></acp-changes-menu>` : nothing}
       ${this.base !== null
         ? html`<md-button
               id="acp-changes-review-apply"

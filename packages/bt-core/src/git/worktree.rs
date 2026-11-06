@@ -148,7 +148,7 @@ pub fn remove_saved(git: &Path, repo: &Path, path: &Path) -> Result<(), String> 
 
 /// Puts the worktree at `path` back on `branch`.
 pub fn switch(git: &Path, path: &Path, branch: &str) -> Result<(), String> {
-    with_mutation(git, path, || exec::run(git, path, &exec::args(&[&"switch", &"--end-of-options", &branch]), Mode::Local).map(drop))
+    with_mutation(git, path, || exec::run(git, path, &exec::args(&[&"switch", &"--end-of-options", &branch]), Mode::Hooks).map(drop))
 }
 
 /// Unlocks the worktree at `path`, which a checkout killed outright leaves locked.

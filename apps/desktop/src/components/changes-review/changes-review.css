@@ -8,20 +8,22 @@
   padding: var(--acp-tab-view-padding, 0);
 }
 
-/* Toolbar: collapse all, all-files checkbox, summary, totals; view, navigation, revert, review */
+/* Toolbar: collapse all, all-files checkbox, summary, totals; layout, menu, a session's actions */
 .acp-changes-review__toolbar {
   flex: none;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: var(--acp-space-1-5);
-  min-height: 48px;
+  gap: var(--acp-space-1);
+  min-height: 36px;
   box-sizing: border-box;
-  padding: 10px var(--acp-space-3) var(--acp-space-1-5) var(--acp-space-2);
+  /* 1px: Collapse all (26px) and the gap put the checkbox over the rows' checkboxes, 31px in. */
+  padding: 0 var(--acp-space-2) 0 1px;
+  border-bottom: 1px solid var(--acp-color-outline-variant);
 }
 
 .acp-changes-review__tool {
-  --md-icon-button-font-size: var(--acp-icon-size-lg);
+  --md-icon-button-font-size: var(--acp-icon-size-sm);
   --md-icon-button-foreground-color: var(--acp-color-on-surface-variant);
 }
 
@@ -30,7 +32,7 @@
 }
 
 .acp-changes-review__tool-icon {
-  font-size: var(--acp-icon-size-lg);
+  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-changes-review__session-action {
@@ -42,6 +44,7 @@
 
 .acp-changes-review__all {
   flex: none;
+  padding: 0;
 }
 
 .acp-changes-review__summary {
@@ -55,25 +58,50 @@
   flex: 1;
 }
 
+/* Unified / Split: a dense MD3 segmented button, 28px instead of 40px. */
+.acp-changes-review__segments {
+  flex: none;
+  --md-segmented-button-group-height: 28px;
+}
+
+/* On the segment, not the group: each segment's :host declares these, hiding inherited values. */
+.acp-changes-review__segment {
+  --md-segmented-button-block-space: var(--acp-space-1);
+  --md-segmented-button-inline-space: var(--acp-space-3);
+  --md-segmented-button-label-text-size: var(--acp-font-size-sm);
+  --md-segmented-button-label-text-line-height: 16px;
+}
+
 /* Files */
 .acp-changes-review__list {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--acp-space-0-5);
+  gap: var(--acp-space-1);
   overflow: auto;
   /* The last diff scrolls clear of <acp-comment-bar>, which floats over the bottom (48px + 16px). */
-  padding: 0 var(--acp-space-2) 72px;
+  padding: var(--acp-space-2) var(--acp-space-2) 72px;
 }
 
-/* Expanded file: header row and diff in an outlined card, on the column's surface */
+/* A file: its header row, and its diff while expanded, outlined. Transparent while collapsed, so rows keep their alignment. */
 .acp-changes-review__card {
   flex: none;
-  margin-block: var(--acp-space-1);
-  border: 1px solid var(--acp-color-outline-variant);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--acp-column-background);
+}
+
+.acp-changes-review__card_open {
+  border-color: var(--acp-color-outline-variant);
+}
+
+/* The header stays in view while its diff scrolls; the card ends it, so it needs no clipping. */
+.acp-changes-review__row_sticky {
+  position: sticky;
+  /* Sticks at the list's padding edge, not its top: this reaches over the padding. */
+  top: calc(-1 * var(--acp-space-2));
+  z-index: var(--acp-z-raised);
 }
 
 .acp-changes-review__diff {

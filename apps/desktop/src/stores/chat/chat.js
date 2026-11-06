@@ -1,4 +1,5 @@
 import { atom } from 'nanostores';
+import { showColumn } from '../layout/layout.js';
 import { $activeSessionId } from '../sessions/sessions.js';
 
 /** @typedef {import('../../hooks/chat/types.js').ChatInsert} ChatInsert */
@@ -26,11 +27,13 @@ function addPending({ inserts = [], drops = [] }, sessionId) {
 }
 
 /**
- * Code for the shown session's composer, or its CLI.
+ * Code for the shown session's composer, or its CLI. An expanded editor gives the agent column back, so it's seen arriving.
  * @param {readonly ChatInsert[]} inserts
  */
 export function addToChat(inserts) {
-  if (inserts.length) addPending({ inserts }, $activeSessionId.get());
+  if (!inserts.length) return;
+  addPending({ inserts }, $activeSessionId.get());
+  showColumn('agent');
 }
 
 /**

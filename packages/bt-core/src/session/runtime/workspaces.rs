@@ -81,14 +81,19 @@ impl Sessions {
         Ok(())
     }
 
-    /// A workspace's changed files since its base commit, relative to its folder. Blocking.
-    pub fn workspace_changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
+    /// A workspace's changed files since its base commit, relative to its folder. Stops the list of
+    /// it still running, whose answer nobody wants now (it fails with `exec::CANCELLED`). Blocking.
+    pub fn workspace_changes(&self, id: &str) -> Result<Vec<crate::git::status::FileStatus>, String> {
         let (dir, base) = self.checked_out(id)?;
-        crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base)
+        let cancel = Arc::new(AtomicBool::new(false));
+        if let Some(previous) = lock(&self.inner.change_lists).insert(id.to_owned(), Arc::clone(&cancel)) {
+            previous.store(true, Ordering::SeqCst);
+        }
+        crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base, &cancel)
     }
 
     /// A workspace's file (relative to its folder) at its base commit; `None` when it wasn't
-    /// there, is binary or too large. Blocking.
+    /// there. Fails, saying why, when it has no text to diff (see `blob::file_at_head`). Blocking.
     pub fn workspace_file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
         crate::util::checked_rel(path)?;
         let (dir, base) = self.checked_out(id)?;

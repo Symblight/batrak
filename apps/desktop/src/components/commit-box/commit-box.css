@@ -1,7 +1,7 @@
 :host {
   display: flex;
   flex-direction: column;
-  gap: var(--acp-space-2);
+  gap: var(--acp-space-1);
 }
 
 .acp-commit-box__message {
@@ -9,6 +9,27 @@
   min-width: 0;
   --md-text-field-background-color: var(--acp-column-background);
 }
+
+.acp-commit-box__support {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 var(--acp-space-2);
+  padding-inline: var(--acp-space-3);
+  font-size: var(--acp-font-size-xs);
+  line-height: 16px;
+  color: var(--acp-color-on-surface-variant);
+}
+
+.acp-commit-box__summary_over {
+  color: var(--acp-color-error);
+}
+
+.acp-commit-box__key {
+  font-family: var(--acp-font-family-mono);
+  font-size: inherit;
+}
+
 /* When narrow, the button wraps under Amend and fills the row: the spacer takes
    (nearly) all free space beside it, the button all of its own line */
 .acp-commit-box__actions {
@@ -16,28 +37,41 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--acp-space-2);
+  margin-top: var(--acp-space-1);
 }
+
 .acp-commit-box__amend {
   flex: none;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding-left: 3px;
-  font-size: var(--acp-font-size-md);
-  line-height: 20px;
-  cursor: pointer;
+  --md-chip-height: 28px;
+  --md-chip-border-radius: var(--acp-shape-corner-small);
+  --md-chip-border-color: var(--acp-color-outline-variant);
+  --md-chip-icon-size: var(--acp-icon-size-sm);
+  --md-chip-label-text-size: var(--acp-font-size-md);
+  --md-chip-label-text-weight: var(--acp-font-weight-medium);
 }
+
 .acp-commit-box__spacer {
   flex: 1000 1 0;
 }
+
+.acp-commit-box__reason {
+  flex: 1 0 auto;
+  display: flex;
+}
+
 .acp-commit-box__commit {
   flex: 1 0 auto;
   --md-button-font-size: var(--acp-font-size-md);
-  --md-button-block-start-space: var(--acp-button-block-space-regular);
-  --md-button-block-end-space: var(--acp-button-block-space-regular);
-  --md-button-inline-start-space: 12px;
-  --md-button-inline-end-space: 16px;
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+  --md-button-inline-start-space: var(--acp-space-3);
+  --md-button-inline-end-space: var(--acp-space-4);
 }
-.acp-commit-box__commit-icon {
-  font-size: var(--acp-icon-size-md);
+
+.acp-commit-box__icon {
+  font-size: var(--acp-icon-size-sm);
+}
+
+.acp-commit-box__spinner {
+  font-size: var(--acp-icon-size-sm);
 }

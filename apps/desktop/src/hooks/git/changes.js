@@ -46,6 +46,28 @@ export function statusOf(kind) {
 }
 
 /**
+ * What to ask before reverting files: a file HEAD doesn't have is deleted.
+ * @param {readonly GitFileStatus[]} files
+ * @returns {import('../app/types.js').ConfirmOptions}
+ */
+export function revertPrompt(files) {
+  const detail = 'A copy stays in git under refs/batrak/reverted.';
+  const isNew = (/** @type {GitFileStatus} */ { kind }) => kind === 'added' || kind === 'untracked';
+  const [file] = files;
+  if (files.length !== 1 || !file) {
+    const created = files.filter(isNew).length;
+    const deleted = created === 0 ? '' : created === 1 ? ' 1 new file isn’t in HEAD and is deleted.' : ` ${created} new files aren’t in HEAD and are deleted.`;
+    return { headline: `Roll back ${files.length} files?`, message: `Their changes are thrown away and they go back to HEAD.${deleted}`, detail, confirmLabel: 'Rollback', destructive: true };
+  }
+  const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+  if (isNew(file)) {
+    return { headline: `Delete new file ${name}?`, message: 'It isn’t in HEAD, so reverting deletes it.', detail, confirmLabel: 'Delete', destructive: true };
+  }
+  const message = file.origPath ? `It goes back to ${file.origPath}, as in HEAD.` : 'Its changes are thrown away and it goes back to HEAD.';
+  return { headline: `Revert ${name}?`, message, detail, confirmLabel: 'Revert', destructive: true };
+}
+
+/**
  * The uncommitted files hint: what its button says, and the prompt it puts in the composer.
  * @param {number} count
  * @returns {{ label: string, value: string }}
@@ -124,28 +146,37 @@ const TYPE_BADGES = /** @type {Record<string, string>} */ ({
 });
 
 /**
- * The badge naming a file's type: known extensions by their usual short form, others by their
- * first three letters, `·` for a name without one.
- * @param {string} name
+ * Where a renamed file came from: the folder when its name stayed, else its old path.
+ * @param {string} dir Its folder now, root-relative (`''` at the top).
+ * @param {string} name Its name now.
+ * @param {string} origPath Root-relative.
+ * @returns {{ from: string, to: string }}
  */
-export function typeBadge(name) {
-  const dot = name.lastIndexOf('.');
-  if (dot <= 0) return '·';
-  const ext = name.slice(dot + 1).toLowerCase();
-  return TYPE_BADGES[ext] ?? ext.slice(0, 3).toUpperCase();
+export function renameLabel(dir, name, origPath) {
+  const slash = origPath.lastIndexOf('/');
+  const sameName = origPath.slice(slash + 1) === name;
+  return { from: sameName ? origPath.slice(0, Math.max(slash, 0)) || '.' : origPath, to: dir || '.' };
 }
 
+/** The read failed for the file not being there: Rust's `NotFound` errors, on every platform. */
+const GONE = /\(os error [23]\)$/;
+
 /**
- * Path of `to` relative to the folder `from`, both root-relative: `../old/name.css`.
- * @param {string} from
- * @param {string} to
+ * An expanded file's diff from its two reads. A missing baseline is a new file. A read that fails says
+ * why there is no diff, unless it failed for the file being gone: listed as deleted, or as a rename
+ * or a conflict whose file is gone too, or deleted since it was listed.
+ * @param {Promise<string>} file The file now.
+ * @param {Promise<string | null>} base The file it's compared to; `null` when it wasn't there.
+ * @param {boolean} deleted It's listed as deleted.
+ * @returns {Promise<import('../tabs/types.js').FileDiff>}
  */
-export function relativePath(from, to) {
-  const a = from ? from.split('/') : [];
-  const b = to.split('/');
-  let common = 0;
-  while (common < a.length && common < b.length - 1 && a[common] === b[common]) common++;
-  return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
+export async function readDiff(file, base, deleted) {
+  const [content, baseline] = await Promise.allSettled([file, base]);
+  /** @param {unknown} reason */
+  const failed = (reason) => ({ content: '', baseline: '', error: String(reason), loading: false });
+  if (baseline.status === 'rejected') return failed(baseline.reason);
+  if (content.status === 'rejected' && !deleted && !GONE.test(String(content.reason))) return failed(content.reason);
+  return { content: content.status === 'fulfilled' ? content.value : '', baseline: baseline.value ?? '', error: '', loading: false };
 }
 
 /**

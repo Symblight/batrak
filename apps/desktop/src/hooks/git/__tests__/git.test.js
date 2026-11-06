@@ -234,6 +234,27 @@ describe('git', () => {
     stopWatching();
   });
 
+  it('reverts files in the active project in one call, both sides of a rename, then reads the files again, also when git refuses', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    const stopWatching = git.watchChanges();
+    await until(() => $gitChanges.get().loaded);
+    answers.git_revert_files = () => null;
+    // Act
+    await git.revertFiles([{ ...FILE, path: 'new.txt', origPath: 'old.txt' }, { ...FILE, path: 'a.txt', origPath: null }]);
+    await until(() => sent('git_status').length === 2);
+    answers.git_revert_files = () => {
+      throw new Error('conflict');
+    };
+    const failure = await git.revertFiles([FILE]).catch((err) => err);
+    await until(() => sent('git_status').length === 3);
+    // Assert
+    expect(sent('git_revert_files')[0]).to.deep.equal({ rootId, paths: ['new.txt', 'old.txt', 'a.txt'] });
+    expect(String(failure)).to.include('conflict');
+    stopWatching();
+  });
+
   it('refuses to commit with no project open', async () => {
     // Arrange
     const git = await started();
@@ -301,5 +322,16 @@ describe('git', () => {
     expect(results).to.deep.equal([list, 'Fix it', 'text']);
     expect(sent('git_branches')).to.deep.equal([{ rootId: 'r1' }]);
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId: 'r1', path: 'src/a.js' }]);
+  });
+
+  it('reads the path it is given at HEAD, whatever the list of changes says: the list may predate HEAD', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    $gitChanges.set({ files: [{ ...FILE, path: 'new.js', kind: 'renamed', origPath: 'old.js' }], loaded: true, loading: false, error: null });
+    // Act
+    await git.fileAtHead(rootId, 'new.js');
+    // Assert
+    expect(sent('git_file_at_head')).to.deep.equal([{ rootId, path: 'new.js' }]);
   });
 });

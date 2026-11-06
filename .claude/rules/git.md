@@ -11,6 +11,12 @@ paths:
 
 # Git: commit, worktrees, frontend, cache
 
+- Revert (`bt_core::git::revert`, `git_revert_files`): a row's Revert, or `<acp-changes-menu>`'s Rollback for
+  the picked files (Changes tab and pane; `git.revertAsking()`), of the project back to HEAD, index and working tree, a rename's two
+  sides together; what HEAD doesn't have is deleted. One conflicted file refuses them all. Its view
+  asks first; reverted files are unpicked. The work goes into a new
+  `refs/batrak/reverted/<nanos>` first (a tree, so no one's history shows it; no undo yet:
+  `git show <ref>:<path>`). Worktree sessions' tabs have no Revert.
 - Commit (`git/commit.rs`, `git_commit`): the files picked in Changes go in as they are in the
   working tree (`commit --only`, untracked ones staged first and unstaged again if it fails, both
   sides of a rename); whatever else is staged stays staged and out. Amend with no files rewords
@@ -20,6 +26,13 @@ paths:
   filters run under `Mode::Hooks`: 10 min timeout, own session and process group (no controlling
   terminal, so ssh fails instead of prompting), stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
+- Staging a conflicted file marks it resolved, so a pick that still has conflict markers is refused,
+  with or without a merge in progress. An operation stopped midway (`RepoState.operation`) is finished in a
+  terminal; the Changes pane only says so.
+- `exec` runs every git in its own session and process group, stopped with SIGTERM first on a timeout. Its
+  output is read with a grace after git is gone: a child left behind doesn't hold the call. `Hooks` and
+  `Network` take no slot of `MAX_CONCURRENT`. `Background` never runs a program named by `core.fsmonitor` (a status keeps git's own daemon, `core.fsmonitor=true`);
+  filters still run.
 - `worktree` backs workspaces (`workspace/checkout.rs`; `add` / `attach` check out under `Mode::Hooks`: a big
   tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a workspace's Apply
   to Main (`workspace_apply_locally`: its commits and uncommitted work since `baseCommit` as an
@@ -39,14 +52,15 @@ paths:
   (`views/git-changes/`) watches while Changes is the side pane's shown pane (`active`), `ChangesReviewController` (in `<acp-changes-tab>`) while the Changes tab is active
   (`<acp-git-changes>` also forgets picks of files no longer changed). Stopping
   keeps the files in the store; the spinner shows only for a root's first status. The files picked
-  for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
+  for the next commit are `$commitSelection` (root-relative paths), shared by both. How both Changes tabs show a diff is `$diffLayout`, saved and shared
+  by every window. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor
   reloads its diff baselines on it.
 - **Cached git state** (`git/cache.rs`, one `GitCache` per `Root`): `git_head` / `git_status` reuse the
   last answer while the root's change epoch (bumped by the watcher after every batch that changed
   something) and a fingerprint of the repository files (mtime/size of `HEAD`, `index`, the HEAD ref,
-  the upstream ref, `packed-refs`, `config`, `FETCH_HEAD`, `info/exclude` — covers a git dir outside the
-  root) are
+  the upstream ref, `packed-refs`, `config`, `info/exclude`, what marks an operation in progress — covers a
+  git dir outside the root) are
   unchanged. `git_status` takes the caller's `since` version and replies `unchanged` without the
   files; the frontend then keeps the same `files` array, so views neither rebuild nor re-read diffs.
   Refresh passes `force`. Changes inside ignored folders don't bump the epoch.

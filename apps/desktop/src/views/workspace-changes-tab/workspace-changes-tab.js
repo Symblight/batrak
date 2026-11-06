@@ -1,6 +1,7 @@
 import { html, nothing } from 'lit';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
+import { $diffLayout, setDiffLayout } from '../../stores/git/git.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { WorkspaceChangesController } from '../../controllers/workspace-changes/WorkspaceChangesController.js';
 import '../../components/changes-review/changes-review.js';
@@ -19,6 +20,7 @@ export class AcpWorkspaceChangesTab extends ViewElement {
   #review = new WorkspaceChangesController(this, { workspaceId: () => this.workspaceId });
   #comments = new StoreController(this, { store: $comments });
   #commentFocus = new StoreController(this, { store: $commentFocus });
+  #diffLayout = new StoreController(this, { store: $diffLayout });
 
   constructor() {
     super();
@@ -71,11 +73,16 @@ export class AcpWorkspaceChangesTab extends ViewElement {
       .branch=${view.branch}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
+      .diffLayout=${this.#diffLayout.value}
       @acp-change-toggle=${byId((id) => this.#review.toggle(id))}
       @acp-change-expand=${byId((id) => this.#review.expand(id))}
       @acp-changes-collapse=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         this.#review.collapseAll();
+      }}
+      @acp-diff-layout=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        setDiffLayout(/** @type {CustomEvent<{ layout: import('../../hooks/git/types.js').DiffLayout }>} */ (e).detail.layout);
       }}
       @acp-changes-apply=${(/** @type {Event} */ e) => {
         e.stopPropagation();

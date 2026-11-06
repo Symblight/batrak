@@ -14,7 +14,8 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 
-use super::repo::{self, RepoInfo, RepoState, Status};
+use super::repo::{self, RepoInfo, RepoState};
+use super::status::{self, Status};
 
 /// Modification time and size of each file a fingerprint looks at; `None` for a missing one.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -35,6 +36,7 @@ fn fingerprint(info: &RepoInfo, upstream: Option<&str>) -> Fingerprint {
         common.join("info/exclude"),
     ];
     paths.extend(head_ref.map(|r| common.join(r)));
+    paths.extend(repo::OPERATION_MARKERS.iter().map(|(marker, _)| git_dir.join(marker)));
     if let Some(upstream) = upstream {
         // `origin/main` or a local branch; whichever exists.
         paths.push(common.join("refs/remotes").join(upstream));
@@ -139,11 +141,11 @@ impl GitCache {
         // The fingerprint is taken before git reads, so a change while it runs makes the next call
         // read again. It covers the upstream ref only once the upstream is known: when the read
         // finds another one (the first read, or a new upstream), read once more with it covered.
-        let mut state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
+        let mut state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
         if state.upstream != upstream {
             upstream = state.upstream.clone();
             fingerprint = self::fingerprint(&info, upstream.as_deref());
-            state = repo::head_in(git, root).inspect_err(|_| self.forget_info())?;
+            state = repo::head_in(git, root, &info).inspect_err(|_| self.forget_info())?;
         }
         *slot = (state.upstream == upstream).then(|| CachedHead { fingerprint, state: state.clone() });
         Ok(Some(state))
@@ -167,7 +169,7 @@ impl GitCache {
             && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
         if !valid {
             let status = match &info {
-                Some(info) => Some(repo::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
+                Some(info) => Some(status::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
                 None => None,
             };
             if slot.cached.as_ref().map(|c| &c.status) != Some(&status) {
@@ -231,6 +233,15 @@ mod tests {
         repo.git(&["commit", "-qm", "edit"]);
         let committed = ask(&cache, &repo.path, 2, Some(staged.version));
         assert!(committed.status.unwrap().files.is_empty());
+    }
+
+    #[test]
+    fn an_operation_starting_outside_a_watched_root_is_noticed() {
+        let repo = TestRepo::with_commit("cache-operation");
+        let (git, cache) = (git_bin(), GitCache::default());
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().operation, None);
+        repo.write(".git/MERGE_HEAD", "0000\n");
+        assert_eq!(cache.head(&git, &repo.path, 0).unwrap().unwrap().operation, Some(repo::Operation::Merge));
     }
 
     #[test]
