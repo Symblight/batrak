@@ -13,6 +13,11 @@ pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     if info(git, root)?.is_none() {
         return Ok(Vec::new());
     }
+    local_branches(git, root)
+}
+
+/// [`branches`] for a `root` known to be in a repository.
+fn local_branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     let args = exec::args(&[&"for-each-ref", &"--sort=-committerdate", &"--format=%(refname:short)", &"refs/heads/"]);
     let out = exec::run(git, root, &args, Mode::Background)?;
     Ok(String::from_utf8_lossy(&out)
@@ -56,7 +61,7 @@ pub fn branch_list(git: &Path, root: &Path) -> Result<BranchList, String> {
     names.sort_by_key(|n| std::cmp::Reverse(n.len()));
     let mut remotes: Vec<RemoteBranches> = Vec::new();
     for refname in lines(run(&[&"for-each-ref", &"--sort=-committerdate", &"--format=%(refname)", &"refs/remotes/"])?) {
-        let short = refname.trim_start_matches("refs/remotes/");
+        let Some(short) = refname.strip_prefix("refs/remotes/") else { continue };
         let Some(remote) = names.iter().find(|n| short.strip_prefix(n.as_str()).is_some_and(|rest| rest.starts_with('/'))) else { continue };
         let branch = &short[remote.len() + 1..];
         if branch == "HEAD" || branch.starts_with(BRANCH_PREFIX) {
@@ -69,7 +74,7 @@ pub fn branch_list(git: &Path, root: &Path) -> Result<BranchList, String> {
     }
     remotes.sort_by(|a, b| a.remote.cmp(&b.remote));
     let default = run(&[&"symbolic-ref", &"-q", &"--short", &"refs/remotes/origin/HEAD"]).ok().map(|o| String::from_utf8_lossy(&o).trim().to_owned());
-    Ok(BranchList { local: branches(git, root)?, remotes, default: default.filter(|d| !d.is_empty()) })
+    Ok(BranchList { local: local_branches(git, root)?, remotes, default: default.filter(|d| !d.is_empty()) })
 }
 
 /// Fetches every remote, pruning remote-tracking branches deleted there. Not under
@@ -115,6 +120,21 @@ mod tests {
         );
         assert_eq!(list.default.as_deref(), Some("origin/main"));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[test]
+    fn a_remote_named_like_the_ref_prefix_keeps_its_whole_name() {
+        let (repo, bare) = TestRepo::with_remote("branch-list-odd-remote");
+        repo.git(&["remote", "add", "refs/remotes/x", bare.to_str().unwrap()]);
+        repo.git(&["fetch", "-q", "refs/remotes/x"]);
+
+        let list = branch_list(&git_bin(), &repo.path).unwrap();
+
+        assert!(
+            list.remotes.contains(&RemoteBranches { remote: "refs/remotes/x".into(), branches: vec!["refs/remotes/x/main".into()] }),
+            "{:?}",
+            list.remotes
+        );
     }
 
     #[test]

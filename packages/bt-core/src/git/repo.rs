@@ -97,30 +97,37 @@ pub fn head(git: &Path, root: &Path) -> Result<Option<RepoState>, String> {
 
 /// [`head`] for a `root` known to be in a repository.
 pub fn head_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<RepoState, String> {
-    // Each of these exits non-zero for a legitimate "none": detached HEAD, no commits, no upstream.
-    let optional = |args: &[&dyn AsRef<std::ffi::OsStr>]| -> Result<Option<String>, String> {
-        let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
-        let text = out.stdout_str()?.trim();
-        Ok((out.success() && !text.is_empty()).then(|| text.to_owned()))
-    };
-    let branch = optional(&[&"symbolic-ref", &"-q", &"--short", &"HEAD"])?;
-    let sha = optional(&[&"rev-parse", &"-q", &"--verify", &"HEAD"])?;
+    let branch = optional(git, root, &[&"symbolic-ref", &"-q", &"--short", &"HEAD"])?;
+    let sha = optional(git, root, &[&"rev-parse", &"-q", &"--verify", &"HEAD"])?;
     let mut state = RepoState::new(branch, sha);
     state.operation = operation_in(&info.git_dir);
     if let Some(branch) = &state.branch {
-        let reference = format!("refs/heads/{branch}");
         let format = "--format=%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream)%00%(upstream:remotename)";
-        let line = optional(&[&"for-each-ref", &format, &reference])?;
-        if let Some(line) = line {
-            let mut fields = line.split('\0');
-            let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
-            state.upstream = next();
-            (state.ahead, state.behind) = parse_track(&next().unwrap_or_default());
-            (state.upstream_ref, state.upstream_remote) = (next(), next());
-        }
+        let [upstream, track, upstream_ref, upstream_remote] = branch_fields(git, root, branch, format)?;
+        state.upstream = upstream;
+        (state.ahead, state.behind) = parse_track(&track.unwrap_or_default());
+        (state.upstream_ref, state.upstream_remote) = (upstream_ref, upstream_remote);
     }
     add_remote(git, root, &mut state)?;
     Ok(state)
+}
+
+/// What a git call that exits non-zero for a legitimate "none" (detached HEAD, no commits, no
+/// upstream) printed. Lossy, like the status: a name in another encoding must not fail the header.
+fn optional(git: &Path, root: &Path, args: &[&dyn AsRef<std::ffi::OsStr>]) -> Result<Option<String>, String> {
+    let out = exec::run_with(git, root, &exec::args(args), Mode::Background, &Default::default())?;
+    let text = String::from_utf8_lossy(&out.stdout);
+    let text = text.trim();
+    Ok((out.success() && !text.is_empty()).then(|| text.to_owned()))
+}
+
+/// The NUL-separated fields of `format` for a local branch; an empty one is `None`, and all are when
+/// no ref has that name (a name decoded lossily finds none).
+fn branch_fields<const N: usize>(git: &Path, root: &Path, branch: &str, format: &str) -> Result<[Option<String>; N], String> {
+    let reference = format!("refs/heads/{branch}");
+    let line = optional(git, root, &[&"for-each-ref", &format, &reference])?.unwrap_or_default();
+    let mut fields = line.split('\0');
+    Ok(std::array::from_fn(|_| fields.next().filter(|f| !f.is_empty()).map(str::to_owned)))
 }
 
 /// Fills in the remote a branch syncs with; none for a detached HEAD.
@@ -129,12 +136,7 @@ pub(super) fn add_remote(git: &Path, root: &Path, state: &mut RepoState) -> Resu
     state.remote = if state.detached { None } else { remote };
     // `status --porcelain` names the upstream only by its short name.
     if let (Some(branch), Some(_), None) = (&state.branch, &state.upstream, &state.upstream_ref) {
-        let reference = format!("refs/heads/{branch}");
-        let format = "--format=%(upstream)%00%(upstream:remotename)";
-        let out = exec::run_with(git, root, &exec::args(&[&"for-each-ref", &format, &reference]), Mode::Background, &Default::default())?;
-        let mut fields = out.stdout_str()?.trim_end_matches('\n').split('\0');
-        let mut next = || fields.next().filter(|f| !f.is_empty()).map(str::to_owned);
-        (state.upstream_ref, state.upstream_remote) = (next(), next());
+        [state.upstream_ref, state.upstream_remote] = branch_fields(git, root, branch, "--format=%(upstream)%00%(upstream:remotename)")?;
     }
     // Only a remote-tracking branch has a lease to give; a local upstream branch is not on a remote.
     let on_remote = state.upstream_remote.as_deref().is_some_and(|r| r != ".");
@@ -250,6 +252,51 @@ mod tests {
         let plain = temp_dir("head-plain");
         assert_eq!(head(&git, &plain).unwrap(), None);
         std::fs::remove_dir_all(plain).unwrap();
+    }
+
+    /// A ref named in another encoding. In `packed-refs`, since macOS's filesystem refuses such a
+    /// name for a loose ref.
+    #[cfg(unix)]
+    fn pack_ref(repo: &TestRepo, name: &[u8]) {
+        use std::io::Write;
+        let sha = repo.git(&["rev-parse", "HEAD"]);
+        let mut packed = std::fs::OpenOptions::new().create(true).append(true).open(repo.path.join(".git/packed-refs")).unwrap();
+        packed.write_all(&[sha.trim().as_bytes(), b" ", name, b"\n"].concat()).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_branch_name_that_is_not_utf8_doesnt_fail_a_refresh() {
+        let repo = TestRepo::with_remote("not-utf8-branch").0;
+        pack_ref(&repo, b"refs/heads/caf\xe9");
+        std::fs::write(repo.path.join(".git/HEAD"), b"ref: refs/heads/caf\xe9\n").unwrap();
+
+        let state = head(&git_bin(), &repo.path).unwrap().unwrap();
+
+        assert_eq!(state.branch.as_deref(), Some("caf\u{fffd}"));
+        assert!(state.sha.is_some());
+        assert_eq!(state.upstream, None, "the decoded name finds no ref, so no upstream");
+        assert_eq!(state.remote.map(|r| r.name).as_deref(), Some("origin"));
+        assert_eq!(status_of(&repo.path).repo.branch.as_deref(), Some("caf\u{fffd}"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_upstream_name_that_is_not_utf8_doesnt_fail_a_refresh() {
+        let repo = TestRepo::with_remote("not-utf8-upstream").0;
+        pack_ref(&repo, b"refs/remotes/origin/caf\xe9");
+        let mut config = std::fs::OpenOptions::new().append(true).open(repo.path.join(".git/config")).unwrap();
+        std::io::Write::write_all(&mut config, b"[branch \"main\"]\n\tmerge = refs/heads/caf\xe9\n").unwrap();
+        repo.git(&["config", "--unset-all", "branch.main.merge", "^refs/heads/main$"]);
+
+        let git = git_bin();
+        let (head, status) = (head(&git, &repo.path).unwrap().unwrap(), status_of(&repo.path).repo);
+
+        for state in [head, status] {
+            assert_eq!(state.branch.as_deref(), Some("main"));
+            assert_eq!(state.upstream.as_deref(), Some("origin/caf\u{fffd}"));
+            assert_eq!(state.upstream_sha, None, "the decoded name finds no ref");
+        }
     }
 
     #[test]
