@@ -1,5 +1,5 @@
 import { atom, computed } from 'nanostores';
-import { $project } from '../project/project.js';
+import { $shownFolder } from '../workspaces/workspaces.js';
 import { $activePath, CHANGES_TAB_ID, parseTabId } from '../editor/editor.js';
 import { $gitChanges } from '../git/git.js';
 import { addToChat } from '../chat/chat.js';
@@ -19,10 +19,10 @@ const NONE = Object.freeze([]);
  */
 export const $comments = atom(/** @type {Readonly<Record<string, readonly AgentThread[]>>} */ ({}));
 
-/** Comments of the active project, by path then line: what Send to agent sends. */
-export const $queuedComments = computed([$comments, $project], (comments, project) => {
-  if (!project) return /** @type {QueuedComment[]} */ ([]);
-  const prefix = `${project.path}/`;
+/** Comments of the shown folder (Main's or a worktree's), by path then line: what Send to agent sends. */
+export const $queuedComments = computed([$comments, $shownFolder], (comments, folder) => {
+  if (folder === null) return /** @type {QueuedComment[]} */ ([]);
+  const prefix = `${folder}/`;
   return Object.keys(comments)
     .filter((path) => path.startsWith(prefix))
     .sort()
@@ -47,11 +47,11 @@ export const $queuedComments = computed([$comments, $project], (comments, projec
  * the Changes tab those of every changed file (each has its editor there). None in other views.
  */
 export const $tabComments = computed(
-  [$queuedComments, $activePath, $gitChanges, $project],
-  (queued, active, changes, project) => {
-    if (active === null || !project) return /** @type {QueuedComment[]} */ ([]);
+  [$queuedComments, $activePath, $gitChanges, $shownFolder],
+  (queued, active, changes, folder) => {
+    if (active === null || folder === null) return /** @type {QueuedComment[]} */ ([]);
     if (active === CHANGES_TAB_ID) {
-      const changed = new Set(changes.files.map((f) => `${project.path}/${f.path}`));
+      const changed = new Set(changes.files.map((f) => `${folder}/${f.path}`));
       return queued.filter((c) => changed.has(c.path));
     }
     const { kind, path } = parseTabId(active);

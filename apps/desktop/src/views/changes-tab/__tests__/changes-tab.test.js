@@ -1,11 +1,12 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
-import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
+import { $commentFocus, $comments, $tabComments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
 import { $commitSelection, $diffLayout, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $project } from '../../../stores/project/project.js';
+import { $openRoots, $project } from '../../../stores/project/project.js';
+import { setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import '../changes-tab.js';
 
@@ -52,6 +53,9 @@ describe('acp-changes-tab', () => {
   });
 
   afterEach(() => {
+    setActiveWorkspace('/p', 'main');
+    setWorkspaces([], null);
+    $openRoots.set({});
     closeAllTabs();
     $commitSelection.set(new Set());
     $comments.set({});
@@ -172,6 +176,22 @@ describe('acp-changes-tab', () => {
     // Assert
     expect(statuses()[1].args.force).to.equal(true);
     expect(leaked).to.equal(false);
+  });
+
+  it('in a worktree session, gives the review the worktree as its root and lists the comments on its files', async () => {
+    // Arrange
+    $project.set({ path: '/p', name: 'p', rootId: 'r1' });
+    setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1' })], '/p');
+    $openRoots.set({ '/wt/s1': 'r-w' });
+    setActiveWorkspace('/p', 'w1');
+    const thread = /** @type {never} */ ({ id: 't1', line: 1, comments: [{ id: 'c1', body: 'Why?' }] });
+    $comments.set({ '/wt/s1/a.js': [thread], '/p/a.js': [thread] });
+    openChanges();
+    // Act
+    const { review } = await render();
+    // Assert
+    expect(review.root).to.equal('/wt/s1');
+    expect($tabComments.get().map((c) => c.path)).to.deep.equal(['/wt/s1/a.js']);
   });
 
   it('gives the review the project’s changes, repository, picks and comments, and the project folder as its root', async () => {
