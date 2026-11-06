@@ -3,24 +3,28 @@
 
 use std::ffi::OsStr;
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, ExitStatus, Stdio};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex, PoisonError};
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::atomic::AtomicBool;
 use std::thread;
 use std::time::{Duration, Instant};
+
+use self::permit::Permit;
+use self::pipes::Capture;
+use self::stop::wait_with_timeout;
+
+mod permit;
+mod pipes;
+mod stop;
+#[cfg(test)]
+mod tests;
 
 const LOCAL_TIMEOUT: Duration = Duration::from_secs(10);
 /// A pre-commit hook may run a test suite.
 const HOOKS_TIMEOUT: Duration = Duration::from_secs(600);
 /// A fetch over a slow network, a credential helper waiting on the keychain.
 const NETWORK_TIMEOUT: Duration = Duration::from_secs(120);
-/// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
-const TERM_GRACE: Duration = Duration::from_secs(3);
-/// After git is gone, how long its pipes may stay open: all it wrote is in them by then, and only a
-/// child left behind (a hook's, a filter's) keeps them open longer.
-const PIPE_GRACE: Duration = Duration::from_secs(2);
 /// Captured stdout beyond this fails the call; the rest is drained so git can still exit.
 pub const MAX_OUTPUT: usize = 32 * 1024 * 1024;
 const MAX_STDERR: usize = 64 * 1024;
@@ -30,39 +34,6 @@ const TOO_LARGE: &str = "git output exceeded the limit";
 /// Whether `run`/`run_with` failed because the output was over its cap.
 pub fn is_too_large(err: &str) -> bool {
     err.starts_with(TOO_LARGE)
-}
-
-/// Short git calls alive at once, app-wide; more callers wait. Each one also costs two or three
-/// pipe threads, and a burst (every restored tab asking for its baseline) must not fork dozens.
-/// Long calls take no slot: a few commits or checkouts must not stall every status for minutes.
-const MAX_CONCURRENT: usize = 4;
-
-struct Permits {
-    used: Mutex<usize>,
-    freed: Condvar,
-}
-
-static PERMITS: Permits = Permits { used: Mutex::new(0), freed: Condvar::new() };
-
-/// A slot for one git process, given back on drop.
-struct Permit;
-
-impl Permit {
-    fn acquire() -> Permit {
-        let mut used = PERMITS.used.lock().unwrap_or_else(PoisonError::into_inner);
-        while *used >= MAX_CONCURRENT {
-            used = PERMITS.freed.wait(used).unwrap_or_else(PoisonError::into_inner);
-        }
-        *used += 1;
-        Permit
-    }
-}
-
-impl Drop for Permit {
-    fn drop(&mut self) {
-        *PERMITS.used.lock().unwrap_or_else(PoisonError::into_inner) -= 1;
-        PERMITS.freed.notify_one();
-    }
 }
 
 #[cfg(test)]
@@ -208,6 +179,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     no_window(&mut command);
     #[cfg(unix)]
     {
+        use std::io;
         use std::os::unix::process::CommandExt;
         // A session of its own: it leads its process group, stopped as a whole on a timeout, gently
         // first so git removes its `index.lock` (hooks, filters and credential helpers hold our pipes
@@ -275,120 +247,6 @@ pub fn failure_message(out: &Output) -> String {
     }
 }
 
-/// A pipe read on its own thread, so the writer never blocks on a full one: up to a cap, then
-/// drained. Finishing never waits on a child left holding the pipe; what arrived by then counts.
-struct Capture {
-    /// The bytes, and whether there were more than the cap.
-    read: Arc<Mutex<(Vec<u8>, bool)>>,
-    /// Disconnects at the end of the pipe.
-    ended: mpsc::Receiver<()>,
-}
-
-impl Capture {
-    fn start(mut pipe: impl Read + Send + 'static, cap: usize) -> Capture {
-        let read = Arc::new(Mutex::new((Vec::new(), false)));
-        let (end, ended) = mpsc::channel::<()>();
-        let shared = Arc::clone(&read);
-        thread::spawn(move || {
-            let _end = end;
-            let mut chunk = vec![0; 64 * 1024];
-            loop {
-                let n = match pipe.read(&mut chunk) {
-                    Ok(0) => break,
-                    Ok(n) => n,
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(_) => break,
-                };
-                let mut read = shared.lock().unwrap_or_else(PoisonError::into_inner);
-                let room = cap.saturating_sub(read.0.len());
-                read.0.extend_from_slice(&chunk[..n.min(room)]);
-                read.1 |= n > room;
-            }
-        });
-        Capture { read, ended }
-    }
-
-    /// The bytes read and whether there were more; call once git is gone.
-    fn finish(self) -> (Vec<u8>, bool) {
-        let _ = self.ended.recv_timeout(PIPE_GRACE);
-        std::mem::take(&mut *self.read.lock().unwrap_or_else(PoisonError::into_inner))
-    }
-}
-
-/// Stops the child's whole process group on timeout or once `cancel` is set.
-fn wait_with_timeout(child: &mut Child, timeout: Duration, cancel: Option<&AtomicBool>) -> Result<ExitStatus, String> {
-    let started = Instant::now();
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return Ok(status),
-            Ok(None) if started.elapsed() > timeout || cancel.is_some_and(|c| c.load(Ordering::SeqCst)) => {
-                let timed_out = started.elapsed() > timeout;
-                stop_group(child);
-                let _ = child.wait();
-                return Err(if timed_out { format!("git timed out after {}s", timeout.as_secs()) } else { CANCELLED.to_owned() });
-            }
-            Ok(None) => thread::sleep(Duration::from_millis(5)),
-            Err(e) => {
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err(format!("failed to wait for git: {e}"));
-            }
-        }
-    }
-}
-
-/// SIGTERM to the child's process group: git's signal handler removes its lock files, and hooks
-/// it started stop too (they also hold our output pipes open). SIGKILL if it outlives the grace.
-#[cfg(unix)]
-fn stop_group(child: &mut Child) {
-    let Ok(pid) = libc::pid_t::try_from(child.id()) else {
-        let _ = child.kill();
-        return;
-    };
-    // SAFETY: plain syscalls on a process group we created; a stale id at worst fails with ESRCH.
-    unsafe { libc::kill(-pid, libc::SIGTERM) };
-    let started = Instant::now();
-    while started.elapsed() < TERM_GRACE {
-        if matches!(child.try_wait(), Ok(Some(_))) {
-            break;
-        }
-        thread::sleep(Duration::from_millis(20));
-    }
-    // Hooks that ignored SIGTERM, and git itself if it did.
-    unsafe { libc::kill(-pid, libc::SIGKILL) };
-}
-
-/// Windows has no process groups to signal here: the git process alone is killed, and a child it
-/// left behind runs on (`Capture::finish` doesn't wait for it).
-#[cfg(not(unix))]
-fn stop_group(child: &mut Child) {
-    let _ = child.kill();
-}
-
-/// A path in the temp directory for a file or folder git reads or writes (a temporary index, a
-/// commit message, scratch objects); removed on drop.
-pub struct TempFile {
-    pub path: PathBuf,
-}
-
-impl TempFile {
-    pub fn new(kind: &str) -> TempFile {
-        static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
-        let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        TempFile { path: std::env::temp_dir().join(format!("batrak-{kind}-{}-{n}", std::process::id())) }
-    }
-}
-
-impl Drop for TempFile {
-    fn drop(&mut self) {
-        if self.path.is_dir() {
-            let _ = std::fs::remove_dir_all(&self.path);
-        } else {
-            let _ = std::fs::remove_file(&self.path);
-        }
-    }
-}
-
 #[cfg(windows)]
 fn no_window(command: &mut Command) {
     use std::os::windows::process::CommandExt;
@@ -407,270 +265,4 @@ pub fn args<'a>(parts: &'a [&'a dyn AsRef<OsStr>]) -> Vec<&'a OsStr> {
 /// Canonical form of a path git printed, so it compares with our roots (`/private/var` vs `/var`).
 pub fn canonical(path: &Path) -> PathBuf {
     dunce::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    /// A git that runs `script`, in a temp folder returned with it.
-    #[cfg(unix)]
-    fn fake_git(name: &str, script: &str) -> (PathBuf, PathBuf) {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = crate::git::test_repo::temp_dir(name);
-        let git = dir.join("git");
-        std::fs::write(&git, format!("#!/bin/sh\n{script}\n")).unwrap();
-        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-        (git, dir)
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_background_child_holding_the_pipes_doesnt_hold_the_call() {
-        // Left running by a hook or a filter, it keeps our pipes open after git is done.
-        let (git, dir) = fake_git("child-holds", "echo printed\nsleep 20 &\nexit 0");
-        let started = Instant::now();
-        let out = run(&git, &dir, &[OsStr::new("status")], Mode::Background).unwrap();
-        assert_eq!(out, b"printed\n", "what git printed is kept");
-        assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_timeout_in_any_mode_stops_the_children_of_git() {
-        let (git, dir) = fake_git("timeout-children", "sleep 20 &\nwait");
-        TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
-        let started = Instant::now();
-        let err = run(&git, &dir, &[OsStr::new("status")], Mode::Background).unwrap_err();
-        TEST_TIMEOUT.set(None);
-        assert!(err.contains("timed out"), "{err}");
-        assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn long_calls_leave_the_short_ones_their_slots() {
-        let (slow, dir) = fake_git("long-calls", "sleep 3");
-        let real = crate::git::test_repo::git_bin();
-        thread::scope(|scope| {
-            for _ in 0..MAX_CONCURRENT {
-                scope.spawn(|| run(&slow, &dir, &[OsStr::new("commit")], Mode::Hooks));
-            }
-            thread::sleep(Duration::from_millis(200));
-            let started = Instant::now();
-            run(&real, &dir, &[OsStr::new("--version")], Mode::Background).unwrap();
-            assert!(started.elapsed() < Duration::from_secs(2), "waited {:?}", started.elapsed());
-        });
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn stopping_a_group_stops_the_children_too() {
-        use std::io::BufRead;
-        use std::os::unix::process::CommandExt;
-        // Like a hook: a child of the process we wait on, holding its output pipe.
-        let mut child = Command::new("sh")
-            .args(["-c", "sleep 60 & echo $!; wait"])
-            .stdout(Stdio::piped())
-            .process_group(0)
-            .spawn()
-            .unwrap();
-        let mut line = String::new();
-        io::BufReader::new(child.stdout.take().unwrap()).read_line(&mut line).unwrap();
-        let sleeper: libc::pid_t = line.trim().parse().unwrap();
-        stop_group(&mut child);
-        child.wait().unwrap();
-        thread::sleep(Duration::from_millis(100));
-        // SAFETY: signal 0 only checks that the process exists.
-        assert_ne!(unsafe { libc::kill(sleeper, 0) }, 0, "the hook's child is gone");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_git_running_hooks_has_no_terminal_and_leads_its_own_process_group() {
-        use std::os::unix::fs::PermissionsExt;
-        // Arrange: a git that notes its pid, then runs a while
-        let dir = crate::git::test_repo::temp_dir("hooks-session");
-        let (git, pid_file) = (dir.join("git"), dir.join("pid"));
-        std::fs::write(&git, format!("#!/bin/sh\necho $$ > '{}'\nsleep 1\n", pid_file.display())).unwrap();
-        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-
-        thread::scope(|scope| {
-            // Act
-            let running = scope.spawn(|| run(&git, &dir, &[OsStr::new("commit")], Mode::Hooks));
-            let pid = loop {
-                if let Some(pid) = std::fs::read_to_string(&pid_file).ok().and_then(|t| t.trim().parse::<libc::pid_t>().ok()) {
-                    break pid;
-                }
-                thread::sleep(Duration::from_millis(5));
-            };
-            // SAFETY: plain queries of a process that is still running.
-            let (session, group) = unsafe { (libc::getsid(pid), libc::getpgid(pid)) };
-
-            // Assert: a session of its own has no terminal for ssh to prompt on; the group is stopped on a timeout
-            assert_eq!((session, group), (pid, pid), "session and process group of {pid}");
-            running.join().unwrap().unwrap();
-        });
-    }
-    use crate::git::test_repo::{git_bin, TestRepo};
-
-    #[test]
-    fn caps_output_and_still_lets_git_exit() {
-        let repo = TestRepo::new("cap");
-        repo.write("big.txt", &"x".repeat(4096));
-        repo.git(&["add", "."]);
-        repo.git(&["commit", "-qm", "big"]);
-        let opts = Options { max_output: Some(1024), ..Default::default() };
-        let err = run_with(&git_bin(), &repo.path, &args(&[&"show", &"HEAD:big.txt"]), Mode::Local, &opts)
-            .unwrap_err();
-        assert!(is_too_large(&err), "{err}");
-    }
-
-    #[test]
-    fn non_zero_exit_carries_git_message() {
-        let repo = TestRepo::new("fail");
-        let err = run(&git_bin(), &repo.path, &args(&[&"rev-parse", &"no-such-ref"]), Mode::Local).unwrap_err();
-        assert!(err.contains("no-such-ref"), "{err}");
-    }
-
-    #[test]
-    fn scrubbed_variables_include_repository_redirects() {
-        // Setting them process-wide would leak into tests running in parallel, so check the list.
-        for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE"] {
-            assert!(SCRUBBED_ENV.contains(&key), "{key}");
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_timeout_keeps_what_git_said() {
-        use std::os::unix::fs::PermissionsExt;
-        let cases = [("echo 'Connecting to h' >&2; sleep 30", Some("Connecting to h")), ("exec sleep 30", None)];
-        for (body, said) in cases {
-            // Arrange: a git that outlives a short timeout
-            let dir = crate::git::test_repo::temp_dir("timeout");
-            let git = dir.join("git");
-            std::fs::write(&git, format!("#!/bin/sh\n{body}\n")).unwrap();
-            std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-            TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
-
-            // Act
-            let err = run(&git, &dir, &[OsStr::new("status")], Mode::Local).unwrap_err();
-            TEST_TIMEOUT.set(None);
-
-            // Assert
-            assert!(err.contains("timed out"), "{err}");
-            assert!(said.is_none_or(|s| err.contains(s)), "{body}: {err}");
-            let _ = std::fs::remove_dir_all(&dir);
-        }
-    }
-
-    /// The levels of the events logged while it's the default subscriber.
-    struct Levels(Arc<Mutex<Vec<tracing::Level>>>);
-    impl<S: tracing::Subscriber> tracing_subscriber::Layer<S> for Levels {
-        fn on_event(&self, event: &tracing::Event<'_>, _: tracing_subscriber::layer::Context<'_, S>) {
-            self.0.lock().unwrap().push(*event.metadata().level());
-        }
-    }
-
-    #[test]
-    fn only_a_call_the_user_asked_for_warns_when_it_fails() {
-        use tracing_subscriber::layer::SubscriberExt;
-        for (mode, warns) in [(Mode::Background, false), (Mode::Local, true)] {
-            let levels = Arc::new(Mutex::new(Vec::new()));
-            let subscriber = tracing_subscriber::registry().with(Levels(Arc::clone(&levels)));
-            let result = tracing::subscriber::with_default(subscriber, || {
-                run_with(Path::new("/no/such/git"), &std::env::temp_dir(), &[OsStr::new("status")], mode, &Options::default())
-            });
-            assert!(result.is_err());
-            let warned = levels.lock().unwrap().iter().any(|l| *l <= tracing::Level::WARN);
-            assert_eq!(warned, warns, "{mode:?}");
-        }
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_cancelled_call_is_no_failure_the_user_hears_of() {
-        use std::os::unix::fs::PermissionsExt;
-        use tracing_subscriber::layer::SubscriberExt;
-        // Arrange: a git that would run for long, already cancelled
-        let dir = crate::git::test_repo::temp_dir("cancelled");
-        let git = dir.join("git");
-        std::fs::write(&git, "#!/bin/sh
-exec sleep 30
-").unwrap();
-        std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let cancel = AtomicBool::new(true);
-        let levels = Arc::new(Mutex::new(Vec::new()));
-        let subscriber = tracing_subscriber::registry().with(Levels(Arc::clone(&levels)));
-
-        // Act
-        let result = tracing::subscriber::with_default(subscriber, || {
-            run_with(&git, &dir, &[OsStr::new("status")], Mode::Hooks, &Options { cancel: Some(&cancel), ..Options::default() })
-        });
-
-        // Assert
-        assert_eq!(result.unwrap_err(), CANCELLED);
-        assert!(!levels.lock().unwrap().iter().any(|l| *l <= tracing::Level::WARN), "no warn, so no snackbar: {:?}", levels.lock().unwrap());
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn at_most_max_concurrent_processes_at_once() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
-        use std::sync::Arc;
-
-        let active = Arc::new(AtomicUsize::new(0));
-        let peak = Arc::new(AtomicUsize::new(0));
-        let handles: Vec<_> = (0..MAX_CONCURRENT * 3)
-            .map(|_| {
-                let (active, peak) = (Arc::clone(&active), Arc::clone(&peak));
-                thread::spawn(move || {
-                    let _permit = Permit::acquire();
-                    let now = active.fetch_add(1, Ordering::SeqCst) + 1;
-                    peak.fetch_max(now, Ordering::SeqCst);
-                    thread::sleep(Duration::from_millis(20));
-                    active.fetch_sub(1, Ordering::SeqCst);
-                })
-            })
-            .collect();
-        for handle in handles {
-            handle.join().unwrap();
-        }
-        // Other tests may hold permits too, so the peak here can only be lower.
-        assert!(peak.load(Ordering::SeqCst) <= MAX_CONCURRENT);
-        assert!(peak.load(Ordering::SeqCst) >= 1);
-    }
-
-    #[test]
-    fn input_reaches_stdin() {
-        let repo = TestRepo::new("stdin");
-        let opts = Options { input: Some(b"hello"), ..Default::default() };
-        let out =
-            run_with(&git_bin(), &repo.path, &args(&[&"hash-object", &"--stdin"]), Mode::Local, &opts).unwrap();
-        assert_eq!(out.stdout_str().unwrap().trim(), "b6fc4c620b67d95f953a5c1c1230aaab5db5a1b0");
-    }
-
-    #[test]
-    fn a_read_interrupted_by_a_signal_goes_on() {
-        struct Interrupted(u8);
-        impl Read for Interrupted {
-            fn read(&mut self, into: &mut [u8]) -> io::Result<usize> {
-                self.0 += 1;
-                match self.0 {
-                    1 => Err(io::ErrorKind::Interrupted.into()),
-                    2 => {
-                        into[..4].copy_from_slice(b"rest");
-                        Ok(4)
-                    }
-                    _ => Ok(0),
-                }
-            }
-        }
-
-        assert_eq!(Capture::start(Interrupted(0), 100).finish(), (b"rest".to_vec(), false));
-    }
 }

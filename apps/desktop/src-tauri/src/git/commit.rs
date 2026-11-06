@@ -7,8 +7,9 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use super::exec::{self, Mode, Options, TempFile};
+use super::exec::{self, Mode, Options};
 use super::lock::with_mutation;
+use super::temp_file::TempFile;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
