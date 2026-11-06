@@ -3,7 +3,7 @@
 /** @typedef {import('./types.js').ShortcutRow} ShortcutRow */
 
 /** `KeyboardEvent.code` of the keys that are neither letters, digits nor F-keys. */
-const CODES = Object.freeze({ '`': 'Backquote', ',': 'Comma' });
+const CODES = Object.freeze({ '`': 'Backquote', ',': 'Comma', '↵': 'Enter' });
 
 /**
  * The combo a row means on a platform.

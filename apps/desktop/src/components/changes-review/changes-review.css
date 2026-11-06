@@ -8,7 +8,7 @@
   padding: var(--acp-tab-view-padding, 0);
 }
 
-/* Toolbar: all-files checkbox, summary, totals; layout, collapse all, a session's actions */
+/* Toolbar: collapse all, all-files checkbox, summary, totals; layout, menu, a session's actions */
 .acp-changes-review__toolbar {
   flex: none;
   display: flex;
@@ -17,7 +17,8 @@
   gap: var(--acp-space-1);
   min-height: 36px;
   box-sizing: border-box;
-  padding: 0 var(--acp-space-2);
+  /* 1px: Collapse all (26px) and the gap put the checkbox over the rows' checkboxes, 31px in. */
+  padding: 0 var(--acp-space-2) 0 1px;
   border-bottom: 1px solid var(--acp-color-outline-variant);
 }
 
@@ -43,8 +44,6 @@
 
 .acp-changes-review__all {
   flex: none;
-  /* Lines up with the rows' checkboxes. */
-  margin-inline-start: 23px;
   padding: 0;
 }
 

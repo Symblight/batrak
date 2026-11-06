@@ -11,8 +11,8 @@ paths:
 
 # Git: commit, worktrees, frontend, cache
 
-- Revert (`bt_core::git::revert`, `git_revert_files`): a row's Revert, or the toolbar menu's Rollback for
-  the picked files, of the project's Changes tab back to HEAD, index and working tree, a rename's two
+- Revert (`bt_core::git::revert`, `git_revert_files`): a row's Revert, or `<acp-changes-menu>`'s Rollback for
+  the picked files (Changes tab and pane; `git.revertAsking()`), of the project back to HEAD, index and working tree, a rename's two
   sides together; what HEAD doesn't have is deleted. One conflicted file refuses them all. Its view
   asks first; reverted files are unpicked. The work goes into a new
   `refs/batrak/reverted/<nanos>` first (a tree, so no one's history shows it; no undo yet:

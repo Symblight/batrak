@@ -7,6 +7,7 @@ import { $project } from '../../stores/project/project.js';
 import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/changes-panel/changes-panel.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
@@ -78,8 +79,8 @@ export class AcpGitChanges extends ViewElement {
     const panel = /** @type {HTMLElementTagNameMap['acp-changes-panel']} */ (e.currentTarget);
     const { paths, message, amend } = /** @type {CustomEvent<{ paths: string[], message: string, amend: boolean }>} */ (e).detail;
     try {
-      const { sha, summary } = await git.commit(paths, message, amend);
-      notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}: ${summary}`);
+      const { sha } = await git.commit(paths, message, amend);
+      notify('info', `${amend ? 'Amended' : 'Committed'} ${sha}`, { timeout: 4000 });
       panel.commitFinished(true);
     } catch (err) {
       // Not `app.reportError`: a hook's output may quote file contents, which stay out of the log.
@@ -103,6 +104,12 @@ export class AcpGitChanges extends ViewElement {
         e.stopPropagation();
         git.refreshChanges();
       }}
+      @acp-changes-rollback=${(/** @type {Event} */ e) => {
+        e.stopPropagation();
+        const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+        const picked = this.#changes.value.files.filter((file) => this.#selection.value.has(file.path));
+        git.revertAsking(picked, (options) => dialog.confirm(options));
+      }}
       @acp-amend-start=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         this.#onAmendStart(e);
@@ -111,7 +118,8 @@ export class AcpGitChanges extends ViewElement {
         e.stopPropagation();
         this.#onCommit(e);
       }}
-    ></acp-changes-panel>`;
+    ></acp-changes-panel>
+      <acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }
 
