@@ -22,6 +22,7 @@ import styles from './toolbar.css?inline';
  * @fires acp-column-toggle `{ column }`
  * @fires acp-github-open `{ url }` From the GitHub slot and the branch card.
  * @fires acp-copy `{ text }` From the branch card.
+ * @fires acp-compare-pick `{ branch }` From the branch card.
  */
 export class AcpToolbar extends LitElement {
   static properties = {
@@ -30,6 +31,9 @@ export class AcpToolbar extends LitElement {
     unread: { attribute: false },
     home: {},
     git: { attribute: false },
+    compareTo: { attribute: false },
+    branches: { attribute: false },
+    loadBranches: { attribute: false },
     githubSlot: { attribute: false },
     githubReply: { attribute: false },
     hiddenColumns: { attribute: false },
@@ -55,6 +59,12 @@ export class AcpToolbar extends LitElement {
     this.home = null;
     /** @type {GitRepoView} */
     this.git = { repo: null, error: null };
+    /** @type {string | null} The branch the Changes views show the diff of. */
+    this.compareTo = null;
+    /** @type {import('../../hooks/git/types.js').BranchList} What the branch card can compare to. */
+    this.branches = { local: [], remotes: [], default: null };
+    /** @type {(() => Promise<void>) | null} Brings `branches` up to date. */
+    this.loadBranches = null;
     /** @type {import('../../hooks/github/types.js').GithubSlot} What the GitHub slot beside the branch shows. */
     this.githubSlot = 'hidden';
     /** @type {import('../../hooks/github/types.js').GithubPrReply | null} The shown branch's pull request lookup. */
@@ -128,7 +138,13 @@ export class AcpToolbar extends LitElement {
         <md-tooltip for="acp-toolbar-git-error" show-delay="800" placement="bottom">${error}</md-tooltip>`;
     }
     if (!repo) return nothing;
-    return html`<acp-branch-popover .repo=${repo} .pr=${this.githubReply?.pr ?? null}></acp-branch-popover>
+    return html`<acp-branch-popover
+        .repo=${repo}
+        .pr=${this.githubReply?.pr ?? null}
+        .compareTo=${this.compareTo}
+        .branches=${this.branches}
+        .loadBranches=${this.loadBranches}
+      ></acp-branch-popover>
       <acp-pull-request-chip .status=${this.githubSlot} .reply=${this.githubReply} .repo=${repo}></acp-pull-request-chip>`;
   }
 
