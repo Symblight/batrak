@@ -28,3 +28,16 @@ export function remoteLine(repo) {
   if (behind) return `${count(behind, 'commit')} to pull from ${remote}`;
   return `In sync with ${remote}`;
 }
+
+/**
+ * The branches the current one can be compared to: all but itself, also as git lists one a tag of
+ * the same name shadows (`heads/main`).
+ * @param {import('./types.js').BranchList} list
+ * @param {GitRepoState | null} repo
+ * @returns {import('./types.js').BranchList}
+ */
+export function compareBranches(list, repo) {
+  const current = repo?.branch;
+  if (!current) return list;
+  return { ...list, local: list.local.filter((name) => name !== current && name !== `heads/${current}`) };
+}

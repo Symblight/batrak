@@ -87,6 +87,23 @@
  */
 
 /**
+ * Reply of `git_compare`; mirrors `git::compare::Comparison`.
+ * @typedef {Object} GitComparison
+ * @property {string} target The branch as asked for.
+ * @property {string} base Where HEAD and the branch parted: a full commit id.
+ * @property {GitFileStatus[]} files Relative to the root.
+ */
+
+/**
+ * The comparison of the active root (`$gitCompare`).
+ * @typedef {Object} GitCompareView
+ * @property {string | null} target The branch compared to; `null` shows local changes.
+ * @property {string | null} base Where they parted; `null` until the first answer.
+ * @property {GitChangesView} changes A new `files` array only when the list changed.
+ * @property {string | null} refreshError Why the last refresh failed; `changes` are then the last good list.
+ */
+
+/**
  * Branches a workspace can be based on (`git_branches`).
  * @typedef {Object} BranchList
  * @property {string[]} local

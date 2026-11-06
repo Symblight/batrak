@@ -1,7 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect } from '@esm-bundle/chai';
-import { $commitSelection, $gitChanges, $gitRepo, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitCompare, $gitRepo, $shownChanges, $uncommittedCount, NO_COMPARE, NO_REPO, setCommitSelection } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $project } from '../../../stores/project/project.js';
 import { projects } from '../../projects/projects.js';
@@ -104,6 +104,7 @@ describe('git', () => {
     };
     $project.set(null);
     $gitRepo.set(NO_REPO);
+    $gitCompare.set(NO_COMPARE);
     $notices.set([]);
     setCommitSelection([]);
     mockIPC(
@@ -333,5 +334,222 @@ describe('git', () => {
     await git.fileAtHead(rootId, 'new.js');
     // Assert
     expect(sent('git_file_at_head')).to.deep.equal([{ rootId, path: 'new.js' }]);
+  });
+
+  describe('comparing to a branch', () => {
+    /** @type {GitFileStatus} */
+    const BRANCH_FILE = /** @type {GitFileStatus} */ ({ path: 'b.txt', kind: 'added' });
+    const comparison = (/** @type {GitFileStatus[]} */ files = [BRANCH_FILE], base = 'b1') => ({ target: 'main', base, files });
+
+    it('shows the branch’s files and leaves local changes, their count and the picks alone; going back shows local changes', async () => {
+      // Arrange
+      answers.git_compare = () => comparison();
+      const git = await started();
+      const rootId = await open();
+      const stopWatching = git.watchChanges();
+      await until(() => $gitChanges.get().loaded);
+      setCommitSelection(['a.txt']);
+      // Act
+      git.compareTo('main');
+      const atOnce = $shownChanges.get();
+      await until(() => $gitCompare.get().changes.loaded);
+      const compared = { view: $gitCompare.get(), shown: $shownChanges.get().files };
+      const local = { files: $gitChanges.get().files, count: $uncommittedCount.get(), picks: [...$commitSelection.get()] };
+      git.compareTo(null);
+      // Assert
+      expect(atOnce, 'no other list under the branch’s name').to.deep.include({ files: [], loaded: false, loading: true });
+      expect(sent('git_compare')).to.deep.equal([{ rootId, target: 'main' }]);
+      expect(compared.view).to.deep.include({ target: 'main', base: 'b1', refreshError: null });
+      expect(compared.shown).to.deep.equal([BRANCH_FILE]);
+      expect(local).to.deep.equal({ files: [FILE], count: 1, picks: ['a.txt'] });
+      expect($gitCompare.get()).to.equal(NO_COMPARE);
+      expect($shownChanges.get().files).to.deep.equal([FILE]);
+      expect(sent('git_compare_stop')).to.deep.equal([{ rootId }]);
+      stopWatching();
+    });
+
+    it('a pick asks at once, even while a refresh is running, and the answer for the old branch is dropped', async () => {
+      // Arrange
+      /** @type {{ target: string, resolve: (reply: unknown) => void }[]} */
+      const asked = [];
+      answers.git_compare = ({ target }) => new Promise((resolve) => asked.push({ target, resolve }));
+      const git = await started();
+      const rootId = await open();
+      const stopWatching = git.watchChanges();
+      git.compareTo('main');
+      asked[0].resolve(comparison());
+      await until(() => $gitCompare.get().changes.loaded);
+      await changed(rootId);
+      await until(() => asked.length === 2);
+      // Act
+      git.compareTo('other');
+      const whileRunning = asked.map((a) => a.target);
+      asked[1].resolve(comparison([FILE], 'old'));
+      await wait(10);
+      const afterOldAnswer = $gitCompare.get().changes.files;
+      asked[2].resolve({ target: 'other', base: 'b2', files: [] });
+      await until(() => $gitCompare.get().changes.loaded);
+      // Assert
+      expect(whileRunning).to.deep.equal(['main', 'main', 'other']);
+      expect(afterOldAnswer).to.deep.equal([]);
+      expect($gitCompare.get()).to.deep.include({ target: 'other', base: 'b2' });
+      stopWatching();
+    });
+
+    it('a refresh waiting for a pick also waits for the pick after it, rather than stop its scan', async () => {
+      // Arrange
+      /** @type {{ target: string, resolve: (reply: unknown) => void }[]} */
+      const asked = [];
+      answers.git_compare = ({ target }) => new Promise((resolve) => asked.push({ target, resolve }));
+      const git = await started();
+      const rootId = await open();
+      const stopWatching = git.watchChanges();
+      git.compareTo('a');
+      await changed(rootId);
+      await settle();
+      // Act
+      git.compareTo('b');
+      asked[0].resolve({ target: 'a', base: 'b1', files: [] });
+      await wait(20);
+      const whileBRuns = asked.map((a) => a.target);
+      asked[1].resolve({ target: 'b', base: 'b2', files: [] });
+      await until(() => $gitCompare.get().changes.loaded);
+      // Assert
+      expect(whileBRuns).to.deep.equal(['a', 'b']);
+      stopWatching();
+    });
+
+    it('reads again on file changes while watched, one at a time, keeping the same array for the same list', async () => {
+      // Arrange
+      /** @type {((reply: unknown) => void)[]} */
+      const answering = [];
+      answers.git_compare = () => new Promise((resolve) => answering.push(resolve));
+      const git = await started();
+      const rootId = await open();
+      const stopWatching = git.watchChanges();
+      git.compareTo('main');
+      answering[0](comparison());
+      await until(() => $gitCompare.get().changes.loaded);
+      const { files } = $gitCompare.get().changes;
+      // Act
+      await changed(rootId);
+      await until(() => answering.length === 2);
+      await changed(rootId);
+      await settle();
+      const whileOneRuns = answering.length;
+      answering[1](comparison());
+      await until(() => answering.length === 3);
+      answering[2](comparison());
+      await until(() => !$gitCompare.get().changes.loading);
+      stopWatching();
+      await changed(rootId);
+      await settle();
+      // Assert
+      expect(whileOneRuns, 'refreshes never overlap').to.equal(2);
+      expect($gitCompare.get().changes.files).to.equal(files);
+      expect(answering.length, 'none once nothing watches').to.equal(3);
+    });
+
+    it('a failed refresh keeps the list and says why, until one works; Refresh reads it too', async () => {
+      // Arrange
+      answers.git_compare = () => comparison();
+      const git = await started();
+      await open();
+      const stopWatching = git.watchChanges();
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      answers.git_compare = () => Promise.reject(new Error('git timed out after 10s'));
+      // Act
+      git.refreshChanges();
+      await until(() => $gitCompare.get().refreshError !== null);
+      const failed = $gitCompare.get();
+      answers.git_compare = () => comparison();
+      git.refreshChanges();
+      await until(() => $gitCompare.get().refreshError === null);
+      // Assert
+      expect(failed.changes.files).to.deep.equal([BRANCH_FILE]);
+      expect(failed.changes.error).to.equal(null);
+      expect(failed.refreshError).to.contain('timed out');
+      stopWatching();
+    });
+
+    it('a failed first read says why, and a stopped one keeps what is shown', async () => {
+      // Arrange
+      answers.git_compare = () => Promise.reject(new Error('main no longer exists'));
+      const git = await started();
+      await open();
+      // Act
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      const failed = $gitCompare.get().changes;
+      answers.git_compare = () => comparison();
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      const stopWatching = git.watchChanges();
+      answers.git_compare = () => Promise.reject('cancelled');
+      git.refreshChanges();
+      await until(() => sent('git_compare').length === 3);
+      await until(() => !$gitCompare.get().changes.loading);
+      // Assert
+      expect(failed.error).to.contain('main no longer exists');
+      expect(failed.files).to.deep.equal([]);
+      expect($gitCompare.get().changes.files).to.deep.equal([BRANCH_FILE]);
+      expect($gitCompare.get().refreshError).to.equal(null);
+      stopWatching();
+    });
+
+    it('asks again when a first read was stopped: a stop for the last comparison may have reached it', async () => {
+      // Arrange
+      let asked = 0;
+      answers.git_compare = () => (++asked === 1 ? Promise.reject('cancelled') : comparison());
+      const git = await started();
+      await open();
+      // Act
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      // Assert
+      expect(asked).to.equal(2);
+      expect($gitCompare.get().changes.files).to.deep.equal([BRANCH_FILE]);
+    });
+
+    it('another project isn’t compared, and one still open gets its comparison back; a late answer stays out', async () => {
+      // Arrange
+      /** @type {((reply: unknown) => void)[]} */
+      const answering = [];
+      answers.git_compare = () => comparison();
+      const git = await started();
+      const a = await open();
+      const stopWatching = git.watchChanges();
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      const kept = $gitCompare.get().changes.files;
+      // Act
+      await open();
+      const right = $gitCompare.get();
+      answers.git_compare = () => new Promise((resolve) => answering.push(resolve));
+      git.compareTo('other');
+      await until(() => answering.length === 1);
+      await projects.activate(a.replace('root:', ''));
+      const back = $gitCompare.get();
+      answering[0](comparison([], 'late'));
+      await settle();
+      // Assert
+      expect(right).to.equal(NO_COMPARE);
+      expect(back.target).to.equal('main');
+      expect(back.changes.files).to.equal(kept);
+      expect($gitCompare.get().base, 'the other project’s answer').to.not.equal('late');
+      stopWatching();
+    });
+
+    it('passes the commit and path to read a file at', async () => {
+      // Arrange
+      answers.git_file_at_rev = () => 'old text';
+      const git = await started();
+      // Act
+      const text = await git.fileAtRev('r1', 'b1', 'a.txt');
+      // Assert
+      expect(text).to.equal('old text');
+      expect(sent('git_file_at_rev')).to.deep.equal([{ rootId: 'r1', rev: 'b1', path: 'a.txt' }]);
+    });
   });
 });
