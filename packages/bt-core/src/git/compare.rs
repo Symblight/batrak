@@ -7,6 +7,7 @@ use std::sync::atomic::AtomicBool;
 use serde::Serialize;
 
 use super::apply::changed_since;
+use super::blob::file_at;
 use super::exec::{self, Mode, Options};
 use super::status::FileStatus;
 
@@ -61,6 +62,23 @@ pub fn compare_to(git: &Path, root: &Path, target: &str, cancel: &AtomicBool) ->
     };
     let files = changed_since(git, root, &base, cancel)?;
     Ok(Comparison { target: target.to_owned(), base, files })
+}
+
+/// Text of `rel` at the commit `rev`, a comparison's `base`; `None` when it wasn't there. Fails unless
+/// `rev` is a full id of a commit that exists: `blob::file_at` answers `None` for any failure, which
+/// would draw the whole file as added.
+pub fn file_at_commit(git: &Path, root: &Path, rev: &str, rel: &str) -> Result<Option<String>, String> {
+    let not_a_commit = || format!("{rev} isn't a commit");
+    let full_id = matches!(rev.len(), 40 | 64) && rev.bytes().all(|b| b.is_ascii_hexdigit());
+    if !full_id {
+        return Err(not_a_commit());
+    }
+    let commit = format!("{rev}^{{commit}}");
+    let found = exec::run_with(git, root, &exec::args(&[&"rev-parse", &"--verify", &"--quiet", &commit]), Mode::Background, &Options::default())?;
+    if !found.success() {
+        return Err(not_a_commit());
+    }
+    file_at(git, root, rev, rel)
 }
 
 #[cfg(test)]
@@ -218,6 +236,31 @@ mod tests {
         let repo = repo_on_a_side_branch("compare-cancel");
         let err = compare_to(&git_bin(), &repo.path, "main", &AtomicBool::new(true)).unwrap_err();
         assert_eq!(err, exec::CANCELLED);
+    }
+
+    #[test]
+    fn a_file_at_a_commit_is_its_text_or_nothing_when_it_wasnt_there() {
+        let repo = TestRepo::with_commit("compare-file");
+        let sha = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        repo.write("README.md", "edited\n");
+        commit_all(&repo, "a later commit, so HEAD isn't the answer");
+
+        assert_eq!(file_at_commit(&git_bin(), &repo.path, &sha, "README.md").unwrap().as_deref(), Some("hello\n"));
+        assert_eq!(file_at_commit(&git_bin(), &repo.path, &sha, "new.txt").unwrap(), None);
+    }
+
+    #[test]
+    fn a_file_at_anything_but_a_full_id_of_an_existing_commit_fails() {
+        let repo = TestRepo::with_commit("compare-file-rev");
+        let sha = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]).trim().to_owned();
+        // A branch whose name is 40 characters and not hex resolves, so only the hex check refuses it.
+        let named = "z".repeat(40);
+        repo.git(&["branch", &named]);
+        for rev in ["HEAD", "main", "--output=x", &sha[..7], &"a".repeat(40), &"a".repeat(64), named.as_str(), &tree] {
+            let err = file_at_commit(&git_bin(), &repo.path, rev, "README.md").unwrap_err();
+            assert!(err.contains("isn't a commit"), "{rev}: {err}");
+        }
     }
 
     #[test]
