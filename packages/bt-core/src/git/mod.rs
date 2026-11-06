@@ -4,10 +4,13 @@
 pub mod apply;
 pub mod binary;
 pub mod blob;
+pub mod branches;
 pub mod exec;
+pub mod line_counts;
 pub mod lock;
 pub mod remote;
 pub mod repo;
+pub mod status;
 pub mod temp_file;
 pub mod worktree;
 

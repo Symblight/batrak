@@ -3602,7 +3602,7 @@ async fn a_workspaces_git_actions_wait_for_none_of_its_chats_and_hold_them_all()
     run_in(&ws.folder, &["add", "."]);
     run_in(&ws.folder, &["commit", "-qm", "agent"]);
     std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
-    let names = |files: Vec<crate::git::repo::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
+    let names = |files: Vec<crate::git::status::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
     assert_eq!(names(f.sessions.workspace_changes(&ws.id).unwrap()), ["a.txt", "committed.txt"]);
     assert_eq!(f.sessions.workspace_file_at_base(&ws.id, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
 
