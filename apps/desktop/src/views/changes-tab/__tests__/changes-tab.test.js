@@ -89,7 +89,7 @@ describe('acp-changes-tab', () => {
       asked.push(options.headline);
       return answer;
     };
-    const reverts = () => calls.filter((c) => c.cmd === 'git_revert_file').map((c) => c.args.path);
+    const reverts = () => calls.filter((c) => c.cmd === 'git_revert_files').map((c) => c.args.paths);
     // Act
     fire(review, 'acp-change-revert', { id: 'a.js' });
     await until(() => asked.length === 1);
@@ -101,11 +101,11 @@ describe('acp-changes-tab', () => {
     // Assert
     expect(afterNo).to.deep.equal([]);
     expect(asked).to.deep.equal(['Revert a.js?', 'Delete new file b.js?']);
-    expect(reverts()).to.deep.equal(['b.js']);
+    expect(reverts()).to.deep.equal([['b.js']]);
     // Arrange: git refuses
     clearMocks();
     mockIPC((cmd) => {
-      if (cmd === 'git_revert_file') throw new Error('it has a conflict');
+      if (cmd === 'git_revert_files') throw new Error('it has a conflict');
       return cmd === 'git_status' ? { version: 1, unchanged: true, status: null } : null;
     });
     // Act
@@ -113,6 +113,65 @@ describe('acp-changes-tab', () => {
     await until(() => $notices.get().length === 1);
     // Assert
     expect($notices.get()[0].message).to.equal('Couldn’t revert a.js: it has a conflict');
+  });
+
+  it('asks before rolling back the picked files, rolls back only those on yes and unpicks them, keeps them picked when it fails', async () => {
+    // Arrange
+    $notices.set([]);
+    const third = { ...FILES[0], path: 'c.js' };
+    $gitChanges.set({ ...CHANGES, files: [...FILES, third] });
+    $commitSelection.set(new Set(['a.js', 'b.js']));
+    const { el, review } = await render();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+    /** @type {string[]} */
+    const asked = [];
+    let answer = false;
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return answer;
+    };
+    const rollbacks = () => calls.filter((c) => c.cmd === 'git_revert_files').map((c) => c.args.paths);
+    // Act
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => asked.length === 1);
+    await new Promise((r) => setTimeout(r));
+    const afterNo = rollbacks();
+    answer = true;
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => $commitSelection.get().size === 0);
+    // Assert
+    expect(afterNo).to.deep.equal([]);
+    expect(asked).to.deep.equal(['Roll back 2 files?', 'Roll back 2 files?']);
+    expect(rollbacks()).to.deep.equal([['a.js', 'b.js']]);
+    // Arrange: git refuses
+    $commitSelection.set(new Set(['a.js', 'b.js']));
+    clearMocks();
+    mockIPC((cmd) => {
+      if (cmd === 'git_revert_files') throw new Error('a.js has a conflict');
+      return cmd === 'git_status' ? { version: 1, unchanged: true, status: null } : null;
+    });
+    // Act
+    fire(review, 'acp-changes-rollback', undefined);
+    await until(() => $notices.get().length === 1);
+    // Assert
+    expect($notices.get()[0].message).to.equal('Couldn’t revert 2 files: a.js has a conflict');
+    expect([...$commitSelection.get()]).to.deep.equal(['a.js', 'b.js']);
+  });
+
+  it('scans again, even with nothing seen changing, when the review asks for a refresh', async () => {
+    // Arrange
+    const { review } = await render();
+    openChanges();
+    const statuses = () => calls.filter((c) => c.cmd === 'git_status');
+    await until(() => statuses().length === 1);
+    let leaked = false;
+    document.addEventListener('acp-changes-refresh', () => (leaked = true), { once: true });
+    // Act
+    fire(review, 'acp-changes-refresh');
+    await until(() => statuses().length === 2);
+    // Assert
+    expect(statuses()[1].args.force).to.equal(true);
+    expect(leaked).to.equal(false);
   });
 
   it('gives the review the project’s changes, repository, picks and comments, and the project folder as its root', async () => {

@@ -1,4 +1,4 @@
-//! Reverting one changed file to HEAD from the Changes tab.
+//! Reverting changed files to HEAD from the Changes tab.
 
 use std::ffi::OsStr;
 use std::path::Path;
@@ -13,10 +13,10 @@ use super::temp_file::TempFile;
 const SAVED_REFS: &str = "refs/batrak/reverted";
 
 /// Makes `paths` (relative to `root`, already checked; both sides of a rename) match HEAD, in the
-/// index and the working tree, deleting what HEAD doesn't have. Conflicted files are refused. The
+/// index and the working tree, deleting what HEAD doesn't have. One conflicted file refuses them all. The
 /// work goes into a new ref first, whose name is returned. All of it is git's doing, which never
 /// follows a path through a symlink, and a second run changes nothing but the saved ref.
-pub fn revert_file(git: &Path, root: &Path, paths: &[&str]) -> Result<String, String> {
+pub fn revert_files(git: &Path, root: &Path, paths: &[&str]) -> Result<String, String> {
     let run = |args: &[&dyn AsRef<OsStr>], mode: Mode| run(git, root, args, mode, &Options::default());
     with_mutation(git, root, || {
         for path in paths {
@@ -74,7 +74,7 @@ mod tests {
     use crate::git::test_repo::{git_bin, TestRepo};
 
     fn revert(root: &Path, paths: &[&str]) -> Result<String, String> {
-        revert_file(&git_bin(), root, paths)
+        revert_files(&git_bin(), root, paths)
     }
 
     fn status(repo: &TestRepo) -> String {
@@ -181,6 +181,36 @@ mod tests {
         assert!(err.contains("conflict"), "{err}");
         assert_eq!(read(&repo, "README.md"), before);
         assert!(status(&repo).starts_with("UU"), "{}", status(&repo));
+    }
+
+    #[test]
+    fn several_files_go_back_together_under_one_saved_ref_and_one_conflict_refuses_them_all() {
+        // Arrange
+        let repo = TestRepo::with_commit("revert-several");
+        repo.write("other.txt", "base\n");
+        repo.git(&["add", "other.txt"]);
+        repo.git(&["commit", "-qm", "other"]);
+        repo.git(&["checkout", "-qb", "side"]);
+        repo.write("README.md", "side\n");
+        repo.git(&["commit", "-qam", "side"]);
+        repo.git(&["checkout", "-q", "main"]);
+        repo.write("README.md", "main\n");
+        repo.git(&["commit", "-qam", "main"]);
+        let _ = std::process::Command::new(git_bin()).args(["merge", "side"]).current_dir(&repo.path).output().unwrap();
+        repo.write("other.txt", "edited\n");
+        repo.write("new.txt", "new\n");
+        // Act
+        let refused = revert(&repo.path, &["other.txt", "new.txt", "README.md"]).unwrap_err();
+        let other_after_refusal = read(&repo, "other.txt");
+        let saved = revert(&repo.path, &["other.txt", "new.txt"]).unwrap();
+        // Assert
+        assert!(refused.contains("README.md"), "{refused}");
+        assert_eq!(other_after_refusal, "edited\n");
+        assert_eq!(read(&repo, "other.txt"), "base\n");
+        assert!(!repo.path.join("new.txt").exists());
+        assert_eq!(repo.git(&["for-each-ref", "--format=%(refname)", "refs/batrak/reverted"]).trim(), saved);
+        assert_eq!(repo.git(&["show", &format!("{saved}:other.txt")]), "edited\n");
+        assert_eq!(repo.git(&["show", &format!("{saved}:new.txt")]), "new\n");
     }
 
     #[test]

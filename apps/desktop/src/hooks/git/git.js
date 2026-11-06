@@ -227,15 +227,16 @@ export const git = Object.freeze({
   },
 
   /**
-   * Makes a changed file match HEAD; both sides of a rename. Its work stays in a ref.
-   * @param {import('./types.js').GitFileStatus} file
+   * Makes changed files match HEAD, all or none; both sides of a rename. Their work stays in a ref.
+   * @param {readonly import('./types.js').GitFileStatus[]} files
    * @returns {Promise<void>}
    */
-  async revertFile(file) {
+  async revertFiles(files) {
     const rootId = $rootId.get();
     if (rootId === null) throw new Error('No project is open');
     try {
-      await ipc.invoke('git_revert_file', { rootId, path: file.path, origPath: file.origPath ?? null });
+      const paths = files.flatMap((file) => (file.origPath ? [file.path, file.origPath] : [file.path]));
+      await ipc.invoke('git_revert_files', { rootId, paths });
     } finally {
       git.refreshChanges();
     }

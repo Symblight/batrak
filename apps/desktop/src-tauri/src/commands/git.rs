@@ -91,19 +91,19 @@ pub async fn git_commit(
     Ok(done)
 }
 
-/// Makes one changed file match HEAD: `orig_path` is a rename's other side. Its work stays in a ref.
+/// Makes changed files match HEAD, both sides of a rename among `paths`. Their work stays in one ref.
 #[tauri::command]
-pub async fn git_revert_file(roots: State<'_, Roots>, root_id: String, path: String, orig_path: Option<String>) -> Result<(), String> {
+pub async fn git_revert_files(roots: State<'_, Roots>, root_id: String, paths: Vec<String>) -> Result<(), String> {
     let root = roots.get(&root_id)?;
-    checked_rel(&path)?;
-    if let Some(orig) = &orig_path {
-        checked_rel(orig)?;
+    for path in &paths {
+        checked_rel(path)?;
     }
+    let count = paths.len();
     let saved = blocking(move || {
-        let paths: Vec<&str> = [Some(path.as_str()), orig_path.as_deref()].into_iter().flatten().collect();
-        revert::revert_file(binary::git()?, &root.path, &paths)
+        let paths: Vec<&str> = paths.iter().map(String::as_str).collect();
+        revert::revert_files(binary::git()?, &root.path, &paths)
     })
     .await??;
-    tracing::info!(saved = %saved, "reverted a file");
+    tracing::info!(saved = %saved, paths = count, "reverted files");
     Ok(())
 }
