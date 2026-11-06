@@ -14,9 +14,6 @@ import styles from './change-row.css?inline';
 
 /** @typedef {import('../../hooks/git/changes.js').ChangeRow} ChangeRow */
 
-/** Disabled controls of features that don't exist yet say so on hover. */
-const NOT_YET = 'Not available yet';
-
 /**
  * @tag acp-change-row
  * @summary A changed file in the Changes tab: chevron, a checkbox to pick it for the commit, its type badge, name, folder and rename, the lines it adds and removes, and Edit and Revert while hovered, focused or expanded (shown by CSS).
@@ -24,6 +21,7 @@ const NOT_YET = 'Not available yet';
  * @fires acp-change-expand `{ id }` ArrowRight on a collapsed row.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-change-edit `{ id }` Edit was pressed.
+ * @fires acp-change-revert `{ id }` Revert was pressed; its view asks first.
  */
 export class AcpChangeRow extends LitElement {
   static properties = {
@@ -44,7 +42,7 @@ export class AcpChangeRow extends LitElement {
     this.expanded = false;
     /** @type {boolean} Picked for the next commit. */
     this.picked = false;
-    /** @type {boolean} It can be picked (not a worktree session's read-only changes). */
+    /** @type {boolean} It can be picked and reverted (not a worktree session's read-only changes). */
     this.selectable = true;
     /** @type {boolean} The tree's Tab stop (`TreeNavigationController` moves it). */
     this.tabStop = true;
@@ -84,6 +82,7 @@ export class AcpChangeRow extends LitElement {
     if (!row) return nothing;
     const { file } = row;
     const deleted = file.kind === 'deleted';
+    const conflicted = file.kind === 'conflicted';
     const id = 'acp-change-row';
     return html`<div
         class="acp-change-row__row ${this.expanded ? 'acp-change-row__row_header' : ''}"
@@ -123,9 +122,17 @@ export class AcpChangeRow extends LitElement {
               >
                 <md-icon class="acp-change-row__action-icon">${unsafeSVG(editIcon)}</md-icon>
               </md-icon-button>
-              <md-icon-button id="${id}-revert" class="acp-change-row__action" aria-label=${`Revert ${row.name}`} disabled>
-                <md-icon class="acp-change-row__action-icon">${unsafeSVG(undoIcon)}</md-icon>
-              </md-icon-button>
+              ${this.selectable
+                ? html`<md-icon-button
+                    id="${id}-revert"
+                    class="acp-change-row__action"
+                    aria-label=${`Revert ${row.name}`}
+                    ?disabled=${conflicted}
+                    @click=${() => this.#emit('acp-change-revert', { id: row.id })}
+                  >
+                    <md-icon class="acp-change-row__action-icon">${unsafeSVG(undoIcon)}</md-icon>
+                  </md-icon-button>`
+                : nothing}
             </span>
       </div>
       <md-tooltip for="${id}-name" show-delay="800" style="width: max-content; max-inline-size: none">${file.path}</md-tooltip>
@@ -135,7 +142,7 @@ export class AcpChangeRow extends LitElement {
           >`
         : nothing}
       <md-tooltip for="${id}-edit" show-delay="800">Edit</md-tooltip>
-      <md-tooltip for="${id}-revert" show-delay="800">${NOT_YET}</md-tooltip>`;
+      ${this.selectable ? html`<md-tooltip for="${id}-revert" show-delay="800">${conflicted ? 'Resolve the conflict first' : 'Revert'}</md-tooltip>` : nothing}`;
   }
 }
 
