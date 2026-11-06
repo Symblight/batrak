@@ -1,6 +1,7 @@
 //! Lines added and removed per changed file, for a root's status and a workspace's changes.
 
 use std::collections::HashMap;
+use std::io::Read;
 use std::path::Path;
 
 use super::exec::{self, Mode};
@@ -65,14 +66,17 @@ pub(crate) fn parse_numstat(text: &str) -> LineCounts {
     counts
 }
 
-/// Lines in a text file; `None` for a directory, a binary file or one over `MAX_COUNTED_FILE`.
+/// Lines in a text file; `None` for a directory, a symlink (it may point out of the root), a binary
+/// file or one over `MAX_COUNTED_FILE`.
 fn count_lines(path: &Path) -> Option<u32> {
-    let meta = std::fs::metadata(path).ok()?;
+    let meta = std::fs::symlink_metadata(path).ok()?;
     if !meta.is_file() || meta.len() > MAX_COUNTED_FILE {
         return None;
     }
-    let bytes = std::fs::read(path).ok()?;
-    if bytes.contains(&0) {
+    // Limited again: the file may have grown since the size above.
+    let mut bytes = Vec::new();
+    std::fs::File::open(path).ok()?.take(MAX_COUNTED_FILE + 1).read_to_end(&mut bytes).ok()?;
+    if bytes.len() as u64 > MAX_COUNTED_FILE || bytes.contains(&0) {
         return None;
     }
     let newlines = bytes.iter().filter(|&&b| b == b'\n').count();
@@ -152,6 +156,33 @@ mod tests {
         let s = status_of(&repo.path);
         assert_eq!(s.files.len(), MAX_COUNTED_FILES + 5, "all are listed");
         assert_eq!(s.files.iter().filter(|f| f.added.is_some()).count(), MAX_COUNTED_FILES);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn an_untracked_symlink_isnt_followed_out_of_the_root() {
+        let repo = TestRepo::with_commit("symlink-out");
+        let outside = temp_dir("symlink-out-target");
+        std::fs::write(outside.join("secret.txt"), "one\ntwo\n").unwrap();
+        std::os::unix::fs::symlink(outside.join("secret.txt"), repo.path.join("link.txt")).unwrap();
+
+        let s = status_of(&repo.path);
+
+        assert_eq!((file(&s, "link.txt").kind, file(&s, "link.txt").added), (FileKind::Untracked, None));
+        std::fs::remove_dir_all(outside).unwrap();
+    }
+
+    #[test]
+    fn an_untracked_file_is_counted_up_to_the_limit_and_not_over_it() {
+        let repo = TestRepo::with_commit("big-untracked");
+        let full = "\n".repeat(MAX_COUNTED_FILE as usize);
+        repo.write("full.txt", &full);
+        repo.write("over.txt", &format!("{full}\n"));
+
+        let s = status_of(&repo.path);
+
+        assert_eq!(file(&s, "full.txt").added, Some(MAX_COUNTED_FILE as u32));
+        assert_eq!(file(&s, "over.txt").added, None);
     }
 
     #[test]
