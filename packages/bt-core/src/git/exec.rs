@@ -156,7 +156,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     // Paths with non-ASCII names print as-is instead of octal-escaped.
     command.args(["-c", "core.quotepath=off"]);
     // `core.fsmonitor` can name a program in the repository's config: a refresh nobody asked for must
-    // not run code from a folder that was only opened. A later `-c` wins: see `repo::status_in`.
+    // not run code from a folder that was only opened. A later `-c` wins: see `status::status_in`.
     if mode == Mode::Background {
         command.args(["-c", "core.fsmonitor=false"]);
     }

@@ -89,7 +89,7 @@ What it holds, module by module.
 | `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch |
 | `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher |
 | `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates |
-| `git/` | the git the sessions need: `exec` (one path for every call), `lock`, `binary`, `repo` and the `remote` it reads, `worktree`, `apply`, `blob` (a workspace's file at its base); `test_repo` behind `test-support`, since the desktop's git tests use it too |
+| `git/` | the git the sessions need: `exec` (one path for every call), `lock`, `binary`, `repo` and the `remote` it reads, `status`, `line_counts`, `branches`, `temp_file`, `worktree`, `apply`, `blob` (a workspace's file at its base); `test_repo` behind `test-support`, since the desktop's git tests use it too |
 | `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) |
 | `project/` | the project's `.bt/` folder: creating it, `workspace.json`, and later `specs/`, `pipelines/`, `tools.json` (§8) |
 | `util` | `checked_rel`, `write_atomic`, ISO time, `default_shell` |

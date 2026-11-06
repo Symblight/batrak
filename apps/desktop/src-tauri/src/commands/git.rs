@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::git::cache::StatusReply;
-use crate::git::{binary, blob, commit, repo};
+use crate::git::{binary, blob, branches, commit, repo};
 use crate::roots::Roots;
 use crate::util::checked_rel;
 
@@ -47,9 +47,9 @@ pub async fn git_file_at_head(
 
 /// Branches a workspace can be based on: local and remote-tracking ones, and the remote's default.
 #[tauri::command]
-pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<repo::BranchList, String> {
+pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<branches::BranchList, String> {
     let root = roots.get(&root_id)?;
-    blocking(move || repo::branch_list(binary::git()?, &root.path)).await?
+    blocking(move || branches::branch_list(binary::git()?, &root.path)).await?
 }
 
 /// Fetches every remote of the root's repository (New workspace's refresh), pruning deleted branches.
@@ -57,7 +57,7 @@ pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<re
 pub async fn git_fetch(roots: State<'_, Roots>, root_id: String) -> Result<(), String> {
     let root = roots.get(&root_id)?;
     tracing::info!(root = %root.path.display(), "fetching remotes");
-    blocking(move || repo::fetch(binary::git()?, &root.path)).await?
+    blocking(move || branches::fetch(binary::git()?, &root.path)).await?
 }
 
 /// Message of the last commit, which Amend starts from; `null` before the first commit.
@@ -90,3 +90,4 @@ pub async fn git_commit(
     tracing::info!(sha = %done.sha, files = count, amend, "committed");
     Ok(done)
 }
+

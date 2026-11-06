@@ -7,7 +7,8 @@ use std::sync::atomic::AtomicBool;
 
 use super::exec::{self, Mode, Options};
 use super::lock::with_mutation;
-use super::repo::{self, FileKind, FileStatus};
+use super::line_counts::parse_numstat;
+use super::status::{FileKind, FileStatus};
 use super::temp_file::TempFile;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -144,7 +145,7 @@ pub fn changed_since(git: &Path, dir: &Path, base: &str, cancel: &AtomicBool) ->
     with_snapshot(git, dir, false, Mode::Background, Some(cancel), |run| {
         let diff = |format: &'static str| run(&[&"diff", &"--cached", &format, &"-z", &"--relative", &"--no-renames", &base]);
         let names = diff("--name-status")?;
-        let counts = repo::parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
+        let counts = parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
         let names = String::from_utf8_lossy(&names);
         let mut fields = names.split('\0').filter(|f| !f.is_empty());
         let mut files = Vec::new();
@@ -219,7 +220,7 @@ pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::repo::FileKind;
+    use crate::git::status::FileKind;
     use crate::git::test_repo::{git_bin, run_in, TestRepo};
     use crate::git::{blob, worktree};
 

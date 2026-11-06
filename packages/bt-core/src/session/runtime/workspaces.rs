@@ -83,7 +83,7 @@ impl Sessions {
 
     /// A workspace's changed files since its base commit, relative to its folder. Stops the list of
     /// it still running, whose answer nobody wants now (it fails with `exec::CANCELLED`). Blocking.
-    pub fn workspace_changes(&self, id: &str) -> Result<Vec<crate::git::repo::FileStatus>, String> {
+    pub fn workspace_changes(&self, id: &str) -> Result<Vec<crate::git::status::FileStatus>, String> {
         let (dir, base) = self.checked_out(id)?;
         let cancel = Arc::new(AtomicBool::new(false));
         if let Some(previous) = lock(&self.inner.change_lists).insert(id.to_owned(), Arc::clone(&cancel)) {

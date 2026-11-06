@@ -14,7 +14,8 @@ use std::time::SystemTime;
 
 use serde::Serialize;
 
-use super::repo::{self, RepoInfo, RepoState, Status};
+use super::repo::{self, RepoInfo, RepoState};
+use super::status::{self, Status};
 
 /// Modification time and size of each file a fingerprint looks at; `None` for a missing one.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -168,7 +169,7 @@ impl GitCache {
             && slot.cached.as_ref().is_some_and(|c| c.epoch == epoch && c.fingerprint == fingerprint);
         if !valid {
             let status = match &info {
-                Some(info) => Some(repo::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
+                Some(info) => Some(status::status_in(git, root, info).inspect_err(|_| self.forget_info())?),
                 None => None,
             };
             if slot.cached.as_ref().map(|c| &c.status) != Some(&status) {
