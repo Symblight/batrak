@@ -94,6 +94,6 @@
 /* Footer: the commit form */
 .acp-changes-panel__footer {
   flex: none;
-  padding: var(--acp-space-2);
+  padding: var(--acp-space-4) var(--acp-space-2) var(--acp-space-2);
   border-top: 1px solid var(--acp-color-outline-variant);
 }
