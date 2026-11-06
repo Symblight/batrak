@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { app } from '../../hooks/app/app.js';
 import { git } from '../../hooks/git/git.js';
-import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitCompare, $gitRepo, $shownChanges, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
 import { $rootId, $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -28,6 +28,8 @@ export class AcpGitChanges extends ViewElement {
       setCommitSelection([...$commitSelection.get()].filter((id) => changed.has(id)));
     },
   });
+  #shown = new StoreController(this, { store: $shownChanges });
+  #compare = new StoreController(this, { store: $gitCompare });
   #repo = new StoreController(this, { store: $gitRepo });
   #selection = new StoreController(this, { store: $commitSelection });
   #folder = new StoreController(this, { store: $shownFolder });
@@ -91,7 +93,9 @@ export class AcpGitChanges extends ViewElement {
 
   render() {
     return html`<acp-changes-panel
-      .changes=${this.#changes.value}
+      .changes=${this.#shown.value}
+      .compareTo=${this.#compare.value.target}
+      .refreshError=${this.#compare.value.refreshError}
       .repo=${this.#repo.value}
       .selection=${this.#selection.value}
       .root=${this.#folder.value}
