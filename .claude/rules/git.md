@@ -25,7 +25,7 @@ paths:
   terminal; the Changes pane only says so.
 - `exec` runs every git in its own session and process group, stopped with SIGTERM first on a timeout. Its
   output is read with a grace after git is gone: a child left behind doesn't hold the call. `Hooks` and
-  `Network` take no slot of `MAX_CONCURRENT`. `Background` never runs the repository's `core.fsmonitor`;
+  `Network` take no slot of `MAX_CONCURRENT`. `Background` never runs a program named by `core.fsmonitor` (a status keeps git's own daemon, `core.fsmonitor=true`);
   filters still run.
 - `worktree` backs workspaces (`workspace/checkout.rs`; `add` / `attach` check out under `Mode::Hooks`: a big
   tree, LFS or a `post-checkout` hook outlast 10 s). `apply` backs a workspace's Apply

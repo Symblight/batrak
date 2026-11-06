@@ -3,6 +3,7 @@
 
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::AtomicBool;
 
 use super::exec::{self, Mode, Options, TempFile};
 use super::lock::with_mutation;
@@ -23,11 +24,14 @@ pub enum ApplyOutcome {
 /// uncommitted and untracked ones included (ignored ones not). Seeded from the worktree's own index,
 /// so `add -A` hashes only changed files; that index is never touched. `worktree` may be a folder in it.
 /// Without `keep_objects` what `add -A` writes goes to a scratch folder too: only looking at the work
-/// must not grow the repository.
+/// must not grow the repository. `mode` is the caller's: a refresh nobody asked for is `Background`, what
+/// the user waits for gets `Hooks`' long timeout for the clean filters (LFS) `add -A` runs over every changed file.
 fn with_snapshot<T>(
     git: &Path,
     worktree: &Path,
     keep_objects: bool,
+    mode: Mode,
+    cancel: Option<&AtomicBool>,
     f: impl FnOnce(&dyn Fn(&[&dyn AsRef<OsStr>]) -> Result<Vec<u8>, String>) -> Result<T, String>,
 ) -> Result<T, String> {
     let index = TempFile::new("index");
@@ -40,14 +44,13 @@ fn with_snapshot<T>(
     let alternates = alternate_entry(&git_path("objects")?);
     let mut env: Vec<(&str, &OsStr)> = vec![("GIT_INDEX_FILE", index.path.as_os_str())];
     if !keep_objects {
-        std::fs::create_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
+        private_dir(&scratch_objects.path).map_err(|e| format!("cannot make a scratch folder: {e}"))?;
         env.push(("GIT_OBJECT_DIRECTORY", scratch_objects.path.as_os_str()));
         env.push(("GIT_ALTERNATE_OBJECT_DIRECTORIES", alternates.as_os_str()));
     }
-    let opts = Options { env: &env, ..Default::default() };
-    // `add -A` runs clean filters (LFS) over every changed file.
+    let opts = Options { env: &env, cancel, ..Default::default() };
     let run = |args: &[&dyn AsRef<OsStr>]| -> Result<Vec<u8>, String> {
-        let out = exec::run_with(git, worktree, &exec::args(args), Mode::Hooks, &opts)?;
+        let out = exec::run_with(git, worktree, &exec::args(args), mode, &opts)?;
         if out.success() { Ok(out.stdout) } else { Err(exec::failure_message(&out)) }
     };
     if !seeded {
@@ -55,6 +58,18 @@ fn with_snapshot<T>(
     }
     run(&[&"add", &"-A"])?;
     f(&run)
+}
+
+/// A folder only its owner can read: it holds the worktree's uncommitted files, and the temp folder may
+/// be shared with other users.
+fn private_dir(path: &Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::DirBuilderExt;
+        std::fs::DirBuilder::new().mode(0o700).create(path)
+    }
+    #[cfg(not(unix))]
+    std::fs::create_dir(path)
 }
 
 /// `path` as the one entry of `GIT_ALTERNATE_OBJECT_DIRECTORIES`, a list split on `:` (`;` on Windows)
@@ -77,7 +92,7 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
         return Err(format!("{}: not on branch {branch}", worktree.display()));
     }
     with_mutation(git, worktree, || {
-        with_snapshot(git, worktree, true, |run| {
+        with_snapshot(git, worktree, true, Mode::Hooks, None, |run| {
             let tree = text(run(&[&"write-tree"])?);
             let head = text(run(&[&"rev-parse", &"--verify", &"HEAD^{commit}"])?);
             if tree == text(run(&[&"rev-parse", &"HEAD^{tree}"])?) {
@@ -104,7 +119,7 @@ pub fn snapshot_commit(git: &Path, worktree: &Path, branch: &str, message: &str)
 /// (ignored files are not). The worktree's own index is untouched. The user's diff settings stay out
 /// of it: `git apply` takes only a plain patch with `a/` and `b/` prefixes.
 pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>, String> {
-    with_snapshot(git, worktree, false, |run| {
+    with_snapshot(git, worktree, false, Mode::Hooks, None, |run| {
         run(&[
             &"diff",
             &"--cached",
@@ -123,9 +138,9 @@ pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>,
 
 /// Files under `dir` (a worktree or a folder in one; paths relative to it) that differ from
 /// `base`: its commits and uncommitted work together, with line counts. Renames show as a deletion
-/// and an addition. Sorted by path.
-pub fn changed_since(git: &Path, dir: &Path, base: &str) -> Result<Vec<FileStatus>, String> {
-    with_snapshot(git, dir, false, |run| {
+/// and an addition. Sorted by path. A refresh: once `cancel` is set git stops (`exec::CANCELLED`).
+pub fn changed_since(git: &Path, dir: &Path, base: &str, cancel: &AtomicBool) -> Result<Vec<FileStatus>, String> {
+    with_snapshot(git, dir, false, Mode::Background, Some(cancel), |run| {
         let diff = |format: &'static str| run(&[&"diff", &"--cached", &format, &"-z", &"--relative", &"--no-renames", &base]);
         let names = diff("--name-status")?;
         let counts = repo::parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
@@ -232,7 +247,7 @@ mod tests {
         std::fs::write(wt.join("new.txt"), "new\n").unwrap();
         let before = repo.git(&["count-objects"]);
 
-        assert_eq!(changed_since(&git_bin(), &wt, &base).unwrap().len(), 2);
+        assert_eq!(changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap().len(), 2);
         assert!(!changes_since(&git_bin(), &wt, &base).unwrap().is_empty());
 
         assert_eq!(repo.git(&["count-objects"]), before);
@@ -287,7 +302,7 @@ mod tests {
         let wt = repo.worktree("colon-wt", "batrak/colon");
         std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
 
-        let files = changed_since(&git_bin(), &wt, &base).unwrap();
+        let files = changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap();
         assert_eq!(files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["README.md"]);
     }
 
@@ -309,7 +324,7 @@ mod tests {
         run_in(&wt, &["add", "app/new.txt"]);
         let git = git_bin();
 
-        let files = changed_since(&git, &wt.join("app"), &base).unwrap();
+        let files = changed_since(&git, &wt.join("app"), &base, &AtomicBool::new(false)).unwrap();
         let summary: Vec<_> = files.iter().map(|f| (f.path.as_str(), f.kind, f.added, f.removed)).collect();
         assert_eq!(
             summary,
@@ -393,5 +408,43 @@ mod tests {
         assert!(check_out_branch(&git_bin(), &wt, "batrak/back", &repo.path).is_err());
         assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), "batrak/back");
         assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn listing_a_worktrees_changes_doesnt_run_the_repositorys_fsmonitor_hook() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut repo = TestRepo::with_commit("list-fsmonitor");
+        let wt = repo.worktree("list-fsmonitor-wt", "batrak/list-fsmonitor");
+        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
+        std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
+        let dir = crate::git::test_repo::temp_dir("list-fsmonitor-hook");
+        let (hook, ran) = (dir.join("hook"), dir.join("ran"));
+        std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\nexit 1\n", ran.display())).unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        repo.git(&["config", "core.fsmonitor", hook.to_str().unwrap()]);
+
+        assert_eq!(changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap().len(), 1);
+
+        assert!(!ran.exists(), "the hook ran on a refresh");
+        std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn what_a_look_at_the_work_writes_only_its_owner_can_read() {
+        use std::os::unix::fs::PermissionsExt;
+        let mut repo = TestRepo::with_commit("private");
+        let wt = repo.worktree("private-wt", "batrak/private");
+        std::fs::write(wt.join("README.md"), "a secret\n").unwrap();
+
+        let mode = with_snapshot(&git_bin(), &wt, false, Mode::Background, None, |run| {
+            let objects = run(&[&"rev-parse", &"--git-path", &"objects"])?;
+            let objects = PathBuf::from(String::from_utf8_lossy(&objects).trim());
+            Ok(std::fs::metadata(objects).map_err(|e| e.to_string())?.permissions().mode())
+        })
+        .unwrap();
+
+        assert_eq!(mode & 0o777, 0o700);
     }
 }

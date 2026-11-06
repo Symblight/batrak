@@ -1,6 +1,7 @@
 //! Branch and working-tree status of the repository a root belongs to.
 
 use std::collections::HashMap;
+use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -304,28 +305,21 @@ pub fn status(git: &Path, root: &Path) -> Result<Option<Status>, String> {
 pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, String> {
     // The line counts don't depend on the status: read them alongside it. Before the first commit
     // `diff HEAD` fails, and its result is not used.
+    let daemon = uses_fsmonitor_daemon(git, root);
     let (out, numstat) = std::thread::scope(|scope| {
         let numstat = scope.spawn(|| {
             // `--relative`: paths relative to `root` and only those under it, like the status entries.
             let args = exec::args(&[&"diff", &"HEAD", &"--numstat", &"-z", &"--relative", &"--no-renames"]);
             exec::run(git, root, &args, Mode::Background)
         });
-        let out = exec::run(
-            git,
-            root,
-            &exec::args(&[
-                &"status",
-                &"--porcelain=v2",
-                &"-z",
-                &"--branch",
-                // Every untracked file rather than one entry per new folder: the lists show files only.
-                // Ignored files still stay out.
-                &"--untracked-files=all",
-                &"--",
-                &".",
-            ]),
-            Mode::Background,
-        );
+        let mut args: Vec<&dyn AsRef<OsStr>> = Vec::new();
+        if daemon {
+            args.extend::<[&dyn AsRef<OsStr>; 2]>([&"-c", &"core.fsmonitor=true"]);
+        }
+        // Every untracked file rather than one entry per new folder: the lists show files only.
+        // Ignored files still stay out.
+        args.extend::<[&dyn AsRef<OsStr>; 7]>([&"status", &"--porcelain=v2", &"-z", &"--branch", &"--untracked-files=all", &"--", &"."]);
+        let out = exec::run(git, root, &exec::args(&args), Mode::Background);
         (out, numstat.join().unwrap_or_else(|_| Err("git diff panicked".to_owned())))
     });
     let out = out?;
@@ -339,6 +333,15 @@ pub fn status_in(git: &Path, root: &Path, info: &RepoInfo) -> Result<Status, Str
     let counts = with_rename_counts(git, root, &status, counts);
     add_line_counts(root, &mut status, &counts);
     Ok(status)
+}
+
+/// Whether the repository asks for git's own fsmonitor daemon, which runs no program of its naming and
+/// is what makes a status of a huge tree fast. Asked only for the status, the refresh that runs all the
+/// time. Not `Background`, whose `core.fsmonitor=false` this would read back. Passing a literal `true` on, not what
+/// was read, keeps a program named in the config from running even if the config changes in between.
+fn uses_fsmonitor_daemon(git: &Path, root: &Path) -> bool {
+    let value = exec::run(git, root, &exec::args(&[&"config", &"--type=bool", &"--get", &"core.fsmonitor"]), Mode::Local);
+    value.is_ok_and(|out| String::from_utf8_lossy(&out).trim() == "true")
 }
 
 fn parse(text: &str, prefix: &str) -> Status {
@@ -605,6 +608,35 @@ mod tests {
 
         assert!(!ran.exists(), "the hook ran on a refresh");
         std::fs::remove_dir_all(dir).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_refresh_keeps_gits_own_fsmonitor_daemon_and_nothing_else_the_config_names() {
+        use std::os::unix::fs::PermissionsExt;
+        for (value, kept) in [(Some("true"), true), (Some("1"), true), (Some("false"), false), (Some("/some/hook"), false), (None, false)] {
+            let repo = TestRepo::with_commit("fsmonitor-daemon");
+            if let Some(value) = value {
+                repo.git(&["config", "core.fsmonitor", value]);
+            }
+            // Logs each call, and stops at the status: a real one would start the daemon.
+            let dir = temp_dir("fsmonitor-daemon-git");
+            let (fake, log) = (dir.join("git"), dir.join("log"));
+            let script = format!(
+                "#!/bin/sh\necho \"$*\" >> '{}'\ncase \" $* \" in *' status '*) exit 0;; esac\nexec '{}' \"$@\"\n",
+                log.display(),
+                git_bin().display()
+            );
+            std::fs::write(&fake, script).unwrap();
+            std::fs::set_permissions(&fake, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+            status(&fake, &repo.path).unwrap();
+
+            let log = std::fs::read_to_string(&log).unwrap();
+            let call = log.lines().find(|line| line.contains(" status ")).unwrap();
+            assert_eq!(call.contains("-c core.fsmonitor=true"), kept, "{value:?}: {call}");
+            std::fs::remove_dir_all(dir).unwrap();
+        }
     }
 
     #[test]

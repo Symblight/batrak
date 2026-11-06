@@ -148,9 +148,13 @@ export function relativePath(from, to) {
   return [...a.slice(common).map(() => '..'), ...b.slice(common)].join('/');
 }
 
+/** The read failed for the file not being there: Rust's `NotFound` errors, on every platform. */
+const GONE = /\(os error [23]\)$/;
+
 /**
  * An expanded file's diff from its two reads. A missing baseline is a new file. A read that fails says
- * why there is no diff, unless the file is listed as deleted: then it failed for being gone.
+ * why there is no diff, unless it failed for the file being gone: listed as deleted, or as a rename
+ * or a conflict whose file is gone too, or deleted since it was listed.
  * @param {Promise<string>} file The file now.
  * @param {Promise<string | null>} base The file it's compared to; `null` when it wasn't there.
  * @param {boolean} deleted It's listed as deleted.
@@ -161,7 +165,7 @@ export async function readDiff(file, base, deleted) {
   /** @param {unknown} reason */
   const failed = (reason) => ({ content: '', baseline: '', error: String(reason), loading: false });
   if (baseline.status === 'rejected') return failed(baseline.reason);
-  if (content.status === 'rejected' && !deleted) return failed(content.reason);
+  if (content.status === 'rejected' && !deleted && !GONE.test(String(content.reason))) return failed(content.reason);
   return { content: content.status === 'fulfilled' ? content.value : '', baseline: baseline.value ?? '', error: '', loading: false };
 }
 

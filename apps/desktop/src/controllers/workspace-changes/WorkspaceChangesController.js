@@ -153,7 +153,9 @@ export class WorkspaceChangesController {
     try {
       changes = { files: await workspaces.listChanges(id), loaded: true, loading: false, error: null };
     } catch (err) {
-      changes = { files: [], loaded: true, loading: false, error: String(err) };
+      // Stopped by a newer list, perhaps another window's: the files shown are the best there is.
+      const stopped = String(err).startsWith('cancelled');
+      changes = stopped ? { ...this.#changes, loading: false } : { files: [], loaded: true, loading: false, error: String(err) };
     }
     if (id !== this.#workspaceId || list !== this.#listCount) return;
     this.#changes = changes;

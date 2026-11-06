@@ -158,6 +158,29 @@ describe('acp-workspace-changes-tab', () => {
     expect(listed(), 'a removed tab lists nothing').to.equal(3);
   });
 
+  it('keeps the list when another list stopped this one', async () => {
+    // Arrange
+    const { el } = await render('w1');
+    const review = () => /** @type {HTMLElementTagNameMap['acp-changes-review']} */ (el.querySelector('acp-changes-review'));
+    await until(() => review().changes.loaded === true);
+    /** @type {string[]} */
+    const asked = [];
+    mockIPC((cmd) => {
+      asked.push(cmd);
+      if (cmd === 'workspace_changes') throw 'cancelled\nsome stderr';
+      return null;
+    });
+    // Act: a turn ends, and the list it starts is stopped
+    $sessions.set($sessions.get().map((s) => (s.id === 'a1' ? /** @type {never} */ ({ ...s, status: 'working' }) : s)));
+    $sessions.set($sessions.get().map((s) => (s.id === 'a1' ? /** @type {never} */ ({ ...s, status: 'idle' }) : s)));
+    await until(() => asked.includes('workspace_changes'));
+    await new Promise((r) => setTimeout(r, 50));
+    await el.updateComplete;
+    // Assert
+    expect(review().changes.error).to.equal(null);
+    expect(review().changes.files.map((f) => f.path)).to.deep.equal(['a.js']);
+  });
+
   it('turns the review’s events into expanding files and the workspace’s Apply and Check out, and none leaves the view', async () => {
     // Arrange
     const { el } = await render('w1');
