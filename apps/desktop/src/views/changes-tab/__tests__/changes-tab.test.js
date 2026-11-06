@@ -3,7 +3,7 @@ import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
-import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
+import { $commitSelection, $diffLayout, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
 import { $project } from '../../../stores/project/project.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import '../changes-tab.js';
@@ -56,6 +56,7 @@ describe('acp-changes-tab', () => {
     $comments.set({});
     $commentFocus.set(null);
     $project.set(null);
+    $diffLayout.set('unified');
     clearMocks();
   });
 
@@ -90,6 +91,19 @@ describe('acp-changes-tab', () => {
     expect(review.root).to.equal('/p');
     expect(review.comments).to.equal($comments.get());
     expect(review.commentFocus === focus).to.equal(true);
+  });
+
+  it('shows the saved diff layout and saves the one the review asks for', async () => {
+    // Arrange
+    $diffLayout.set('split');
+    const { el, review } = await render();
+    expect(review.diffLayout).to.equal('split');
+    // Act
+    fire(review, 'acp-diff-layout', { layout: 'unified' });
+    await el.updateComplete;
+    // Assert
+    expect($diffLayout.get()).to.equal('unified');
+    expect(review.diffLayout).to.equal('unified');
   });
 
   it('reads a renamed file at HEAD under its old name', async () => {

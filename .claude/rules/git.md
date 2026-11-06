@@ -46,7 +46,8 @@ paths:
   (`views/git-changes/`) watches while Changes is the side pane's shown pane (`active`), `ChangesReviewController` (in `<acp-changes-tab>`) while the Changes tab is active
   (`<acp-git-changes>` also forgets picks of files no longer changed). Stopping
   keeps the files in the store; the spinner shows only for a root's first status. The files picked
-  for the next commit are `$commitSelection` (root-relative paths), shared by both. Changes are files
+  for the next commit are `$commitSelection` (root-relative paths), shared by both. How both Changes tabs show a diff is `$diffLayout`, saved and shared
+  by every window. Changes are files
   only: `git status --untracked-files=all` lists new folders file by file. `$gitHead` changes only when HEAD moves; the editor
   reloads its diff baselines on it.
 - **Cached git state** (`git/cache.rs`, one `GitCache` per `Root`): `git_head` / `git_status` reuse the

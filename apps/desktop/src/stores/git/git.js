@@ -1,7 +1,9 @@
 import { atom, computed } from 'nanostores';
+import { persistentStore } from '../persistent/persistent.js';
 
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
+/** @typedef {import('../../hooks/git/types.js').DiffLayout} DiffLayout */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };
@@ -48,3 +50,19 @@ export function pickForCommit(ids, picked) {
 
 /** Notifies only when HEAD moves (commit, checkout, reset). */
 export const $gitHead = computed($gitRepo, ({ repo }) => (repo ? `${repo.branch ?? ''}@${repo.sha ?? ''}` : null));
+
+/**
+ * @param {unknown} raw What was stored.
+ * @returns {DiffLayout | null}
+ */
+export function parseDiffLayout(raw) {
+  return raw === 'unified' || raw === 'split' ? raw : null;
+}
+
+/** How the Changes tabs show a file's diff; shared by every window. */
+export const $diffLayout = persistentStore('batrak:git:diff-layout', /** @type {DiffLayout} */ ('unified'), { parse: parseDiffLayout });
+
+/** @param {DiffLayout} layout */
+export function setDiffLayout(layout) {
+  $diffLayout.set(layout);
+}

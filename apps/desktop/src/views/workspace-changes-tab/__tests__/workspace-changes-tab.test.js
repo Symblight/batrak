@@ -2,6 +2,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { $commentFocus, $comments } from '../../../stores/comments/comments.js';
 import { activateTab, closeAllTabs, openTab } from '../../../stores/editor/editor.js';
+import { $diffLayout } from '../../../stores/git/git.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 import { $workspaces } from '../../../stores/workspaces/workspaces.js';
 import { workspaceChangesTabId } from '../../../stores/tab-ids/tab-ids.js';
@@ -56,7 +57,23 @@ describe('acp-workspace-changes-tab', () => {
     $workspaces.set([]);
     $comments.set({});
     $commentFocus.set(null);
+    $diffLayout.set('unified');
     clearMocks();
+  });
+
+  it('shows the saved diff layout and saves the one the review asks for', async () => {
+    // Arrange
+    $diffLayout.set('split');
+    const el = /** @type {AcpWorkspaceChangesTab} */ (await fixture(html`<acp-workspace-changes-tab .workspaceId=${'w1'}></acp-workspace-changes-tab>`));
+    await until(() => el.querySelector('acp-changes-review') !== null);
+    const review = /** @type {HTMLElementTagNameMap['acp-changes-review']} */ (el.querySelector('acp-changes-review'));
+    expect(review.diffLayout).to.equal('split');
+    // Act
+    review.dispatchEvent(new CustomEvent('acp-diff-layout', { detail: { layout: 'unified' }, bubbles: true, composed: true }));
+    await el.updateComplete;
+    // Assert
+    expect($diffLayout.get()).to.equal('unified');
+    expect(review.diffLayout).to.equal('unified');
   });
 
   /**

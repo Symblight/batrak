@@ -55,6 +55,39 @@
   flex: 1;
 }
 
+/* Unified / Split */
+.acp-changes-review__segments {
+  flex: none;
+  display: flex;
+  gap: var(--acp-space-0-5);
+}
+
+.acp-changes-review__segment {
+  block-size: 22px;
+  padding: 0 var(--acp-space-2);
+  border: none;
+  border-radius: var(--acp-shape-corner-extra-small);
+  background: transparent;
+  color: var(--acp-color-on-surface-variant);
+  font: inherit;
+  font-size: var(--acp-font-size-sm);
+  font-weight: var(--acp-font-weight-medium);
+  white-space: nowrap;
+  cursor: pointer;
+
+  &:hover {
+    background: var(--acp-state-hover);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 1px;
+  }
+  &[aria-pressed='true'] {
+    background: var(--acp-color-secondary-container);
+    color: var(--acp-color-on-secondary-container);
+  }
+}
+
 /* Files */
 .acp-changes-review__list {
   flex: 1;

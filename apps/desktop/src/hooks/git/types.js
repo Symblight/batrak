@@ -23,6 +23,8 @@
  * @property {GitOperation | null} [operation] What stopped midway and waits to be finished in a terminal.
  */
 
+/** @typedef {'unified' | 'split'} DiffLayout How a file's diff is shown: one column, or before and after side by side. */
+
 /** @typedef {'merge' | 'rebase' | 'cherryPick' | 'revert' | 'bisect'} GitOperation */
 
 /**
