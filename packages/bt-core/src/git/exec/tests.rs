@@ -1,5 +1,6 @@
 use std::io::{self, Read};
 use std::sync::{Arc, Mutex};
+use std::thread;
 
 use super::permit::{Permit, MAX_CONCURRENT};
 use super::pipes::Capture;
@@ -27,6 +28,52 @@ fn a_background_child_holding_the_pipes_doesnt_hold_the_call() {
     let out = run(&git, &dir, &[OsStr::new("status")], Mode::Background).unwrap();
     assert_eq!(out, b"printed\n", "what git printed is kept");
     assert!(started.elapsed() < Duration::from_secs(10), "took {:?}", started.elapsed());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+/// What a left-behind child may add to a call: one `PIPE_GRACE` (2 s) with some room for a loaded
+/// machine, below the 4 s that waiting the grace twice can't take less than. `Mode::Hooks` takes no
+/// permit, so the time is all spawn and grace.
+#[cfg(unix)]
+const ONE_GRACE: Duration = Duration::from_millis(3500);
+
+/// More than a pipe buffer: the writer blocks until someone reads or the last reader is gone.
+#[cfg(unix)]
+const BIG_INPUT: &[u8] = &[b'x'; 1024 * 1024];
+
+// The saved fd because a background job's stdin is /dev/null before its redirects in some shells (dash).
+#[cfg(unix)]
+#[test]
+fn a_child_holding_stdin_doesnt_hold_the_call() {
+    let (git, dir) = fake_git("stdin-held", "exec 3<&0\nsleep 20 <&3 >/dev/null 2>&1 &\nexit 0");
+    let started = Instant::now();
+    let opts = Options { input: Some(BIG_INPUT), ..Options::default() };
+    let out = run_with(&git, &dir, &[OsStr::new("hash-object")], Mode::Hooks, &opts).unwrap();
+    assert!(out.success(), "{:?}", out.status);
+    assert!(started.elapsed() < ONE_GRACE, "took {:?}", started.elapsed());
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_child_holding_stdout_and_stderr_waits_one_grace_not_two() {
+    let (git, dir) = fake_git("both-held", "echo printed\necho said >&2\nsleep 20 &\nexit 0");
+    let started = Instant::now();
+    let out = run_with(&git, &dir, &[OsStr::new("status")], Mode::Hooks, &Options::default()).unwrap();
+    assert!(started.elapsed() < ONE_GRACE, "took {:?}", started.elapsed());
+    assert_eq!((out.stdout.as_slice(), out.stderr.as_str()), (&b"printed\n"[..], "said"), "what git printed is kept");
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[cfg(unix)]
+#[test]
+fn a_child_holding_every_pipe_waits_one_grace() {
+    let (git, dir) = fake_git("all-held", "echo printed\nexec 3<&0\nsleep 20 <&3 &\nexit 0");
+    let started = Instant::now();
+    let opts = Options { input: Some(BIG_INPUT), ..Options::default() };
+    let out = run_with(&git, &dir, &[OsStr::new("hash-object")], Mode::Hooks, &opts).unwrap();
+    assert!(started.elapsed() < ONE_GRACE, "took {:?}", started.elapsed());
+    assert_eq!(out.stdout, b"printed\n", "what git printed is kept");
     std::fs::remove_dir_all(dir).unwrap();
 }
 
@@ -265,5 +312,6 @@ fn a_read_interrupted_by_a_signal_goes_on() {
         }
     }
 
-    assert_eq!(Capture::start(Interrupted(0), 100).finish(), (b"rest".to_vec(), false));
+    let deadline = Instant::now() + Duration::from_secs(10);
+    assert_eq!(Capture::start(Interrupted(0), 100).finish(deadline), (b"rest".to_vec(), false));
 }
