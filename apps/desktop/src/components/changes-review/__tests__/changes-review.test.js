@@ -185,4 +185,51 @@ describe('acp-changes-review', () => {
     expect(fired).to.deep.equal(['acp-changes-check-out']);
     expect(root.querySelector('acp-confirm-dialog')).to.equal(null);
   });
+
+  describe('diff layout', () => {
+    /** @param {Partial<HTMLElementTagNameMap['acp-changes-review']>} props */
+    async function renderDiff(props) {
+      const view = await render({ expanded: new Set(['src/b.js']), diffs: new Map([['src/b.js', DIFF]]), ...props });
+      return {
+        ...view,
+        editorLayout: () => view.root.querySelector('cdx-code-editor')?.getAttribute('diff-layout'),
+        segments: () => /** @type {HTMLButtonElement[]} */ ([...view.root.querySelectorAll('.acp-changes-review__segment')]),
+      };
+    }
+
+    it('shows the chosen layout on the diffs and the toggle, and asks for the other one only when it is pressed', async () => {
+      // Arrange
+      const { el, editorLayout, segments } = await renderDiff({ diffLayout: 'split' });
+      const asked = listen(el, 'acp-diff-layout');
+      // Assert: Split is shown, and pressed
+      expect(editorLayout()).to.equal('split');
+      expect(segments().map((b) => [b.textContent?.trim(), b.getAttribute('aria-pressed')])).to.deep.equal([
+        ['Unified', 'false'],
+        ['Split', 'true'],
+      ]);
+      // Act: the shown one, then the other one
+      segments()[1].click();
+      segments()[0].click();
+      // Assert
+      expect(asked).to.deep.equal([{ layout: 'unified' }]);
+
+      // Act: the view answers
+      el.diffLayout = 'unified';
+      await el.updateComplete;
+      // Assert
+      expect(editorLayout()).to.equal('unified');
+    });
+
+    it('shows Split however narrow the tab is', async () => {
+      // Arrange
+      const { el, editorLayout, segments } = await renderDiff({ diffLayout: 'split' });
+      // Act
+      el.style.width = '400px';
+      for (let i = 0; i < 3; i++) await new Promise((resolve) => requestAnimationFrame(resolve));
+      await el.updateComplete;
+      // Assert
+      expect(editorLayout()).to.equal('split');
+      expect(segments()[1].textContent?.trim()).to.equal('Split');
+    });
+  });
 });

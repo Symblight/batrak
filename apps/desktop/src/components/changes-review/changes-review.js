@@ -23,6 +23,7 @@ import styles from './changes-review.css?inline';
 /** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
+/** @typedef {import('../../hooks/git/types.js').DiffLayout} DiffLayout */
 /** @typedef {import('../../hooks/tabs/types.js').FileDiff} FileDiff */
 /** @typedef {import('../../hooks/comments/types.js').AgentThread} AgentThread */
 /** @typedef {import('../../hooks/comments/types.js').CommentFocus} CommentFocus */
@@ -39,6 +40,7 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-change-toggle `{ id }` A row was clicked: expand or collapse its diff.
  * @fires acp-change-expand `{ id }`
  * @fires acp-changes-collapse `null` Collapse all.
+ * @fires acp-diff-layout `{ layout }` A layout other than the chosen one was pressed.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
  * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.
@@ -56,6 +58,7 @@ export class AcpChangesReview extends LitElement {
     branch: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
+    diffLayout: { attribute: false },
   };
 
   static styles = styles;
@@ -100,6 +103,8 @@ export class AcpChangesReview extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
+    /** @type {DiffLayout} */
+    this.diffLayout = 'unified';
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
@@ -193,6 +198,7 @@ export class AcpChangesReview extends LitElement {
     return html`<cdx-code-editor
       class="acp-changes-review__editor"
       read-only
+      diff-layout=${this.diffLayout}
       aria-label=${`Diff of ${row.name}`}
       .plugins=${codeEditor.plugins}
       filename=${row.file.path}
@@ -218,6 +224,21 @@ export class AcpChangesReview extends LitElement {
       ${this.#renderRow(row, true)}
       <div class="acp-changes-review__diff">${this.#renderDiff(row)}</div>
     </div>`;
+  }
+
+  /**
+   * @param {DiffLayout} layout
+   * @param {string} label
+   */
+  #renderSegment(layout, label) {
+    return html`<button
+      type="button"
+      class="acp-changes-review__segment"
+      aria-pressed=${this.diffLayout === layout ? 'true' : 'false'}
+      @click=${() => layout !== this.diffLayout && this.#emit('acp-diff-layout', { layout })}
+    >
+      ${label}
+    </button>`;
   }
 
   #renderToolbar() {
@@ -258,6 +279,10 @@ export class AcpChangesReview extends LitElement {
           >`}
       <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
       <span class="acp-changes-review__spacer"></span>
+      <div class="acp-changes-review__segments" role="group" aria-label="Diff layout">
+        ${this.#renderSegment('unified', 'Unified')}
+        ${this.#renderSegment('split', 'Split')}
+      </div>
       ${this.base !== null
         ? html`<md-button
               id="acp-changes-review-apply"
