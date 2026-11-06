@@ -2,7 +2,7 @@ import { html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
 import { $commitSelection, $diffLayout, $gitChanges, $gitRepo, pickForCommit, setCommitSelection, setDiffLayout } from '../../stores/git/git.js';
-import { $project } from '../../stores/project/project.js';
+import { $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
 import { git } from '../../hooks/git/git.js';
@@ -23,7 +23,7 @@ export class AcpChangesTab extends ViewElement {
   #selection = new StoreController(this, { store: $commitSelection });
   #comments = new StoreController(this, { store: $comments });
   #commentFocus = new StoreController(this, { store: $commentFocus });
-  #project = new StoreController(this, { store: $project });
+  #folder = new StoreController(this, { store: $shownFolder });
   #diffLayout = new StoreController(this, { store: $diffLayout });
   /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-changes-review']>} */
   #reviewRef = createRef();
@@ -64,7 +64,7 @@ export class AcpChangesTab extends ViewElement {
       .selection=${this.#selection.value}
       .expanded=${this.#review.expanded}
       .diffs=${this.#review.diffs}
-      .root=${this.#project.value?.path ?? null}
+      .root=${this.#folder.value}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
       .diffLayout=${this.#diffLayout.value}

@@ -3,8 +3,7 @@ import { app } from '../../hooks/app/app.js';
 import { git } from '../../hooks/git/git.js';
 import { $commitSelection, $gitChanges, $gitRepo, setCommitSelection } from '../../stores/git/git.js';
 import { notify } from '../../stores/notices/notices.js';
-import { $project } from '../../stores/project/project.js';
-import { $rootId } from '../../stores/workspaces/workspaces.js';
+import { $rootId, $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/changes-panel/changes-panel.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -31,7 +30,7 @@ export class AcpGitChanges extends ViewElement {
   });
   #repo = new StoreController(this, { store: $gitRepo });
   #selection = new StoreController(this, { store: $commitSelection });
-  #project = new StoreController(this, { store: $project });
+  #folder = new StoreController(this, { store: $shownFolder });
   #rootId = new StoreController(this, { store: $rootId });
   /** @type {(() => void) | null} Stops watching the changes; set while the pane is shown and connected. */
   #unwatch = null;
@@ -95,7 +94,7 @@ export class AcpGitChanges extends ViewElement {
       .changes=${this.#changes.value}
       .repo=${this.#repo.value}
       .selection=${this.#selection.value}
-      .root=${this.#project.value?.path ?? null}
+      .root=${this.#folder.value}
       @acp-commit-select=${(/** @type {CustomEvent<{ ids: string[] }>} */ e) => {
         e.stopPropagation();
         setCommitSelection(e.detail.ids);
