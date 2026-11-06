@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::git::cache::StatusReply;
-use crate::git::{binary, blob, branches, commit, repo, revert};
+use crate::git::{binary, blob, branches, commit, compare, repo, revert};
 use crate::roots::Roots;
 use crate::util::checked_rel;
 
@@ -50,6 +50,41 @@ pub async fn git_file_at_head(
 pub async fn git_branches(roots: State<'_, Roots>, root_id: String) -> Result<branches::BranchList, String> {
     let root = roots.get(&root_id)?;
     blocking(move || branches::branch_list(binary::git()?, &root.path)).await?
+}
+
+/// The slot of `Root::start_search` for comparisons: a new one stops the one before it, and closing
+/// the root stops it too. The search dialog and panel use slots of their own.
+const COMPARE_SLOT: &str = "compare";
+
+/// What the root's work has against the branch `target`, from their merge base. Stops the
+/// comparison before it, whose answer nobody wants now (it fails with `exec::CANCELLED`).
+#[tauri::command]
+pub async fn git_compare(roots: State<'_, Roots>, root_id: String, target: String) -> Result<compare::Comparison, String> {
+    let root = roots.get(&root_id)?;
+    let cancel = root.start_search(COMPARE_SLOT);
+    blocking(move || compare::compare_to(binary::git()?, &root.path, &target, &cancel)).await?
+}
+
+/// Stops the root's running comparison, if any: the user went back to local changes.
+#[tauri::command]
+pub async fn git_compare_stop(roots: State<'_, Roots>, root_id: String) -> Result<(), String> {
+    roots.get(&root_id)?.cancel_search(COMPARE_SLOT);
+    Ok(())
+}
+
+/// Text of a file at a comparison's base; `null` when it wasn't there. Fails unless `rev` is a full
+/// id of an existing commit, and, saying why, when the file has no text to diff. `path` is relative
+/// to the root.
+#[tauri::command]
+pub async fn git_file_at_rev(
+    roots: State<'_, Roots>,
+    root_id: String,
+    rev: String,
+    path: String,
+) -> Result<Option<String>, String> {
+    let root = roots.get(&root_id)?;
+    checked_rel(&path)?;
+    blocking(move || compare::file_at_commit(binary::git()?, &root.path, &rev, &path)).await?
 }
 
 /// Fetches every remote of the root's repository (New workspace's refresh), pruning deleted branches.
