@@ -41,15 +41,6 @@ function listen(el, type) {
   return details;
 }
 
-/** @param {() => boolean} pred */
-async function until(pred) {
-  const started = Date.now();
-  while (!pred()) {
-    expect(Date.now() - started, 'timed out').to.be.lessThan(2000);
-    await new Promise((r) => setTimeout(r, 10));
-  }
-}
-
 describe('acp-changes-review', () => {
   it('lists the changed files sorted by path as rows, with the totals and how many are picked', async () => {
     const { root, rows } = await render({ selection: new Set(['src/b.js']) });
@@ -118,35 +109,16 @@ describe('acp-changes-review', () => {
     expect(selects).to.deep.equal([{ ids: ['new.txt', 'src/b.js', 'src/z.js'] }, { ids: [] }]);
   });
 
-  it('has a menu of Rollback, enabled once a file is picked, and Refresh; a session’s changes have none', async () => {
+  it('gives its menu how many listed files are picked; a session’s changes have no menu', async () => {
     // Arrange
-    const { el, root } = await render();
-    const rollbacks = listen(el, 'acp-changes-rollback');
-    const refreshes = listen(el, 'acp-changes-refresh');
-    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-changes-review__menu'));
-    const item = (/** @type {string} */ value) => /** @type {HTMLElementTagNameMap['md-menu-item']} */ (menu.querySelector(`md-menu-item[value="${value}"]`));
-    const pick = async (/** @type {string} */ value) => {
-      /** @type {HTMLElement} */ (root.querySelector('#acp-changes-review-more')).click();
-      await until(() => menu.open);
-      await item(value).updateComplete;
-      /** @type {HTMLElement} */ (item(value).shadowRoot?.querySelector('.md-menu-item__interactive')).click();
-      await until(() => !menu.open);
-    };
+    const { el, root } = await render({ selection: new Set(['new.txt', 'gone.txt']) });
     // Act
-    const disabledWithNoPicks = item('rollback').disabled;
-    el.selection = new Set(['new.txt']);
-    await el.updateComplete;
-    const disabledWithAPick = item('rollback').disabled;
-    await pick('rollback');
-    await pick('refresh');
+    const picked = root.querySelector('acp-changes-menu')?.picked;
     el.base = 'abc1234def';
     await el.updateComplete;
     // Assert
-    expect(disabledWithNoPicks).to.equal(true);
-    expect(disabledWithAPick).to.equal(false);
-    expect(rollbacks).to.deep.equal([null]);
-    expect(refreshes).to.deep.equal([null]);
-    expect(root.querySelector('#acp-changes-review-more')).to.equal(null);
+    expect(picked).to.equal(1);
+    expect(root.querySelector('acp-changes-menu')).to.equal(null);
   });
 
   it('turns a row’s Edit into opening the file at its absolute path, and lets the row’s own events through', async () => {

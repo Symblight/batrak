@@ -5,11 +5,10 @@ import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/tree-view';
 import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
-import '@symblight/wc-material/icon-button';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/tooltip';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
-import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
+import '../changes-menu/changes-menu.js';
 import '../commit-box/commit-box.js';
 import styles from './changes-panel.css?inline';
 
@@ -22,7 +21,8 @@ import styles from './changes-panel.css?inline';
  * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit.
  * @fires acp-diff-open `{ path }` A changed file's name was clicked: show its diff in the Changes tab.
  * @fires acp-commit-select `{ ids }` The files picked for the commit.
- * @fires acp-changes-refresh `null`
+ * @fires acp-changes-rollback `null` From its menu, for the picked files.
+ * @fires acp-changes-refresh `null` From its menu.
  * @fires acp-amend-start `null` Amend was turned on: `fillAmendMessage()` gets the last commit's message.
  * @fires acp-commit `{ paths, message, amend }` Answered by `commitFinished()`.
  */
@@ -322,15 +322,7 @@ export class AcpChangesPanel extends LitElement {
         ></md-checkbox>
         <span class="acp-changes-panel__summary">${summary}</span>
         <span class="acp-changes-panel__spacer"></span>
-        <md-icon-button
-          id="acp-changes-panel-refresh"
-          class="acp-changes-panel__refresh"
-          aria-label="Refresh"
-          @click=${() => this.#emit('acp-changes-refresh', null)}
-        >
-          <md-icon class="acp-changes-panel__refresh-icon">${unsafeSVG(refreshIcon)}</md-icon>
-        </md-icon-button>
-        <md-tooltip for="acp-changes-panel-refresh" show-delay="800">Refresh</md-tooltip>
+        <acp-changes-menu class="acp-changes-panel__menu" .picked=${included}></acp-changes-menu>
       </div>
       ${operation ? html`<div class="acp-changes-panel__operation" role="status">${operation}</div>` : nothing}
       ${this.#renderBody()}

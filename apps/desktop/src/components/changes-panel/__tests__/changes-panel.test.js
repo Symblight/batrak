@@ -54,7 +54,7 @@ describe('acp-changes-panel', () => {
     expect(shown()).to.equal(undefined);
   });
 
-  it('shows loading, an error, a folder that is no repository, and a clean tree, instead of the list; Refresh has a tooltip and asks to refresh', async () => {
+  it('shows loading, an error, a folder that is no repository, and a clean tree, instead of the list; the menu stays', async () => {
     const loading = await render({ changes: { files: [], loaded: false, loading: true, error: null } });
     expect(loading.root.querySelector('md-progress-circular')?.getAttribute('aria-label')).to.equal('Loading changes');
     const failed = await render({ changes: { files: [], loaded: true, loading: false, error: 'git is gone' } });
@@ -65,17 +65,15 @@ describe('acp-changes-panel', () => {
     expect(clean.state()?.textContent).to.contain('No changes');
     expect(clean.summary()).to.equal('No changed files');
     expect(clean.root.querySelector('tvx-tree-view')).to.equal(null);
-    const refreshes = listen(clean.el, 'acp-changes-refresh');
-    expect(tooltipOf(clean.root.querySelector('.acp-changes-panel__refresh'))).to.equal('Refresh');
+    expect(clean.root.querySelector('acp-changes-menu')?.picked, 'the menu is there with nothing changed').to.equal(0);
     expect(clean.root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
-    /** @type {HTMLElement} */ (clean.root.querySelector('.acp-changes-panel__refresh')).click();
-    expect(refreshes).to.have.length(1);
   });
 
   it('lists the changed files in groups for the tree, and sums up how many are picked', async () => {
     const { root, summary } = await render({ changes: { files: FILES, loaded: true, loading: false, error: null }, selection: new Set(['src/a.js']) });
     const tree = /** @type {HTMLElementTagNameMap['tvx-tree-view']} */ (root.querySelector('tvx-tree-view'));
     const items = /** @type {{ id: string, children?: { id: string }[] }[]} */ (/** @type {unknown} */ (tree.items));
+    expect(root.querySelector('acp-changes-menu')?.picked).to.equal(1);
     expect(items.map((g) => [g.id, g.children?.map((c) => c.id)])).to.deep.equal([
       ['group:changes', ['b.md', 'src/a.js']],
       ['group:untracked', ['new.txt']],

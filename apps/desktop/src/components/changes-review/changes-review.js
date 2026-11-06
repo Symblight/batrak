@@ -8,16 +8,13 @@ import '@symblight/wc-material/button';
 import '@symblight/wc-material/checkbox';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
-import '@symblight/wc-material/menu';
 import '@symblight/wc-material/progress-circular';
 import '@symblight/wc-material/segmented-button';
 import '@symblight/wc-material/tooltip';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
-import moreIcon from '@material-design-icons/svg/outlined/more_vert.svg?raw';
-import refreshIcon from '@material-design-icons/svg/outlined/refresh.svg?raw';
-import undoIcon from '@material-design-icons/svg/outlined/undo.svg?raw';
 import unfoldLessIcon from '@material-design-icons/svg/outlined/unfold_less.svg?raw';
 import '../change-row/change-row.js';
+import '../changes-menu/changes-menu.js';
 import { codeEditor } from '../code-view/code-editor.js';
 import '../diff-counts/diff-counts.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
@@ -47,8 +44,8 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-changes-collapse `null` Collapse all.
  * @fires acp-diff-layout `{ layout }` A layout other than the chosen one was pressed.
  * @fires acp-change-revert `{ id }` A row's Revert was pressed; its view asks first.
- * @fires acp-changes-rollback `null` The menu's Rollback, for the picked files; its view asks first.
- * @fires acp-changes-refresh `null` The menu's Refresh.
+ * @fires acp-changes-rollback `null` From its menu, for the picked files.
+ * @fires acp-changes-refresh `null` From its menu.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
  * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.
@@ -179,12 +176,6 @@ export class AcpChangesReview extends LitElement {
     this.#emit('acp-diff-layout', { layout: value });
   }
 
-  #onMenuSelect = (/** @type {Event} */ e) => {
-    if (e.target !== e.currentTarget) return; // the item's own `select`; the menu dispatches it again
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
-    this.#emit(`acp-changes-${value}`, null);
-  };
-
   /** @param {Event} e A row's Edit. */
   #onEdit(e) {
     e.stopPropagation();
@@ -248,24 +239,6 @@ export class AcpChangesReview extends LitElement {
     </div>`;
   }
 
-  /** @param {number} picked How many listed files are picked: Rollback is theirs. */
-  #renderMenu(picked) {
-    return html`<md-icon-button id="acp-changes-review-more" class="acp-changes-review__tool" aria-label="More actions" aria-haspopup="menu">
-        <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(moreIcon)}</md-icon>
-      </md-icon-button>
-      <md-tooltip for="acp-changes-review-more" show-delay="800">More actions</md-tooltip>
-      <md-menu class="acp-changes-review__menu" for="acp-changes-review-more" placement="bottom-end" aria-label="More actions" @select=${this.#onMenuSelect}>
-        <md-menu-item value="rollback" ?disabled=${picked === 0}>
-          <md-icon slot="leading" class="acp-changes-review__tool-icon">${unsafeSVG(undoIcon)}</md-icon>
-          Rollback
-        </md-menu-item>
-        <md-menu-item value="refresh">
-          <md-icon slot="leading" class="acp-changes-review__tool-icon">${unsafeSVG(refreshIcon)}</md-icon>
-          Refresh
-        </md-menu-item>
-      </md-menu>`;
-  }
-
   #renderToolbar() {
     const total = this.#rows.length;
     const selection = this.selection;
@@ -279,6 +252,16 @@ export class AcpChangesReview extends LitElement {
       if (file.removed !== null) removed = (removed ?? 0) + file.removed;
     }
     return html`<header class="acp-changes-review__toolbar">
+      <md-icon-button
+        id="acp-changes-review-collapse"
+        class="acp-changes-review__tool"
+        aria-label="Collapse all"
+        ?disabled=${this.expanded.size === 0}
+        @click=${() => this.#emit('acp-changes-collapse', null)}
+      >
+        <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
+      </md-icon-button>
+      <md-tooltip for="acp-changes-review-collapse" show-delay="800">Collapse all</md-tooltip>
       ${this.base === null
         ? html`<md-checkbox
               class="acp-changes-review__all"
@@ -287,11 +270,13 @@ export class AcpChangesReview extends LitElement {
               .checked=${total > 0 && picked === total}
               .indeterminate=${picked > 0 && picked < total}
               @change=${this.#onToggleAll}
-            ></md-checkbox>
-            <span class="acp-changes-review__summary">${picked} of ${total} selected</span>`
-        : html`<span class="acp-changes-review__summary"
-            >${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}</span
-          >`}
+            ></md-checkbox>`
+        : nothing}
+      <span class="acp-changes-review__summary"
+        >${this.base === null
+          ? `${picked} of ${total} selected`
+          : `${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}`}</span
+      >
       <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
       <span class="acp-changes-review__spacer"></span>
       <md-segmented-button-group
@@ -303,17 +288,7 @@ export class AcpChangesReview extends LitElement {
         <md-segmented-button class="acp-changes-review__segment" value="unified">Unified</md-segmented-button>
         <md-segmented-button class="acp-changes-review__segment" value="split">Split</md-segmented-button>
       </md-segmented-button-group>
-      <md-icon-button
-        id="acp-changes-review-collapse"
-        class="acp-changes-review__tool"
-        aria-label="Collapse all"
-        ?disabled=${this.expanded.size === 0}
-        @click=${() => this.#emit('acp-changes-collapse', null)}
-      >
-        <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
-      </md-icon-button>
-      <md-tooltip for="acp-changes-review-collapse" show-delay="800">Collapse all</md-tooltip>
-      ${this.base === null ? this.#renderMenu(picked) : nothing}
+      ${this.base === null ? html`<acp-changes-menu .picked=${picked}></acp-changes-menu>` : nothing}
       ${this.base !== null
         ? html`<md-button
               id="acp-changes-review-apply"

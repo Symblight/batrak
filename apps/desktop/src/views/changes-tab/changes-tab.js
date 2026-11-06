@@ -5,7 +5,6 @@ import { $commitSelection, $diffLayout, $gitChanges, $gitRepo, pickForCommit, se
 import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
-import { app } from '../../hooks/app/app.js';
 import { git } from '../../hooks/git/git.js';
 import '../../components/changes-review/changes-review.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
@@ -50,22 +49,10 @@ export class AcpChangesTab extends ViewElement {
     };
   }
 
-  /**
-   * Throwing work away is asked about first. Reverted files are no longer picked for a commit.
-   * @param {readonly GitFileStatus[]} files
-   */
-  async #revert(files) {
-    const [first] = files;
-    if (!first) return;
+  /** @param {readonly GitFileStatus[]} files */
+  #revert(files) {
     const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
-    if (!(await dialog.confirm(git.revertPrompt(files)))) return;
-    try {
-      await git.revertFiles(files);
-      pickForCommit(files.map((file) => file.path), false);
-    } catch (err) {
-      const what = files.length === 1 ? first.path.slice(first.path.lastIndexOf('/') + 1) : `${files.length} files`;
-      app.reportError(`Couldn’t revert ${what}`, err);
-    }
+    return git.revertAsking(files, (options) => dialog.confirm(options));
   }
 
   render() {

@@ -28,6 +28,7 @@ const TABLE = Object.freeze(
     newTerminal: { ctrl: true, key: '`' },
     save: { mod: true, key: 'S' },
     find: { mod: true, key: 'F' },
+    commit: { mod: true, key: '↵' },
     markdownSplit: { mod: true, key: 'K', then: 'V' },
     markdownPreview: { mod: true, shift: true, key: 'V' },
     matchCase: { alt: true, key: 'C' },

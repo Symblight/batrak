@@ -142,6 +142,33 @@ describe('acp-git-changes', () => {
     expect(leaked).to.deep.equal([]);
   });
 
+  it('asks before rolling back the picked files, rolls back only those on yes, and unpicks them', async () => {
+    // Arrange
+    $commitSelection.set(new Set(['a.js']));
+    const { el, panel } = await render();
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (el.querySelector('acp-confirm-dialog'));
+    /** @type {string[]} */
+    const asked = [];
+    let yes = false;
+    dialog.confirm = async (options) => {
+      asked.push(options.headline);
+      return yes;
+    };
+    const rollbacks = () => calls.filter((c) => c.cmd === 'git_revert_files').map((c) => c.args.paths);
+    // Act
+    fire(panel, 'acp-changes-rollback');
+    await until(() => asked.length === 1);
+    await new Promise((r) => setTimeout(r));
+    const afterNo = rollbacks();
+    yes = true;
+    fire(panel, 'acp-changes-rollback');
+    await until(() => $commitSelection.get().size === 0);
+    // Assert
+    expect(afterNo).to.deep.equal([]);
+    expect(asked).to.deep.equal(['Revert a.js?', 'Revert a.js?']);
+    expect(rollbacks()).to.deep.equal([['a.js']]);
+  });
+
   it('commits the picked files and says how it went; Amend starts from the last commit’s message', async () => {
     // Arrange
     const { el, panel } = await render();
@@ -163,7 +190,7 @@ describe('acp-git-changes', () => {
     expect(filled).to.deep.equal(['Last one']);
     expect(calls.find((c) => c.cmd === 'git_commit')?.args).to.deep.equal({ rootId: 'r', paths: ['a.js'], message: 'Fix it', amend: false });
     expect(finished).to.deep.equal([true]);
-    expect($notices.get().map((n) => [n.level, n.message])).to.deep.equal([['info', 'Committed abc1234: Fix it']]);
+    expect($notices.get().map((n) => [n.level, n.message, n.timeout])).to.deep.equal([['info', 'Committed abc1234', 4000]]);
     // Act: a hook refuses
     answer = (cmd) => {
       if (cmd === 'git_commit') throw 'pre-commit failed';
@@ -184,7 +211,7 @@ describe('acp-git-changes', () => {
     await until(() => finished.length === 3 && filled.length === 2);
     // Assert
     expect(filled.at(-1), 'nothing to start from').to.equal(null);
-    expect($notices.get().at(-1)?.message).to.equal('Amended def5678: Reworded');
+    expect($notices.get().at(-1)?.message).to.equal('Amended def5678');
     expect(leaked).to.deep.equal([]);
   });
 });
