@@ -1,7 +1,7 @@
 import { html } from 'lit';
 import { createRef, ref } from 'lit/directives/ref.js';
 import { $comments, $commentFocus } from '../../stores/comments/comments.js';
-import { $commitSelection, $diffLayout, $gitChanges, $gitRepo, pickForCommit, setCommitSelection, setDiffLayout } from '../../stores/git/git.js';
+import { $commitSelection, $diffLayout, $gitChanges, $gitCompare, $gitRepo, $shownChanges, pickForCommit, setCommitSelection, setDiffLayout } from '../../stores/git/git.js';
 import { $shownFolder } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
@@ -19,6 +19,8 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 export class AcpChangesTab extends ViewElement {
   #review = new ChangesReviewController(this);
   #changes = new StoreController(this, { store: $gitChanges });
+  #shown = new StoreController(this, { store: $shownChanges });
+  #compare = new StoreController(this, { store: $gitCompare });
   #repo = new StoreController(this, { store: $gitRepo });
   #selection = new StoreController(this, { store: $commitSelection });
   #comments = new StoreController(this, { store: $comments });
@@ -59,7 +61,9 @@ export class AcpChangesTab extends ViewElement {
     const byId = AcpChangesTab.#byId;
     return html`<acp-changes-review
       ${ref(this.#reviewRef)}
-      .changes=${this.#changes.value}
+      .changes=${this.#shown.value}
+      .compareTo=${this.#compare.value.target}
+      .refreshError=${this.#compare.value.refreshError}
       .repo=${this.#repo.value}
       .selection=${this.#selection.value}
       .expanded=${this.#review.expanded}

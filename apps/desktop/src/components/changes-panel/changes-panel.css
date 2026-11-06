@@ -10,6 +10,19 @@
   color: var(--acp-color-on-surface);
 }
 
+/* While a branch's diff is shown. */
+.acp-changes-panel__compare {
+  flex: none;
+  display: flex;
+  min-width: 0;
+  padding: var(--acp-space-1) var(--acp-space-2);
+  border-bottom: 1px solid var(--acp-color-outline-variant);
+}
+/* Hidden, not removed: the commit box holds the message being typed. */
+.acp-changes-panel__footer[hidden] {
+  display: none;
+}
+
 /* Tools row: all-files checkbox, summary, menu */
 .acp-changes-panel__tools {
   flex: none;

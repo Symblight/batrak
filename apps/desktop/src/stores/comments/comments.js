@@ -1,7 +1,7 @@
 import { atom, computed } from 'nanostores';
 import { $shownFolder } from '../workspaces/workspaces.js';
 import { $activePath, CHANGES_TAB_ID, parseTabId } from '../editor/editor.js';
-import { $gitChanges } from '../git/git.js';
+import { $shownChanges } from '../git/git.js';
 import { addToChat } from '../chat/chat.js';
 
 /** @typedef {import('@symblight/code-editor').CdxCommentAuthor} CdxCommentAuthor */
@@ -47,7 +47,7 @@ export const $queuedComments = computed([$comments, $shownFolder], (comments, fo
  * the Changes tab those of every changed file (each has its editor there). None in other views.
  */
 export const $tabComments = computed(
-  [$queuedComments, $activePath, $gitChanges, $shownFolder],
+  [$queuedComments, $activePath, $shownChanges, $shownFolder],
   (queued, active, changes, folder) => {
     if (active === null || folder === null) return /** @type {QueuedComment[]} */ ([]);
     if (active === CHANGES_TAB_ID) {

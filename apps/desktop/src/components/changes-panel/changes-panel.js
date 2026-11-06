@@ -10,6 +10,7 @@ import '@symblight/wc-material/tooltip';
 import checkCircleIcon from '@material-design-icons/svg/outlined/check_circle.svg?raw';
 import '../changes-menu/changes-menu.js';
 import '../commit-box/commit-box.js';
+import '../compare-chip/compare-chip.js';
 import styles from './changes-panel.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
@@ -18,7 +19,7 @@ import styles from './changes-panel.css?inline';
 
 /**
  * @tag acp-changes-panel
- * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit.
+ * @summary Working-tree changes in checkable groups, with the commit message, Amend and Commit; or, read-only under a chip, a branch's diff.
  * @fires acp-diff-open `{ path }` A changed file's name was clicked: show its diff in the Changes tab.
  * @fires acp-commit-select `{ ids }` The files picked for the commit.
  * @fires acp-changes-rollback `null` From its menu, for the picked files.
@@ -32,6 +33,8 @@ export class AcpChangesPanel extends LitElement {
     repo: { attribute: false },
     selection: { attribute: false },
     root: { attribute: false },
+    compareTo: { attribute: false },
+    refreshError: { attribute: false },
   };
 
   static styles = styles;
@@ -42,6 +45,8 @@ export class AcpChangesPanel extends LitElement {
   #leaves = new Map();
   /** @type {Set<string>} Ids of the groups. */
   #groupIds = new Set();
+  /** @type {Set<string>} Collapsed groups of local changes, kept during a comparison. */
+  #localCollapsed = new Set();
   /** @type {Set<string>} Groups the user collapsed; the others stay expanded across refreshes. */
   #collapsed = new Set();
   /** The tree must get its checks and expansion after the next render. */
@@ -62,10 +67,15 @@ export class AcpChangesPanel extends LitElement {
     this.selection = new Set();
     /** @type {string | null} The project's path. */
     this.root = null;
+    /** @type {string | null} The branch whose diff `changes` is: nothing here acts on the files then. */
+    this.compareTo = null;
+    /** @type {string | null} Why the comparison's last refresh failed. */
+    this.refreshError = null;
   }
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
+    this.#followMode(changed.get('compareTo'), changed.has('compareTo'));
     const old = changed.get('changes');
     if (changed.has('changes') && (this.changes.files !== old?.files || this.changes.loaded !== old?.loaded)) {
       this.#rebuild();
@@ -123,6 +133,20 @@ export class AcpChangesPanel extends LitElement {
     return [...this.#leaves.keys()].filter((id) => selection.has(id));
   }
 
+  /**
+   * Local changes get their collapsed groups back after a comparison, which lacks some of them.
+   * @param {string | null | undefined} old
+   * @param {boolean} changed
+   */
+  #followMode(old, changed) {
+    if (!changed) return;
+    const comparing = this.compareTo !== null;
+    if (comparing === (old !== null && old !== undefined)) return;
+    if (comparing) this.#localCollapsed = this.#collapsed;
+    this.#collapsed = comparing ? new Set() : this.#localCollapsed;
+    this.#syncTree = true;
+  }
+
   /** Rebuilds the list from `changes`, keeping checks and collapsed groups that still exist. */
   #rebuild() {
     this.#nodes = git.groupChanges(this.changes.files);
@@ -146,7 +170,7 @@ export class AcpChangesPanel extends LitElement {
     }
     this.#syncing = true;
     await tree.updateComplete;
-    tree.selectedItems = this.#included;
+    tree.selectedItems = this.compareTo === null ? this.#included : [];
     tree.expandedItems = [...this.#groupIds].filter((id) => !this.#collapsed.has(id));
     await tree.updateComplete;
     this.#syncing = false;
@@ -286,14 +310,15 @@ export class AcpChangesPanel extends LitElement {
     if (this.#leaves.size === 0) {
       return html`<div class="acp-changes-panel__state">
         <md-icon class="acp-changes-panel__state-icon">${unsafeSVG(checkCircleIcon)}</md-icon>
-        <b class="acp-changes-panel__state-title">No changes</b>
-        <span>The working tree matches HEAD.</span>
+        <b class="acp-changes-panel__state-title">${this.compareTo === null ? 'No changes' : `No differences from ${this.compareTo}`}</b>
+        ${this.compareTo === null ? html`<span>The working tree matches HEAD.</span>` : nothing}
       </div>`;
     }
     return html`<tvx-tree-view
       class="acp-changes-panel__tree"
       compact
-      checkbox-selection
+      ?checkbox-selection=${this.compareTo === null}
+      ?disable-selection=${this.compareTo !== null}
       expansion-trigger="icon"
       aria-label="Changed files"
       .items=${this.#nodes}
@@ -309,24 +334,33 @@ export class AcpChangesPanel extends LitElement {
     const total = this.#leaves.size;
     const included = this.#included.length;
     const operation = git.operationLine(this.repo.repo);
-    const summary = total === 0 ? 'No changed files' : `${total} ${total === 1 ? 'file' : 'files'} · ${included} selected`;
+    const comparing = this.compareTo !== null;
+    const files = `${total} ${total === 1 ? 'file' : 'files'}`;
+    const summary = total === 0 ? 'No changed files' : comparing ? files : `${files} · ${included} selected`;
     return html`
+      ${comparing
+        ? html`<div class="acp-changes-panel__compare">
+            <acp-compare-chip .target=${this.compareTo} .refreshError=${this.refreshError}></acp-compare-chip>
+          </div>`
+        : nothing}
       <div class="acp-changes-panel__tools">
-        <md-checkbox
-          class="acp-changes-panel__all"
-          aria-label="Select all changed files"
-          ?disabled=${total === 0}
-          .checked=${total > 0 && included === total}
-          .indeterminate=${included > 0 && included < total}
-          @change=${this.#onToggleAll}
-        ></md-checkbox>
+        ${comparing
+          ? nothing
+          : html`<md-checkbox
+              class="acp-changes-panel__all"
+              aria-label="Select all changed files"
+              ?disabled=${total === 0}
+              .checked=${total > 0 && included === total}
+              .indeterminate=${included > 0 && included < total}
+              @change=${this.#onToggleAll}
+            ></md-checkbox>`}
         <span class="acp-changes-panel__summary">${summary}</span>
         <span class="acp-changes-panel__spacer"></span>
-        <acp-changes-menu class="acp-changes-panel__menu" .picked=${included}></acp-changes-menu>
+        <acp-changes-menu class="acp-changes-panel__menu" .picked=${included} ?read-only=${comparing}></acp-changes-menu>
       </div>
       ${operation ? html`<div class="acp-changes-panel__operation" role="status">${operation}</div>` : nothing}
       ${this.#renderBody()}
-      <footer class="acp-changes-panel__footer">
+      <footer class="acp-changes-panel__footer" ?hidden=${comparing}>
         <acp-commit-box .included=${included} @acp-commit-submit=${this.#onSubmit}></acp-commit-box>
       </footer>
     `;

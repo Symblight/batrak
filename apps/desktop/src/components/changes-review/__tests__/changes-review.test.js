@@ -246,4 +246,34 @@ describe('acp-changes-review', () => {
       expect(segments()[1].textContent?.trim()).to.equal('Split');
     });
   });
+
+  describe('comparing to a branch', () => {
+    it('reads only: the chip and the file count, no picks, Revert, Rollback, Apply or Check out; the rest stays', async () => {
+      // Arrange
+      const { root, rows } = await render({ compareTo: 'main', selection: new Set(['src/z.js']), expanded: new Set(['src/z.js']), diffs: new Map([['src/z.js', DIFF]]) });
+      await Promise.all(rows().map((row) => row.updateComplete));
+      const inRow = (/** @type {string} */ selector) => rows().flatMap((row) => [.../** @type {ShadowRoot} */ (row.shadowRoot).querySelectorAll(selector)]);
+      // Assert
+      expect(/** @type {HTMLElementTagNameMap['acp-compare-chip']} */ (root.querySelector('acp-compare-chip')).target).to.equal('main');
+      expect(root.querySelector('.acp-changes-review__summary')?.textContent?.trim()).to.equal('3 files');
+      expect(root.querySelector('.acp-changes-review__all')).to.equal(null);
+      expect(/** @type {HTMLElementTagNameMap['acp-changes-menu']} */ (root.querySelector('acp-changes-menu')).readOnly).to.equal(true);
+      expect(root.querySelector('#acp-changes-review-apply')).to.equal(null);
+      expect(root.querySelector('#acp-changes-review-check-out')).to.equal(null);
+      expect(inRow('md-checkbox')).to.deep.equal([]);
+      expect(inRow('[aria-label^="Revert"]')).to.deep.equal([]);
+      expect(inRow('[aria-label^="Open"]').length, 'Edit stays').to.equal(3);
+      expect(root.querySelector('cdx-code-editor')?.hasAttribute('read-only')).to.equal(true);
+      expect(root.querySelector('md-segmented-button-group'), 'Unified / Split stays').to.not.equal(null);
+    });
+
+    it('says when nothing differs, and passes on why a refresh failed', async () => {
+      // Arrange
+      const { root } = await render({ compareTo: 'main', refreshError: 'slow', changes: { ...CHANGES, files: [] } });
+      // Assert
+      expect(root.textContent).to.contain('No differences from main');
+      expect(root.textContent).to.not.contain('matches HEAD');
+      expect(/** @type {HTMLElementTagNameMap['acp-compare-chip']} */ (root.querySelector('acp-compare-chip')).refreshError).to.equal('slow');
+    });
+  });
 });

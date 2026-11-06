@@ -3,10 +3,10 @@ import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $commentFocus, $comments, $tabComments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
-import { $commitSelection, $diffLayout, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
+import { $commitSelection, $diffLayout, $gitChanges, $gitCompare, $gitRepo, NO_COMPARE } from '../../../stores/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
-import { setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
+import { $rootId, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import { AcpChangesReview } from '../../../components/changes-review/changes-review.js';
 import '../changes-tab.js';
 
@@ -41,7 +41,7 @@ describe('acp-changes-tab', () => {
       calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
       if (cmd === 'git_status') return { version: 1, unchanged: true, status: null };
       if (cmd === 'read_file') return fileBytes('new text');
-      if (cmd === 'git_file_at_head') return 'old text';
+      if (cmd === 'git_file_at_head' || cmd === 'git_file_at_rev') return 'old text';
       return null;
     });
     $project.set({ path: '/p', name: 'p', rootId: 'r1' });
@@ -53,6 +53,7 @@ describe('acp-changes-tab', () => {
   });
 
   afterEach(() => {
+    $gitCompare.set(NO_COMPARE);
     setActiveWorkspace('/p', 'main');
     setWorkspaces([], null);
     $openRoots.set({});
@@ -176,6 +177,141 @@ describe('acp-changes-tab', () => {
     // Assert
     expect(statuses()[1].args.force).to.equal(true);
     expect(leaked).to.equal(false);
+  });
+
+  describe('comparing to a branch', () => {
+    const compareTo = (/** @type {string} */ target, /** @type {string | null} */ base, /** @type {GitFileStatus[]} */ files) =>
+      $gitCompare.set({ target, base, changes: { files, loaded: base !== null, loading: false, error: null }, refreshError: null });
+    const until = async (/** @type {() => boolean} */ pred) => {
+      const started = Date.now();
+      while (!pred()) {
+        expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
+        await new Promise((r) => setTimeout(r, 5));
+      }
+    };
+
+    it('shows the branch’s files with diffs against the merge base, and lists comments on them', async () => {
+      // Arrange
+      const branchFile = /** @type {GitFileStatus} */ ({ ...FILES[0], path: 'branch.js' });
+      const thread = /** @type {never} */ ({ id: 't1', line: 1, comments: [{ id: 'c1', body: 'Why?' }] });
+      $comments.set({ '/p/branch.js': [thread], '/p/a.js': [thread] });
+      compareTo('main', 'b1', [branchFile]);
+      openChanges();
+      const { el, review } = await render();
+      const listed = $tabComments.get().map((c) => c.path);
+      $comments.set({});
+      // Act
+      fire(review, 'acp-change-toggle', { id: 'branch.js' });
+      await until(() => review.diffs.get('branch.js')?.loading === false);
+      await el.updateComplete;
+      // Assert
+      expect(review.compareTo).to.equal('main');
+      expect(review.changes.files).to.deep.equal([branchFile]);
+      expect(calls.find((c) => c.cmd === 'git_file_at_rev')?.args).to.deep.equal({ rootId: 'r1', rev: 'b1', path: 'branch.js' });
+      expect(calls.some((c) => c.cmd === 'git_file_at_head')).to.equal(false);
+      expect(listed).to.deep.equal(['/p/branch.js']);
+    });
+
+    it('never shows a diff against another baseline, and going back brings the expanded local files back', async () => {
+      // Arrange
+      const branchFile = /** @type {GitFileStatus} */ ({ ...FILES[0], path: 'branch.js' });
+      openChanges();
+      const { el, review } = await render();
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      await until(() => review.diffs.get('a.js')?.loading === false);
+      // Act
+      compareTo('main', null, []);
+      await el.updateComplete;
+      const whileLoading = { diffs: review.diffs.size, expanded: [...review.expanded] };
+      compareTo('main', 'b1', [FILES[0], branchFile]);
+      await el.updateComplete;
+      fire(review, 'acp-change-toggle', { id: 'branch.js' });
+      await until(() => review.diffs.get('branch.js')?.loading === false);
+      const asked = calls.filter((c) => c.cmd === 'git_file_at_rev').length;
+      compareTo('main', 'b2', [branchFile]);
+      await until(() => calls.filter((c) => c.cmd === 'git_file_at_rev').length > asked);
+      const movedBase = calls.filter((c) => c.cmd === 'git_file_at_rev').at(-1)?.args.rev;
+      $gitCompare.set(NO_COMPARE);
+      await el.updateComplete;
+      await until(() => review.diffs.get('a.js')?.loading === false);
+      // Assert
+      expect(whileLoading.diffs, 'the local diff doesn’t stay under the branch').to.equal(0);
+      expect(whileLoading.expanded).to.deep.equal([]);
+      expect(movedBase).to.equal('b2');
+      expect([...review.expanded]).to.deep.equal(['a.js']);
+      expect(review.changes.files).to.equal(FILES);
+    });
+
+    it('drops a read still running when the comparison starts: its file no longer shows', async () => {
+      // Arrange
+      /** @type {((text: string) => void)[]} */
+      const held = [];
+      mockIPC((cmd) => {
+        if (cmd === 'git_status') return { version: 1, unchanged: true, status: null };
+        if (cmd === 'read_file') return fileBytes('new text');
+        if (cmd === 'git_file_at_head') return new Promise((resolve) => held.push(resolve));
+        return null;
+      });
+      openChanges();
+      const { el, review } = await render();
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      await until(() => held.length === 1);
+      // Act
+      compareTo('main', 'b1', [FILES[0]]);
+      await el.updateComplete;
+      held[0]('old text');
+      await new Promise((r) => setTimeout(r, 20));
+      await el.updateComplete;
+      // Assert
+      expect(review.diffs.size).to.equal(0);
+    });
+
+    it('closing the tab forgets the local files expanded before the comparison', async () => {
+      // Arrange
+      openChanges();
+      const { el, review } = await render();
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      compareTo('main', 'b1', [FILES[0]]);
+      await el.updateComplete;
+      // Act
+      closeAllTabs();
+      await el.updateComplete;
+      $gitCompare.set(NO_COMPARE);
+      openChanges();
+      await el.updateComplete;
+      // Assert
+      expect([...review.expanded]).to.deep.equal([]);
+    });
+
+    it('another project with the tab open and back gives local changes their expanded files back, and none reach that project', async () => {
+      // Arrange: tabs are per project; and as the git hook does, the comparison changes first when the project does
+      $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+      openChanges();
+      $project.set({ path: '/p', name: 'p', rootId: 'r1' });
+      const stopFollowing = $rootId.listen((rootId) => $gitCompare.set(rootId === 'r1' ? { target: 'main', base: 'b1', changes: { files: [FILES[0]], loaded: true, loading: false, error: null }, refreshError: null } : NO_COMPARE));
+      openChanges();
+      const { el, review } = await render();
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      compareTo('main', 'b1', [FILES[0]]);
+      await el.updateComplete;
+      const whileComparing = [...review.expanded];
+      // Act
+      $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+      await el.updateComplete;
+      const inOther = [...review.expanded];
+      $project.set({ path: '/p', name: 'p', rootId: 'r1' });
+      await el.updateComplete;
+      $gitCompare.set(NO_COMPARE);
+      await el.updateComplete;
+      stopFollowing();
+      const back = [...review.expanded];
+      $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+      closeAllTabs();
+      // Assert
+      expect(whileComparing).to.deep.equal([]);
+      expect(inOther).to.deep.equal([]);
+      expect(back).to.deep.equal(['a.js']);
+    });
   });
 
   it('in a worktree session, gives the review the worktree as its root and lists the comments on its files', async () => {

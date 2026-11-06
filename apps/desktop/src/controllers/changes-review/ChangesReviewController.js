@@ -2,7 +2,7 @@ import { projects } from '../../hooks/projects/projects.js';
 import { StoreController } from '../store/StoreController.js';
 import { git } from '../../hooks/git/git.js';
 import { CHANGES_TAB_ID, $editorTabs } from '../../stores/editor/editor.js';
-import { $gitChanges, $gitHead } from '../../stores/git/git.js';
+import { $gitCompare, $gitHead, $shownChanges } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspaces/workspaces.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -31,9 +31,10 @@ function sameStatus(a, b) {
 }
 
 /**
- * The Changes tab's data while the tab is open: which changed files are expanded (per open root) and
- * their diffs against HEAD, read again only when a file changed (on disk, in the status, or HEAD
- * moved). Keeps `$gitChanges` current while the tab is active. Everything is dropped when it closes.
+ * The Changes tab's data while the tab is open: which listed files are expanded (per open root) and
+ * their diffs, against HEAD or, while comparing to a branch, the comparison's base; read again only
+ * when a file changed (on disk, in the status, or HEAD moved). Keeps the changes current while the
+ * tab is active. Everything is dropped when it closes.
  * @implements {ReactiveController}
  */
 export class ChangesReviewController {
@@ -55,6 +56,12 @@ export class ChangesReviewController {
   #loads = new Map();
   /** Sequence number handed to each diff/file read. */
   #loadCount = 0;
+  /** @type {string | null} The branch the expanded files and diffs are of; `null` for local changes. */
+  #target = null;
+  /** @type {string | null} The base the diffs are against while comparing. */
+  #base = null;
+  /** @type {Map<string | null, ReadonlySet<string>>} Local changes' expanded files during a comparison, by root id. */
+  #localExpanded = new Map();
   /** The Changes tab is open. */
   #open = false;
   /** The host is connected. */
@@ -70,7 +77,7 @@ export class ChangesReviewController {
   constructor(host) {
     this.#host = host;
     this.#changes = new StoreController(host, {
-      store: $gitChanges,
+      store: $shownChanges,
       onChange: (changes, old) => {
         if (this.#open) this.#onChanges(changes, old);
       },
@@ -154,6 +161,9 @@ export class ChangesReviewController {
     this.#files = new Map();
     this.#staleDiffs.clear();
     this.#expandedByRoot.clear();
+    this.#target = null;
+    this.#base = null;
+    this.#localExpanded.clear();
     this.#loads.clear();
     this.#shownRoot = null;
     this.#host.requestUpdate();
@@ -166,6 +176,8 @@ export class ChangesReviewController {
    * @param {GitChangesView | undefined} old
    */
   #onChanges({ files, loaded, loading }, old) {
+    // First: a list arriving with the comparison mustn't be read against the last baseline.
+    this.#followCompare();
     if (files !== old?.files) {
       const previous = this.#files;
       this.#files = new Map(files.map((file) => [file.path, file]));
@@ -181,6 +193,30 @@ export class ChangesReviewController {
   }
 
   /**
+   * Another comparison, or none: diffs are cached by path, so an old baseline would stay on screen.
+   * Going back gives local changes their expanded files back. A change of project isn't one of
+   * these: `#switchRoot` has taken that project's comparison by the time its change is heard.
+   */
+  #followCompare() {
+    const { target, base } = $gitCompare.get();
+    if (target === this.#target && base === this.#base) return;
+    const rootId = this.#rootId.value;
+    if (this.#target === null) {
+      this.#localExpanded.set(rootId, this.#expanded);
+      this.#expanded = new Set();
+    } else if (target === null) {
+      this.#expanded = this.#localExpanded.get(rootId) ?? new Set();
+      this.#localExpanded.delete(rootId);
+    }
+    this.#target = target;
+    this.#base = base;
+    this.#diffs = new Map();
+    this.#loads.clear(); // reads still in flight are against the last baseline
+    this.#staleDiffs.clear();
+    this.#host.requestUpdate();
+  }
+
+  /**
    * Another project: its own expanded files come back, but no diff is carried over — paths repeat
    * across projects, and the files may have changed while it was inactive.
    * @param {string | null} rootId
@@ -189,6 +225,8 @@ export class ChangesReviewController {
     const previous = this.#shownRoot;
     if (previous === rootId) return;
     this.#shownRoot = rootId;
+    // The git hook writes the project's comparison on this same change, and its listener ran first.
+    ({ target: this.#target, base: this.#base } = $gitCompare.get());
     if (previous !== null && projects.isOpen(previous)) this.#expandedByRoot.set(previous, this.#expanded);
     for (const id of this.#expandedByRoot.keys()) {
       if (!projects.isOpen(id)) this.#expandedByRoot.delete(id);
@@ -246,8 +284,8 @@ export class ChangesReviewController {
   }
 
   /**
-   * Reads a file and its HEAD version for its diff: a deleted file is nothing against HEAD, a new
-   * one is the file against nothing.
+   * Reads a file and its baseline for its diff: a deleted file is nothing against the baseline, a
+   * new one is the file against nothing.
    * @param {string} id
    */
   async #loadDiff(id) {
@@ -258,7 +296,8 @@ export class ChangesReviewController {
     const rootId = projects.rootId();
     const path = projects.absPath(id);
     const file = this.#files.get(id);
-    const base = rootId ? git.fileAtHead(rootId, file?.origPath ?? id) : Promise.resolve(null);
+    const rel = file?.origPath ?? id;
+    const base = !rootId ? Promise.resolve(null) : this.#base ? git.fileAtRev(rootId, this.#base, rel) : git.fileAtHead(rootId, rel);
     const diff = await git.readDiff(projects.readFile(path), base, file?.kind === 'deleted');
     if (this.#loads.get(id) !== load) return;
     this.#setDiff(id, diff);
