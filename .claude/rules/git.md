@@ -11,6 +11,11 @@ paths:
 
 # Git: commit, worktrees, frontend, cache
 
+- Revert (`bt_core::git::revert`, `git_revert_file`): one file of the project's Changes tab back to
+  HEAD, index and working tree, a rename's two sides together; what HEAD doesn't have is deleted.
+  Conflicted files are refused. Its view asks first. The work goes into a new
+  `refs/batrak/reverted/<nanos>` first (a tree, so no one's history shows it; no undo yet:
+  `git show <ref>:<path>`). Worktree sessions' tabs have no Revert.
 - Commit (`git/commit.rs`, `git_commit`): the files picked in Changes go in as they are in the
   working tree (`commit --only`, untracked ones staged first and unstaged again if it fails, both
   sides of a rename); whatever else is staged stays staged and out. Amend with no files rewords

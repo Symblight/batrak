@@ -10,6 +10,7 @@ pub mod line_counts;
 pub mod lock;
 pub mod remote;
 pub mod repo;
+pub mod revert;
 pub mod status;
 pub mod temp_file;
 pub mod worktree;
