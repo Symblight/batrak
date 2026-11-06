@@ -193,6 +193,22 @@ describe('acp-changes-panel', () => {
       expect([...tree(root).expandedItems], 'Untracked files stays collapsed').to.deep.equal(['group:changes']);
     });
 
+    it('keeps the picks when the tree is synced twice in a row while comparing', async () => {
+      // Arrange
+      const { el, root } = await render({ changes: CHANGES, selection: new Set(['src/a.js']), compareTo: 'main' });
+      await tree(root).updateComplete;
+      await new Promise((r) => setTimeout(r));
+      const picks = listen(el, 'acp-commit-select');
+      // Act
+      el.selection = new Set(['src/a.js', 'b.md']);
+      await el.updateComplete;
+      el.selection = new Set(['src/a.js']);
+      await el.updateComplete;
+      await new Promise((r) => setTimeout(r, 5));
+      // Assert
+      expect(picks).to.deep.equal([]);
+    });
+
     it('says when nothing differs, and passes on why a refresh failed', async () => {
       // Arrange
       const { root } = await render({ changes: { ...CHANGES, files: [] }, compareTo: 'origin/main', refreshError: 'slow' });
