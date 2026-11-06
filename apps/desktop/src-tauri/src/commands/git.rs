@@ -3,7 +3,7 @@
 use tauri::State;
 
 use crate::git::cache::StatusReply;
-use crate::git::{binary, blob, branches, commit, repo};
+use crate::git::{binary, blob, branches, commit, repo, revert};
 use crate::roots::Roots;
 use crate::util::checked_rel;
 
@@ -91,3 +91,19 @@ pub async fn git_commit(
     Ok(done)
 }
 
+/// Makes one changed file match HEAD: `orig_path` is a rename's other side. Its work stays in a ref.
+#[tauri::command]
+pub async fn git_revert_file(roots: State<'_, Roots>, root_id: String, path: String, orig_path: Option<String>) -> Result<(), String> {
+    let root = roots.get(&root_id)?;
+    checked_rel(&path)?;
+    if let Some(orig) = &orig_path {
+        checked_rel(orig)?;
+    }
+    let saved = blocking(move || {
+        let paths: Vec<&str> = [Some(path.as_str()), orig_path.as_deref()].into_iter().flatten().collect();
+        revert::revert_file(binary::git()?, &root.path, &paths)
+    })
+    .await??;
+    tracing::info!(saved = %saved, "reverted a file");
+    Ok(())
+}
