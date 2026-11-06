@@ -131,7 +131,7 @@ describe('acp-commit-box', () => {
     expect(commits).to.deep.equal([{ message: 'fix', amend: false }]);
   });
 
-  it('keeps the field at two lines at least, grows it with its lines up to six, and shrinks it again', async () => {
+  it('keeps the field at four lines at least, grows it with its lines up to six, and shrinks it again', async () => {
     // Arrange
     const view = await render();
     await view.field().updateComplete;
@@ -144,15 +144,15 @@ describe('acp-commit-box', () => {
     };
     // Act
     const one = await heightWith(1);
-    const two = await heightWith(2);
-    const three = await heightWith(3);
+    const four = await heightWith(4);
+    const five = await heightWith(5);
     const six = await heightWith(6);
     const twenty = await heightWith(20);
     const oneAgain = await heightWith(1);
     // Assert
-    expect(two).to.equal(one);
-    expect(three).to.be.greaterThan(two);
-    expect(six).to.be.greaterThan(three);
+    expect(four).to.equal(one);
+    expect(five).to.be.greaterThan(four);
+    expect(six).to.be.greaterThan(five);
     expect(twenty).to.equal(six);
     expect(oneAgain).to.equal(one);
   });
