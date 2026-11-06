@@ -14,7 +14,7 @@ import styles from './commit-box.css?inline';
 /** Past this, a summary line reads badly in `git log`. */
 const SUMMARY_MAX = 72;
 /** How many lines the message field shows at least, and at most before it scrolls. */
-const MESSAGE_MIN_ROWS = 2;
+const MESSAGE_MIN_ROWS = 4;
 const MESSAGE_MAX_ROWS = 6;
 
 /**
