@@ -4,6 +4,7 @@ import { persistentStore } from '../persistent/persistent.js';
 /** @typedef {import('../../hooks/git/types.js').GitRepoView} GitRepoView */
 /** @typedef {import('../../hooks/git/types.js').GitChangesView} GitChangesView */
 /** @typedef {import('../../hooks/git/types.js').DiffLayout} DiffLayout */
+/** @typedef {import('../../hooks/git/types.js').GitCompareView} GitCompareView */
 
 /** @type {GitRepoView} */
 export const NO_REPO = { repo: null, error: null };
@@ -16,6 +17,15 @@ export const $gitRepo = atom(NO_REPO);
 
 /** Changed files of the active root, while the Changes panel is open; written by the `git` hook. */
 export const $gitChanges = atom(NO_CHANGES);
+
+/** @type {GitCompareView} */
+export const NO_COMPARE = { target: null, base: null, changes: NO_CHANGES, refreshError: null };
+
+/** The branch the active root is compared to, and its files; written by the `git` hook. Apart from `$gitChanges`, which goes on meaning local changes: Rollback, the picks and the composer's hint act on those. */
+export const $gitCompare = atom(NO_COMPARE);
+
+/** What the Changes pane and tab list: the comparison's files while there is one, else local changes. */
+export const $shownChanges = computed([$gitCompare, $gitChanges], (compare, changes) => (compare.target === null ? changes : compare.changes));
 
 /** How many files `$gitChanges` lists; 0 until they load and when the scan failed. */
 export const $uncommittedCount = computed($gitChanges, (changes) => (changes.loaded && !changes.error ? changes.files.length : 0));

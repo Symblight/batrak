@@ -1,9 +1,9 @@
-import { $commitSelection, $gitChanges, $gitRepo, NO_CHANGES, NO_REPO, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
+import { $commitSelection, $gitChanges, $gitCompare, $gitRepo, NO_CHANGES, NO_COMPARE, NO_REPO, pickForCommit, setCommitSelection } from '../../stores/git/git.js';
 import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { app } from '../app/app.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
-import { operationLine, remoteLine } from './branch.js';
+import { compareBranches, operationLine, remoteLine } from './branch.js';
 import { changeRows, groupChanges, readDiff, renameLabel, revertPrompt, statusOf, uncommittedHint } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
@@ -21,6 +21,7 @@ import { SerialTask } from './serial-task.js';
  * @property {GitChangesView} changes
  * @property {number | null} version
  * @property {ReadonlySet<string>} selection Files picked for its next commit.
+ * @property {import('./types.js').GitCompareView} compare
  */
 
 /** File changes come in bursts (a build, a checkout): wait for a pause before asking git. */
@@ -42,8 +43,24 @@ let followedRoot = null;
 const saved = new Map();
 /** @type {(() => void) | null} Stops the following that `start()` began. */
 let following = null;
+/** Bumped when another comparison is shown, so an answer still running then doesn't write its result. */
+let compareGeneration = 0;
+/** @type {Promise<void>} The read a pick started: refreshes wait for it rather than stop it. */
+let pickRead = Promise.resolve();
 const headTask = new SerialTask(readHead, REFRESH_MAX_WAIT_MS);
 const changesTask = new SerialTask(readChanges, REFRESH_MAX_WAIT_MS);
+// One at a time: if each stopped the last, a scan longer than the wait would never finish while
+// an agent keeps writing. Only a pick or going back stops a running one (`git.compareTo`).
+const compareTask = new SerialTask(readCompare, REFRESH_MAX_WAIT_MS);
+
+/**
+ * Reads the changed files after `delay`, and the comparison if there is one.
+ * @param {number} delay
+ */
+function scheduleChanges(delay) {
+  changesTask.schedule(delay);
+  if ($gitCompare.get().target !== null) compareTask.schedule(delay);
+}
 
 /**
  * Keeps the outgoing root's state while its root stays open, and shows the incoming one's, if
@@ -59,6 +76,7 @@ function switchRoot(rootId) {
       changes: { ...$gitChanges.get(), loading: false },
       version,
       selection: $commitSelection.get(),
+      compare: $gitCompare.get(),
     });
   }
   for (const id of saved.keys()) {
@@ -72,8 +90,12 @@ function switchRoot(rootId) {
   setCommitSelection(kept?.selection ?? []);
   version = kept?.version ?? null;
   $gitChanges.set({ ...(kept?.changes ?? NO_CHANGES), loading: watchers > 0 });
+  compareGeneration++;
+  compareTask.cancel();
+  pickRead = Promise.resolve();
+  $gitCompare.set(kept?.compare ?? NO_COMPARE);
   headTask.schedule(0);
-  if (watchers) changesTask.schedule(0);
+  if (watchers) scheduleChanges(0);
 }
 
 /**
@@ -135,6 +157,51 @@ async function readChanges() {
 }
 
 /**
+ * Asks for the comparison and shows the answer, unless another comparison is shown by now. Never fails.
+ * @param {string} rootId
+ * @param {string} target
+ */
+async function askCompare(rootId, target) {
+  const generation = compareGeneration;
+  try {
+    /** @type {import('./types.js').GitComparison} */
+    const { base, files } = await ipc.invoke('git_compare', { rootId, target });
+    if (generation !== compareGeneration) return;
+    const shown = $gitCompare.get().changes.files;
+    // Same files: keep the array, so views don't rebuild or re-read their diffs.
+    const same = JSON.stringify(shown) === JSON.stringify(files);
+    $gitCompare.set({ target, base, changes: { files: same ? shown : files, loaded: true, loading: false, error: null }, refreshError: null });
+  } catch (err) {
+    if (generation !== compareGeneration) return;
+    const view = $gitCompare.get();
+    const { changes } = view;
+    if (String(err).startsWith('cancelled')) {
+      $gitCompare.set({ ...view, changes: { ...changes, loading: false } });
+      // Nothing to show yet: a stop for the last comparison may have reached this one.
+      if (!changes.loaded) compareTask.schedule(0);
+    } else if (changes.loaded && changes.error === null) {
+      // A refresh: the last good list stays.
+      $gitCompare.set({ ...view, changes: { ...changes, loading: false }, refreshError: String(err) });
+    } else {
+      $gitCompare.set({ ...view, changes: { files: [], loaded: true, loading: false, error: String(err) } });
+    }
+  }
+}
+
+async function readCompare() {
+  // Until no newer pick came meanwhile: asking now would stop that pick's scan.
+  for (let waited; waited !== pickRead; ) {
+    waited = pickRead;
+    await waited;
+  }
+  const rootId = $rootId.get();
+  const view = $gitCompare.get();
+  if (rootId === null || view.target === null) return;
+  $gitCompare.set({ ...view, changes: { ...view.changes, loading: true } });
+  await askCompare(rootId, view.target);
+}
+
+/**
  * Git state of the active root. The branch (`$gitRepo`) is cheap and kept current while a project
  * is open: on root change, repository changes and window focus (a root inside a larger repository
  * or a worktree has its `.git` outside the watched folder). Changed files (`$gitChanges`) are kept
@@ -152,6 +219,7 @@ export const git = Object.freeze({
   renameLabel,
   remoteLine,
   operationLine,
+  compareBranches,
 
   /**
    * Starts following the active root; once however often it is called.
@@ -161,13 +229,13 @@ export const git = Object.freeze({
     if (following) return following;
     const onFocus = () => {
       headTask.schedule(0);
-      if (watchers) changesTask.schedule(0);
+      if (watchers) scheduleChanges(0);
     };
     const stops = [
       $rootId.subscribe(switchRoot),
       projects.onFsChange(({ git: moved }) => {
         if (moved) headTask.schedule(REFRESH_DELAY_MS);
-        if (watchers) changesTask.schedule(REFRESH_DELAY_MS);
+        if (watchers) scheduleChanges(REFRESH_DELAY_MS);
       }),
     ];
     window.addEventListener('focus', onFocus);
@@ -176,6 +244,7 @@ export const git = Object.freeze({
       window.removeEventListener('focus', onFocus);
       headTask.cancel();
       changesTask.cancel();
+      compareTask.cancel();
       following = null;
     };
     return following;
@@ -187,13 +256,14 @@ export const git = Object.freeze({
    * @returns {() => void} Stops watching; the files stay in `$gitChanges`. Calling it again does nothing.
    */
   watchChanges() {
-    if (watchers++ === 0) changesTask.schedule(0);
+    if (watchers++ === 0) scheduleChanges(0);
     let watching = true;
     return () => {
       if (!watching) return;
       watching = false;
       if (--watchers > 0) return;
       changesTask.cancel();
+      compareTask.cancel();
       changesGeneration++;
       const changes = $gitChanges.get();
       if (changes.loading) $gitChanges.set({ ...changes, loading: false });
@@ -204,7 +274,37 @@ export const git = Object.freeze({
   refreshChanges() {
     if (!watchers) return;
     force = true;
-    changesTask.schedule(0);
+    scheduleChanges(0);
+  },
+
+  /**
+   * Shows what the active root has against a branch in the Changes views, or local changes again.
+   * Asks at once: a scan still running stops, for this root.
+   * @param {string | null} target A full short name (`main`, `origin/main`); `null` goes back.
+   */
+  compareTo(target) {
+    const rootId = $rootId.get();
+    compareGeneration++;
+    compareTask.cancel();
+    pickRead = Promise.resolve();
+    if (target === null || rootId === null) {
+      $gitCompare.set(NO_COMPARE);
+      if (rootId !== null) ipc.invoke('git_compare_stop', { rootId }).catch(() => {}); // only saves work
+      return;
+    }
+    $gitCompare.set({ ...NO_COMPARE, target, changes: { ...NO_CHANGES, loading: true } });
+    pickRead = askCompare(rootId, target);
+  },
+
+  /**
+   * A file's text at a comparison's base, the diff's baseline.
+   * @param {string} rootId
+   * @param {string} rev A full commit id.
+   * @param {string} path Relative.
+   * @returns {Promise<string | null>} `null` when it wasn't there. Fails, saying why, when it has no text to diff.
+   */
+  fileAtRev(rootId, rev, path) {
+    return ipc.invoke('git_file_at_rev', { rootId, rev, path });
   },
 
   /**

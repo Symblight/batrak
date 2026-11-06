@@ -30,4 +30,17 @@ describe('git branch', () => {
       expect(git.remoteLine(repo(fields)), JSON.stringify(fields)).to.equal(line);
     }
   });
+
+  it('leaves the current branch out of what can be compared to, also as git lists one a tag shadows', () => {
+    // Arrange
+    const list = { local: ['main', 'dev'], remotes: [{ remote: 'origin', branches: ['origin/main'] }], default: 'origin/main' };
+    // Act
+    const left = git.compareBranches(list, repo({ branch: 'main' }));
+    const shadowed = git.compareBranches({ ...list, local: ['heads/main', 'dev'] }, repo({ branch: 'main' }));
+    const detached = git.compareBranches(list, repo({ branch: null, detached: true }));
+    // Assert
+    expect(left).to.deep.equal({ ...list, local: ['dev'] });
+    expect(shadowed.local).to.deep.equal(['dev']);
+    expect(detached).to.deep.equal(list);
+  });
 });
