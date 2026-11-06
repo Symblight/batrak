@@ -178,7 +178,8 @@ export class AcpChangesPanel extends LitElement {
 
   /** @param {Event} e */
   #onSelectionChange(e) {
-    if (this.#syncing) return;
+    // While comparing the tree is cleared, and says so: that must not reach the picks of local changes.
+    if (this.#syncing || this.compareTo !== null) return;
     const { selectedItems } = /** @type {CustomEvent<{ selectedItems: Set<PropertyKey> }>} */ (e).detail;
     this.#select([...this.#leaves.keys()].filter((id) => selectedItems.has(id)));
   }

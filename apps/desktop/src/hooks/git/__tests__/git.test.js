@@ -512,6 +512,23 @@ describe('git', () => {
       expect($gitCompare.get().changes.files).to.deep.equal([BRANCH_FILE]);
     });
 
+    it('a stopped first read goes on showing the spinner until it is asked again, never an empty list', async () => {
+      // Arrange
+      let asked = 0;
+      answers.git_compare = () => (++asked === 1 ? Promise.reject('cancelled') : comparison());
+      const git = await started();
+      await open();
+      /** @type {{ loaded: boolean, loading: boolean }[]} */
+      const states = [];
+      const stop = $gitCompare.listen(({ changes }) => states.push({ loaded: changes.loaded, loading: changes.loading }));
+      // Act
+      git.compareTo('main');
+      await until(() => $gitCompare.get().changes.loaded);
+      stop();
+      // Assert
+      expect(states.filter(({ loaded, loading }) => !loaded && !loading)).to.deep.equal([]);
+    });
+
     it('another project isn’t compared, and one still open gets its comparison back; a late answer stays out', async () => {
       // Arrange
       /** @type {((reply: unknown) => void)[]} */

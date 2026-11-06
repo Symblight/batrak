@@ -176,8 +176,9 @@ async function askCompare(rootId, target) {
     const view = $gitCompare.get();
     const { changes } = view;
     if (String(err).startsWith('cancelled')) {
-      $gitCompare.set({ ...view, changes: { ...changes, loading: false } });
-      // Nothing to show yet: a stop for the last comparison may have reached this one.
+      // Nothing to show yet: a stop for the last comparison may have reached this one. Still loading,
+      // or the views would say nothing differs.
+      $gitCompare.set({ ...view, changes: { ...changes, loading: !changes.loaded } });
       if (!changes.loaded) compareTask.schedule(0);
     } else if (changes.loaded && changes.error === null) {
       // A refresh: the last good list stays.
