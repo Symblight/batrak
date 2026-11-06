@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { $gitCompare, $gitRepo, NO_COMPARE, NO_REPO } from '../../../stores/git/git.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
 import { $project } from '../../../stores/project/project.js';
@@ -29,6 +30,7 @@ describe('acp-toolbar-view', () => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
       if (cmd === 'open_root') return { rootId: `root:${a.path}`, path: a.path };
+      if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [], default: null };
       return cmd.startsWith('list_') ? [] : null;
     });
     $projects.set([
@@ -39,6 +41,8 @@ describe('acp-toolbar-view', () => {
   });
 
   afterEach(() => {
+    $gitCompare.set(NO_COMPARE);
+    $gitRepo.set(NO_REPO);
     $projects.set([]);
     $project.set(null);
     $hiddenColumns.set([]);
@@ -91,5 +95,53 @@ describe('acp-toolbar-view', () => {
     // Assert
     expect(toolbar.hiddenColumns, 'the toolbar sees it hidden').to.deep.equal(['side']);
     expect(calls.find((c) => c.cmd === 'open_url')?.args).to.deep.equal({ url: 'https://example.test/pr/1' });
+  });
+
+  it('gives the card the comparison, and loads the branches without the current one when its menu opens; no fetch', async () => {
+    // Arrange
+    $gitRepo.set({ repo: /** @type {import('../../../hooks/git/types.js').GitRepoState} */ ({ branch: 'main', sha: 'a1', detached: false, upstream: null, ahead: 0, behind: 0 }), error: null });
+    $gitCompare.set({ ...NO_COMPARE, target: 'dev' });
+    const view = /** @type {AcpToolbarView} */ (await fixture(html`<acp-toolbar-view></acp-toolbar-view>`));
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (view.querySelector('acp-toolbar'));
+    await toolbar.updateComplete;
+    const card = /** @type {HTMLElementTagNameMap['acp-branch-popover']} */ (/** @type {ShadowRoot} */ (toolbar.shadowRoot).querySelector('acp-branch-popover'));
+    // Act
+    await card.loadBranches?.();
+    await view.updateComplete;
+    await toolbar.updateComplete;
+    // Assert
+    expect(card.compareTo).to.equal('dev');
+    expect(card.branches.local).to.deep.equal(['dev']);
+    expect(calls.find((c) => c.cmd === 'git_branches')?.args).to.deep.equal({ rootId: 'r' });
+    expect(calls.some((c) => c.cmd === 'git_fetch')).to.equal(false);
+  });
+
+  it('never shows another project’s branches: a late answer is dropped, and a failed load shows none', async () => {
+    // Arrange
+    /** @type {{ resolve: (list: unknown) => void, reject: (err: unknown) => void }[]} */
+    const asked = [];
+    mockIPC((cmd) => {
+      if (cmd === 'git_branches') return new Promise((resolve, reject) => asked.push({ resolve, reject }));
+      return cmd.startsWith('list_') ? [] : null;
+    });
+    const view = /** @type {AcpToolbarView} */ (await fixture(html`<acp-toolbar-view></acp-toolbar-view>`));
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (view.querySelector('acp-toolbar'));
+    const loadBranches = /** @type {() => Promise<void>} */ (toolbar.loadBranches);
+    const list = (/** @type {string} */ name) => ({ local: [name], remotes: [], default: null });
+    const first = loadBranches();
+    asked[0].resolve(list('of-p'));
+    await first;
+    // Act: a late answer for this project, once another is shown
+    const late = loadBranches();
+    $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+    asked[1].resolve(list('late-of-p'));
+    await late;
+    const afterLate = view.branches.local;
+    const failed = loadBranches();
+    asked[2].reject(new Error('git failed'));
+    await failed;
+    // Assert
+    expect(afterLate).to.deep.equal(['of-p']);
+    expect(view.branches.local).to.deep.equal([]);
   });
 });

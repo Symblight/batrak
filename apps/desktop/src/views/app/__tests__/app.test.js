@@ -3,6 +3,7 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
+import { $gitCompare, NO_COMPARE } from '../../../stores/git/git.js';
 import { $openRoots, $project } from '../../../stores/project/project.js';
 import { $activeRoot, $activeWorkspaceId, $workspaces, setActiveWorkspace } from '../../../stores/workspaces/workspaces.js';
 import { tabs } from '../../../hooks/tabs/tabs.js';
@@ -120,6 +121,7 @@ describe('acp-app: search dialog', () => {
   afterEach(() => {
     for (const el of document.querySelectorAll('acp-app')) searchDialog(/** @type {AcpApp} */ (el))?.close();
     $projectSearch.setKey('/p', undefined);
+    $gitCompare.set(NO_COMPARE);
     $project.set(null);
     clearMocks();
   });
@@ -215,6 +217,25 @@ describe('acp-app: the shown workspace', () => {
     $projectSearch.setKey('/p', undefined);
     $project.set(null);
     clearMocks();
+  });
+
+  it('picking a branch to compare to shows its diff in the Changes column, also when hidden; going back leaves the columns', async () => {
+    // Arrange
+    $hiddenColumns.set(['side']);
+    const app = /** @type {AcpApp} */ (await fixture(html`<acp-app></acp-app>`));
+    const toolbar = /** @type {HTMLElement} */ (app.querySelector('acp-toolbar-view'));
+    const pick = (/** @type {string | null} */ branch) => toolbar.dispatchEvent(new CustomEvent('acp-compare-pick', { detail: { branch }, bubbles: true, composed: true }));
+    // Act
+    pick('main');
+    await app.updateComplete;
+    const compared = { target: $gitCompare.get().target, side: app.sideView, hidden: $hiddenColumns.get().includes('side') };
+    $hiddenColumns.set(['side']);
+    pick(null);
+    await app.updateComplete;
+    // Assert
+    expect(compared).to.deep.equal({ target: 'main', side: 'changes', hidden: false });
+    expect($gitCompare.get().target).to.equal(null);
+    expect($hiddenColumns.get(), 'going back doesn’t show the column').to.deep.equal(['side']);
   });
 
   it("queries its root in Quick Open and Find in Files, opens matches in its folder, and shows its branch", async () => {

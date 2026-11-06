@@ -336,6 +336,13 @@ export class AcpApp extends ViewElement {
     this.#files.showChanges();
   }
 
+  /** @param {Event} e From the branch card, or a chip's × (`branch: null`), which stays in the Changes column. */
+  #onComparePick(e) {
+    const { branch } = /** @type {CustomEvent<{ branch: string | null }>} */ (e).detail;
+    git.compareTo(branch);
+    if (branch !== null) this.#showChanges();
+  }
+
   #showSettings() {
     this.#main.openSettings();
   }
@@ -504,7 +511,7 @@ export class AcpApp extends ViewElement {
     // Expanded, the editor takes the agent column's room; with no tab open the agent column is shown anyway.
     const expanded = hasCode && hidden.includes('agent');
     const panelShown = this.#terminalPanel.value.open && this.#terminalTabs.value.paths.length > 0;
-    return html`<acp-panel variant="window" @acp-workspace-delete-request=${this.#onWorkspaceDeleteRequest}>
+    return html`<acp-panel variant="window" @acp-workspace-delete-request=${this.#onWorkspaceDeleteRequest} @acp-compare-pick=${this.#onComparePick}>
       <acp-toolbar-view slot="header"></acp-toolbar-view>
       <!-- With no tabs, the main column is hidden and the agent column takes the space. The terminal panel sits under both, only while the shown project's is open. -->
       <acp-column-split

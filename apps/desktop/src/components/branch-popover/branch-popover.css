@@ -106,6 +106,9 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.acp-branch-popover__compare {
+  max-width: 100%;
+}
 .acp-branch-popover__value_mono {
   display: block;
   line-height: 32px;

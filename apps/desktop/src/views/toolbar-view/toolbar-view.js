@@ -1,12 +1,13 @@
 import { html } from 'lit';
 import { app } from '../../hooks/app/app.js';
+import { git } from '../../hooks/git/git.js';
 import { github } from '../../hooks/github/github.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $activePath } from '../../stores/editor/editor.js';
-import { $gitRepo } from '../../stores/git/git.js';
+import { $gitCompare, $gitRepo } from '../../stores/git/git.js';
 import { $githubAccount, $pullRequestHere } from '../../stores/github/github.js';
 import { $shownHiddenColumns, toggleColumn } from '../../stores/layout/layout.js';
 import { $project } from '../../stores/project/project.js';
@@ -14,7 +15,7 @@ import { $projects, toggleProject } from '../../stores/projects/projects.js';
 import { $unreadSessions } from '../../stores/session-read/session-read.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
 import { $pickerWorkspaces, $workspaceNumbers, $workspaceStatuses, $workspacesEnabled } from '../../stores/workspace-status/workspace-status.js';
-import { $activeWorkspaceId, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspaceId, $rootId, MAIN } from '../../stores/workspaces/workspaces.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/toolbar/toolbar.js';
@@ -27,12 +28,14 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 export class AcpToolbarView extends ViewElement {
   static properties = {
     home: { state: true },
+    branches: { state: true },
   };
 
   #project = new StoreController(this, { store: $project });
   #projects = new StoreController(this, { store: $projects });
   #unread = new StoreController(this, { store: $unreadSessions });
   #gitRepo = new StoreController(this, { store: $gitRepo });
+  #gitCompare = new StoreController(this, { store: $gitCompare });
   #githubAccount = new StoreController(this, { store: $githubAccount });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #hiddenColumns = new StoreController(this, { store: $shownHiddenColumns });
@@ -47,7 +50,23 @@ export class AcpToolbarView extends ViewElement {
     super();
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
+    /** @type {import('../../hooks/git/types.js').BranchList} What the branch card can compare to, as of its menu's last opening. */
+    this.branches = { local: [], remotes: [], default: null };
   }
+
+  /** As of the last fetch: fetching is the terminal's, and would keep the menu waiting. */
+  #loadBranches = async () => {
+    const rootId = $rootId.get();
+    if (rootId === null) return;
+    /** @type {import('../../hooks/git/types.js').BranchList} */
+    let list = { local: [], remotes: [], default: null };
+    try {
+      list = git.compareBranches(await git.branches(rootId), $gitRepo.get().repo);
+    } catch (err) {
+      app.reportError('Listing the branches failed', err);
+    }
+    if ($rootId.get() === rootId) this.branches = list;
+  };
 
   connectedCallback() {
     super.connectedCallback();
@@ -142,6 +161,9 @@ export class AcpToolbarView extends ViewElement {
         .unread=${projects.unreadByProject($sessions.get(), this.#unread.value)}
         .home=${this.home}
         .git=${this.#gitRepo.value}
+        .compareTo=${this.#gitCompare.value.target}
+        .branches=${this.branches}
+        .loadBranches=${this.#loadBranches}
         .githubSlot=${github.slot(this.#gitRepo.value.repo, this.#githubAccount.value, reply)}
         .githubReply=${reply}
         .hiddenColumns=${this.#hiddenColumns.value}

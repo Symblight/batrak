@@ -74,10 +74,11 @@ describe('acp-branch-popover', () => {
       Branch: 'spec/git-remote-sync',
       Remote: '2 commits to push to origin',
       'Pull request': 'PR #9 · Open',
+      'Compare to': '',
       Checks: '1 check failing: backend',
     });
     const { root: withoutPr } = await shown(REPO);
-    expect(rows(withoutPr), 'no pull request: no rows for it').to.deep.equal({ Branch: 'spec/git-remote-sync', Remote: 'In sync with origin' });
+    expect(rows(withoutPr), 'no pull request: no rows for it').to.deep.equal({ Branch: 'spec/git-remote-sync', Remote: 'In sync with origin', 'Compare to': '' });
   });
 
   it('copies the branch name and opens the pull request', async () => {
@@ -94,5 +95,77 @@ describe('acp-branch-popover', () => {
       { type: 'acp-github-open', detail: { url: PR.url } },
     ]);
     expect([tooltipOf(copy), tooltipOf(openPr)]).to.deep.equal(['Copy branch name', 'Open on GitHub']);
+  });
+
+  describe('Compare to', () => {
+    const BRANCHES = { local: ['dev'], remotes: [], default: null };
+
+    /** @param {Partial<HTMLElementTagNameMap['acp-branch-popover']>} [props] */
+    async function comparing(props = {}) {
+      const { el, root } = await shown(REPO);
+      const card = /** @type {import('../branch-popover.js').AcpBranchPopover} */ (/** @type {unknown} */ (el));
+      Object.assign(card, { branches: BRANCHES, ...props });
+      await card.updateComplete;
+      const picker = /** @type {HTMLElementTagNameMap['acp-branch-picker']} */ (root.querySelector('acp-branch-picker'));
+      const popover = /** @type {HTMLElement} */ (root.querySelector('.acp-branch-popover__popover'));
+      return { card, root, picker, popover };
+    }
+
+    it('lists the branches, says Local changes while nothing is compared, and the branch once one is', async () => {
+      // Arrange
+      /** @type {() => Promise<void>} */
+      const loadBranches = async () => {};
+      const { card, root, picker } = await comparing({ loadBranches });
+      const before = rows(root)['Compare to'];
+      // Act
+      card.compareTo = 'origin/main';
+      await card.updateComplete;
+      await picker.updateComplete;
+      // Assert
+      expect(before).to.not.equal(undefined);
+      expect(picker.offLabel).to.equal('Local changes');
+      expect(picker.list).to.equal(BRANCHES);
+      expect(picker.load).to.equal(loadBranches);
+      expect(picker.value).to.equal('origin/main');
+    });
+
+    it('a pick asks for that comparison and closes the card; Local changes asks for none', async () => {
+      // Arrange
+      const { card, picker, popover } = await comparing();
+      /** @type {unknown[]} */
+      const asked = [];
+      card.addEventListener('acp-compare-pick', (e) => asked.push(/** @type {CustomEvent} */ (e).detail));
+      /** @type {unknown[]} */
+      const leaked = [];
+      card.addEventListener('acp-branch-pick', (e) => leaked.push(e));
+      popover.showPopover();
+      // Act
+      picker.dispatchEvent(new CustomEvent('acp-branch-pick', { detail: { branch: 'dev' }, bubbles: true, composed: true }));
+      const open = popover.matches(':popover-open');
+      picker.dispatchEvent(new CustomEvent('acp-branch-pick', { detail: { branch: null }, bubbles: true, composed: true }));
+      // Assert
+      expect(asked).to.deep.equal([{ branch: 'dev' }, { branch: null }]);
+      expect(open).to.equal(false);
+      expect(leaked).to.deep.equal([]);
+    });
+
+    it('closing the card closes the menu, which Esc would leave marked open', async () => {
+      // Arrange
+      const { picker, popover } = await comparing();
+      popover.showPopover();
+      const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (/** @type {ShadowRoot} */ (picker.shadowRoot).querySelector('md-menu'));
+      await menu.show();
+      // Act
+      popover.hidePopover();
+      // Assert
+      expect(menu.open).to.equal(false);
+    });
+
+    it('isn’t offered before the first commit', async () => {
+      // Arrange + Act
+      const { root } = await shown({ ...REPO, sha: null });
+      // Assert
+      expect(root.querySelector('acp-branch-picker')).to.equal(null);
+    });
   });
 });
