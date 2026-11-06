@@ -1,16 +1,46 @@
-//! Reading git's output pipes.
+//! Git's pipes, each served on its own thread: nothing here waits past the deadline on a child left
+//! holding one.
 
-use std::io::{self, Read};
+use std::io::{self, Read, Write};
 use std::sync::{mpsc, Arc, Mutex, PoisonError};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
-/// After git is gone, how long its pipes may stay open: all it wrote is in them by then, and only a
-/// child left behind (a hook's, a filter's) keeps them open longer.
-const PIPE_GRACE: Duration = Duration::from_secs(2);
+/// After git is gone, how long all its pipes together may stay open: all it wrote is in them by then,
+/// and only a child left behind (a hook's, a filter's) keeps them open longer.
+pub(super) const PIPE_GRACE: Duration = Duration::from_secs(2);
+
+/// Until `ended` disconnects (at once if it has) or the deadline passes.
+fn wait_for_end(ended: &mpsc::Receiver<()>, deadline: Instant) {
+    let _ = ended.recv_timeout(deadline.saturating_duration_since(Instant::now()));
+}
+
+/// Input written to git's stdin on its own thread, then closed.
+pub(super) struct Feed {
+    /// Disconnects when the writing is over.
+    ended: mpsc::Receiver<()>,
+}
+
+impl Feed {
+    pub(super) fn start(mut stdin: impl Write + Send + 'static, input: Vec<u8>) -> Feed {
+        let (end, ended) = mpsc::channel::<()>();
+        thread::spawn(move || {
+            let _end = end;
+            // A broken pipe means git stopped reading; its exit status tells why.
+            drop(stdin.write_all(&input));
+        });
+        Feed { ended }
+    }
+
+    /// Call once git is gone. A writer still blocked by the deadline is left to end on its own, when
+    /// whoever holds the pipe dies.
+    pub(super) fn finish(self, deadline: Instant) {
+        wait_for_end(&self.ended, deadline);
+    }
+}
 
 /// A pipe read on its own thread, so the writer never blocks on a full one: up to a cap, then
-/// drained. Finishing never waits on a child left holding the pipe; what arrived by then counts.
+/// drained. What arrived by the deadline of `finish` counts.
 pub(super) struct Capture {
     /// The bytes, and whether there were more than the cap.
     read: Arc<Mutex<(Vec<u8>, bool)>>,
@@ -43,8 +73,8 @@ impl Capture {
     }
 
     /// The bytes read and whether there were more; call once git is gone.
-    pub(super) fn finish(self) -> (Vec<u8>, bool) {
-        let _ = self.ended.recv_timeout(PIPE_GRACE);
+    pub(super) fn finish(self, deadline: Instant) -> (Vec<u8>, bool) {
+        wait_for_end(&self.ended, deadline);
         std::mem::take(&mut *self.read.lock().unwrap_or_else(PoisonError::into_inner))
     }
 }

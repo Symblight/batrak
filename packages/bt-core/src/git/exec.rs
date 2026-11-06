@@ -3,15 +3,13 @@
 
 use std::ffi::OsStr;
 use std::fmt;
-use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::process::{Command, ExitStatus, Stdio};
 use std::sync::atomic::AtomicBool;
-use std::thread;
 use std::time::{Duration, Instant};
 
 use self::permit::Permit;
-use self::pipes::Capture;
+use self::pipes::{Capture, Feed, PIPE_GRACE};
 use self::stop::wait_with_timeout;
 
 mod permit;
@@ -195,12 +193,7 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     // Held until the process is reaped and its pipes drained; the timeout starts once it runs.
     let _permit = mode.short().then(Permit::acquire);
     let mut child = command.spawn().map_err(|e| format!("failed to run git: {e}"))?;
-    let writer = opts.input.map(|input| {
-        let mut stdin = child.stdin.take().expect("stdin is piped");
-        let input = input.to_vec();
-        // A broken pipe means git stopped reading; its exit status tells why.
-        thread::spawn(move || drop(stdin.write_all(&input)))
-    });
+    let feed = opts.input.map(|input| Feed::start(child.stdin.take().expect("stdin is piped"), input.to_vec()));
     let max_output = opts.max_output.unwrap_or(MAX_OUTPUT);
     let stdout = child.stdout.take().expect("stdout is piped");
     let stderr = child.stderr.take().expect("stderr is piped");
@@ -215,11 +208,13 @@ fn spawn_and_wait(git: &Path, cwd: &Path, args: &[&OsStr], mode: Mode, opts: &Op
     #[cfg(test)]
     let timeout = TEST_TIMEOUT.get().unwrap_or(timeout);
     let status = wait_with_timeout(&mut child, timeout, opts.cancel);
-    if let Some(writer) = writer {
-        let _ = writer.join();
+    // One grace from here for all that's still open, so a left-behind child can't make it add up.
+    let deadline = Instant::now() + PIPE_GRACE;
+    if let Some(feed) = feed {
+        feed.finish(deadline);
     }
-    let (stdout, truncated) = stdout.finish();
-    let (stderr, _) = stderr.finish();
+    let (stdout, truncated) = stdout.finish(deadline);
+    let (stderr, _) = stderr.finish(deadline);
     let stderr = String::from_utf8_lossy(&stderr).trim().to_owned();
     let status = status.map_err(|e| stopped_message(e, &stderr))?;
     if truncated {
