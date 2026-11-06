@@ -68,8 +68,7 @@ describe('acp-change-row', () => {
     const edits = listen(el, 'acp-change-edit');
     const toggles = listen(el, 'acp-change-toggle');
     const actions = [...root.querySelectorAll('.acp-change-row__action')];
-    expect(actions.map(tooltipOf)).to.deep.equal(['Edit', 'Not available yet']);
-    expect(/** @type {HTMLElementTagNameMap['md-icon-button']} */ (actions[1]).disabled, 'Revert does not exist yet').to.equal(true);
+    expect(actions.map(tooltipOf)).to.deep.equal(['Edit', 'Revert']);
     /** @type {HTMLElement} */ (actions[0]).click();
     expect(edits).to.deep.equal([{ id: 'src/b.js' }]);
     expect(toggles, 'Edit does not toggle the row').to.deep.equal([]);
@@ -77,6 +76,26 @@ describe('acp-change-row', () => {
     el.expanded = true;
     await el.updateComplete;
     expect(el.hasAttribute('expanded'), 'the attribute the header styling keys on').to.equal(true);
+  });
+
+  it('asks to revert without toggling, except a conflicted file, which it says to resolve, and a read-only row, which has no Revert', async () => {
+    // Arrange
+    const revertOf = (/** @type {ShadowRoot} */ root) => /** @type {HTMLElementTagNameMap['md-icon-button'] | null} */ (root.querySelector('[aria-label^="Revert"]'));
+    const { el, root } = await render();
+    const reverts = listen(el, 'acp-change-revert');
+    const toggles = listen(el, 'acp-change-toggle');
+    // Act
+    revertOf(root)?.click();
+    // Assert
+    expect(reverts).to.deep.equal([{ id: 'src/b.js' }]);
+    expect(toggles).to.deep.equal([]);
+
+    const conflicted = await render({ row: rowOf({ kind: 'conflicted' }) });
+    expect(revertOf(conflicted.root)?.disabled).to.equal(true);
+    expect(tooltipOf(revertOf(conflicted.root))).to.equal('Resolve the conflict first');
+
+    const readOnly = await render({ selectable: false });
+    expect(revertOf(readOnly.root)).to.equal(null);
   });
 
   it('toggles on a click, Enter or Space, expands on ArrowRight and collapses on ArrowLeft only while expanded', async () => {

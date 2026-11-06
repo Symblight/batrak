@@ -5,7 +5,10 @@ import { $commitSelection, $diffLayout, $gitChanges, $gitRepo, pickForCommit, se
 import { $project } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChangesReviewController } from '../../controllers/changes-review/ChangesReviewController.js';
+import { app } from '../../hooks/app/app.js';
+import { git } from '../../hooks/git/git.js';
 import '../../components/changes-review/changes-review.js';
+import '../../components/confirm-dialog/confirm-dialog.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
@@ -45,6 +48,18 @@ export class AcpChangesTab extends ViewElement {
     };
   }
 
+  /**
+   * Throwing work away is asked about first.
+   * @param {string} id
+   */
+  async #revert(id) {
+    const file = this.#changes.value.files.find((f) => f.path === id);
+    if (!file) return;
+    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+    if (!(await dialog.confirm(git.revertPrompt(file)))) return;
+    await git.revertFile(file).catch((err) => app.reportError(`Couldn’t revert ${id.slice(id.lastIndexOf('/') + 1)}`, err));
+  }
+
   render() {
     const byId = AcpChangesTab.#byId;
     return html`<acp-changes-review
@@ -60,6 +75,7 @@ export class AcpChangesTab extends ViewElement {
       .diffLayout=${this.#diffLayout.value}
       @acp-change-toggle=${byId((id) => this.#review.toggle(id))}
       @acp-change-expand=${byId((id) => this.#review.expand(id))}
+      @acp-change-revert=${byId((id) => this.#revert(id))}
       @acp-changes-collapse=${(/** @type {Event} */ e) => {
         e.stopPropagation();
         this.#review.collapseAll();
@@ -77,7 +93,8 @@ export class AcpChangesTab extends ViewElement {
         e.stopPropagation();
         setCommitSelection(/** @type {CustomEvent<{ ids: string[] }>} */ (e).detail.ids);
       }}
-    ></acp-changes-review>`;
+    ></acp-changes-review>
+      <acp-confirm-dialog></acp-confirm-dialog>`;
   }
 }
 

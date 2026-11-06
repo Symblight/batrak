@@ -3,7 +3,7 @@ import { $rootId } from '../../stores/workspaces/workspaces.js';
 import { ipc } from '../ipc/ipc.js';
 import { projects } from '../projects/projects.js';
 import { operationLine, remoteLine } from './branch.js';
-import { changeRows, groupChanges, readDiff, relativePath, statusOf, typeBadge, uncommittedHint } from './changes.js';
+import { changeRows, groupChanges, readDiff, relativePath, revertPrompt, statusOf, typeBadge, uncommittedHint } from './changes.js';
 import { SerialTask } from './serial-task.js';
 
 /** @typedef {import('./types.js').RootChanges} RootChanges */
@@ -144,6 +144,7 @@ async function readChanges() {
 export const git = Object.freeze({
   groupChanges,
   readDiff,
+  revertPrompt,
   uncommittedHint,
   statusOf,
   changeRows,
@@ -222,6 +223,21 @@ export const git = Object.freeze({
     } finally {
       // A failing hook may have changed files too.
       headTask.schedule(0);
+      git.refreshChanges();
+    }
+  },
+
+  /**
+   * Makes a changed file match HEAD; both sides of a rename. Its work stays in a ref.
+   * @param {import('./types.js').GitFileStatus} file
+   * @returns {Promise<void>}
+   */
+  async revertFile(file) {
+    const rootId = $rootId.get();
+    if (rootId === null) throw new Error('No project is open');
+    try {
+      await ipc.invoke('git_revert_file', { rootId, path: file.path, origPath: file.origPath ?? null });
+    } finally {
       git.refreshChanges();
     }
   },

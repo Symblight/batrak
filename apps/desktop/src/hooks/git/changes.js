@@ -46,6 +46,21 @@ export function statusOf(kind) {
 }
 
 /**
+ * What to ask before reverting a file: a file HEAD doesn't have is deleted.
+ * @param {GitFileStatus} file
+ * @returns {import('../app/types.js').ConfirmOptions}
+ */
+export function revertPrompt(file) {
+  const name = file.path.slice(file.path.lastIndexOf('/') + 1);
+  const detail = 'A copy stays in git under refs/batrak/reverted.';
+  if (file.kind === 'added' || file.kind === 'untracked') {
+    return { headline: `Delete new file ${name}?`, message: 'It isn’t in HEAD, so reverting deletes it.', detail, confirmLabel: 'Delete', destructive: true };
+  }
+  const message = file.origPath ? `It goes back to ${file.origPath}, as in HEAD.` : 'Its changes are thrown away and it goes back to HEAD.';
+  return { headline: `Revert ${name}?`, message, detail, confirmLabel: 'Revert', destructive: true };
+}
+
+/**
  * The uncommitted files hint: what its button says, and the prompt it puts in the composer.
  * @param {number} count
  * @returns {{ label: string, value: string }}

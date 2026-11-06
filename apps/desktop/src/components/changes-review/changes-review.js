@@ -41,6 +41,7 @@ const COLLAPSE_UNCHANGED = { margin: 3, minSize: 4 };
  * @fires acp-change-expand `{ id }`
  * @fires acp-changes-collapse `null` Collapse all.
  * @fires acp-diff-layout `{ layout }` A layout other than the chosen one was pressed.
+ * @fires acp-change-revert `{ id }` A row's Revert was pressed; its view asks first.
  * @fires acp-commit-pick `{ ids, picked }`
  * @fires acp-commit-select `{ ids }` Select all, or none.
  * @fires acp-changes-apply `null` With `base`: Apply locally was pressed.

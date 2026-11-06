@@ -234,6 +234,27 @@ describe('git', () => {
     stopWatching();
   });
 
+  it('reverts a file in the active project, both sides of a rename, then reads the files again, also when git refuses', async () => {
+    // Arrange
+    const git = await started();
+    const rootId = await open();
+    const stopWatching = git.watchChanges();
+    await until(() => $gitChanges.get().loaded);
+    answers.git_revert_file = () => null;
+    // Act
+    await git.revertFile({ ...FILE, path: 'new.txt', origPath: 'old.txt' });
+    await until(() => sent('git_status').length === 2);
+    answers.git_revert_file = () => {
+      throw new Error('conflict');
+    };
+    const failure = await git.revertFile(FILE).catch((err) => err);
+    await until(() => sent('git_status').length === 3);
+    // Assert
+    expect(sent('git_revert_file')[0]).to.deep.equal({ rootId, path: 'new.txt', origPath: 'old.txt' });
+    expect(String(failure)).to.include('conflict');
+    stopWatching();
+  });
+
   it('refuses to commit with no project open', async () => {
     // Arrange
     const git = await started();

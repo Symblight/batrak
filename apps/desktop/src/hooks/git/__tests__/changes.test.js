@@ -96,6 +96,26 @@ describe('git changes', () => {
     for (const [name, badge] of cases) expect(git.typeBadge(name), name).to.equal(badge);
   });
 
+  it('asks about a revert in the terms of what it does to the file', () => {
+    // Arrange
+    /** @type {[import('../types.js').GitFileStatus, string, string, RegExp][]} */
+    const cases = [
+      [file('src/a.js'), 'Revert a.js?', 'Revert', /back to HEAD/],
+      [file('src/a.js', { kind: 'deleted' }), 'Revert a.js?', 'Revert', /back to HEAD/],
+      [file('src/a.js', { kind: 'added' }), 'Delete new file a.js?', 'Delete', /isn’t in HEAD/],
+      [file('src/a.js', { kind: 'untracked' }), 'Delete new file a.js?', 'Delete', /isn’t in HEAD/],
+      [file('src/a.js', { kind: 'renamed', origPath: 'old/a.js' }), 'Revert a.js?', 'Revert', /old\/a\.js/],
+    ];
+    for (const [changed, headline, confirmLabel, message] of cases) {
+      // Act
+      const prompt = git.revertPrompt(changed);
+      // Assert
+      expect([prompt.headline, prompt.confirmLabel, prompt.destructive], changed.kind).to.deep.equal([headline, confirmLabel, true]);
+      expect(prompt.message, changed.kind).to.match(message);
+      expect(prompt.detail, changed.kind).to.include('refs/batrak/reverted');
+    }
+  });
+
   it('writes a renamed file’s old path relative to its folder', () => {
     /** @type {[string, string, string][]} */
     const cases = [
