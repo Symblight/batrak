@@ -47,12 +47,16 @@ pub(super) fn check_out(w: &WorkspaceRecord, cancel: &AtomicBool) -> Result<(), 
             undo_checkout(git, w, existing)?;
             return Err("cancelled".to_owned());
         }
-        checked_out?;
-        // An unmarked branch is the safe side: it's kept on delete.
-        if let Err(e) = mark_own(git, w) {
-            tracing::warn!(branch = %w.branch, "couldn't mark the workspace's branch: {e}");
+        // `-b` refuses a name that exists, so a failed checkout that leaves the branch at the base made it.
+        if !existing && tip(git, w).as_deref() == Some(w.base_commit.as_str()) {
+            mark_own(git, w);
         }
+        checked_out?;
         tracing::info!(path = %w.worktree_path.display(), branch = %w.branch, "worktree checked out");
+    }
+    // On the branch in the workspace's own folder proves it's its own; this also retries a failed mark.
+    if on_branch(git, &w.worktree_path, &w.branch) && !is_own(git, w) {
+        mark_own(git, w);
     }
     folder_on_branch(&w.folder, &w.branch)
 }
@@ -122,10 +126,15 @@ fn is_own(git: &Path, w: &WorkspaceRecord) -> bool {
     owner.is_ok_and(|o| String::from_utf8_lossy(&o).trim() == w.id)
 }
 
-fn mark_own(git: &Path, w: &WorkspaceRecord) -> Result<(), String> {
-    lock::with_mutation(git, &w.project_path, || {
+/// Marks the record's branch as its own. A failure is only logged: `check_out` tries again, and until
+/// then the branch is kept on delete.
+fn mark_own(git: &Path, w: &WorkspaceRecord) {
+    let marked = lock::with_mutation(git, &w.project_path, || {
         exec::run(git, &w.project_path, &exec::args(&[&"config", &owner_key(&w.branch), &w.id]), GitMode::Local).map(|_| ())
-    })
+    });
+    if let Err(e) = marked {
+        tracing::warn!(branch = %w.branch, "couldn't mark the workspace's branch: {e}");
+    }
 }
 
 /// Removes a checkout just made or stopped midway (git removed its files then) and, unless the
@@ -488,6 +497,45 @@ mod tests {
 
         assert!(repo.git(&["branch", "--list", "batrak/old"]).is_empty(), "deleted");
         let _ = std::fs::remove_dir_all(home); // `remove` takes the empty group folder
+    }
+
+    /// A worktree checked out with no marker (a crash before it, a failed write) gets one on the next
+    /// check-out: being on the branch in the workspace's own folder proves the branch is its own.
+    #[test]
+    fn a_checked_out_worktree_with_no_marker_gets_one_and_comes_back_with_its_commits() {
+        let repo = TestRepo::with_commit("late-marker");
+        let home = temp_dir("late-marker-home");
+        let w = workspace(&repo, &home.join("s"), "late");
+        worktree::add(binary::git().unwrap(), &repo.path, &w.worktree_path, "late", &w.base_commit, &AtomicBool::new(false)).unwrap();
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        crate::git::test_repo::run_in(&w.worktree_path, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "work"]);
+        std::fs::remove_dir_all(&w.worktree_path).unwrap();
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        assert!(w.worktree_path.join(".git").exists());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    /// A check-out that fails after git made the branch: deleting the workspace takes the branch too.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_first_checkouts_branch_goes_with_the_workspace() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = TestRepo::with_commit("failed-first");
+        let hook = repo.path.join(".git/hooks/post-checkout");
+        std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+        std::fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let home = temp_dir("failed-first-home");
+        let w = workspace(&repo, &home.join("s"), "failed");
+
+        assert!(check_out(&w, &AtomicBool::new(false)).is_err());
+        assert!(!repo.git(&["branch", "--list", "failed"]).is_empty(), "git made the branch");
+
+        remove(&w, "m", false).unwrap();
+        assert!(repo.git(&["branch", "--list", "failed"]).is_empty(), "deleted");
+        let _ = std::fs::remove_dir_all(home);
     }
 
     /// What a failed `worktree add -b` leaves behind must not block the next try.
