@@ -4,6 +4,7 @@
 
 pub mod installer;
 pub mod pending;
+pub mod process_lock;
 #[cfg(test)]
 mod tests;
 
@@ -21,11 +22,13 @@ use tracing::{debug, info};
 
 use installer::{Found, InstallError, Installer, PluginInstaller};
 use pending::{Files, Launch, Pending};
+use process_lock::Standing;
 
 const CHANGED: &str = "app-update://changed";
 const FIRST_CHECK: Duration = Duration::from_secs(30);
 const CHECK_EVERY: Duration = Duration::from_secs(6 * 60 * 60);
 const MEGABYTE: u64 = 1024 * 1024;
+const LOCK_WAIT: Duration = Duration::from_secs(1);
 
 /// Debug builds have no update row and never touch what waits on disk: they share the data folder with
 /// an installed app, and aren't what its update replaces.
@@ -165,6 +168,8 @@ pub trait Host: Send + Sync {
     /// Brings back the window a failed install left hidden: by a launch, or on Windows by the hook
     /// that runs before the installer starts.
     fn show_window(&self);
+    /// Hides the window for an install on next launch that had to wait for the lock.
+    fn hide_window(&self);
 }
 
 struct AppHost<R: Runtime>(AppHandle<R>);
@@ -187,11 +192,21 @@ impl<R: Runtime> Host for AppHost<R> {
             let _ = window.show();
         }
     }
+
+    fn hide_window(&self) {
+        for window in self.0.webview_windows().values() {
+            let _ = window.hide();
+        }
+    }
 }
 
 pub struct Options {
     /// `app-update/` under `Dirs.data`.
     pub dir: PathBuf,
+    /// `app-update.lock` under `Dirs.data`.
+    pub lock: PathBuf,
+    /// How long a launch that finds the lock held keeps trying.
+    pub lock_wait: Duration,
     pub running: Version,
     pub manual: bool,
     pub updates_enabled: bool,
@@ -221,6 +236,7 @@ struct Core {
     /// The running download's cancel flag, set only under this lock: whoever holds it knows whether the
     /// download still owns the state.
     cancel: Option<Arc<AtomicBool>>,
+    standing: Standing,
 }
 
 /// A download `begin_download` admitted.
@@ -236,7 +252,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 impl AppUpdates {
     pub fn new(options: Options) -> AppUpdates {
         let files = Files::new(options.dir.clone());
-        let core = Core { state: AppUpdateState::None, found: None, cancel: None };
+        // A dev build shares its data folder with an installed app, and mustn't hold up that app's updates.
+        let standing = if options.updates_enabled { process_lock::claim(&options.lock) } else { Standing::Handling(None) };
+        let core = Core { state: AppUpdateState::None, found: None, cancel: None, standing };
         AppUpdates { inner: Arc::new(Inner { options, files, work: Mutex::new(()), core: Mutex::new(core) }) }
     }
 
@@ -247,6 +265,11 @@ impl AppUpdates {
             core.state = after;
             (self.inner.options.sink)(&core.state);
         }
+    }
+
+    /// Whether About has its **Check for updates** row.
+    pub fn updates_enabled(&self) -> bool {
+        self.inner.options.updates_enabled && lock(&self.inner.core).standing.handling()
     }
 
     pub fn state(&self) -> AppUpdateState {
@@ -280,7 +303,7 @@ impl AppUpdates {
         }
         {
             let core = lock(&self.inner.core);
-            if !may_check(&core.state, by) {
+            if !core.standing.handling() || !may_check(&core.state, by) {
                 return Ok(core.state.clone());
             }
         }
@@ -310,13 +333,13 @@ impl AppUpdates {
     /// Available or Failed → Downloading, at once; `None` when there's nothing to start. `run_download`
     /// does the rest.
     pub fn begin_download(&self) -> Result<Option<Download>, String> {
-        if self.inner.options.manual {
-            return Err("this install can't update itself: download the release instead".to_owned());
-        }
         let mut core = lock(&self.inner.core);
         let (AppUpdateState::Available { version, .. } | AppUpdateState::Failed { version, .. }) = core.state.clone() else {
             return Ok(None);
         };
+        if self.inner.options.manual {
+            return Err("this install can't update itself: download the release instead".to_owned());
+        }
         let cancel = Arc::new(AtomicBool::new(false));
         core.cancel = Some(cancel.clone());
         let found = core.found.clone().filter(|found| found.version.to_string() == version);
@@ -465,6 +488,8 @@ impl AppUpdates {
             Ok(()) => {
                 info!(version = %pending.version, "update installed, restarting");
                 host.stop_everything();
+                // The new process starts before this one ends, and would take itself for a second one.
+                lock(&self.inner.core).standing.let_go();
                 host.restart();
             }
             Err(error) => self.install_failed(error, Some(pending)),
@@ -512,12 +537,17 @@ impl AppUpdates {
         if !self.inner.options.updates_enabled {
             return Launch::Nothing;
         }
+        match lock(&self.inner.core).standing {
+            Standing::Handling(_) => {}
+            Standing::Contended => return Launch::WaitForLock,
+            Standing::Aside => return Launch::Nothing,
+        }
         let launch = pending::decide(self.inner.files.read_pending(), &self.inner.options.running);
         let mut core = lock(&self.inner.core);
         match &launch {
             Launch::Clean(state) => core.state = state.clone(),
             Launch::Install(pending) => core.state = AppUpdateState::Installing { version: pending.version.to_string() },
-            Launch::Verify(_) | Launch::Nothing => {}
+            Launch::Verify(_) | Launch::Nothing | Launch::WaitForLock => {}
         }
         launch
     }
@@ -527,6 +557,7 @@ impl AppUpdates {
         let files = &self.inner.files;
         match launch {
             Launch::Nothing => {}
+            Launch::WaitForLock => self.launch_after_the_wait(),
             Launch::Clean(_) => files.delete_all(),
             Launch::Install(pending) => self.install(pending),
             Launch::Verify(pending) => {
@@ -544,6 +575,24 @@ impl AppUpdates {
                 }
             }
         }
+    }
+
+    /// The launch `setup` couldn't settle without stalling the main thread: the page may have asked by
+    /// now, so it's told. A page that hears `Updated` and asks too announces it twice, which beats losing it.
+    fn launch_after_the_wait(&self) {
+        let standing = process_lock::claim_within(&self.inner.options.lock, self.inner.options.lock_wait);
+        lock(&self.inner.core).standing = standing;
+        let launch = self.plan_launch();
+        if matches!(launch, Launch::Install(_)) {
+            self.inner.options.host.hide_window();
+        }
+        {
+            let core = lock(&self.inner.core);
+            if core.state != AppUpdateState::None {
+                (self.inner.options.sink)(&core.state);
+            }
+        }
+        self.run_launch(launch);
     }
 }
 
@@ -571,6 +620,8 @@ pub fn for_app<R: Runtime>(app: &AppHandle<R>, dirs: &Dirs) -> AppUpdates {
     let emitter = app.clone();
     AppUpdates::new(Options {
         dir: dirs.data.join("app-update"),
+        lock: dirs.data.join("app-update.lock"),
+        lock_wait: LOCK_WAIT,
         running: app.package_info().version.clone(),
         manual: is_manual(tauri::utils::platform::bundle_type(), &exe, cfg!(target_os = "macos")),
         updates_enabled: UPDATES_ENABLED,

@@ -6,11 +6,13 @@ mod download;
 mod install;
 mod launch;
 mod pure;
+mod second_process;
 
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use bt_core::release::{Manifest, Source};
 use serde_json::{json, Value};
@@ -111,20 +113,27 @@ impl Host for Fake {
     fn report_stopped(&self) { self.note("report stopped"); }
     fn restart(&self) { self.note("restart"); }
     fn show_window(&self) { self.note("show"); }
+    fn hide_window(&self) { self.note("hide"); }
 }
 
+/// A temp `Dirs.data`, gone with the last process over it.
+struct Root(PathBuf);
+
+impl Drop for Root {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+/// One process of the app. Another over the same `Root` is a second process, since locks conflict per
+/// open file.
 struct Fixture {
-    root: PathBuf,
     files: Files,
     fake: Arc<Fake>,
     events: Arc<Mutex<Vec<AppUpdateState>>>,
     updates: AppUpdates,
-}
-
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = std::fs::remove_dir_all(&self.root);
-    }
+    /// Last: `updates` lets go of the lock first, or Windows keeps the folder.
+    root: Arc<Root>,
 }
 
 static NEXT_FOLDER: AtomicUsize = AtomicUsize::new(0);
@@ -133,21 +142,36 @@ fn fixture_with(manual: bool, updates_enabled: bool, running: &str) -> Fixture {
     let root = std::env::temp_dir().join(format!("batrak-app-update-{}-{}", std::process::id(), NEXT_FOLDER.fetch_add(1, Ordering::Relaxed)));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    let dir = root.join("app-update");
+    process(Arc::new(Root(root.clone())), root, Process { manual, updates_enabled, running, lock_wait: Duration::ZERO })
+}
+
+#[derive(Clone, Copy)]
+struct Process<'a> {
+    manual: bool,
+    updates_enabled: bool,
+    running: &'a str,
+    /// No wait unless a test is about it: it's real time.
+    lock_wait: Duration,
+}
+
+fn process(root: Arc<Root>, data: PathBuf, how: Process) -> Fixture {
+    let dir = data.join("app-update");
     let fake = Arc::new(Fake { files: Files::new(dir.clone()), log: Mutex::default(), hooks: Mutex::default(), checks: Mutex::default(), packages: Mutex::default() });
     let events = Arc::new(Mutex::new(Vec::new()));
     let heard = events.clone();
     let updates = AppUpdates::new(Options {
         dir: dir.clone(),
-        running: running.parse().unwrap(),
-        manual,
-        updates_enabled,
+        lock: data.join("app-update.lock"),
+        lock_wait: how.lock_wait,
+        running: how.running.parse().unwrap(),
+        manual: how.manual,
+        updates_enabled: how.updates_enabled,
         installer: fake.clone(),
         source: fake.clone(),
         host: fake.clone(),
         sink: Arc::new(move |state: &AppUpdateState| lock(&heard).push(state.clone())),
     });
-    Fixture { root, files: Files::new(dir), fake, events, updates }
+    Fixture { files: Files::new(dir), fake, events, updates, root }
 }
 
 fn fixture() -> Fixture {
@@ -155,6 +179,15 @@ fn fixture() -> Fixture {
 }
 
 impl Fixture {
+    /// A second process of the app, over the same data folder.
+    fn another_process(&self, how: Process) -> Fixture {
+        process(self.root.clone(), self.root.0.clone(), how)
+    }
+
+    fn lock_path(&self) -> PathBuf {
+        self.root.0.join("app-update.lock")
+    }
+
     /// Runs `hook` once, inside the fake's next call of that name: what happens mid-download or mid-verify.
     fn on(&self, call: &'static str, hook: impl FnOnce(&AppUpdates) + Send + 'static) {
         let updates = self.updates.clone();
@@ -171,7 +204,7 @@ impl Fixture {
 
     /// What's on disk under `app-update/`, sorted.
     fn on_disk(&self) -> Vec<String> {
-        let Ok(entries) = std::fs::read_dir(self.root.join("app-update")) else { return Vec::new() };
+        let Ok(entries) = std::fs::read_dir(self.root.0.join("app-update")) else { return Vec::new() };
         let mut names: Vec<String> = entries.map(|e| e.unwrap().file_name().to_string_lossy().into_owned()).collect();
         names.sort();
         names

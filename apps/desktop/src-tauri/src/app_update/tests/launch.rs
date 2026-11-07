@@ -2,9 +2,9 @@
 
 use super::*;
 
-fn leave(f: &Fixture, name: &str, bytes: &[u8]) {
-    std::fs::create_dir_all(f.root.join("app-update")).unwrap();
-    std::fs::write(f.root.join("app-update").join(name), bytes).unwrap();
+pub(super) fn leave(f: &Fixture, name: &str, bytes: &[u8]) {
+    std::fs::create_dir_all(f.root.0.join("app-update")).unwrap();
+    std::fs::write(f.root.0.join("app-update").join(name), bytes).unwrap();
 }
 
 #[test]

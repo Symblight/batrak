@@ -32,7 +32,7 @@ fn a_failed_download_says_what_the_user_can_do_leaves_no_package_and_shows_no_sn
     let cases: [(&str, Arrange, &str, &[&str]); 3] = [
         ("a bad signature", |f| f.serves(Some(BAD)), SIGNATURE, &[URL, "verify"]),
         ("the network", |f| f.serves(None), REACH, &[URL]),
-        ("a file where the folder should be", |f| std::fs::write(f.root.join("app-update"), b"").unwrap(), DISK, &[]),
+        ("a file where the folder should be", |f| std::fs::write(f.root.0.join("app-update"), b"").unwrap(), DISK, &[]),
     ];
     for (label, arrange, reason, logged) in cases {
         let f = fixture();

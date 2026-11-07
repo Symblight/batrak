@@ -77,3 +77,30 @@ fn an_install_marks_the_attempt_first_and_only_after_it_worked_stops_everything_
         }
     }
 }
+
+#[test]
+fn the_lock_goes_right_before_the_restart_and_stays_through_a_failed_install() {
+    for (route, install) in [("restart", by_restart as Arrange), ("launch", by_launch)] {
+        for (label, package, restarts) in [("it works", GOOD, true), ("the installer refuses it", REFUSED, false)] {
+            let f = fixture();
+            if route == "restart" {
+                f.ready_after_a_download("0.9.3");
+            } else {
+                f.left_by_a_previous_run(true, false, GOOD);
+            }
+            std::fs::write(f.files.package(), package).unwrap();
+            let lock_file = f.lock_path();
+            // The new process starts before this one ends, and has to find the lock free.
+            let held = move || std::fs::File::options().write(true).open(&lock_file).unwrap().try_lock().is_err();
+            let while_stopping = held.clone();
+            f.on("stop", move |_| assert!(while_stopping(), "{route}: still held while everything stops"));
+            let at_the_restart = held.clone();
+            f.on("restart", move |_| assert!(!at_the_restart(), "{route}: free by the restart"));
+
+            install(&f);
+
+            assert_eq!(lock(&f.fake.log).contains(&"restart".to_owned()), restarts, "{route}: {label}");
+            assert_eq!(held(), !restarts, "{route}: {label}");
+        }
+    }
+}

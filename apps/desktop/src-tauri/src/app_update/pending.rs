@@ -105,8 +105,10 @@ fn remove_if_there(path: &Path) -> std::io::Result<()> {
 /// What a launch does with what it finds (`docs/specs/app-update.md` §3.3).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Launch {
-    /// This build doesn't update.
+    /// This build doesn't update, or another process handles them.
     Nothing,
+    /// Another process holds the lock, for now: off the main thread, try for a moment, then decide.
+    WaitForLock,
     /// Deletes `app-update/` and opens in this state.
     Clean(AppUpdateState),
     /// Installs before anything else, then restarts.
