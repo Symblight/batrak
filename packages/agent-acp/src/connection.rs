@@ -920,6 +920,15 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn a_slow_turn_with_a_count_ends_on_its_own_after_that_many_chunks() {
+        let (conn, _, mut rx, _) = connect(FakeAgentOptions::default(), None).await.unwrap();
+        let stop = tokio::time::timeout(Duration::from_secs(2), conn.prompt(text("slow 3"))).await.unwrap().unwrap();
+        assert_eq!(stop, "end_turn");
+        let chunks: Vec<_> = drain(&mut rx).into_iter().filter(|s| matches!(s, Seen::Update(_))).collect();
+        assert_eq!(chunks.len(), 3, "{chunks:?}");
+    }
+
+    #[tokio::test]
     async fn a_crash_mid_turn_fails_the_turn_and_closes() {
         let (conn, _, mut rx, _) = connect(FakeAgentOptions::default(), None).await.unwrap();
         let err = tokio::time::timeout(Duration::from_secs(2), conn.prompt(text("crash"))).await.unwrap().unwrap_err();

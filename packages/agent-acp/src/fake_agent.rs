@@ -4,7 +4,7 @@
 //! - `hello` → two message chunks, `end_turn`
 //! - `permission` → a tool call, a permission request, then a chunk naming the answer
 //! - `read <path>` / `write <path> <text>` → the client's fs methods; a chunk with the result
-//! - `slow` → a chunk every 20 ms until cancelled (`cancelled`) or 200 chunks
+//! - `slow [<chunks>]` → a chunk every 20 ms until cancelled (`cancelled`) or that many chunks (200)
 //! - `sleep <ms>` → waits that long (or until cancelled), then a chunk
 //! - `edit <path> <ms>` → a tool call naming the file (location, then a diff), written straight to
 //!   disk as agents' own tools do; then like `sleep`
@@ -460,7 +460,8 @@ async fn run_turn(
             }
         }
         "slow" => {
-            for i in 0..200 {
+            let chunks: u32 = words.next().and_then(|w| w.parse().ok()).unwrap_or(200);
+            for i in 0..chunks {
                 if state.cancelled.load(Ordering::SeqCst) {
                     return Ok(StopReason::Cancelled);
                 }
