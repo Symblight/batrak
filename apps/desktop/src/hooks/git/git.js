@@ -43,14 +43,11 @@ let followedRoot = null;
 const saved = new Map();
 /** @type {(() => void) | null} Stops the following that `start()` began. */
 let following = null;
-/** Bumped when another comparison is shown, so an answer still running then doesn't write its result. */
-let compareGeneration = 0;
-/** @type {Promise<void>} The read a pick started: refreshes wait for it rather than stop it. */
-let pickRead = Promise.resolve();
 const headTask = new SerialTask(readHead, REFRESH_MAX_WAIT_MS);
 const changesTask = new SerialTask(readChanges, REFRESH_MAX_WAIT_MS);
-// One at a time: if each stopped the last, a scan longer than the wait would never finish while
-// an agent keeps writing. Only a pick or going back stops a running one (`git.compareTo`).
+// One at a time: if each refresh stopped the last, a scan longer than the wait would never finish
+// while an agent keeps writing. Showing another comparison supersedes it; a pick's scan then stops the
+// running one in the backend.
 const compareTask = new SerialTask(readCompare, REFRESH_MAX_WAIT_MS);
 
 /**
@@ -90,9 +87,7 @@ function switchRoot(rootId) {
   setCommitSelection(kept?.selection ?? []);
   version = kept?.version ?? null;
   $gitChanges.set({ ...(kept?.changes ?? NO_CHANGES), loading: watchers > 0 });
-  compareGeneration++;
-  compareTask.cancel();
-  pickRead = Promise.resolve();
+  compareTask.supersede();
   $gitCompare.set(kept?.compare ?? NO_COMPARE);
   headTask.schedule(0);
   if (watchers) scheduleChanges(0);
@@ -157,24 +152,25 @@ async function readChanges() {
 }
 
 /**
- * Asks for the comparison and shows the answer, unless another comparison is shown by now. Never fails.
- * @param {string} rootId
- * @param {string} target
+ * Asks for the comparison shown and shows the answer, unless superseded by then. Only this job writes
+ * `$gitCompare` within a generation, so `view` is still what is shown.
+ * @param {() => boolean} isCurrent
  */
-async function askCompare(rootId, target) {
-  const generation = compareGeneration;
+async function readCompare(isCurrent) {
+  const rootId = $rootId.get();
+  const view = $gitCompare.get();
+  const { target, changes } = view;
+  if (rootId === null || target === null) return;
+  if (!changes.loading) $gitCompare.set({ ...view, changes: { ...changes, loading: true } });
   try {
     /** @type {import('./types.js').GitComparison} */
     const { base, files } = await ipc.invoke('git_compare', { rootId, target });
-    if (generation !== compareGeneration) return;
-    const shown = $gitCompare.get().changes.files;
+    if (!isCurrent()) return;
     // Same files: keep the array, so views don't rebuild or re-read their diffs.
-    const same = JSON.stringify(shown) === JSON.stringify(files);
-    $gitCompare.set({ target, base, changes: { files: same ? shown : files, loaded: true, loading: false, error: null }, refreshError: null });
+    const same = JSON.stringify(changes.files) === JSON.stringify(files);
+    $gitCompare.set({ target, base, changes: { files: same ? changes.files : files, loaded: true, loading: false, error: null }, refreshError: null });
   } catch (err) {
-    if (generation !== compareGeneration) return;
-    const view = $gitCompare.get();
-    const { changes } = view;
+    if (!isCurrent()) return;
     if (String(err).startsWith('cancelled')) {
       // Nothing to show yet: a stop for the last comparison may have reached this one. Still loading,
       // or the views would say nothing differs.
@@ -187,19 +183,6 @@ async function askCompare(rootId, target) {
       $gitCompare.set({ ...view, changes: { files: [], loaded: true, loading: false, error: String(err) } });
     }
   }
-}
-
-async function readCompare() {
-  // Until no newer pick came meanwhile: asking now would stop that pick's scan.
-  for (let waited; waited !== pickRead; ) {
-    waited = pickRead;
-    await waited;
-  }
-  const rootId = $rootId.get();
-  const view = $gitCompare.get();
-  if (rootId === null || view.target === null) return;
-  $gitCompare.set({ ...view, changes: { ...view.changes, loading: true } });
-  await askCompare(rootId, view.target);
 }
 
 /**
@@ -285,16 +268,14 @@ export const git = Object.freeze({
    */
   compareTo(target) {
     const rootId = $rootId.get();
-    compareGeneration++;
-    compareTask.cancel();
-    pickRead = Promise.resolve();
+    compareTask.supersede();
     if (target === null || rootId === null) {
       $gitCompare.set(NO_COMPARE);
       if (rootId !== null) ipc.invoke('git_compare_stop', { rootId }).catch(() => {}); // only saves work
       return;
     }
     $gitCompare.set({ ...NO_COMPARE, target, changes: { ...NO_CHANGES, loading: true } });
-    pickRead = askCompare(rootId, target);
+    compareTask.run();
   },
 
   /**
