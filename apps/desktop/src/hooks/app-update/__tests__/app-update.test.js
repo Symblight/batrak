@@ -63,6 +63,7 @@ describe('appUpdate hook', () => {
     const asked = [];
     return {
       asked,
+      othersClosed: async () => {},
       /** @param {import('../../app/types.js').ConfirmOptions} options */
       choose: async (options) => {
         asked.push(`${options.headline} ${options.message} [${options.cancelLabel}] [${options.confirmLabel}]`);

@@ -65,10 +65,17 @@ impl Files {
     }
 
     /// Puts a verified `package.new` in place of what is waiting. `pending.json` goes first, so a crash
-    /// in between leaves a package nothing names, which the next launch deletes.
+    /// in between leaves a package nothing names, which the next launch deletes. A rename that fails
+    /// (a scanner holding the file) changed nothing, so what was waiting is named again.
     pub fn promote(&self, pending: &Pending) -> std::io::Result<()> {
+        let waiting = self.read_pending();
         remove_if_there(&self.dir.join(PENDING))?;
-        fs::rename(self.incoming(), self.package())?;
+        if let Err(e) = fs::rename(self.incoming(), self.package()) {
+            if let Some(Err(restore)) = waiting.map(|waiting| self.write_pending(&waiting)) {
+                tracing::info!("couldn't restore the update that was waiting: {restore}");
+            }
+            return Err(e);
+        }
         self.write_pending(pending)
     }
 

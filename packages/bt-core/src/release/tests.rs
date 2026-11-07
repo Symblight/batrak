@@ -237,6 +237,13 @@ fn tampered(from: &str, to: &str) -> String {
 }
 
 #[test]
+fn a_signature_names_the_file_it_signed() {
+    assert_eq!(signed_file(SIGNED).as_deref(), Ok("batrak-aarch64-apple-darwin"));
+    assert_eq!(signed_file(NO_FILE), Err("the signature names no file".to_owned()));
+    assert!(signed_file("not a signature").is_err());
+}
+
+#[test]
 fn a_good_signature_passes() {
     assert_eq!(check(SIGNED, BYTES, "0.9.3", FILE), Ok(()));
 }

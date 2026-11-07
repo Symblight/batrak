@@ -158,6 +158,8 @@ pub fn release_page(version: &str) -> String {
 /// What the app does that the update flow needs and a test records.
 pub trait Host: Send + Sync {
     fn stop_everything(&self);
+    /// Tells the page what a stop that the app outlived left stopped; nothing when none ran.
+    fn report_stopped(&self);
     /// Doesn't return in the app.
     fn restart(&self);
     /// Brings back the window a failed install left hidden: by a launch, or on Windows by the hook
@@ -170,6 +172,10 @@ struct AppHost<R: Runtime>(AppHandle<R>);
 impl<R: Runtime> Host for AppHost<R> {
     fn stop_everything(&self) {
         crate::stop_everything(&self.0);
+    }
+
+    fn report_stopped(&self) {
+        tauri::async_runtime::block_on(self.0.state::<crate::session::Sessions>().report_stopped());
     }
 
     fn restart(&self) {
@@ -495,6 +501,8 @@ impl AppUpdates {
         let mut core = lock(&self.inner.core);
         self.step(&mut core, Step::InstallFailed { reason: error.failure.reason().to_owned() });
         drop(core);
+        // On Windows `on_before_exit` already stopped everything, before the installer failed to start.
+        self.inner.options.host.report_stopped();
         self.inner.options.host.show_window();
     }
 

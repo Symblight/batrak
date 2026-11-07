@@ -10,11 +10,13 @@ import { checkMessage, restartMessage } from './rules.js';
 /** @typedef {import('./types.js').RestartBlockers} RestartBlockers */
 
 /**
- * Where the hook asks; a view's `<acp-confirm-dialog>`.
+ * Where the hook asks; a view's own `<acp-confirm-dialog>`.
  * @typedef {Pick<HTMLElementTagNameMap['acp-confirm-dialog'], 'choose'>} Dialog
  */
 
-/** @type {Dialog | null} Set by **Update and Restart** while its download runs: where that restart asks. */
+/** @typedef {Pick<HTMLElementTagNameMap['acp-confirm-dialog'], 'choose' | 'othersClosed'>} WaitingDialog */
+
+/** @type {WaitingDialog | null} Set by **Update and Restart** while its download runs: where that restart asks. */
 let restartWhenReady = null;
 
 /** @param {AppUpdateState} state */
@@ -29,7 +31,23 @@ function apply(state) {
   if (state.state === 'downloading' || restartWhenReady === null) return;
   const dialog = restartWhenReady;
   restartWhenReady = null;
-  if (state.state === 'ready') void restart(dialog);
+  if (state.state === 'ready') void restartUnasked(dialog);
+}
+
+/**
+ * The restart **Update and Restart** promised, at a moment the user didn't pick: it waits for any other
+ * question, before reading what's busy and again right before it asks, since one may open in between.
+ * @param {WaitingDialog} dialog
+ */
+async function restartUnasked(dialog) {
+  await dialog.othersClosed();
+  if ($appUpdate.get().state !== 'ready') return;
+  await restart({
+    choose: async (options) => {
+      await dialog.othersClosed();
+      return dialog.choose(options);
+    },
+  });
 }
 
 /** @param {Dialog} dialog */
@@ -79,7 +97,7 @@ export const appUpdate = Object.freeze({
 
   /**
    * Starts the download: **Update and Restart**, which restarts when it's done, or Retry, which doesn't.
-   * @param {Dialog} dialog
+   * @param {WaitingDialog} dialog
    */
   async download(dialog) {
     restartWhenReady = $appUpdate.get().state === 'available' ? dialog : null;

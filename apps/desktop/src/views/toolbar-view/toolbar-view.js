@@ -1,4 +1,5 @@
 import { html } from 'lit';
+import { createRef, ref } from 'lit/directives/ref.js';
 import { app } from '../../hooks/app/app.js';
 import { appUpdate } from '../../hooks/app-update/app-update.js';
 import { git } from '../../hooks/git/git.js';
@@ -53,6 +54,8 @@ export class AcpToolbarView extends ViewElement {
   #workspaceStatuses = new StoreController(this, { store: $workspaceStatuses });
   #workspaceNumbers = new StoreController(this, { store: $workspaceNumbers });
   #appUpdate = new StoreController(this, { store: $appUpdate });
+  /** @type {import('lit/directives/ref.js').Ref<HTMLElementTagNameMap['acp-confirm-dialog']>} The update asks at moments of its own, so never in the dialog of a question already open. */
+  #updateDialogRef = createRef();
 
   constructor() {
     super();
@@ -149,16 +152,20 @@ export class AcpToolbarView extends ViewElement {
     return /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
   }
 
+  get #updateDialog() {
+    return /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.#updateDialogRef.value);
+  }
+
   /** @param {Event} e */
   #onProjectRemove = (e) => {
     projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, this.#dialog);
   };
 
-  #onUpdateDownload = () => void appUpdate.download(this.#dialog);
+  #onUpdateDownload = () => void appUpdate.download(this.#updateDialog);
 
   #onUpdateCancel = () => void appUpdate.cancel();
 
-  #onUpdateRestart = () => void appUpdate.restart(this.#dialog);
+  #onUpdateRestart = () => void appUpdate.restart(this.#updateDialog);
 
   /** @param {Event} e */
   #onUpdateOnNextLaunch = (e) => void appUpdate.setOnNextLaunch(/** @type {CustomEvent<{ on: boolean }>} */ (e).detail.on);
@@ -215,7 +222,8 @@ export class AcpToolbarView extends ViewElement {
         @acp-update-on-next-launch=${this.#onUpdateOnNextLaunch}
         @acp-update-manual=${this.#onUpdateManual}
       ></acp-toolbar>
-      <acp-confirm-dialog></acp-confirm-dialog>`;
+      <acp-confirm-dialog></acp-confirm-dialog>
+      <acp-confirm-dialog ${ref(this.#updateDialogRef)}></acp-confirm-dialog>`;
   }
 }
 

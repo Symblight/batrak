@@ -222,7 +222,7 @@ pub fn verify(bytes: &[u8], signature: &str, version: &Version, file: &str) -> R
 
 fn verify_with(key: &str, bytes: &[u8], signature: &str, version: &Version, file: &str) -> Result<(), String> {
     let key = unwrap_box(key).and_then(|text| PublicKey::decode(&text).map_err(|e| e.to_string())).map_err(|e| format!("invalid public key: {e}"))?;
-    let signature = unwrap_box(signature).and_then(|text| Signature::decode(&text).map_err(|e| e.to_string())).map_err(|e| format!("invalid signature: {e}"))?;
+    let signature = decode_signature(signature)?;
     // The signer prehashes, so no legacy signature is ever ours. The comment is signed too: it is read
     // only after this.
     key.verify(bytes, &signature, false).map_err(|e| format!("signature check failed: {e}"))?;
@@ -238,6 +238,17 @@ fn verify_with(key: &str, bytes: &[u8], signature: &str, version: &Version, file
         return Err(format!("the signature is for {signed_file}, not {file}"));
     }
     Ok(())
+}
+
+/// The `file:` a signature's trusted comment names. This checks nothing: the comment means something
+/// only once the signature has passed, so call it after that.
+pub fn signed_file(signature: &str) -> Result<String, String> {
+    let signature = decode_signature(signature)?;
+    signed_field(signature.trusted_comment(), "file").map(str::to_owned).ok_or_else(|| "the signature names no file".to_owned())
+}
+
+fn decode_signature(wrapped: &str) -> Result<Signature, String> {
+    unwrap_box(wrapped).and_then(|text| Signature::decode(&text).map_err(|e| e.to_string())).map_err(|e| format!("invalid signature: {e}"))
 }
 
 /// The outer base64 of a Tauri `.sig` or public key.

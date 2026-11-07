@@ -143,6 +143,10 @@ impl Host for FakeHost {
         lock(&self.0).push("stop".to_owned());
     }
 
+    fn report_stopped(&self) {
+        lock(&self.0).push("report stopped".to_owned());
+    }
+
     fn restart(&self) {
         lock(&self.0).push("restart".to_owned());
     }
@@ -431,6 +435,28 @@ fn a_download_started_right_after_a_cancel_waits_for_the_old_one_to_be_gone() {
     assert_eq!(f.state(), ready("0.9.3"));
     assert_eq!(f.package_on_disk(), OTHER_GOOD);
     assert_eq!(f.on_disk(), ["package", "pending.json"]);
+}
+
+#[test]
+fn a_rename_that_fails_keeps_the_update_already_waiting() {
+    let f = fixture();
+    f.ready_with("0.9.3", GOOD);
+    f.available_after_a_check("0.9.4");
+    f.answer(package(OTHER_GOOD));
+    let incoming = f.files().incoming();
+    // Nothing left to rename: fails like a share violation, on every platform.
+    *lock(&f.installer.during_verify) = Some(Box::new(move || std::fs::remove_file(incoming).unwrap()));
+
+    f.download();
+
+    assert_eq!(f.state(), failed("0.9.4", DISK));
+    assert_eq!(f.files().read_pending(), Some(pending("0.9.3", false, false)));
+    assert_eq!(f.package_on_disk(), GOOD);
+    assert_eq!(f.on_disk(), ["package", "pending.json"]);
+    let next_launch = fixture();
+    next_launch.left_by_a_previous_run(&f.files().read_pending().unwrap(), &f.package_on_disk());
+    next_launch.launch();
+    assert_eq!(next_launch.state(), ready("0.9.3"), "the next launch still has it");
 }
 
 #[test]
@@ -725,8 +751,9 @@ fn a_failed_install_leaves_everything_running_and_the_attempt_cleared() {
     let warnings = warnings_during(|| f.updates.run_restart());
 
     assert_eq!(warnings, 0);
-    // The plugin's hook hides the windows on Windows before the installer can fail to start.
-    assert_eq!(f.logged(), ["install attempted=true", "show"], "nothing stopped, and the window is back");
+    // On Windows the plugin's hook has by then stopped everything and hidden the windows: the page
+    // hears what stopped before the window comes back.
+    assert_eq!(f.logged(), ["install attempted=true", "report stopped", "show"], "nothing stopped here, and the window is back");
     assert_eq!(f.state(), failed("0.9.3", REPLACE));
     assert_eq!(lock(&f.events).last(), Some(&failed("0.9.3", REPLACE)));
     assert_eq!(f.files().read_pending(), Some(pending("0.9.3", false, false)), "tried once");
@@ -833,7 +860,7 @@ fn a_failed_install_on_next_launch_opens_normally_with_failed_and_is_tried_once(
 
     f.launch();
 
-    assert_eq!(f.logged(), ["install attempted=true", "show"], "the window it hid comes back");
+    assert_eq!(f.logged(), ["install attempted=true", "report stopped", "show"], "the window it hid comes back");
     assert_eq!(f.state(), failed("0.9.3", REPLACE));
     assert_eq!(f.files().read_pending(), Some(pending("0.9.3", false, false)));
 

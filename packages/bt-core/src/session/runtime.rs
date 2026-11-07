@@ -419,6 +419,17 @@ impl Sessions {
         crate::acp::process::stop_all(Duration::from_millis(500));
         self.inner.persist();
     }
+
+    /// The app went on after `shutdown()` (an installer that didn't start): each session it stopped
+    /// finishes as a Stop would and the page hears it, so a next message or resume starts the agent. A
+    /// session still running was never stopped, so this does nothing without a `shutdown()`.
+    pub async fn report_stopped(&self) {
+        let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
+        for state in states.iter().filter(|s| s.stopping.load(Ordering::SeqCst)) {
+            self.inner.stop(state).await;
+            self.inner.set_status(state, SessionStatus::Stopped, None);
+        }
+    }
 }
 
 impl Inner {
