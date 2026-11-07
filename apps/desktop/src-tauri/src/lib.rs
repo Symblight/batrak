@@ -169,6 +169,7 @@ pub fn run() {
             commands::roots::close_root,
             commands::roots::close_window_roots,
             commands::roots::list_dir,
+            commands::roots::needs_agents_md,
             commands::roots::rescan_root,
             commands::roots::quick_open,
             commands::roots::note_file_opened,
