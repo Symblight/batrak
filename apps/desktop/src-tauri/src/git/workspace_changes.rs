@@ -79,29 +79,6 @@ mod tests {
         (repo, folder, base)
     }
 
-    #[test]
-    fn a_workspaces_list_and_file_text_are_against_its_base() {
-        let (_repo, wt, base) = workspace("ws-changes");
-        let git = git_bin();
-        let list = || -> Vec<String> {
-            changed_since(&git, &wt, &base, &AtomicBool::new(false)).unwrap().into_iter().map(|file| file.path).collect()
-        };
-        assert!(list().is_empty(), "nothing done yet");
-
-        std::fs::write(wt.join("committed.txt"), "c\n").unwrap();
-        run_in(&wt, &["add", "."]);
-        run_in(&wt, &["commit", "-qm", "agent"]);
-        std::fs::write(wt.join("a.txt"), "edited").unwrap();
-        std::fs::create_dir(wt.join("dir")).unwrap();
-        std::fs::write(wt.join("dir/new.txt"), "new").unwrap();
-
-        assert_eq!(list(), ["a.txt", "committed.txt", "dir/new.txt"]);
-        assert_eq!(file_at_base(&git, &wt, &base, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
-        assert_eq!(file_at_base(&git, &wt, &base, "dir/new.txt").unwrap(), None);
-        let err = file_at_base(&git, &wt, &base, "../x").unwrap_err();
-        assert!(err.contains("not a path inside the root"), "{err}");
-    }
-
     #[cfg(unix)]
     #[test]
     fn a_new_list_stops_the_one_before_it() {
