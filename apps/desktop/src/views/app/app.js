@@ -1,5 +1,6 @@
 import { projects } from '../../hooks/projects/projects.js';
 import { app } from '../../hooks/app/app.js';
+import { appUpdate } from '../../hooks/app-update/app-update.js';
 import { shortcuts } from '../../hooks/shortcuts/shortcuts.js';
 import { agents } from '../../hooks/agents/agents.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
@@ -10,6 +11,7 @@ import { github } from '../../hooks/github/github.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { search } from '../../hooks/search/search.js';
 import { $about } from '../../stores/about/about.js';
+import { $updateCheck } from '../../stores/app-update/app-update.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $columnWidths, $shownHiddenColumns, showColumn } from '../../stores/layout/layout.js';
 import { $notices, dismissNotice, holdNotices, runNoticeAction } from '../../stores/notices/notices.js';
@@ -128,6 +130,7 @@ export class AcpApp extends ViewElement {
   #rootId = new StoreController(this, { store: $rootId });
   #notices = new StoreController(this, { store: $notices });
   #about = new StoreController(this, { store: $about });
+  #updateCheck = new StoreController(this, { store: $updateCheck });
   #trustPrompt = new StoreController(this, { store: $trustPrompt, onChange: (prompt) => this.#askTrust(prompt) });
   /** Sequence of Quick Open queries; only the latest answer is shown. */
   #quickOpenRequest = 0;
@@ -268,6 +271,7 @@ export class AcpApp extends ViewElement {
     sessions.init().catch((err) => app.reportError('Loading sessions failed', err));
     git.start();
     github.start();
+    appUpdate.start();
     projects.restore().catch((err) => app.reportError('Reopening folder failed', err));
   }
 
@@ -343,12 +347,15 @@ export class AcpApp extends ViewElement {
     if (branch !== null) this.#showChanges();
   }
 
+  #onUpdateCheck = () => void appUpdate.check();
+
   #showSettings() {
     this.#main.openSettings();
   }
 
   #showAbout() {
     app.loadAbout();
+    appUpdate.forgetCheck();
     /** @type {HTMLElementTagNameMap['acp-about-dialog']} */ (this.renderRoot.querySelector('acp-about-dialog')).show();
   }
 
@@ -571,7 +578,12 @@ export class AcpApp extends ViewElement {
         @acp-go-to-line=${this.#onPaletteGoToLine}
       ></acp-quick-open>
       <acp-search-view @acp-search-open=${this.#onSearchOpen} @acp-search-popout=${this.#onSearchPopout}></acp-search-view>
-      <acp-about-dialog .about=${this.#about.value} @acp-reveal-path=${this.#onRevealPath}></acp-about-dialog>
+      <acp-about-dialog
+        .about=${this.#about.value}
+        .updateCheck=${this.#updateCheck.value}
+        @acp-reveal-path=${this.#onRevealPath}
+        @acp-update-check=${this.#onUpdateCheck}
+      ></acp-about-dialog>
       <acp-confirm-dialog class="acp-app__trust"></acp-confirm-dialog>
       <acp-workspace-delete-dialog @acp-workspace-delete=${this.#onWorkspaceDelete}></acp-workspace-delete-dialog>
       <acp-snackbars

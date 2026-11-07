@@ -43,6 +43,20 @@
   overflow-wrap: anywhere;
 }
 
+.acp-about-dialog__updates {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  column-gap: var(--acp-space-2);
+}
+.acp-about-dialog__check {
+  /* The text variant's own inset, so its label lines up with the values above. */
+  margin-inline-start: calc(-1 * var(--acp-space-3));
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-block-start-space: 0px;
+  --md-button-block-end-space: 0px;
+}
+
 .acp-about-dialog__footer {
   display: flex;
   flex-wrap: wrap;

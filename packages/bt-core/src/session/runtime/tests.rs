@@ -3689,3 +3689,141 @@ async fn a_new_workspace_follows_its_first_chats_agent_title_until_renamed() {
     settle().await;
     assert_eq!(name(), "Mine", "a user's name stays");
 }
+
+#[tokio::test]
+async fn working_counts_chats_in_a_turn_not_idle_ones() {
+    let f = fixture("working-acp", FakeAgentOptions::default());
+    let (session, first) = f.create("first", "fake").unwrap();
+    assert_eq!(session.status, SessionStatus::Preparing);
+    assert_eq!(f.sessions.working(), 1, "preparing");
+    first.wait_status("idle").await;
+    assert_eq!(f.sessions.working(), 0, "idle");
+    let (_, second) = f.create("second", "fake").unwrap();
+    second.wait_status("idle").await;
+
+    f.sessions.send_prompt("first", text("permission")).unwrap();
+    let request = first.wait_for("permission request", |e| e.kind == "permission-request").await;
+    first.wait_status("waiting").await;
+    assert_eq!(f.sessions.working(), 1, "waiting");
+    f.sessions.send_prompt("second", text("hello")).unwrap();
+    second.wait_status("queued").await;
+    assert_eq!(f.sessions.working(), 2, "queued behind the waiting one");
+
+    let id = request.payload["requestId"].as_str().unwrap().to_owned();
+    f.sessions.respond_permission("first", &id, Some("allow".to_owned())).unwrap();
+    first.wait_turn_end().await;
+    second.wait_turn_end().await;
+    f.sessions.send_prompt("first", text("sleep 5000")).unwrap();
+    first.wait_for("the turn", |e| e.kind == "status" && e.payload["status"] == "working" && status_of(&f, "first") == SessionStatus::Working).await;
+    assert_eq!(f.sessions.working(), 1, "working, the other idle again");
+    f.sessions.stop("first").await.unwrap();
+    assert_eq!(f.sessions.working(), 0, "stopped");
+}
+
+#[tokio::test]
+async fn working_counts_a_terminal_run_chat_unless_its_agent_says_it_is_at_its_prompt() {
+    use agent_api::SessionActivity::{Idle, Running, WaitingForUser};
+    // `RECORDED_ACTIVITY` is shared by the tests, and every fixture's ids start at `fake-session-1`.
+    let f = fixture("working-cli", FakeAgentOptions { created: Arc::new(AtomicUsize::new(1000)), ..FakeAgentOptions::default() });
+    f.give_cli_agents();
+    let (acp, events) = f.started_then_stopped("s1", "fake").await;
+    f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
+    assert_eq!(f.sessions.working(), 1, "its agent hasn't told, so it may be in a turn");
+
+    for (activity, expected) in [(Running, 1), (WaitingForUser, 1), (Idle, 0)] {
+        record_activity(&acp, activity);
+        let told = serde_json::to_value(activity).unwrap();
+        events.wait_for("the activity", |e| e.kind == "session" && e.payload["activity"] == told).await;
+        assert_eq!(status_of(&f, "s1"), SessionStatus::Stopped, "no ACP status");
+        assert_eq!(f.sessions.working(), expected, "{activity:?}");
+    }
+}
+
+#[tokio::test]
+async fn a_chat_its_cli_runs_names_its_terminal_while_the_cli_is_open() {
+    // Arrange
+    let f = fixture("cli-terminals", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let _started = f.started_then_stopped("s1", "fake").await;
+    assert!(f.sessions.cli_terminals().is_empty(), "no CLI yet");
+
+    // Act
+    let opened = f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
+
+    // Assert
+    assert_eq!(f.sessions.cli_terminals(), [opened.terminal_id]);
+
+    // Act
+    f.sessions.close_cli("s1").await.unwrap();
+
+    // Assert
+    assert!(f.sessions.cli_terminals().is_empty(), "its terminal is gone");
+}
+
+#[tokio::test]
+async fn shutting_down_twice_changes_nothing_the_second_time() {
+    let f = fixture("shutdown-twice", FakeAgentOptions::default());
+    let (_, running) = f.create("running", "fake").unwrap();
+    running.wait_status("idle").await;
+    let (_, stopped) = f.create("stopped", "fake").unwrap();
+    stopped.wait_status("idle").await;
+    f.sessions.stop("stopped").await.unwrap();
+    f.sessions.send_prompt("running", text("sleep 5000")).unwrap();
+    running.wait_status("working").await;
+    let stored = f.dir.join("data/sessions.json");
+
+    f.sessions.shutdown();
+    let first = std::fs::read(&stored).unwrap();
+    f.sessions.shutdown();
+
+    assert_eq!(std::fs::read(&stored).unwrap(), first);
+    for session in f.sessions.list() {
+        assert_eq!(session.status, SessionStatus::Stopped, "{}", session.id);
+    }
+}
+
+#[tokio::test]
+async fn after_a_shutdown_the_app_survives_the_page_hears_stopped_and_sessions_go_on() {
+    let f = fixture("survived-shutdown", FakeAgentOptions::default());
+    let (_, idle) = f.create("idle", "fake").unwrap();
+    idle.wait_status("idle").await;
+    let (_, working) = f.create("working", "fake").unwrap();
+    working.wait_status("idle").await;
+    f.sessions.send_prompt("working", text("sleep 50")).unwrap();
+    working.wait_status("working").await;
+    f.sessions.shutdown();
+    idle.clear();
+    working.clear();
+
+    f.sessions.report_stopped().await;
+
+    idle.wait_status("stopped").await;
+    working.wait_status("stopped").await;
+    working.wait_turn_end().await;
+    assert_eq!(status_of(&f, "working"), SessionStatus::Stopped, "the turn's end doesn't bring back a dead agent");
+
+    assert!(f.sessions.resume("idle").await.unwrap());
+    idle.wait_status("idle").await;
+    idle.clear();
+    f.sessions.send_prompt("idle", text("hello")).unwrap();
+    assert_eq!(idle.wait_turn_end().await, "end_turn");
+    working.clear();
+    f.sessions.send_prompt("working", text("hello")).unwrap();
+    assert_eq!(working.wait_turn_end().await, "end_turn", "a next message starts it, as after Stop");
+    assert!(!has(&idle, "error") && !has(&working, "error"));
+}
+
+#[tokio::test]
+async fn with_no_shutdown_there_is_nothing_to_report() {
+    let f = fixture("no-shutdown", FakeAgentOptions::default());
+    let (_, events) = f.create("a", "fake").unwrap();
+    events.wait_status("idle").await;
+    events.clear();
+
+    f.sessions.report_stopped().await;
+
+    assert!(!has(&events, "status"), "{:#?}", lock(&events.events));
+    assert_eq!(status_of(&f, "a"), SessionStatus::Idle);
+    f.sessions.send_prompt("a", text("hello")).unwrap();
+    assert_eq!(events.wait_turn_end().await, "end_turn");
+}

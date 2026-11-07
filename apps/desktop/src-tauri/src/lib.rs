@@ -1,5 +1,6 @@
 use bt_core::{config, dirs, notify, session, util, workspace};
 
+mod app_update;
 mod commands;
 mod git;
 mod github;
@@ -15,6 +16,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(roots::Roots::default())
         .manage(commands::dropped::DroppedFiles::default())
         .manage(git::workspace_changes::WorkspaceScans::default())
@@ -35,6 +37,15 @@ pub fn run() {
                     "Batrak started"
                 ),
                 Err(e) => eprintln!("logging disabled: {e}"),
+            }
+            let updates = app_update::for_app(app.handle(), &dirs);
+            let launch = updates.plan_launch();
+            // Tauri builds the config's window, visible, before `setup` runs; the event loop hasn't
+            // run since. An install on next launch keeps it out of sight, and only that path touches it.
+            if matches!(launch, app_update::pending::Launch::Install(_)) {
+                if let Some(window) = app.get_webview_window("main") {
+                    let _ = window.hide();
+                }
             }
             let user_agents = Some(dirs.config.join(config::AGENTS_FILE));
             let data_dir = dirs.data.clone();
@@ -64,6 +75,9 @@ pub fn run() {
                 shell: None,
                 version: app.package_info().version.to_string(),
             }));
+            // Last: an install stops what was just managed above.
+            app.manage(updates.clone());
+            app_update::start(updates, launch);
             Ok(())
         })
         // A webview window reports its file drops as window events, a child webview as its own.
@@ -121,6 +135,14 @@ pub fn run() {
             commands::agents::agents_sign_in_cancel,
             commands::agents::agents_trust,
             commands::agents::agents_untrusted,
+            commands::app_update::app_update_state,
+            commands::app_update::app_update_check,
+            commands::app_update::app_update_download,
+            commands::app_update::app_update_cancel,
+            commands::app_update::app_update_on_next_launch,
+            commands::app_update::app_update_blockers,
+            commands::app_update::app_update_restart,
+            commands::app_update::app_update_open_release,
             commands::about::about,
             commands::about::windows_build,
             commands::fonts::list_fonts,
@@ -178,13 +200,17 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building Batrak")
         .run(|app, event| {
-            // No agent process or shell outlives the app: every session's and terminal's process
-            // group is stopped.
             if let tauri::RunEvent::Exit = event {
-                app.state::<session::Sessions>().shutdown();
-                app.state::<terminal::Terminals>().stop_all(std::time::Duration::from_millis(200));
+                stop_everything(app);
             }
         });
+}
+
+/// No agent process or shell outlives the app: every session's and terminal's process group is stopped.
+/// Safe to repeat.
+pub(crate) fn stop_everything<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
+    app.state::<session::Sessions>().shutdown();
+    app.state::<terminal::Terminals>().stop_all(std::time::Duration::from_millis(200));
 }
 
 /// Keeps the user's agents.json watched for the app's lifetime.

@@ -39,6 +39,9 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 tokio = { version = "1", features = ["process", "io-util", "sync", "time", "macros", "rt-multi-thread"] }
 # Terminal tabs: the user's shell in a pseudo-terminal
 portable-pty = "0.9"
+# Updating the app from GitHub Releases (Rust only: no JS plugin, no capabilities)
+tauri-plugin-updater = "2.14"
+semver = { version = "1", features = ["serde"] }
 
 # Stopping a timed-out commit's process group (git and its hooks)
 [target.'cfg(unix)'.dependencies]

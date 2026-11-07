@@ -83,3 +83,81 @@ jobs:
           # A later job writes latest.json once; parallel jobs merging it can lose a platform.
           includeUpdaterJson: false
           args: ${{ matrix.args }}
+
+  cli:
+    needs: build
+    # Holds the updater's signing key.
+    environment: release
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            ext: .exe
+    runs-on: ${{ matrix.os }}
+    env:
+      ASSET: batrak-${{ matrix.target }}${{ matrix.ext }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      # The repo's Tauri CLI, for `signer sign`.
+      - uses: ./.github/actions/setup
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Two targets share a runner OS and a job: without a key they would share a cache.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Build
+        run: |
+          cargo build --release --locked -p batrak --target ${{ matrix.target }}
+          cp "target/${{ matrix.target }}/release/batrak${{ matrix.ext }}" "$ASSET"
+
+      # After the copy: release::verify requires the signature's file: to equal the asset's name.
+      - name: Sign
+        working-directory: apps/desktop
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm tauri signer sign --app-version "${GITHUB_REF_NAME#v}" "../../$ASSET"
+
+      - name: Upload to the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sig" --clobber
+
+  manifests:
+    needs: [build, cli]
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write the manifests
+        run: |
+          gh release download "$GITHUB_REF_NAME" --pattern '*.sig' --dir "$RUNNER_TEMP/sigs"
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets.txt"
+          node .github/scripts/release-manifests.mjs "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" "$RUNNER_TEMP/sigs" "$RUNNER_TEMP/assets.txt" "$RUNNER_TEMP/manifests"
+
+      - name: Upload to the draft
+        run: |
+          gh release upload "$GITHUB_REF_NAME" --clobber \
+            "$RUNNER_TEMP/manifests/latest.json" "$RUNNER_TEMP/manifests/batrak-cli.json" \
+            scripts/install.sh scripts/install.ps1

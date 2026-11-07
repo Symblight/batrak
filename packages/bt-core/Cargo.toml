@@ -30,9 +30,13 @@ dirs = "7"
 notify-debouncer-full = "0.7"
 # `${keychain:name}` in agents.json env values
 keyring = "4.2"
-# The ACP agent registry (config/registry.rs only): fetched over rustls, versions compared by semver
+# The ACP agent registry (config/registry.rs) and GitHub Releases (release/): fetched over rustls,
+# versions compared by semver
 ureq = { version = "3", default-features = false, features = ["rustls"] }
 semver = "1"
+# A release's signature: a Tauri `.sig` and public key are minisign boxes wrapped in base64
+minisign-verify = "0.3.0"
+base64 = "0.23"
 # Accent-insensitive agent search (NFD); already in the tree through url/idna
 icu_normalizer = "2"
 

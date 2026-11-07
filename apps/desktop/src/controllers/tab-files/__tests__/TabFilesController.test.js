@@ -3,7 +3,7 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { TabFilesController } from '../TabFilesController.js';
-import { closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
+import { $unsavedFiles, closeAllTabs, closeTab, openTab } from '../../../stores/editor/editor.js';
 import { $project } from '../../../stores/project/project.js';
 import { $sessions } from '../../../stores/sessions/sessions.js';
 
@@ -211,6 +211,28 @@ describe('TabFilesController', () => {
   describe('switching projects', () => {
     const away = () => $project.set({ path: '/q', name: 'q', rootId: 'r2' });
     const back = () => $project.set({ path: '/p', name: 'p', rootId: 'r' });
+
+    it('counts unsaved edits while another project is shown, until they are saved or closed', async () => {
+      // Arrange
+      const { files } = await edited();
+      expect($unsavedFiles.get(), 'edited').to.equal(1);
+
+      // Act + Assert: its project isn't shown
+      away();
+      expect($unsavedFiles.get(), 'away').to.equal(1);
+
+      // Act + Assert: shown again, and saved
+      back();
+      expect($unsavedFiles.get(), 'back').to.equal(1);
+      await files.save(PATH);
+      expect($unsavedFiles.get(), 'saved').to.equal(0);
+
+      // Act + Assert: edited again, and closed
+      files.edit(PATH, '{ "mine": 2 }');
+      expect($unsavedFiles.get(), 'edited again').to.equal(1);
+      closeTab(PATH);
+      expect($unsavedFiles.get(), 'closed').to.equal(0);
+    });
 
     it('keeps unsaved edits while another project is shown', async () => {
       const { files, tab } = await edited();

@@ -93,6 +93,7 @@ import type { AcpSessionSync } from './components/session-sync/session-sync.js';
 import type { AcpSessionColumn } from './views/session-column/session-column.js';
 import type { AcpTerminal } from './components/terminal/terminal.js';
 import type { AcpToolbar } from './components/toolbar/toolbar.js';
+import type { AcpUpdateButton } from './components/update-button/update-button.js';
 import type { AcpToolbarView } from './views/toolbar-view/toolbar-view.js';
 import type { AcpViewPlaceholder } from './components/view-placeholder/view-placeholder.js';
 import type { AcpWelcome } from './components/welcome/welcome.js';
@@ -194,6 +195,7 @@ declare global {
     'acp-terminal': AcpTerminal;
     'acp-terminal-find': import('./components/terminal-find/terminal-find.js').AcpTerminalFind;
     'acp-toolbar': AcpToolbar;
+    'acp-update-button': AcpUpdateButton;
     'acp-toolbar-view': AcpToolbarView;
     'acp-view-placeholder': AcpViewPlaceholder;
     'acp-welcome': AcpWelcome;
