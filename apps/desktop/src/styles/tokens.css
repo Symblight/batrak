@@ -122,7 +122,6 @@
   --acp-font-size-lg: 14px;
   --acp-font-size-title: var(--acp-font-size-lg);
   --acp-font-weight-medium: 500;
-  --acp-font-weight-title: 600;
 
   /* Icon sizes: set as font-size on the icon's class */
   --acp-icon-size-xs: 14px;
