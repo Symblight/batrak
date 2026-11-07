@@ -4,8 +4,9 @@ import { expect, fixture, html } from '../../../../test/fixture.js';
 import { agentsMd } from '../../../hooks/agents-md/agents-md.js';
 import { $agentList } from '../../../stores/agents/agents.js';
 import { forgetComposer } from '../../../stores/composer/composer.js';
-import { $project } from '../../../stores/project/project.js';
+import { $openRoots, $project } from '../../../stores/project/project.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
+import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../chat-view.js';
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
@@ -52,6 +53,9 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
     $sessions.set([]);
     $project.set(null);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
+    setWorkspaces([]);
+    $openRoots.set({});
+    for (const key of Object.keys(localStorage)) if (key.startsWith('batrak:agents-md:dismissed:')) localStorage.removeItem(key);
     clearMocks();
   });
 
@@ -167,6 +171,45 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
     // Assert
     expect(chat(el).agentsMdOffer).to.equal(false);
     expect(unhandled).to.deep.equal([]);
+  });
+
+  it('its dismiss button ends the offer for the project, in all its workspaces, and for no other', async () => {
+    // Arrange: every root lacks the file; shown is a workspace of a project no other test has dismissed
+    answer = (cmd) => cmd === 'needs_agents_md';
+    const path = `/p-${crypto.randomUUID()}`;
+    $project.set({ path, name: 'p', rootId: 'r' });
+    const workspace = /** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', name: 'w1', folder: '/wt/w1', worktreePath: '/wt/w1', branch: 'w1', checkedOut: true });
+    setWorkspaces([workspace], path);
+    $openRoots.set({ '/wt/w1': 'r-w1' });
+    setActiveWorkspace(path, 'w1');
+    const el = await render();
+    await until(() => chat(el).agentsMdOffer);
+    expect(asked(), 'about the workspace').to.deep.equal(['r-w1']);
+    const banner = /** @type {import('lit').LitElement} */ (chat(el).renderRoot.querySelector('acp-session-banner'));
+    await banner.updateComplete;
+    const inner = /** @type {import('lit').LitElement} */ (banner.renderRoot.querySelector('chx-input-mode-banner'));
+    await inner.updateComplete;
+
+    // Act
+    /** @type {HTMLElement} */ (inner.renderRoot.querySelector('[part="dismiss"]')).click();
+    await el.updateComplete;
+
+    // Assert
+    expect(chat(el).agentsMdOffer, 'gone at once').to.equal(false);
+
+    // Act: Main of the same project, its root lacking the file too
+    setActiveWorkspace(path, MAIN);
+    await until(() => asked().includes('r'));
+    await settled();
+
+    // Assert
+    expect(chat(el).agentsMdOffer, "the project's Main").to.equal(false);
+
+    // Act: another project
+    $project.set({ path: `/other-${crypto.randomUUID()}`, name: 'other', rootId: 'r-other' });
+
+    // Assert
+    await until(() => chat(el).agentsMdOffer);
   });
 
   it('Create AGENTS.md starts a session titled after the prompt and sends it the whole prompt', async () => {

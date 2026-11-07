@@ -24,6 +24,7 @@ const VARIANTS = OPTION_VARIANTS;
  * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
  * @fires acp-agents-md-create `null` Create AGENTS.md, from the offer.
+ * @fires acp-agents-md-dismiss `null` The offer's dismiss button.
  */
 export class AcpSessionBanner extends LitElement {
   static properties = {
@@ -202,8 +203,7 @@ export class AcpSessionBanner extends LitElement {
   render() {
     const request = this.permission;
     const notice = this.notice;
-    // Last in each of the choices below: a request or a notice goes first.
-    const offer = this.agentsMdOffer;
+    const offer = this.agentsMdOffer && request === null && notice === null;
     const shown = request !== null || notice !== null || offer;
     const signingIn = !request && notice?.kind === 'sign-in' && notice.signIn !== undefined;
     const label = request?.title ?? (notice && signingIn ? this.#signInLabel(notice) : notice?.message) ?? (offer ? agentsMd.LABEL : '');
@@ -215,8 +215,8 @@ export class AcpSessionBanner extends LitElement {
       ?hidden=${!shown}
       .label=${label}
       .variant=${variant}
-      ?dismissible=${!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap' || notice?.kind === 'stop-reason')}
-      @chx-input-mode-banner-dismiss=${() => this.#act('dismiss-notice')}
+      ?dismissible=${offer || (!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap' || notice?.kind === 'stop-reason'))}
+      @chx-input-mode-banner-dismiss=${() => (offer ? this.#emit('acp-agents-md-dismiss', null) : this.#act('dismiss-notice'))}
     >
       ${request ? this.#renderPermission(request) : notice ? this.#renderNoticeActions(notice) : offer ? this.#renderOffer() : nothing}
     </chx-input-mode-banner>`;
