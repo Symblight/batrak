@@ -1,6 +1,6 @@
-/** Runs an async job at most once at a time; a request while it runs runs it again afterwards. */
+/** Runs an async job one at a time, a request during a run running it again afterwards; only a superseded run can overlap the next. */
 export class SerialTask {
-  /** @type {() => Promise<void>} */
+  /** @type {(isCurrent: () => boolean) => Promise<void>} */
   #job;
   /** Longest ms a run waits while requests keep coming. */
   #maxWait;
@@ -12,9 +12,11 @@ export class SerialTask {
   #running = false;
   /** A request came in while it ran. */
   #again = false;
+  /** Bumped by `supersede()`: a run from an older one is dead. */
+  #generation = 0;
 
   /**
-   * @param {() => Promise<void>} job Handles its own errors.
+   * @param {(isCurrent: () => boolean) => Promise<void>} job Handles its own errors; `isCurrent` turns false once it is superseded.
    * @param {number} [maxWait] Longest ms a run waits while requests keep coming.
    */
   constructor(job, maxWait = Infinity) {
@@ -27,7 +29,7 @@ export class SerialTask {
     clearTimeout(this.#timer);
     this.#asked ??= Date.now();
     const left = this.#maxWait - (Date.now() - this.#asked);
-    this.#timer = setTimeout(() => this.#run(), Math.max(0, Math.min(delay, left)));
+    this.#timer = setTimeout(() => this.run(), Math.max(0, Math.min(delay, left)));
   }
 
   /** Drops a pending run; one in progress finishes, and its caller fences the result. */
@@ -37,20 +39,32 @@ export class SerialTask {
     this.#again = false;
   }
 
-  async #run() {
+  /** Drops a pending run and makes the one in progress dead, so the next run needn't wait for it. */
+  supersede() {
+    this.cancel();
+    this.#generation++;
+    this.#running = false;
+  }
+
+  /** Runs now, in place of a pending run; if one is in progress, again right after it. */
+  async run() {
+    clearTimeout(this.#timer);
     this.#asked = null;
     if (this.#running) {
       this.#again = true;
       return;
     }
     this.#running = true;
+    const generation = this.#generation;
     try {
-      await this.#job();
+      await this.#job(() => generation === this.#generation);
     } finally {
-      this.#running = false;
-      if (this.#again) {
-        this.#again = false;
-        this.#run();
+      if (generation === this.#generation) {
+        this.#running = false;
+        if (this.#again) {
+          this.#again = false;
+          this.run();
+        }
       }
     }
   }
