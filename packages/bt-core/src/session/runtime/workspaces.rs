@@ -42,7 +42,7 @@ impl Sessions {
     /// project's checkout, unstaged; a checkout that moved on gets a three-way merge. Refused while
     /// a chat of it is in a turn.
     pub async fn workspace_apply_locally(&self, id: &str) -> Result<crate::git::apply::ApplyOutcome, String> {
-        let (dir, base) = self.checked_out(id)?;
+        let (dir, base) = self.workspace_checked_out(id)?;
         let _held = self.hold_workspace(id)?;
         let project = self.inner.workspaces.get(id)?.project_path;
         let outcome = tokio::task::spawn_blocking(move || {
@@ -59,7 +59,7 @@ impl Sessions {
     /// project is on another branch). Refused while a chat is in a turn or the worktree has
     /// uncommitted changes, which a checkout would leave behind.
     pub async fn workspace_check_out_branch(&self, id: &str) -> Result<(), String> {
-        self.checked_out(id)?;
+        self.workspace_checked_out(id)?;
         let held = self.hold_workspace(id)?;
         let workspace = self.inner.workspaces.get(id)?;
         let check = workspace.worktree_path.clone();
@@ -81,27 +81,8 @@ impl Sessions {
         Ok(())
     }
 
-    /// A workspace's changed files since its base commit, relative to its folder. Stops the list of
-    /// it still running, whose answer nobody wants now (it fails with `exec::CANCELLED`). Blocking.
-    pub fn workspace_changes(&self, id: &str) -> Result<Vec<crate::git::status::FileStatus>, String> {
-        let (dir, base) = self.checked_out(id)?;
-        let cancel = Arc::new(AtomicBool::new(false));
-        if let Some(previous) = lock(&self.inner.change_lists).insert(id.to_owned(), Arc::clone(&cancel)) {
-            previous.store(true, Ordering::SeqCst);
-        }
-        crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base, &cancel)
-    }
-
-    /// A workspace's file (relative to its folder) at its base commit; `None` when it wasn't
-    /// there. Fails, saying why, when it has no text to diff (see `blob::file_at_head`). Blocking.
-    pub fn workspace_file_at_base(&self, id: &str, path: &str) -> Result<Option<String>, String> {
-        crate::util::checked_rel(path)?;
-        let (dir, base) = self.checked_out(id)?;
-        crate::git::blob::file_at(crate::git::binary::git()?, &dir, &base, path)
-    }
-
     /// A workspace's folder and base commit, once its folder is there.
-    fn checked_out(&self, id: &str) -> Result<(PathBuf, String), String> {
+    pub fn workspace_checked_out(&self, id: &str) -> Result<(PathBuf, String), String> {
         let workspace = self.inner.workspaces.get(id)?;
         if workspace.checkout_state() != crate::workspace::CheckoutState::Ready {
             return Err(format!("{}: the workspace's folder isn't checked out", workspace.folder.display()));

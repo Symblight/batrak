@@ -5,6 +5,7 @@ use std::path::PathBuf;
 
 use tauri::State;
 
+use crate::git::workspace_changes::{file_at_base, WorkspaceScans};
 use crate::session::{DeletePreview, Sessions};
 use crate::workspace::Workspace;
 
@@ -80,16 +81,27 @@ pub async fn workspace_check_out_branch(sessions: State<'_, Sessions>, id: Strin
     sessions.workspace_check_out_branch(&id).await
 }
 
-/// The workspace's changed files since its base, relative to its folder.
+/// The workspace's changed files since its base, relative to its folder. Stops the list of it still
+/// running, whose answer nobody wants now (it fails with `exec::CANCELLED`).
 #[tauri::command]
-pub async fn workspace_changes(sessions: State<'_, Sessions>, id: String) -> Result<Vec<crate::git::status::FileStatus>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.workspace_changes(&id)).await?
+pub async fn workspace_changes(
+    sessions: State<'_, Sessions>,
+    scans: State<'_, WorkspaceScans>,
+    id: String,
+) -> Result<Vec<crate::git::status::FileStatus>, String> {
+    let (dir, base) = checked_out(&sessions, &id).await?;
+    let cancel = scans.start(&id);
+    blocking(move || crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base, &cancel)).await?
 }
 
 /// A workspace's file at its base commit; `null` when new, binary or too large.
 #[tauri::command]
 pub async fn workspace_file_at_base(sessions: State<'_, Sessions>, id: String, path: String) -> Result<Option<String>, String> {
-    let sessions = sessions.inner().clone();
-    blocking(move || sessions.workspace_file_at_base(&id, &path)).await?
+    let (dir, base) = checked_out(&sessions, &id).await?;
+    blocking(move || file_at_base(crate::git::binary::git()?, &dir, &base, &path)).await?
+}
+
+async fn checked_out(sessions: &Sessions, id: &str) -> Result<(PathBuf, String), String> {
+    let (sessions, id) = (sessions.clone(), id.to_owned());
+    blocking(move || sessions.workspace_checked_out(&id)).await?
 }

@@ -4,3 +4,4 @@ pub use bt_core::git::*;
 
 pub mod cache;
 pub mod commit;
+pub mod workspace_changes;
