@@ -1105,7 +1105,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 
     assert_eq!(f.sessions.workspaces().get(one.workspace_id.as_deref().unwrap()).unwrap().base_commit, head);
     let branch = one.branch.clone().unwrap();
-    assert!(branch.starts_with("batrak/workspace"), "{branch}");
+    assert!(branch.starts_with("workspace"), "{branch}");
     assert_ne!(two.branch, one.branch);
     let wt = PathBuf::from(one.folder.clone());
     assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
@@ -3478,7 +3478,7 @@ async fn a_workspace_outlives_its_only_chat() {
     let workspaces = f.sessions.workspaces().list(&f.project);
     assert_eq!(workspaces.len(), 1);
     let ws = &workspaces[0];
-    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "batrak/workspace", Some("main")));
+    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "workspace", Some("main")));
     assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
     assert_eq!(PathBuf::from(&chat.folder), ws.folder, "its agent works in the workspace's folder");
     assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");

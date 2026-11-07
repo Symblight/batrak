@@ -85,7 +85,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `listed_record`), `for_session()` builds its env, and `Inner::prepare_folder` (`start.rs`) gets
   the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
   `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
-  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `batrak/<slug>` (`-2`… when taken) from
+  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `<slug>` (`-2`… when taken) from
   its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by
   `check_out` (in the background from `workspace_create`) or at its first chat's start
   (`Workspaces::ready`, which every chat start waits on); checkout, removal and placing live in

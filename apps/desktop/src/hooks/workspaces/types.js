@@ -1,6 +1,6 @@
 /**
  * A workspace of the shown project, as the backend lists it (`workspace::Workspace`): a task
- * with its own folder (a git worktree) on branch `batrak/<slug>`. Main, the project's own folder,
+ * with its own folder (a git worktree) on branch `<slug>`. Main, the project's own folder,
  * isn't one.
  * @typedef {Object} Workspace
  * @property {string} id
