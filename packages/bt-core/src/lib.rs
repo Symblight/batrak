@@ -10,6 +10,7 @@ pub mod config;
 pub mod dirs;
 pub mod git;
 pub mod notify;
+pub mod release;
 pub mod session;
 pub mod storage;
 pub mod util;

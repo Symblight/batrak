@@ -32,6 +32,7 @@
  * @property {string} os Name and version, e.g. `macOS 26.1`.
  * @property {string} arch
  * @property {string | null} logDir
+ * @property {boolean} updatesEnabled This build has **Check for updates** (not a debug build).
  */
 
 /** @typedef {'background' | 'foreground' | 'cursor' | 'black' | 'red' | 'green' | 'yellow' | 'blue' | 'magenta' | 'cyan' | 'white' | 'brightBlack' | 'brightRed' | 'brightGreen' | 'brightYellow' | 'brightBlue' | 'brightMagenta' | 'brightCyan' | 'brightWhite'} TerminalColorKey */

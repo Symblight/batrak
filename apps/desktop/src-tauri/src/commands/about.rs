@@ -13,6 +13,8 @@ pub struct AboutInfo {
     pub os: String,
     pub arch: &'static str,
     pub log_dir: Option<String>,
+    /// Whether this build updates itself, so whether About has its **Check for updates** row.
+    pub updates_enabled: bool,
 }
 
 #[tauri::command]
@@ -24,6 +26,7 @@ pub async fn about(app: AppHandle) -> Result<AboutInfo, String> {
         os: os_name(),
         arch: std::env::consts::ARCH,
         log_dir,
+        updates_enabled: crate::app_update::UPDATES_ENABLED,
     })
     .await
 }

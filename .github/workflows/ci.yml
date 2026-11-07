@@ -14,6 +14,13 @@ permissions:
   contents: read
 
 jobs:
+  release-scripts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - run: node --test .github/scripts/release-manifests.test.mjs
+
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -52,3 +59,19 @@ jobs:
       - run: cargo clippy --all-targets -- -D warnings
 
       - run: cargo test --workspace
+
+  # The CLI alone: it has the Windows-only way of replacing a running binary. The desktop stays on macOS.
+  cli-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - run: cargo clippy -p batrak --all-targets -- -D warnings
+
+      - run: cargo test -p batrak

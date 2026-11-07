@@ -11,12 +11,14 @@ import styles from './about-dialog.css?inline';
 
 /**
  * @tag acp-about-dialog
- * @summary About Batrak: the app's version, what it runs on and its log files.
+ * @summary About Batrak: the app's version, what it runs on, its log files and a check for updates.
  * @fires acp-reveal-path `{ path }` Show log files.
+ * @fires acp-update-check `null` Check for updates.
  */
 export class AcpAboutDialog extends LitElement {
   static properties = {
     about: { attribute: false },
+    updateCheck: { attribute: false },
   };
 
   static styles = styles;
@@ -25,6 +27,8 @@ export class AcpAboutDialog extends LitElement {
     super();
     /** @type {AboutInfo | null} `null` until read. */
     this.about = null;
+    /** @type {import('../../hooks/app-update/types.js').UpdateCheck} */
+    this.updateCheck = { checking: false, message: null };
   }
 
   /** Opens the dialog. */
@@ -42,6 +46,19 @@ export class AcpAboutDialog extends LitElement {
     this.dispatchEvent(new CustomEvent('acp-reveal-path', { detail: { path: logDir }, bubbles: true, composed: true }));
   };
 
+  #checkForUpdates = () => {
+    this.dispatchEvent(new CustomEvent('acp-update-check', { detail: null, bubbles: true, composed: true }));
+  };
+
+  #renderUpdates() {
+    const { checking, message } = this.updateCheck;
+    return html`<dt class="acp-about-dialog__label">Updates</dt>
+      <dd class="acp-about-dialog__value acp-about-dialog__updates">
+        <md-button class="acp-about-dialog__check" variant="text" ?disabled=${checking} @click=${this.#checkForUpdates}>Check for updates</md-button>
+        <span role="status">${message ?? nothing}</span>
+      </dd>`;
+  }
+
   render() {
     const about = this.about;
     return html`<md-dialog class="acp-about-dialog__dialog" wide>
@@ -56,6 +73,7 @@ export class AcpAboutDialog extends LitElement {
               ([label, value]) => html`<dt class="acp-about-dialog__label">${label}</dt>
                 <dd class="acp-about-dialog__value">${value}</dd>`,
             )}
+            ${about.updatesEnabled ? this.#renderUpdates() : nothing}
           </dl>`
         : nothing}
       <div slot="footer" class="acp-about-dialog__footer">

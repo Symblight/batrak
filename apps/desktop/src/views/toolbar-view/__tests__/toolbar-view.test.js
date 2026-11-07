@@ -1,5 +1,8 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { appUpdate } from '../../../hooks/app-update/app-update.js';
+import { $appUpdate } from '../../../stores/app-update/app-update.js';
 import { $gitCompare, $gitRepo, NO_COMPARE, NO_REPO } from '../../../stores/git/git.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
@@ -20,19 +23,58 @@ async function until(pred) {
   }
 }
 
+const settled = () => new Promise((r) => setTimeout(r, 30));
+
+const REMOVE = 'Remove project?';
+const RESTART = 'Restart Batrak?';
+
+/**
+ * The dialog showing this question.
+ * @param {HTMLElement} view
+ * @param {string} headline
+ */
+function question(view, headline) {
+  const dialogs = [...view.querySelectorAll('acp-confirm-dialog')];
+  return (
+    dialogs.find((d) => {
+      const root = /** @type {ShadowRoot} */ (d.shadowRoot);
+      return root.querySelector('md-dialog[open]') !== null && root.querySelector('.acp-confirm-dialog__headline')?.textContent === headline;
+    }) ?? null
+  );
+}
+
+/**
+ * Clicks a button of the question showing.
+ * @param {HTMLElement} view
+ * @param {string} headline
+ * @param {string} button
+ */
+function answer(view, headline, button) {
+  const root = /** @type {ShadowRoot} */ (question(view, headline)?.shadowRoot);
+  /** @type {HTMLElement | undefined} */ ([...root.querySelectorAll('md-button')].find((b) => b.textContent?.trim() === button))?.click();
+}
+
 describe('acp-toolbar-view', () => {
   /** @type {{ cmd: string, args: Record<string, unknown> }[]} */
   let calls;
+  /** @type {{ agents: number, terminals: number } | Promise<{ agents: number, terminals: number }>} */
+  let blockers;
 
   beforeEach(() => {
     calls = [];
-    mockIPC((cmd, args) => {
-      const a = /** @type {Record<string, unknown>} */ (args ?? {});
-      calls.push({ cmd, args: a });
-      if (cmd === 'open_root') return { rootId: `root:${a.path}`, path: a.path };
-      if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [], default: null };
-      return cmd.startsWith('list_') ? [] : null;
-    });
+    blockers = { agents: 2, terminals: 1 };
+    mockIPC(
+      (cmd, args) => {
+        const a = /** @type {Record<string, unknown>} */ (args ?? {});
+        calls.push({ cmd, args: a });
+        if (cmd === 'open_root') return { rootId: `root:${a.path}`, path: a.path };
+        if (cmd === 'app_update_blockers') return blockers;
+        if (cmd === 'app_update_state') return $appUpdate.get();
+        if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [], default: null };
+        return cmd.startsWith('list_') ? [] : null;
+      },
+      { shouldMockEvents: true },
+    );
     $projects.set([
       { id: '/p', name: 'p', path: '/p' },
       { id: '/q', name: 'q', path: '/q' },
@@ -46,6 +88,7 @@ describe('acp-toolbar-view', () => {
     $projects.set([]);
     $project.set(null);
     $hiddenColumns.set([]);
+    $appUpdate.set({ state: 'none' });
     clearMocks();
   });
 
@@ -121,6 +164,7 @@ describe('acp-toolbar-view', () => {
     /** @type {{ resolve: (list: unknown) => void, reject: (err: unknown) => void }[]} */
     const asked = [];
     mockIPC((cmd) => {
+      if (cmd === 'app_update_blockers') return { agents: 2, terminals: 1 };
       if (cmd === 'git_branches') return new Promise((resolve, reject) => asked.push({ resolve, reject }));
       return cmd.startsWith('list_') ? [] : null;
     });
@@ -147,5 +191,151 @@ describe('acp-toolbar-view', () => {
     expect(afterSwitch).to.deep.equal([]);
     expect(afterLate).to.deep.equal([]);
     expect(view.branches.local).to.deep.equal([]);
+  });
+
+  describe('the update button', () => {
+    const READY = /** @type {const} */ ({ state: 'ready', version: '0.9.3', onNextLaunch: false });
+
+    it('shows the store, and does what its menu asks', async () => {
+      // Arrange
+      $appUpdate.set(READY);
+      const { toolbar, fire } = await render();
+      expect(toolbar.appUpdate, 'from the store').to.deep.equal(READY);
+
+      /** @type {[string, unknown, string, unknown][]} */
+      const cases = [
+        ['acp-update-download', null, 'app_update_download', {}],
+        ['acp-update-cancel', null, 'app_update_cancel', {}],
+        ['acp-update-on-next-launch', { on: true }, 'app_update_on_next_launch', { on: true }],
+        ['acp-update-manual', null, 'app_update_open_release', {}],
+      ];
+      for (const [type, detail, cmd, args] of cases) {
+        // Act
+        fire(type, detail);
+        await until(() => calls.some((c) => c.cmd === cmd));
+
+        // Assert
+        expect(calls.find((c) => c.cmd === cmd)?.args, type).to.deep.equal(args);
+      }
+    });
+
+    it('asks in its dialog before a restart that stops something', async () => {
+      for (const [button, restarts] of /** @type {const} */ ([['Postpone', false], ['Restart', true]])) {
+        // Arrange
+        calls = [];
+        $appUpdate.set(READY);
+        const { view, fire } = await render();
+
+        // Act
+        fire('acp-update-restart');
+        await until(() => question(view, RESTART) !== null);
+        const shadow = /** @type {ShadowRoot} */ (question(view, RESTART)?.shadowRoot);
+        const message = shadow.querySelector('.acp-confirm-dialog__message')?.textContent;
+        answer(view, RESTART, button);
+        await settled();
+
+        // Assert
+        expect(message).to.equal('2 agents are working, 1 terminal is running a program. Restarting stops them. You can continue each session after the update.');
+        expect(calls.some((c) => c.cmd === 'app_update_restart'), button).to.equal(restarts);
+      }
+    });
+
+    /** Update and Restart on its way, as of a clean start. */
+    async function downloading() {
+      calls = [];
+      $projects.set([
+        { id: '/p', name: 'p', path: '/p' },
+        { id: '/q', name: 'q', path: '/q' },
+      ]);
+      $appUpdate.set({ state: 'available', version: '0.9.3', current: '0.9.2', manual: false });
+      const stop = appUpdate.start();
+      const { view, fire } = await render();
+      fire('acp-update-download');
+      await until(() => calls.some((c) => c.cmd === 'app_update_download'));
+      await emit('app-update://changed', { state: 'downloading', version: '0.9.3', received: 1, total: 2 });
+      return { view, fire, stop };
+    }
+
+    it('lets a question opened while it reads what is busy go first', async () => {
+      // Arrange
+      /** @type {(value: { agents: number, terminals: number }) => void} */
+      let reply = () => {};
+      blockers = new Promise((resolve) => (reply = resolve));
+      const { view, fire, stop } = await downloading();
+      await emit('app-update://changed', READY);
+      await until(() => calls.some((c) => c.cmd === 'app_update_blockers'));
+      fire('acp-project-remove', { projectId: '/q' });
+      await until(() => question(view, REMOVE) !== null);
+
+      // Act
+      reply({ agents: 1, terminals: 0 });
+      await settled();
+
+      // Assert
+      expect(question(view, RESTART) !== null, 'waits').to.equal(false);
+      answer(view, REMOVE, 'Cancel');
+      await until(() => question(view, RESTART) !== null);
+      answer(view, RESTART, 'Postpone');
+      stop();
+    });
+
+    it('asks by itself only with no other question open, so a click reaches what it was meant for', async () => {
+      /** @type {{ why: string, order: 'remove first' | 'restart first', remove: string, removed: boolean, gone?: boolean, idle?: boolean }[]} */
+      const orders = [
+        { why: 'Remove open as the download ends, then chosen', order: 'remove first', remove: 'Remove', removed: true },
+        { why: 'Remove open as the download ends, then cancelled', order: 'remove first', remove: 'Cancel', removed: false },
+        { why: 'nothing busy still waits for the open question', order: 'remove first', remove: 'Remove', removed: true, idle: true },
+        { why: 'Ready gone by the time Remove is answered', order: 'remove first', remove: 'Cancel', removed: false, gone: true },
+        { why: 'Remove asked over the restart question', order: 'restart first', remove: 'Remove', removed: true },
+      ];
+      for (const { why, order, remove, removed, gone, idle } of orders) {
+        // Arrange: Update and Restart is on its way
+        blockers = idle ? { agents: 0, terminals: 0 } : { agents: 2, terminals: 1 };
+        const { view, fire, stop } = await downloading();
+        const restarted = () => calls.some((c) => c.cmd === 'app_update_restart');
+
+        if (order === 'remove first') {
+          // Act: the download ends behind an open question
+          fire('acp-project-remove', { projectId: '/q' });
+          await until(() => question(view, REMOVE) !== null);
+          await emit('app-update://changed', READY);
+          await settled();
+
+          // Assert: that question stays, and nothing else came
+          expect(question(view, REMOVE) !== null, `${why}: still asking`).to.equal(true);
+          expect(question(view, RESTART) !== null, `${why}: not asked yet`).to.equal(false);
+          expect(restarted(), `${why}: not restarted yet`).to.equal(false);
+
+          // Act: the click lands on what it was meant for
+          if (gone) await emit('app-update://changed', { state: 'installing', version: '0.9.3' });
+          answer(view, REMOVE, remove);
+          await settled();
+          expect($projects.get().length === 1, `${why}: removed`).to.equal(removed);
+          expect(restarted(), `${why}: no restart from that click`).to.equal(!!idle);
+          expect(question(view, RESTART) !== null, `${why}: asked after`).to.equal(!gone && !idle);
+          if (!gone && !idle) {
+            answer(view, RESTART, 'Restart');
+            await until(restarted);
+          }
+        } else {
+          // Act: the question is up, and another is asked over it
+          await emit('app-update://changed', READY);
+          await until(() => question(view, RESTART) !== null);
+          fire('acp-project-remove', { projectId: '/q' });
+          await until(() => question(view, REMOVE) !== null);
+          answer(view, REMOVE, remove);
+          await settled();
+
+          // Assert: each question keeps its own answer
+          expect($projects.get().length === 1, `${why}: removed`).to.equal(removed);
+          expect(question(view, RESTART) !== null, `${why}: still asking`).to.equal(true);
+          expect(restarted(), `${why}: no restart from that click`).to.equal(false);
+          answer(view, RESTART, 'Postpone');
+          await settled();
+          expect(restarted(), `${why}: postponed`).to.equal(false);
+        }
+        stop();
+      }
+    });
   });
 });

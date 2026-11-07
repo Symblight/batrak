@@ -7,6 +7,10 @@ import styles from './confirm-dialog.css?inline';
 /** @typedef {import('../../hooks/app/types.js').ConfirmOptions} ConfirmOptions */
 /** @typedef {import('../../hooks/app/types.js').ConfirmChoice} ConfirmChoice */
 
+/** @type {Set<AcpConfirmDialog>} The questions open anywhere in the app. */
+const openDialogs = new Set();
+const settled = new EventTarget();
+
 /**
  * @tag acp-confirm-dialog
  * @summary Modal question; `confirm()` resolves `true` only when the confirm action is chosen, `choose()` names the action (a third one with `extraLabel`).
@@ -47,6 +51,7 @@ export class AcpConfirmDialog extends LitElement {
    */
   async choose(options) {
     this.#settle('cancel');
+    openDialogs.add(this);
     this.options = options;
     await this.updateComplete;
     const answer = new Promise((resolve) => (this.#resolve = resolve));
@@ -59,8 +64,25 @@ export class AcpConfirmDialog extends LitElement {
     this.#settle('cancel');
   }
 
+  /**
+   * Resolves once no other `<acp-confirm-dialog>` is open. For a question nobody just asked for: one
+   * opening by itself over another would take the click meant for that one.
+   */
+  async othersClosed() {
+    while ([...openDialogs].some((dialog) => dialog !== this)) {
+      await new Promise((resolve) => settled.addEventListener('settled', resolve, { once: true }));
+    }
+  }
+
+  disconnectedCallback() {
+    super.disconnectedCallback();
+    this.close();
+  }
+
   /** @param {ConfirmChoice} choice */
   #settle(choice) {
+    openDialogs.delete(this);
+    settled.dispatchEvent(new Event('settled'));
     const resolve = this.#resolve;
     if (!resolve) return;
     this.#resolve = null;

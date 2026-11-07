@@ -488,6 +488,11 @@ impl Terminals {
         master.resize(size).map_err(|e| e.to_string())
     }
 
+    /// Every terminal, of all windows.
+    pub fn ids(&self) -> Vec<String> {
+        lock(&self.inner.terminals).keys().cloned().collect()
+    }
+
     /// The terminals among `ids` running something other than their shell in the foreground.
     pub fn busy(&self, ids: &[String]) -> Vec<Busy> {
         ids.iter()

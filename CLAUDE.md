@@ -18,6 +18,8 @@ cargo run -p batrak -- --version         # the CLI (a stub until docs/specs/cli.
 cargo test -p bt-core real_claude -- --ignored --nocapture   # real Claude Code over ACP (network, login)
 cargo test -p bt-core real_registry -- --ignored             # the real ACP registry and its ETag (network)
 cargo test -p bt-core real_npm -- --ignored                  # a real `npm cache add` prefetch (network, npm)
+node --test .github/scripts/release-manifests.test.mjs        # the release manifests; must pass
+cargo test -p bt-core real_release -- --ignored              # the real batrak-cli.json parses (network; a published release that has it)
 
 cd apps/desktop
 pnpm dev             # Rsbuild dev server (port 1420; full reload, no HMR)
