@@ -90,6 +90,8 @@ test that reproduces it.
   `lit-test-suite` skill.
 - A test is added only for behavior no existing test covers. Test counts never drop to make
   something compile: a test moves with its code.
+- A test file is 500 lines at most. Past that, split it by concern (`<module>/tests/<concern>.rs`,
+  shared helpers in `tests/mod.rs`), like `session/runtime/tests/`.
 - Before reporting work done: `cargo test --workspace`, `cargo clippy --all-targets`,
   `pnpm typecheck` and `pnpm test` pass (the `verify` skill runs them). Say which behavior was
   verified by a test, which by running the app, and which not at all.
