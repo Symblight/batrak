@@ -1,6 +1,7 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../chat.js';
 import { sessions } from '../../../hooks/sessions/sessions.js';
+import { agentsMd } from '../../../hooks/agents-md/agents-md.js';
 
 /** @typedef {import('../chat.js').AcpChat} AcpChat */
 /**
@@ -191,6 +192,79 @@ describe('acp-chat', () => {
       expect(shown).to.deep.equal(lines);
       expect(fired).to.deep.equal(['acp-chat-hint-use']);
     }
+  });
+
+  /** @param {AcpChat} chat Its banner's button, once rendered: there only while the offer shows. */
+  async function createAgentsMdButton(chat) {
+    const banner = /** @type {import('lit').LitElement} */ (chat.renderRoot.querySelector('acp-session-banner'));
+    await banner.updateComplete;
+    return /** @type {HTMLElement | null} */ (banner.renderRoot.querySelector('md-button'));
+  }
+
+  it('offers to create AGENTS.md only on a draft that can send', async () => {
+    const cases = [
+      { props: { empty: true, agentsMdOffer: true }, shown: true },
+      { props: { empty: true, agentsMdOffer: false }, shown: false },
+      { props: { empty: false, agentsMdOffer: true }, shown: false },
+      { props: { empty: true, agentsMdOffer: true, blocked: { message: 'Gone', workspaceId: 'w1' } }, shown: false },
+    ];
+    for (const { props, shown } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
+
+      // Act
+      Object.assign(el, props);
+      await el.updateComplete;
+
+      // Assert
+      expect((await createAgentsMdButton(el)) !== null, JSON.stringify(props)).to.equal(shown);
+    }
+  });
+
+  it('Create AGENTS.md sends the whole prompt from an empty composer', async () => {
+    // Arrange
+    const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .agentsMdOffer=${true}></acp-chat>`));
+    await el.composerReady();
+    /** @type {string[]} */
+    const sent = [];
+    el.addEventListener(
+      'chx-send-message',
+      (e) => {
+        // Kept from `<chx-chat>`: this chat has no adapter to send through.
+        e.stopPropagation();
+        e.preventDefault();
+        sent.push(/** @type {CustomEvent<{ value: string }>} */ (e).detail.value);
+      },
+      { capture: true },
+    );
+
+    // Act
+    (await createAgentsMdButton(el))?.click();
+
+    // Assert
+    expect(sent).to.deep.equal([agentsMd.PROMPT]);
+  });
+
+  it('Create AGENTS.md keeps a draft already typed: the prompt after it, nothing sent', async () => {
+    // Arrange
+    const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .agentsMdOffer=${true}></acp-chat>`));
+    await el.composerReady();
+    el.chat?.input.setText('Look at login first');
+    /** @type {string[]} */
+    const fired = [];
+    el.addEventListener('chx-send-message', (e) => fired.push(e.type), { capture: true });
+
+    // Act
+    (await createAgentsMdButton(el))?.click();
+
+    // Assert
+    /** @type {string[]} */
+    const shown = [];
+    docOf(el).descendants((node) => {
+      if (node.type.name === 'line') shown.push(node.textContent);
+    });
+    expect(shown).to.deep.equal(['Look at login first', ...agentsMd.PROMPT.split('\n').filter(Boolean)]);
+    expect(fired, 'nothing sent').to.deep.equal([]);
   });
 
   it("hands a draft's footer where it runs, beside the full-access note; a started session has none", async () => {

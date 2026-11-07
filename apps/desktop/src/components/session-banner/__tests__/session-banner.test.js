@@ -47,6 +47,46 @@ describe('acp-session-banner', () => {
     expect(selected).to.deep.equal([{ sessionId: 'a' }]);
   });
 
+  it('offers to create AGENTS.md only when nothing else needs the banner', async () => {
+    const offer = 'This project has no AGENTS.md, the instructions file coding agents share.';
+    const notice = { kind: /** @type {const} */ ('info'), message: 'Noted' };
+    const permission = { requestId: 'r', toolCallId: 't', title: 'Edit a file?', options: [{ optionId: 'o', name: 'Allow', kind: 'allow_once' }] };
+    const cases = [
+      { props: { agentsMdOffer: true }, hidden: false, label: offer, buttons: ['Create AGENTS.md'] },
+      { props: { agentsMdOffer: true, notice }, hidden: false, label: 'Noted', buttons: [] },
+      { props: { agentsMdOffer: true, permission }, hidden: false, label: 'Edit a file?', buttons: ['Allow'] },
+      { props: { agentsMdOffer: false }, hidden: true, label: '', buttons: [] },
+    ];
+    for (const { props, hidden, label, buttons } of cases) {
+      // Arrange
+      const el = await fixture(html`<acp-session-banner></acp-session-banner>`);
+
+      // Act
+      Object.assign(el, props);
+      await /** @type {import('lit').LitElement} */ (el).updateComplete;
+
+      // Assert
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const banner = /** @type {HTMLElement & { label: string }} */ (root.querySelector('chx-input-mode-banner'));
+      expect({ hidden: banner.hidden, label: banner.label }, JSON.stringify(props)).to.deep.equal({ hidden, label });
+      expect([...root.querySelectorAll('md-button')].map((b) => b.textContent?.trim())).to.deep.equal(buttons);
+    }
+  });
+
+  it('Create AGENTS.md asks for it', async () => {
+    // Arrange
+    const el = await fixture(html`<acp-session-banner .agentsMdOffer=${true}></acp-session-banner>`);
+    /** @type {CustomEvent[]} */
+    const fired = [];
+    el.addEventListener('acp-agents-md-create', (/** @type {Event} */ e) => fired.push(/** @type {CustomEvent} */ (e)));
+
+    // Act
+    /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('md-button')).click();
+
+    // Assert
+    expect(fired.map((e) => [e.bubbles, e.composed]), 'one event that leaves the banner').to.deep.equal([[true, true]]);
+  });
+
   describe('sign-in', () => {
     /** @param {Partial<import('../../../hooks/agents/types.js').SignInMethod> & { id: string, name: string }} method */
     const method = (method) => ({ description: null, kind: /** @type {const} */ ('agent'), label: null, apiKey: null, ...method });

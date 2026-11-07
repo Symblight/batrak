@@ -16,6 +16,7 @@ import { COMMAND_CHIP_TEMPLATE } from '../../controllers/chat-parts/ChatPartsCon
 import { FileMentionsController } from '../../controllers/file-mentions/FileMentionsController.js';
 import { buildMenuItem, codeChip, commentLines, fileChipAttrs, recalledDoc } from '../../controllers/file-mentions/chips.js';
 import { chat } from '../../hooks/chat/chat.js';
+import { agentsMd } from '../../hooks/agents-md/agents-md.js';
 import { composer } from '../../hooks/composer/composer.js';
 import { git } from '../../hooks/git/git.js';
 import '../agent-picker/agent-picker.js';
@@ -106,6 +107,8 @@ export class AcpChat extends LitElement {
     place: { attribute: false },
     /** A draft's: how many files its folder has uncommitted. */
     uncommitted: { attribute: false },
+    /** A draft's: its folder has no AGENTS.md. */
+    agentsMdOffer: { attribute: false },
     permission: { attribute: false },
     notice: { attribute: false },
     signInRun: { attribute: false },
@@ -158,6 +161,8 @@ export class AcpChat extends LitElement {
     this.place = null;
     /** @type {number} */
     this.uncommitted = 0;
+    /** @type {boolean} */
+    this.agentsMdOffer = false;
     /** @type {PermissionRequest | null} */
     this.permission = null;
     /** @type {SessionNotice | null} */
@@ -291,14 +296,35 @@ export class AcpChat extends LitElement {
    */
   #onHint = (e) => {
     e.stopPropagation();
+    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    if (this.#addLines([value])) this.#emit('acp-chat-hint-use', {});
+  };
+
+  /**
+   * Text lines after the draft (replacing an empty one), with the caret at their end.
+   * @param {readonly string[]} texts None blank: a text node can't be.
+   * @returns {boolean} Whether the composer was up to take them.
+   */
+  #addLines(texts) {
     const textbox = this.#readyTextbox;
     const view = textbox?.editor?.view;
-    if (!textbox || !view) return;
-    const { value } = /** @type {CustomEvent<{ value: string }>} */ (e).detail;
+    if (!textbox || !view) return false;
     const { schema, tr } = view.state;
-    view.dispatch(appendLines(tr, [schema.nodes.line.create(null, [schema.text(value)])]));
+    view.dispatch(appendLines(tr, texts.map((text) => schema.nodes.line.create(null, [schema.text(text)]))));
     textbox.focusEnd();
-    this.#emit('acp-chat-hint-use', {});
+    return true;
+  }
+
+  /** Sent at once from an empty composer. A draft already typed is kept, and the user decides: sending would take it along. */
+  #onAgentsMdCreate = () => {
+    const input = this.chat?.input;
+    if (!input?.isEmpty()) {
+      this.#addLines(agentsMd.PROMPT.split('\n').filter(Boolean));
+      return;
+    }
+    input.setText(agentsMd.PROMPT);
+    // The library has no send of its own; this is how its `autoSubmit` suggestions send.
+    this.#readyTextbox?.closest('form')?.requestSubmit();
   };
 
   /** The uncommitted files hint, on a draft that can send and has some. */
@@ -379,6 +405,8 @@ export class AcpChat extends LitElement {
           .permission=${this.permission}
           .notice=${this.notice}
           .signInRun=${this.signInRun}
+          .agentsMdOffer=${empty && !this.blocked && this.agentsMdOffer}
+          @acp-agents-md-create=${this.#onAgentsMdCreate}
         ></acp-session-banner>
         ${this.subagent
           ? html`<acp-subagent-bar
