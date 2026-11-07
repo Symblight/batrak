@@ -7,8 +7,6 @@ use std::sync::atomic::AtomicBool;
 
 use super::exec::{self, Mode, Options};
 use super::lock::with_mutation;
-use super::line_counts::parse_numstat;
-use super::status::{FileKind, FileStatus};
 use super::temp_file::TempFile;
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
@@ -28,7 +26,7 @@ pub enum ApplyOutcome {
 /// Without `keep_objects` what `add -A` writes goes to a scratch folder too: only looking at the work
 /// must not grow the repository. `mode` is the caller's: a refresh nobody asked for is `Background`, what
 /// the user waits for gets `Hooks`' long timeout for the clean filters (LFS) `add -A` runs over every changed file.
-fn with_snapshot<T>(
+pub fn with_snapshot<T>(
     git: &Path,
     worktree: &Path,
     keep_objects: bool,
@@ -126,32 +124,6 @@ pub fn changes_since(git: &Path, worktree: &Path, base: &str) -> Result<Vec<u8>,
     })
 }
 
-/// Files under `dir` (a worktree or a folder in one; paths relative to it) that differ from
-/// `base`: its commits and uncommitted work together, with line counts. Renames show as a deletion
-/// and an addition. Sorted by path. A refresh: once `cancel` is set git stops (`exec::CANCELLED`).
-pub fn changed_since(git: &Path, dir: &Path, base: &str, cancel: &AtomicBool) -> Result<Vec<FileStatus>, String> {
-    with_snapshot(git, dir, false, Mode::Background, Some(cancel), |run| {
-        let diff = |format: &'static str| run(&[&"diff", &"--cached", &format, &"-z", &"--relative", &"--no-renames", &base]);
-        let names = diff("--name-status")?;
-        let counts = parse_numstat(&String::from_utf8_lossy(&diff("--numstat")?));
-        let names = String::from_utf8_lossy(&names);
-        let mut fields = names.split('\0').filter(|f| !f.is_empty());
-        let mut files = Vec::new();
-        while let (Some(status), Some(path)) = (fields.next(), fields.next()) {
-            let kind = match status.as_bytes().first() {
-                Some(b'A') => FileKind::Added,
-                Some(b'D') => FileKind::Deleted,
-                Some(b'T') => FileKind::TypeChanged,
-                _ => FileKind::Modified,
-            };
-            let (added, removed) = counts.get(path).copied().unwrap_or((None, None));
-            files.push(FileStatus { path: path.to_owned(), kind, staged: false, unstaged: true, orig_path: None, added, removed });
-        }
-        files.sort_by(|a, b| a.path.cmp(&b.path));
-        Ok(files)
-    })
-}
-
 /// Applies the worktree's changes since `base` to the checkout at `target`. A plain apply is
 /// tried first; when the target has moved on, a three-way merge leaves conflict markers.
 pub fn apply_locally(git: &Path, worktree: &Path, base: &str, target: &Path) -> Result<ApplyOutcome, String> {
@@ -208,9 +180,8 @@ pub fn check_out_branch(git: &Path, worktree: &Path, branch: &str, target: &Path
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::git::status::FileKind;
     use crate::git::test_repo::{git_bin, run_in, TestRepo};
-    use crate::git::{blob, worktree};
+    use crate::git::worktree;
 
     #[test]
     fn applies_uncommitted_and_untracked_work_unstaged() {
@@ -237,7 +208,6 @@ mod tests {
         std::fs::write(wt.join("new.txt"), "new\n").unwrap();
         let before = repo.git(&["count-objects"]);
 
-        assert_eq!(changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap().len(), 2);
         assert!(!changes_since(&git_bin(), &wt, &base).unwrap().is_empty());
 
         assert_eq!(repo.git(&["count-objects"]), before);
@@ -282,51 +252,6 @@ mod tests {
 
         let patch = changes_since(&git_bin(), &wt, &base).unwrap();
         assert!(String::from_utf8_lossy(&patch).contains("Subproject commit"), "{}", String::from_utf8_lossy(&patch));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn a_colon_in_the_repositorys_path_is_only_a_colon() {
-        let mut repo = TestRepo::with_commit("co:lon");
-        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-        let wt = repo.worktree("colon-wt", "batrak/colon");
-        std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
-
-        let files = changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap();
-        assert_eq!(files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(), ["README.md"]);
-    }
-
-    #[test]
-    fn files_changed_since_the_base_commit_and_their_text_there() {
-        let mut repo = TestRepo::with_commit("since");
-        for (path, text) in [("app/edit.txt", "one\n"), ("app/gone.txt", "gone\n"), ("app/keep.txt", "keep\n")] {
-            repo.write(path, text);
-        }
-        repo.git(&["add", "."]);
-        repo.git(&["commit", "-qm", "app"]);
-        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-        let wt = repo.worktree("since-wt", "batrak/since");
-        std::fs::write(wt.join("app/edit.txt"), "one\ntwo\n").unwrap();
-        run_in(&wt, &["commit", "-qam", "agent"]);
-        std::fs::remove_file(wt.join("app/gone.txt")).unwrap();
-        std::fs::write(wt.join("app/new.txt"), "a\nb\nc\n").unwrap();
-        std::fs::write(wt.join("outside.txt"), "not the project's").unwrap();
-        run_in(&wt, &["add", "app/new.txt"]);
-        let git = git_bin();
-
-        let files = changed_since(&git, &wt.join("app"), &base, &AtomicBool::new(false)).unwrap();
-        let summary: Vec<_> = files.iter().map(|f| (f.path.as_str(), f.kind, f.added, f.removed)).collect();
-        assert_eq!(
-            summary,
-            [
-                ("edit.txt", FileKind::Modified, Some(1), Some(0)),
-                ("gone.txt", FileKind::Deleted, Some(0), Some(1)),
-                ("new.txt", FileKind::Added, Some(3), Some(0)),
-            ]
-        );
-        assert_eq!(run_in(&wt, &["diff", "--cached", "--name-only"]), "app/new.txt\n", "the worktree's index is untouched");
-        assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "edit.txt").unwrap().as_deref(), Some("one\n"));
-        assert_eq!(blob::file_at(&git, &wt.join("app"), &base, "new.txt").unwrap(), None);
     }
 
     #[test]
@@ -398,26 +323,6 @@ mod tests {
         assert!(check_out_branch(&git_bin(), &wt, "batrak/back", &repo.path).is_err());
         assert_eq!(run_in(&wt, &["branch", "--show-current"]).trim(), "batrak/back");
         assert_eq!(repo.git(&["branch", "--show-current"]).trim(), "main");
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn listing_a_worktrees_changes_doesnt_run_the_repositorys_fsmonitor_hook() {
-        use std::os::unix::fs::PermissionsExt;
-        let mut repo = TestRepo::with_commit("list-fsmonitor");
-        let wt = repo.worktree("list-fsmonitor-wt", "batrak/list-fsmonitor");
-        let base = repo.git(&["rev-parse", "HEAD"]).trim().to_owned();
-        std::fs::write(wt.join("README.md"), "agent edit\n").unwrap();
-        let dir = crate::git::test_repo::temp_dir("list-fsmonitor-hook");
-        let (hook, ran) = (dir.join("hook"), dir.join("ran"));
-        std::fs::write(&hook, format!("#!/bin/sh\ntouch '{}'\nexit 1\n", ran.display())).unwrap();
-        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
-        repo.git(&["config", "core.fsmonitor", hook.to_str().unwrap()]);
-
-        assert_eq!(changed_since(&git_bin(), &wt, &base, &AtomicBool::new(false)).unwrap().len(), 1);
-
-        assert!(!ran.exists(), "the hook ran on a refresh");
-        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[cfg(unix)]

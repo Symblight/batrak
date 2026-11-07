@@ -8,6 +8,7 @@ use super::exec::{self, Mode};
 use super::repo::info;
 
 /// Local branches a session can start from, most recently committed first. Empty outside a repository or before the first commit.
+#[cfg(test)]
 pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     if info(git, root)?.is_none() {
         return Ok(Vec::new());

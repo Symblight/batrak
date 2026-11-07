@@ -5,7 +5,7 @@ use std::path::PathBuf;
 
 use tauri::State;
 
-use crate::git::workspace_changes::{file_at_base, WorkspaceScans};
+use crate::git::workspace_changes::{changed_since, file_at_base, WorkspaceScans};
 use crate::session::{DeletePreview, Sessions};
 use crate::workspace::Workspace;
 
@@ -91,7 +91,7 @@ pub async fn workspace_changes(
 ) -> Result<Vec<crate::git::status::FileStatus>, String> {
     let (dir, base) = checked_out(&sessions, &id).await?;
     let cancel = scans.start(&id);
-    blocking(move || crate::git::apply::changed_since(crate::git::binary::git()?, &dir, &base, &cancel)).await?
+    blocking(move || changed_since(crate::git::binary::git()?, &dir, &base, &cancel)).await?
 }
 
 /// A workspace's file at its base commit; `null` when new, binary or too large.
