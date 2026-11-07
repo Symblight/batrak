@@ -89,7 +89,7 @@ What it holds, module by module.
 | `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch |
 | `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher |
 | `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates |
-| `git/` | the git the sessions need: `exec` (one path for every call), `lock`, `binary`, `repo` and the `remote` it reads, `status`, `line_counts`, `branches`, `temp_file`, `worktree`, `apply`, `blob` (a workspace's file at its base); `test_repo` behind `test-support`, since the desktop's git tests use it too |
+| `git/` | the git sessions and workspaces need: `exec` (one path for every call), `lock`, `binary`, `temp_file`, `worktree`, `apply`; `test_repo` behind `test-support`, since the desktop's git tests use it too. The Changes views' git is the desktop's (§7.1) |
 | `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) |
 | `project/` | the project's `.bt/` folder: creating it, `workspace.json`, and later `specs/`, `pipelines/`, `tools.json` (§8) |
 | `util` | `checked_rel`, `write_atomic`, ISO time, `default_shell` |
@@ -246,7 +246,7 @@ and changes nothing above.
   method), `lib.rs` (the builder, state, window lifecycle), `menu.rs`, `logging.rs` (daily files,
   the notice layer that implements `Notifier::notice`), the editor side that never enters the
   core: `roots/` (snapshot, watcher, Quick Open, Find in Files, open-root groups per window),
-  editor git (`commit`, `cache`), `github.rs`, `fs`, attachments,
+  editor git (`status`, `line_counts`, `repo`, `remote`, `branches`, `blob`, `compare`, `revert`, `workspace_changes`, `commit`, `cache`, over the core's `git/`), `github.rs`, `fs`, attachments,
   drops, fonts, about, and `terminal/` (PTY tabs; implements `ProgramRunner`).
 - `src/`: the Lit UI. `hooks/ipc/ipc.js` is the only module that imports
   `@tauri-apps/*`; each feature's hook owns its command names; containers subscribe to stores,
@@ -265,7 +265,7 @@ The `batrak` binary over the core, clap verbs with no prefix, every one a core m
 | `sessions [--sync]`, `rename`, `rm`, `log [-f]` | `Sessions::sync`, `list`, `rename`, `remove`, `log_path` |
 | `run <agent> [prompt] [--workspace\|--new-workspace [--base]] [--model] [--mode]`, `send <id>` | `Sessions::create`, `send_prompt`, an `EventSink` rendered on the TTY |
 | `resume <id>` | `Sessions::open_cli` through the inherit-stdio `ProgramRunner` |
-| `workspaces`, `workspace new\|rm\|apply\|checkout\|changes` | `Workspaces::*` |
+| `workspaces`, `workspace new\|rm\|apply\|checkout` | `Workspaces::*` |
 | later: `spec new\|status\|approve`, `tasks run`, `mcp` | §8 |
 
 Scope: the project whose folder the command runs in (walking up to the first `.bt/`), else the
@@ -358,7 +358,7 @@ and 1 skipped; `pnpm typecheck` and `cargo clippy --all-targets` clean.
 | An agent's CLI in a terminal | `bt-core` `session/`, through `ProgramRunner`; PTY in the desktop | moves as is |
 | Terminals tab | desktop `terminal/` | moves as is |
 | File tree, Quick Open, Find in Files, Search pane | desktop `roots/` | moves as is |
-| Changes, commit, GitHub | desktop `git/{commit,cache}`, `github.rs`, over the core's `git/` | moves as is |
+| Changes, commit, GitHub | desktop `git/`, `github.rs`, over the core's `git/` | moves as is |
 | Editor tabs, comments, Markdown views, drops, attachments, fonts, menus, windows | desktop `commands/`, `menu.rs`, `lib.rs` | moves as is |
 | Logs and snackbars | desktop `logging.rs` | moves as is; see §10.3 |
 
