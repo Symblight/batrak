@@ -90,25 +90,29 @@ export class AcpBranchPicker extends LitElement {
     /** @type {HTMLElementTagNameMap['md-menu'] | null} */ (this.renderRoot.querySelector('md-menu'))?.close();
   }
 
+  /** @param {boolean} picked */
+  #renderLeading(picked) {
+    return html`<md-icon slot="leading">${unsafeSVG(picked ? checkIcon : branchIcon)}</md-icon>`;
+  }
+
   /**
    * @param {string} branch Its full short name, the row's value.
    * @param {string} label
    */
   #renderRow(branch, label) {
     const picked = branch === this.value;
-    return html`<md-menu-item class="acp-branch-picker__item" value=${branch} ?selected=${picked}>
-      <md-icon slot="leading" class="acp-branch-picker__check ${picked ? '' : 'acp-branch-picker__check_hidden'}">${unsafeSVG(checkIcon)}</md-icon>
-      <md-icon slot="leading" class="acp-branch-picker__icon">${unsafeSVG(branchIcon)}</md-icon>
+    return html`<md-menu-item value=${branch} ?selected=${picked}>
+      ${this.#renderLeading(picked)}
       ${label}
-      ${branch === this.list.default ? html`<span slot="trailing" class="acp-branch-picker__default">default</span>` : nothing}
+      ${branch === this.list.default ? html`<span slot="trailing">default</span>` : nothing}
     </md-menu-item>`;
   }
 
   /** @param {string} label */
   #renderOff(label) {
     const picked = this.value === null;
-    return html`<md-menu-item class="acp-branch-picker__item" value="" ?selected=${picked}>
-      <md-icon slot="leading" class="acp-branch-picker__check ${picked ? '' : 'acp-branch-picker__check_hidden'}">${unsafeSVG(checkIcon)}</md-icon>
+    return html`<md-menu-item value="" ?selected=${picked}>
+      ${this.#renderLeading(picked)}
       ${label}
     </md-menu-item>`;
   }

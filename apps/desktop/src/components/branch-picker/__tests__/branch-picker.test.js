@@ -60,6 +60,19 @@ describe('acp-branch-picker', () => {
     expect(selected.map((r) => r.getAttribute('value'))).to.deep.equal(['origin/main']);
   });
 
+  it('leads every row, the off choice too, with one icon: a distinct one on the picked row', async () => {
+    // Arrange + Act
+    const { root } = await render({ offLabel: 'Local changes' });
+
+    // Assert
+    const rows = [...root.querySelectorAll('md-menu-item')];
+    const leading = rows.map((r) => [...r.querySelectorAll(':scope > [slot="leading"]')].map((icon) => icon.innerHTML));
+    expect(leading.every((icons) => icons.length === 1)).to.equal(true);
+    const picked = rows.findIndex((r) => /** @type {HTMLElementTagNameMap['md-menu-item']} */ (r).selected);
+    expect(new Set(leading.filter((_, i) => i !== picked).flat()).size).to.equal(1);
+    expect(leading.filter((_, i) => i !== picked).flat()).to.not.include(leading[picked][0]);
+  });
+
   it('fires the picked branch', async () => {
     // Arrange
     const { el, root } = await render();
