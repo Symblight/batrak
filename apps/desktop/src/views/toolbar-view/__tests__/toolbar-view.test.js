@@ -1,5 +1,6 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { $appUpdate } from '../../../stores/app-update/app-update.js';
 import { $gitCompare, $gitRepo, NO_COMPARE, NO_REPO } from '../../../stores/git/git.js';
 import { $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
@@ -30,6 +31,7 @@ describe('acp-toolbar-view', () => {
       const a = /** @type {Record<string, unknown>} */ (args ?? {});
       calls.push({ cmd, args: a });
       if (cmd === 'open_root') return { rootId: `root:${a.path}`, path: a.path };
+      if (cmd === 'app_update_blockers') return { agents: 2, terminals: 1 };
       if (cmd === 'git_branches') return { local: ['main', 'dev'], remotes: [], default: null };
       return cmd.startsWith('list_') ? [] : null;
     });
@@ -46,6 +48,7 @@ describe('acp-toolbar-view', () => {
     $projects.set([]);
     $project.set(null);
     $hiddenColumns.set([]);
+    $appUpdate.set({ state: 'none' });
     clearMocks();
   });
 
@@ -121,6 +124,7 @@ describe('acp-toolbar-view', () => {
     /** @type {{ resolve: (list: unknown) => void, reject: (err: unknown) => void }[]} */
     const asked = [];
     mockIPC((cmd) => {
+      if (cmd === 'app_update_blockers') return { agents: 2, terminals: 1 };
       if (cmd === 'git_branches') return new Promise((resolve, reject) => asked.push({ resolve, reject }));
       return cmd.startsWith('list_') ? [] : null;
     });
@@ -147,5 +151,55 @@ describe('acp-toolbar-view', () => {
     expect(afterSwitch).to.deep.equal([]);
     expect(afterLate).to.deep.equal([]);
     expect(view.branches.local).to.deep.equal([]);
+  });
+
+  describe('the update button', () => {
+    const READY = /** @type {const} */ ({ state: 'ready', version: '0.9.3', onNextLaunch: false });
+
+    it('shows the store, and does what its menu asks', async () => {
+      // Arrange
+      $appUpdate.set(READY);
+      const { toolbar, fire } = await render();
+      expect(toolbar.appUpdate, 'from the store').to.deep.equal(READY);
+
+      /** @type {[string, unknown, string, unknown][]} */
+      const cases = [
+        ['acp-update-download', null, 'app_update_download', {}],
+        ['acp-update-cancel', null, 'app_update_cancel', {}],
+        ['acp-update-on-next-launch', { on: true }, 'app_update_on_next_launch', { on: true }],
+        ['acp-update-manual', null, 'app_update_open_release', {}],
+      ];
+      for (const [type, detail, cmd, args] of cases) {
+        // Act
+        fire(type, detail);
+        await until(() => calls.some((c) => c.cmd === cmd));
+
+        // Assert
+        expect(calls.find((c) => c.cmd === cmd)?.args, type).to.deep.equal(args);
+      }
+    });
+
+    it('asks in its dialog before a restart that stops something', async () => {
+      for (const [button, restarts] of /** @type {const} */ ([['Postpone', false], ['Restart', true]])) {
+        // Arrange
+        calls = [];
+        $appUpdate.set(READY);
+        const { view, fire } = await render();
+        const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (view.querySelector('acp-confirm-dialog'));
+        const shadow = /** @type {ShadowRoot} */ (dialog.shadowRoot);
+
+        // Act
+        fire('acp-update-restart');
+        await until(() => shadow.querySelector('.acp-confirm-dialog__message')?.textContent !== '');
+        const message = shadow.querySelector('.acp-confirm-dialog__message')?.textContent;
+        const action = [.../** @type {NodeListOf<HTMLElement>} */ (shadow.querySelectorAll('md-button'))].find((b) => b.textContent?.trim() === button);
+        action?.click();
+        await new Promise((r) => setTimeout(r, 20));
+
+        // Assert
+        expect(message).to.equal('2 agents are working, 1 terminal is running a program. Restarting stops them. You can continue each session after the update.');
+        expect(calls.some((c) => c.cmd === 'app_update_restart'), button).to.equal(restarts);
+      }
+    });
   });
 });

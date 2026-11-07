@@ -123,4 +123,19 @@ describe('acp-toolbar', () => {
       expect(toggled).to.deep.equal([{ column: 'agent' }]);
     }
   });
+
+  it('hands the update state to the button, between the spacer and the column toggles', async () => {
+    // Arrange
+    const update = { state: 'available', version: '0.9.3', current: '0.9.2', manual: false };
+
+    // Act
+    const el = await fixture(html`<acp-toolbar .appUpdate=${update}></acp-toolbar>`);
+
+    // Assert
+    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+    const button = root.querySelector('acp-update-button');
+    expect(button?.state).to.equal(update);
+    expect(button?.previousElementSibling?.className, 'after the spacer').to.equal('acp-toolbar__spacer');
+    expect(button?.nextElementSibling?.id, 'before the toggles').to.equal('acp-toolbar-toggle-side');
+  });
 });

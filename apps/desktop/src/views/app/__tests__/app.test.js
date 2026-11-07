@@ -1,5 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
+import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { $appUpdate, $updateCheck, NO_CHECK } from '../../../stores/app-update/app-update.js';
 import { $projectSearch } from '../../../stores/search/search.js';
 import { $columnWidths, $hiddenColumns } from '../../../stores/layout/layout.js';
 import { $projects } from '../../../stores/projects/projects.js';
@@ -95,6 +97,7 @@ function fire(app, type, detail) {
 function startupAnswer(cmd, args) {
   if (cmd === 'sessions_sync') return { projectPath: args.projectPath, startedAt: '', endedAt: '', agents: [] };
   if (cmd === 'agents_list') return { agents: [], defaultAgent: null, known: [], userAgents: [], errors: [] };
+  if (cmd === 'app_update_state') return { state: 'none' };
   return cmd.startsWith('list_') ? [] : null;
 }
 
@@ -739,5 +742,54 @@ describe('acp-app: the columns on the welcome view', () => {
     expect(afterSearch, 'shown here, the saved layout untouched').to.deep.equal({ side: false, saved: [] });
     expect(afterToggle, 'the toolbar hides it again').to.equal(true);
     expect([isHidden(app, 'acp-session-column'), isHidden(app, 'acp-file-column')], 'the saved layout').to.deep.equal([false, false]);
+  });
+});
+
+describe('acp-app: updates', () => {
+  /** @type {string[]} */
+  let asked;
+
+  beforeEach(() => {
+    asked = [];
+    $project.set(null);
+    mockIPC(
+      (cmd, args) => {
+        asked.push(cmd);
+        if (cmd === 'app_update_state') return { state: 'ready', version: '0.9.3', onNextLaunch: false };
+        if (cmd === 'app_update_check') return { state: 'none' };
+        if (cmd === 'about') return { version: '0.9.2', os: 'macOS', arch: 'aarch64', logDir: null, updatesEnabled: true };
+        return startupAnswer(cmd, /** @type {Record<string, unknown>} */ (args));
+      },
+      { shouldMockEvents: true },
+    );
+  });
+
+  afterEach(() => {
+    $appUpdate.set({ state: 'none' });
+    $updateCheck.set(NO_CHECK);
+    clearMocks();
+  });
+
+  it('follows the update from launch, and About checks by hand and forgets its answer when reopened', async () => {
+    // Arrange
+    const el = /** @type {HTMLElementTagNameMap['acp-app']} */ (await fixture(html`<acp-app></acp-app>`));
+    const toolbar = /** @type {HTMLElementTagNameMap['acp-toolbar']} */ (el.querySelector('acp-toolbar'));
+    const about = /** @type {HTMLElementTagNameMap['acp-about-dialog']} */ (el.querySelector('acp-about-dialog'));
+
+    // Assert: the state reaches the toolbar
+    await until(() => toolbar.appUpdate.state === 'ready');
+
+    // Act: About, then its check
+    await emit('menu://action', 'about');
+    await until(() => about.about !== null);
+    about.dispatchEvent(new CustomEvent('acp-update-check', { bubbles: true, composed: true }));
+    await until(() => about.updateCheck.message === 'Batrak 0.9.2 is up to date');
+
+    // Act: About again
+    await emit('menu://action', 'about');
+    await until(() => about.updateCheck.message === null);
+
+    // Assert
+    expect(asked).to.include('app_update_check');
   });
 });

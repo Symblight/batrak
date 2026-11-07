@@ -1,11 +1,13 @@
 import { html } from 'lit';
 import { app } from '../../hooks/app/app.js';
+import { appUpdate } from '../../hooks/app-update/app-update.js';
 import { git } from '../../hooks/git/git.js';
 import { github } from '../../hooks/github/github.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
+import { $appUpdate } from '../../stores/app-update/app-update.js';
 import { $activePath } from '../../stores/editor/editor.js';
 import { $gitCompare, $gitRepo } from '../../stores/git/git.js';
 import { $githubAccount, $pullRequestHere } from '../../stores/github/github.js';
@@ -26,7 +28,7 @@ const NO_BRANCHES = { local: [], remotes: [], default: null };
 
 /**
  * @tag acp-toolbar-view
- * @summary The toolbar wired to its data: the project menu and its Remove dialog, the workspace picker, the branch and its pull request, the column buttons.
+ * @summary The toolbar wired to its data: the project menu and its Remove dialog, the workspace picker, the branch and its pull request, the update button and its restart dialog, the column buttons.
  */
 export class AcpToolbarView extends ViewElement {
   static properties = {
@@ -50,6 +52,7 @@ export class AcpToolbarView extends ViewElement {
   #workspacesEnabled = new StoreController(this, { store: $workspacesEnabled });
   #workspaceStatuses = new StoreController(this, { store: $workspaceStatuses });
   #workspaceNumbers = new StoreController(this, { store: $workspaceNumbers });
+  #appUpdate = new StoreController(this, { store: $appUpdate });
 
   constructor() {
     super();
@@ -142,11 +145,25 @@ export class AcpToolbarView extends ViewElement {
     projects.activate(id).catch((err) => app.reportError('Opening project failed', err));
   };
 
+  get #dialog() {
+    return /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
+  }
+
   /** @param {Event} e */
   #onProjectRemove = (e) => {
-    const dialog = /** @type {HTMLElementTagNameMap['acp-confirm-dialog']} */ (this.renderRoot.querySelector('acp-confirm-dialog'));
-    projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, dialog);
+    projects.confirmRemove(/** @type {CustomEvent<{ projectId: string }>} */ (e).detail.projectId, this.#dialog);
   };
+
+  #onUpdateDownload = () => void appUpdate.download(this.#dialog);
+
+  #onUpdateCancel = () => void appUpdate.cancel();
+
+  #onUpdateRestart = () => void appUpdate.restart(this.#dialog);
+
+  /** @param {Event} e */
+  #onUpdateOnNextLaunch = (e) => void appUpdate.setOnNextLaunch(/** @type {CustomEvent<{ on: boolean }>} */ (e).detail.on);
+
+  #onUpdateManual = () => void appUpdate.openRelease();
 
   /** @param {Event} e */
   #onBranchCopy = (e) => app.copy(/** @type {CustomEvent<{ text: string }>} */ (e).detail.text, 'Copying the branch name failed');
@@ -177,6 +194,7 @@ export class AcpToolbarView extends ViewElement {
         .workspaceNumbers=${this.#workspaceNumbers.value}
         .workspaceId=${workspaceId === MAIN ? null : workspaceId}
         ?workspaces-enabled=${this.#workspacesEnabled.value}
+        .appUpdate=${this.#appUpdate.value}
         @acp-workspace-select=${this.#onWorkspaceEvent}
         @acp-workspace-new=${this.#onWorkspaceEvent}
         @acp-workspace-rename=${this.#onWorkspaceEvent}
@@ -191,6 +209,11 @@ export class AcpToolbarView extends ViewElement {
         @acp-project-remove=${this.#onProjectRemove}
         @acp-copy=${this.#onBranchCopy}
         @acp-github-open=${this.#onGithubOpen}
+        @acp-update-download=${this.#onUpdateDownload}
+        @acp-update-cancel=${this.#onUpdateCancel}
+        @acp-update-restart=${this.#onUpdateRestart}
+        @acp-update-on-next-launch=${this.#onUpdateOnNextLaunch}
+        @acp-update-manual=${this.#onUpdateManual}
       ></acp-toolbar>
       <acp-confirm-dialog></acp-confirm-dialog>`;
   }

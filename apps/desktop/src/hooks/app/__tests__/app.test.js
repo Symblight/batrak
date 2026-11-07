@@ -8,7 +8,7 @@ import { app } from '../app.js';
 /** @typedef {import('../../settings/types.js').AboutInfo} AboutInfo */
 
 /** @type {AboutInfo} */
-const ABOUT = { version: '1.2.3', os: 'macOS', arch: 'aarch64', logDir: '/logs' };
+const ABOUT = { version: '1.2.3', os: 'macOS', arch: 'aarch64', logDir: '/logs', updatesEnabled: true };
 
 /** @param {() => boolean} pred */
 async function until(pred) {

@@ -74,6 +74,14 @@ export function parseTabs(raw) {
   return tabsOf(paths, typeof raw.active === 'string' ? raw.active : null, pinned);
 }
 
+/** Open tabs with unsaved edits, in every project; the drafts themselves live with the tabs (`TabFilesController`). */
+export const $unsavedFiles = atom(0);
+
+/** @param {number} count */
+export function setUnsavedFiles(count) {
+  $unsavedFiles.set(count);
+}
+
 const TABS_PREFIX = 'batrak:editor:tabs:';
 
 /**

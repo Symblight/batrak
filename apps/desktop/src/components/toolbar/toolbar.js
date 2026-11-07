@@ -6,6 +6,7 @@ import '@symblight/wc-material/tooltip';
 import '../branch-popover/branch-popover.js';
 import '../project-menu/project-menu.js';
 import '../pull-request-chip/pull-request-chip.js';
+import '../update-button/update-button.js';
 import '../workspace-picker/workspace-picker.js';
 import sidebarIcon from '@material-design-icons/svg/outlined/view_sidebar.svg?raw';
 import expandIcon from '@material-design-icons/svg/outlined/fullscreen.svg?raw';
@@ -17,7 +18,7 @@ import styles from './toolbar.css?inline';
 
 /**
  * @tag acp-toolbar
- * @summary Narrow app-wide bar above the columns: the project menu, the workspace picker and git branch (a card with its remote and pull request), and the
+ * @summary Narrow app-wide bar above the columns: the project menu, the workspace picker and git branch (a card with its remote and pull request), the update button, and the
  *   buttons hiding the sessions and file columns, and the one expanding the editor over the agent column.
  * @fires acp-column-toggle `{ column }`
  * @fires acp-github-open `{ url }` From the GitHub slot and the branch card.
@@ -43,6 +44,7 @@ export class AcpToolbar extends LitElement {
     workspaceNumbers: { attribute: false },
     workspaceId: { attribute: false },
     workspacesEnabled: { type: Boolean, attribute: 'workspaces-enabled' },
+    appUpdate: { attribute: false },
   };
 
   static styles = styles;
@@ -83,6 +85,8 @@ export class AcpToolbar extends LitElement {
     this.workspaceId = null;
     /** @type {boolean} The project can have workspaces: git with a commit. */
     this.workspacesEnabled = false;
+    /** @type {import('../../hooks/app-update/types.js').AppUpdateState} */
+    this.appUpdate = { state: 'none' };
   }
 
   /** Button hiding the agent column, so the editor's tabs take the whole middle. */
@@ -176,6 +180,7 @@ export class AcpToolbar extends LitElement {
       ${project && (this.git.repo || this.git.error) ? html`<span class="acp-toolbar__divider"></span>` : nothing}
       ${project ? this.#renderBranch(this.git) : nothing}
       <span class="acp-toolbar__spacer"></span>
+      <acp-update-button .state=${this.appUpdate}></acp-update-button>
       ${this.expandable ? this.#renderExpand() : nothing} ${this.#renderColumnToggle('side', 'file column', 'end')}`;
   }
 }

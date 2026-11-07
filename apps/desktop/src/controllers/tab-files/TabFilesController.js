@@ -5,7 +5,7 @@ import { contentKindOf, readsFile, readsText } from '../tab-content/TabContentCo
 import { agents } from '../../hooks/agents/agents.js';
 import { imageType } from '../../components/image-preview/image-type.js';
 import { git } from '../../hooks/git/git.js';
-import { $editorTabs, $folderTabs, parseTabId } from '../../stores/editor/editor.js';
+import { $editorTabs, $folderTabs, parseTabId, setUnsavedFiles } from '../../stores/editor/editor.js';
 import { $gitHead } from '../../stores/git/git.js';
 import { $sessions } from '../../stores/sessions/sessions.js';
 import { $rootId } from '../../stores/workspaces/workspaces.js';
@@ -225,6 +225,11 @@ export class TabFilesController {
     }
   }
 
+  /** A restart asks about these (`appUpdate.restart()`); they live only here. */
+  #publishUnsaved() {
+    setUnsavedFiles([...this.#tabs, ...this.#away.values()].filter((t) => t.draft !== null).length);
+  }
+
   /**
    * Follows `$editorTabs`, keeping loaded content and loading the active tab if needed.
    * @param {EditorTabs} tabs
@@ -253,6 +258,7 @@ export class TabFilesController {
       const loaded = !readsFile(target);
       return { id, ...target, content: '', error: '', loaded, baseline: null, draft: null, changedOnDisk: false, deletedOnDisk: false, image: null };
     });
+    this.#publishUnsaved();
     for (const id of known.keys()) {
       if (paths.includes(id)) continue;
       this.#loads.delete(id);
@@ -285,6 +291,7 @@ export class TabFilesController {
    */
   #patch(id, changes) {
     this.#tabs = this.#tabs.map((t) => (t.id === id ? { ...t, ...changes } : t));
+    this.#publishUnsaved();
     this.#host.requestUpdate();
   }
 
