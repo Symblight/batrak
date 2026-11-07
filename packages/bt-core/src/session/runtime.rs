@@ -118,6 +118,18 @@ impl Sessions {
             .count()
     }
 
+    /// How many sessions, in any project, are in a turn or about to be, a chat its CLI runs included
+    /// (its `status` stays `stopped`; its activity is the last poll's). Never waits on a turn.
+    pub fn working(&self) -> usize {
+        lock(&self.inner.sessions)
+            .values()
+            .filter(|s| {
+                let by_cli = |activity| matches!(activity, Some(agent_api::SessionActivity::Running | agent_api::SessionActivity::WaitingForUser));
+                workspaces::in_turn(s.status()) || by_cli(lock(&s.cli).as_ref().and_then(|held| held.activity))
+            })
+            .count()
+    }
+
     /// Most recently active first.
     pub fn list(&self) -> Vec<Session> {
         let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| s.page()).collect();
