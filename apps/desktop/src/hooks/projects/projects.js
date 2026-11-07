@@ -14,6 +14,7 @@ import {
   initialOf,
   isAbsolute,
   parentLabel,
+  parentPath,
   projectPathOf,
   relPath,
   shownPath,
@@ -131,6 +132,7 @@ export const projects = Object.freeze({
   initialOf,
   tildePath,
   parentLabel,
+  parentPath,
   unreadByProject,
 
   /** @returns {string | null} Canonical absolute path of the opened folder. */

@@ -154,8 +154,8 @@ export class AcpTabOverflow extends LitElement {
    */
   #renderIcon({ icon, file }) {
     return file !== null
-      ? html`<acp-file-icon slot="leading" class="acp-tab-overflow__file-icon" name=${file}></acp-file-icon>`
-      : html`<md-icon slot="leading" class="acp-tab-overflow__file-icon">${unsafeSVG(icon)}</md-icon>`;
+      ? html`<acp-file-icon slot="leading" name=${file}></acp-file-icon>`
+      : html`<md-icon slot="leading">${unsafeSVG(icon)}</md-icon>`;
   }
 
   /** @param {TabOverflowItem} item */

@@ -1,10 +1,13 @@
+import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { classMap } from 'lit/directives/class-map.js';
+import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/code-editor';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/menu';
 import '@symblight/wc-material/select'; // registers md-hr, the menu divider
+import terminalIcon from '@material-design-icons/svg/outlined/terminal.svg?raw';
 import { codeEditor } from './code-editor.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
@@ -40,7 +43,7 @@ import styles from './code-view.css?inline';
 
 /**
  * @tag acp-code-view
- * @summary A file tab's code editor, with its footer's file, folder and language menus; agents.json files are editable (Mod+S saves).
+ * @summary A file tab's code editor, with a right-click menu and its footer's file, folder and language menus; agents.json files are editable (Mod+S saves).
  * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
  * @fires acp-tab-save `{ id }` Mod+S in an editable file not changed on disk.
  * @fires acp-tab-conflict `{ id }` Mod+S in an editable file changed on disk since its edits started.
@@ -48,6 +51,8 @@ import styles from './code-view.css?inline';
  * @fires acp-copy-path `{ path }`
  * @fires acp-file-reveal `{ path, expand }` Reveal in Files, or a folder picked in a footer crumb's list.
  * @fires acp-file-open `{ path }` A file picked in a footer crumb's list.
+ * @fires acp-reveal-path `{ path }` Open in the file manager, from the code's menu.
+ * @fires acp-open-terminal `{ path }` Open in Terminal, the file's folder, from the code's menu.
  */
 export class AcpCodeView extends LitElement {
   static properties = {
@@ -71,6 +76,11 @@ export class AcpCodeView extends LitElement {
   });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
   #readOnlyHint = new ReadOnlyHintController(this, { readOnly: () => this.tab !== null && !agents.isAgentsFile(this.tab.path) });
+  /** @type {ContextMenuController<EditorTab>} */
+  #codeMenu = new ContextMenuController(this, {
+    menu: () => this.renderRoot.querySelector('.acp-code-view__code-menu'),
+    onSelect: (value, tab) => this.#onCodeMenuSelect(value, tab),
+  });
   /** @type {ContextMenuController<FooterTarget>} */
   #fileMenu = new ContextMenuController(this, {
     menu: () => this.renderRoot.querySelector('.acp-code-view__file-menu'),
@@ -156,6 +166,27 @@ export class AcpCodeView extends LitElement {
     if (!shortcuts.matches('save', e)) return;
     e.preventDefault();
     this.#emit(tab.changedOnDisk ? 'acp-tab-conflict' : 'acp-tab-save', { id: tab.id });
+  }
+
+  /**
+   * The code's own menu instead of the webview's.
+   * @param {EditorTab} tab
+   * @param {Event} e
+   */
+  #onCodeContextMenu(tab, e) {
+    const { clientX, clientY } = /** @type {CustomEvent<{ clientX: number, clientY: number }>} */ (e).detail;
+    e.preventDefault();
+    this.#codeMenu.open(tab, clientX, clientY);
+  }
+
+  /**
+   * @param {string} value The chosen item's.
+   * @param {EditorTab} tab
+   */
+  #onCodeMenuSelect(value, { path }) {
+    if (value === 'copy-path') this.#emit('acp-copy-path', { path });
+    else if (value === 'reveal') this.#emit('acp-reveal-path', { path });
+    else if (value === 'open-terminal') this.#emit('acp-open-terminal', { path: projects.parentPath(path) });
   }
 
   /**
@@ -252,19 +283,41 @@ export class AcpCodeView extends LitElement {
     }
   }
 
+  /** The right-click menu of the code. */
+  #renderCodeMenu() {
+    return html`<md-menu
+      class="acp-code-view__code-menu"
+      aria-label="Code"
+      @select=${this.#codeMenu.onSelect}
+      @closed=${this.#codeMenu.onClosed}
+    >
+      <md-menu-item value="copy-path">Copy Path</md-menu-item>
+      <md-menu-item value="open-in">
+        Open in
+        <md-menu slot="submenu" aria-label="Open in">
+          <md-menu-item value="reveal">${app.fileManagers[app.platform]}</md-menu-item>
+          <md-menu-item value="open-terminal">
+            <md-icon slot="leading">${unsafeSVG(terminalIcon)}</md-icon>
+            Terminal
+          </md-menu-item>
+        </md-menu>
+      </md-menu-item>
+    </md-menu>`;
+  }
+
   /** The footer's menu of its file or of a folder on its path. */
   #renderFileMenu() {
     const target = this.#fileMenu.target;
     return html`<md-menu
-      class="acp-code-view__file-menu acp-code-view__menu"
+      class="acp-code-view__file-menu"
       aria-label=${target ? projects.basename(target.path) : 'File'}
       @select=${this.#fileMenu.onSelect}
       @closed=${this.#fileMenu.onClosed}
     >
-      <md-menu-item class="acp-code-view__menu-item" value="reveal">Reveal in Files</md-menu-item>
+      <md-menu-item value="reveal">Reveal in Files</md-menu-item>
       <md-hr></md-hr>
-      <md-menu-item class="acp-code-view__menu-item" value="copy-path">Copy Path</md-menu-item>
-      <md-menu-item class="acp-code-view__menu-item" value="copy-relative-path">Copy Relative Path</md-menu-item>
+      <md-menu-item value="copy-path">Copy Path</md-menu-item>
+      <md-menu-item value="copy-relative-path">Copy Relative Path</md-menu-item>
     </md-menu>`;
   }
 
@@ -272,7 +325,7 @@ export class AcpCodeView extends LitElement {
   #renderFolderMenu() {
     const list = this.#folderMenu.target;
     return html`<md-menu
-      class="acp-code-view__folder-menu acp-code-view__menu"
+      class="acp-code-view__folder-menu"
       aria-label=${list ? projects.basename(projects.abs(this.root, list.folder)) : 'Folder'}
       focus-on-open="selected"
       @select=${this.#folderMenu.onSelect}
@@ -284,7 +337,7 @@ export class AcpCodeView extends LitElement {
           value=${e.path}
           ?selected=${e.path === list?.selected}
         >
-          <acp-file-icon slot="leading" class="acp-code-view__entry-icon" name=${e.name} ?folder=${e.isDir}></acp-file-icon>
+          <acp-file-icon slot="leading" name=${e.name} ?folder=${e.isDir}></acp-file-icon>
           ${e.name}
         </md-menu-item>`,
       )}
@@ -299,9 +352,9 @@ export class AcpCodeView extends LitElement {
      * @param {string} label
      */
     const item = (value, label) =>
-      html`<md-menu-item class="acp-code-view__menu-item" value=${value} ?selected=${value === this.language}>${label}</md-menu-item>`;
+      html`<md-menu-item value=${value} ?selected=${value === this.language}>${label}</md-menu-item>`;
     return html`<md-menu
-      class="acp-code-view__language-menu acp-code-view__menu"
+      class="acp-code-view__language-menu"
       aria-label="Language"
       focus-on-open="selected"
       @select=${this.#languageMenu.onSelect}
@@ -331,6 +384,7 @@ export class AcpCodeView extends LitElement {
         .baseline=${tab.baseline}
         @click=${{ handleEvent: this.#onStatusPress, capture: true }}
         @cdx-status-click=${(/** @type {Event} */ e) => this.#onStatusClick(tab, e)}
+        @cdx-contextmenu=${(/** @type {Event} */ e) => this.#onCodeContextMenu(tab, e)}
         @cdx-change=${editable
           ? (/** @type {CustomEvent<{ value: string }>} */ e) => this.#emit('acp-tab-edit', { id: tab.id, value: e.detail.value })
           : nothing}
@@ -346,7 +400,7 @@ export class AcpCodeView extends LitElement {
         ></cdx-comments>
         <cdx-footer slot="footer" path=${this.#footerPath(tab.path)}></cdx-footer>
       </cdx-code-editor>
-      ${this.#renderFileMenu()} ${this.#renderFolderMenu()} ${this.#renderLanguageMenu()}
+      ${this.#renderCodeMenu()} ${this.#renderFileMenu()} ${this.#renderFolderMenu()} ${this.#renderLanguageMenu()}
       ${this.#selectionActions.render()} ${this.#readOnlyHint.render()}`;
   }
 }

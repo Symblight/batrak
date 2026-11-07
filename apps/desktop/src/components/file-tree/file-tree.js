@@ -380,7 +380,7 @@ export class AcpFileTree extends LitElement {
    */
   #menuItem(value, icon, label) {
     return html`<md-menu-item value=${value}>
-      <md-icon slot="leading" class="acp-file-tree__menu-icon">${unsafeSVG(icon)}</md-icon>
+      <md-icon slot="leading">${unsafeSVG(icon)}</md-icon>
       ${label}
     </md-menu-item>`;
   }
@@ -393,7 +393,7 @@ export class AcpFileTree extends LitElement {
       @closed=${this.#onMenuClosed}
     >
       <md-menu-item value="open-in">
-        <md-icon slot="leading" class="acp-file-tree__menu-icon">${unsafeSVG(openInIcon)}</md-icon>
+        <md-icon slot="leading">${unsafeSVG(openInIcon)}</md-icon>
         Open in
         <md-menu slot="submenu" class="acp-file-tree__menu" aria-label="Open in">
           ${this.#menuItem('reveal', folderOpenIcon, app.fileManagers[this.platform])} ${this.#menuItem('open-terminal', terminalIcon, 'Terminal')}

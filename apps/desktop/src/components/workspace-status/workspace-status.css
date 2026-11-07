@@ -2,8 +2,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 12px;
-  block-size: 12px;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
   flex: none;
 }
 
@@ -11,14 +11,14 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  inline-size: 8px;
-  block-size: 8px;
+  inline-size: 0.5rem;
+  block-size: 0.5rem;
   box-sizing: border-box;
   border-radius: var(--acp-shape-corner-full);
 
   &.acp-workspace-status__dot_waiting {
     background: var(--acp-color-tertiary);
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--acp-color-tertiary) 25%, transparent);
+    box-shadow: 0 0 0 0.1875rem color-mix(in srgb, var(--acp-color-tertiary) 25%, transparent);
   }
 
   &.acp-workspace-status__dot_error {
@@ -34,11 +34,11 @@
   }
 
   &.acp-workspace-status__dot_working {
-    inline-size: 12px;
-    block-size: 12px;
+    inline-size: 0.75rem;
+    block-size: 0.75rem;
   }
 }
 
 .acp-workspace-status__spinner {
-  --md-progress-circular-size: 12px;
+  --md-progress-circular-size: 0.75rem;
 }

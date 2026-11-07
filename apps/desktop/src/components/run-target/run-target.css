@@ -35,5 +35,5 @@
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-run-target__menu {
-  --md-menu-min-width: 15rem;
+  --md-menu-min-width: var(--acp-menu-width-picker);
 }

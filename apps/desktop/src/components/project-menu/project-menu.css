@@ -44,8 +44,10 @@
   font-weight: 700;
 
   &.acp-project-menu__tile_small {
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: 1rem;
+    block-size: 1rem;
+    border-radius: 0.25rem;
+    font-size: 0.625rem;
     background: var(--acp-color-surface-container-highest);
     color: var(--acp-color-on-surface);
   }
@@ -65,7 +67,7 @@
 .acp-project-menu__text {
   display: flex;
   align-items: baseline;
-  gap: var(--acp-space-2);
+  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -86,15 +88,11 @@
 .acp-project-menu__path {
   flex: 0 1 auto;
   max-inline-size: 6rem;
-  font-size: var(--acp-font-size-sm);
+  font-size: 0.75rem;
   color: var(--acp-color-on-surface-variant);
 }
 
 .acp-project-menu__icon {
-  font-size: var(--acp-icon-size-md);
-}
-
-.acp-project-menu__check {
   font-size: var(--acp-icon-size-md);
 }
 
@@ -111,14 +109,14 @@
 
 .acp-project-menu__dot {
   display: block;
-  inline-size: 6px;
-  block-size: 6px;
+  inline-size: 0.375rem;
+  block-size: 0.375rem;
   border-radius: var(--acp-shape-corner-full);
   background: var(--acp-color-primary);
 }
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-project-menu__menu {
-  --md-menu-min-width: 12rem;
-  --md-menu-max-width: 15rem;
+  --md-menu-min-width: var(--acp-menu-width-picker);
+  --md-menu-max-width: 20rem;
 }
