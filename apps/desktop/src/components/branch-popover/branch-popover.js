@@ -12,6 +12,7 @@ import forkRightIcon from '@material-design-icons/svg/outlined/fork_right.svg?ra
 import mergeTypeIcon from '@material-design-icons/svg/outlined/merge_type.svg?raw';
 import openInNewIcon from '@material-design-icons/svg/outlined/open_in_new.svg?raw';
 import pendingIcon from '@material-design-icons/svg/outlined/pending.svg?raw';
+import '../branch-picker/branch-picker.js';
 import { FloatingController } from '../../controllers/floating/FloatingController.js';
 import { git } from '../../hooks/git/git.js';
 import { github } from '../../hooks/github/github.js';
@@ -31,11 +32,15 @@ const CHECK_ICONS = { ok: checkCircleIcon, fail: cancelIcon, run: pendingIcon };
  * @summary The header's branch button and the card it opens: the branch with a Copy button, how it stands against its remote, and its pull request with its checks.
  * @fires acp-copy `{ text }` The branch's name.
  * @fires acp-github-open `{ url }` The pull request.
+ * @fires acp-compare-pick `{ branch }` Show that branch's diff in the Changes views; `null` for local changes.
  */
 export class AcpBranchPopover extends LitElement {
   static properties = {
     repo: { attribute: false },
     pr: { attribute: false },
+    compareTo: { attribute: false },
+    branches: { attribute: false },
+    loadBranches: { attribute: false },
     open: { state: true },
   };
 
@@ -47,6 +52,12 @@ export class AcpBranchPopover extends LitElement {
     this.repo = null;
     /** @type {GithubPullRequest | null} The branch's pull request, once looked up. */
     this.pr = null;
+    /** @type {string | null} The branch the Changes views show the diff of. */
+    this.compareTo = null;
+    /** @type {import('../../hooks/git/types.js').BranchList} What can be compared to. */
+    this.branches = { local: [], remotes: [], default: null };
+    /** @type {(() => Promise<void>) | null} Brings `branches` up to date; Compare to's menu waits for it. */
+    this.loadBranches = null;
     /** @type {boolean} The card is showing. */
     this.open = false;
   }
@@ -69,7 +80,16 @@ export class AcpBranchPopover extends LitElement {
   // Before the card shows, so it is placed before its first paint.
   #onToggle = (/** @type {Event} */ e) => {
     this.open = /** @type {ToggleEvent} */ (e).newState === 'open';
-    if (!this.open) this.#closedAt = performance.now();
+    if (this.open) return;
+    this.#closedAt = performance.now();
+    // Its menu is a popover of its own: Esc closes only the card, and leaves it marked open.
+    this.renderRoot.querySelector('acp-branch-picker')?.close();
+  };
+
+  #onComparePick = (/** @type {Event} */ e) => {
+    e.stopPropagation();
+    this.#emit('acp-compare-pick', { branch: /** @type {CustomEvent<{ branch: string | null }>} */ (e).detail.branch });
+    if (this.open) this.#popover?.hidePopover();
   };
 
   #onTrigger() {
@@ -94,6 +114,23 @@ export class AcpBranchPopover extends LitElement {
             </md-icon-button>
             <md-tooltip for="acp-branch-popover-copy" show-delay="800">Copy branch name</md-tooltip>`
         : html`<span></span>`}`;
+  }
+
+  /** @param {string} name The current branch, or a detached HEAD's commit. */
+  #renderCompare(name) {
+    return html`<span class="acp-branch-popover__label">Compare to</span>
+      <span class="acp-branch-popover__value">
+        <acp-branch-picker
+          class="acp-branch-popover__compare"
+          .label=${''}
+          .offLabel=${`${name} - local`}
+          .list=${this.branches}
+          .value=${this.compareTo}
+          .load=${this.loadBranches}
+          @acp-branch-pick=${this.#onComparePick}
+        ></acp-branch-picker>
+      </span>
+      <span></span>`;
   }
 
   /** @param {GithubPullRequest} pr */
@@ -140,6 +177,7 @@ export class AcpBranchPopover extends LitElement {
           <span class="acp-branch-popover__label">Remote</span>
           <span class="acp-branch-popover__value">${git.remoteLine(repo)}</span>
           <span></span>
+          ${repo.sha ? this.#renderCompare(name) : nothing}
           ${this.pr ? this.#renderPullRequest(this.pr) : nothing}
         </div>
       </div>`;

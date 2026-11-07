@@ -33,6 +33,7 @@ import type { AcpChangeRow } from './components/change-row/change-row.js';
 import type { AcpDiffCounts } from './components/diff-counts/diff-counts.js';
 import type { AcpChangesPanel } from './components/changes-panel/changes-panel.js';
 import type { AcpChangesReview } from './components/changes-review/changes-review.js';
+import type { AcpCompareChip } from './components/compare-chip/compare-chip.js';
 import type { AcpChangesMenu } from './components/changes-menu/changes-menu.js';
 import type { AcpContextMeter } from './components/context-meter/context-meter.js';
 import type { AcpConfirmDialog } from './components/confirm-dialog/confirm-dialog.js';
@@ -130,6 +131,7 @@ declare global {
     'acp-commit-box': AcpCommitBox;
     'acp-changes-review': AcpChangesReview;
     'acp-changes-menu': AcpChangesMenu;
+    'acp-compare-chip': AcpCompareChip;
     'acp-code-view': AcpCodeView;
     'acp-chat': AcpChat;
     'acp-comment-bar': AcpCommentBar;

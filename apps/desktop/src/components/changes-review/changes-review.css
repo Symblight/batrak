@@ -165,4 +165,6 @@
 .acp-changes-review__spinner {
   font-size: 32px;
 }
-
+.acp-changes-review__compare {
+  flex: 0 1 auto;
+}

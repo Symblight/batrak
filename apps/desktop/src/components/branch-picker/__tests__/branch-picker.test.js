@@ -93,4 +93,58 @@ describe('acp-branch-picker', () => {
     expect(loading, 'a spinner, no menu yet').to.deep.equal([true, false]);
     expect([button.querySelector('md-progress-circular'), menu.open], 'loaded').to.deep.equal([null, true]);
   });
+
+  describe('with an off choice', () => {
+    it('offers it first, selected and named on the button while nothing is picked, and asks for it as no branch', async () => {
+      // Arrange
+      const { el, root } = await render({ label: '', offLabel: 'Local changes', value: null });
+      const button = /** @type {HTMLElementTagNameMap['md-button']} */ (root.querySelector('md-button'));
+      const [first] = root.querySelectorAll('md-menu-item');
+      const picks = record(el, 'acp-branch-pick');
+      const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
+      // Act
+      menu.dispatchEvent(new CustomEvent('select', { detail: { value: '' } }));
+      // Assert
+      expect(button.disabled).to.equal(false);
+      expect(button.textContent?.replace(/\s+/g, ' ').trim()).to.equal('Local changes');
+      expect(first.textContent?.trim()).to.equal('Local changes');
+      expect(/** @type {HTMLElementTagNameMap['md-menu-item']} */ (first).selected).to.equal(true);
+      expect(picks).to.deep.equal([{ branch: null }]);
+    });
+
+    it('names the picked branch without a word before it', async () => {
+      // Arrange + Act
+      const { root } = await render({ label: '', offLabel: 'Local changes', value: 'main' });
+      // Assert
+      expect(root.querySelector('.acp-branch-picker__button')?.textContent?.replace(/\s+/g, ' ').trim()).to.equal('main');
+      expect(/** @type {HTMLElementTagNameMap['md-menu-item']} */ (root.querySelector('md-menu-item')).selected).to.equal(false);
+    });
+  });
+
+  it('close() while the branches load keeps the menu from opening once they have', async () => {
+    // Arrange
+    /** @type {() => void} */
+    let loaded = () => {};
+    const { el, root } = await render({ load: () => new Promise((resolve) => (loaded = () => resolve())) });
+    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('md-menu'));
+    /** @type {HTMLElement} */ (root.querySelector('md-button')).click();
+    await el.updateComplete;
+    // Act
+    el.close();
+    loaded();
+    await new Promise((r) => setTimeout(r, 20));
+    // Assert
+    expect(menu.open).to.equal(false);
+  });
+
+  it('close() closes its open menu', async () => {
+    // Arrange
+    const { el, root } = await render();
+    const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('md-menu'));
+    await menu.show();
+    // Act
+    el.close();
+    // Assert
+    expect(menu.open).to.equal(false);
+  });
 });

@@ -43,4 +43,13 @@ describe('acp-changes-menu', () => {
     expect(fired).to.deep.equal([['acp-changes-rollback', null], ['acp-changes-refresh', null]]);
     expect(tooltipOf(button)).to.equal('More actions');
   });
+
+  it('read-only, offers Refresh but not Rollback', async () => {
+    // Arrange
+    const el = /** @type {AcpChangesMenu} */ (await fixture(html`<acp-changes-menu read-only .picked=${2}></acp-changes-menu>`));
+    // Act
+    const values = [.../** @type {ShadowRoot} */ (el.shadowRoot).querySelectorAll('md-menu-item')].map((item) => item.getAttribute('value'));
+    // Assert
+    expect(values).to.deep.equal(['refresh']);
+  });
 });

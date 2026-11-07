@@ -137,4 +137,93 @@ describe('acp-changes-panel', () => {
     /** @type {HTMLElement} */ (host.querySelector('span')).click();
     expect(opens).to.deep.equal([{ path: '/p/src/a.js' }]);
   });
+
+  describe('comparing to a branch', () => {
+    const CHANGES = { files: FILES, loaded: true, loading: false, error: null };
+    const tree = (/** @type {ShadowRoot} */ root) => /** @type {HTMLElementTagNameMap['tvx-tree-view']} */ (root.querySelector('tvx-tree-view'));
+
+    it('shows the chip and the same tree, without anything that acts on local files', async () => {
+      // Arrange
+      const { root, summary } = await render({ changes: CHANGES, selection: new Set(['src/a.js']), compareTo: 'main' });
+      // Act
+      await tree(root).updateComplete;
+      const chip = /** @type {HTMLElementTagNameMap['acp-compare-chip']} */ (root.querySelector('acp-compare-chip'));
+      const menu = /** @type {HTMLElementTagNameMap['acp-changes-menu']} */ (root.querySelector('acp-changes-menu'));
+      // Assert
+      expect(chip.target).to.equal('main');
+      expect(summary()).to.equal('3 files');
+      expect(tree(root).hasAttribute('checkbox-selection')).to.equal(false);
+      expect(tree(root).hasAttribute('disable-selection')).to.equal(true);
+      expect([...tree(root).selectedItems]).to.deep.equal([]);
+      expect(root.querySelector('.acp-changes-panel__all')).to.equal(null);
+      expect(menu.readOnly).to.equal(true);
+      expect(/** @type {HTMLElement} */ (root.querySelector('footer')).hidden).to.equal(true);
+    });
+
+    it('a click opens the file’s diff and leaves the picks; going back shows them with the typed message and collapsed groups', async () => {
+      // Arrange
+      const { el, root } = await render({ changes: CHANGES, selection: new Set(['src/a.js']), compareTo: null });
+      await tree(root).updateComplete;
+      const box = /** @type {HTMLElementTagNameMap['acp-commit-box']} */ (root.querySelector('acp-commit-box'));
+      box.message = 'half typed';
+      tree(root).dispatchEvent(new CustomEvent('tvx-expansion-change', { detail: { expandedItems: new Set(['group:changes']) } }));
+      const opened = listen(el, 'acp-diff-open');
+      const picks = listen(el, 'acp-commit-select');
+      // Act
+      el.compareTo = 'main';
+      el.changes = { ...CHANGES, files: [file('branch.js')] };
+      await el.updateComplete;
+      await tree(root).updateComplete;
+      const label = /** @type {HTMLElement | null} */ (tree(root).renderRoot.querySelector('#acp-changes-panel-label\\:branch\\.js'));
+      label?.click();
+      await new Promise((r) => setTimeout(r));
+      const selectedWhileComparing = [...tree(root).selectedItems];
+      el.compareTo = null;
+      el.changes = CHANGES;
+      await el.updateComplete;
+      await new Promise((r) => setTimeout(r));
+      // Assert
+      expect(opened).to.deep.equal([{ path: '/p/branch.js' }]);
+      expect(picks, 'a click on a compared file never touches the picks').to.deep.equal([]);
+      expect(selectedWhileComparing).to.deep.equal([]);
+      expect(root.querySelector('acp-compare-chip')).to.equal(null);
+      expect(root.querySelector('acp-commit-box')).to.equal(box);
+      expect(box.message).to.equal('half typed');
+      expect([...tree(root).selectedItems]).to.deep.equal(['src/a.js']);
+      expect([...tree(root).expandedItems], 'Untracked files stays collapsed').to.deep.equal(['group:changes']);
+    });
+
+    it('keeps the picks when the tree is synced twice in a row while comparing', async () => {
+      // Arrange
+      const { el, root } = await render({ changes: CHANGES, selection: new Set(['src/a.js']), compareTo: 'main' });
+      await tree(root).updateComplete;
+      await new Promise((r) => setTimeout(r));
+      const picks = listen(el, 'acp-commit-select');
+      // Act
+      el.selection = new Set(['src/a.js', 'b.md']);
+      await el.updateComplete;
+      el.selection = new Set(['src/a.js']);
+      await el.updateComplete;
+      await new Promise((r) => setTimeout(r, 5));
+      // Assert
+      expect(picks).to.deep.equal([]);
+    });
+
+    it('says when nothing differs, and passes on why a refresh failed', async () => {
+      // Arrange
+      const { root } = await render({ changes: { ...CHANGES, files: [] }, compareTo: 'origin/main', refreshError: 'slow' });
+      // Assert
+      expect(root.textContent).to.contain('No differences from origin/main');
+      expect(root.textContent).to.not.contain('matches HEAD');
+      expect(/** @type {HTMLElementTagNameMap['acp-compare-chip']} */ (root.querySelector('acp-compare-chip')).refreshError).to.equal('slow');
+    });
+
+    it('keeps the chip when it can’t compare, to go back', async () => {
+      // Arrange
+      const { root } = await render({ changes: { files: [], loaded: true, loading: false, error: 'main no longer exists' }, compareTo: 'main' });
+      // Assert
+      expect(root.querySelector('acp-compare-chip')).to.not.equal(null);
+      expect(root.querySelector('[role="alert"]')?.textContent).to.contain('main no longer exists');
+    });
+  });
 });
