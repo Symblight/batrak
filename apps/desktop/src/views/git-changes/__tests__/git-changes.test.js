@@ -2,8 +2,9 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
 import { $notices } from '../../../stores/notices/notices.js';
-import { $commitSelection, $gitChanges, $gitRepo } from '../../../stores/git/git.js';
-import { $project } from '../../../stores/project/project.js';
+import { $commitSelection, $gitChanges, $gitCompare, $gitRepo, NO_COMPARE } from '../../../stores/git/git.js';
+import { $openRoots, $project } from '../../../stores/project/project.js';
+import { setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../git-changes.js';
 
 /** @typedef {import('../git-changes.js').AcpGitChanges} AcpGitChanges */
@@ -44,6 +45,9 @@ describe('acp-git-changes', () => {
 
   afterEach(() => {
     $commitSelection.set(new Set());
+    setActiveWorkspace('/p', 'main');
+    setWorkspaces([], null);
+    $openRoots.set({});
     $notices.set([]);
     $project.set(null);
     clearMocks();
@@ -63,6 +67,35 @@ describe('acp-git-changes', () => {
   function fire(from, type, detail) {
     from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
   }
+
+  it('while comparing, gives the panel the branch’s files and leaves the picks of local files alone', async () => {
+    // Arrange
+    const { el, panel } = await render();
+    $commitSelection.set(new Set(['a.js']));
+    const compared = { files: [], loaded: true, loading: false, error: null };
+    // Act
+    $gitCompare.set({ target: 'main', base: 'b1', changes: compared, refreshError: 'slow' });
+    await el.updateComplete;
+    const during = { changes: panel.changes === compared, compareTo: panel.compareTo, refreshError: panel.refreshError };
+    $gitCompare.set(NO_COMPARE);
+    await el.updateComplete;
+    // Assert
+    expect(during).to.deep.equal({ changes: true, compareTo: 'main', refreshError: 'slow' });
+    expect([...$commitSelection.get()]).to.deep.equal(['a.js']);
+    expect([panel.changes === CHANGES, panel.compareTo]).to.deep.equal([true, null]);
+  });
+
+  it('in a worktree session, gives the panel the worktree as its root, so its file clicks resolve there', async () => {
+    // Arrange
+    $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    setWorkspaces([/** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', projectPath: '/p', name: 'Task', folder: '/wt/s1' })], '/p');
+    $openRoots.set({ '/wt/s1': 'r-w' });
+    setActiveWorkspace('/p', 'w1');
+    // Act
+    const { panel } = await render();
+    // Assert
+    expect(panel.root).to.equal('/wt/s1');
+  });
 
   it('gives the panel the changed files, the repository, the picks and the project folder; picks of files no longer changed are forgotten once the scan is done', async () => {
     // Arrange

@@ -20,6 +20,7 @@ import '../diff-counts/diff-counts.js';
 import { EditorCommentsController } from '../../controllers/comments/EditorCommentsController.js';
 import { TreeNavigationController } from '../../controllers/tree-navigation/TreeNavigationController.js';
 import { SelectionActionsController } from '../../controllers/selection-actions/SelectionActionsController.js';
+import '../compare-chip/compare-chip.js';
 import styles from './changes-review.css?inline';
 
 /** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
@@ -61,6 +62,8 @@ export class AcpChangesReview extends LitElement {
     root: { attribute: false },
     base: { attribute: false },
     branch: { attribute: false },
+    compareTo: { attribute: false },
+    refreshError: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
     diffLayout: { attribute: false },
@@ -104,6 +107,10 @@ export class AcpChangesReview extends LitElement {
     this.base = null;
     /** @type {string | null} With `base`: the session's branch, which Check out branch hands to the project. */
     this.branch = null;
+    /** @type {string | null} The branch whose diff `changes` is: read-only, under its chip. */
+    this.compareTo = null;
+    /** @type {string | null} Why the comparison's last refresh failed. */
+    this.refreshError = null;
     /** @type {Readonly<Record<string, readonly AgentThread[]>>} Every file's comments, by absolute path. */
     this.comments = {};
     /** @type {CommentFocus | null} */
@@ -194,7 +201,7 @@ export class AcpChangesReview extends LitElement {
       .row=${row}
       .expanded=${expanded}
       .picked=${this.selection.has(row.id)}
-      .selectable=${this.base === null}
+      .selectable=${this.base === null && this.compareTo === null}
       @acp-change-edit=${this.#onEdit}
     ></acp-change-row>`;
   }
@@ -262,7 +269,10 @@ export class AcpChangesReview extends LitElement {
         <md-icon class="acp-changes-review__tool-icon">${unsafeSVG(unfoldLessIcon)}</md-icon>
       </md-icon-button>
       <md-tooltip for="acp-changes-review-collapse" show-delay="800">Collapse all</md-tooltip>
-      ${this.base === null
+      ${this.compareTo !== null
+        ? html`<acp-compare-chip class="acp-changes-review__compare" .target=${this.compareTo} .refreshError=${this.refreshError}></acp-compare-chip>`
+        : nothing}
+      ${this.base === null && this.compareTo === null
         ? html`<md-checkbox
               class="acp-changes-review__all"
               aria-label="Select all changed files"
@@ -273,9 +283,11 @@ export class AcpChangesReview extends LitElement {
             ></md-checkbox>`
         : nothing}
       <span class="acp-changes-review__summary"
-        >${this.base === null
-          ? `${picked} of ${total} selected`
-          : `${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}`}</span
+        >${this.compareTo !== null
+          ? `${total} ${total === 1 ? 'file' : 'files'}`
+          : this.base === null
+            ? `${picked} of ${total} selected`
+            : `${total} ${total === 1 ? 'file' : 'files'} changed since ${this.base.slice(0, 7)}`}</span
       >
       <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>
       <span class="acp-changes-review__spacer"></span>
@@ -288,7 +300,7 @@ export class AcpChangesReview extends LitElement {
         <md-segmented-button class="acp-changes-review__segment" value="unified">Unified</md-segmented-button>
         <md-segmented-button class="acp-changes-review__segment" value="split">Split</md-segmented-button>
       </md-segmented-button-group>
-      ${this.base === null ? html`<acp-changes-menu .picked=${picked}></acp-changes-menu>` : nothing}
+      ${this.base === null ? html`<acp-changes-menu .picked=${picked} ?read-only=${this.compareTo !== null}></acp-changes-menu>` : nothing}
       ${this.base !== null
         ? html`<md-button
               id="acp-changes-review-apply"
@@ -331,8 +343,10 @@ export class AcpChangesReview extends LitElement {
     if (this.#rows.length === 0) {
       return html`<div class="acp-changes-review__state">
         <md-icon class="acp-changes-review__state-icon">${unsafeSVG(checkCircleIcon)}</md-icon>
-        <b class="acp-changes-review__state-title">No changes</b>
-        <span>${this.base === null ? 'The working tree matches HEAD.' : 'Nothing changed since the session started.'}</span>
+        <b class="acp-changes-review__state-title">${this.compareTo === null ? 'No changes' : `No differences from ${this.compareTo}`}</b>
+        ${this.compareTo === null
+          ? html`<span>${this.base === null ? 'The working tree matches HEAD.' : 'Nothing changed since the session started.'}</span>`
+          : nothing}
       </div>`;
     }
     return html`<div class="acp-changes-review__list" role="tree" aria-label="Changed files" @keydown=${this.#tree.onKeydown} @focusin=${this.#tree.onFocusin}>

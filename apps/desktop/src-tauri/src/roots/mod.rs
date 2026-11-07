@@ -120,8 +120,8 @@ pub struct Root {
     recent: Mutex<VecDeque<String>>,
     /// Bumped by every Quick Open query; a running query stops when it is no longer current.
     quick_open_generation: AtomicU64,
-    /// Cancel flag of the running Find in Files per slot (the Search pane's, the dialog's),
-    /// replaced on every new search in that slot.
+    /// Cancel flag of the running Find in Files per slot (the Search pane's, the dialog's) or
+    /// comparison to a branch (its own slot), replaced on every new one in that slot.
     search_cancel: Mutex<HashMap<String, Arc<AtomicBool>>>,
     /// Set by `Roots::close`; stops a watcher rescan still running for a closed root.
     pub closed: AtomicBool,

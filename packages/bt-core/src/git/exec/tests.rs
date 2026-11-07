@@ -202,14 +202,16 @@ fn scrubbed_variables_cover_what_git_itself_calls_repository_local() {
 #[test]
 fn a_timeout_keeps_what_git_said() {
     use std::os::unix::fs::PermissionsExt;
-    let cases = [("echo 'Connecting to h' >&2; sleep 30", Some("Connecting to h")), ("exec sleep 30", None)];
-    for (body, said) in cases {
+    // Longer where the script must speak first: a new script's shell can take seconds to start on a
+    // busy machine, with other tests spawning git beside this one.
+    let cases = [("echo 'Connecting to h' >&2; sleep 30", Some("Connecting to h"), 6000), ("exec sleep 30", None, 1500)];
+    for (body, said, timeout) in cases {
         // Arrange: a git that outlives a short timeout
         let dir = crate::git::test_repo::temp_dir("timeout");
         let git = dir.join("git");
         std::fs::write(&git, format!("#!/bin/sh\n{body}\n")).unwrap();
         std::fs::set_permissions(&git, std::fs::Permissions::from_mode(0o755)).unwrap();
-        TEST_TIMEOUT.set(Some(Duration::from_millis(1500)));
+        TEST_TIMEOUT.set(Some(Duration::from_millis(timeout)));
 
         // Act
         let err = run(&git, &dir, &[OsStr::new("status")], Mode::Local).unwrap_err();

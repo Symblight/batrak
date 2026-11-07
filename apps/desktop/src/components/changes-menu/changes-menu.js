@@ -1,4 +1,4 @@
-import { LitElement, html } from 'lit';
+import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/icon-button';
@@ -18,6 +18,7 @@ import styles from './changes-menu.css?inline';
 export class AcpChangesMenu extends LitElement {
   static properties = {
     picked: { type: Number },
+    readOnly: { type: Boolean, attribute: 'read-only', reflect: true },
   };
 
   static styles = styles;
@@ -26,6 +27,8 @@ export class AcpChangesMenu extends LitElement {
     super();
     /** @type {number} How many listed files are picked: Rollback is theirs. */
     this.picked = 0;
+    /** @type {boolean} A branch's diff is shown, whose files aren't there to roll back: only Refresh. */
+    this.readOnly = false;
   }
 
   #onSelect = (/** @type {Event} */ e) => {
@@ -40,10 +43,12 @@ export class AcpChangesMenu extends LitElement {
       </md-icon-button>
       <md-tooltip for="more" show-delay="800">More actions</md-tooltip>
       <md-menu class="acp-changes-menu__menu" for="more" placement="bottom-end" aria-label="More actions" @select=${this.#onSelect}>
-        <md-menu-item value="rollback" ?disabled=${this.picked === 0}>
-          <md-icon slot="leading" class="acp-changes-menu__item-icon">${unsafeSVG(undoIcon)}</md-icon>
-          Rollback
-        </md-menu-item>
+        ${this.readOnly
+          ? nothing
+          : html`<md-menu-item value="rollback" ?disabled=${this.picked === 0}>
+              <md-icon slot="leading" class="acp-changes-menu__item-icon">${unsafeSVG(undoIcon)}</md-icon>
+              Rollback
+            </md-menu-item>`}
         <md-menu-item value="refresh">
           <md-icon slot="leading" class="acp-changes-menu__item-icon">${unsafeSVG(refreshIcon)}</md-icon>
           Refresh

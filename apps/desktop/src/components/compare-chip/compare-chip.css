@@ -1,0 +1,38 @@
+:host {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--acp-space-1) var(--acp-space-2);
+  min-width: 0;
+}
+.acp-compare-chip__chip {
+  --md-chip-height: 24px;
+  --md-chip-border-radius: var(--acp-shape-corner-small);
+  --md-chip-icon-size: var(--acp-icon-size-sm);
+  --md-chip-label-text-size: var(--acp-font-size-sm);
+  --md-chip-container-color: var(--acp-color-secondary-container);
+  --md-chip-label-color: var(--acp-color-on-secondary-container);
+  --md-chip-icon-color: var(--acp-color-on-secondary-container);
+  --md-chip-border-color: transparent;
+  min-width: 0;
+  max-width: 100%;
+}
+.acp-compare-chip__icon {
+  font-size: var(--acp-icon-size-sm);
+}
+/* Capped on its own, so a long branch's name can't push the chip's × out of a narrow column. */
+.acp-compare-chip__label {
+  display: block;
+  overflow: hidden;
+  max-width: 140px;
+  font-family: var(--acp-font-family-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acp-compare-chip__error {
+  overflow: hidden;
+  font-size: var(--acp-font-size-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--acp-color-error);
+}
