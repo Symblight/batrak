@@ -88,6 +88,7 @@ What it holds, module by module.
 | `session/` | `Sessions`: lifecycle, turns, permissions, turn slots per folder, sync with the agents' own lists, replay for a client that attaches, subagents, sign-in, the agent's CLI, worktree helpers |
 | `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch |
 | `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher |
+| `release/` | The app's own releases: the manifest, downloading a package, its minisign signature, comparing versions |
 | `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates |
 | `git/` | the git sessions and workspaces need: `exec` (one path for every call), `lock`, `binary`, `temp_file`, `worktree`, `apply`; `test_repo` behind `test-support`, since the desktop's git tests use it too. The Changes views' git is the desktop's (§7.1) |
 | `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) |
@@ -247,7 +248,8 @@ and changes nothing above.
   the notice layer that implements `Notifier::notice`), the editor side that never enters the
   core: `roots/` (snapshot, watcher, Quick Open, Find in Files, open-root groups per window),
   editor git (`status`, `line_counts`, `repo`, `remote`, `branches`, `blob`, `compare`, `revert`, `workspace_changes`, `commit`, `cache`, over the core's `git/`), `github.rs`, `fs`, attachments,
-  drops, fonts, about, and `terminal/` (PTY tabs; implements `ProgramRunner`).
+  drops, fonts, about, `app_update/` (the app's own updates, over `tauri-plugin-updater` and the
+  core's `release`) and `terminal/` (PTY tabs; implements `ProgramRunner`).
 - `src/`: the Lit UI. `hooks/ipc/ipc.js` is the only module that imports
   `@tauri-apps/*`; each feature's hook owns its command names; containers subscribe to stores,
   everything else is presentational. Its own rules live in `apps/desktop/CLAUDE.md` and
@@ -266,6 +268,7 @@ The `batrak` binary over the core, clap verbs with no prefix, every one a core m
 | `run <agent> [prompt] [--workspace\|--new-workspace [--base]] [--model] [--mode]`, `send <id>` | `Sessions::create`, `send_prompt`, an `EventSink` rendered on the TTY |
 | `resume <id>` | `Sessions::open_cli` through the inherit-stdio `ProgramRunner` |
 | `workspaces`, `workspace new\|rm\|apply\|checkout` | `Workspaces::*` |
+| `self update [--check [--json]]` | `release::*`; replacing the binary is the CLI's (`self_update.rs`) |
 | later: `spec new\|status\|approve`, `tasks run`, `mcp` | §8 |
 
 Scope: the project whose folder the command runs in (walking up to the first `.bt/`), else the

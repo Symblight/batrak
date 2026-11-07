@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use super::CANCELLED;
 
 /// After SIGTERM on a timeout, how long git gets to remove its lock files before SIGKILL.
+#[cfg(unix)]
 const TERM_GRACE: Duration = Duration::from_secs(3);
 
 /// Stops the child's whole process group on timeout or once `cancel` is set.

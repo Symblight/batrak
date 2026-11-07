@@ -330,6 +330,20 @@ fn opening_one_terminal_twice_at_once_starts_one_shell() {
 }
 
 #[test]
+fn every_terminal_is_listed_and_stopping_them_all_again_is_harmless() {
+    let f = fixture("stop-twice");
+    let _out = f.start("t");
+    assert_eq!(f.terminals.ids(), ["t"]);
+
+    let started = Instant::now();
+    f.terminals.stop_all(Duration::ZERO);
+    f.terminals.stop_all(Duration::from_secs(60));
+
+    assert!(f.terminals.ids().is_empty());
+    assert!(started.elapsed() < Duration::from_secs(5), "nothing left to wait for");
+}
+
+#[test]
 fn the_exit_is_reported_while_a_background_job_still_holds_the_terminal() {
     let f = fixture("background");
     let out = f.start("t");

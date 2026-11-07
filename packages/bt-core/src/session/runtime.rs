@@ -118,6 +118,22 @@ impl Sessions {
             .count()
     }
 
+    /// How many sessions, in any project, would lose work if stopped now: in a turn or about to be, or
+    /// a chat its CLI runs (its `status` stays `stopped`) unless that is known to be at its prompt, as
+    /// `cli_busy` tells. An agent that keeps no records can't say, so it counts. Asks each runner, so
+    /// may block; never waits on a turn.
+    pub fn working(&self) -> usize {
+        // `cli_busy` takes the sessions lock.
+        let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
+        states.iter().filter(|s| workspaces::in_turn(s.status()) || self.cli_busy(&s.id).unwrap_or(false)).count()
+    }
+
+    /// The terminals of the chats open in their agents' CLIs. Such a terminal's program is an agent,
+    /// which `working()` answers for, whatever else its terminal reads as.
+    pub fn cli_terminals(&self) -> Vec<String> {
+        lock(&self.inner.sessions).values().filter_map(|s| lock(&s.cli).as_ref().map(CliHeld::terminal_id)).collect()
+    }
+
     /// Most recently active first.
     pub fn list(&self) -> Vec<Session> {
         let mut sessions: Vec<Session> = lock(&self.inner.sessions).values().map(|s| s.page()).collect();
@@ -402,6 +418,17 @@ impl Sessions {
         // Groups whose owner couldn't be reached (a start in progress) go too.
         crate::acp::process::stop_all(Duration::from_millis(500));
         self.inner.persist();
+    }
+
+    /// The app went on after `shutdown()` (an installer that didn't start): each session it stopped
+    /// finishes as a Stop would and the page hears it, so a next message or resume starts the agent. A
+    /// session still running was never stopped, so this does nothing without a `shutdown()`.
+    pub async fn report_stopped(&self) {
+        let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
+        for state in states.iter().filter(|s| s.stopping.load(Ordering::SeqCst)) {
+            self.inner.stop(state).await;
+            self.inner.set_status(state, SessionStatus::Stopped, None);
+        }
     }
 }
 

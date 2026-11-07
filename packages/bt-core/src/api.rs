@@ -9,6 +9,7 @@ pub use crate::config::update::Updated;
 pub use crate::config::view::{AgentRow, AgentsView, Counts, RegistryRow, SignInState, Status};
 pub use crate::config::{AgentList, AgentSummary, LaunchConfig, Removal, Scope, UntrustedAgent};
 pub use crate::notify::{AgentsChanged, Notice, NoticeLevel, SessionsSynced, SignInEvent, SignInProgress, WorkspacesChanged};
+pub use crate::release::ReleaseStatus;
 pub use crate::session::{AgentSync, CliOpened, DeletePreview, Envelope, LoginTab, Session, SessionStatus, SyncOutcome, SyncReport, TitleSource};
 pub use crate::workspace::{NameSource, Workspace, WorkspaceRecord};
 
@@ -271,6 +272,19 @@ mod tests {
                 json!({ "projectPath": null, "agentId": "a", "state": "failed", "message": "m", "terminal": { "terminalId": "t", "title": "T", "commandLine": "c" } }),
             ),
             (value(Notice { level: NoticeLevel::Error, message: "m".into() }), json!({ "level": "error", "message": "m" })),
+        ];
+        for (actual, expected) in cases {
+            assert_eq!(actual, expected);
+        }
+    }
+
+    #[test]
+    fn a_release_status_keeps_its_json() {
+        let known = ReleaseStatus { current: "0.9.2".into(), latest: Some("0.9.3".into()), update_available: true, self_update: true };
+        let unknown = ReleaseStatus { current: "0.9.2".into(), latest: None, update_available: false, self_update: false };
+        let cases = [
+            (value(known), json!({ "current": "0.9.2", "latest": "0.9.3", "updateAvailable": true, "selfUpdate": true })),
+            (value(unknown), json!({ "current": "0.9.2", "latest": null, "updateAvailable": false, "selfUpdate": false })),
         ];
         for (actual, expected) in cases {
             assert_eq!(actual, expected);

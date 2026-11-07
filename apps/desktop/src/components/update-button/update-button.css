@@ -1,0 +1,116 @@
+/* No box of its own: with nothing to show it takes no gap in the toolbar. */
+:host {
+  display: contents;
+}
+
+/* 28dp: 20px line + 4px above and below. */
+.acp-update-button__button,
+.acp-update-button__status {
+  flex: none;
+}
+.acp-update-button__button {
+  --md-button-font-size: var(--acp-font-size-md);
+  --md-button-font-weight: var(--acp-font-weight-medium);
+  --md-button-line-height: 20px;
+  --md-button-border-radius: var(--acp-shape-corner-small);
+  --md-button-rounded-border-radius: var(--acp-shape-corner-small);
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+  --md-button-inline-start-space: var(--acp-space-2);
+  --md-button-inline-end-space: var(--acp-space-1);
+}
+.acp-update-button__button_tonal {
+  --md-button-background-color: var(--acp-color-primary-container);
+  --md-button-foreground-color: var(--acp-color-on-primary-container);
+}
+.acp-update-button__button_quiet {
+  --md-button-font-weight: 400;
+  --md-button-foreground-color: var(--acp-color-on-surface-variant);
+}
+.acp-update-button__button_error {
+  --md-button-foreground-color: var(--acp-color-error);
+}
+
+.acp-update-button__label,
+.acp-update-button__status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1-5);
+  white-space: nowrap;
+}
+.acp-update-button__status {
+  block-size: 28px;
+  padding-inline: var(--acp-space-2);
+  font-size: var(--acp-font-size-md);
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-update-button__icon,
+.acp-update-button__ring,
+.acp-update-button__arrow {
+  flex: none;
+  font-size: var(--acp-icon-size-sm);
+}
+.acp-update-button__ring {
+  --md-progress-circular-active-indicator-color: var(--acp-color-primary);
+  --md-progress-circular-track-color: color-mix(in srgb, var(--acp-color-primary) 20%, transparent);
+}
+.acp-update-button__spinner {
+  flex: none;
+  box-sizing: border-box;
+  inline-size: var(--acp-icon-size-xs);
+  block-size: var(--acp-icon-size-xs);
+  border: 2px solid color-mix(in srgb, currentColor 25%, transparent);
+  border-block-start-color: currentColor;
+  border-radius: var(--acp-shape-corner-full);
+  animation: acp-update-button-spin 1s linear infinite;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+@keyframes acp-update-button-spin {
+  to {
+    transform: rotate(1turn);
+  }
+}
+.acp-update-button__version {
+  font-family: var(--acp-font-family-mono);
+  font-size: var(--acp-font-size-sm);
+  font-weight: 400;
+  opacity: 0.85;
+}
+.acp-update-button__tooltip {
+  width: max-content;
+  max-inline-size: none;
+}
+
+/* Menu density comes from src/styles/shadow.css. */
+.acp-update-button__menu {
+  --md-menu-min-width: var(--acp-menu-width-picker);
+  --md-menu-max-width: 20rem;
+}
+.acp-update-button__header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--acp-space-0-5);
+  padding: var(--acp-space-1-5) var(--acp-space-3);
+  font-size: var(--acp-font-size-md);
+}
+.acp-update-button__title {
+  font-weight: var(--acp-font-weight-medium);
+  color: var(--acp-color-on-surface);
+}
+.acp-update-button__detail {
+  font-family: var(--acp-font-family-mono);
+  font-size: var(--acp-font-size-xs);
+  color: var(--acp-color-on-surface-variant);
+}
+.acp-update-button__bar {
+  height: 3px;
+  margin-block-start: var(--acp-space-1);
+}
+.acp-update-button__item_primary {
+  --md-menu-item-label-text-color: var(--acp-color-primary);
+  --md-menu-item-leading-icon-color: var(--acp-color-primary);
+  --md-menu-item-label-text-weight: var(--acp-font-weight-medium);
+}

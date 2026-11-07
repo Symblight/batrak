@@ -13,17 +13,21 @@ pub struct AboutInfo {
     pub os: String,
     pub arch: &'static str,
     pub log_dir: Option<String>,
+    /// Whether this process updates the app, so whether About has its **Check for updates** row.
+    pub updates_enabled: bool,
 }
 
 #[tauri::command]
 pub async fn about(app: AppHandle) -> Result<AboutInfo, String> {
     let version = app.package_info().version.to_string();
     let log_dir = Some(app.state::<crate::dirs::Dirs>().logs.to_string_lossy().into_owned());
+    let updates_enabled = app.state::<crate::app_update::AppUpdates>().updates_enabled();
     blocking(move || AboutInfo {
         version,
         os: os_name(),
         arch: std::env::consts::ARCH,
         log_dir,
+        updates_enabled,
     })
     .await
 }
