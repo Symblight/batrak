@@ -7,7 +7,7 @@ use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
-#[command(name = "batrak", version, about = "Batrak's command line", arg_required_else_help = true)]
+#[command(name = "batrak", bin_name = "batrak", version, about = "Batrak's command line", arg_required_else_help = true)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
