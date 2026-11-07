@@ -21,6 +21,9 @@ import '../../components/confirm-dialog/confirm-dialog.js';
 import '../../components/toolbar/toolbar.js';
 import { ViewElement } from '../../components/view-element/view-element.js';
 
+/** @type {import('../../hooks/git/types.js').BranchList} */
+const NO_BRANCHES = { local: [], remotes: [], default: null };
+
 /**
  * @tag acp-toolbar-view
  * @summary The toolbar wired to its data: the project menu and its Remove dialog, the workspace picker, the branch and its pull request, the column buttons.
@@ -36,6 +39,8 @@ export class AcpToolbarView extends ViewElement {
   #unread = new StoreController(this, { store: $unreadSessions });
   #gitRepo = new StoreController(this, { store: $gitRepo });
   #gitCompare = new StoreController(this, { store: $gitCompare });
+  // Another project's branches aren't this one's: its menu lists them only once they load.
+  #rootId = new StoreController(this, { store: $rootId, onChange: () => (this.branches = NO_BRANCHES) });
   #githubAccount = new StoreController(this, { store: $githubAccount });
   #pullRequest = new StoreController(this, { store: $pullRequestHere });
   #hiddenColumns = new StoreController(this, { store: $shownHiddenColumns });
@@ -51,21 +56,20 @@ export class AcpToolbarView extends ViewElement {
     /** @type {string | null} Shown as `~` in the project menu's paths. */
     this.home = null;
     /** @type {import('../../hooks/git/types.js').BranchList} What the branch card can compare to, as of its menu's last opening. */
-    this.branches = { local: [], remotes: [], default: null };
+    this.branches = NO_BRANCHES;
   }
 
   /** As of the last fetch: fetching is the terminal's, and would keep the menu waiting. */
   #loadBranches = async () => {
-    const rootId = $rootId.get();
+    const rootId = this.#rootId.value;
     if (rootId === null) return;
-    /** @type {import('../../hooks/git/types.js').BranchList} */
-    let list = { local: [], remotes: [], default: null };
+    let list = NO_BRANCHES;
     try {
       list = git.compareBranches(await git.branches(rootId), $gitRepo.get().repo);
     } catch (err) {
       app.reportError('Listing the branches failed', err);
     }
-    if ($rootId.get() === rootId) this.branches = list;
+    if (this.#rootId.value === rootId) this.branches = list;
   };
 
   connectedCallback() {
