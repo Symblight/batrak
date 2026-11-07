@@ -36,8 +36,11 @@ jobs:
       matrix:
         include:
           - os: macos-latest
-            rust-targets: aarch64-apple-darwin,x86_64-apple-darwin
-            args: --target universal-apple-darwin --bundles app,dmg
+            rust-targets: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles app,dmg
+          - os: macos-latest
+            rust-targets: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles app,dmg
           - os: windows-latest
           # The oldest supported runner: a binary runs only on a glibc at least as new as its build's.
           - os: ubuntu-22.04
@@ -55,7 +58,10 @@ jobs:
         with:
           targets: ${{ matrix.rust-targets }}
 
+      # Two targets share a runner OS and a job: without a key they would share a cache.
       - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.rust-targets }}
 
       # One draft release that every platform uploads to; publish it by hand after a check.
       - uses: tauri-apps/tauri-action@v0
@@ -71,7 +77,8 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: Batrak v__VERSION__
           releaseBody: |
-            - **macOS:** download `Batrak_*_universal.dmg`, open it and drag Batrak into Applications.
+            - **macOS:** download `Batrak_*_aarch64.dmg` for Apple Silicon (M1 and newer) or
+              `Batrak_*_x64.dmg` for Intel, open it and drag Batrak into Applications.
               This build is not notarized yet: on first launch macOS reports it as damaged. Run
               `xattr -dr com.apple.quarantine /Applications/Batrak.app` once, then open it.
             - **Windows:** run the `.exe` or `.msi` installer. It is not signed yet, so SmartScreen

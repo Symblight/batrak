@@ -6,8 +6,8 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const DESKTOP = [
-  ['darwin-aarch64', '.app.tar.gz'],
-  ['darwin-x86_64', '.app.tar.gz'],
+  ['darwin-aarch64', '_aarch64.app.tar.gz'],
+  ['darwin-x86_64', '_x64.app.tar.gz'],
   ['windows-x86_64', '-setup.exe'],
   ['windows-x86_64-nsis', '-setup.exe'],
   ['windows-x86_64-msi', '.msi'],
