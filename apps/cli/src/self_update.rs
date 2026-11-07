@@ -48,20 +48,29 @@ fn production() -> Deps<'static> {
 }
 
 /// The binary being updated.
-struct Install {
+pub(crate) struct Install {
     exe: PathBuf,
     dir: PathBuf,
-    current: Version,
+    pub(crate) current: Version,
     os: &'static str,
     arch: &'static str,
 }
 
 impl Install {
-    fn running() -> Result<Self, String> {
+    pub(crate) fn running() -> Result<Self, String> {
         let exe = std::env::current_exe().and_then(dunce::canonicalize).map_err(|e| format!("can't find this binary: {e}"))?;
         let dir = exe.parent().ok_or_else(|| format!("{} has no folder", exe.display()))?.to_path_buf();
         let current = Version::parse(env!("CARGO_PKG_VERSION")).map_err(|e| format!("this binary's version: {e}"))?;
         Ok(Self { exe, dir, current, os: std::env::consts::OS, arch: std::env::consts::ARCH })
+    }
+
+    /// The notice's last sentence.
+    pub(crate) fn update_advice(&self) -> String {
+        if has_receipt(&self.dir) {
+            "Run `batrak self update`.".to_owned()
+        } else {
+            no_receipt_message(&self.exe)
+        }
     }
 }
 

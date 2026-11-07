@@ -136,6 +136,17 @@ impl Installed {
     }
 }
 
+// ---- the notice's advice
+
+#[test]
+fn the_advice_is_self_update_with_a_receipt_and_the_refusal_without_one() {
+    let with = Installed::new("advice");
+    let without = Installed::without_receipt("advice-none");
+
+    assert_eq!(with.install.update_advice(), "Run `batrak self update`.");
+    assert_eq!(without.install.update_advice(), no_receipt_message(&without.install.exe));
+}
+
 // ---- replacing
 
 #[cfg(unix)]

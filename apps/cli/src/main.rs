@@ -1,7 +1,9 @@
 mod self_update;
+mod update_notice;
 
 use std::process::ExitCode;
 
+use clap::error::ErrorKind;
 use clap::{Parser, Subcommand};
 
 #[derive(Parser)]
@@ -32,10 +34,23 @@ enum OwnCommand {
         #[arg(long, requires = "check")]
         json: bool,
     },
+    /// Asks for the latest release and saves the answer for the update notice; a command starts it
+    #[command(hide = true)]
+    RefreshCheck,
 }
 
 fn main() -> ExitCode {
-    match Cli::parse().command {
+    let cli = match Cli::try_parse() {
+        Ok(cli) => cli,
+        Err(version) if version.kind() == ErrorKind::DisplayVersion => {
+            let _ = version.print();
+            update_notice::after_command();
+            return ExitCode::SUCCESS;
+        }
+        Err(other) => other.exit(),
+    };
+    match cli.command {
         Command::Own { command: OwnCommand::Update { check, json } } => self_update::run(check, json),
+        Command::Own { command: OwnCommand::RefreshCheck } => update_notice::refresh_check(),
     }
 }

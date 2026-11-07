@@ -441,6 +441,7 @@ dependencies = [
  "clap",
  "dunce",
  "semver",
+ "serde",
  "serde_json",
 ]
 
