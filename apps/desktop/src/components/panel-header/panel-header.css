@@ -10,8 +10,8 @@
   min-width: 0;
   margin: 0;
   font-size: var(--acp-font-size-title);
-  font-weight: var(--acp-font-weight-title);
-  color: var(--acp-color-on-surface-variant);
+  font-weight: var(--acp-font-weight-medium);
+  color: var(--acp-color-on-surface);
 }
 
 .acp-panel-header__action {
