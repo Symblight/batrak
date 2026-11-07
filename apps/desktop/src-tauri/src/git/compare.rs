@@ -6,10 +6,10 @@ use std::sync::atomic::AtomicBool;
 
 use serde::Serialize;
 
-use super::apply::changed_since;
 use super::blob::file_at;
 use super::exec::{self, Mode, Options};
 use super::status::FileStatus;
+use super::workspace_changes::changed_since;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

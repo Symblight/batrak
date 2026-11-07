@@ -123,6 +123,9 @@
   --acp-font-size-title: var(--acp-font-size-lg);
   --acp-font-weight-medium: 500;
 
+  /* A menu that picks a value, wider than a context menu's default (shadow.css) */
+  --acp-menu-width-picker: 15rem;
+
   /* Icon sizes: set as font-size on the icon's class */
   --acp-icon-size-xs: 14px;
   --acp-icon-size-sm: 16px;

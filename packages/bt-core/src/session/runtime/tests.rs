@@ -1105,7 +1105,7 @@ async fn worktree_sessions_run_side_by_side_on_their_own_branches() {
 
     assert_eq!(f.sessions.workspaces().get(one.workspace_id.as_deref().unwrap()).unwrap().base_commit, head);
     let branch = one.branch.clone().unwrap();
-    assert!(branch.starts_with("batrak/workspace"), "{branch}");
+    assert!(branch.starts_with("workspace"), "{branch}");
     assert_ne!(two.branch, one.branch);
     let wt = PathBuf::from(one.folder.clone());
     assert!(wt.starts_with(dunce::canonicalize(f.dir.join("data/worktrees")).unwrap()), "{}", wt.display());
@@ -1188,54 +1188,16 @@ async fn a_worktree_prompt_quotes_project_files_by_path_and_names_files_it_lacks
     assert!(prompt_blocks(&*env, vec![PromptInput::Mention { path: outside }]).unwrap_err().contains("outside"));
 }
 
-#[cfg(unix)]
 #[tokio::test]
-async fn a_newer_list_of_a_workspaces_changes_stops_the_one_it_replaces() {
-    let f = git_fixture("wt-supersede");
+async fn a_workspace_gives_its_folder_and_base_only_once_checked_out() {
+    let f = git_fixture("ws-checked-out");
     let ws = f.sessions.workspaces().create(&f.project, "Task", None).unwrap();
-    let (_, events) = f.create_in_workspace("c", &ws.id).unwrap();
-    events.wait_status("idle").await;
-    // A filter that hangs until the second list.
-    let (go, started) = (f.dir.join("go"), f.dir.join("started"));
-    let filter = format!("sh -c '[ -e \"{}\" ] || {{ touch \"{}\"; sleep 30; }}; cat'", go.display(), started.display());
-    run_in(&ws.folder, &["config", "filter.slow.clean", &filter]);
-    std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
-    std::fs::write(ws.folder.join(".gitattributes"), "a.txt filter=slow\n").unwrap();
+    let placed = f.sessions.workspaces().place(&f.project, Some("Later"), None).unwrap();
 
-    let first = {
-        let (sessions, id) = (f.sessions.clone(), ws.id.clone());
-        std::thread::spawn(move || sessions.workspace_changes(&id))
-    };
-    while !started.exists() {
-        std::thread::sleep(std::time::Duration::from_millis(10));
-    }
-    std::fs::write(&go, "").unwrap();
-    let began = std::time::Instant::now();
-    let second = f.sessions.workspace_changes(&ws.id).unwrap();
-    let first = first.join().unwrap().unwrap_err();
-
-    assert!(first.starts_with(crate::git::exec::CANCELLED), "{first}");
-    assert!(began.elapsed() < std::time::Duration::from_secs(9), "took {:?}", began.elapsed());
-    assert!(second.iter().any(|file| file.path == "a.txt"));
-}
-
-#[tokio::test]
-async fn a_workspaces_changes_are_listed_against_its_base() {
-    let f = git_fixture("wt-changes");
-    let (session, events) = f.create_in("c", "fake", f.new_workspace(None)).unwrap();
-    events.wait_status("idle").await;
-    let ws = session.workspace_id.clone().unwrap();
-    let wt = PathBuf::from(&session.folder);
-    assert!(f.sessions.workspace_changes(&ws).unwrap().is_empty(), "nothing done yet");
-
-    assert_eq!(f.ask("c", &events, &format!("write {} one\nmore", wt.join("a.txt").display())).await, "written");
-    assert_eq!(f.ask("c", &events, &format!("write {} new", wt.join("dir/new.txt").display())).await, "written");
-    let changed: Vec<_> = f.sessions.workspace_changes(&ws).unwrap().into_iter().map(|file| file.path).collect();
-    assert_eq!(changed, ["a.txt", "dir/new.txt"]);
-    assert_eq!(f.sessions.workspace_file_at_base(&ws, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
-    assert_eq!(f.sessions.workspace_file_at_base(&ws, "dir/new.txt").unwrap(), None);
-    assert!(f.sessions.workspace_file_at_base(&ws, "../x").is_err());
-    assert!(f.sessions.workspace_changes("nope").is_err(), "an unknown workspace");
+    assert_eq!(f.sessions.workspace_checked_out(&ws.id).unwrap(), (ws.folder.clone(), ws.base_commit.clone()));
+    assert!(f.sessions.workspace_checked_out("nope").is_err(), "an unknown workspace");
+    let err = f.sessions.workspace_checked_out(&placed.id).unwrap_err();
+    assert!(err.contains("isn't checked out"), "{err}");
 }
 
 #[tokio::test]
@@ -3478,7 +3440,7 @@ async fn a_workspace_outlives_its_only_chat() {
     let workspaces = f.sessions.workspaces().list(&f.project);
     assert_eq!(workspaces.len(), 1);
     let ws = &workspaces[0];
-    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "batrak/workspace", Some("main")));
+    assert_eq!((ws.name.as_str(), ws.branch.as_str(), ws.base_branch.as_deref()), ("Session b", "workspace", Some("main")));
     assert_eq!(chat.workspace_id.as_deref(), Some(ws.id.as_str()));
     assert_eq!(PathBuf::from(&chat.folder), ws.folder, "its agent works in the workspace's folder");
     assert!(ws.folder.join("a.txt").is_file(), "checked out at the chat's start");
@@ -3602,9 +3564,6 @@ async fn a_workspaces_git_actions_wait_for_none_of_its_chats_and_hold_them_all()
     run_in(&ws.folder, &["add", "."]);
     run_in(&ws.folder, &["commit", "-qm", "agent"]);
     std::fs::write(ws.folder.join("a.txt"), "edited").unwrap();
-    let names = |files: Vec<crate::git::status::FileStatus>| files.into_iter().map(|f| f.path).collect::<Vec<_>>();
-    assert_eq!(names(f.sessions.workspace_changes(&ws.id).unwrap()), ["a.txt", "committed.txt"]);
-    assert_eq!(f.sessions.workspace_file_at_base(&ws.id, "a.txt").unwrap().as_deref(), Some("one\ntwo\nthree\n"));
 
     // Refused while one chat works, naming it; the other chat's slot is left alone.
     f.sessions.send_prompt("busy", text("slow")).unwrap();

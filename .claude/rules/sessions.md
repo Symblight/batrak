@@ -85,7 +85,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `listed_record`), `for_session()` builds its env, and `Inner::prepare_folder` (`start.rs`) gets
   the folder ready for an ACP or CLI start alike (`Workspaces::ready`, then the env's `prepare`). **Workspaces** (`src-tauri/src/workspace/`, spec: `docs/specs/workspaces.md`):
   `<app data>/workspaces.json`, `Workspaces` (in `Sessions`, `sessions.workspaces()`), each a
-  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `batrak/<slug>` (`-2`… when taken) from
+  worktree `<app data>/worktrees/<repo>-<hash>/<slug>` on `<slug>` (`-2`… when a folder, record or ref takes it, `checkout::ref_taken`; `branch.<name>.batrak-workspace` in the repo's config, or the old `batrak/` prefix, says the branch is its own, and only then is it attached past its base or deleted) from
   its base branch (default `origin/HEAD`'s, `main`, `master`, HEAD's), checked out by
   `check_out` (in the background from `workspace_create`) or at its first chat's start
   (`Workspaces::ready`, which every chat start waits on); checkout, removal and placing live in
@@ -181,7 +181,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   `openWorkspaceChanges()` from `workspaces.changes()`, Changes since base, with or without chats; kept while the workspace is in
   the project's `$workspaces`, and until they're listed): `WorkspaceChangesController`
   (`<acp-workspace-changes-tab>`, one per tab, following its own workspace) lists `workspace_changes` (commits and uncommitted work since `baseCommit`,
-  `git::apply::changed_since`, in a scratch index seeded from the worktree's) when shown and after
+  `git::workspace_changes::changed_since`, in a scratch index seeded from the worktree's) when shown and after
   each turn of any of its chats, and diffs a file against `workspace_file_at_base`; `<acp-changes-review>` with
   `base` shows them without commit picks, with Apply to Main and Check out branch (`workspaces.apply()` /
   `checkOut()`, the `workspaces` hook).

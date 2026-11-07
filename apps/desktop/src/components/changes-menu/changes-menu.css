@@ -17,6 +17,3 @@
   font-size: var(--acp-changes-menu-icon-size, var(--acp-icon-size-sm));
 }
 
-.acp-changes-menu__item-icon {
-  font-size: var(--acp-icon-size-sm);
-}

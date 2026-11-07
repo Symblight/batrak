@@ -17,6 +17,7 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .manage(roots::Roots::default())
         .manage(commands::dropped::DroppedFiles::default())
+        .manage(git::workspace_changes::WorkspaceScans::default())
         .on_menu_event(menu::on_event)
         .setup(|app| {
             #[cfg(target_os = "macos")]

@@ -15,9 +15,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  margin-inline-end: -8px;
+  width: 1.25rem;
+  height: 1.25rem;
+  margin-inline-end: -0.5rem;
   border-radius: 50%;
   color: var(--acp-color-on-surface-variant);
   cursor: pointer;
@@ -28,17 +28,14 @@
     outline: none;
   }
 }
-.acp-tab-overflow__file-icon {
-  font-size: var(--acp-icon-size-xs);
-}
 .acp-tab-overflow__close-icon {
-  font-size: var(--acp-icon-size-sm);
+  font-size: 1rem;
 }
 /* Unsaved edits: a dot after the name, in the accent color. */
 .acp-tab-overflow__unsaved {
-  margin-inline-start: var(--acp-space-0-5);
+  margin-inline-start: 0.125rem;
   color: var(--acp-color-primary);
-  font-size: 10px;
+  font-size: 0.625rem;
   line-height: 1;
 }
 /* Show Hidden Tabs: outside the scroller, so never faded or scrolled away. */
@@ -58,18 +55,6 @@
   font-size: var(--acp-icon-size-lg);
 }
 .acp-tab-overflow__menu {
-  --md-menu-min-width: 12rem;
+  --md-menu-min-width: var(--acp-menu-width-picker);
   --md-menu-max-height: 24rem;
-  --md-menu-shape: var(--acp-shape-corner-small);
-}
-/* Dense rows, like the IDE's popups. */
-.acp-tab-overflow__item {
-  --md-menu-item-min-block-size: 1.375rem;
-  --md-menu-item-padding-block: 0;
-  --md-menu-item-padding-inline: var(--acp-space-1-5);
-  --md-menu-item-label-text-size: var(--acp-font-size-sm);
-  --md-menu-item-label-text-line-height: 1.375rem;
-  --md-menu-item-leading-icon-size: var(--acp-icon-size-xs);
-
-  margin-inline: var(--acp-space-0-5);
 }

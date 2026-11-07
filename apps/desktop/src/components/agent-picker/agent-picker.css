@@ -65,9 +65,9 @@
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-agent-picker__menu {
-  --md-menu-min-width: 13rem;
+  --md-menu-min-width: var(--acp-menu-width-picker);
 }
 
 .acp-agent-picker__lock {
-  font-size: var(--acp-icon-size-sm);
+  font-size: 1rem;
 }

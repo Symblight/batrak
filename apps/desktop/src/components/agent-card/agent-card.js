@@ -332,17 +332,17 @@ export class AcpAgentCard extends LitElement {
     >
       <md-item-group>
         <md-menu-item class="acp-agent-card__menu-item" value="edit">
-          <md-icon slot="leading" class="acp-agent-card__icon">${unsafeSVG(editIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(editIcon)}</md-icon>
           Edit
         </md-menu-item>
         <md-menu-item class="acp-agent-card__menu-item" value="default" ?disabled=${!canDefault}>
-          <md-icon slot="leading" class="acp-agent-card__icon">${unsafeSVG(starIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(starIcon)}</md-icon>
           Set as default
         </md-menu-item>
       </md-item-group>
       <md-item-group>
         <md-menu-item class="acp-agent-card__menu-item acp-agent-card__menu-item_danger" value="remove">
-          <md-icon slot="leading" class="acp-agent-card__icon">${unsafeSVG(deleteIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(deleteIcon)}</md-icon>
           Remove
         </md-menu-item>
       </md-item-group>

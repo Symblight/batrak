@@ -79,7 +79,7 @@ export class AcpProjectMenu extends LitElement {
     const dotId = `acp-project-menu-dot-${index}`;
     return html`<md-menu-item class="acp-project-menu__item" value=${project.id} data-project=${project.id} ?selected=${current}>
       ${current
-        ? html`<md-icon slot="leading" class="acp-project-menu__check">${unsafeSVG(checkIcon)}</md-icon>`
+        ? html`<md-icon slot="leading">${unsafeSVG(checkIcon)}</md-icon>`
         : html`<span slot="leading" class="acp-project-menu__tile acp-project-menu__tile_small">${projects.initialOf(project.name)}</span>`}
       <span class="acp-project-menu__text">
         <span class="acp-project-menu__title">${project.name}</span>
@@ -97,7 +97,7 @@ export class AcpProjectMenu extends LitElement {
   /** @param {string} value @param {string} icon @param {string} label @param {string} [hint] */
   #renderAction(value, icon, label, hint) {
     return html`<md-menu-item class="acp-project-menu__item" value=${value}>
-      <md-icon slot="leading" class="acp-project-menu__icon">${unsafeSVG(icon)}</md-icon>
+      <md-icon slot="leading">${unsafeSVG(icon)}</md-icon>
       ${label} ${hint ? html`<span slot="trailing">${hint}</span>` : nothing}
     </md-menu-item>`;
   }

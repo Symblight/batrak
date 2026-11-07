@@ -127,6 +127,37 @@ describe('acp-main-column', () => {
     expect(el.querySelector('acp-tab-view')?.shadowRoot?.querySelector('acp-editor-view acp-code-view'), 'through the editor view').to.not.equal(null);
   });
 
+  it("answers a file tab's Open in itself: shows it in the file manager, starts a terminal in its folder", async () => {
+    // Arrange
+    /** @type {{ cmd: string, args: unknown }[]} */
+    const calls = [];
+    mockIPC((cmd, args) => {
+      calls.push({ cmd, args });
+      return null;
+    });
+    $terminals.set({});
+    const { el, tabView } = await render();
+    /** @type {string[]} */
+    const escaped = [];
+    const parent = /** @type {HTMLElement} */ (el.parentElement);
+    const note = (/** @type {Event} */ e) => escaped.push(e.type);
+    const types = ['acp-reveal-path', 'acp-open-terminal'];
+    for (const type of types) parent.addEventListener(type, note);
+    /** @param {string} type @param {object} detail */
+    const ask = (type, detail) => tabView.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
+    try {
+      // Act
+      ask('acp-reveal-path', { path: '/p/src/a.js' });
+      ask('acp-open-terminal', { path: '/p/src' });
+      // Assert
+      expect(calls.filter((c) => c.cmd === 'reveal_path').map((c) => c.args)).to.deep.equal([{ path: '/p/src/a.js' }]);
+      expect(Object.values($terminals.get()).map((t) => t.cwd)).to.deep.equal(['/p/src']);
+      expect(escaped, 'not answered again above the column').to.deep.equal([]);
+    } finally {
+      for (const type of types) parent.removeEventListener(type, note);
+    }
+  });
+
   describe('markdown view keys', () => {
     afterEach(() => $markdownModes.setKey('/p', undefined));
 

@@ -243,6 +243,19 @@ export class AcpMainColumn extends ViewElement {
     app.copy(path, 'Copying the path failed');
   }
 
+  /** @param {Event} e */
+  #onRevealPath(e) {
+    e.stopPropagation();
+    const { path } = /** @type {CustomEvent<{ path: string }>} */ (e).detail;
+    projects.reveal(path).catch((err) => app.reportError(`${app.revealLabel} failed`, err));
+  }
+
+  /** @param {Event} e */
+  #onOpenTerminal(e) {
+    e.stopPropagation();
+    terminals.openAt(/** @type {CustomEvent<{ path: string }>} */ (e).detail.path);
+  }
+
   /**
    * The content of the tabs whose view this column owns: files as text get their editor.
    * @param {EditorTab} tab
@@ -301,6 +314,8 @@ export class AcpMainColumn extends ViewElement {
         @acp-tab-save=${this.#onTabSave}
         @acp-tab-reload=${(/** @type {CustomEvent<{ id: string }>} */ e) => this.#files.reload(e.detail.id)}
         @acp-copy-path=${this.#onCopyPath}
+        @acp-reveal-path=${this.#onRevealPath}
+        @acp-open-terminal=${this.#onOpenTerminal}
         @acp-link-open=${(/** @type {CustomEvent<{ url: string }>} */ e) =>
           app.openUrl(e.detail.url).catch((err) => app.reportError('Opening link failed', err))}
         @acp-comment-add=${(/** @type {CustomEvent<{ path: string, draft: CommentDraft }>} */ e) =>

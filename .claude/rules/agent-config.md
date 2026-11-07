@@ -17,7 +17,7 @@ paths:
   `workspace.json`, `.gitignore` with `local/`), never overwriting. `workspace.json`
   holds `localTurns` (read by the backend at each turn); an old `defaultMode` is ignored, since a
   chat's workspace decides where it runs. New workspace picks its base from `git_branches` (local
-  branches, sessions' `batrak/…` left out). A project's agents are its
+  branches). A project's agents are its
   `.bt/agents.json` and nothing else; `<config dir>/batrak/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,

@@ -147,7 +147,7 @@ export class AcpSessionMenu extends LitElement {
         ? nothing
         : html`<md-item-group>
             <md-menu-item class="acp-session-menu__item" value=${this.mark === 'read' ? 'mark-read' : 'mark-unread'}>
-              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(this.mark === 'read' ? markReadIcon : markUnreadIcon)}</md-icon>
+              <md-icon slot="leading">${unsafeSVG(this.mark === 'read' ? markReadIcon : markUnreadIcon)}</md-icon>
               ${this.mark === 'read' ? 'Mark as read' : 'Mark as unread'}
             </md-menu-item>
           </md-item-group>`}
@@ -155,15 +155,15 @@ export class AcpSessionMenu extends LitElement {
         ${this.pin === ''
           ? nothing
           : html`<md-menu-item class="acp-session-menu__item" value=${this.pin}>
-              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(pinIcon)}</md-icon>
+              <md-icon slot="leading">${unsafeSVG(pinIcon)}</md-icon>
               ${this.pin === 'pin' ? 'Pin' : 'Unpin'}
             </md-menu-item>`}
         <md-menu-item class="acp-session-menu__item" value="open-in">
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(openInIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(openInIcon)}</md-icon>
           Open in
           <md-menu slot="submenu" class="acp-session-menu__menu" aria-label="Open in">
             <md-menu-item class="acp-session-menu__item" value="open-terminal">
-              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(terminalIcon)}</md-icon>
+              <md-icon slot="leading">${unsafeSVG(terminalIcon)}</md-icon>
               Terminal
             </md-menu-item>
           </md-menu>
@@ -171,34 +171,34 @@ export class AcpSessionMenu extends LitElement {
       </md-item-group>
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="rename">
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(editIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(editIcon)}</md-icon>
           Rename
           <span slot="trailing">F2</span>
         </md-menu-item>
         ${this.resettable
           ? html`<md-menu-item class="acp-session-menu__item" value="reset-title">
-              <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(agentTitleIcon)}</md-icon>
+              <md-icon slot="leading">${unsafeSVG(agentTitleIcon)}</md-icon>
               Reset to agent title
             </md-menu-item>`
           : nothing}
       </md-item-group>
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="reveal">
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(folderOpenIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(folderOpenIcon)}</md-icon>
           Reveal workspace in Files
         </md-menu-item>
         <md-menu-item class="acp-session-menu__item" value="export" disabled>
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(downloadIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(downloadIcon)}</md-icon>
           Export transcript (Markdown)
         </md-menu-item>
       </md-item-group>
       <md-item-group>
         <md-menu-item class="acp-session-menu__item" value="archive" disabled>
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(archiveIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(archiveIcon)}</md-icon>
           Archive
         </md-menu-item>
         <md-menu-item class="acp-session-menu__item acp-session-menu__item_danger" value="delete">
-          <md-icon slot="leading" class="acp-session-menu__icon">${unsafeSVG(deleteIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(deleteIcon)}</md-icon>
           Delete…
         </md-menu-item>
       </md-item-group>

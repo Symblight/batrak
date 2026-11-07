@@ -1,4 +1,5 @@
 import { expect, fixture, html, tooltipOf } from '../../../../test/fixture.js';
+import { app } from '../../../hooks/app/app.js';
 import '../tab-strip.js';
 
 /** @typedef {import('../../../hooks/tabs/types.js').EditorTab} EditorTab */
@@ -39,6 +40,15 @@ const terminalInfo = {
   error: null,
   login: null,
 };
+
+/** @param {() => boolean} condition */
+async function until(condition) {
+  const started = Date.now();
+  while (!condition()) {
+    expect(Date.now() - started, 'timed out').to.be.lessThan(1500);
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
 
 describe('acp-tab-strip', () => {
   it('shows a file tab with its file\'s icon and a view tab with its own', async () => {
@@ -107,6 +117,64 @@ describe('acp-tab-strip', () => {
       // Assert
       expect(el.shadowRoot?.querySelector('md-tooltip')?.textContent?.trim(), path).to.equal(expected);
     }
+  });
+
+  describe('a tab\'s menu', () => {
+    /**
+     * Right-clicks the strip's only tab and returns its menu, open.
+     * @param {EditorTab} tab
+     */
+    async function rightClick(tab) {
+      const el = /** @type {HTMLElementTagNameMap['acp-tab-strip']} */ (
+        await fixture(html`<acp-tab-strip .tabs=${[tab]} .terminals=${{ t1: terminalInfo }}></acp-tab-strip>`)
+      );
+      el.shadowRoot?.querySelector('md-tab')?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 40, clientY: 40 }));
+      const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (el.shadowRoot?.querySelector('md-menu'));
+      await until(() => menu.open);
+      return { el, menu };
+    }
+
+    const CASES = [
+      { value: 'copy-path', event: 'acp-copy-path', detail: { path: '/p/src/a.js' } },
+      { value: 'reveal', event: 'acp-reveal-path', detail: { path: '/p/src/a.js' } },
+      { value: 'open-terminal', event: 'acp-open-terminal', detail: { path: '/p/src' } },
+    ];
+    for (const { value, event, detail } of CASES) {
+      it(`${value} on a file asks once for ${JSON.stringify(detail)}`, async () => {
+        // Arrange
+        const { el, menu } = await rightClick(fileTab('/p/src/a.js'));
+        /** @type {unknown[]} */
+        const fired = [];
+        el.addEventListener(event, (e) => fired.push(/** @type {CustomEvent} */ (e).detail));
+        const item = menu.querySelector(`md-menu-item[value="${value}"]`);
+        expect(item, value).to.not.equal(null);
+        const pick = { value, item };
+        // Act: md-menu repeats a submenu's pick, with the item's own detail.
+        menu.dispatchEvent(new CustomEvent('select', { detail: pick }));
+        menu.dispatchEvent(new CustomEvent('select', { detail: pick }));
+        // Assert
+        expect(fired).to.deep.equal([detail]);
+      });
+    }
+
+    it('names the file manager of the OS under Open in', async () => {
+      // Act
+      const { menu } = await rightClick(fileTab('/p/a.js'));
+      // Assert
+      const submenu = menu.querySelector('md-menu-item[value="open-in"] md-menu[slot="submenu"]');
+      const labels = [...(submenu?.querySelectorAll('md-menu-item') ?? [])].map((item) => item.textContent?.trim());
+      expect(labels).to.deep.equal([app.fileManagers[app.platform], 'Terminal']);
+      expect(submenu?.querySelector('md-menu-item[value="open-terminal"] md-icon[slot="leading"] svg'), 'the terminal icon').to.not.equal(null);
+    });
+
+    it('offers neither Open in nor Copy Path on a tab that is not a file', async () => {
+      // Act
+      const { menu } = await rightClick(terminalTab('t1'));
+      // Assert
+      for (const value of ['open-in', 'reveal', 'open-terminal', 'copy-path']) {
+        expect(menu.querySelector(`md-menu-item[value="${value}"]`), value).to.equal(null);
+      }
+    });
   });
 
   describe('Show Hidden Tabs', () => {

@@ -238,7 +238,7 @@ export class AcpWorkspacePicker extends LitElement {
       aria-keyshortcuts=${number === undefined ? nothing : shortcuts.aria(/** @type {ShortcutId} */ (`workspace${number}`))}
     >
       ${current
-        ? html`<md-icon slot="leading" class="acp-workspace-picker__check">${unsafeSVG(checkIcon)}</md-icon>`
+        ? html`<md-icon slot="leading">${unsafeSVG(checkIcon)}</md-icon>`
         : html`<acp-workspace-status slot="leading" class="acp-workspace-picker__status" .status=${status}></acp-workspace-status>`}
       ${renaming
         ? html`<input
@@ -263,7 +263,7 @@ export class AcpWorkspacePicker extends LitElement {
           void this.#openMenu(id, /** @type {HTMLElement} */ (e.currentTarget));
         }}
       >
-        <md-icon class="acp-workspace-picker__icon">${unsafeSVG(moreIcon)}</md-icon>
+        <md-icon class="acp-workspace-picker__more-icon">${unsafeSVG(moreIcon)}</md-icon>
       </md-icon-button>
     </md-menu-item>`;
   }
@@ -301,7 +301,7 @@ export class AcpWorkspacePicker extends LitElement {
         ${main ? html`<md-item-group><md-menu-group label="Main">${this.#renderRow(MAIN, 'Main')}</md-menu-group></md-item-group>` : nothing}
         <md-item-group>
           <md-menu-item class="acp-workspace-picker__item" value=${NEW}>
-            <md-icon slot="leading" class="acp-workspace-picker__icon">${unsafeSVG(addIcon)}</md-icon>
+            <md-icon slot="leading">${unsafeSVG(addIcon)}</md-icon>
             New workspace <span slot="trailing">${shortcuts.hint('newWorkspace')}</span>
           </md-menu-item>
         </md-item-group>

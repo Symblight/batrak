@@ -46,11 +46,11 @@ export class AcpChangesMenu extends LitElement {
         ${this.readOnly
           ? nothing
           : html`<md-menu-item value="rollback" ?disabled=${this.picked === 0}>
-              <md-icon slot="leading" class="acp-changes-menu__item-icon">${unsafeSVG(undoIcon)}</md-icon>
+              <md-icon slot="leading">${unsafeSVG(undoIcon)}</md-icon>
               Rollback
             </md-menu-item>`}
         <md-menu-item value="refresh">
-          <md-icon slot="leading" class="acp-changes-menu__item-icon">${unsafeSVG(refreshIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(refreshIcon)}</md-icon>
           Refresh
         </md-menu-item>
       </md-menu>`;
