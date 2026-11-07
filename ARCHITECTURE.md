@@ -88,6 +88,7 @@ What it holds, module by module.
 | `session/` | `Sessions`: lifecycle, turns, permissions, turn slots per folder, sync with the agents' own lists, replay for a client that attaches, subagents, sign-in, the agent's CLI, worktree helpers |
 | `workspace/` | `Workspaces`: records in `workspaces.json`, worktree checkout, naming, delete, apply, check out branch |
 | `config/` | `.bt/agents.json` and the user's file, merging, trust, on/off switches, the ACP registry, updates, the user-file watcher |
+| `release/` | The app's own releases: the manifest, downloading a package, its minisign signature, comparing versions |
 | `agents/` | `AgentHub`: which agent crate drives a launch; the one place that names the crates |
 | `git/` | the git sessions and workspaces need: `exec` (one path for every call), `lock`, `binary`, `temp_file`, `worktree`, `apply`; `test_repo` behind `test-support`, since the desktop's git tests use it too. The Changes views' git is the desktop's (§7.1) |
 | `storage/` | `JsonFile`: atomic JSON documents in app data, cross-process safe (§6) |
