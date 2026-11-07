@@ -116,7 +116,7 @@ describe('acp-toolbar-view', () => {
     expect(calls.some((c) => c.cmd === 'git_fetch')).to.equal(false);
   });
 
-  it('never shows another project’s branches: a late answer is dropped, and a failed load shows none', async () => {
+  it('never shows another project’s branches: a switch clears them, a late answer is dropped, and a failed load shows none', async () => {
     // Arrange
     /** @type {{ resolve: (list: unknown) => void, reject: (err: unknown) => void }[]} */
     const asked = [];
@@ -131,9 +131,11 @@ describe('acp-toolbar-view', () => {
     const first = loadBranches();
     asked[0].resolve(list('of-p'));
     await first;
-    // Act: a late answer for this project, once another is shown
+    const loaded = view.branches.local;
+    // Act: another project is shown, and a late answer for this one comes after
     const late = loadBranches();
     $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+    const afterSwitch = view.branches.local;
     asked[1].resolve(list('late-of-p'));
     await late;
     const afterLate = view.branches.local;
@@ -141,7 +143,9 @@ describe('acp-toolbar-view', () => {
     asked[2].reject(new Error('git failed'));
     await failed;
     // Assert
-    expect(afterLate).to.deep.equal(['of-p']);
+    expect(loaded).to.deep.equal(['of-p']);
+    expect(afterSwitch).to.deep.equal([]);
+    expect(afterLate).to.deep.equal([]);
     expect(view.branches.local).to.deep.equal([]);
   });
 });
