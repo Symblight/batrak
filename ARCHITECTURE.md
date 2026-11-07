@@ -267,6 +267,7 @@ The `batrak` binary over the core, clap verbs with no prefix, every one a core m
 | `run <agent> [prompt] [--workspace\|--new-workspace [--base]] [--model] [--mode]`, `send <id>` | `Sessions::create`, `send_prompt`, an `EventSink` rendered on the TTY |
 | `resume <id>` | `Sessions::open_cli` through the inherit-stdio `ProgramRunner` |
 | `workspaces`, `workspace new\|rm\|apply\|checkout` | `Workspaces::*` |
+| `self update [--check [--json]]` | `release::*`; replacing the binary is the CLI's (`self_update.rs`) |
 | later: `spec new\|status\|approve`, `tasks run`, `mcp` | §8 |
 
 Scope: the project whose folder the command runs in (walking up to the first `.bt/`), else the

@@ -3,3 +3,11 @@ name = "batrak"
 version = "0.1.0"
 description = "Batrak's command line (verbs arrive with docs/specs/cli.md)"
 edition = "2021"
+
+[dependencies]
+bt-core = { path = "../../packages/bt-core" }
+clap = { version = "4", features = ["derive"] }
+# canonicalize without Windows' `\\?\` prefix, as in bt-core
+dunce = "1"
+semver = "1"
+serde_json = "1"
