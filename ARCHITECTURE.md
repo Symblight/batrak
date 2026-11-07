@@ -248,7 +248,8 @@ and changes nothing above.
   the notice layer that implements `Notifier::notice`), the editor side that never enters the
   core: `roots/` (snapshot, watcher, Quick Open, Find in Files, open-root groups per window),
   editor git (`status`, `line_counts`, `repo`, `remote`, `branches`, `blob`, `compare`, `revert`, `workspace_changes`, `commit`, `cache`, over the core's `git/`), `github.rs`, `fs`, attachments,
-  drops, fonts, about, and `terminal/` (PTY tabs; implements `ProgramRunner`).
+  drops, fonts, about, `app_update/` (the app's own updates, over `tauri-plugin-updater` and the
+  core's `release`) and `terminal/` (PTY tabs; implements `ProgramRunner`).
 - `src/`: the Lit UI. `hooks/ipc/ipc.js` is the only module that imports
   `@tauri-apps/*`; each feature's hook owns its command names; containers subscribe to stores,
   everything else is presentational. Its own rules live in `apps/desktop/CLAUDE.md` and

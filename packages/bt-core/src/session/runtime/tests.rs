@@ -3721,14 +3721,14 @@ async fn working_counts_chats_in_a_turn_not_idle_ones() {
 }
 
 #[tokio::test]
-async fn working_counts_a_terminal_run_chat_by_what_its_agent_says() {
+async fn working_counts_a_terminal_run_chat_unless_its_agent_says_it_is_at_its_prompt() {
     use agent_api::SessionActivity::{Idle, Running, WaitingForUser};
     // `RECORDED_ACTIVITY` is shared by the tests, and every fixture's ids start at `fake-session-1`.
     let f = fixture("working-cli", FakeAgentOptions { created: Arc::new(AtomicUsize::new(1000)), ..FakeAgentOptions::default() });
     f.give_cli_agents();
     let (acp, events) = f.started_then_stopped("s1", "fake").await;
     f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
-    assert_eq!(f.sessions.working(), 0, "its agent hasn't told yet");
+    assert_eq!(f.sessions.working(), 1, "its agent hasn't told, so it may be in a turn");
 
     for (activity, expected) in [(Running, 1), (WaitingForUser, 1), (Idle, 0)] {
         record_activity(&acp, activity);
@@ -3737,6 +3737,27 @@ async fn working_counts_a_terminal_run_chat_by_what_its_agent_says() {
         assert_eq!(status_of(&f, "s1"), SessionStatus::Stopped, "no ACP status");
         assert_eq!(f.sessions.working(), expected, "{activity:?}");
     }
+}
+
+#[tokio::test]
+async fn a_chat_its_cli_runs_names_its_terminal_while_the_cli_is_open() {
+    // Arrange
+    let f = fixture("cli-terminals", FakeAgentOptions::default());
+    f.give_cli_agents();
+    let _started = f.started_then_stopped("s1", "fake").await;
+    assert!(f.sessions.cli_terminals().is_empty(), "no CLI yet");
+
+    // Act
+    let opened = f.sessions.open_cli("s1", None, f.programs.client("main"), None).await.unwrap();
+
+    // Assert
+    assert_eq!(f.sessions.cli_terminals(), [opened.terminal_id]);
+
+    // Act
+    f.sessions.close_cli("s1").await.unwrap();
+
+    // Assert
+    assert!(f.sessions.cli_terminals().is_empty(), "its terminal is gone");
 }
 
 #[tokio::test]

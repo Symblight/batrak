@@ -24,7 +24,10 @@
   },
   "plugins": {
     "updater": {
-      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE4QjZFMTU2MjZBMTFFRUEKUldUcUhxRW1WdUcyR08vYWgvWjZyMjFUcTJ1YmprN3JBMkM1Vzh2eUVsZ2ZtcjlubnhqNXJxYWUK"
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE4QjZFMTU2MjZBMTFFRUEKUldUcUhxRW1WdUcyR08vYWgvWjZyMjFUcTJ1YmprN3JBMkM1Vzh2eUVsZ2ZtcjlubnhqNXJxYWUK",
+      "endpoints": ["https://github.com/Symblight/batrak/releases/latest/download/latest.json"],
+      "requireSignedVersion": true,
+      "windows": { "installMode": "passive" }
     }
   },
   "bundle": {

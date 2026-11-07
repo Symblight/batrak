@@ -209,18 +209,20 @@ fn checked_url(url: &str) -> Result<&str, String> {
 /// the app's own window away). Only `http`, `https` and `mailto`.
 #[tauri::command]
 pub async fn open_url(url: String) -> Result<(), String> {
-    checked_url(&url)?;
-    blocking(move || {
-        #[cfg(target_os = "macos")]
-        let status = Command::new("open").arg(&url).status();
-        // Not through `cmd /C start`: cmd would read `&`, `|` and `%` in the URL as its own syntax.
-        #[cfg(target_os = "windows")]
-        let status = Command::new("rundll32").args(["url.dll,FileProtocolHandler", &url]).status();
-        #[cfg(not(any(target_os = "macos", target_os = "windows")))]
-        let status = Command::new("xdg-open").arg(&url).status();
-        status.map(|_| ()).map_err(|e| format!("{url}: {e}"))
-    })
-    .await?
+    blocking(move || open_in_browser(&url)).await?
+}
+
+/// Blocking.
+pub(super) fn open_in_browser(url: &str) -> Result<(), String> {
+    checked_url(url)?;
+    #[cfg(target_os = "macos")]
+    let status = Command::new("open").arg(url).status();
+    // Not through `cmd /C start`: cmd would read `&`, `|` and `%` in the URL as its own syntax.
+    #[cfg(target_os = "windows")]
+    let status = Command::new("rundll32").args(["url.dll,FileProtocolHandler", url]).status();
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let status = Command::new("xdg-open").arg(url).status();
+    status.map(|_| ()).map_err(|e| format!("{url}: {e}"))
 }
 
 #[cfg(test)]

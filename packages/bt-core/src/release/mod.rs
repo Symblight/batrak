@@ -142,10 +142,26 @@ pub enum Downloaded {
     Cancelled,
 }
 
+/// Why a download failed, which a front tells apart for its user.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DownloadError {
+    /// The transfer: a connection, a status, a limit.
+    Network(String),
+    /// Our side: making the folder, writing the file, putting it in place.
+    Disk(String),
+}
+
+impl std::fmt::Display for DownloadError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (Self::Network(detail) | Self::Disk(detail)) = self;
+        f.write_str(detail)
+    }
+}
+
 /// Writes `<dest>.part`, creating the folder, then renames it over `dest`. A cancel or a failure
 /// removes the part file and leaves an existing `dest` as it was. Blocking. `cancel` is checked between
 /// chunks.
-pub fn download(source: &dyn Source, url: &str, dest: &Path, cancel: &AtomicBool, progress: impl FnMut(u64, Option<u64>)) -> Result<Downloaded, String> {
+pub fn download(source: &dyn Source, url: &str, dest: &Path, cancel: &AtomicBool, progress: impl FnMut(u64, Option<u64>)) -> Result<Downloaded, DownloadError> {
     let part = part_path(dest);
     let outcome = write_part(source, url, &part, dest, cancel, progress);
     if outcome != Ok(Downloaded::Done) {
@@ -161,22 +177,27 @@ fn part_path(dest: &Path) -> PathBuf {
     PathBuf::from(part)
 }
 
-fn write_part(source: &dyn Source, url: &str, part: &Path, dest: &Path, cancel: &AtomicBool, mut progress: impl FnMut(u64, Option<u64>)) -> Result<Downloaded, String> {
+fn write_part(source: &dyn Source, url: &str, part: &Path, dest: &Path, cancel: &AtomicBool, mut progress: impl FnMut(u64, Option<u64>)) -> Result<Downloaded, DownloadError> {
     if cancel.load(Ordering::Relaxed) {
         return Ok(Downloaded::Cancelled);
     }
-    let file_error = |path: &Path, e: std::io::Error| format!("{}: {e}", path.display());
+    let file_error = |path: &Path, e: std::io::Error| DownloadError::Disk(format!("{}: {e}", path.display()));
     if let Some(folder) = dest.parent() {
         fs::create_dir_all(folder).map_err(|e| file_error(folder, e))?;
     }
     let mut file = File::create(part).map_err(|e| file_error(part, e))?;
     let size = Cell::new(None);
+    // `Source` hands back the sink's error as a plain string.
+    let write_failed = Cell::new(false);
     let mut received = 0u64;
     let mut sink = |chunk: &[u8]| {
         if cancel.load(Ordering::Relaxed) {
             return Err("cancelled".to_owned());
         }
-        file.write_all(chunk).map_err(|e| file_error(part, e))?;
+        file.write_all(chunk).map_err(|e| {
+            write_failed.set(true);
+            format!("{}: {e}", part.display())
+        })?;
         received += chunk.len() as u64;
         progress(received, size.get());
         Ok(())
@@ -185,7 +206,7 @@ fn write_part(source: &dyn Source, url: &str, part: &Path, dest: &Path, cancel: 
     if cancel.load(Ordering::Relaxed) {
         return Ok(Downloaded::Cancelled);
     }
-    transfer?;
+    transfer.map_err(|e| if write_failed.get() { DownloadError::Disk(e) } else { DownloadError::Network(e) })?;
     file.sync_all().map_err(|e| file_error(part, e))?;
     // Windows can't rename an open file.
     drop(file);

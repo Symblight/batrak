@@ -151,8 +151,20 @@ fn a_failed_transfer_leaves_no_part_and_no_dest() {
 
     let error = download(&source, "u", &dir.join("pkg"), &AtomicBool::new(false), |_, _| ()).unwrap_err();
 
-    assert_eq!(error, "connection reset");
+    assert_eq!(error, DownloadError::Network("connection reset".to_owned()));
     assert!(names_in(&dir).is_empty());
+}
+
+/// `/dev/full` fails every write with "no space", as a full disk does in the middle of a download.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_write_that_fails_during_the_transfer_is_a_disk_failure() {
+    let dir = folder("full");
+    std::os::unix::fs::symlink("/dev/full", dir.join("pkg.part")).unwrap();
+
+    let error = download(&fake(&[b"a"]), "u", &dir.join("pkg"), &AtomicBool::new(false), |_, _| ()).unwrap_err();
+
+    assert!(matches!(error, DownloadError::Disk(_)), "{error:?}");
 }
 
 #[test]
@@ -179,7 +191,7 @@ fn a_rename_that_fails_is_an_error_and_removes_the_part() {
 
     let error = download(&fake(&[b"a"]), "u", &dest, &AtomicBool::new(false), |_, _| ()).unwrap_err();
 
-    assert!(error.contains("pkg"), "{error}");
+    assert!(matches!(&error, DownloadError::Disk(detail) if detail.contains("pkg")), "{error}");
     assert_eq!(names_in(&dir), ["pkg"]);
 }
 
@@ -191,7 +203,7 @@ fn a_folder_that_cant_be_created_is_an_error() {
 
     let error = download(&source, "u", &dir.join("file/pkg"), &AtomicBool::new(false), |_, _| ()).unwrap_err();
 
-    assert!(error.contains("file"), "{error}");
+    assert!(matches!(&error, DownloadError::Disk(detail) if detail.contains("file")), "{error}");
     assert_eq!(source.delivered.load(Ordering::Relaxed), 0);
 }
 

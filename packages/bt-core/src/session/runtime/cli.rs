@@ -22,6 +22,12 @@ pub(in crate::session) struct CliHeld {
     pub(super) activity: Option<agent_api::SessionActivity>,
 }
 
+impl CliHeld {
+    pub(in crate::session) fn terminal_id(&self) -> String {
+        self.terminal_id.clone()
+    }
+}
+
 /// A session opened in its agent's CLI: the terminal the page attaches to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]

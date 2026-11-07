@@ -118,16 +118,20 @@ impl Sessions {
             .count()
     }
 
-    /// How many sessions, in any project, are in a turn or about to be, a chat its CLI runs included
-    /// (its `status` stays `stopped`; its activity is the last poll's). Never waits on a turn.
+    /// How many sessions, in any project, would lose work if stopped now: in a turn or about to be, or
+    /// a chat its CLI runs (its `status` stays `stopped`) unless that is known to be at its prompt, as
+    /// `cli_busy` tells. An agent that keeps no records can't say, so it counts. Asks each runner, so
+    /// may block; never waits on a turn.
     pub fn working(&self) -> usize {
-        lock(&self.inner.sessions)
-            .values()
-            .filter(|s| {
-                let by_cli = |activity| matches!(activity, Some(agent_api::SessionActivity::Running | agent_api::SessionActivity::WaitingForUser));
-                workspaces::in_turn(s.status()) || by_cli(lock(&s.cli).as_ref().and_then(|held| held.activity))
-            })
-            .count()
+        // `cli_busy` takes the sessions lock.
+        let states: Vec<_> = lock(&self.inner.sessions).values().cloned().collect();
+        states.iter().filter(|s| workspaces::in_turn(s.status()) || self.cli_busy(&s.id).unwrap_or(false)).count()
+    }
+
+    /// The terminals of the chats open in their agents' CLIs. Such a terminal's program is an agent,
+    /// which `working()` answers for, whatever else its terminal reads as.
+    pub fn cli_terminals(&self) -> Vec<String> {
+        lock(&self.inner.sessions).values().filter_map(|s| lock(&s.cli).as_ref().map(CliHeld::terminal_id)).collect()
     }
 
     /// Most recently active first.
