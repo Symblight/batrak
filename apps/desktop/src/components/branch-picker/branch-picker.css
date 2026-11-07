@@ -42,13 +42,18 @@
   font-size: var(--acp-icon-size-xs);
 }
 
+.acp-branch-picker__item {
+  --md-menu-item-leading-icon-size: 2rem;
+}
+
 .acp-branch-picker__icon,
 .acp-branch-picker__check {
   flex: none;
-  font-size: var(--acp-icon-size-sm);
 }
 
 .acp-branch-picker__check {
+  /* At the slot's start in a row with no branch icon, in line with the other rows' checks. */
+  margin-inline-end: auto;
   color: var(--acp-color-primary);
 
   &.acp-branch-picker__check_hidden {
@@ -65,10 +70,10 @@
 
 
 .acp-branch-picker__remote {
-  padding-inline-start: var(--acp-space-2);
+  padding-inline-start: 0.5rem;
 }
 
 .acp-branch-picker__default {
   color: var(--acp-color-on-surface-variant);
-  font-size: var(--acp-font-size-sm);
+  font-size: 0.75rem;
 }

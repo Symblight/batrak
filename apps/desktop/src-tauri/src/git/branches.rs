@@ -7,8 +7,8 @@ use serde::Serialize;
 use super::exec::{self, Mode};
 use super::repo::info;
 
-/// Local branches a session can start from, most recently committed first; the sessions' own
-/// (`batrak/…`) are left out. Empty outside a repository or before the first commit.
+/// Local branches a session can start from, most recently committed first. Empty outside a repository or before the first commit.
+#[cfg(test)]
 pub fn branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     if info(git, root)?.is_none() {
         return Ok(Vec::new());
@@ -22,16 +22,13 @@ fn local_branches(git: &Path, root: &Path) -> Result<Vec<String>, String> {
     let out = exec::run(git, root, &args, Mode::Background)?;
     Ok(String::from_utf8_lossy(&out)
         .lines()
-        .filter(|name| !name.is_empty() && !name.starts_with(BRANCH_PREFIX))
+        .filter(|name| !name.is_empty())
         .map(str::to_owned)
         .collect())
 }
 
-/// Starts the name of every branch a workspace creates.
-pub const BRANCH_PREFIX: &str = "batrak/";
-
 /// Branches a workspace can be based on: local ones and each remote's remote-tracking ones, most
-/// recently committed first, Batrak's own (`batrak/…`) left out.
+/// recently committed first.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BranchList {
@@ -64,7 +61,7 @@ pub fn branch_list(git: &Path, root: &Path) -> Result<BranchList, String> {
         let Some(short) = refname.strip_prefix("refs/remotes/") else { continue };
         let Some(remote) = names.iter().find(|n| short.strip_prefix(n.as_str()).is_some_and(|rest| rest.starts_with('/'))) else { continue };
         let branch = &short[remote.len() + 1..];
-        if branch == "HEAD" || branch.starts_with(BRANCH_PREFIX) {
+        if branch == "HEAD" {
             continue;
         }
         match remotes.iter_mut().find(|r| &r.remote == remote) {
@@ -97,8 +94,8 @@ mod tests {
         assert_eq!(branch_list(&git, &dir).unwrap(), BranchList::default(), "outside a repository");
         let (repo, _bare) = TestRepo::with_remote("branch-list");
         repo.git(&["branch", "feature/x"]);
-        repo.git(&["branch", "batrak/task"]);
-        repo.git(&["push", "-q", "origin", "feature/x", "batrak/task"]);
+        repo.git(&["branch", "task"]);
+        repo.git(&["push", "-q", "origin", "feature/x", "task"]);
         // A remote whose name has a slash: its branches are its own, not `team`'s.
         repo.git(&["remote", "add", "team/b", _bare.to_str().unwrap()]);
         repo.git(&["fetch", "-q", "team/b"]);
@@ -110,12 +107,12 @@ mod tests {
             remote.branches.sort();
         }
 
-        assert_eq!(list.local, ["feature/x", "main"]);
+        assert_eq!(list.local, ["feature/x", "main", "task"]);
         assert_eq!(
             list.remotes,
             [
-                RemoteBranches { remote: "origin".into(), branches: vec!["origin/feature/x".into(), "origin/main".into()] },
-                RemoteBranches { remote: "team/b".into(), branches: vec!["team/b/feature/x".into(), "team/b/main".into()] },
+                RemoteBranches { remote: "origin".into(), branches: vec!["origin/feature/x".into(), "origin/main".into(), "origin/task".into()] },
+                RemoteBranches { remote: "team/b".into(), branches: vec!["team/b/feature/x".into(), "team/b/main".into(), "team/b/task".into()] },
             ]
         );
         assert_eq!(list.default.as_deref(), Some("origin/main"));
@@ -156,18 +153,18 @@ mod tests {
     }
 
     #[test]
-    fn branches_to_start_a_session_from_leave_out_session_branches() {
+    fn branches_to_start_a_session_from_include_every_local_branch() {
         let git = git_bin();
         let dir = temp_dir("branches-none");
         assert!(branches(&git, &dir).unwrap().is_empty(), "outside a repository");
         assert!(branches(&git, &TestRepo::new("branches-empty").path).unwrap().is_empty(), "before the first commit");
         let repo = TestRepo::with_commit("branches");
-        for branch in ["feature/x", "batrak/session-1234"] {
+        for branch in ["feature/x", "session-1234"] {
             repo.git(&["branch", branch]);
         }
         let mut names = branches(&git, &repo.path).unwrap();
         names.sort();
-        assert_eq!(names, ["feature/x", "main"]);
+        assert_eq!(names, ["feature/x", "main", "session-1234"]);
         std::fs::remove_dir_all(dir).unwrap();
     }
 }

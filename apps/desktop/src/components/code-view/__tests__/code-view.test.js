@@ -35,6 +35,58 @@ async function until(pred) {
 }
 
 describe('acp-code-view', () => {
+  describe("the code's right-click menu", () => {
+    async function rightClick() {
+      const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (
+        await fixture(html`<acp-code-view .tab=${{ ...fileTab('/p/src/a.js'), loaded: true, content: 'one\ntwo\n' }} .root=${'/p'}></acp-code-view>`)
+      );
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (root.querySelector('cdx-code-editor'));
+      /** @returns {Element | null | undefined} */
+      const content = () => editor.shadowRoot?.querySelector('.cm-content') ?? editor.querySelector('.cm-content');
+      await until(() => Boolean(content()));
+      const event = new MouseEvent('contextmenu', { bubbles: true, composed: true, cancelable: true, clientX: 40, clientY: 40 });
+      content()?.dispatchEvent(event);
+      const menu = /** @type {HTMLElementTagNameMap['md-menu']} */ (root.querySelector('.acp-code-view__code-menu'));
+      await until(() => menu.open);
+      return { el, menu, event };
+    }
+
+    const CASES = [
+      { value: 'copy-path', type: 'acp-copy-path', detail: { path: '/p/src/a.js' } },
+      { value: 'reveal', type: 'acp-reveal-path', detail: { path: '/p/src/a.js' } },
+      { value: 'open-terminal', type: 'acp-open-terminal', detail: { path: '/p/src' } },
+    ];
+    for (const { value, type, detail } of CASES) {
+      it(`${value} asks once for ${JSON.stringify(detail)}`, async () => {
+        // Arrange
+        const { el, menu } = await rightClick();
+        /** @type {unknown[]} */
+        const fired = [];
+        el.addEventListener(type, (e) => fired.push(/** @type {CustomEvent} */ (e).detail));
+        const item = menu.querySelector(`md-menu-item[value="${value}"]`);
+        expect(item, value).to.not.equal(null);
+        const pick = { value, item };
+        // Act: md-menu repeats a submenu's pick, with the item's own detail.
+        menu.dispatchEvent(new CustomEvent('select', { detail: pick }));
+        menu.dispatchEvent(new CustomEvent('select', { detail: pick }));
+        // Assert
+        expect(fired).to.deep.equal([detail]);
+      });
+    }
+
+    it('replaces the native menu, and names the file manager of the OS under Open in', async () => {
+      // Act
+      const { menu, event } = await rightClick();
+      // Assert
+      expect(event.defaultPrevented, 'no native menu').to.equal(true);
+      const submenu = menu.querySelector('md-menu-item[value="open-in"] md-menu[slot="submenu"]');
+      const labels = [...(submenu?.querySelectorAll('md-menu-item') ?? [])].map((item) => item.textContent?.trim());
+      expect(labels).to.deep.equal([app.fileManagers[app.platform], 'Terminal']);
+      expect(submenu?.querySelector('md-menu-item[value="open-terminal"] md-icon[slot="leading"] svg'), 'the terminal icon').to.not.equal(null);
+    });
+  });
+
   it('says when a file was deleted on disk, still showing it', async () => {
     const path = '/p/.bt/agents.json';
     /** @type {EditorTab} */

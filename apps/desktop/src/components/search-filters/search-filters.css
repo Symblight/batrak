@@ -32,22 +32,22 @@
 }
 
 .acp-search-filters__menu {
-  --md-menu-min-width: 240px;
-  --md-menu-max-height: 320px;
+  --md-menu-min-width: var(--acp-menu-width-picker);
+  --md-menu-max-height: 24rem;
 }
 /* The app's dense field (shadow.css), in mono. */
 .acp-search-filters__menu-field {
   --md-text-field-font-family: var(--acp-font-family-mono);
 
   box-sizing: border-box;
-  width: calc(100% - 2 * var(--acp-space-2));
-  margin: var(--acp-space-1) var(--acp-space-2);
+  width: calc(100% - 2 * 0.5rem);
+  margin: 0.25rem 0.5rem;
 }
 .acp-search-filters__menu-path {
   font-family: var(--acp-font-family-mono);
 }
 .acp-search-filters__menu-empty {
-  padding: var(--acp-space-2) var(--acp-space-3);
+  padding: 0.5rem 0.75rem;
   color: var(--acp-color-on-surface-variant);
-  font-size: var(--acp-font-size-sm);
+  font-size: 0.75rem;
 }

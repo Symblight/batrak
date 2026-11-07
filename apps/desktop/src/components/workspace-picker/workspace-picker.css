@@ -32,14 +32,13 @@
 
 .acp-workspace-picker__name {
   min-width: 2ch;
-  max-inline-size: 200px;
+  max-inline-size: 12.5rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.acp-workspace-picker__icon,
-.acp-workspace-picker__check {
+.acp-workspace-picker__icon {
   flex: none;
   font-size: var(--acp-icon-size-md);
 }
@@ -65,16 +64,20 @@
 
 /* Menu density comes from src/styles/shadow.css. */
 .acp-workspace-picker__menu {
-  --md-menu-min-width: 15rem;
+  --md-menu-min-width: var(--acp-menu-width-picker);
   --md-menu-max-width: 20rem;
 }
 
 .acp-workspace-picker__more {
-  --md-icon-button-font-size: var(--acp-icon-size-md);
+  --md-icon-button-font-size: 1rem;
+}
+
+.acp-workspace-picker__more-icon {
+  font-size: 1rem;
 }
 
 .acp-workspace-picker__more::part(button) {
-  padding: 2px;
+  padding: 0.125rem;
 }
 
 .acp-workspace-picker__filter,

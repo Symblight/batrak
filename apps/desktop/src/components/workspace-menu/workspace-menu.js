@@ -114,7 +114,7 @@ export class AcpWorkspaceMenu extends LitElement {
    */
   #item(value, icon, label, modifier = '') {
     return html`<md-menu-item class="acp-workspace-menu__item ${modifier}" value=${value}>
-      <md-icon slot="leading" class="acp-workspace-menu__icon">${unsafeSVG(icon)}</md-icon>
+      <md-icon slot="leading">${unsafeSVG(icon)}</md-icon>
       ${label}
     </md-menu-item>`;
   }
@@ -133,7 +133,7 @@ export class AcpWorkspaceMenu extends LitElement {
       ${workspace ? html`<md-item-group>${this.#item('rename', editIcon, html`Rename <span slot="trailing">F2</span>`)}</md-item-group>` : nothing}
       <md-item-group>
         <md-menu-item class="acp-workspace-menu__item" value="open-in">
-          <md-icon slot="leading" class="acp-workspace-menu__icon">${unsafeSVG(openInIcon)}</md-icon>
+          <md-icon slot="leading">${unsafeSVG(openInIcon)}</md-icon>
           Open in
           <md-menu slot="submenu" class="acp-workspace-menu__menu" aria-label="Open in">${this.#item('open-terminal', terminalIcon, 'Terminal')}</md-menu>
         </md-menu-item>

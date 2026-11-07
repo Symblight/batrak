@@ -85,13 +85,21 @@ export function tildePath(path, home) {
 }
 
 /**
+ * @param {string} path Absolute, with either slash.
+ * @returns {string} The folder it lies in.
+ */
+export function parentPath(path) {
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  return path.slice(0, Math.max(cut, 1));
+}
+
+/**
  * @param {string} path A project's absolute path.
  * @param {string | null} home
  * @returns {string} The folder it lies in, as `tildePath` shows it.
  */
 export function parentLabel(path, home) {
-  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
-  return tildePath(path.slice(0, Math.max(cut, 1)), home);
+  return tildePath(parentPath(path), home);
 }
 
 /**

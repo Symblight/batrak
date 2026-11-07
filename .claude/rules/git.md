@@ -11,7 +11,7 @@ paths:
 
 # Git: commit, worktrees, frontend, cache
 
-- Revert (`bt_core::git::revert`, `git_revert_files`): a row's Revert, or `<acp-changes-menu>`'s Rollback for
+- Revert (`git::revert`, `git_revert_files`): a row's Revert, or `<acp-changes-menu>`'s Rollback for
   the picked files (Changes tab and pane; `git.revertAsking()`), of the project back to HEAD, index and working tree, a rename's two
   sides together; what HEAD doesn't have is deleted. One conflicted file refuses them all. Its view
   asks first; reverted files are unpicked. The work goes into a new
@@ -26,7 +26,7 @@ paths:
   filters run under `Mode::Hooks`: 10 min timeout, own session and process group (no controlling
   terminal, so ssh fails instead of prompting), stopped with SIGTERM first
   so git removes `index.lock`. The tail of their output is the snackbar's error; it isn't logged.
-- Compare to (`bt_core::git::compare`, `git_compare`, `git_file_at_rev`; spec `docs/specs/git-compare-to.md`): the branch card's menu shows, in the Changes pane and tab, what the shown folder has against a branch, from their merge base, commits and uncommitted work together. `$gitCompare` is apart from `$gitChanges`, which goes on meaning local changes: Rollback, the picks and the composer's hint act on those. `$shownChanges` is what both views list; `read-only` there means no picks, Revert or Rollback. Picks and refreshes share one `SerialTask`: a pick supersedes whatever is running and asks at once, which stops that scan in the backend; refreshes run one at a time and never stop each other, or a scan longer than the wait would never finish while an agent writes. Per window and root; not saved. Targets go by full ref, since a bare name takes a tag of the same name first; `git_branches` lists such a branch as `heads/x`, which `compare_to` also accepts, and New worktree relies on that name staying as it is.
+- Compare to (`git::compare`, `git_compare`, `git_file_at_rev`; spec `docs/specs/git-compare-to.md`): the branch card's menu shows, in the Changes pane and tab, what the shown folder has against a branch, from their merge base, commits and uncommitted work together. `$gitCompare` is apart from `$gitChanges`, which goes on meaning local changes: Rollback, the picks and the composer's hint act on those. `$shownChanges` is what both views list; `read-only` there means no picks, Revert or Rollback. Picks and refreshes share one `SerialTask`: a pick supersedes whatever is running and asks at once, which stops that scan in the backend; refreshes run one at a time and never stop each other, or a scan longer than the wait would never finish while an agent writes. Per window and root; not saved. Targets go by full ref, since a bare name takes a tag of the same name first; `git_branches` lists such a branch as `heads/x`, which `compare_to` also accepts, and New worktree relies on that name staying as it is.
 - Staging a conflicted file marks it resolved, so a pick that still has conflict markers is refused,
   with or without a merge in progress. An operation stopped midway (`RepoState.operation`) is finished in a
   terminal; the Changes pane only says so.

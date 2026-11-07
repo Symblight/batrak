@@ -1,7 +1,7 @@
 import { expect } from '@esm-bundle/chai';
 import { projects } from '../projects.js';
 
-const { abs, basename, initialOf, isAbsolute, parentLabel, projectPathOf, rel, shownPath, tildePath, unreadByProject, worktreeOf } = projects;
+const { abs, basename, initialOf, isAbsolute, parentLabel, parentPath, projectPathOf, rel, shownPath, tildePath, unreadByProject, worktreeOf } = projects;
 
 describe('projects: path rules', () => {
   it('joins a root and a relative path, and splits them again; outside the root there is none', () => {
@@ -70,6 +70,12 @@ describe('projects: path rules', () => {
     expect(parentLabel('/Users/me/Code/app', '/Users/me')).to.equal('~/Code');
     expect(parentLabel('/work/app', '/Users/me')).to.equal('/work');
     expect(parentLabel('/app', null)).to.equal('/');
+  });
+
+  it('finds the folder a path lies in, with either slash', () => {
+    expect(parentPath('/p/src/a.js')).to.equal('/p/src');
+    expect(parentPath('/a.js')).to.equal('/');
+    expect(parentPath('C:\\p\\src\\a.js')).to.equal('C:\\p\\src');
   });
 
   it('counts the unread sessions of each project', () => {

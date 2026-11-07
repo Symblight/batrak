@@ -42,25 +42,12 @@
   overflow: hidden;
   clip-path: inset(50%);
 }
-/* The footer's menus: dense rows, like the IDE's breadcrumb popups. */
-.acp-code-view__menu {
-  --md-menu-min-width: 8rem;
+/* The footer's lists of a folder's entries and of languages: long, so they scroll. */
+.acp-code-view__folder-menu,
+.acp-code-view__language-menu {
+  --md-menu-min-width: var(--acp-menu-width-picker);
   --md-menu-max-height: 24rem;
-  --md-menu-shape: var(--acp-shape-corner-small);
-}
-.acp-code-view__menu-item {
-  --md-menu-item-min-block-size: 1.375rem;
-  --md-menu-item-padding-block: 0;
-  --md-menu-item-padding-inline: var(--acp-space-1-5);
-  --md-menu-item-label-text-size: var(--acp-font-size-sm);
-  --md-menu-item-label-text-line-height: 1.375rem;
-  --md-menu-item-leading-icon-size: var(--acp-icon-size-xs);
-
-  margin-inline: var(--acp-space-0-5);
 }
 .acp-code-view__menu-item_ignored {
   --md-menu-item-label-text-color: var(--acp-color-on-surface-variant);
-}
-.acp-code-view__entry-icon {
-  font-size: var(--acp-icon-size-xs);
 }

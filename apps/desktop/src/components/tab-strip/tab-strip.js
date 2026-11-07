@@ -1,3 +1,4 @@
+import { app } from '../../hooks/app/app.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { tabs } from '../../hooks/tabs/tabs.js';
 import { LitElement, html, nothing } from 'lit';
@@ -44,6 +45,8 @@ const RETURN_DELAY_MS = 2000;
  * @fires acp-tab-move `{ id, index }`
  * @fires acp-tab-receive `{ id, index }` A tab of another strip (its `dropTo` is this strip's `dropName`) was dropped here, at that index of this strip.
  * @fires acp-copy-path `{ path }`
+ * @fires acp-reveal-path `{ path }` Open in the file manager, a file's tab.
+ * @fires acp-open-terminal `{ path }` Open in Terminal, the folder of a file's tab.
  */
 export class AcpTabStrip extends LitElement {
   static properties = {
@@ -265,6 +268,8 @@ export class AcpTabStrip extends LitElement {
     else if (value === 'close-all') this.#close(tab.id, 'all', closable);
     else if (value === 'pin' || value === 'unpin') this.#emit('acp-tab-pin', { id: tab.id, pinned: value === 'pin' });
     else if (value === 'copy-path') this.#emit('acp-copy-path', { path: tab.path });
+    else if (value === 'reveal') this.#emit('acp-reveal-path', { path: tab.path });
+    else if (value === 'open-terminal') this.#emit('acp-open-terminal', { path: projects.parentPath(tab.path) });
   }
 
   /**
@@ -384,6 +389,18 @@ export class AcpTabStrip extends LitElement {
       <md-hr></md-hr>
       ${item(true, pinned ? 'unpin' : 'pin', pinned ? 'Unpin Tab' : 'Pin Tab')}
       ${item(tab?.kind === 'file', 'copy-path', 'Copy Path')}
+      ${tab?.kind === 'file'
+        ? html`<md-menu-item value="open-in">
+            Open in
+            <md-menu slot="submenu" aria-label="Open in">
+              ${item(true, 'reveal', app.fileManagers[app.platform])}
+              <md-menu-item value="open-terminal">
+                <md-icon slot="leading">${unsafeSVG(terminalIcon)}</md-icon>
+                Terminal
+              </md-menu-item>
+            </md-menu>
+          </md-menu-item>`
+        : nothing}
     </md-menu>`;
   }
 

@@ -15,12 +15,18 @@
   scrollbar-color: var(--acp-color-outline-variant) transparent;
 }
 
-/* Every menu, context menu and select: compact rows, the library's type sizes. */
+/* Every menu, context menu and select: compact rows, the library's type sizes. A context menu sets
+   nothing here; a picker sets `--md-menu-min-width: var(--acp-menu-width-picker)`. */
 md-menu {
   --md-menu-min-width: 11rem;
-  --md-menu-shape: var(--md-sys-shape-corner-medium, 0.75rem);
+  --md-menu-shape: 0.5rem;
+  --md-menu-shape-inner: 0.25rem;
   --md-menu-selected-container-color: var(--acp-color-tertiary-container);
   --md-menu-selected-label-color: var(--acp-color-on-tertiary-container);
+}
+/* One size for a row's icon; as weak as a class, so a component's rule can still differ on purpose. */
+:where(md-menu-item, md-option) > :where(md-icon, acp-file-icon)[slot='leading'] {
+  font-size: 1rem;
 }
 /* On the group itself: its `:host` sets the line height, so one inherited from the menu never lands. */
 md-menu-group,
@@ -35,9 +41,13 @@ md-option-group {
 }
 md-menu-item,
 md-option {
-  --md-menu-item-min-block-size: 2rem;
-  --md-menu-item-padding-block: 0.25rem;
-  --md-menu-item-padding-inline: 0.625rem;
+  --md-menu-item-min-block-size: 1.75rem;
+  --md-menu-item-padding-block: 0.125rem;
+  --md-menu-item-padding-inline: 0.5rem;
+  --md-menu-item-label-text-size: 0.8125rem;
+  --md-menu-item-label-text-line-height: 1.25rem;
+  --md-menu-item-leading-icon-size: 1rem;
+  --md-menu-item-trailing-icon-size: 1rem;
   --md-menu-item-supporting-text-line-height: 1rem;
   --md-menu-item-label-text-weight: 400;
 

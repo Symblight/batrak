@@ -7,8 +7,10 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use super::WorkspaceRecord;
 use crate::git::exec::{self, Mode as GitMode};
-use crate::git::{binary, worktree};
-use crate::git::branches::BRANCH_PREFIX;
+use crate::git::{binary, lock, worktree};
+
+/// What workspace branches started with before they had a marker: such a branch is its workspace's.
+const LEGACY_PREFIX: &str = "batrak/";
 
 /// Whether a worktree is checked out at `root`.
 pub fn is_checked_out(root: &Path) -> bool {
@@ -29,7 +31,12 @@ pub(super) fn check_out(w: &WorkspaceRecord, cancel: &AtomicBool) -> Result<(), 
         if cancel.load(Ordering::SeqCst) {
             return Err("cancelled".to_owned());
         }
-        let existing = tip(git, w).is_some();
+        let current = tip(git, w);
+        // At the base it has no work to lose, and it's what a failed `worktree add -b` leaves behind.
+        if current.as_ref().is_some_and(|tip| *tip != w.base_commit) && !is_own(git, w) {
+            return Err(format!("Branch {} already exists with other commits, and isn't this workspace's; rename it to check the workspace out", w.branch));
+        }
+        let existing = current.is_some();
         let checked_out = if existing {
             worktree::attach(git, &w.project_path, &w.worktree_path, &w.branch, cancel)
         } else {
@@ -40,8 +47,16 @@ pub(super) fn check_out(w: &WorkspaceRecord, cancel: &AtomicBool) -> Result<(), 
             undo_checkout(git, w, existing)?;
             return Err("cancelled".to_owned());
         }
+        // `-b` refuses a name that exists, so a failed checkout that leaves the branch at the base made it.
+        if !existing && tip(git, w).as_deref() == Some(w.base_commit.as_str()) {
+            mark_own(git, w);
+        }
         checked_out?;
         tracing::info!(path = %w.worktree_path.display(), branch = %w.branch, "worktree checked out");
+    }
+    // On the branch in the workspace's own folder proves it's its own; this also retries a failed mark.
+    if on_branch(git, &w.worktree_path, &w.branch) && !is_own(git, w) {
+        mark_own(git, w);
     }
     folder_on_branch(&w.folder, &w.branch)
 }
@@ -94,6 +109,34 @@ fn tip(git: &Path, w: &WorkspaceRecord) -> Option<String> {
     out.ok().map(|o| String::from_utf8_lossy(&o).trim().to_owned())
 }
 
+/// The config key that says which workspace a branch belongs to; `branch -D` removes it with the branch.
+fn owner_key(branch: &str) -> String {
+    format!("branch.{branch}.batrak-workspace")
+}
+
+/// Whether the record's branch is the workspace's own: a name alone doesn't say, since a user can
+/// make that branch after placement.
+fn is_own(git: &Path, w: &WorkspaceRecord) -> bool {
+    if w.branch.starts_with(LEGACY_PREFIX) {
+        return true;
+    }
+    let key = owner_key(&w.branch);
+    // `--default`: an unset key is an answer here, not a failed call.
+    let owner = exec::run(git, &w.project_path, &exec::args(&[&"config", &"--default", &"", &"--get", &key]), GitMode::Background);
+    owner.is_ok_and(|o| String::from_utf8_lossy(&o).trim() == w.id)
+}
+
+/// Marks the record's branch as its own. A failure is only logged: `check_out` tries again, and until
+/// then the branch is kept on delete.
+fn mark_own(git: &Path, w: &WorkspaceRecord) {
+    let marked = lock::with_mutation(git, &w.project_path, || {
+        exec::run(git, &w.project_path, &exec::args(&[&"config", &owner_key(&w.branch), &w.id]), GitMode::Local).map(|_| ())
+    });
+    if let Err(e) = marked {
+        tracing::warn!(branch = %w.branch, "couldn't mark the workspace's branch: {e}");
+    }
+}
+
 /// Removes a checkout just made or stopped midway (git removed its files then) and, unless the
 /// branch was `existing` before, its branch. What its hooks wrote goes with it.
 fn undo_checkout(git: &Path, w: &WorkspaceRecord, existing: bool) -> Result<(), String> {
@@ -133,7 +176,7 @@ pub(super) fn remove(w: &WorkspaceRecord, message: &str, keep_work: bool) -> Res
     }
     let tip = tip(git, w);
     let unused = !keep_work || tip.as_deref() == Some(w.base_commit.as_str());
-    let cleanup = if unused && !checked_out_elsewhere(git, project, root, &w.branch)? {
+    let cleanup = if unused && is_own(git, w) && !checked_out_elsewhere(git, project, root, &w.branch)? {
         worktree::BranchCleanup::Delete
     } else {
         worktree::BranchCleanup::Keep
@@ -156,9 +199,9 @@ pub(super) struct Placed {
     pub base_commit: String,
 }
 
-/// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on `batrak/<stem>`,
-/// `-2`, `-3`… when the folder or the branch is taken, on disk or by `reserved` (a worktree root
-/// and branch placed but not checked out yet). `base` (a branch or commit, `None` for the
+/// Where a new worktree named `stem` goes: `<worktrees>/<repo>-<hash>/<stem>` on branch `<stem>`,
+/// `-2`, `-3`… when the folder or the branch is taken, on disk, by a ref (`ref_taken`) or by
+/// `reserved` (a worktree root and branch placed but not checked out yet). `base` (a branch or commit, `None` for the
 /// project's HEAD) must name a commit. Creates nothing but the parent folder. Blocking.
 pub(super) fn place_named(
     project: &Path,
@@ -194,21 +237,19 @@ pub(super) fn place_named(
     // Canonical, as `confine` compares against it.
     let group = dunce::canonicalize(&group).map_err(|e| format!("{}: {e}", group.display()))?;
 
-    // The folder is named like the branch, the prefix left out; both must be free.
-    let taken = |leaf: &str| {
-        reserved(&group.join(leaf), &format!("{BRANCH_PREFIX}{leaf}"))
-            || group.join(leaf).exists()
-            || run(&[&"rev-parse", &"--verify", &"--quiet", &format!("refs/heads/{BRANCH_PREFIX}{leaf}")]).is_ok()
-    };
+    let refs = run(&[&"for-each-ref", &"--format=%(refname)", &"refs/heads", &"refs/tags", &"refs/remotes"])?;
+    let refs: Vec<String> = String::from_utf8_lossy(&refs).lines().map(str::to_owned).collect();
+    // The folder is named like the branch; both must be free.
+    let taken = |leaf: &str| reserved(&group.join(leaf), leaf) || group.join(leaf).exists() || ref_taken(leaf, &refs);
     // Kept branches never free their numbers: the search goes on past them.
     let leaf = std::iter::once(stem.to_owned())
         .chain((2..1_000_000).map(|n| format!("{stem}-{n}")))
         .find(|leaf| !taken(leaf))
-        .ok_or_else(|| format!("{BRANCH_PREFIX}{stem}: every branch name is taken"))?;
+        .ok_or_else(|| format!("{stem}: every branch name is taken"))?;
     let root = group.join(&leaf);
     // `join("")` would add a trailing slash to the agent's cwd.
     let folder = if inside.as_os_str().is_empty() { root.clone() } else { root.join(inside) };
-    Ok(Placed { folder, worktree_path: root, branch: format!("{BRANCH_PREFIX}{leaf}"), base_commit })
+    Ok(Placed { folder, worktree_path: root, branch: leaf, base_commit })
 }
 
 /// Removes a worktree in app data that no workspace owns, unless it has uncommitted changes; its
@@ -243,6 +284,23 @@ pub(super) fn slug(text: &str, fallback: &str) -> String {
     }
     let out = out.trim_end_matches('-');
     if out.is_empty() { fallback.to_owned() } else { out.to_owned() }
+}
+
+/// Whether a new branch `leaf` (a slug: lowercase, no `/`) would collide with one of `refs`.
+fn ref_taken(leaf: &str, refs: &[String]) -> bool {
+    let same = |part: &str| part.eq_ignore_ascii_case(leaf);
+    // `HEAD`: ambiguous with it on a case-insensitive file system.
+    same("head")
+        || refs.iter().any(|name| {
+            if let Some(remote) = name.strip_prefix("refs/remotes/") {
+                // Every part, as a remote's name may hold a slash: over-matching costs only a `-2`,
+                // and a branch named like a remote would make that name ambiguous.
+                remote.split('/').any(same)
+            } else {
+                let short = name.strip_prefix("refs/heads/").or_else(|| name.strip_prefix("refs/tags/")).unwrap_or(name);
+                short.split('/').next().is_some_and(same)
+            }
+        })
 }
 
 /// FNV-1a: stable across builds (unlike `DefaultHasher`), so a project keeps its folder.
@@ -323,14 +381,175 @@ mod tests {
         let worktrees = temp_dir("place-name-worktrees");
         let placed = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
         assert_eq!(placed.worktree_path.file_name().unwrap(), "fix-the-login");
-        assert_eq!(placed.branch, "batrak/fix-the-login");
+        assert_eq!(placed.branch, "fix-the-login");
 
         // A folder left behind (an orphan kept for its uncommitted work) takes the next name.
         std::fs::create_dir_all(&placed.worktree_path).unwrap();
         let next = place_named(&repo.path, &worktrees, "fix-the-login", None, &|_, _| false).unwrap();
         assert_eq!(next.worktree_path.file_name().unwrap(), "fix-the-login-2");
-        assert_eq!(next.branch, "batrak/fix-the-login-2");
+        assert_eq!(next.branch, "fix-the-login-2");
         std::fs::remove_dir_all(worktrees).unwrap();
+    }
+
+    #[test]
+    fn a_ref_takes_a_name_it_would_clash_with() {
+        let refs: Vec<String> = [
+            "refs/heads/main",
+            "refs/heads/feature/x",
+            "refs/heads/Upper",
+            "refs/tags/v1",
+            "refs/tags/Release/1",
+            "refs/remotes/origin/HEAD",
+            "refs/remotes/origin/fix-login",
+            "refs/remotes/origin/topic/y",
+            "refs/remotes/team/b/nested",
+        ]
+        .map(str::to_owned)
+        .into();
+        for (leaf, taken) in [
+            ("main", true),
+            ("feature", true),
+            ("upper", true),
+            ("v1", true),
+            ("release", true),
+            ("fix-login", true),
+            ("topic", true),
+            ("nested", true),
+            ("origin", true),
+            ("team", true),
+            ("head", true),
+            ("free", false),
+            ("mai", false),
+            ("feature-2", false),
+        ] {
+            assert_eq!(ref_taken(leaf, &refs), taken, "{leaf}");
+        }
+        assert!(ref_taken("head", &[]), "ambiguous with HEAD even with no refs");
+    }
+
+    #[test]
+    fn a_new_worktrees_name_skips_what_a_ref_takes() {
+        let repo = TestRepo::with_commit("place-refs");
+        let worktrees = temp_dir("place-refs-worktrees");
+        repo.git(&["branch", "feature/x"]);
+        repo.git(&["tag", "v1"]);
+        let placed = |stem| place_named(&repo.path, &worktrees, stem, None, &|_, _| false).unwrap().branch;
+        assert_eq!(placed("feature"), "feature-2");
+        assert_eq!(placed("v1"), "v1-2");
+        assert_eq!(placed("fresh"), "fresh");
+        std::fs::remove_dir_all(worktrees).unwrap();
+    }
+
+    /// A commit on a new branch of `repo`, past HEAD, that nothing checked out: someone else's work.
+    fn commit_on_branch(repo: &TestRepo, branch: &str) -> String {
+        let tree = repo.git(&["rev-parse", "HEAD^{tree}"]);
+        let head = repo.git(&["rev-parse", "HEAD"]);
+        let sha = repo.git(&["-c", "user.name=t", "-c", "user.email=t@t", "commit-tree", tree.trim(), "-p", head.trim(), "-m", "theirs"]);
+        repo.git(&["branch", branch, sha.trim()]);
+        sha.trim().to_owned()
+    }
+
+    #[test]
+    fn a_branch_with_someone_elses_commits_isnt_attached_or_deleted() {
+        let repo = TestRepo::with_commit("foreign-branch");
+        let home = temp_dir("foreign-branch-home");
+        let w = workspace(&repo, &home.join("s"), "fix-login");
+        let theirs = commit_on_branch(&repo, "fix-login");
+
+        let err = check_out(&w, &AtomicBool::new(false)).unwrap_err();
+        assert!(err.contains("fix-login"), "{err}");
+        assert!(!w.worktree_path.exists());
+
+        remove(&w, "m", false).unwrap();
+        assert_eq!(repo.git(&["rev-parse", "fix-login"]).trim(), theirs, "kept, Keep branch off");
+        let _ = std::fs::remove_dir_all(home); // `remove` takes the empty group folder
+    }
+
+    #[test]
+    fn a_workspaces_own_branch_comes_back_with_its_commits_and_goes_with_its_marker() {
+        let repo = TestRepo::with_commit("own-branch");
+        let home = temp_dir("own-branch-home");
+        let w = workspace(&repo, &home.join("s"), "own");
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        crate::git::test_repo::run_in(&w.worktree_path, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "work"]);
+        let sha = repo.git(&["rev-parse", "own"]);
+
+        // The folder deleted outside the app, then Recreate.
+        std::fs::remove_dir_all(&w.worktree_path).unwrap();
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        assert_eq!(crate::git::test_repo::run_in(&w.worktree_path, &["rev-parse", "HEAD"]), sha);
+
+        remove(&w, "m", false).unwrap();
+        assert!(repo.git(&["branch", "--list", "own"]).is_empty(), "deleted");
+        assert!(repo.git(&["config", "--default", "", "--get", &owner_key("own")]).trim().is_empty(), "the marker went with it");
+        let _ = std::fs::remove_dir_all(home); // `remove` takes the empty group folder
+    }
+
+    #[test]
+    fn a_branch_from_before_the_marker_is_still_the_workspaces() {
+        let repo = TestRepo::with_commit("legacy-branch");
+        let home = temp_dir("legacy-branch-home");
+        let w = workspace(&repo, &home.join("s"), "batrak/old");
+        commit_on_branch(&repo, "batrak/old");
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        remove(&w, "m", false).unwrap();
+
+        assert!(repo.git(&["branch", "--list", "batrak/old"]).is_empty(), "deleted");
+        let _ = std::fs::remove_dir_all(home); // `remove` takes the empty group folder
+    }
+
+    /// A worktree checked out with no marker (a crash before it, a failed write) gets one on the next
+    /// check-out: being on the branch in the workspace's own folder proves the branch is its own.
+    #[test]
+    fn a_checked_out_worktree_with_no_marker_gets_one_and_comes_back_with_its_commits() {
+        let repo = TestRepo::with_commit("late-marker");
+        let home = temp_dir("late-marker-home");
+        let w = workspace(&repo, &home.join("s"), "late");
+        worktree::add(binary::git().unwrap(), &repo.path, &w.worktree_path, "late", &w.base_commit, &AtomicBool::new(false)).unwrap();
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        crate::git::test_repo::run_in(&w.worktree_path, &["-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "work"]);
+        std::fs::remove_dir_all(&w.worktree_path).unwrap();
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+        assert!(w.worktree_path.join(".git").exists());
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    /// A check-out that fails after git made the branch: deleting the workspace takes the branch too.
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_first_checkouts_branch_goes_with_the_workspace() {
+        use std::os::unix::fs::PermissionsExt;
+        let repo = TestRepo::with_commit("failed-first");
+        let hook = repo.path.join(".git/hooks/post-checkout");
+        std::fs::create_dir_all(hook.parent().unwrap()).unwrap();
+        std::fs::write(&hook, "#!/bin/sh\nexit 1\n").unwrap();
+        std::fs::set_permissions(&hook, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let home = temp_dir("failed-first-home");
+        let w = workspace(&repo, &home.join("s"), "failed");
+
+        assert!(check_out(&w, &AtomicBool::new(false)).is_err());
+        assert!(!repo.git(&["branch", "--list", "failed"]).is_empty(), "git made the branch");
+
+        remove(&w, "m", false).unwrap();
+        assert!(repo.git(&["branch", "--list", "failed"]).is_empty(), "deleted");
+        let _ = std::fs::remove_dir_all(home);
+    }
+
+    /// What a failed `worktree add -b` leaves behind must not block the next try.
+    #[test]
+    fn an_unmarked_branch_at_the_base_commit_is_attached() {
+        let repo = TestRepo::with_commit("at-base");
+        let home = temp_dir("at-base-home");
+        let w = workspace(&repo, &home.join("s"), "left-behind");
+        repo.git(&["branch", "left-behind"]);
+
+        check_out(&w, &AtomicBool::new(false)).unwrap();
+
+        assert!(w.worktree_path.join(".git").exists());
+        std::fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
@@ -345,7 +564,7 @@ mod tests {
 
         let placed = place_named(&repo.path, &worktrees, "workspace", None, &taken).unwrap();
 
-        assert_eq!(placed.branch, "batrak/workspace-151");
+        assert_eq!(placed.branch, "workspace-151");
         std::fs::remove_dir_all(worktrees).unwrap();
     }
 
