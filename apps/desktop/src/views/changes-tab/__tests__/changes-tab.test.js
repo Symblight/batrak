@@ -1,6 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { expect, fileBytes, fixture, html } from '../../../../test/fixture.js';
 import { git } from '../../../hooks/git/git.js';
+import { projects } from '../../../hooks/projects/projects.js';
 import { $commentFocus, $comments, $tabComments } from '../../../stores/comments/comments.js';
 import { closeAllTabs, openChanges, openSettings } from '../../../stores/editor/editor.js';
 import { $commitSelection, $diffLayout, $gitChanges, $gitCompare, $gitRepo, NO_COMPARE } from '../../../stores/git/git.js';
@@ -45,6 +46,7 @@ describe('acp-changes-tab', () => {
       return null;
     });
     $project.set({ path: '/p', name: 'p', rootId: 'r1' });
+    projects.showRoot('/p', 'r1');
     $gitChanges.set(CHANGES);
     $gitRepo.set(REPO);
     // The Changes tab is open, but another tab is active: nothing watches the working tree yet.
@@ -311,6 +313,52 @@ describe('acp-changes-tab', () => {
       expect(whileComparing).to.deep.equal([]);
       expect(inOther).to.deep.equal([]);
       expect(back).to.deep.equal(['a.js']);
+    });
+
+    it('a project with a comparison and one without, there and back, each keep their own expanded files, and local ones stay apart from compared ones', async () => {
+      // Arrange: both roots open; as the git hook does, the comparison changes first when the project does
+      projects.showRoot('/p', 'r1');
+      projects.showRoot('/q', 'r2');
+      const comparison = { target: 'main', base: 'b1', changes: { files: [FILES[0]], loaded: true, loading: false, error: null }, refreshError: null };
+      $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+      openChanges();
+      $project.set({ path: '/p', name: 'p', rootId: 'r1' });
+      const stopFollowing = $rootId.listen((rootId) => $gitCompare.set(rootId === 'r1' ? comparison : NO_COMPARE));
+      openChanges();
+      const { el, review } = await render();
+      const toProject = async (/** @type {string} */ name, /** @type {string} */ rootId) => {
+        $project.set({ path: `/${name}`, name, rootId });
+        await el.updateComplete;
+        return [...review.expanded];
+      };
+      fire(review, 'acp-change-toggle', { id: 'b.js' });
+      $gitCompare.set(comparison);
+      await el.updateComplete;
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      // Act
+      const arrived = await toProject('q', 'r2');
+      fire(review, 'acp-change-toggle', { id: 'a.js' });
+      fire(review, 'acp-change-toggle', { id: 'b.js' });
+      const comparedAgain = await toProject('p', 'r1');
+      const ownAgain = await toProject('q', 'r2');
+      const comparedOnceMore = await toProject('p', 'r1');
+      $gitCompare.set(NO_COMPARE);
+      await el.updateComplete;
+      const local = [...review.expanded];
+      $gitCompare.set(comparison);
+      await el.updateComplete;
+      const reentered = [...review.expanded];
+      stopFollowing();
+      $project.set({ path: '/q', name: 'q', rootId: 'r2' });
+      closeAllTabs();
+      await Promise.all([projects.closeFolder('/p'), projects.closeFolder('/q')]);
+      // Assert
+      expect(arrived, 'nothing crosses to the other project').to.deep.equal([]);
+      expect(comparedAgain, 'the comparison’s, not local’s').to.deep.equal(['a.js']);
+      expect(ownAgain).to.deep.equal(['a.js', 'b.js']);
+      expect(comparedOnceMore).to.deep.equal(['a.js']);
+      expect(local, 'going back gives local’s').to.deep.equal(['b.js']);
+      expect(reentered, 'a comparison left starts over').to.deep.equal([]);
     });
   });
 
