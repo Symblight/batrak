@@ -45,10 +45,8 @@ export class AcpChangesPanel extends LitElement {
   #leaves = new Map();
   /** @type {Set<string>} Ids of the groups. */
   #groupIds = new Set();
-  /** @type {Set<string>} Collapsed groups of local changes, kept during a comparison. */
-  #localCollapsed = new Set();
-  /** @type {Set<string>} Groups the user collapsed; the others stay expanded across refreshes. */
-  #collapsed = new Set();
+  /** @type {Record<'local' | 'compare', Set<string>>} Groups the user collapsed, per mode; the others stay expanded across refreshes. */
+  #collapsed = { local: new Set(), compare: new Set() };
   /** The tree must get its checks and expansion after the next render. */
   #syncTree = false;
   /**
@@ -75,7 +73,10 @@ export class AcpChangesPanel extends LitElement {
 
   /** @param {import('lit').PropertyValues<this>} changed */
   willUpdate(changed) {
-    this.#followMode(changed.get('compareTo'), changed.has('compareTo'));
+    if (changed.has('compareTo') && (this.compareTo === null) !== (changed.get('compareTo') == null)) {
+      this.#collapsed.compare = new Set(); // every comparison starts with nothing collapsed
+      this.#syncTree = true;
+    }
     const old = changed.get('changes');
     if (changed.has('changes') && (this.changes.files !== old?.files || this.changes.loaded !== old?.loaded)) {
       this.#rebuild();
@@ -127,24 +128,14 @@ export class AcpChangesPanel extends LitElement {
     return this.renderRoot.querySelector('tvx-tree-view');
   }
 
+  get #mode() {
+    return this.compareTo === null ? 'local' : 'compare';
+  }
+
   /** @returns {string[]} Ids of the files going into the commit. */
   get #included() {
     const selection = this.selection;
     return [...this.#leaves.keys()].filter((id) => selection.has(id));
-  }
-
-  /**
-   * Local changes get their collapsed groups back after a comparison, which lacks some of them.
-   * @param {string | null | undefined} old
-   * @param {boolean} changed
-   */
-  #followMode(old, changed) {
-    if (!changed) return;
-    const comparing = this.compareTo !== null;
-    if (comparing === (old !== null && old !== undefined)) return;
-    if (comparing) this.#localCollapsed = this.#collapsed;
-    this.#collapsed = comparing ? new Set() : this.#localCollapsed;
-    this.#syncTree = true;
   }
 
   /** Rebuilds the list from `changes`, keeping checks and collapsed groups that still exist. */
@@ -156,7 +147,8 @@ export class AcpChangesPanel extends LitElement {
       this.#groupIds.add(group.id);
       for (const file of group.children ?? []) this.#leaves.set(file.id, file);
     }
-    this.#collapsed = new Set([...this.#collapsed].filter((id) => this.#groupIds.has(id)));
+    const mode = this.#mode;
+    this.#collapsed[mode] = new Set([...this.#collapsed[mode]].filter((id) => this.#groupIds.has(id)));
     this.#syncTree = true;
     this.#syncing = true;
   }
@@ -171,7 +163,7 @@ export class AcpChangesPanel extends LitElement {
     this.#syncing = true;
     await tree.updateComplete;
     tree.selectedItems = this.compareTo === null ? this.#included : [];
-    tree.expandedItems = [...this.#groupIds].filter((id) => !this.#collapsed.has(id));
+    tree.expandedItems = [...this.#groupIds].filter((id) => !this.#collapsed[this.#mode].has(id));
     await tree.updateComplete;
     this.#syncing = false;
   }
@@ -188,7 +180,7 @@ export class AcpChangesPanel extends LitElement {
   #onExpansionChange(e) {
     if (this.#syncing) return;
     const { expandedItems } = /** @type {CustomEvent<{ expandedItems: Set<PropertyKey> }>} */ (e).detail;
-    this.#collapsed = new Set([...this.#groupIds].filter((id) => !expandedItems.has(id)));
+    this.#collapsed[this.#mode] = new Set([...this.#groupIds].filter((id) => !expandedItems.has(id)));
   }
 
   /** The all-files checkbox: everything in unless everything already is, then everything out. */
