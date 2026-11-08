@@ -24,6 +24,7 @@ mod restarts;
 mod shutdowns;
 mod sign_ins;
 mod sync_lists;
+mod tool_calls;
 mod turns;
 mod workspace_chats;
 mod worktrees;
@@ -258,6 +259,31 @@ impl agent_api::Agent for FakeKind {
 
     fn session_activity(&self, session_id: &str) -> Option<agent_api::SessionActivity> {
         lock(&RECORDED_ACTIVITY).get(session_id).copied()
+    }
+
+    /// As the fake agent's `tools` script asks in each call's `rawInput`; `advance` completes the
+    /// plan's first open entry.
+    fn shown_tool_call(&self, tool_call: &Value, plan: &[agent_api::PlanEntry]) -> agent_api::ShownToolCall {
+        use agent_api::{PlanEntry, ShownToolCall};
+        let input = &tool_call["rawInput"];
+        if input["hide"] == true {
+            return ShownToolCall::Hide;
+        }
+        if input["planning"] == true {
+            return ShownToolCall::Plan(None);
+        }
+        if let Some(items) = input["plan"].as_array() {
+            let entry = |c: &Value| PlanEntry { content: c.as_str().unwrap_or_default().to_owned(), priority: "medium".to_owned(), status: "pending".to_owned() };
+            return ShownToolCall::Plan(Some(items.iter().map(entry).collect()));
+        }
+        if input["advance"] == true {
+            let mut plan = plan.to_vec();
+            if let Some(open) = plan.iter_mut().find(|e| e.status != "completed") {
+                open.status = "completed".to_owned();
+            }
+            return ShownToolCall::Plan(Some(plan));
+        }
+        ShownToolCall::Keep { label: input["label"].as_str().map(str::to_owned) }
     }
 }
 

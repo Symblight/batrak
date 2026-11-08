@@ -9,6 +9,8 @@
 //! - `edit <path> <ms>` → a tool call naming the file (location, then a diff), written straight to
 //!   disk as agents' own tools do; then like `sleep`
 //! - `look <path> <ms>` → a read tool call naming the file (location only); then like `sleep`
+//! - `tools` → tool calls whose `rawInput` says how the test's agent crate shows them (`label`,
+//!   `hide`, `planning` then `plan`, `advance`), each with later updates; then a chunk
 //! - `crash` → one chunk, then the agent's side of the pipe closes mid-turn
 //! - `subagent` → announces subagent `child-1` (`subagent_update`: title, description, cancel,
 //!   running); under its id a title, a tool call, a chunk and a permission request; then `child-1` idle
@@ -512,6 +514,28 @@ async fn run_turn(
                 return Ok(StopReason::Cancelled);
             }
             say(cx, &sid, "looked")?;
+        }
+        "tools" => {
+            let call = |id: &str, title: &str, input: serde_json::Value| {
+                SessionUpdate::ToolCall(ToolCall::new(id.to_owned(), title.to_owned()).kind(ToolKind::Execute).raw_input(input))
+            };
+            let update = |id: &str, fields: ToolCallUpdateFields| SessionUpdate::ToolCallUpdate(ToolCallUpdate::new(id.to_owned(), fields));
+            let done = || ToolCallUpdateFields::new().status(ToolCallStatus::Completed);
+            for update in [
+                call("c1", "ls -la", serde_json::json!({ "label": "List files" })),
+                update("c1", done()),
+                call("c2", "secret", serde_json::json!({ "hide": true })),
+                update("c2", done()),
+                call("c3", "plan", serde_json::json!({ "planning": true })),
+                update("c3", ToolCallUpdateFields::new().status(ToolCallStatus::InProgress)),
+                update("c3", ToolCallUpdateFields::new().raw_input(serde_json::json!({ "plan": ["a", "b"] }))),
+                update("c3", done().raw_input(serde_json::json!({ "plan": ["again"] }))),
+                call("c4", "advance", serde_json::json!({ "advance": true })),
+                update("c4", done().raw_input(serde_json::json!({ "advance": true }))),
+            ] {
+                cx.send_notification(SessionNotification::new(sid.clone(), update))?;
+            }
+            say(cx, &sid, "tools done")?;
         }
         "crash" => {
             say(cx, &sid, "about to crash")?;

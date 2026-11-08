@@ -84,7 +84,10 @@
  * @property {AcpContent | AcpContent[]} [content] Message, thought and user chunks; `session_message`: its blocks.
  * @property {string} [toolCallId]
  * @property {string | null} [title]
+ * @property {string} [shownLabel] Added by the backend: the tool call's label, worded by its agent's
+ *   crate (a shell call's description), shown instead of `title`.
  * @property {string | null} [kind]
+ * @property {ToolCallDiff} [shownDiff] Added by the backend: the lines a tool call's edits add and remove.
  * @property {'pending' | 'in_progress' | 'completed' | 'failed' | null} [status]
  * @property {{ path: string, line?: number | null }[] | null} [locations]
  * @property {{ content: string, priority?: string, status?: 'pending' | 'in_progress' | 'completed' }[]} [entries] `plan`.
@@ -274,3 +277,36 @@
  */
 
 export {};
+
+/**
+ * The lines a tool call's edits add and remove; `created`: one makes a new file.
+ * @typedef {{ added: number, removed: number, created: boolean }} ToolCallDiff
+ */
+
+/**
+ * @typedef {'pending' | 'in_progress' | 'awaiting-permission' | 'completed' | 'failed' | 'rejected' | 'cancelled'} ToolCallStatus
+ */
+
+/**
+ * One tool call of a reply, as its row shows it (`MessageBuilder`, `<acp-reply-work>`).
+ * @typedef {Object} ToolCallView
+ * @property {string} toolCallId
+ * @property {string} label The backend's wording (`shownLabel`), else the agent's title.
+ * @property {string} command The agent's title when the label is the backend's wording (a shell
+ *   call's command), else `''`.
+ * @property {string} kind ACP's tool kind.
+ * @property {ToolCallStatus} status
+ * @property {{ path: string, line?: number }[]} locations
+ * @property {string} error Why it failed.
+ * @property {ToolCallDiff | null} diff
+ * @property {number | null} startedAt When the page saw it start (ms); `null` in a replay.
+ * @property {number | null} endedAt When the page saw it end; `null` while it runs or in a replay.
+ */
+
+/**
+ * One step of a reply's work part (`MessageBuilder`, `<acp-reply-work>`): a tool call, the text a
+ * tool call followed (narration), or a thought that ended after the part started.
+ * @typedef {{ kind: 'tool', call: ToolCallView }
+ *   | { kind: 'text', text: string }
+ *   | { kind: 'thought', text: string, startedAt: number | null, endedAt: number | null }} WorkStep
+ */

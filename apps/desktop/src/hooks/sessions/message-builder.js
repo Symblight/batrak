@@ -8,12 +8,24 @@ import { subagentCardId } from './rules.js';
 /** @typedef {Parameters<NonNullable<ChxChatAdapter['subscribe']>>[0]} SubscribeHandlers */
 /** @typedef {Parameters<SubscribeHandlers['onChunk']>[0]} ChxChunk */
 /** @typedef {import('./types.js').AcpSessionUpdate} AcpSessionUpdate */
+/** @typedef {import('./types.js').ToolCallView} ToolCallView */
+/** @typedef {import('./types.js').ToolCallStatus} ToolCallStatus */
+/** @typedef {import('./types.js').WorkStep} WorkStep */
+
+/** Statuses of a call that still runs. */
+const RUNNING = new Set(['pending', 'in_progress', 'awaiting-permission']);
 
 /**
  * Turns ACP session updates into `<chx-chat>` chunks for one message. Consecutive text (or thought)
  * chunks grow one part; a new tool call or plan in between starts the next text part, so the reply
- * reads in the order the agent worked. Tool calls are keyed by ACP's `toolCallId`; an update of one
- * already shown, which can arrive at any moment, splits nothing.
+ * reads in the order the agent worked.
+ *
+ * A reply that calls a tool has one `work` part (spec: `docs/specs/reply-work-row.md`), created by
+ * its first tool call: its steps (`data.steps`, `WorkStep[]`) are the tool calls (`ToolCallView`,
+ * keyed by ACP's `toolCallId`), the text a tool call followed (narration) and the thoughts that
+ * ended after it started. Such text and thoughts stay parts, as they streamed, marked
+ * `data.folded` so they're drawn as nothing; the text after the last tool call is the answer. Its
+ * `status` runs until `finish()`, so a reply that is stopped settles it.
  *
  * ACP never says a thought is over: any other update but that ends it (`part-end`), and a live one
  * carries when it started and ended in `data` (`startedAt`, `endedAt`).
@@ -24,15 +36,24 @@ export class MessageBuilder {
   #lastKind = null;
   /** Parts started in this message, which numbers the next part's id. */
   #parts = 0;
-  /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
+  /** @type {{ partId: string, text: string, startedAt: number | null } | null} The thought being streamed. */
   #thought = null;
-  /** @type {Set<string>} Tool calls with a card: a later update changes it in place. */
+  /** @type {WorkStep[] | null} The work part's steps; `null` until the first tool call. */
+  #steps = null;
+  /** @type {Set<string>} Tool calls among the steps: a later update changes its step in place. */
   #tools = new Set();
+  /**
+   * What came since the last tool call, in order: text parts (narration once a tool call follows,
+   * else the answer) and the thoughts that ended meanwhile (already folded; steps at the next call
+   * or the finish).
+   * @type {({ kind: 'text', partId: string, text: string } | { kind: 'thought', step: WorkStep })[]}
+   */
+  #since = [];
 
   /**
    * @param {string} sessionId
    * @param {string} authorId
-   * @param {{ live?: boolean }} [options] `live`: updates arrive as the agent works, so thoughts are timed.
+   * @param {{ live?: boolean }} [options] `live`: updates arrive as the agent works, so thoughts and tool calls are timed.
    */
   constructor(sessionId, authorId, { live = false } = {}) {
     this.sessionId = sessionId;
@@ -47,6 +68,10 @@ export class MessageBuilder {
       this.#parts += 1;
     }
     return `${this.messageId}-${kind}${this.#parts}`;
+  }
+
+  get #workPartId() {
+    return `${this.messageId}-work`;
   }
 
   /**
@@ -67,14 +92,15 @@ export class MessageBuilder {
 
   /**
    * The card of a subagent the agent handed work to: a tool call part keyed by the subagent, so
-   * later fields (its status) update it.
+   * later fields (its status) update it. Never a step of the work part.
    * @param {string} subagentId
    * @param {Partial<ChxMessagePart>} fields
    * @returns {ChxChunk[]}
    */
   subagentCard(subagentId, fields) {
-    this.#lastKind = 'tool';
-    return [...this.#endThought(), this.chunk(this.subagentPartId(subagentId), 'tool_call', { ...fields, data: subagentCardData(subagentId) })];
+    const end = this.#endThought();
+    this.#lastKind = 'subagent';
+    return [...end, this.chunk(this.subagentPartId(subagentId), 'tool_call', { ...fields, data: subagentCardData(subagentId) })];
   }
 
   /** @param {string} subagentId */
@@ -88,9 +114,28 @@ export class MessageBuilder {
    */
   chunks(update) {
     if (update.sessionUpdate === 'agent_thought_chunk') return this.#thoughtChunks(update);
-    const inPlace = this.#tools.has(update.toolCallId ?? '');
-    const chunks = this.#chunks(update);
-    return chunks.length && !inPlace ? [...this.#endThought(), ...chunks] : chunks;
+    // A thought ends before what follows it is shown, so it's folded (or not) as what came first.
+    const end = this.#shows(update) && !this.#tools.has(update.toolCallId ?? '') ? this.#endThought() : [];
+    return [...end, ...this.#chunks(update)];
+  }
+
+  /**
+   * Whether the update shows something: what ends a thought.
+   * @param {AcpSessionUpdate} update
+   */
+  #shows(update) {
+    switch (update.sessionUpdate) {
+      case 'agent_message_chunk':
+      case 'user_message_chunk':
+        return textOf(update) !== '';
+      case 'tool_call':
+      case 'tool_call_update':
+        return Boolean(update.toolCallId);
+      case 'plan':
+        return true;
+      default:
+        return false;
+    }
   }
 
   /**
@@ -101,13 +146,20 @@ export class MessageBuilder {
     const text = textOf(update);
     if (!text) return [];
     const partId = this.#partId('thought');
-    if (this.#thought?.partId === partId) return [this.chunk(partId, 'thought', { text })];
+    if (this.#thought?.partId === partId) {
+      this.#thought.text += text;
+      return [this.chunk(partId, 'thought', { text })];
+    }
     const startedAt = this.live ? Date.now() : null;
-    this.#thought = { partId, startedAt };
+    this.#thought = { partId, text, startedAt };
     return [this.chunk(partId, 'thought', startedAt === null ? { text } : { text, data: { startedAt } })];
   }
 
-  /** @returns {ChxChunk[]} Ends the thought being streamed, if any. */
+  /**
+   * Ends the thought being streamed, if any; one that ends while the work part exists is folded
+   * into it.
+   * @returns {ChxChunk[]}
+   */
   #endThought() {
     const thought = this.#thought;
     if (!thought) return [];
@@ -115,8 +167,12 @@ export class MessageBuilder {
     const { messageId, sessionId: conversationId } = this;
     /** @type {ChxChunk} */
     const end = { kind: 'part-end', messageId, conversationId, partId: thought.partId };
-    if (thought.startedAt === null) return [end];
-    return [this.chunk(thought.partId, 'thought', { data: { startedAt: thought.startedAt, endedAt: Date.now() } }), end];
+    const { startedAt } = thought;
+    const endedAt = startedAt === null ? null : Date.now();
+    const times = startedAt === null ? {} : { startedAt, endedAt };
+    if (!this.#steps) return startedAt === null ? [end] : [this.chunk(thought.partId, 'thought', { data: times }), end];
+    this.#since.push({ kind: 'thought', step: { kind: 'thought', text: thought.text, startedAt, endedAt } });
+    return [this.chunk(thought.partId, 'thought', { data: { ...times, folded: true } }), end];
   }
 
   /**
@@ -128,17 +184,16 @@ export class MessageBuilder {
       case 'agent_message_chunk':
       case 'user_message_chunk': {
         const text = textOf(update);
-        return text ? [this.chunk(this.#partId('text'), 'text', { text })] : [];
+        if (!text) return [];
+        const partId = this.#partId('text');
+        const last = this.#since.at(-1);
+        if (last?.kind === 'text' && last.partId === partId) last.text += text;
+        else this.#since.push({ kind: 'text', partId, text });
+        return [this.chunk(partId, 'text', { text })];
       }
       case 'tool_call':
-      case 'tool_call_update': {
-        if (!update.toolCallId) return [];
-        if (!this.#tools.has(update.toolCallId)) {
-          this.#tools.add(update.toolCallId);
-          this.#lastKind = 'tool';
-        }
-        return [this.chunk(this.toolPartId(update.toolCallId), 'tool_call', this.#toolDelta(update))];
-      }
+      case 'tool_call_update':
+        return update.toolCallId ? this.#toolChunks(update.toolCallId, update) : [];
       case 'plan':
         this.#lastKind = 'plan';
         return [this.chunk(`${this.messageId}-plan`, 'plan', { entries: update.entries ?? [] })];
@@ -148,25 +203,89 @@ export class MessageBuilder {
   }
 
   /**
-   * Only the fields the update carries: every field but `text` replaces the part's.
+   * The chunks after `update` of `toolCallId`: a call not seen yet makes what was said since the
+   * last one narration (folded into the work part, which the first call creates) and becomes a step.
+   * @param {string} toolCallId
    * @param {AcpSessionUpdate} update
-   * @returns {Partial<ChxMessagePart>}
+   * @returns {ChxChunk[]}
    */
-  #toolDelta(update) {
-    /** @type {Partial<ChxMessagePart>} */
-    const delta = { data: { toolCallId: update.toolCallId } };
-    if (update.title) delta.label = update.title;
-    if (update.kind) delta.kind = update.kind;
-    if (update.status) delta.status = update.status;
-    const reason = update.status === 'failed' ? failureOf(update) : '';
-    if (reason) delta.error = reason;
+  #toolChunks(toolCallId, update) {
+    /** @type {ChxChunk[]} */
+    const folds = [];
+    if (!this.#tools.has(toolCallId)) {
+      this.#tools.add(toolCallId);
+      this.#lastKind = 'tool';
+      const since = this.#since.map((entry) => {
+        if (entry.kind === 'thought') return entry.step;
+        folds.push(this.chunk(entry.partId, 'text', { data: { folded: true } }));
+        return /** @type {WorkStep} */ ({ kind: 'text', text: entry.text });
+      });
+      this.#since = [];
+      const call = newCall(toolCallId, this.live ? Date.now() : null);
+      this.#steps = [...(this.#steps ?? []), ...since, { kind: 'tool', call }];
+    }
+    this.#updateCall(toolCallId, (call) => this.#updated(call, update));
+    return [...folds, this.#workChunk()];
+  }
+
+  /**
+   * The chunks that show `status` on a call (a permission request), making the call under `title`
+   * when it isn't shown yet.
+   * @param {string} toolCallId
+   * @param {ToolCallStatus} status
+   * @param {string} [title]
+   * @returns {ChxChunk[]}
+   */
+  toolCallChunks(toolCallId, status, title = '') {
+    // A request can come before its call: it makes the call (its folds; the work chunk follows).
+    const made = this.#tools.has(toolCallId) ? [] : this.#toolChunks(toolCallId, { sessionUpdate: 'tool_call', toolCallId, title }).slice(0, -1);
+    this.#updateCall(toolCallId, (call) => ({ ...call, status }));
+    return [...made, this.#workChunk()];
+  }
+
+  /**
+   * @param {string} toolCallId
+   * @param {(call: ToolCallView) => ToolCallView} change
+   */
+  #updateCall(toolCallId, change) {
+    this.#steps = (this.#steps ?? []).map((step) =>
+      step.kind === 'tool' && step.call.toolCallId === toolCallId ? { kind: 'tool', call: change(step.call) } : step,
+    );
+  }
+
+  /** @param {'in_progress' | 'completed'} [status] */
+  #workChunk(status = 'in_progress') {
+    return this.chunk(this.#workPartId, 'work', { status, data: { steps: this.#steps ?? [] } });
+  }
+
+  /**
+   * `call` with the fields `update` carries. Once the backend worded its label (`shownLabel`), the
+   * title is its command, never its label again.
+   * @param {ToolCallView} call
+   * @param {AcpSessionUpdate} update
+   * @returns {ToolCallView}
+   */
+  #updated(call, update) {
+    const next = { ...call };
+    if (update.shownLabel) {
+      next.label = update.shownLabel;
+      next.command = update.title || call.command || call.label;
+    } else if (update.title) {
+      if (call.command) next.command = update.title;
+      else next.label = update.title;
+    }
+    if (update.kind) next.kind = update.kind;
+    if (update.status) next.status = update.status;
+    if (update.status && !RUNNING.has(update.status) && call.startedAt !== null && call.endedAt === null) next.endedAt = Date.now();
+    if (update.status === 'failed') next.error = failureOf(update);
+    if (update.shownDiff) next.diff = update.shownDiff;
     if (update.locations) {
-      delta.locations = update.locations.map(({ path, line }) => ({
+      next.locations = update.locations.map(({ path, line }) => ({
         path: relativeTo(folderOf(this.sessionId), path),
         ...(line ? { line } : {}),
       }));
     }
-    return delta;
+    return next;
   }
 
   /**
@@ -175,7 +294,18 @@ export class MessageBuilder {
    */
   finish(cancelled = false) {
     const { messageId, sessionId: conversationId } = this;
-    return [...this.#endThought(), { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
+    const end = this.#endThought();
+    if (!this.#steps) return [...end, { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
+    // Thoughts after the last call are the row's (folded already); its text is the answer. A call
+    // the agent never ended is settled here: the library settles the part, not its calls.
+    const thoughts = this.#since.flatMap((entry) => (entry.kind === 'thought' ? [entry.step] : []));
+    this.#since = [];
+    this.#steps = [...this.#steps, ...thoughts].map((step) =>
+      step.kind === 'tool' && RUNNING.has(step.call.status) ? { kind: 'tool', call: { ...step.call, status: 'cancelled' } } : step,
+    );
+    // An abort settles the part (`cancelled`) itself; a finish would too, unless it's `completed`.
+    const work = this.#workChunk(cancelled ? 'in_progress' : 'completed');
+    return [...end, work, { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
   }
 }
 
@@ -185,6 +315,16 @@ export class MessageBuilder {
  */
 export function subagentCardData(subagentId) {
   return { toolCallId: subagentCardId(subagentId), subagentId };
+}
+
+/**
+ * A call before its first update is applied.
+ * @param {string} toolCallId
+ * @param {number | null} startedAt
+ * @returns {ToolCallView}
+ */
+function newCall(toolCallId, startedAt) {
+  return { toolCallId, label: '', command: '', kind: 'other', status: 'pending', locations: [], error: '', diff: null, startedAt, endedAt: null };
 }
 
 /** @param {AcpSessionUpdate} update */

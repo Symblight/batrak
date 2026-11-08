@@ -55,6 +55,7 @@ import type { AcpModePicker } from './components/mode-picker/mode-picker.js';
 import type { AcpModelPicker } from './components/model-picker/model-picker.js';
 import type { AcpNavRail } from './components/nav-rail/nav-rail.js';
 import type { AcpPartThinking } from './components/part-thinking/part-thinking.js';
+import type { AcpReplyWork } from './components/reply-work/reply-work.js';
 import type { AcpResizeHandle } from './components/resize-handle/resize-handle.js';
 import type { AcpQuickOpen } from './components/quick-open/quick-open.js';
 import type { AcpSelectionActions } from './components/selection-actions/selection-actions.js';
@@ -156,6 +157,7 @@ declare global {
     'acp-model-picker': AcpModelPicker;
     'acp-nav-rail': AcpNavRail;
     'acp-part-thinking': AcpPartThinking;
+    'acp-reply-work': AcpReplyWork;
     'acp-quick-open': AcpQuickOpen;
     'acp-resize-handle': AcpResizeHandle;
     'acp-search-bar': AcpSearchBar;

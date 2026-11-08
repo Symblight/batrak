@@ -194,6 +194,28 @@ pub enum SessionActivity {
     Idle,
 }
 
+/// How a tool call is shown (`Agent::shown_tool_call`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ShownToolCall {
+    /// Shown as a tool call, under `label` instead of its title when there is one.
+    Keep { label: Option<String> },
+    /// Not shown, nor any later update of it.
+    Hide,
+    /// It updates the plan: `Some` is the whole plan now; `None` is a plan tool whose input hasn't
+    /// arrived yet (its first update while the input streams), so nothing is shown yet.
+    Plan(Option<Vec<PlanEntry>>),
+}
+
+/// An entry of a plan, as ACP's `plan` update carries it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PlanEntry {
+    pub content: String,
+    /// `high`, `medium` or `low`.
+    pub priority: String,
+    /// `pending`, `in_progress` or `completed`.
+    pub status: String,
+}
+
 /// One kind of agent. Default methods are plain ACP with no CLI; a crate overrides what its agent
 /// does differently. The app's hub picks the crate for a launch and calls only this.
 pub trait Agent: Send + Sync + 'static {
@@ -243,6 +265,12 @@ pub trait Agent: Send + Sync + 'static {
     /// reads little. Reads files: call off the async runtime.
     fn session_activity(&self, _session_id: &str) -> Option<SessionActivity> {
         None
+    }
+    /// How a tool call update (`tool_call` or `tool_call_update`, as ACP sends it) is shown, given
+    /// the plan the session shows now (`plan`). Called for every update of a call until one hides
+    /// it or gives a plan; a later update may carry what the first didn't (its whole input).
+    fn shown_tool_call(&self, _tool_call: &serde_json::Value, _plan: &[PlanEntry]) -> ShownToolCall {
+        ShownToolCall::Keep { label: None }
     }
 }
 
@@ -319,6 +347,12 @@ mod tests {
     #[should_panic(expected = "guesses")]
     fn the_conformance_suite_catches_an_agent_that_answers_for_any_id() {
         conformance::check(&Guesses);
+    }
+
+    #[test]
+    fn by_default_a_tool_call_is_shown_as_the_agent_sent_it() {
+        let call = serde_json::json!({ "toolCallId": "t1", "title": "mcp__x__y", "rawInput": { "description": "Do it" } });
+        assert_eq!(Plain.shown_tool_call(&call, &[]), ShownToolCall::Keep { label: None });
     }
 
     #[test]

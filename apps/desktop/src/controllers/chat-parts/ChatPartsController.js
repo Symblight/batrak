@@ -7,6 +7,7 @@ import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
 import { AcpCollapsibleText } from '../../components/collapsible-text/collapsible-text.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
+import { AcpReplyWork } from '../../components/reply-work/reply-work.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
 /** @typedef {import('lit').LitElement} LitElement */
@@ -17,6 +18,8 @@ import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js
 /** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
 /** @typedef {import('../../hooks/chat/chat.js').FileRef} FileRef */
+/** @typedef {import('../../hooks/sessions/types.js').ToolCallView} ToolCallView */
+/** @typedef {import('../../hooks/sessions/types.js').WorkStep} WorkStep */
 
 /**
  * @typedef {Object} ChatPartsConfig
@@ -87,6 +90,44 @@ export function locationChip({ path, line }) {
   icon.innerHTML = fileIcon.svgFor(name);
   chip.append(icon, name);
   return chip;
+}
+
+/** Statuses of a tool call that still runs. */
+const RUNNING = new Set(['pending', 'in_progress', 'awaiting-permission']);
+
+/**
+ * A part a work row holds instead (`data.folded`): an element that takes no space.
+ * @param {Element | null | undefined} previous
+ */
+function hiddenPart(previous) {
+  if (previous instanceof HTMLElement && previous.dataset.folded !== undefined) return previous;
+  const element = document.createElement('span');
+  element.dataset.folded = '';
+  element.hidden = true;
+  return element;
+}
+
+/**
+ * A tool call's row: its label, kind, status, first file, error and edit stats, its command in the
+ * body.
+ * @param {Pick<ToolCallView, 'toolCallId' | 'label' | 'kind' | 'status' | 'locations' | 'error'> & Partial<ToolCallView>} view
+ * @param {Element | null | undefined} previous
+ */
+function toolCallElement(view, previous) {
+  const call = /** @type {ChxToolCall} */ (previous?.localName === 'chx-tool-call' ? previous : document.createElement('chx-tool-call'));
+  call.buildLocation = locationChip;
+  call.toolCallId = view.toolCallId;
+  call.label = view.label;
+  call.kind = view.kind;
+  call.status = view.status;
+  call.locations = view.locations;
+  call.error = view.error;
+  call.additions = view.diff?.added || undefined;
+  call.deletions = view.diff?.removed || undefined;
+  if (call.textContent !== (view.command ?? '')) {
+    call.replaceChildren(...(view.command ? [Object.assign(document.createElement('code'), { textContent: view.command })] : []));
+  }
+  return call;
 }
 
 /**
@@ -208,11 +249,13 @@ export class ChatPartsController {
     ensureChipTemplates();
     this.#host.addEventListener('click', this.#onClick);
     this.#host.addEventListener('chx-tool-call-location-click', this.#onLocationClick);
+    this.#host.addEventListener('acp-tool-location-click', this.#onLocationClick);
   }
 
   hostDisconnected() {
     this.#host.removeEventListener('click', this.#onClick);
     this.#host.removeEventListener('chx-tool-call-location-click', this.#onLocationClick);
+    this.#host.removeEventListener('acp-tool-location-click', this.#onLocationClick);
   }
 
   /** @type {PartElements} */
@@ -237,6 +280,8 @@ export class ChatPartsController {
     // The agent's text is Markdown; your own stays as typed, its file refs as chips (a restored
     // message has them only as text).
     text: (part, previous, message) => {
+      // Narration the work row holds (`data.folded`): drawn as nothing.
+      if (part.data?.folded) return hiddenPart(previous);
       if (message.own) {
         // folded to its last lines while it's long: a pasted prompt would fill the chat
         const folded = previous instanceof AcpCollapsibleText ? previous : new AcpCollapsibleText();
@@ -257,6 +302,7 @@ export class ChatPartsController {
     },
     // A thought the turn was stopped in is the reply's last part (any other part ends it).
     thought: (part, previous, message) => {
+      if (part.data?.folded) return hiddenPart(previous);
       const thinking = previous instanceof AcpPartThinking ? previous : new AcpPartThinking();
       const { startedAt, endedAt } = part.data ?? {};
       thinking.text = part.text ?? '';
@@ -275,20 +321,40 @@ export class ChatPartsController {
       plan.entries = part.entries ?? NONE;
       return plan;
     },
+    // A subagent's card; the agent's own tool calls are `tool_group` parts.
     tool_call: (part, previous) => {
-      const call = /** @type {ChxToolCall} */ (previous ?? document.createElement('chx-tool-call'));
-      call.buildLocation = locationChip;
-      call.toolCallId = String(part.data?.toolCallId ?? '');
-      call.label = part.label ?? '';
-      call.kind = part.kind ?? 'other';
-      call.status = part.status ?? 'pending';
-      call.locations = part.locations ?? NONE;
-      call.error = part.error ?? '';
+      const call = toolCallElement(
+        {
+          toolCallId: String(part.data?.toolCallId ?? ''),
+          label: part.label ?? '',
+          kind: part.kind ?? 'other',
+          status: part.status ?? 'pending',
+          locations: part.locations ?? NONE,
+          error: part.error ?? '',
+        },
+        previous,
+      );
       // A subagent's card (`subagentCardData()`): a click opens its chat.
       const subagentId = part.data?.subagentId;
       if (typeof subagentId === 'string') call.dataset.subagentId = subagentId;
       else delete call.dataset.subagentId;
       return call;
+    },
+    // A reply's work (`MessageBuilder`): live until the reply finishes; a reply that was stopped
+    // settled the part (`cancelled`), not its calls.
+    work: (part, previous) => {
+      const cancelled = part.status === 'cancelled';
+      const steps = /** @type {WorkStep[]} */ (part.data?.steps ?? NONE).map((step) =>
+        cancelled && step.kind === 'tool' && RUNNING.has(step.call.status)
+          ? { kind: /** @type {const} */ ('tool'), call: { ...step.call, status: /** @type {const} */ ('cancelled') } }
+          : step,
+      );
+      const work = previous instanceof AcpReplyWork ? previous : new AcpReplyWork();
+      work.steps = steps;
+      work.live = part.status !== 'completed' && !cancelled;
+      work.buildLocation = locationChip;
+      work.decorate = (body) => formatFileRefs(body, { links: true });
+      return work;
     },
     attachment: (part, previous) => {
       const file = /** @type {File} */ (part.attachment);

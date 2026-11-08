@@ -60,6 +60,13 @@ pub(super) struct SessionState {
     pub(super) touched: Mutex<HashSet<PathBuf>>,
     pub(super) overlaps: Mutex<HashSet<PathBuf>>,
     pub(super) tool_kinds: Mutex<HashMap<String, String>>,
+    /// Tool calls its agent's crate hid or turned into the plan (`shown_tool_call`): their later
+    /// updates aren't shown. And the plan they made, which the next one starts from. Both for the
+    /// running agent's conversation (`start_replay`).
+    pub(super) settled_tools: Mutex<HashSet<String>>,
+    /// Plan tools whose input hasn't come yet (`Plan(None)`): their updates aren't shown meanwhile.
+    pub(super) planning_tools: Mutex<HashSet<String>>,
+    pub(super) plan: Mutex<Vec<agent_api::PlanEntry>>,
     /// When the last turn ended (`None` while one runs): its `touched` still count for a while.
     pub(super) turn_ended: Mutex<Option<Instant>>,
     /// The agent asked for a sign-in at its last start or prompt (the page was sent `sign-in`);
@@ -142,6 +149,9 @@ impl SessionState {
     /// A new agent's conversation starts: its `session/load` replay comes first.
     pub(super) fn start_replay(&self) {
         *lock(&self.replay) = Some(replay::ReplayLog::default());
+        lock(&self.settled_tools).clear();
+        lock(&self.planning_tools).clear();
+        lock(&self.plan).clear();
     }
 
     /// The turn's prompt, as the agent gets it.
@@ -175,6 +185,9 @@ pub(super) fn new_state(record: SessionRecord) -> SessionState {
         touched: Mutex::default(),
         overlaps: Mutex::default(),
         tool_kinds: Mutex::default(),
+        settled_tools: Mutex::default(),
+        planning_tools: Mutex::default(),
+        plan: Mutex::default(),
         turn_ended: Mutex::default(),
         sign_in: Mutex::default(),
         held: Mutex::default(),

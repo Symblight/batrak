@@ -100,4 +100,65 @@ describe('ChatPartsController', () => {
       }
     }
   });
+
+  it('draws a reply’s work as one row, live until it finishes, a stopped reply’s running calls cancelled', () => {
+    // Arrange
+    const host = /** @type {PartsHost} */ (document.body.appendChild(new PartsHost()));
+    const work = /** @type {(part: unknown, previous: Element | null) => HTMLElement} */ (host.parts.partElements.work);
+    const step = (/** @type {string} */ id, /** @type {string} */ status) => ({
+      kind: 'tool',
+      call: { toolCallId: id, label: 'Run', command: 'npm test', kind: 'execute', status, locations: [], error: '', diff: null, startedAt: null, endedAt: null },
+    });
+    const steps = [step('t1', 'completed'), step('t2', 'in_progress')];
+    try {
+      // Act
+      const live = /** @type {import('../../../components/reply-work/reply-work.js').AcpReplyWork} */ (work({ id: 'w', type: 'work', status: 'in_progress', data: { steps } }, null));
+      const liveFlag = live.live;
+      const stopped = /** @type {typeof live} */ (work({ id: 'w', type: 'work', status: 'cancelled', data: { steps } }, live));
+      // Assert
+      expect([live.localName, liveFlag]).to.deep.equal(['acp-reply-work', true]);
+      expect(stopped, 'the same row').to.equal(live);
+      expect(stopped.live).to.equal(false);
+      expect(stopped.steps.map((s) => s.kind === 'tool' && s.call.status), 'stopped').to.deep.equal(['completed', 'cancelled']);
+    } finally {
+      host.remove();
+    }
+  });
+
+  it('draws a folded text or thought as nothing: it is a step of the work row', () => {
+    // Arrange
+    const host = /** @type {PartsHost} */ (document.body.appendChild(new PartsHost()));
+    const { text, thought } = /** @type {Record<string, (part: unknown, previous: Element | null, message: unknown) => HTMLElement>} */ (/** @type {unknown} */ (host.parts.partElements));
+    const message = { own: false, parts: [] };
+    try {
+      // Act
+      const shown = [
+        text({ id: 'a', type: 'text', text: 'I will look.', data: { folded: true } }, null, message),
+        thought({ id: 'b', type: 'thought', text: 'Hmm', data: { folded: true } }, null, message),
+        text({ id: 'c', type: 'text', text: 'Done.' }, null, message),
+      ].map((el) => el.hidden);
+      // Assert
+      expect(shown).to.deep.equal([true, true, false]);
+    } finally {
+      host.remove();
+    }
+  });
+
+  it('opens the file a group’s summary names', async () => {
+    // Arrange
+    $activeSessionId.set(null);
+    const host = /** @type {PartsHost} */ (document.body.appendChild(new PartsHost()));
+    /** @type {unknown[]} */
+    const opened = [];
+    host.addEventListener('acp-file-open', (e) => opened.push(/** @type {CustomEvent} */ (e).detail));
+    try {
+      // Act
+      host.dispatchEvent(new CustomEvent('acp-tool-location-click', { detail: { path: '/p/a.rs', line: 3 }, bubbles: true, composed: true }));
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      // Assert
+      expect(opened).to.deep.equal([{ path: '/p/a.rs', line: 3 }]);
+    } finally {
+      host.remove();
+    }
+  });
 });

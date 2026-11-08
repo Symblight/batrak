@@ -1,0 +1,117 @@
+:host {
+  --_acp-reply-work-ease: cubic-bezier(0.2, 0, 0, 1);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 100%;
+  font-size: var(--acp-font-size-md);
+  line-height: 18px;
+}
+
+/* One click target: the spinner or summary, the time and the chevron. */
+.acp-reply-work__head {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-2);
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0 var(--acp-space-2);
+  border-radius: var(--acp-shape-corner-full);
+  color: var(--acp-color-on-surface-variant);
+  cursor: pointer;
+  &:hover {
+    background: var(--acp-state-hover);
+  }
+  &:active {
+    background: var(--acp-state-pressed);
+  }
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-secondary);
+    outline-offset: 2px;
+  }
+  /* A call waits for the user's answer in the banner: the row is its subject. */
+  :host([waiting]) & {
+    color: var(--acp-color-primary);
+    background: color-mix(in srgb, var(--acp-color-primary) 8%, transparent);
+  }
+}
+
+.acp-reply-work__spinner {
+  flex: none;
+  --md-circular-progress-size: 16px;
+}
+
+.acp-reply-work__label {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+/* A file the summary names, as a tool call's chip shows it. */
+.acp-reply-work__file {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--acp-space-1);
+  vertical-align: bottom;
+  padding: 0 var(--acp-space-1);
+  border-radius: var(--acp-shape-corner-small);
+  color: var(--acp-color-on-surface);
+  &:hover {
+    background: var(--acp-state-hover);
+    text-decoration: underline;
+  }
+}
+.acp-reply-work__file-icon {
+  font-size: var(--acp-icon-size-sm);
+}
+
+.acp-reply-work__failed {
+  color: var(--acp-color-error);
+}
+
+.acp-reply-work__time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+
+.acp-reply-work__chevron {
+  flex: none;
+  font-size: var(--acp-icon-size-lg);
+  transition: transform 300ms var(--_acp-reply-work-ease);
+  :host([expanded]) & {
+    transform: rotate(180deg);
+  }
+}
+
+/* The steps hang off a rail under the head. */
+.acp-reply-work__steps {
+  display: flex;
+  flex-direction: column;
+  align-self: stretch;
+  margin-inline-start: var(--acp-space-3);
+  padding-inline-start: var(--acp-space-2);
+  border-inline-start: 2px solid var(--acp-color-outline-variant);
+}
+
+/* Narration: the agent's text between its calls, quieter than its answer. */
+.acp-reply-work__narration {
+  color: var(--acp-color-on-surface-variant);
+  font-size: var(--acp-font-size-sm);
+}
+
+.acp-reply-work__command {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-family: var(--acp-font-family-mono);
+  color: var(--acp-color-on-surface-variant);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .acp-reply-work__chevron {
+    transition: none;
+  }
+}

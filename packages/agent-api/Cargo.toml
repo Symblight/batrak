@@ -6,6 +6,8 @@ description = "What every Batrak agent crate implements, and the types they shar
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
+# a tool call as ACP sends it (`Agent::shown_tool_call`)
+serde_json = "1"
 
 [features]
 # `conformance`: what every agent crate's tests run
