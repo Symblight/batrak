@@ -9,15 +9,18 @@ const frame = () => new Promise((resolve) => requestAnimationFrame(() => resolve
 /** @param {AcpMarkdown} el */
 const body = (el) => /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-markdown__body'));
 
+/** Waits out the frames a streaming reply takes to show what arrived (8, `CATCH_UP_FRAMES`). */
+const painted = async () => { for (let i = 0; i < 10; i++) await frame(); };
+
 /**
- * Sets the text and waits for the frame that paints it.
+ * Sets the text and waits for the frames that paint it.
  * @param {AcpMarkdown} el
  * @param {string} text
  */
 async function show(el, text) {
   el.text = text;
   await el.updateComplete;
-  await frame();
+  await painted();
 }
 
 describe('acp-markdown', () => {
@@ -233,7 +236,8 @@ describe('acp-markdown', () => {
 
       await show(el, 'one\n\ntwo\n\nthree');
 
-      expect(rendered).to.deep.equal(['two\nthree']);
+      expect(rendered.filter((text) => text.includes('one')), 'the finished block').to.deep.equal([]);
+      expect(rendered.at(-1)).to.equal('two\nthree');
     });
 
     it('streamed in pieces, ends up as the same text rendered whole', async () => {
@@ -246,11 +250,16 @@ describe('acp-markdown', () => {
         const whole = await fixture(html`<acp-markdown .text=${text}></acp-markdown>`);
         const el = await fixture(html`<acp-markdown streaming .text=${text.slice(0, 4)}></acp-markdown>`);
 
-        for (let end = 9; end < text.length; end += 5) await show(el, text.slice(0, end));
+        // a piece a frame, as a reply streams in
+        for (let end = 9; end < text.length; end += 5) {
+          el.text = text.slice(0, end);
+          await el.updateComplete;
+          await frame();
+        }
         el.text = text;
         el.streaming = false;
         await el.updateComplete;
-        await frame();
+        await painted();
 
         const blocks = (/** @type {AcpMarkdown} */ m) => [...body(m).children].map((c) => c.outerHTML);
         expect(blocks(el), name).to.deep.equal(blocks(whole));

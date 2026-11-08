@@ -14,9 +14,14 @@ import styles from './markdown.css?inline';
  * @property {Node} node
  */
 
+/** A streamed chunk is shown within this many frames of arriving, a share of it each frame. */
+const CATCH_UP_FRAMES = 8;
+/** How long text that just appeared takes to fade in (`.acp-markdown__fresh` in the CSS). */
+const FADE_MS = 160;
+
 /**
  * @tag acp-markdown
- * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams, only its last blocks.
+ * @summary Markdown rendered safely, by the policy of its source: an agent's reply (no images) or the user's own file (local images, relative links, heading anchors); sanitized HTML, fenced code in `<chx-code-block>`; re-rendered at most once a frame while it streams, only its last blocks, its text revealed at a steady pace and fading in.
  * @fires acp-link-open `{ url }` A web or mail link, for the browser.
  * @fires acp-file-open `{ path }` A link to a file in the project (document).
  * @fires acp-file-reveal `{ path, expand: true }` A link to a folder in the project (document).
@@ -42,6 +47,14 @@ export class AcpMarkdown extends LitElement {
   #frame = 0;
   /** @type {string | null} The text the body shows. */
   #painted = null;
+  /** @type {{ length: number, at: number }[]} The characters each recent paint revealed, newest last, while they fade in. */
+  #fresh = [];
+  /** The last paint showed less than the text: pacing goes on after the stream ends, until it caught up. */
+  #lagging = false;
+  /** Characters a paced paint reveals: what was behind when text last arrived, spread over `CATCH_UP_FRAMES`. */
+  #step = 0;
+  /** The text's length when `#step` was set. */
+  #stepFor = 0;
   /** @type {Block[]} The body's top-level blocks. */
   #blocks = [];
   /** The last paint rendered only the end of the text, so what it can't see wasn't applied (reference links). */
@@ -100,6 +113,10 @@ export class AcpMarkdown extends LitElement {
   updated() {
     const finished = this.#fromTail && !this.streaming;
     if ((this.#painted === this.text && !finished) || this.#frame) return;
+    this.#schedule();
+  }
+
+  #schedule() {
     // The first paint is immediate, so a restored message doesn't flash empty.
     if (this.#painted === null) this.#paint();
     else this.#frame = requestAnimationFrame(() => this.#paint());
@@ -109,10 +126,14 @@ export class AcpMarkdown extends LitElement {
     this.#frame = 0;
     const body = /** @type {HTMLElement | null} */ (this.renderRoot.querySelector('.acp-markdown__body'));
     if (!body) return;
-    const settled = this.#settledBlocks();
+    const text = this.#nextText();
+    const settled = this.#settledBlocks(text);
     const line = settled ? this.#blocks[settled].line : 1;
-    const source = settled ? this.text.slice(markdown.lineStart(this.text, line)) : this.text;
-    this.#painted = this.text;
+    const source = settled ? text.slice(markdown.lineStart(text, line)) : text;
+    const paced = this.#paced;
+    const revealed = paced && this.#painted !== null && text.startsWith(this.#painted) ? text.length - this.#painted.length : 0;
+    this.#painted = text;
+    this.#lagging = paced && text !== this.text;
     /** @type {import('../../hooks/markdown/types.js').Rendered} */
     let rendered;
     try {
@@ -138,6 +159,81 @@ export class AcpMarkdown extends LitElement {
     this.#blocks = [...this.#blocks.slice(0, settled), ...blocks.map((block, i) => (i < kept ? { ...block, node: this.#blocks[settled + i].node } : block))];
     this.#revokeUnused();
     for (const { node, path } of images) if (node.isConnected) this.#loadInto(node, path);
+    if (paced) this.#fadeIn(body, revealed);
+    else this.#settleFades(body);
+    // caught up after the stream ended: one more paint, whole and plain
+    if (text !== this.text || (!this.streaming && (this.#fromTail || paced))) this.#schedule();
+  }
+
+  /**
+   * What this paint shows: while the text grows at its end, the next share of what arrived, so a
+   * chunk appears at a steady pace, all of it within `CATCH_UP_FRAMES`; anything else at once.
+   * @returns {string}
+   */
+  #nextText() {
+    const shown = this.#painted;
+    if (shown === null || !this.#paced || !this.text.startsWith(shown)) return this.text;
+    if (this.text.length !== this.#stepFor) {
+      this.#stepFor = this.text.length;
+      this.#step = Math.ceil((this.text.length - shown.length) / CATCH_UP_FRAMES);
+    }
+    let end = shown.length + this.#step;
+    // never between the two halves of a surrogate pair
+    if (/[\uD800-\uDBFF]/.test(this.text.charAt(end - 1))) end++;
+    return this.text.slice(0, end);
+  }
+
+  /**
+   * The reply's last paint is plain: what was still fading just shows, and the blocks it kept lose
+   * their fade wrappers.
+   * @param {HTMLElement} body
+   */
+  #settleFades(body) {
+    this.#fresh = [];
+    for (const span of body.querySelectorAll('.acp-markdown__fresh')) span.replaceWith(...span.childNodes);
+    body.normalize();
+  }
+
+  /** A reply arriving, or catching up with what arrived; a document's edits show at once. */
+  get #paced() {
+    return this.streaming || this.#lagging;
+  }
+
+  /**
+   * Fades in the text the last paints revealed. Repainted blocks are new nodes, so each paint wraps
+   * again the characters still fading, each run's animation set back by its age to go on from
+   * where it was. Counted from the end of the rendered text: markdown's own marks make it a
+   * character or two off, which a fade can't show.
+   * @param {HTMLElement} body
+   * @param {number} revealed How many characters this paint added at the end.
+   */
+  #fadeIn(body, revealed) {
+    const now = performance.now();
+    if (revealed > 0) this.#fresh.push({ length: revealed, at: now });
+    this.#fresh = this.#fresh.filter((run) => now - run.at < FADE_MS);
+    if (!this.#fresh.length) return;
+    /** @type {Text[]} */
+    const texts = [];
+    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const parent = node.parentElement;
+      if (node.textContent?.trim() && !parent?.closest('.acp-markdown__fresh')) texts.push(/** @type {Text} */ (node));
+    }
+    for (const run of [...this.#fresh].reverse()) {
+      let left = run.length;
+      while (left > 0 && texts.length) {
+        const node = /** @type {Text} */ (texts.pop());
+        const length = node.data.length;
+        const tail = length > left ? node.splitText(length - left) : node;
+        if (length > left) texts.push(node);
+        left -= tail.data.length;
+        const span = document.createElement('span');
+        span.className = 'acp-markdown__fresh';
+        span.style.animationDelay = `${Math.round(run.at - now)}ms`;
+        tail.replaceWith(span);
+        span.append(tail);
+      }
+    }
   }
 
   /**
@@ -145,8 +241,9 @@ export class AcpMarkdown extends LitElement {
    * at its end, all but the last two. The last can change, and so can the one before it, which it
    * may still join (`1. a\n\n2` is a list and a paragraph, `1. a\n\n2. b` one list).
    */
-  #settledBlocks() {
-    if (!this.streaming || this.#painted === null || !this.text.startsWith(this.#painted)) return 0;
+  /** @param {string} text What this paint shows. */
+  #settledBlocks(text) {
+    if (!this.#paced || this.#painted === null || !text.startsWith(this.#painted)) return 0;
     return Math.max(0, this.#blocks.length - 2);
   }
 
