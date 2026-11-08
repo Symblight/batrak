@@ -39,6 +39,9 @@ function said(text) {
   }));
 }
 
+/** The reply's answer: what it says after its last tool call. */
+const ANSWER = 'CI runs the backend on macOS, the CLI also on Windows, and the frontend on Ubuntu; that goes under Gotchas.';
+
 /** @returns {AcpSessionUpdate[]} The start of an agent's reply to the AGENTS.md prompt: text, commands, a failed one. */
 function replyUpdates() {
   const command = (/** @type {string} */ id, /** @type {string} */ title) => /** @type {AcpSessionUpdate[]} */ ([
@@ -67,7 +70,7 @@ function replyUpdates() {
     ),
     ...command('t3', 'cat .github/workflows/ci.yml apps/desktop/package.json'),
     { sessionUpdate: 'tool_call_update', toolCallId: 't3', status: 'completed' },
-    ...said('CI runs the backend on macOS, the CLI also on Windows, and the frontend on Ubuntu; that goes under Gotchas.'),
+    ...said(ANSWER),
   ];
 }
 
@@ -238,6 +241,11 @@ describe('acp-chat', () => {
 
     // Assert
     expect(away).to.deep.equal([]);
+    await frame();
+    const reply = [...list.renderRoot.querySelectorAll('chx-message'), ...infinity.renderRoot.querySelectorAll('chx-message')].at(-1);
+    const answer = [...(reply?.querySelectorAll('acp-markdown') ?? [])].map((m) => /** @type {import('../../markdown/markdown.js').AcpMarkdown} */ (m).text);
+    expect(reply?.querySelectorAll('acp-reply-work').length, 'one work row').to.equal(1);
+    expect(answer, 'its narration folded: only the answer below the row').to.deep.equal([ANSWER]);
   });
 
   it('asks for the next task above the composer until the first message', async () => {

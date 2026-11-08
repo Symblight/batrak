@@ -349,11 +349,10 @@ export function handleSessionEvent(event) {
       const title = toolCall.title ?? 'The agent asks for permission';
       addPermissionRequest(sessionId, subagentId ? { requestId, toolCallId, title, options, subagentId } : { requestId, toolCallId, title, options });
       if (!toolCallId) return;
-      const awaiting = { status: /** @type {const} */ ('awaiting-permission') };
       const child = subagentId ? subagentChats.get(subagentConversationId(sessionId, subagentId)) : undefined;
       const turn = turns.get(sessionId);
-      if (child) deliver(child.chunk(child.toolPartId(toolCallId), 'tool_call', awaiting));
-      else if (turn && !subagentId) enqueue(sessionId, turn.builder.chunk(turn.builder.toolPartId(toolCallId), 'tool_call', awaiting));
+      if (child) for (const chunk of child.toolCallChunks(toolCallId, 'awaiting-permission', title)) deliver(chunk);
+      else if (turn && !subagentId) for (const chunk of turn.builder.toolCallChunks(toolCallId, 'awaiting-permission', title)) enqueue(sessionId, chunk);
       return;
     }
     case 'config-options':
