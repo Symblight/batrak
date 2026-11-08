@@ -5,6 +5,7 @@ import { chat } from '../../hooks/chat/chat.js';
 import { $activeSessionId, folderOf } from '../../stores/sessions/sessions.js';
 import { $workspaces } from '../../stores/workspaces/workspaces.js';
 import { AcpMarkdown } from '../../components/markdown/markdown.js';
+import { AcpCollapsibleText } from '../../components/collapsible-text/collapsible-text.js';
 import { AcpPartThinking } from '../../components/part-thinking/part-thinking.js';
 
 /** @typedef {import('lit').ReactiveController} ReactiveController */
@@ -237,14 +238,16 @@ export class ChatPartsController {
     // message has them only as text).
     text: (part, previous, message) => {
       if (message.own) {
-        const span = previous?.localName === 'span' ? previous : document.createElement('span');
+        // folded to its last lines while it's long: a pasted prompt would fill the chat
+        const folded = previous instanceof AcpCollapsibleText ? previous : new AcpCollapsibleText();
+        const span = folded.querySelector('span') ?? folded.appendChild(document.createElement('span'));
         if (part.html) span.innerHTML = part.html;
         else {
           const lines = (part.text ?? '').split('\n');
           span.replaceChildren(...lines.flatMap((line, i) => (i ? [document.createElement('br'), line] : [line])));
         }
         formatFileRefs(span, { links: false });
-        return span;
+        return folded;
       }
       const markdown = previous instanceof AcpMarkdown ? previous : new AcpMarkdown();
       markdown.decorate = (body) => formatFileRefs(body, { links: true });

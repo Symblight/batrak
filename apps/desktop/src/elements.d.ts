@@ -42,6 +42,7 @@ import type { AcpCommentBar } from './components/comment-bar/comment-bar.js';
 import type { AcpChat } from './components/chat/chat.js';
 import type { AcpImagePreview } from './components/image-preview/image-preview.js';
 import type { AcpMarkdown } from './components/markdown/markdown.js';
+import type { AcpCollapsibleText } from './components/collapsible-text/collapsible-text.js';
 import type { AcpCodeView } from './components/code-view/code-view.js';
 import type { AcpTabOverflow } from './components/tab-overflow/tab-overflow.js';
 import type { AcpTabStrip } from './components/tab-strip/tab-strip.js';
@@ -134,6 +135,7 @@ declare global {
     'acp-changes-menu': AcpChangesMenu;
     'acp-compare-chip': AcpCompareChip;
     'acp-code-view': AcpCodeView;
+    'acp-collapsible-text': AcpCollapsibleText;
     'acp-chat': AcpChat;
     'acp-comment-bar': AcpCommentBar;
     'acp-confirm-dialog': AcpConfirmDialog;

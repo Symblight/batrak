@@ -54,6 +54,27 @@ describe('ChatPartsController', () => {
   customElements.define('test-chat-parts-host', PartsHost);
   afterEach(() => $activeSessionId.set(null));
 
+  it('folds your own message to its last lines, updating it in place; never an agent reply', async () => {
+    // Arrange
+    const host = /** @type {PartsHost} */ (document.body.appendChild(new PartsHost()));
+    const text = /** @type {(part: unknown, previous: Element | null, message: unknown) => HTMLElement} */ (host.parts.partElements.text);
+    try {
+      // Act
+      const own = text({ id: 'p', type: 'text', text: 'Read @CLAUDE.md\nthen write' }, null, { own: true });
+      const again = text({ id: 'p', type: 'text', text: 'Read @CLAUDE.md\nthen write AGENTS.md' }, own, { own: true });
+      const reply = text({ id: 'r', type: 'text', text: 'Done' }, null, { own: false });
+
+      // Assert
+      expect(own.localName).to.equal('acp-collapsible-text');
+      expect(again, 'the same element').to.equal(own);
+      expect(again.textContent).to.equal('Read CLAUDE.mdthen write AGENTS.md');
+      expect(again.querySelector('chx-chip')?.textContent, 'its file refs as chips').to.equal('CLAUDE.md');
+      expect(reply.localName).to.equal('acp-markdown');
+    } finally {
+      host.remove();
+    }
+  });
+
   it("opens a subagent's chat when its card in a reply is clicked, never for a tool call of the agent's", async () => {
     const cases = [
       { data: { toolCallId: subagentCardId('c1'), subagentId: 'c1' }, opened: [{ sessionId: 's1', subagentId: 'c1' }], why: 'a card' },
