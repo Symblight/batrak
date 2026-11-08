@@ -415,6 +415,7 @@ export class AcpChatView extends ViewElement {
       @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-run-target-change=${this.#onRunTarget}
       @acp-chat-hint-use=${this.#onHintUse}
+      @acp-agents-md-create=${() => dismissAgentsMd(sessionId)}
       @acp-agents-md-dismiss=${() => dismissAgentsMd(sessionId)}
       @acp-link-open=${this.#onLinkOpen}
       @acp-subagent-stop=${this.#onSubagentStop}

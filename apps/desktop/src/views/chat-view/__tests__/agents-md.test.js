@@ -253,7 +253,7 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
     }
   });
 
-  it('Create AGENTS.md starts a session titled after the prompt and sends it the whole prompt', async () => {
+  it('Create AGENTS.md only fills the composer and hides the offer on this view; its send starts a session titled after the prompt with the whole prompt', async () => {
     // Arrange
     answer = (cmd, args) => {
       if (cmd === 'needs_agents_md') return true;
@@ -270,6 +270,15 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
 
     // Act
     /** @type {HTMLElement} */ (banner.renderRoot.querySelector('md-button')).click();
+    await settled();
+
+    // Assert
+    expect(calls.map((c) => c.cmd), 'nothing started').to.not.include.members(['session_create', 'session_send_prompt']);
+    expect(chat(el).agentsMdOffer, 'offer hidden').to.equal(false);
+
+    // Act: the user sends it
+    const composer = /** @type {import('lit').LitElement} */ (chat(el).renderRoot.querySelector('chx-message-composer'));
+    /** @type {HTMLElement} */ (composer.renderRoot.querySelector('chx-textbox')).closest('form')?.requestSubmit();
     await until(() => calls.some((c) => c.cmd === 'session_send_prompt'));
 
     // Assert

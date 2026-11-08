@@ -302,7 +302,7 @@ export class AcpChat extends LitElement {
 
   /**
    * Text lines after the draft (replacing an empty one), with the caret at their end.
-   * @param {readonly string[]} texts None blank: a text node can't be.
+   * @param {readonly string[]} texts A blank one is an empty line.
    * @returns {boolean} Whether the composer was up to take them.
    */
   #addLines(texts) {
@@ -310,21 +310,14 @@ export class AcpChat extends LitElement {
     const view = textbox?.editor?.view;
     if (!textbox || !view) return false;
     const { schema, tr } = view.state;
-    view.dispatch(appendLines(tr, texts.map((text) => schema.nodes.line.create(null, [schema.text(text)]))));
+    view.dispatch(appendLines(tr, texts.map((text) => schema.nodes.line.create(null, text ? [schema.text(text)] : []))));
     textbox.focusEnd();
     return true;
   }
 
-  /** Sent at once from an empty composer. A draft already typed is kept, and the user decides: sending would take it along. */
+  /** Like a hint: the prompt goes in, and the user sends it. */
   #onAgentsMdCreate = () => {
-    const input = this.chat?.input;
-    if (!input?.isEmpty()) {
-      this.#addLines(agentsMd.PROMPT.split('\n').filter(Boolean));
-      return;
-    }
-    input.setText(agentsMd.PROMPT);
-    // The library has no send of its own; this is how its `autoSubmit` suggestions send.
-    this.#readyTextbox?.closest('form')?.requestSubmit();
+    this.#addLines(agentsMd.PROMPT.split('\n'));
   };
 
   /** The uncommitted files hint, on a draft that can send and has some. */
