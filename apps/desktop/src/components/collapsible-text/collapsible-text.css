@@ -2,22 +2,13 @@
   display: block;
 }
 
-/* Folded, it shows the content's last lines: the start overflows upward, clipped, under a fade. */
+/* Folded, it shows the content's last lines: the start overflows upward, clipped. */
 .acp-collapsible-text__box {
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
   max-block-size: 4lh;
   overflow: hidden;
-}
-:host([overflowing]:not([expanded])) .acp-collapsible-text__box {
-  cursor: pointer;
-  mask-image: linear-gradient(transparent, black 1.5lh);
-
-  &:focus-visible {
-    outline: 2px solid var(--acp-color-primary);
-    outline-offset: 2px;
-  }
 }
 /* Unfolded: a taller box that scrolls from the start. */
 :host([expanded]) .acp-collapsible-text__box {
@@ -28,4 +19,13 @@
 
 .acp-collapsible-text__content {
   flex: none;
+}
+
+.acp-collapsible-text__toggle {
+  --md-button-font-size: var(--acp-font-size-sm);
+  --md-button-line-height: 16px;
+  --md-button-block-start-space: var(--acp-button-block-space-compact);
+  --md-button-block-end-space: var(--acp-button-block-space-compact);
+  margin-block-start: var(--acp-space-1);
+  margin-inline-start: calc(-1 * var(--acp-space-2));
 }
