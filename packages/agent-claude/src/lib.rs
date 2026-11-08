@@ -6,7 +6,11 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
-use agent_api::{is_flag_value, is_session_id, strings, Agent, CliSpec, Install, Launch, ModeRisk, SessionActivity, SubagentRecord, SubagentState, Update, ID, PROMPT};
+use agent_api::{
+    is_flag_value, is_session_id, strings, Agent, CliSpec, Install, Launch, ModeRisk, PlanEntry, SessionActivity, ShownToolCall, SubagentRecord,
+    SubagentState, Update, ID, PROMPT,
+};
+use serde_json::Value;
 
 /// The adapter's npm package.
 pub const PACKAGE: &str = "@agentclientprotocol/claude-agent-acp";
@@ -70,6 +74,57 @@ impl Agent for Claude {
         };
         [flag("model", "--model"), flag("mode", "--permission-mode"), flag("effort", "--effort")].into_iter().flatten().flatten().collect()
     }
+
+    /// A shell call by its `description`, an MCP tool as "`<tool>` (`<server>`)", and Claude Code
+    /// Desktop's own `mcp__ccd_turn__*` tools (a session it started, replayed here): its plan tool
+    /// as the plan, the rest hidden, since they run only inside Desktop.
+    fn shown_tool_call(&self, tool_call: &Value, plan: &[PlanEntry]) -> ShownToolCall {
+        let name = tool_call["_meta"]["claudeCode"]["toolName"].as_str().or_else(|| tool_call["title"].as_str()).unwrap_or_default();
+        let input = &tool_call["rawInput"];
+        if name == "mcp__ccd_turn__update_plan" {
+            return ShownToolCall::Plan(desktop_plan(input, plan));
+        }
+        if name.starts_with("mcp__ccd_turn__") {
+            return ShownToolCall::Hide;
+        }
+        let shell = matches!(name, "Bash" | "PowerShell") || tool_call["kind"] == "execute";
+        let label = match shell {
+            true => input["description"].as_str().map(str::trim).filter(|d| !d.is_empty()).map(str::to_owned),
+            false => mcp_label(name),
+        };
+        ShownToolCall::Keep { label }
+    }
+}
+
+/// `mcp__<server>__<tool>` as "`<tool>` (`<server>`)", underscores as spaces in the tool. The
+/// server is up to the next `__`, as Claude Code splits it.
+fn mcp_label(name: &str) -> Option<String> {
+    let (server, tool) = name.strip_prefix("mcp__")?.split_once("__")?;
+    (!server.is_empty() && !tool.is_empty()).then(|| format!("{} ({server})", tool.replace('_', " ")))
+}
+
+/// The plan after Desktop's `update_plan` with `input`: `items` replace it, `advance` completes the
+/// entry in progress and starts the next pending one. `None` while the input hasn't arrived.
+fn desktop_plan(input: &Value, plan: &[PlanEntry]) -> Option<Vec<PlanEntry>> {
+    if let Some(items) = input["items"].as_array() {
+        let entry = |item: &Value| PlanEntry {
+            content: item["content"].as_str().unwrap_or_default().to_owned(),
+            priority: "medium".to_owned(),
+            status: item["status"].as_str().unwrap_or("pending").to_owned(),
+        };
+        return Some(items.iter().map(entry).collect());
+    }
+    if input["advance"] != true {
+        return None;
+    }
+    let mut plan = plan.to_vec();
+    if let Some(current) = plan.iter_mut().find(|e| e.status == "in_progress") {
+        current.status = "completed".to_owned();
+    }
+    if let Some(next) = plan.iter_mut().find(|e| e.status == "pending") {
+        next.status = "in_progress".to_owned();
+    }
+    Some(plan)
 }
 
 /// A running subagent's transcript grows; one untouched this long may have died with its session.
@@ -189,6 +244,8 @@ fn first_timestamp(path: &Path) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use agent_api::{PlanEntry, ShownToolCall};
+    use serde_json::{json, Value};
 
     #[test]
     fn keeps_the_agent_contract() {
@@ -363,6 +420,45 @@ mod tests {
 
     fn config(pairs: &[(&str, &str)]) -> BTreeMap<String, String> {
         pairs.iter().map(|(k, v)| ((*k).to_owned(), (*v).to_owned())).collect()
+    }
+
+    fn entry(content: &str, status: &str) -> PlanEntry {
+        PlanEntry { content: content.into(), priority: "medium".into(), status: status.into() }
+    }
+
+    #[test]
+    fn words_its_tool_calls_and_turns_desktops_own_into_its_plan() {
+        let plan = [entry("a", "completed"), entry("b", "in_progress"), entry("c", "pending")];
+        let keep = |label: Option<&str>| ShownToolCall::Keep { label: label.map(str::to_owned) };
+        let tool = |name: &str, kind: &str, input: Value| json!({ "sessionUpdate": "tool_call", "toolCallId": "t1", "title": name, "kind": kind, "rawInput": input, "_meta": { "claudeCode": { "toolName": name } } });
+        let bash = |input: Value| json!({ "sessionUpdate": "tool_call", "toolCallId": "t1", "title": "ls -la", "kind": "execute", "rawInput": input, "_meta": { "claudeCode": { "toolName": "Bash" } } });
+        let cases = [
+            (bash(json!({ "command": "ls -la", "description": "List project files" })), keep(Some("List project files"))),
+            (bash(json!({ "command": "ls -la" })), keep(None)),
+            (bash(json!({})), keep(None)),
+            (tool("mcp__github__create_issue", "other", json!({})), keep(Some("create issue (github)"))),
+            (tool("Read", "read", json!({ "file_path": "a.rs" })), keep(None)),
+            (tool("mcp__ccd_turn__wrap_up", "other", json!({ "recap": "Done" })), ShownToolCall::Hide),
+            (tool("mcp__ccd_turn__something_else", "other", json!({})), ShownToolCall::Hide),
+            (tool("mcp__ccd_turn__update_plan", "other", json!({})), ShownToolCall::Plan(None)),
+            (
+                tool("mcp__ccd_turn__update_plan", "other", json!({ "items": [{ "content": "x", "status": "in_progress" }, { "content": "y", "status": "pending" }], "scope": "turn" })),
+                ShownToolCall::Plan(Some(vec![entry("x", "in_progress"), entry("y", "pending")])),
+            ),
+            (
+                tool("mcp__ccd_turn__update_plan", "other", json!({ "advance": true })),
+                ShownToolCall::Plan(Some(vec![entry("a", "completed"), entry("b", "completed"), entry("c", "in_progress")])),
+            ),
+        ];
+        for (call, expected) in cases {
+            assert_eq!(Claude.shown_tool_call(&call, &plan), expected, "{call}");
+        }
+    }
+
+    #[test]
+    fn a_later_update_without_its_title_is_still_known_by_its_tool_name() {
+        let update = json!({ "sessionUpdate": "tool_call_update", "toolCallId": "t1", "_meta": { "claudeCode": { "toolName": "mcp__ccd_turn__wrap_up" } } });
+        assert_eq!(Claude.shown_tool_call(&update, &[]), ShownToolCall::Hide);
     }
 
     #[test]

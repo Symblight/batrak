@@ -1,6 +1,7 @@
 //! The app's side of an agent's ACP connection: updates, permission requests and file access.
 
 use super::*;
+use agent_api::ShownToolCall;
 
 /// The app's side of a probe: no session, so nothing to show and no files to give.
 pub(super) struct ProbeHost;
@@ -69,6 +70,50 @@ impl SessionHost {
         lock(&state.touched).extend(named);
     }
 
+    /// A tool call update as the page gets it (`keep_shown_fields`), worded by the session's agent
+    /// crate (`shownLabel`); a `plan` update when the call updates the plan; `None` when it isn't
+    /// shown: hidden, a plan tool whose input hasn't come, or a later update of either. A
+    /// subagent's plan tool is hidden: the plan is the session's.
+    fn shown_tool_update(&self, state: &SessionState, mut update: Value, subagent: bool) -> Option<Value> {
+        let id = update["toolCallId"].as_str().unwrap_or_default().to_owned();
+        if lock(&state.settled_tools).contains(&id) {
+            return None;
+        }
+        let agent = lock(&state.agent).clone();
+        let plan = lock(&state.plan).clone();
+        let shown = agent.map_or(ShownToolCall::Keep { label: None }, |agent| agent.shown_tool_call(&update, &plan));
+        match shown {
+            // An update that doesn't name its tool, of a plan tool still waiting for its input.
+            ShownToolCall::Keep { .. } if lock(&state.planning_tools).contains(&id) => None,
+            ShownToolCall::Keep { label } => {
+                if let Some(label) = label {
+                    update["shownLabel"] = Value::String(label);
+                }
+                replay::keep_shown_fields(&mut update);
+                Some(update)
+            }
+            ShownToolCall::Plan(None) => {
+                lock(&state.planning_tools).insert(id);
+                None
+            }
+            ShownToolCall::Plan(Some(_)) if subagent => {
+                lock(&state.settled_tools).insert(id);
+                None
+            }
+            ShownToolCall::Hide => {
+                lock(&state.settled_tools).insert(id);
+                None
+            }
+            ShownToolCall::Plan(Some(entries)) => {
+                lock(&state.planning_tools).remove(&id);
+                lock(&state.settled_tools).insert(id);
+                let shown = json!({ "sessionUpdate": "plan", "entries": entries });
+                *lock(&state.plan) = entries;
+                Some(shown)
+            }
+        }
+    }
+
     /// A turn's output: what stamps the session's activity.
     fn is_output(&self, update: &Value) -> bool {
         matches!(
@@ -120,6 +165,10 @@ fn normalize(path: &Path) -> PathBuf {
     out
 }
 
+fn is_tool_update(update: &Value) -> bool {
+    update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update"
+}
+
 /// ACP tool kinds whose locations are files read, not changed.
 const LOOKING_TOOL_KINDS: [&str; 4] = ["read", "search", "fetch", "think"];
 
@@ -132,9 +181,10 @@ impl ClientHost for SessionHost {
             if self.is_output(&update) {
                 self.stamp(&state);
             }
-            if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
+            if is_tool_update(&update) {
                 self.note_touched(&state, &update);
-                replay::keep_shown_fields(&mut update);
+                let Some(shown) = self.shown_tool_update(&state, update, true) else { return };
+                update = shown;
             }
             update["subagentId"] = Value::String(subagent);
             state.emit("update", update);
@@ -150,9 +200,10 @@ impl ClientHost for SessionHost {
                 self.on_agent_title(&state, title.as_str());
             }
         }
-        if update["sessionUpdate"] == "tool_call" || update["sessionUpdate"] == "tool_call_update" {
+        if is_tool_update(&update) {
             self.note_touched(&state, &update);
-            replay::keep_shown_fields(&mut update);
+            let Some(shown) = self.shown_tool_update(&state, update, false) else { return };
+            update = shown;
         }
         let output = self.is_output(&update);
         state.emit("update", update);
