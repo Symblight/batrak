@@ -378,14 +378,13 @@ export class AcpChat extends LitElement {
         .noVirtualization=${true}
         @chx-messages-change=${this.#onMessagesChange}
       >
-        <!-- "auto": WebKit sends a smooth pin scroll to an older turn instead of the sent message. -->
         <chx-message-list
           slot="message-list"
           class="acp-chat__message-list"
           ?hidden=${empty}
           scroll-behavior="auto"
           content-align="start"
-          scroll-mode="pin-top"
+          scroll-mode="stick-bottom"
         >
           <!-- Waiting for the reply's first update: the agent thinking, as its thoughts look. -->
           <acp-part-thinking slot="streaming" class="acp-chat__streaming"></acp-part-thinking>
