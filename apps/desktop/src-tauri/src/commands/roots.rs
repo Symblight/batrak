@@ -1,6 +1,7 @@
 //! Root commands. All are async so scans and searches never run on the main thread.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use tauri::ipc::Channel;
@@ -109,6 +110,19 @@ pub async fn list_dir(roots: State<'_, Roots>, root_id: String, path: String) ->
     .await?
 }
 
+/// Whether a new session offers to create `AGENTS.md` for this root's folder.
+#[tauri::command]
+pub async fn needs_agents_md(roots: State<'_, Roots>, root_id: String) -> Result<bool, String> {
+    let root = roots.get(&root_id)?;
+    blocking(move || lacks_agents_md(&root.path)).await
+}
+
+/// Reads the folder itself: the snapshot hides symlinks, and `AGENTS.md` is often one. Any letter case
+/// counts, or a case-insensitive disk would get a second file. A folder it can't read lacks nothing.
+fn lacks_agents_md(folder: &Path) -> bool {
+    fs::read_dir(folder).is_ok_and(|entries| !entries.flatten().any(|e| e.file_name().eq_ignore_ascii_case("AGENTS.md")))
+}
+
 #[tauri::command]
 pub async fn quick_open(
     roots: State<'_, Roots>,
@@ -161,4 +175,73 @@ pub async fn find_in_files(
 pub async fn cancel_search(roots: State<'_, Roots>, root_id: String, slot: String) -> Result<(), String> {
     roots.get(&root_id)?.cancel_search(&slot);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::lacks_agents_md;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+
+    /// A temp folder; removed on drop.
+    struct Tmp(PathBuf);
+
+    impl Tmp {
+        fn new(name: &str) -> Tmp {
+            let dir = std::env::temp_dir().join(format!("batrak-agents-md-{name}-{}", std::process::id()));
+            let _ = fs::remove_dir_all(&dir);
+            fs::create_dir_all(&dir).unwrap();
+            Tmp(dir)
+        }
+    }
+
+    impl Drop for Tmp {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn a_folder_lacks_agents_md_until_it_has_one_in_any_case() {
+        for (name, files, lacks) in [
+            ("empty", &[][..], true),
+            ("others", &["README.md", "CLAUDE.md", "AGENTS.md.bak"][..], true),
+            ("exact", &["AGENTS.md"][..], false),
+            ("lower", &["agents.md"][..], false),
+            ("mixed", &["README.md", "Agents.MD"][..], false),
+        ] {
+            let tmp = Tmp::new(name);
+            for file in files {
+                fs::write(tmp.0.join(file), "").unwrap();
+            }
+            assert_eq!(lacks_agents_md(&tmp.0), lacks, "{name}");
+        }
+    }
+
+    #[test]
+    fn an_agents_md_in_a_subfolder_does_not_count() {
+        let tmp = Tmp::new("nested");
+        fs::create_dir_all(tmp.0.join("sub")).unwrap();
+        fs::write(tmp.0.join("sub/AGENTS.md"), "").unwrap();
+        assert!(lacks_agents_md(&tmp.0));
+    }
+
+    #[test]
+    fn a_folder_that_cant_be_read_is_offered_nothing() {
+        assert!(!lacks_agents_md(Path::new("/no/such/batrak/folder")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_symlink_counts_even_a_dangling_one() {
+        use std::os::unix::fs::symlink;
+        let tmp = Tmp::new("linked");
+        fs::write(tmp.0.join("CLAUDE.md"), "").unwrap();
+        symlink(tmp.0.join("CLAUDE.md"), tmp.0.join("AGENTS.md")).unwrap();
+        assert!(!lacks_agents_md(&tmp.0), "a link to a file");
+
+        let tmp = Tmp::new("dangling");
+        symlink(tmp.0.join("nothing"), tmp.0.join("AGENTS.md")).unwrap();
+        assert!(!lacks_agents_md(&tmp.0), "a link to nothing");
+    }
 }

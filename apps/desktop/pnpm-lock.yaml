@@ -25,7 +25,7 @@ importers:
         version: 1.3.5(nanostores@1.5.5)
       '@symblight/chat':
         specifier: github:Symblight/rich-components#path:/packages/chat
-        version: https://codeload.github.com/Symblight/rich-components/tar.gz/6ffc03988e25361b9531d1b869b72f579ba6615e#path:/packages/chat(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
+        version: https://codeload.github.com/Symblight/rich-components/tar.gz/993a05da36070e061f75405f04aa54217acd78e9#path:/packages/chat(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
       '@symblight/code-editor':
         specifier: github:Symblight/rich-components#db8f2f9fe0c703dd410bea05bb5b518a18256228&path:/packages/code-editor
         version: https://codeload.github.com/Symblight/rich-components/tar.gz/db8f2f9fe0c703dd410bea05bb5b518a18256228#path:/packages/code-editor(@codemirror/autocomplete@6.20.4)(@codemirror/commands@6.11.1)(@codemirror/language@6.13.1)(@codemirror/lint@6.9.7)(@codemirror/merge@6.12.2)(@codemirror/search@6.7.2)(@codemirror/state@6.7.6)(@codemirror/view@6.43.13)(@lezer/common@1.5.4)(@lezer/highlight@1.2.5)(@open-wc/form-control@1.0.0)(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)
@@ -640,8 +640,8 @@ packages:
   '@swc/helpers@0.5.23':
     resolution: {integrity: sha512-5lSsMOTXURePglDfvuAQUqkGek9Hg2kksOYay2m0+XR++b2NWYL/4sWyuvVBIs8oKnJaxkdi9whaL/sqN13afw==}
 
-  '@symblight/chat@https://codeload.github.com/Symblight/rich-components/tar.gz/6ffc03988e25361b9531d1b869b72f579ba6615e#path:/packages/chat':
-    resolution: {path: /packages/chat, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/6ffc03988e25361b9531d1b869b72f579ba6615e}
+  '@symblight/chat@https://codeload.github.com/Symblight/rich-components/tar.gz/993a05da36070e061f75405f04aa54217acd78e9#path:/packages/chat':
+    resolution: {path: /packages/chat, tarball: https://codeload.github.com/Symblight/rich-components/tar.gz/993a05da36070e061f75405f04aa54217acd78e9}
     version: 0.1.0
     peerDependencies:
       lit: '>=3.0.0'
@@ -2832,7 +2832,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@symblight/chat@https://codeload.github.com/Symblight/rich-components/tar.gz/6ffc03988e25361b9531d1b869b72f579ba6615e#path:/packages/chat(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
+  '@symblight/chat@https://codeload.github.com/Symblight/rich-components/tar.gz/993a05da36070e061f75405f04aa54217acd78e9#path:/packages/chat(@open-wc/form-helpers@1.0.0)(lit@3.3.3)(rollup@4.65.0)':
     dependencies:
       '@codemirror/lang-css': 6.3.1
       '@codemirror/lang-html': 6.4.12

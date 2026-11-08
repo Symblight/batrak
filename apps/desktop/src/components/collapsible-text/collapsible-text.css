@@ -1,0 +1,31 @@
+:host {
+  display: block;
+}
+
+/* Folded, it shows the content's last lines: the start overflows upward, clipped, under a fade. */
+.acp-collapsible-text__box {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-block-size: 4lh;
+  overflow: hidden;
+}
+:host([overflowing]:not([expanded])) .acp-collapsible-text__box {
+  cursor: pointer;
+  mask-image: linear-gradient(transparent, black 1.5lh);
+
+  &:focus-visible {
+    outline: 2px solid var(--acp-color-primary);
+    outline-offset: 2px;
+  }
+}
+/* Unfolded: a taller box that scrolls from the start. */
+:host([expanded]) .acp-collapsible-text__box {
+  justify-content: flex-start;
+  max-block-size: 18lh;
+  overflow-y: auto;
+}
+
+.acp-collapsible-text__content {
+  flex: none;
+}

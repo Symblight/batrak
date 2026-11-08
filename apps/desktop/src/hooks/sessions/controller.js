@@ -17,6 +17,7 @@ import { $agentList } from '../../stores/agents/agents.js';
 import { forgetContextUsage } from '../../stores/context-usage/context-usage.js';
 import { forgetRead, recordBaselines } from '../../stores/session-read/session-read.js';
 import { endSync, syncOf } from '../../stores/session-sync/session-sync.js';
+import { offerAgentsMdAgain } from '../../stores/agents-md/agents-md.js';
 import { showColumn } from '../../stores/layout/layout.js';
 import {
   $activeSessionId,
@@ -433,6 +434,7 @@ async function openInTerminal(id) {
 function create(projectId, workspaceId, target) {
   const id = newSession(projectId, workspaceId);
   setRunTarget(id, target ?? null);
+  offerAgentsMdAgain();
   // A new chat is for typing in: an expanded editor gives the agent column back.
   showColumn('agent');
 }

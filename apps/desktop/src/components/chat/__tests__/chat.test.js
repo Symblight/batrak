@@ -1,6 +1,75 @@
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import '../chat.js';
 import { sessions } from '../../../hooks/sessions/sessions.js';
+import { agentsMd } from '../../../hooks/agents-md/agents-md.js';
+import { LitElement } from 'lit';
+import { MessageBuilder } from '../../../hooks/sessions/message-builder.js';
+import { ChatPartsController } from '../../../controllers/chat-parts/ChatPartsController.js';
+
+/** @typedef {import('../../../hooks/sessions/types.js').AcpSessionUpdate} AcpSessionUpdate */
+
+/** A short chat (320px with its composer) that draws parts as the chat column does, and hands out its reply stream. */
+class PartsHost extends LitElement {
+  parts = new ChatPartsController(this, { attachments: () => /** @type {never} */ (null) });
+  /** @type {(controller: ReadableStreamDefaultController<unknown>) => void} */
+  #opened = () => {};
+  /** @type {Promise<ReadableStreamDefaultController<unknown>>} The reply's stream, once a message is sent. */
+  stream = new Promise((resolve) => (this.#opened = resolve));
+  #adapter = {
+    sendMessage: async () => new ReadableStream({ start: (controller) => this.#opened(controller) }),
+  };
+
+  createRenderRoot() {
+    return this;
+  }
+
+  render() {
+    return html`<div style="display: flex; width: 640px; height: 320px">
+      <acp-chat .userId=${'me'} .conversationId=${'s1'} .adapter=${this.#adapter} .partElements=${this.parts.partElements}></acp-chat>
+    </div>`;
+  }
+}
+customElements.define('test-chat-parts-host', PartsHost);
+
+/** @param {string} text @returns {AcpSessionUpdate[]} The text as an agent streams it, a few words a chunk. */
+function said(text) {
+  return (text.match(/(?:\S+\s*){1,4}/g) ?? []).map((words) => ({
+    sessionUpdate: 'agent_message_chunk',
+    content: { type: 'text', text: words },
+  }));
+}
+
+/** @returns {AcpSessionUpdate[]} The start of an agent's reply to the AGENTS.md prompt: text, commands, a failed one. */
+function replyUpdates() {
+  const command = (/** @type {string} */ id, /** @type {string} */ title) => /** @type {AcpSessionUpdate[]} */ ([
+    { sessionUpdate: 'tool_call', toolCallId: id, title, kind: 'execute', status: 'pending' },
+    { sessionUpdate: 'tool_call_update', toolCallId: id, status: 'in_progress' },
+  ]);
+  return [
+    ...said("I'll start by reading the existing instruction files, manifests, and CI to see what AGENTS.md needs to cover."),
+    ...command('t1', "git status --short && echo ---- && find . -path ./node_modules -prune -o -name '*.md' -print"),
+    { sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' },
+    ...command('t2', 'cat AGENTS.md; echo ======CLAUDE.md; cat CLAUDE.md; echo ======apps/desktop/CLAUDE.md'),
+    {
+      sessionUpdate: 'tool_call_update',
+      toolCallId: 't2',
+      status: 'failed',
+      content: [{ type: 'content', content: { type: 'text', text: '```\nExit code 1 cat: AGENTS.md: No such file or directory\n======CLAUDE.md not found\n```' } }],
+    },
+    ...said(
+      'The root has a `CLAUDE.md` that imports `AGENTS.md`, but no `AGENTS.md` exists yet, so this is a new file. ' +
+        'Before writing it I need the commands and the rules the project already states:\n\n' +
+        '1. The manifests: `Cargo.toml`, `apps/desktop/package.json` and the workspace members.\n' +
+        '2. CI under `.github/workflows/`, for the exact checks.\n' +
+        '3. The nested `apps/desktop/CLAUDE.md`, which gets an `AGENTS.md` of its own.\n\n' +
+        '```bash\ncargo test --workspace\ncargo clippy --all-targets\ncd apps/desktop && pnpm typecheck && pnpm test\n```\n\n' +
+        'Next I read the CI workflow and the package manifests.',
+    ),
+    ...command('t3', 'cat .github/workflows/ci.yml apps/desktop/package.json'),
+    { sessionUpdate: 'tool_call_update', toolCallId: 't3', status: 'completed' },
+    ...said('CI runs the backend on macOS, the CLI also on Windows, and the frontend on Ubuntu; that goes under Gotchas.'),
+  ];
+}
 
 /** @typedef {import('../chat.js').AcpChat} AcpChat */
 /**
@@ -130,6 +199,47 @@ describe('acp-chat', () => {
     expect(note(untagged)?.textContent ?? null, 'a name alone says nothing').to.equal(null);
   });
 
+  it('stays at the bottom while a reply streams in after a send, in a short chat', async function () {
+    this.timeout(20000);
+    // Arrange: a short chat rendering parts as the app does, its agent replying as ACP updates
+    const host = /** @type {PartsHost} */ (await fixture(html`<test-chat-parts-host></test-chat-parts-host>`));
+    const el = /** @type {AcpChat} */ (host.querySelector('acp-chat'));
+    await el.composerReady();
+    const list = /** @type {import('lit').LitElement} */ (el.renderRoot.querySelector('chx-message-list'));
+    const infinity = /** @type {import('lit').LitElement} */ (list.renderRoot.querySelector('chx-infinity-scroll'));
+    const scroller = /** @type {HTMLElement} */ (infinity.renderRoot.querySelector('.infinity-scroll__scroller'));
+    const builder = new MessageBuilder('s1', 'agent', { live: true });
+    /** @type {string[]} Where the view wasn't at the bottom, by the step just streamed. */
+    const away = [];
+
+    // Act: the AGENTS.md prompt is sent, then the reply streams
+    el.chat?.dispatchEvent(
+      new CustomEvent('chx-send-message', {
+        detail: { value: agentsMd.PROMPT, html: agentsMd.PROMPT, attachments: [], commands: [] },
+        bubbles: true,
+        composed: true,
+      }),
+    );
+    const stream = await host.stream;
+    const frame = () => new Promise((resolve) => requestAnimationFrame(resolve));
+    const updates = replyUpdates();
+    for (const [step, update] of updates.entries()) {
+      for (const chunk of builder.chunks(update)) stream.enqueue(chunk);
+      if (step % 3 === 2) await frame();
+      // text, then a pause while the agent works: the reply so far must be in view meanwhile
+      const next = updates[step + 1];
+      if (update.sessionUpdate !== 'agent_message_chunk' || (next && next.sessionUpdate === 'agent_message_chunk')) continue;
+      await new Promise((resolve) => setTimeout(resolve, 400));
+      const distance = Math.round(scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight);
+      if (distance > 8) away.push(`step ${step}: ${distance}px below`);
+    }
+    for (const chunk of builder.finish()) stream.enqueue(chunk);
+    stream.close();
+
+    // Assert
+    expect(away).to.deep.equal([]);
+  });
+
   it('asks for the next task above the composer until the first message', async () => {
     // Arrange + Act
     const draft = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty></acp-chat>`));
@@ -190,6 +300,63 @@ describe('acp-chat', () => {
       });
       expect(shown).to.deep.equal(lines);
       expect(fired).to.deep.equal(['acp-chat-hint-use']);
+    }
+  });
+
+  /** @param {AcpChat} chat Its banner's button, once rendered: there only while the offer shows. */
+  async function createAgentsMdButton(chat) {
+    const banner = /** @type {import('lit').LitElement} */ (chat.renderRoot.querySelector('acp-session-banner'));
+    await banner.updateComplete;
+    return /** @type {HTMLElement | null} */ (banner.renderRoot.querySelector('md-button'));
+  }
+
+  it('offers to create AGENTS.md only on a draft that can send', async () => {
+    const cases = [
+      { props: { empty: true, agentsMdOffer: true }, shown: true },
+      { props: { empty: true, agentsMdOffer: false }, shown: false },
+      { props: { empty: false, agentsMdOffer: true }, shown: false },
+      { props: { empty: true, agentsMdOffer: true, blocked: { message: 'Gone', workspaceId: 'w1' } }, shown: false },
+    ];
+    for (const { props, shown } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
+
+      // Act
+      Object.assign(el, props);
+      await el.updateComplete;
+
+      // Assert
+      expect((await createAgentsMdButton(el)) !== null, JSON.stringify(props)).to.equal(shown);
+    }
+  });
+
+  it('Create AGENTS.md fills the composer with the whole prompt without sending, keeping a draft already typed', async () => {
+    const prompt = agentsMd.PROMPT.split('\n');
+    const cases = [
+      { typed: '', lines: prompt },
+      { typed: 'Look at login first', lines: ['Look at login first', ...prompt] },
+    ];
+    for (const { typed, lines } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .agentsMdOffer=${true}></acp-chat>`));
+      await el.composerReady();
+      if (typed) el.chat?.input.setText(typed);
+      /** @type {string[]} */
+      const fired = [];
+      el.addEventListener('chx-send-message', (e) => fired.push(e.type), { capture: true });
+
+      // Act
+      (await createAgentsMdButton(el))?.click();
+      await el.updateComplete;
+
+      // Assert
+      /** @type {string[]} */
+      const shown = [];
+      docOf(el).descendants((node) => {
+        if (node.type.name === 'line') shown.push(node.textContent);
+      });
+      expect(shown, `typed: ${typed}`).to.deep.equal(lines);
+      expect(fired, 'nothing sent').to.deep.equal([]);
     }
   });
 

@@ -7,8 +7,10 @@ import { StoreController } from '../../controllers/store/StoreController.js';
 import { ChatSessionController } from '../../controllers/chat-session/ChatSessionController.js';
 import { ChatPartsController } from '../../controllers/chat-parts/ChatPartsController.js';
 import { agents } from '../../hooks/agents/agents.js';
+import { agentsMd } from '../../hooks/agents-md/agents-md.js';
 import { search } from '../../hooks/search/search.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
+import { $agentsMdDismissedDraft, dismissAgentsMd } from '../../stores/agents-md/agents-md.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
 import { composer as composerRules } from '../../hooks/composer/composer.js';
@@ -20,7 +22,7 @@ import { $activeFolder, $activeSession, $activeSessionId, $draftSessions } from 
 import { $activeNotice, $activePermission, $activeSubagent, $sessionNotices, showSubagent } from '../../stores/session-runtime/session-runtime.js';
 import { $terminals, openLoginTerminal } from '../../stores/terminals/terminals.js';
 import { $project } from '../../stores/project/project.js';
-import { $activeWorkspace, $shownFolder, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
+import { $activeWorkspace, $rootId, $shownFolder, $workspaces, MAIN } from '../../stores/workspaces/workspaces.js';
 import { workspaces } from '../../hooks/workspaces/workspaces.js';
 import { $workspacesEnabled } from '../../stores/workspace-status/workspace-status.js';
 
@@ -29,13 +31,14 @@ import { $workspacesEnabled } from '../../stores/workspace-status/workspace-stat
 /** @typedef {import('../../components/chat/chat.js').AcpChat} AcpChat */
 /** @typedef {import('../../components/chat/chat.js').ChatPlace} ChatPlace */
 /** @typedef {import('../../hooks/git/types.js').BranchList} BranchList */
+/** @typedef {import('../../hooks/git/types.js').RootChanges} RootChanges */
 
 /** @type {BranchList} */
 const NO_BRANCHES = { local: [], remotes: [], default: null };
 
 /**
  * @tag acp-chat-view
- * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, `@` file picks; a subagent's read-only chat in its place (Stop, Back).
+ * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, the offer to create AGENTS.md, `@` file picks; a subagent's read-only chat in its place (Stop, Back).
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */
@@ -46,6 +49,7 @@ export class AcpChatView extends ViewElement {
     fileOptions: { state: true },
     branches: { state: true },
     mainBranch: { state: true },
+    needsAgentsMd: { state: true },
   };
 
   #project = new StoreController(this, { store: $project });
@@ -65,6 +69,8 @@ export class AcpChatView extends ViewElement {
   #workspacesEnabled = new StoreController(this, { store: $workspacesEnabled });
   #uncommitted = new StoreController(this, { store: $uncommittedCount });
   #activeFolder = new StoreController(this, { store: $activeFolder });
+  #rootId = new StoreController(this, { store: $rootId });
+  #agentsMdDismissedDraft = new StoreController(this, { store: $agentsMdDismissedDraft });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #permission = new StoreController(this, { store: $activePermission });
@@ -90,6 +96,10 @@ export class AcpChatView extends ViewElement {
   #listedFor = null;
   /** @type {(() => void) | null} Stops `git.watchChanges()`. */
   #unwatchChanges = null;
+  /** @type {(() => void) | null} Stops `#onRootChange`. */
+  #unwatchRoot = null;
+  /** @type {string | null} The root `needsAgentsMd` is about, while a draft is on screen. */
+  #agentsMdRoot = null;
 
   constructor() {
     super();
@@ -103,6 +113,8 @@ export class AcpChatView extends ViewElement {
     this.branches = NO_BRANCHES;
     /** @type {string | null} Main's checked-out branch. */
     this.mainBranch = null;
+    /** @type {boolean} The shown draft's folder has no AGENTS.md. */
+    this.needsAgentsMd = false;
   }
 
   /** @returns {ChatPlace | null} The shown draft's footer. */
@@ -118,18 +130,41 @@ export class AcpChatView extends ViewElement {
     return { target, workspaceName, worktrees, branches: this.branches, base, load: this.#loadBranches };
   }
 
-  /** A draft is on screen: its hint counts the shown folder's uncommitted files. */
-  get #countsChanges() {
+  /** A draft is on screen: its hint counts the shown folder's uncommitted files, and its offer looks for AGENTS.md there. */
+  get #draftOnScreen() {
     const id = this.#activeSessionId.value;
     return id !== null && id in this.#drafts.value && !this.concealed && this.isConnected;
   }
 
-  #syncChangesWatch() {
-    if (this.#countsChanges) this.#unwatchChanges ??= git.watchChanges();
-    else {
+  #syncDraftWatches() {
+    const onScreen = this.#draftOnScreen;
+    if (onScreen) {
+      this.#unwatchChanges ??= git.watchChanges();
+      this.#unwatchRoot ??= projects.onFsChange(this.#onRootChange);
+    } else {
       this.#unwatchChanges?.();
       this.#unwatchChanges = null;
+      this.#unwatchRoot?.();
+      this.#unwatchRoot = null;
     }
+    const rootId = onScreen ? this.#rootId.value : null;
+    if (rootId !== this.#agentsMdRoot) {
+      this.#agentsMdRoot = rootId;
+      this.needsAgentsMd = false;
+      void this.#askAgentsMd();
+    }
+  }
+
+  #onRootChange = (/** @type {RootChanges} */ { dirs }) => {
+    if (dirs.includes('')) void this.#askAgentsMd();
+  };
+
+  async #askAgentsMd() {
+    const rootId = this.#agentsMdRoot;
+    if (rootId === null) return;
+    // It fails only for a root closed meanwhile, and nobody asked: no offer, no notice.
+    const needed = await agentsMd.needed(rootId).catch(() => false);
+    if (rootId === this.#agentsMdRoot) this.needsAgentsMd = needed;
   }
 
   /** The hint's files are in the shown folder, whatever place the draft had picked. */
@@ -140,7 +175,7 @@ export class AcpChatView extends ViewElement {
   }
 
   willUpdate() {
-    this.#syncChangesWatch();
+    this.#syncDraftWatches();
     // New worktree shown for a draft: Main's branches listed, for its default base.
     const id = this.#activeSessionId.value;
     if (id !== null && id !== this.#branchesFor && this.#place?.target.kind === 'worktree') {
@@ -313,13 +348,13 @@ export class AcpChatView extends ViewElement {
   connectedCallback() {
     super.connectedCallback();
     this.addEventListener('acp-subagent-open', this.#onSubagentOpen);
-    this.#syncChangesWatch();
+    this.#syncDraftWatches();
   }
 
   disconnectedCallback() {
     super.disconnectedCallback();
     this.removeEventListener('acp-subagent-open', this.#onSubagentOpen);
-    this.#syncChangesWatch();
+    this.#syncDraftWatches();
   }
 
   /** @param {Event} e The subagent's bar asks to stop it. */
@@ -360,7 +395,8 @@ export class AcpChatView extends ViewElement {
       .agent=${agentInfo(composer.agentId, this.#activeSession.value?.agentName ?? null)}
       .blocked=${workspace?.missing ? { message: 'Recreate the folder to continue', workspaceId: workspace.id } : null}
       .place=${this.#place}
-      .uncommitted=${this.#countsChanges ? this.#uncommitted.value : 0}
+      .uncommitted=${this.#draftOnScreen ? this.#uncommitted.value : 0}
+      .agentsMdOffer=${this.needsAgentsMd && this.#agentsMdDismissedDraft.value !== sessionId}
       .permission=${hasSession ? this.#permission.value : null}
       .notice=${hasSession ? this.#notice.value : null}
       .signInRun=${hasSession ? this.#signInRun() : null}
@@ -379,6 +415,8 @@ export class AcpChatView extends ViewElement {
       @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-run-target-change=${this.#onRunTarget}
       @acp-chat-hint-use=${this.#onHintUse}
+      @acp-agents-md-create=${() => dismissAgentsMd(sessionId)}
+      @acp-agents-md-dismiss=${() => dismissAgentsMd(sessionId)}
       @acp-link-open=${this.#onLinkOpen}
       @acp-subagent-stop=${this.#onSubagentStop}
       @acp-subagent-close=${() => showSubagent(null)}

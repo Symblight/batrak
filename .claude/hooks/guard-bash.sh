@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse (Bash): enforce CLAUDE.md's git rules.
+# PreToolUse (Bash): enforce AGENTS.md's git rules.
 #   git add -A / --all / .   → denied (stage only the task's files)
 #   git worktree add         → denied (work in the user's checkout)
 #   git push                 → asks (push only when the user asked)
@@ -11,7 +11,7 @@ deny() {
 }
 
 if grep -Eq '(^|[^[:alnum:]_-])git[[:space:]]+([^;&|]*[[:space:]])?add[[:space:]]+([^;&|]*[[:space:]])?(-A|--all|\.)([[:space:]]|$|[;&|])' <<<"$cmd"; then
-  deny "Blocked: 'git add -A' / 'git add .' stages unrelated changes. Add only this task's files by path (CLAUDE.md, Commits)."
+  deny "Blocked: 'git add -A' / 'git add .' stages unrelated changes. Add only this task's files by path (AGENTS.md, Commits)."
 fi
 
 if grep -Eq '(^|[^[:alnum:]_-])git[[:space:]]+([^;&|]*[[:space:]])?worktree[[:space:]]+add([[:space:]]|$)' <<<"$cmd"; then
@@ -20,6 +20,6 @@ fi
 
 if grep -Eq '(^|[^[:alnum:]_-])git[[:space:]]+([^;&|]*[[:space:]])?push([[:space:]]|$|[;&|])' <<<"$cmd"; then
   jq -n '{hookSpecificOutput: {hookEventName: "PreToolUse", permissionDecision: "ask",
-    permissionDecisionReason: "git push: push only when the user asked for it (CLAUDE.md)."}}'
+    permissionDecisionReason: "git push: push only when the user asked for it (AGENTS.md)."}}'
 fi
 exit 0
