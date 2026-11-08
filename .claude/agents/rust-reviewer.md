@@ -56,7 +56,7 @@ agent-config.md for `config/` and agent crates) and the spec in `docs/specs/` it
 
 Only report problems you can point at. For each finding give `file:line`, what is wrong, a concrete
 scenario in which it fails (inputs / interleaving → wrong result), and the smallest fix. Order by
-severity: *bug* (wrong behavior, panic, deadlock, path escape), then *convention* (a CLAUDE.md or
+severity: *bug* (wrong behavior, panic, deadlock, path escape), then *convention* (an AGENTS.md or
 rules violation), then *nit*. Say explicitly which claims you verified by reading code and which you
 inferred. Do not pad: no praise, no restating the diff, no style opinions rustfmt / clippy would
 settle. If you find nothing, say what you checked and that it is clean.

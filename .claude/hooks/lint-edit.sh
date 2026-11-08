@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# PreToolUse (Edit|Write): refuse text that breaks a mechanical CLAUDE.md rule. Only the text being
+# PreToolUse (Edit|Write): refuse text that breaks a mechanical AGENTS.md rule. Only the text being
 # written is checked (Edit's new_string, Write's content), so old violations never block an edit.
 #   Rust   : println! / eprintln! / dbg!  (use tracing; bench.rs and tests.rs are exempt)
 #   CSS    : !important, raw hex colors (tokens.css is exempt), BEM `--modifier` class names
@@ -41,7 +41,7 @@ esac
 
 if ((${#problems[@]})); then
   {
-    echo "Blocked: $(basename "$f") breaks CLAUDE.md rules:"
+    echo "Blocked: $(basename "$f") breaks AGENTS.md rules:"
     printf ' - %s\n' "${problems[@]}"
   } >&2
   exit 2

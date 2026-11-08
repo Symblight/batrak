@@ -1,11 +1,11 @@
 ---
 name: verify
-description: Run this project's required checks (cargo test, cargo clippy, pnpm typecheck, pnpm test) and report them the way CLAUDE.md asks, ending with the commit proposal. Use when a task is done, before reporting it done, or when the user asks to verify / run the checks.
+description: Run this project's required checks (cargo test, cargo clippy, pnpm typecheck, pnpm test) and report them the way AGENTS.md asks, ending with the commit proposal. Use when a task is done, before reporting it done, or when the user asks to verify / run the checks.
 ---
 
 # Verify
 
-CLAUDE.md requires all four checks to pass before work is reported done.
+AGENTS.md requires all four checks to pass before work is reported done.
 
 ## 1. Run the checks
 
@@ -33,7 +33,7 @@ it unasked.
 A short table: check → pass / fail (counts, e.g. `cargo test: 412 passed`). Test counts never drop
 unless the task deleted a test on purpose; say so if they did.
 
-Then, as CLAUDE.md asks, say which behavior was verified:
+Then, as AGENTS.md asks, say which behavior was verified:
 - **by a test** (name the tests added or changed),
 - **by running the app** (only if you actually did),
 - **not at all**.

@@ -1,6 +1,6 @@
 ---
 name: new-component
-description: Scaffold a new Lit custom element (presentational component in src/components/, or container view in src/views/) the way CLAUDE.md lays it out - folder, JS, CSS, test, elements.d.ts entry. Use when adding a new `acp-*` element.
+description: Scaffold a new Lit custom element (presentational component in src/components/, or container view in src/views/) the way AGENTS.md lays it out - folder, JS, CSS, test, elements.d.ts entry. Use when adding a new `acp-*` element.
 disable-model-invocation: true
 argument-hint: <tag-name e.g. acp-foo-bar> [view]
 ---
@@ -15,7 +15,7 @@ presentational component in `src/components/`. If the tag is missing or already 
 
 `name` below is the tag without `acp-` (`foo-bar`); `ClassName` is `AcpFooBar`.
 
-## 1. Decide what it is (CLAUDE.md, "Layers")
+## 1. Decide what it is (AGENTS.md, "Layers")
 
 - **Component** (default): data in through properties, intents out as bubbling, composed `acp-*`
   events. No imports from `stores/`, no `StoreController`, no storage / network / clipboard. A hook's
@@ -28,7 +28,7 @@ presentational component in `src/components/`. If the tag is missing or already 
 
 ## 2. Test first
 
-CLAUDE.md works test-first. Before the element has behavior, write the test for the first
+AGENTS.md works test-first. Before the element has behavior, write the test for the first
 user-visible behavior (properties in, events and shadow DOM out) in `__tests__/name.test.js`, run it
 with `pnpm test --files <path>` and see it fail, then implement. Start from
 `templates/component.test.js`. Use the `lit-test-suite` skill for anything beyond the first test; add
@@ -75,4 +75,4 @@ Replace the placeholders (`NAME`, `ClassName`, `acp-NAME`). Then:
 
 Run `pnpm typecheck` and the new test file; then use the `verify` skill if the task is otherwise
 done. Say which behavior a test covers and which only running the app would show. Do not commit;
-CLAUDE.md asks first, showing the files and a proposed message.
+AGENTS.md asks first, showing the files and a proposed message.

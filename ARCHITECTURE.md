@@ -40,7 +40,8 @@ Consequences:
 Batrak/
 ├── ARCHITECTURE.md             this file
 ├── README.md                   what Batrak is, how to build and run each app
-├── CLAUDE.md                   working rules for agents (commands, conventions, tests)
+├── AGENTS.md                   working rules for agents (commands, conventions, tests)
+├── CLAUDE.md                   imports AGENTS.md; only what is specific to Claude Code
 ├── Cargo.toml                  one workspace: packages/*, apps/cli, apps/desktop/src-tauri; all default members
 ├── apps/                       what a user runs; each app is a thin front over the packages
 │   ├── desktop/
@@ -252,7 +253,7 @@ and changes nothing above.
   core's `release`) and `terminal/` (PTY tabs; implements `ProgramRunner`).
 - `src/`: the Lit UI. `hooks/ipc/ipc.js` is the only module that imports
   `@tauri-apps/*`; each feature's hook owns its command names; containers subscribe to stores,
-  everything else is presentational. Its own rules live in `apps/desktop/CLAUDE.md` and
+  everything else is presentational. Its own rules live in `apps/desktop/AGENTS.md` and
   `docs/specs/frontend-structure.md`.
 
 ### 7.2 CLI (`apps/cli/`)
