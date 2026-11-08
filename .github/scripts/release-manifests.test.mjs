@@ -11,7 +11,8 @@ import { buildManifests } from './release-manifests.mjs';
 const script = fileURLToPath(new URL('./release-manifests.mjs', import.meta.url));
 
 const DESKTOP = [
-  'Batrak_universal.app.tar.gz',
+  'Batrak_aarch64.app.tar.gz',
+  'Batrak_x64.app.tar.gz',
   'Batrak_0.2.0_x64-setup.exe',
   'Batrak_0.2.0_x64_en-US.msi',
   'Batrak_0.2.0_amd64.AppImage',
@@ -50,8 +51,8 @@ test('a complete release gives latest.json with every updater key', () => {
     version: '0.2.0',
     pub_date: '2026-11-07T10:00:00Z',
     platforms: {
-      'darwin-aarch64': entry('Batrak_universal.app.tar.gz'),
-      'darwin-x86_64': entry('Batrak_universal.app.tar.gz'),
+      'darwin-aarch64': entry('Batrak_aarch64.app.tar.gz'),
+      'darwin-x86_64': entry('Batrak_x64.app.tar.gz'),
       'windows-x86_64': entry('Batrak_0.2.0_x64-setup.exe'),
       'windows-x86_64-nsis': entry('Batrak_0.2.0_x64-setup.exe'),
       'windows-x86_64-msi': entry('Batrak_0.2.0_x64_en-US.msi'),
@@ -79,7 +80,7 @@ test('a complete release gives batrak-cli.json with the five binaries', () => {
 });
 
 test('a signature is trimmed', () => {
-  const { latest } = build(COMPLETE, { ...signed(COMPLETE), 'Batrak_universal.app.tar.gz.sig': '  abc\n' });
+  const { latest } = build(COMPLETE, { ...signed(COMPLETE), 'Batrak_aarch64.app.tar.gz.sig': '  abc\n' });
 
   assert.equal(latest.platforms['darwin-aarch64'].signature, 'abc');
 });
@@ -93,7 +94,7 @@ test('a name is percent-encoded in its URL', () => {
 });
 
 test('.deb, .rpm, .dmg and their signatures are ignored', () => {
-  const extra = ['Batrak_0.2.0_amd64.deb', 'Batrak-0.2.0-1.x86_64.rpm', 'Batrak_0.2.0_universal.dmg'];
+  const extra = ['Batrak_0.2.0_amd64.deb', 'Batrak-0.2.0-1.x86_64.rpm', 'Batrak_0.2.0_aarch64.dmg', 'Batrak_0.2.0_x64.dmg'];
 
   const { missing, latest } = build([...COMPLETE, ...extra, ...extra.map((name) => `${name}.sig`)]);
 
@@ -123,12 +124,12 @@ test('v0.1.0, which has no signatures or CLI, names everything missing', () => {
 
 test('a missing or empty signature is named once, though two keys share its asset', () => {
   const signatures = signed(COMPLETE);
-  delete signatures['Batrak_universal.app.tar.gz.sig'];
+  delete signatures['Batrak_0.2.0_x64-setup.exe.sig'];
   signatures['batrak-x86_64-apple-darwin.sig'] = ' \n';
 
   const { missing } = build(COMPLETE, signatures);
 
-  assert.deepEqual(missing, ['Batrak_universal.app.tar.gz.sig', 'batrak-x86_64-apple-darwin.sig']);
+  assert.deepEqual(missing, ['Batrak_0.2.0_x64-setup.exe.sig', 'batrak-x86_64-apple-darwin.sig']);
 });
 
 test('two assets for one key are refused rather than picked from', () => {
