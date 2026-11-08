@@ -7,22 +7,29 @@
    to a few characters: the actions are grouped and move below the label once it would get less than
    its basis. */
 .acp-session-banner__banner {
-  margin-block-end: var(--acp-space-2);
+  --chx-input-mode-banner-padding: var(--acp-space-1) var(--acp-space-1) var(--acp-space-1) var(--acp-space-3);
+  --chx-input-mode-banner-gap: var(--acp-space-1);
+  margin-block-end: var(--acp-space-1);
   &[hidden] {
     display: none;
   }
   &::part(container) {
     flex-wrap: wrap;
   }
+  /* A permission's title can be a whole command (a heredoc writing a file): at most a few lines, and
+     the rest scrolls, never cut, since it's what the user approves. */
   &::part(label) {
     flex: 1 1 16rem;
+    max-block-size: 4lh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
   }
   &::part(actions) {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     justify-content: flex-end;
-    gap: var(--acp-space-1) var(--acp-space-2);
+    gap: var(--acp-space-1);
     margin-inline-start: auto;
   }
   @container acp-session-banner (width < 360px) {
