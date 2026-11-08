@@ -48,12 +48,6 @@
   }
 }
 
-/* A started session's agent: a lock where the arrow was. */
-.acp-agent-picker__arrow_fixed {
-  font-size: var(--acp-icon-size-xs);
-  margin-inline-start: 0;
-}
-
 /* The agent's logo, in the button's icon slot and in menu items' leading slot. */
 .acp-agent-picker__glyph {
   font-size: var(--acp-icon-size-sm);
@@ -66,8 +60,4 @@
 /* Menu density comes from src/styles/shadow.css. */
 .acp-agent-picker__menu {
   --md-menu-min-width: var(--acp-menu-width-picker);
-}
-
-.acp-agent-picker__lock {
-  font-size: 1rem;
 }

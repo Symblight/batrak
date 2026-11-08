@@ -15,14 +15,18 @@ import styles from './session-banner.css?inline';
 /** @type {Record<string, string>} ACP `PermissionOptionKind` → `md-button` variant. */
 const VARIANTS = OPTION_VARIANTS;
 
+/** What the banner says while no agent can start a session. */
+const NO_AGENT_LABEL = 'No coding agent is connected yet. Add one to start a session.';
+
 /**
  * @tag acp-session-banner
- * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log (Turn on for an agent the user turned off), stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, the agent asking to sign in with its ways and Retry, or information), else a new session's offer to create AGENTS.md.
+ * @summary Above the composer: the agent's permission request with its options, else the session's notice (starting, error with Restart and Open log (Turn on for an agent the user turned off), stopped with Resume, agents.json changed the running agent with Restart, a queued turn with the session it waits for, another turn changing the same file, the agent asking to sign in with its ways and Retry, or information), else that no agent is connected, with Open Agents, else a new session's offer to create AGENTS.md.
  * @fires acp-permission-respond `{ requestId, optionId }`
  * @fires acp-agent-sign-in `{ agentId, methodId }` `methodId: null` is Retry (only checks).
  * @fires acp-agent-sign-in-cancel `{ agentId }`
  * @fires acp-session-select `{ sessionId }` to show the session a queued turn waits for
  * @fires acp-session-action `{ action }` A `SessionAction` on the active session.
+ * @fires acp-agents-manage `null` Open Agents: the Agents tab opens.
  * @fires acp-agents-md-create `null` Create AGENTS.md, from the offer.
  * @fires acp-agents-md-dismiss `null` The offer's dismiss button.
  */
@@ -32,6 +36,7 @@ export class AcpSessionBanner extends LitElement {
     notice: { attribute: false },
     signInRun: { attribute: false },
     loginHere: { attribute: false },
+    noAgent: { attribute: false },
     agentsMdOffer: { attribute: false },
   };
 
@@ -47,6 +52,8 @@ export class AcpSessionBanner extends LitElement {
     this.signInRun = null;
     /** @type {boolean} The run's login terminal is this window's (another window's it can't show). */
     this.loginHere = false;
+    /** @type {boolean} No agent can start a session: say so, with Open Agents, before the AGENTS.md offer. */
+    this.noAgent = false;
     /** @type {boolean} Offer to create AGENTS.md when nothing else needs the banner. */
     this.agentsMdOffer = false;
   }
@@ -194,19 +201,41 @@ export class AcpSessionBanner extends LitElement {
     return nothing;
   }
 
+  #renderNoAgent() {
+    return html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#emit('acp-agents-manage', null)}>
+      Open Agents
+    </md-button>`;
+  }
+
   #renderOffer() {
     return html`<md-button slot="actions" class="acp-session-banner__action" variant="tonal" @click=${() => this.#emit('acp-agents-md-create', null)}>
       Create AGENTS.md
     </md-button>`;
   }
 
+  /**
+   * The buttons of what the banner shows, in its order of precedence.
+   * @param {PermissionRequest | null} request
+   * @param {SessionNotice | null} notice
+   * @param {boolean} noAgent
+   * @param {boolean} offer
+   */
+  #renderActions(request, notice, noAgent, offer) {
+    if (request) return this.#renderPermission(request);
+    if (notice) return this.#renderNoticeActions(notice);
+    if (noAgent) return this.#renderNoAgent();
+    return offer ? this.#renderOffer() : nothing;
+  }
+
   render() {
     const request = this.permission;
     const notice = this.notice;
-    const offer = this.agentsMdOffer && request === null && notice === null;
-    const shown = request !== null || notice !== null || offer;
+    const noAgent = this.noAgent && request === null && notice === null;
+    const offer = this.agentsMdOffer && request === null && notice === null && !noAgent;
+    const shown = request !== null || notice !== null || noAgent || offer;
     const signingIn = !request && notice?.kind === 'sign-in' && notice.signIn !== undefined;
-    const label = request?.title ?? (notice && signingIn ? this.#signInLabel(notice) : notice?.message) ?? (offer ? agentsMd.LABEL : '');
+    const label =
+      request?.title ?? (notice && signingIn ? this.#signInLabel(notice) : notice?.message) ?? (noAgent ? NO_AGENT_LABEL : offer ? agentsMd.LABEL : '');
     const failed = notice?.kind === 'error' || (signingIn && this.signInRun?.state === 'failed');
     const variant = !request && failed ? 'danger' : 'default';
     // Kept mounted and only hidden: its live region announces a new label reliably.
@@ -218,7 +247,7 @@ export class AcpSessionBanner extends LitElement {
       ?dismissible=${offer || (!request && (notice?.kind === 'info' || notice?.kind === 'outdated' || notice?.kind === 'overlap' || notice?.kind === 'stop-reason'))}
       @chx-input-mode-banner-dismiss=${() => (offer ? this.#emit('acp-agents-md-dismiss', null) : this.#act('dismiss-notice'))}
     >
-      ${request ? this.#renderPermission(request) : notice ? this.#renderNoticeActions(notice) : offer ? this.#renderOffer() : nothing}
+      ${this.#renderActions(request, notice, noAgent, offer)}
     </chx-input-mode-banner>`;
   }
 }

@@ -397,6 +397,7 @@ export class AcpChat extends LitElement {
           .permission=${this.permission}
           .notice=${this.notice}
           .signInRun=${this.signInRun}
+          .noAgent=${empty && !this.blocked && this.agents.every((a) => a.off)}
           .agentsMdOffer=${empty && !this.blocked && this.agentsMdOffer}
           @acp-agents-md-create=${this.#onAgentsMdCreate}
         ></acp-session-banner>

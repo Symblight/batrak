@@ -38,7 +38,7 @@ const NO_BRANCHES = { local: [], remotes: [], default: null };
 
 /**
  * @tag acp-chat-view
- * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, the offer to create AGENTS.md, `@` file picks; a subagent's read-only chat in its place (Stop, Back).
+ * @summary The shown session's chat wired to its data: the conversation, the composer's agent and model (blocked while its workspace's folder is missing), a draft's place (New worktree's base from Main's branches), the banner's permission, notice and sign-in, that no agent is connected (Open Agents), the offer to create AGENTS.md, `@` file picks; a subagent's read-only chat in its place (Stop, Back).
  * @fires acp-file-open `{ path, line }` when a file chip or link in a message, or a tool call's location, is clicked
  * @fires acp-file-reveal `{ path }` when a folder chip or link in a message is clicked
  */

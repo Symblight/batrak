@@ -73,6 +73,47 @@ describe('acp-session-banner', () => {
     }
   });
 
+  it('asks to add an agent when none can run, before the AGENTS.md offer and after a notice or permission', async () => {
+    const ask = 'No coding agent is connected yet. Add one to start a session.';
+    const notice = { kind: /** @type {const} */ ('info'), message: 'Noted' };
+    const permission = { requestId: 'r', toolCallId: 't', title: 'Edit a file?', options: [{ optionId: 'o', name: 'Allow', kind: 'allow_once' }] };
+    const cases = [
+      { props: { noAgent: true }, label: ask, buttons: ['Open Agents'] },
+      { props: { noAgent: true, agentsMdOffer: true }, label: ask, buttons: ['Open Agents'] },
+      { props: { noAgent: true, notice }, label: 'Noted', buttons: [] },
+      { props: { noAgent: true, permission }, label: 'Edit a file?', buttons: ['Allow'] },
+    ];
+    for (const { props, label, buttons } of cases) {
+      // Arrange
+      const el = await fixture(html`<acp-session-banner></acp-session-banner>`);
+
+      // Act
+      Object.assign(el, props);
+      await /** @type {import('lit').LitElement} */ (el).updateComplete;
+
+      // Assert
+      const root = /** @type {ShadowRoot} */ (el.shadowRoot);
+      const banner = /** @type {HTMLElement & { label: string, dismissible: boolean }} */ (root.querySelector('chx-input-mode-banner'));
+      expect({ hidden: banner.hidden, label: banner.label }, JSON.stringify(props)).to.deep.equal({ hidden: false, label });
+      expect([...root.querySelectorAll('md-button')].map((b) => b.textContent?.trim())).to.deep.equal(buttons);
+      if (label === ask) expect(banner.dismissible, 'not dismissible: nothing can run').to.equal(false);
+    }
+  });
+
+  it('Open Agents asks for the Agents tab', async () => {
+    // Arrange
+    const el = await fixture(html`<acp-session-banner .noAgent=${true}></acp-session-banner>`);
+    /** @type {CustomEvent[]} */
+    const fired = [];
+    el.addEventListener('acp-agents-manage', (/** @type {Event} */ e) => fired.push(/** @type {CustomEvent} */ (e)));
+
+    // Act
+    /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('md-button')).click();
+
+    // Assert
+    expect(fired.map((e) => [e.bubbles, e.composed]), 'one event that leaves the banner').to.deep.equal([[true, true]]);
+  });
+
   it('Create AGENTS.md asks for it', async () => {
     // Arrange
     const el = await fixture(html`<acp-session-banner .agentsMdOffer=${true}></acp-session-banner>`);
