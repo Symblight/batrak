@@ -10,7 +10,7 @@ import { agents } from '../../hooks/agents/agents.js';
 import { agentsMd } from '../../hooks/agents-md/agents-md.js';
 import { search } from '../../hooks/search/search.js';
 import { sessions } from '../../hooks/sessions/sessions.js';
-import { $agentsMdDismissed, dismissAgentsMd } from '../../stores/agents-md/agents-md.js';
+import { $agentsMdDismissedDraft, dismissAgentsMd } from '../../stores/agents-md/agents-md.js';
 import { $signIns, signInOf } from '../../stores/agents/agents.js';
 import { $agents, $composer, $composerOptionsStatus, agentInfo, selectAgent, setRunTarget } from '../../stores/composer/composer.js';
 import { composer as composerRules } from '../../hooks/composer/composer.js';
@@ -70,7 +70,7 @@ export class AcpChatView extends ViewElement {
   #uncommitted = new StoreController(this, { store: $uncommittedCount });
   #activeFolder = new StoreController(this, { store: $activeFolder });
   #rootId = new StoreController(this, { store: $rootId });
-  #agentsMdDismissed = new StoreController(this, { store: $agentsMdDismissed });
+  #agentsMdDismissedDraft = new StoreController(this, { store: $agentsMdDismissedDraft });
   #activeSessionId = new StoreController(this, { store: $activeSessionId });
   #activeSession = new StoreController(this, { store: $activeSession });
   #permission = new StoreController(this, { store: $activePermission });
@@ -396,7 +396,7 @@ export class AcpChatView extends ViewElement {
       .blocked=${workspace?.missing ? { message: 'Recreate the folder to continue', workspaceId: workspace.id } : null}
       .place=${this.#place}
       .uncommitted=${this.#draftOnScreen ? this.#uncommitted.value : 0}
-      .agentsMdOffer=${this.needsAgentsMd && !this.#agentsMdDismissed.value}
+      .agentsMdOffer=${this.needsAgentsMd && this.#agentsMdDismissedDraft.value !== sessionId}
       .permission=${hasSession ? this.#permission.value : null}
       .notice=${hasSession ? this.#notice.value : null}
       .signInRun=${hasSession ? this.#signInRun() : null}
@@ -415,7 +415,7 @@ export class AcpChatView extends ViewElement {
       @acp-workspace-recreate=${this.#onWorkspaceRecreate}
       @acp-run-target-change=${this.#onRunTarget}
       @acp-chat-hint-use=${this.#onHintUse}
-      @acp-agents-md-dismiss=${() => dismissAgentsMd(project.path)}
+      @acp-agents-md-dismiss=${() => dismissAgentsMd(sessionId)}
       @acp-link-open=${this.#onLinkOpen}
       @acp-subagent-stop=${this.#onSubagentStop}
       @acp-subagent-close=${() => showSubagent(null)}

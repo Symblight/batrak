@@ -2,11 +2,12 @@ import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
 import { agentsMd } from '../../../hooks/agents-md/agents-md.js';
+import { sessions } from '../../../hooks/sessions/sessions.js';
 import { $agentList } from '../../../stores/agents/agents.js';
+import { offerAgentsMdAgain } from '../../../stores/agents-md/agents-md.js';
 import { forgetComposer } from '../../../stores/composer/composer.js';
-import { $openRoots, $project } from '../../../stores/project/project.js';
+import { $project } from '../../../stores/project/project.js';
 import { $activeSessionId, $draftSessions, $sessions } from '../../../stores/sessions/sessions.js';
-import { MAIN, setActiveWorkspace, setWorkspaces } from '../../../stores/workspaces/workspaces.js';
 import '../chat-view.js';
 
 /** @typedef {import('../chat-view.js').AcpChatView} AcpChatView */
@@ -47,15 +48,14 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
   });
 
   afterEach(() => {
+    offerAgentsMdAgain();
     forgetComposer('d1');
+    forgetComposer('d2');
     $activeSessionId.set(null);
     $draftSessions.set({});
     $sessions.set([]);
     $project.set(null);
     $agentList.set({ ...$agentList.get(), agents: [], defaultAgent: null });
-    setWorkspaces([]);
-    $openRoots.set({});
-    for (const key of Object.keys(localStorage)) if (key.startsWith('batrak:agents-md:dismissed:')) localStorage.removeItem(key);
     clearMocks();
   });
 
@@ -173,43 +173,84 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
     expect(unhandled).to.deep.equal([]);
   });
 
-  it('its dismiss button ends the offer for the project, in all its workspaces, and for no other', async () => {
-    // Arrange: every root lacks the file; shown is a workspace of a project no other test has dismissed
-    answer = (cmd) => cmd === 'needs_agents_md';
-    const path = `/p-${crypto.randomUUID()}`;
-    $project.set({ path, name: 'p', rootId: 'r' });
-    const workspace = /** @type {import('../../../hooks/workspaces/types.js').Workspace} */ ({ id: 'w1', name: 'w1', folder: '/wt/w1', worktreePath: '/wt/w1', branch: 'w1', checkedOut: true });
-    setWorkspaces([workspace], path);
-    $openRoots.set({ '/wt/w1': 'r-w1' });
-    setActiveWorkspace(path, 'w1');
-    const el = await render();
-    await until(() => chat(el).agentsMdOffer);
-    expect(asked(), 'about the workspace').to.deep.equal(['r-w1']);
+  /** @param {AcpChatView} el Presses the banner's dismiss button. */
+  async function dismiss(el) {
     const banner = /** @type {import('lit').LitElement} */ (chat(el).renderRoot.querySelector('acp-session-banner'));
     await banner.updateComplete;
     const inner = /** @type {import('lit').LitElement} */ (banner.renderRoot.querySelector('chx-input-mode-banner'));
     await inner.updateComplete;
-
-    // Act
     /** @type {HTMLElement} */ (inner.renderRoot.querySelector('[part="dismiss"]')).click();
     await el.updateComplete;
+  }
+
+  it('its dismiss button hides the offer on this view, whatever else happens on it', async () => {
+    // Arrange: the root lacks the file
+    answer = (cmd) => cmd === 'needs_agents_md';
+    const el = await render();
+    await until(() => chat(el).agentsMdOffer);
+
+    // Act
+    await dismiss(el);
 
     // Assert
     expect(chat(el).agentsMdOffer, 'gone at once').to.equal(false);
 
-    // Act: Main of the same project, its root lacking the file too
-    setActiveWorkspace(path, MAIN);
-    await until(() => asked().includes('r'));
+    // Act: the root's listing changes, and the backend still says it lacks the file
+    const before = asked().length;
+    await rootChanged(['']);
+    await until(() => asked().length > before);
     await settled();
 
     // Assert
-    expect(chat(el).agentsMdOffer, "the project's Main").to.equal(false);
+    expect(chat(el).agentsMdOffer, 'after asking again').to.equal(false);
 
-    // Act: another project
-    $project.set({ path: `/other-${crypto.randomUUID()}`, name: 'other', rootId: 'r-other' });
+    // Act: away to no session, and back to the same draft
+    $activeSessionId.set(null);
+    await el.updateComplete;
+    $activeSessionId.set('d1');
+    await until(() => asked().length > before + 1);
+    await settled();
 
     // Assert
-    await until(() => chat(el).agentsMdOffer);
+    expect(chat(el).agentsMdOffer, 'back on the same draft').to.equal(false);
+  });
+
+  it('a new session offers it again after a dismissal', async () => {
+    const cases = [
+      {
+        how: 'New chat on the shown draft, which it reuses',
+        open: () => sessions.create('/p'),
+      },
+      {
+        how: 'New chat from no session, reusing the draft',
+        open: () => {
+          $activeSessionId.set(null);
+          sessions.create('/p');
+        },
+      },
+      {
+        how: 'another draft shown',
+        open: () => {
+          $draftSessions.set({ ...$draftSessions.get(), d2: { projectId: '/p', workspaceId: 'main' } });
+          $activeSessionId.set('d2');
+        },
+      },
+    ];
+    for (const { how, open } of cases) {
+      // Arrange
+      answer = (cmd) => cmd === 'needs_agents_md';
+      $activeSessionId.set('d1');
+      const el = await render();
+      await until(() => chat(el).agentsMdOffer);
+      await dismiss(el);
+      expect(chat(el).agentsMdOffer, `${how}: dismissed first`).to.equal(false);
+
+      // Act
+      open();
+
+      // Assert
+      await until(() => chat(el).agentsMdOffer);
+    }
   });
 
   it('Create AGENTS.md starts a session titled after the prompt and sends it the whole prompt', async () => {
