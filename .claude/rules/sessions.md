@@ -141,7 +141,7 @@ in the chat element and the agent, which replays them (`session/load`) when it s
   your answer); `$agentList`
   (the `agents` hook, `hooks/agents/agents.js`) feeds the agent picker. The agent's text renders as Markdown in
   `<acp-markdown>` (`markdown.render()` with the `reply` policy: markdown-it + DOMPurify, fences in `<chx-code-block>`, links via `open_url`), full
-  width (`chx-message:not([own])` in `shadow.css`; while it streams, only the last two blocks are rendered again per frame; streaming's end renders the whole text once). Parts rise in
+  width (`chx-message:not([own])` in `shadow.css`; while it streams, only the last two blocks are rendered again per frame; what arrived is revealed at a steady pace, all of it within `CATCH_UP_FRAMES` (8) of arriving, the new characters fading in (`.acp-markdown__fresh`, none under reduced motion); once it caught up after streaming's end, the whole text renders once more, plain). Parts rise in
   while their row is busy (`chx-message-row[aria-busy='true']` in `shadow.css`, CSS only: history and
   rows scrolled back don't replay; opacity and transform only, so row heights hold). A thought is `<acp-part-thinking>`: ACP never
   ends one, so the adapter ends it (`part-end`) at the next shown update or the turn's end, a live

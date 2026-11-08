@@ -173,3 +173,19 @@
   margin: 0;
   color: var(--acp-color-error);
 }
+
+/* Streamed text that just appeared fades in. Its animation-delay is set to its age, so a repainted
+   block goes on from where it was. */
+.acp-markdown__fresh {
+  animation: acp-markdown-fresh 160ms ease-out both;
+
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+@keyframes acp-markdown-fresh {
+  from {
+    opacity: 0;
+  }
+}
