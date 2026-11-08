@@ -17,7 +17,7 @@ describe('acp-agent-picker', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     expect(root.querySelector('.acp-agent-picker__button')?.textContent).to.contain('Add agent');
     const items = [...root.querySelectorAll('md-menu-item')];
-    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent', 'manage-agents']);
+    expect(items.map((i) => i.dataset.action)).to.deep.equal(['add-agent']);
     expect(root.querySelector('md-menu-group')).to.equal(null);
     expect(tooltipOf(root.querySelector('#acp-agent-picker-button'))).to.equal('Add an ACP agent');
     expect(root.querySelector('[title]'), 'tooltips, not titles').to.equal(null);
@@ -34,18 +34,6 @@ describe('acp-agent-picker', () => {
     const menu = /** @type {HTMLElement & { open: boolean }} */ (root.querySelector('md-menu'));
     /** @type {HTMLElement} */ (root.querySelector('.acp-agent-picker__button')).click();
     expect(menu.open).to.equal(true);
-  });
-
-  it('asks to manage the agents', async () => {
-    const el = await fixture(html`<acp-agent-picker .composer=${NO_AGENT} .agents=${[]} .agent=${null}></acp-agent-picker>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    const menu = /** @type {HTMLElement} */ (root.querySelector('md-menu'));
-    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[data-action="manage-agents"]'));
-    expect(item.textContent?.trim()).to.equal('Manage agents…');
-    let asked = false;
-    el.addEventListener('acp-agents-manage', () => (asked = true));
-    menu.dispatchEvent(new CustomEvent('select', { detail: { value: '', item } }));
-    expect(asked).to.equal(true);
   });
 
   it('asks to add an agent from its first item', async () => {
@@ -77,16 +65,6 @@ describe('acp-agent-picker', () => {
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
     const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-group[label="Agent"] > md-menu-item[value="b"]'));
     expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Needs sign-in');
-  });
-
-  it("says when a started session's agent is off", async () => {
-    const agent = { id: 'b', name: 'B', off: true };
-    const composer = { ...NO_AGENT, agentId: 'b', started: true };
-    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    expect(root.querySelector('.acp-agent-picker__agent')?.textContent?.trim()).to.equal('B (off)');
-    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[disabled]'));
-    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Turned off');
   });
 
   it('lists the offered agents with no submenus, the composer\'s selected', async () => {
@@ -133,27 +111,12 @@ describe('acp-agent-picker', () => {
     expect(picked).to.deep.equal([{ agentId: 'b' }]);
   });
 
-  it("fixes a started session's agent: no other agent to switch to", async () => {
+  it("fixes a started session's agent: no picker to switch with", async () => {
     const a = { id: 'a', name: 'A', configOptions: [] };
     const b = { id: 'b', name: 'B', configOptions: [] };
     const composer = { ...NO_AGENT, agentId: 'a', started: true };
     const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[a, b]} .agent=${a}></acp-agent-picker>`);
     const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    expect(root.querySelector('md-menu-item[value="b"]')).to.equal(null);
-    expect(root.querySelector('[data-action]')).to.equal(null);
-    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[disabled]'));
-    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('Fixed for this session');
-    expect(root.querySelector('.acp-agent-picker__lock')).to.not.equal(null);
-    expect(tooltipOf(root.querySelector('#acp-agent-picker-button'))).to.equal('Agent: A · fixed for this session');
-  });
-
-  it('says when a started session\'s agent is gone from agents.json', async () => {
-    const agent = { id: 'claude', name: 'Claude Code', removed: true };
-    const composer = { ...NO_AGENT, agentId: 'claude', started: true };
-    const el = await fixture(html`<acp-agent-picker .composer=${composer} .agents=${[]} .agent=${agent}></acp-agent-picker>`);
-    const root = /** @type {ShadowRoot} */ (el.shadowRoot);
-    expect(root.querySelector('.acp-agent-picker__agent')?.textContent?.trim()).to.equal('Claude Code (removed)');
-    const item = /** @type {HTMLElement} */ (root.querySelector('md-menu-item[disabled]'));
-    expect(item.querySelector('[slot="supporting-text"]')?.textContent?.trim()).to.equal('No longer in agents.json');
+    expect(root.querySelector('md-button, md-menu')?.localName ?? null).to.equal(null);
   });
 });

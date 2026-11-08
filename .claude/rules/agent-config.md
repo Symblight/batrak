@@ -21,7 +21,7 @@ paths:
   `.bt/agents.json` and nothing else; `<config dir>/batrak/agents.json` is the agents of no
   project (the Agents tab with no project open). Nothing is built in, so a new project has no
   agent (the composer's picker offers Add ACP agent…, which opens the Agents tab at the registry's agents,
-  and Manage agents…; a draft's send is refused with a notice).
+  and the draft's banner says no agent is connected, with Open Agents; a draft's send is refused with a notice).
   - **The Agents tab** (`<acp-agents-view>`, presentational, with an `<acp-agent-card>` per installed agent: its switch,
     Chat / Terminal choice, Update, Sign in and menu, firing the `acp-agent-*` events; spec: `docs/specs/agents-tab.md`) renders
     `agents_view { projectPath, query, filter }` (`config/view.rs`) as is: the backend matches
@@ -105,8 +105,8 @@ paths:
     whose launch (command, args, env, MCP servers) the file changes keeps running; the page hears it
     once (`agent-outdated`, the banner's `outdated` notice with Restart, kept through turns; `null` when
     changed back). `Session.agentName` (kept at each start) names a started session's agent once it's
-    gone ("Claude Code (removed)" in the picker, `agentInfo(id, name)`); `.bt/local/` is never in the
-    snapshot.
+    gone (`agentInfo(id, name)`); a started session shows no agent picker, since its agent is fixed.
+    `.bt/local/` is never in the snapshot.
   - **Secrets and trust:** `env` values take `${env:NAME}` (login-shell env) and `${keychain:name}`
     (service `batrak`), resolved only at spawn: secrets never reach logs, IPC or files. The project's
     file is the repository's, so it can't make the app run anything on its own: an agent whose `command`

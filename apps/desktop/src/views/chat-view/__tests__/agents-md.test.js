@@ -43,6 +43,8 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
       { shouldMockEvents: true },
     );
     $project.set({ path: '/p', name: 'p', rootId: 'r' });
+    // An agent that can run: without one the banner asks for an agent instead.
+    $agentList.set({ ...$agentList.get(), defaultAgent: 'claude', agents: [/** @type {import('../../../hooks/agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })] });
     $draftSessions.set({ d1: { projectId: '/p', workspaceId: 'main' } });
     $activeSessionId.set('d1');
   });
@@ -261,7 +263,6 @@ describe('acp-chat-view: the offer to create AGENTS.md', () => {
       if (cmd === 'session_send_prompt') return '2026-11-07T00:00:00Z';
       return null;
     };
-    $agentList.set({ ...$agentList.get(), defaultAgent: 'claude', agents: [/** @type {import('../../../hooks/agents/types.js').AgentSummary} */ ({ id: 'claude', name: 'Claude Code', enabled: true, terminal: { resume: true, new: true } })] });
     const el = await render();
     await until(() => chat(el).agentsMdOffer);
     await chat(el).composerReady();

@@ -303,8 +303,11 @@ describe('acp-chat', () => {
     }
   });
 
-  /** @param {AcpChat} chat Its banner's button, once rendered: there only while the offer shows. */
-  async function createAgentsMdButton(chat) {
+  /** @type {import('../../../hooks/agents/types.js').CatalogAgent} An agent a draft can start. */
+  const AGENT = { id: 'a', name: 'A', configOptions: [] };
+
+  /** @param {AcpChat} chat Its banner's first button, once rendered: there only while an offer shows. */
+  async function bannerButton(chat) {
     const banner = /** @type {import('lit').LitElement} */ (chat.renderRoot.querySelector('acp-session-banner'));
     await banner.updateComplete;
     return /** @type {HTMLElement | null} */ (banner.renderRoot.querySelector('md-button'));
@@ -319,14 +322,36 @@ describe('acp-chat', () => {
     ];
     for (const { props, shown } of cases) {
       // Arrange
-      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat></acp-chat>`));
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat .agents=${[AGENT]}></acp-chat>`));
 
       // Act
       Object.assign(el, props);
       await el.updateComplete;
 
       // Assert
-      expect((await createAgentsMdButton(el)) !== null, JSON.stringify(props)).to.equal(shown);
+      expect((await bannerButton(el)) !== null, JSON.stringify(props)).to.equal(shown);
+    }
+  });
+
+  it('asks to add an agent only on a draft with none that can run', async () => {
+    const off = { ...AGENT, off: true };
+    const cases = [
+      { props: { empty: true, agents: [] }, shown: true },
+      { props: { empty: true, agents: [off] }, shown: true },
+      { props: { empty: true, agents: [off, AGENT] }, shown: false },
+      { props: { empty: false, agents: [] }, shown: false },
+      { props: { empty: true, agents: [], blocked: { message: 'Gone', workspaceId: 'w1' } }, shown: false },
+    ];
+    for (const { props, shown } of cases) {
+      // Arrange
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat .agentsMdOffer=${true}></acp-chat>`));
+
+      // Act
+      Object.assign(el, props);
+      await el.updateComplete;
+
+      // Assert
+      expect((await bannerButton(el))?.textContent?.trim() === 'Open Agents', JSON.stringify(props)).to.equal(shown);
     }
   });
 
@@ -338,7 +363,7 @@ describe('acp-chat', () => {
     ];
     for (const { typed, lines } of cases) {
       // Arrange
-      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .agentsMdOffer=${true}></acp-chat>`));
+      const el = /** @type {AcpChat} */ (await fixture(html`<acp-chat empty .agentsMdOffer=${true} .agents=${[AGENT]}></acp-chat>`));
       await el.composerReady();
       if (typed) el.chat?.input.setText(typed);
       /** @type {string[]} */
@@ -346,7 +371,7 @@ describe('acp-chat', () => {
       el.addEventListener('chx-send-message', (e) => fired.push(e.type), { capture: true });
 
       // Act
-      (await createAgentsMdButton(el))?.click();
+      (await bannerButton(el))?.click();
       await el.updateComplete;
 
       // Assert
