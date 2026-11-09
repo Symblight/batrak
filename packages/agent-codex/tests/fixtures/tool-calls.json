@@ -1,0 +1,180 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1",
+    "title": "sed -n '1,$p' README.md",
+    "name": "exec_command",
+    "kind": "execute",
+    "status": "in_progress",
+    "content": [
+      {
+        "type": "terminal",
+        "terminalId": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1"
+      }
+    ],
+    "rawInput": {
+      "command": "sed -n '1,$p' README.md",
+      "cwd": "/project"
+    },
+    "_meta": {
+      "terminal_info": {
+        "cwd": "/project",
+        "terminal_id": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1",
+    "status": "completed",
+    "_meta": {
+      "terminal_output_delta": {
+        "data": "# Sample\n\nA project to test tools in.\n",
+        "terminal_id": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1"
+      },
+      "terminal_exit": {
+        "exit_code": 0,
+        "signal": null,
+        "terminal_id": "exec-c0ead1a3-3d94-4f07-9e59-3b520ec24ab1"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-23c077c7-02a9-4806-b80a-190f66c117e3",
+    "title": "List files",
+    "name": "exec_command",
+    "kind": "read",
+    "status": "in_progress"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-23c077c7-02a9-4806-b80a-190f66c117e3",
+    "_meta": {
+      "terminal_output_delta": {
+        "data": "README.md\n",
+        "terminal_id": "exec-23c077c7-02a9-4806-b80a-190f66c117e3"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-23c077c7-02a9-4806-b80a-190f66c117e3",
+    "status": "completed",
+    "rawOutput": {
+      "exit_code": 0
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe",
+    "title": "echo hello",
+    "name": "exec_command",
+    "kind": "execute",
+    "status": "in_progress",
+    "content": [
+      {
+        "type": "terminal",
+        "terminalId": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe"
+      }
+    ],
+    "rawInput": {
+      "command": "echo hello",
+      "cwd": "/project"
+    },
+    "_meta": {
+      "terminal_info": {
+        "cwd": "/project",
+        "terminal_id": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe",
+    "status": "completed",
+    "_meta": {
+      "terminal_output_delta": {
+        "data": "hello\n",
+        "terminal_id": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe"
+      },
+      "terminal_exit": {
+        "exit_code": 0,
+        "signal": null,
+        "terminal_id": "exec-58cb7ae1-ae71-42fd-858e-1ca79acc4efe"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-2589be5b-d185-4099-8fc8-0d149b12fffc",
+    "title": "Read file '/project/missing.txt'",
+    "name": "exec_command",
+    "kind": "read",
+    "status": "in_progress",
+    "locations": [
+      {
+        "path": "/project/missing.txt"
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-2589be5b-d185-4099-8fc8-0d149b12fffc",
+    "status": "failed",
+    "rawOutput": {
+      "exit_code": 1
+    },
+    "_meta": {
+      "terminal_output_delta": {
+        "data": "cat: missing.txt: No such file or directory\n",
+        "terminal_id": "exec-2589be5b-d185-4099-8fc8-0d149b12fffc"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-04aeadd1-c3c4-47b5-801e-57316ca0d074",
+    "title": "Editing files",
+    "kind": "edit",
+    "status": "in_progress",
+    "content": [
+      {
+        "type": "diff",
+        "path": "/project/README.md",
+        "oldText": "A project to test tools in.\n",
+        "newText": "A project to test tools in.\nEdited.\n",
+        "_meta": {
+          "kind": "update"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-04aeadd1-c3c4-47b5-801e-57316ca0d074",
+    "status": "completed"
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "exec-af8a4225-4ef7-42d4-ae2f-ba8ad2df9485",
+    "title": "Editing files",
+    "kind": "edit",
+    "status": "in_progress",
+    "content": [
+      {
+        "type": "diff",
+        "path": "/project/notes.txt",
+        "newText": "A note.\n",
+        "_meta": {
+          "kind": "add"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "exec-af8a4225-4ef7-42d4-ae2f-ba8ad2df9485",
+    "status": "completed"
+  }
+]
