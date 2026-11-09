@@ -1,26 +1,34 @@
 import { LitElement, html, nothing } from 'lit';
 import { repeat } from 'lit/directives/repeat.js';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
-import { ChxToolCall } from '@symblight/chat/agent';
 import '@symblight/wc-material/icon';
 import '@symblight/wc-material/progress-circular';
 import expandIcon from '@material-design-icons/svg/outlined/expand_more.svg?raw';
+import openIcon from '@material-design-icons/svg/outlined/chevron_right.svg?raw';
 import '../diff-counts/diff-counts.js';
 import '../file-icon/file-icon.js';
-import '../markdown/markdown.js';
-import '../part-thinking/part-thinking.js';
 import { chat } from '../../hooks/chat/chat.js';
 import { toolCalls } from '../../hooks/tool-calls/tool-calls.js';
 import styles from './reply-work.css?inline';
 
 /** @typedef {import('../../hooks/sessions/types.js').ToolCallView} ToolCallView */
 /** @typedef {import('../../hooks/sessions/types.js').WorkStep} WorkStep */
-/** @typedef {{ path: string, line?: number }} ChxToolCallLocation */
+/** @typedef {ToolCallView['locations'][number]} ToolCallLocation */
+
+/**
+ * A keydown listener that runs `act` on Enter or Space, as a button's click.
+ * @param {() => void} act
+ */
+const onActivateKey = (act) => (/** @type {KeyboardEvent} */ e) => {
+  if (e.key !== 'Enter' && e.key !== ' ') return;
+  e.preventDefault();
+  act();
+};
 
 /**
  * @tag acp-reply-work
- * @summary What a reply did before its answer, as one row: a live line while it runs, then a summary; expands to its tool calls, narration and thoughts.
- * @fires acp-tool-location-click `{ path, line? }` A file chip of the summary was clicked.
+ * @summary What a reply did before its answer, as one row: a live line while a call runs, else a summary; expands to a card of its tool calls.
+ * @fires acp-tool-location-click `{ path, line? }` A file chip of the summary or a call's row was clicked.
  */
 export class AcpReplyWork extends LitElement {
   static properties = {
@@ -28,10 +36,6 @@ export class AcpReplyWork extends LitElement {
     /** The reply still runs: the line, not the summary. */
     live: { type: Boolean, reflect: true },
     expanded: { type: Boolean, reflect: true },
-    /** Builds a call row's file chip (`chx-tool-call`'s `buildLocation`); its own when unset. */
-    buildLocation: { attribute: false },
-    /** Rewrites a narration's rendered nodes (file refs into chips), as a reply's text. */
-    decorate: { attribute: false },
     waiting: { type: Boolean, reflect: true },
   };
 
@@ -45,13 +49,12 @@ export class AcpReplyWork extends LitElement {
     this.live = false;
     /** @type {boolean} */
     this.expanded = false;
-    /** @type {((location: ChxToolCallLocation) => HTMLElement) | null} */
-    this.buildLocation = null;
-    /** @type {((root: ParentNode) => void) | null} */
-    this.decorate = null;
     /** A call waits for the user's permission: accents the row. */
     this.waiting = false;
   }
+
+  /** The calls whose rows are open, by id. */
+  #open = new Set();
 
   /** Now, while the reply runs: ticks once a second. */
   #now = Date.now();
@@ -78,11 +81,19 @@ export class AcpReplyWork extends LitElement {
   }
 
   get #calls() {
-    return this.steps.flatMap((step) => (step.kind === 'tool' ? [step.call] : []));
+    return this.steps.map((step) => step.call);
+  }
+
+  /**
+   * The reply runs and so does a call: the live line. Between calls the text below may be the answer
+   * (ACP doesn't say until the turn ends), so the row shows what it did so far, not a spinner.
+   */
+  get #working() {
+    return this.live && toolCalls.liveLine(this.#calls) !== null;
   }
 
   #syncTicker() {
-    const live = this.live && this.isConnected && this.#calls.some((c) => c.startedAt !== null);
+    const live = this.#working && this.isConnected && this.#calls.some((c) => c.startedAt !== null);
     if (live && this.#ticker === undefined) {
       this.#now = Date.now();
       this.#ticker = setInterval(() => {
@@ -95,13 +106,13 @@ export class AcpReplyWork extends LitElement {
     }
   }
 
-  /** Since the first call started, until now (live) or the last one ended; `''` when a time is unknown. */
+  /** Since the first call started, until now (a call runs) or the last one ended; `''` when a time is unknown. */
   get #time() {
     const calls = this.#calls;
     const starts = calls.map((c) => c.startedAt);
     if (!starts.length || starts.some((t) => t === null)) return '';
     const start = Math.min(.../** @type {number[]} */ (starts));
-    if (this.live) return chat.formatElapsed(Math.max(this.#now, start) - start);
+    if (this.#working) return chat.formatElapsed(Math.max(this.#now, start) - start);
     const ends = calls.map((c) => c.endedAt);
     if (ends.some((t) => t === null)) return '';
     return chat.formatElapsed(Math.max(.../** @type {number[]} */ (ends)) - start);
@@ -111,15 +122,9 @@ export class AcpReplyWork extends LitElement {
     this.expanded = !this.expanded;
   }
 
-  #onKeydown = (/** @type {KeyboardEvent} */ e) => {
-    if (e.key !== 'Enter' && e.key !== ' ') return;
-    e.preventDefault();
-    this.#toggle();
-  };
-
   /**
    * @param {MouseEvent} e
-   * @param {ChxToolCallLocation} location
+   * @param {ToolCallLocation} location
    */
   #openFile(e, location) {
     e.stopPropagation();
@@ -127,9 +132,8 @@ export class AcpReplyWork extends LitElement {
   }
 
   #liveHead() {
-    const { label } = toolCalls.liveLine(this.steps);
     return html`<md-progress-circular class="acp-reply-work__spinner" indeterminate></md-progress-circular>
-      <span class="acp-reply-work__label">${label}</span>`;
+      <span class="acp-reply-work__label">${toolCalls.liveLine(this.#calls)}</span>`;
   }
 
   #summaryHead() {
@@ -137,58 +141,54 @@ export class AcpReplyWork extends LitElement {
     const { clauses, failed, added, removed } = toolCalls.summaryOf(calls);
     const located = (/** @type {string} */ path) => calls.flatMap((c) => c.locations).find((l) => l.path === path) ?? { path };
     return html`<span class="acp-reply-work__label">
-        ${clauses.map(
-          ({ text, path }, i) =>
-            html`${i ? ', ' : ''}${text}${path === undefined
-              ? nothing
-              : html` <span class="acp-reply-work__file" @click=${(/** @type {MouseEvent} */ e) => this.#openFile(e, located(path))}
-                  ><acp-file-icon class="acp-reply-work__file-icon" .name=${path}></acp-file-icon>${path.slice(path.lastIndexOf('/') + 1)}</span
-                >`}`,
-        )}${failed ? html` <span class="acp-reply-work__failed">· ${failed} failed</span>` : nothing}
+        ${clauses.map(({ text, path }, i) => html`${i ? ', ' : ''}${text}${path === undefined ? nothing : html` ${this.#file(located(path))}`}`)}${failed ? html` <span class="acp-reply-work__failed">· ${failed} failed</span>` : nothing}
       </span>
       <acp-diff-counts .added=${added} .removed=${removed}></acp-diff-counts>`;
   }
 
-  /** @param {ToolCallView} call */
-  #callRow(call) {
-    return html`<chx-tool-call
-      class="acp-reply-work__call"
-      .toolCallId=${call.toolCallId}
-      .label=${call.label}
-      .kind=${call.kind}
-      .status=${call.status}
-      .locations=${call.locations}
-      .error=${call.error}
-      .additions=${call.diff?.added || undefined}
-      .deletions=${call.diff?.removed || undefined}
-      .buildLocation=${this.buildLocation ?? ChxToolCall.prototype.buildLocation}
-      >${call.command ? html`<code class="acp-reply-work__command">${call.command}</code>` : nothing}</chx-tool-call
+  /** @param {ToolCallLocation} location A file chip, which opens the file. */
+  #file(location) {
+    const { path } = location;
+    return html`<span class="acp-reply-work__file" @click=${(/** @type {MouseEvent} */ e) => this.#openFile(e, location)}
+      ><acp-file-icon class="acp-reply-work__file-icon" .name=${path}></acp-file-icon>${path.slice(path.lastIndexOf('/') + 1)}</span
     >`;
   }
 
-  /** @param {WorkStep} step */
-  #step(step) {
-    if (step.kind === 'tool') return this.#callRow(step.call);
-    if (step.kind === 'text') {
-      return html`<acp-markdown class="acp-reply-work__narration" policy="reply" .text=${step.text} .decorate=${this.decorate}></acp-markdown>`;
-    }
-    return html`<acp-part-thinking
-      class="acp-reply-work__thought"
-      status="done"
-      .text=${step.text}
-      .startedAt=${step.startedAt}
-      .endedAt=${step.endedAt}
-      .peek=${false}
-    ></acp-part-thinking>`;
+  /** @param {string} id */
+  #toggleCall(id) {
+    if (!this.#open.delete(id)) this.#open.add(id);
+    this.requestUpdate();
   }
 
   /**
-   * A step's key: a call by its id, the rest by their place (they never move).
-   * @param {WorkStep} step
-   * @param {number} i
+   * A call's row: what it did, its file and counts; open, its error and command.
+   * @param {ToolCallView} call
    */
-  #key(step, i) {
-    return step.kind === 'tool' ? step.call.toolCallId : `${step.kind}-${i}`;
+  #callRow(call) {
+    const { text, path } = toolCalls.rowOf(call);
+    const open = this.#open.has(call.toolCallId);
+    const toggle = () => this.#toggleCall(call.toolCallId);
+    const failed = call.status === 'failed';
+    return html`<div class="acp-reply-work__call ${failed ? 'acp-reply-work__call_failed' : ''}">
+      <div
+        class="acp-reply-work__row"
+        role="button"
+        tabindex="0"
+        aria-expanded=${String(open)}
+        @click=${toggle}
+        @keydown=${onActivateKey(toggle)}
+      >
+        <span class="acp-reply-work__row-label">${text}</span> ${path === undefined ? nothing : this.#file(call.locations[0])}
+        <acp-diff-counts .added=${call.diff?.added ?? null} .removed=${call.diff?.removed ?? null}></acp-diff-counts>
+        <md-icon class="acp-reply-work__row-chevron">${unsafeSVG(openIcon)}</md-icon>
+      </div>
+      ${open
+        ? html`<div class="acp-reply-work__detail">
+            ${call.error ? html`<pre class="acp-reply-work__error">${call.error}</pre>` : nothing}
+            ${call.command ? html`<code class="acp-reply-work__command">${call.command}</code>` : nothing}
+          </div>`
+        : nothing}
+    </div>`;
   }
 
   render() {
@@ -200,13 +200,13 @@ export class AcpReplyWork extends LitElement {
         tabindex="0"
         aria-expanded=${String(this.expanded)}
         @click=${this.#toggle}
-        @keydown=${this.#onKeydown}
+        @keydown=${onActivateKey(() => this.#toggle())}
       >
-        ${this.live ? this.#liveHead() : this.#summaryHead()} ${time ? html`<span class="acp-reply-work__time">${time}</span>` : nothing}
+        ${this.#working ? this.#liveHead() : this.#summaryHead()} ${time ? html`<span class="acp-reply-work__time">${time}</span>` : nothing}
         <md-icon class="acp-reply-work__chevron">${unsafeSVG(expandIcon)}</md-icon>
       </div>
       ${this.expanded
-        ? html`<div class="acp-reply-work__steps">${repeat(this.steps, (s, i) => this.#key(s, i), (s) => this.#step(s))}</div>`
+        ? html`<div class="acp-reply-work__steps">${repeat(this.#calls, (c) => c.toolCallId, (c) => this.#callRow(c))}</div>`
         : nothing}
     `;
   }

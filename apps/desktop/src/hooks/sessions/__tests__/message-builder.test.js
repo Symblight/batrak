@@ -90,8 +90,8 @@ describe('MessageBuilder', () => {
     // Assert
     const work = chunks.filter((c) => c.partType === 'work');
     expect(new Set(work.map((c) => c.partId)), 'one work part').to.deep.equal(new Set([`${b.messageId}-work`]));
-    const steps = /** @type {{ kind: string, text?: string, call?: { toolCallId: string } }[]} */ (work.at(-1)?.delta?.data?.steps);
-    expect(steps.map((s) => s.text ?? s.call?.toolCallId)).to.deep.equal(['I will look.', 't1', 'Found it.', 't2']);
+    const steps = /** @type {{ call: { toolCallId: string } }[]} */ (work.at(-1)?.delta?.data?.steps);
+    expect(steps.map((s) => s.call.toolCallId)).to.deep.equal(['t1', 't2']);
     const texts = chunks.filter((c) => c.partType === 'text');
     const folded = new Set(texts.filter((c) => c.delta?.data?.folded).map((c) => c.partId));
     const parts = [...new Set(texts.map((c) => c.partId))];
@@ -124,12 +124,10 @@ describe('MessageBuilder', () => {
     const fold = second.findIndex((c) => c.partId === after && c.delta?.data?.folded);
     const end = second.findIndex((c) => c.kind === 'part-end' && c.partId === after);
     expect(fold >= 0 && fold < end, 'folded before its end').to.equal(true);
-    const steps = /** @type {{ kind: string, text?: string, startedAt?: number }[]} */ (second.at(-1)?.delta?.data?.steps);
-    expect(steps.map((s) => s.kind)).to.deep.equal(['tool', 'thought', 'tool']);
-    expect([steps[1].text, typeof steps[1].startedAt]).to.deep.equal(['hmm', 'number']);
+    expect(typeof second[fold].delta?.data?.startedAt, 'still timed').to.equal('number');
   });
 
-  it('keeps narration and thoughts in the order they came, and a thought before the answer only in the row', () => {
+  it('folds narration and thoughts between calls and a thought before the answer, never the answer', () => {
     // Arrange
     const b = new MessageBuilder('s1', 'agent');
     const say = (/** @type {string} */ text) => b.chunks(textUpdate('agent_message_chunk', text));
@@ -138,11 +136,9 @@ describe('MessageBuilder', () => {
     // Act
     const chunks = [...tool('t1'), ...say('Found A.'), ...think('so B'), ...tool('t2'), ...think('last'), ...say('The answer.'), ...b.finish()].map(shape);
     // Assert
-    const work = chunks.filter((c) => c.partType === 'work');
-    const steps = /** @type {{ kind: string, text?: string }[]} */ (work.at(-1)?.delta?.data?.steps);
-    expect(steps.map((s) => s.text ?? s.kind)).to.deep.equal(['tool', 'Found A.', 'so B', 'tool', 'last']);
-    const answer = chunks.filter((c) => c.partType === 'text' && c.delta?.text === 'The answer.')[0];
-    expect(chunks.some((c) => c.partId === answer.partId && c.delta?.data?.folded), 'the answer stays').to.equal(false);
+    const folded = new Set(chunks.filter((c) => c.delta?.data?.folded).map((c) => c.partId));
+    const partOf = (/** @type {string} */ text) => chunks.find((c) => c.delta?.text === text)?.partId ?? '';
+    expect(['Found A.', 'so B', 'last', 'The answer.'].map((text) => folded.has(partOf(text)))).to.deep.equal([true, true, true, false]);
   });
 
   it('settles the calls still running when the reply finishes', () => {

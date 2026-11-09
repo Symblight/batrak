@@ -51,4 +51,37 @@ describe('acp-collapsible-text', () => {
       expect(el.getBoundingClientRect().height, 'folded again').to.be.closeTo(folded, 1);
     }
   });
+
+  it('unfolded, says when its end is in view: scrolled to the bottom, or short enough to need no scroll', async () => {
+    for (const [lines, scrolls] of /** @type {[number, boolean][]} */ ([[40, true], [12, false]])) {
+      // Arrange
+      const el = /** @type {AcpCollapsibleText} */ (
+        await fixture(html`<acp-collapsible-text><span style="white-space: pre-line">${textOf(lines)}</span></acp-collapsible-text>`)
+      );
+      // The fold is measured once laid out (a resize observer): wait for its button.
+      for (let frame = 0; frame < 10 && !toggleOf(el); frame++) await settled(el);
+      const box = /** @type {HTMLElement} */ (el.shadowRoot?.querySelector('.acp-collapsible-text__box'));
+      expect(el.hasAttribute('at-end'), `${lines} lines folded`).to.equal(false);
+      // Act
+      toggleOf(el)?.click();
+      await settled(el);
+      // Assert
+      expect(el.hasAttribute('at-end'), `${lines} lines unfolded`).to.equal(!scrolls);
+      if (!scrolls) continue;
+
+      // Act
+      box.scrollTop = box.scrollHeight;
+      box.dispatchEvent(new Event('scroll'));
+      await settled(el);
+      // Assert
+      expect(el.hasAttribute('at-end'), 'scrolled to the bottom').to.equal(true);
+
+      // Act
+      box.scrollTop = 0;
+      box.dispatchEvent(new Event('scroll'));
+      await settled(el);
+      // Assert
+      expect(el.hasAttribute('at-end'), 'scrolled back up').to.equal(false);
+    }
+  });
 });

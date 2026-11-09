@@ -3,23 +3,25 @@
 /** @typedef {import('./types.js').SummaryClause} SummaryClause */
 
 /**
- * How each kind's clause reads: `file`, the verb before a file chip (`Read <file>`), or a count of
- * files (`Read 3 files`); otherwise one call's words and N calls' (`Ran a command`, `Ran 3 commands`).
- * @type {Record<string, { file?: string, one?: string, many?: (n: number) => string }>}
+ * How each kind reads. `doing`: while a call of it runs, for a call the agent didn't describe. A file
+ * kind: `file`, the verb before a file chip (`Read <file>`) or a count of files (`Read 3 files`), and
+ * `asked`, for a call that didn't do it. Any other: one call's words and N calls' (`Ran a command`,
+ * `Ran 3 commands`).
+ * @type {Record<string, { doing: string } & ({ file: string, asked: string } | { one: string, many: (n: number) => string })>}
  */
-const CLAUSES = {
-  read: { file: 'Read' },
-  edit: { file: 'Edited' },
-  delete: { file: 'Deleted' },
-  move: { file: 'Moved' },
-  search: { one: 'Searched', many: (n) => `Searched ${n} times` },
-  execute: { one: 'Ran a command', many: (n) => `Ran ${n} commands` },
-  fetch: { one: 'Fetched a page', many: (n) => `Fetched ${n} pages` },
-  other: { one: 'Used a tool', many: (n) => `Used ${n} tools` },
+const KINDS = {
+  read: { doing: 'Reading', file: 'Read', asked: 'Read' },
+  edit: { doing: 'Editing', file: 'Edited', asked: 'Edit' },
+  delete: { doing: 'Deleting', file: 'Deleted', asked: 'Delete' },
+  move: { doing: 'Moving', file: 'Moved', asked: 'Move' },
+  search: { doing: 'Searching', one: 'Searched', many: (n) => `Searched ${n} times` },
+  execute: { doing: 'Running a command', one: 'Ran a command', many: (n) => `Ran ${n} commands` },
+  fetch: { doing: 'Fetching', one: 'Fetched a page', many: (n) => `Fetched ${n} pages` },
+  other: { doing: 'Working', one: 'Used a tool', many: (n) => `Used ${n} tools` },
 };
 
 /** @param {string} kind */
-const clauseKind = (kind) => (kind in CLAUSES ? kind : 'other');
+const clauseKind = (kind) => (kind in KINDS ? kind : 'other');
 
 /**
  * What a group of tool calls did, in one line: a clause per kind in the order the kinds first
@@ -53,8 +55,9 @@ export function summaryOf(calls) {
  * @returns {SummaryClause}
  */
 function clauseOf(kind, calls) {
-  const { file, one = '', many = () => '' } = CLAUSES[kind];
-  if (!file) return { text: calls.length === 1 ? one : many(calls.length) };
+  const words = KINDS[kind];
+  if (!('file' in words)) return { text: calls.length === 1 ? words.one : words.many(calls.length) };
+  const { file } = words;
   // A file read twice is one file; a call that names none counts as one.
   const paths = new Set(calls.map((c) => c.locations[0]?.path ?? c.toolCallId));
   const [path] = paths;
@@ -72,8 +75,26 @@ const VERBS = new Set(
   uninstall unzip update upgrade verify view wait watch write`.split(/\s+/),
 );
 
-/** Verbs whose last consonant doubles before -ing. */
-const DOUBLED = new Set(['commit', 'get', 'rerun', 'run', 'scan', 'set', 'stop', 'unzip']);
+/** Verbs whose last consonant doubles before -ing and -ed. */
+const DOUBLED = new Set(['commit', 'format', 'get', 'grep', 'rerun', 'run', 'scan', 'set', 'stop', 'unzip']);
+
+/** Past forms that don't take -ed. */
+const IRREGULAR = new Map(
+  Object.entries({
+    build: 'built',
+    find: 'found',
+    get: 'got',
+    make: 'made',
+    read: 'read',
+    rebuild: 'rebuilt',
+    rerun: 'reran',
+    reset: 'reset',
+    run: 'ran',
+    see: 'saw',
+    set: 'set',
+    write: 'wrote',
+  }),
+);
 
 /** @param {string} verb Lowercase, from `VERBS`. */
 function ingOf(verb) {
@@ -82,64 +103,93 @@ function ingOf(verb) {
   return `${verb}ing`;
 }
 
+/** @param {string} verb Lowercase, from `VERBS`. */
+function pastOf(verb) {
+  const irregular = IRREGULAR.get(verb);
+  if (irregular) return irregular;
+  if (DOUBLED.has(verb)) return `${verb}${verb.at(-1)}ed`;
+  if (verb.endsWith('e')) return `${verb}d`;
+  if (/[^aeiou]y$/.test(verb)) return `${verb.slice(0, -1)}ied`;
+  return `${verb}ed`;
+}
+
 /**
- * A label in the -ing form, for while its call runs: "Check … and try …" → "Checking … and trying …".
- * Only the first word and words after "and" that are known verbs change; a label that doesn't
- * start with one stays as it is.
+ * A label with its verbs in another form: only the first word and words after "and" that are known
+ * verbs change; a label that doesn't start with one stays as it is.
  * @param {string} label
+ * @param {(verb: string) => string} form
  */
-export function progressive(label) {
+function inflect(label, form) {
   const [first = ''] = label.split(' ', 1);
   if (!VERBS.has(first.toLowerCase())) return label;
   return label.replace(/(^|\band )([A-Za-z]+)/g, (whole, before, word) => {
     const verb = word.toLowerCase();
     if (!VERBS.has(verb)) return whole;
-    const ing = ingOf(verb);
-    return before + (word[0] === word[0].toUpperCase() ? ing[0].toUpperCase() + ing.slice(1) : ing);
+    const formed = form(verb);
+    return before + (word[0] === word[0].toUpperCase() ? formed[0].toUpperCase() + formed.slice(1) : formed);
   });
 }
 
-/** What a call of each kind is doing, for a call the agent didn't describe. */
-const KIND_VERBS = {
-  read: 'Reading',
-  edit: 'Editing',
-  delete: 'Deleting',
-  move: 'Moving',
-  search: 'Searching',
-  execute: 'Running a command',
-  fetch: 'Fetching',
-};
+/**
+ * A label in the -ing form, for while its call runs: "Check … and try …" → "Checking … and trying …".
+ * @param {string} label
+ */
+export const progressive = (label) => inflect(label, ingOf);
 
 /**
+ * A label in the past tense, for a call that ran: "Check … and try …" → "Checked … and tried …".
+ * @param {string} label
+ */
+export const past = (label) => inflect(label, pastOf);
+
+/**
+ * What a call of a kind is doing, for a call the agent didn't describe.
  * @param {string} kind ACP's tool kind.
  * @param {boolean} created The call makes a new file.
  */
 export function kindVerb(kind, created) {
   if (kind === 'edit' && created) return 'Creating';
-  return KIND_VERBS[/** @type {keyof typeof KIND_VERBS} */ (kind)] ?? 'Working';
+  return KINDS[clauseKind(kind)].doing;
 }
-
-/** @typedef {import('../sessions/types.js').WorkStep} WorkStep */
 
 /** Statuses of a call that still runs. */
 const RUNNING = new Set(['pending', 'in_progress', 'awaiting-permission']);
 
 /**
- * The work row's line while its reply runs: the call waiting for permission, else the last started
- * of those running (its description in the -ing form, or its kind's verb), else the last call's
- * label as written.
- * @param {readonly WorkStep[]} steps
- * @returns {{ label: string, waiting: boolean, running: boolean }}
+ * A call's row in the expanded work row: a file it names by its kind's verb (`Created` + the file),
+ * a described call by its description in the past tense (the -ing form while it runs), else its
+ * label as the agent sent it. A call that failed or was cancelled didn't do it: it reads as asked
+ * (`Run the tests`, `Edit` + the file).
+ * @param {ToolCallView} call
+ * @returns {{ text: string, path?: string }}
  */
-export function liveLine(steps) {
-  const calls = steps.flatMap((step) => (step.kind === 'tool' ? [step.call] : []));
-  const waiting = calls.find((c) => c.status === 'awaiting-permission');
-  if (waiting) return { label: `Waiting for permission: ${waiting.label}`, waiting: true, running: true };
-  const running = calls.filter((c) => RUNNING.has(c.status)).at(-1);
-  if (running) {
-    // A worded call (`command` set) has the agent's description as its label.
-    const label = running.command ? progressive(running.label) : kindVerb(running.kind, running.diff?.created ?? false);
-    return { label, waiting: false, running: true };
+export function rowOf(call) {
+  const running = RUNNING.has(call.status);
+  const done = call.status === 'completed';
+  const created = call.diff?.created ?? false;
+  const path = call.locations[0]?.path;
+  const words = KINDS[clauseKind(call.kind)];
+  if ('file' in words && path !== undefined) {
+    if (running) return { text: kindVerb(call.kind, created), path };
+    if (done) return { text: created ? 'Created' : words.file, path };
+    return { text: created ? 'Create' : words.asked, path };
   }
-  return { label: calls.at(-1)?.label ?? '', waiting: false, running: false };
+  // A worded call (`command` set) has the agent's description as its label.
+  if (call.command) return { text: running ? progressive(call.label) : done ? past(call.label) : call.label };
+  return { text: call.label };
+}
+
+/**
+ * The work row's line while a call runs: the call waiting for permission, else the last started of
+ * those running (its description in the -ing form, or its kind's verb); `null` when none runs.
+ * @param {readonly ToolCallView[]} calls
+ * @returns {string | null}
+ */
+export function liveLine(calls) {
+  const waiting = calls.find((c) => c.status === 'awaiting-permission');
+  if (waiting) return `Waiting for permission: ${waiting.label}`;
+  const running = calls.filter((c) => RUNNING.has(c.status)).at(-1);
+  if (!running) return null;
+  // A worded call (`command` set) has the agent's description as its label.
+  return running.command ? progressive(running.label) : kindVerb(running.kind, running.diff?.created ?? false);
 }
