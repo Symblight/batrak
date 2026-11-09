@@ -85,7 +85,7 @@ describe('ChatPartsController', () => {
     const work = /** @type {(part: unknown, previous: Element | null) => HTMLElement} */ (host.parts.partElements.work);
     const step = (/** @type {string} */ id, /** @type {string} */ status) => ({
       kind: 'tool',
-      call: { toolCallId: id, label: 'Run', command: 'npm test', kind: 'execute', status, locations: [], error: '', diff: null, startedAt: null, endedAt: null },
+      call: { toolCallId: id, label: 'Run', worded: false, command: 'npm test', kind: 'execute', status, locations: [], error: '', diff: null, startedAt: null, endedAt: null },
     });
     const steps = [step('t1', 'completed'), step('t2', 'in_progress')];
     try {

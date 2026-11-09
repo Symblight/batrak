@@ -132,8 +132,11 @@ export class AcpReplyWork extends LitElement {
   }
 
   #liveHead() {
+    const { label = '', command = '' } = toolCalls.liveLine(this.#calls) ?? {};
     return html`<md-progress-circular class="acp-reply-work__spinner" indeterminate></md-progress-circular>
-      <span class="acp-reply-work__label">${toolCalls.liveLine(this.#calls)}</span>`;
+      <span class="acp-reply-work__label"
+        >${label}${command ? html` <code class="acp-reply-work__live-command">${command}</code>` : nothing}</span
+      >`;
   }
 
   #summaryHead() {
@@ -185,7 +188,7 @@ export class AcpReplyWork extends LitElement {
       ${open
         ? html`<div class="acp-reply-work__detail">
             ${call.error ? html`<pre class="acp-reply-work__error">${call.error}</pre>` : nothing}
-            ${call.command ? html`<code class="acp-reply-work__command">${call.command}</code>` : nothing}
+            ${call.command && call.command !== call.label ? html`<code class="acp-reply-work__command">${call.command}</code>` : nothing}
           </div>`
         : nothing}
     </div>`;

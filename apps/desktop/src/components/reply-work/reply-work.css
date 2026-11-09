@@ -65,6 +65,12 @@
   color: var(--acp-color-error);
 }
 
+/* A running call with no description: its command, as code, cut by the label's ellipsis. */
+.acp-reply-work__live-command {
+  font-family: var(--acp-font-family-mono);
+  color: var(--acp-color-on-surface);
+}
+
 .acp-reply-work__time {
   flex: none;
   font-variant-numeric: tabular-nums;

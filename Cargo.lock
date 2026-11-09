@@ -127,6 +127,7 @@ name = "agent-kit"
 version = "0.1.0"
 dependencies = [
  "agent-api",
+ "serde_json",
 ]
 
 [[package]]

@@ -242,8 +242,8 @@ export class MessageBuilder {
   }
 
   /**
-   * `call` with the fields `update` carries. Once the backend worded its label (`shownLabel`), the
-   * title is its command, never its label again.
+   * `call` with the fields `update` carries. Once the backend worded its label (`shownLabel`), a
+   * title never replaces it; the command comes only from the backend (`shownCommand`).
    * @param {ToolCallView} call
    * @param {AcpSessionUpdate} update
    * @returns {ToolCallView}
@@ -252,11 +252,11 @@ export class MessageBuilder {
     const next = { ...call };
     if (update.shownLabel) {
       next.label = update.shownLabel;
-      next.command = update.title || call.command || call.label;
-    } else if (update.title) {
-      if (call.command) next.command = update.title;
-      else next.label = update.title;
+      next.worded = true;
+    } else if (update.title && !call.worded) {
+      next.label = update.title;
     }
+    if (update.shownCommand) next.command = update.shownCommand;
     if (update.kind) next.kind = update.kind;
     if (update.status) next.status = update.status;
     if (update.status && !RUNNING.has(update.status) && call.startedAt !== null && call.endedAt === null) next.endedAt = Date.now();
@@ -305,7 +305,7 @@ export function subagentCardData(subagentId) {
  * @returns {ToolCallView}
  */
 function newCall(toolCallId, startedAt) {
-  return { toolCallId, label: '', command: '', kind: 'other', status: 'pending', locations: [], error: '', diff: null, startedAt, endedAt: null };
+  return { toolCallId, label: '', worded: false, command: '', kind: 'other', status: 'pending', locations: [], error: '', diff: null, startedAt, endedAt: null };
 }
 
 /** @param {AcpSessionUpdate} update */

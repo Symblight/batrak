@@ -283,7 +283,7 @@ impl agent_api::Agent for FakeKind {
             }
             return ShownToolCall::Plan(Some(plan));
         }
-        ShownToolCall::Keep { label: input["label"].as_str().map(str::to_owned) }
+        ShownToolCall::Keep { label: input["label"].as_str().map(str::to_owned), command: input["command"].as_str().map(str::to_owned) }
     }
 }
 

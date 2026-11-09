@@ -11,6 +11,7 @@ import { kindVerb, liveLine, past, progressive, rowOf, summaryOf } from '../rule
 const call = (kind, fields = {}) => ({
   toolCallId: crypto.randomUUID(),
   label: kind,
+  worded: false,
   command: '',
   kind,
   status: 'completed',
@@ -129,9 +130,10 @@ describe('rowOf', () => {
       ['an edit', call('edit', at('AGENTS.md')), { text: 'Edited', path: 'AGENTS.md' }],
       ['a new file', call('edit', { ...at('AGENTS.md'), diff: { added: 59, removed: 0, created: true } }), { text: 'Created', path: 'AGENTS.md' }],
       ['an edit running', call('edit', { ...at('AGENTS.md'), status: 'in_progress' }), { text: 'Editing', path: 'AGENTS.md' }],
-      ['a described command', call('execute', { label: 'List repo root', command: 'ls' }), { text: 'Listed repo root' }],
-      ['one running', call('execute', { label: 'List repo root', command: 'ls', status: 'in_progress' }), { text: 'Listing repo root' }],
-      ['a failed command', call('execute', { label: 'Run the tests', command: 'npm test', status: 'failed' }), { text: 'Run the tests' }],
+      ['a described command', call('execute', { label: 'List repo root', worded: true, command: 'ls' }), { text: 'Listed repo root' }],
+      ['a command with no description', call('execute', { label: 'ls -la', command: 'ls -la' }), { text: 'ls -la' }],
+      ['one running', call('execute', { label: 'List repo root', worded: true, command: 'ls', status: 'in_progress' }), { text: 'Listing repo root' }],
+      ['a failed command', call('execute', { label: 'Run the tests', worded: true, command: 'npm test', status: 'failed' }), { text: 'Run the tests' }],
       ['a cancelled edit', call('edit', { ...at('a.rs'), status: 'cancelled' }), { text: 'Edit', path: 'a.rs' }],
       ['a failed new file', call('edit', { ...at('a.rs'), status: 'failed', diff: { added: 1, removed: 0, created: true } }), { text: 'Create', path: 'a.rs' }],
       ['an undescribed call', call('fetch', { label: 'https://example.com' }), { text: 'https://example.com' }],
@@ -145,24 +147,26 @@ describe('rowOf', () => {
 });
 
 describe('liveLine', () => {
-  it('says what runs: the last started call’s label in the -ing form, its kind’s verb when unworded, the waiting one, or nothing', () => {
-    /** @type {[string, ToolCallView[], string | null][]} */
+  it('says what runs: the last started call’s description in the -ing form, else its command’s first line, else its kind’s verb; the waiting one; or nothing', () => {
+    const line = (/** @type {string} */ label, command = '') => ({ label, command });
+    /** @type {[string, ToolCallView[], { label: string, command: string } | null][]} */
     const cases = [
-      ['one running', [call('execute', { label: 'Run the tests', command: 'npm test', status: 'in_progress' })], 'Running the tests'],
+      ['one running', [call('execute', { label: 'Run the tests', worded: true, command: 'npm test', status: 'in_progress' })], line('Running the tests')],
       [
         'the last started of two',
-        [call('execute', { label: 'List files', command: 'ls', status: 'in_progress' }), call('execute', { label: 'Check git', command: 'git status', status: 'pending' })],
-        'Checking git',
+        [call('execute', { label: 'List files', worded: true, command: 'ls', status: 'in_progress' }), call('execute', { label: 'Check git', worded: true, command: 'git status', status: 'pending' })],
+        line('Checking git'),
       ],
-      ['unworded', [call('read', { label: 'Read a.rs', status: 'in_progress' })], 'Reading'],
-      ['a new file', [call('edit', { label: 'Write n.md', status: 'in_progress', diff: { added: 1, removed: 0, created: true } })], 'Creating'],
-      ['waiting', [call('execute', { status: 'in_progress' }), call('edit', { label: 'Edit a.txt', status: 'awaiting-permission' })], 'Waiting for permission: Edit a.txt'],
+      ['a command with no description', [call('execute', { label: 'npm test', command: 'npm test\nnpm run lint', status: 'in_progress' })], line('Running', 'npm test')],
+      ['unworded', [call('read', { label: 'Read a.rs', status: 'in_progress' })], line('Reading')],
+      ['a new file', [call('edit', { label: 'Write n.md', status: 'in_progress', diff: { added: 1, removed: 0, created: true } })], line('Creating')],
+      ['waiting', [call('execute', { status: 'in_progress' }), call('edit', { label: 'Edit a.txt', status: 'awaiting-permission' })], line('Waiting for permission: Edit a.txt')],
       ['between calls', [call('execute', { label: 'List files', command: 'ls' }), call('read', { label: 'Read a.rs' })], null],
       ['no calls', [], null],
     ];
     for (const [why, calls, expected] of cases) {
       // Act + Assert
-      expect(liveLine(calls), why).to.equal(expected);
+      expect(liveLine(calls), why).to.deep.equal(expected);
     }
   });
 });

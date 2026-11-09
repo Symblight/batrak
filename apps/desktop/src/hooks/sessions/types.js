@@ -86,6 +86,8 @@
  * @property {string | null} [title]
  * @property {string} [shownLabel] Added by the backend: the tool call's label, worded by its agent's
  *   crate (a shell call's description), shown instead of `title`.
+ * @property {string} [shownCommand] Added by the backend: the shell command the call runs, where its
+ *   agent's crate knows it.
  * @property {string | null} [kind]
  * @property {ToolCallDiff} [shownDiff] Added by the backend: the lines a tool call's edits add and remove.
  * @property {'pending' | 'in_progress' | 'completed' | 'failed' | null} [status]
@@ -292,8 +294,8 @@ export {};
  * @typedef {Object} ToolCallView
  * @property {string} toolCallId
  * @property {string} label The backend's wording (`shownLabel`), else the agent's title.
- * @property {string} command The agent's title when the label is the backend's wording (a shell
- *   call's command), else `''`.
+ * @property {boolean} worded The label is the backend's wording (a description), not the title.
+ * @property {string} command The shell command it runs (`shownCommand`), else `''`.
  * @property {string} kind ACP's tool kind.
  * @property {ToolCallStatus} status
  * @property {{ path: string, line?: number }[]} locations

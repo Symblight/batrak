@@ -174,22 +174,23 @@ export function rowOf(call) {
     if (done) return { text: created ? 'Created' : words.file, path };
     return { text: created ? 'Create' : words.asked, path };
   }
-  // A worded call (`command` set) has the agent's description as its label.
-  if (call.command) return { text: running ? progressive(call.label) : done ? past(call.label) : call.label };
+  if (call.worded) return { text: running ? progressive(call.label) : done ? past(call.label) : call.label };
   return { text: call.label };
 }
 
 /**
  * The work row's line while a call runs: the call waiting for permission, else the last started of
- * those running (its description in the -ing form, or its kind's verb); `null` when none runs.
+ * those running: its description in the -ing form, else `Running` and its command's first line
+ * (`command`, shown as code), else its kind's verb; `null` when none runs.
  * @param {readonly ToolCallView[]} calls
- * @returns {string | null}
+ * @returns {{ label: string, command: string } | null}
  */
 export function liveLine(calls) {
   const waiting = calls.find((c) => c.status === 'awaiting-permission');
-  if (waiting) return `Waiting for permission: ${waiting.label}`;
+  if (waiting) return { label: `Waiting for permission: ${waiting.label}`, command: '' };
   const running = calls.filter((c) => RUNNING.has(c.status)).at(-1);
   if (!running) return null;
-  // A worded call (`command` set) has the agent's description as its label.
-  return running.command ? progressive(running.label) : kindVerb(running.kind, running.diff?.created ?? false);
+  if (running.worded) return { label: progressive(running.label), command: '' };
+  if (running.command) return { label: 'Running', command: running.command.split('\n', 1)[0] };
+  return { label: kindVerb(running.kind, running.diff?.created ?? false), command: '' };
 }
