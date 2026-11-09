@@ -64,6 +64,17 @@
   --chx-message-composer-background: var(--acp-color-surface-container-high);
   --chx-message-composer-footer-padding: 2px var(--acp-space-1);
   --chx-message-composer-footer-min-height: 28px;
+
+  /* Its own `:host` display beats the UA rule; the bar stands in for it while a subagent is shown. */
+  &[hidden] {
+    display: none;
+  }
+}
+/* In the composer's place: raised like it, so it covers the banner's shadow instead of under it. */
+.acp-chat__subagent {
+  max-width: var(--_acp-chat-content-max-width);
+  position: relative;
+  z-index: var(--acp-z-raised);
 }
 .acp-chat__composer::part(textbox) {
   --chx-textbox-background-color: var(--acp-color-surface-container-lowest);

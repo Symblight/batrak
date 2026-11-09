@@ -1,6 +1,7 @@
 import { clearMocks, mockIPC } from '@tauri-apps/api/mocks';
 import { emit } from '@tauri-apps/api/event';
 import { expect, fixture, html } from '../../../../test/fixture.js';
+import { git } from '../../../hooks/git/git.js';
 import { projects } from '../../../hooks/projects/projects.js';
 import { $notices } from '../../../stores/notices/notices.js';
 import { $folderExpandedFolders, setExpandedFolders } from '../../../stores/file-tree/file-tree.js';
@@ -56,6 +57,7 @@ describe('acp-files-view', () => {
     mockIPC(
       (cmd, args) => {
         calls.push({ cmd, args: /** @type {Record<string, unknown>} */ (args ?? {}) });
+        if (cmd === 'git_status') return { version: 1, unchanged: true, status: null };
         return cmd === 'list_dir' ? [] : null;
       },
       { shouldMockEvents: true },
@@ -276,5 +278,21 @@ describe('acp-files-view', () => {
     el.reveal('src/a.js', { expand: true });
     // Assert
     expect(revealed).to.deep.equal([['src/a.js', { expand: true }]]);
+  });
+
+  it('keeps the changed files current only while it is connected', async () => {
+    // Arrange
+    const scanned = () => calls.some((c) => c.cmd === 'git_status');
+    // Act
+    const { el } = await render();
+    // Assert
+    await until(scanned);
+    // Act
+    el.remove();
+    calls.length = 0;
+    git.refreshChanges();
+    await new Promise((r) => setTimeout(r, 50));
+    // Assert
+    expect(scanned(), 'removed').to.equal(false);
   });
 });

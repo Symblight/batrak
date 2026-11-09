@@ -1,4 +1,5 @@
 import { computed } from 'nanostores';
+import { $gitChanges } from '../git/git.js';
 import { persistentMapStore } from '../persistent/persistent.js';
 import { $project } from '../project/project.js';
 import { $activeRoot } from '../workspaces/workspaces.js';
@@ -50,3 +51,48 @@ export function setExpandedFolders(paths) {
 export function removeFolderExpandedFolders(root) {
   if (root in $folderExpandedFolders.get()) $folderExpandedFolders.setKey(root, undefined);
 }
+
+/** @typedef {import('../../hooks/git/types.js').GitFileKind} GitFileKind */
+/** @typedef {import('../../hooks/git/types.js').GitFileStatus} GitFileStatus */
+
+/**
+ * How a row is marked: a file by its own status, a folder by the most serious status under it.
+ * @typedef {{ kind: GitFileKind, folder: boolean }} FileMark
+ */
+
+/** @type {Record<GitFileKind, number>} */
+const RANK = { added: 0, untracked: 0, modified: 1, typeChanged: 1, renamed: 1, deleted: 2, conflicted: 3 };
+
+/** @type {ReadonlyMap<string, FileMark>} */
+const NO_MARKS = new Map();
+
+/**
+ * Marks by root-relative path, for files and every folder above a changed file. A deleted file
+ * marks only its folders: it has no row of its own.
+ * @param {readonly GitFileStatus[]} files
+ * @returns {ReadonlyMap<string, FileMark>}
+ */
+export function fileMarks(files) {
+  /** @type {Map<string, FileMark>} */
+  const marks = new Map();
+  for (const { path, kind } of files) {
+    if (kind !== 'deleted') marks.set(path, { kind, folder: false });
+    for (let end = path.lastIndexOf('/'); end > 0; end = path.lastIndexOf('/', end - 1)) {
+      const folder = path.slice(0, end);
+      const mark = marks.get(folder);
+      if (!mark || RANK[kind] > RANK[mark.kind]) marks.set(folder, { kind, folder: true });
+    }
+  }
+  return marks;
+}
+
+/** @type {{ files: readonly GitFileStatus[], marks: ReadonlyMap<string, FileMark> } | null} */
+let lastMarks = null;
+
+/** Marks of the shown root's changes; empty until its status loads, outside a repo, or on error. */
+export const $fileMarks = computed($gitChanges, ({ files, loaded, error }) => {
+  if (!loaded || error) return NO_MARKS;
+  // `files` is a new array only when the status changed: the tree doesn't redraw for nothing.
+  if (lastMarks?.files !== files) lastMarks = { files, marks: fileMarks(files) };
+  return lastMarks.marks;
+});

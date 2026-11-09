@@ -1,8 +1,9 @@
 import { html } from 'lit';
 import { app } from '../../hooks/app/app.js';
+import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { terminals } from '../../hooks/terminals/terminals.js';
-import { $expandedFolders, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
+import { $expandedFolders, $fileMarks, setExpandedFolders } from '../../stores/file-tree/file-tree.js';
 import { $activeRoot } from '../../stores/workspaces/workspaces.js';
 import { $openingPath } from '../../stores/project/project.js';
 import { StoreController } from '../../controllers/store/StoreController.js';
@@ -13,16 +14,19 @@ import { ViewElement } from '../../components/view-element/view-element.js';
 
 /**
  * @tag acp-files-view
- * @summary The file tree wired to its data: the shown folder (the project's, or the shown workspace's), its expanded folders, the folders listed again when files change on disk, Refresh, and what a row's menu asks for.
+ * @summary The file tree wired to its data: the shown folder (the project's, or the shown workspace's), its expanded folders, its rows' git marks, the folders listed again when files change on disk, Refresh, and what a row's menu asks for.
  */
 export class AcpFilesView extends ViewElement {
   #activeRoot = new StoreController(this, { store: $activeRoot });
   #openingPath = new StoreController(this, { store: $openingPath });
   #expandedFolders = new StoreController(this, { store: $expandedFolders });
+  #fileMarks = new StoreController(this, { store: $fileMarks });
   /** A Refresh is running. */
   #refreshing = false;
   /** Stops listening to the shown folder's files changing on disk. */
   #stopWatching = () => {};
+  /** Stops keeping the changed files current, which the rows are marked by. */
+  #unwatchChanges = () => {};
 
   get #tree() {
     return /** @type {HTMLElementTagNameMap['acp-file-tree'] | null} */ (this.renderRoot.querySelector('acp-file-tree'));
@@ -35,10 +39,12 @@ export class AcpFilesView extends ViewElement {
   connectedCallback() {
     super.connectedCallback();
     this.#stopWatching = projects.onFsChange(this.#onFsChange);
+    this.#unwatchChanges = git.watchChanges();
   }
 
   disconnectedCallback() {
     this.#stopWatching();
+    this.#unwatchChanges();
     super.disconnectedCallback();
   }
 
@@ -92,6 +98,7 @@ export class AcpFilesView extends ViewElement {
       .root=${root.path}
       .listDir=${projects.listDir}
       .expanded=${this.#expandedFolders.value}
+      .marks=${this.#fileMarks.value}
       .opening=${this.#openingPath.value !== null || root.opening}
       @acp-expanded-change=${(/** @type {CustomEvent<{ paths: string[] }>} */ e) => {
         e.stopPropagation();

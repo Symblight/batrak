@@ -1,4 +1,5 @@
 import { app } from '../../hooks/app/app.js';
+import { git } from '../../hooks/git/git.js';
 import { projects } from '../../hooks/projects/projects.js';
 import { LitElement, html, nothing } from 'lit';
 import { unsafeSVG } from 'lit/directives/unsafe-svg.js';
@@ -17,6 +18,7 @@ import styles from './file-tree.css?inline';
 /** @typedef {import('../../hooks/projects/types.js').RootEntry} RootEntry */
 /** @typedef {import('../../hooks/app/types.js').Platform} Platform */
 /** @typedef {{ id: string, label: string, isDir: boolean, ignored: boolean }} TreeItem */
+/** @typedef {import('../../stores/file-tree/file-tree.js').FileMark} FileMark */
 /** @typedef {(rootId: string, rel: string) => Promise<RootEntry[]>} ListDir A folder's entries; `''` is the root. */
 
 /**
@@ -31,12 +33,18 @@ function toItem(e) {
 const SKELETON_DELAY = 150;
 const SKELETON_ROWS = 6;
 
+/** @type {ReadonlyMap<string, FileMark>} */
+const NO_MARKS = new Map();
+
 /**
- * Tooltip of a row's label: its root-relative path.
+ * Tooltip of a row's label: its root-relative path, and its git status if it has one.
  * @param {TreeItem} item
+ * @param {FileMark | undefined} mark Shown only on a row that isn't ignored.
  */
-function tooltipFor(item) {
-  return item.ignored ? `${item.id} (ignored)` : item.id;
+function tooltipFor(item, mark) {
+  if (item.ignored) return `${item.id} (ignored)`;
+  if (!mark) return item.id;
+  return mark.folder ? `${item.id} (contains changes)` : `${item.id} (${git.statusOf(mark.kind).label})`;
 }
 
 /**
@@ -64,6 +72,7 @@ export class AcpFileTree extends LitElement {
     root: { attribute: false },
     listDir: { attribute: false },
     expanded: { attribute: false },
+    marks: { attribute: false },
     opening: { type: Boolean },
     platform: {},
   };
@@ -80,6 +89,8 @@ export class AcpFileTree extends LitElement {
     this.listDir = async () => [];
     /** @type {string[]} Root-relative folders to keep expanded, loaded or not. */
     this.expanded = [];
+    /** @type {ReadonlyMap<string, FileMark>} Git marks of changed files and the folders above them, by root-relative path. */
+    this.marks = NO_MARKS;
     /** Its folder's root is being scanned: the tree hides at once, a skeleton shows after `SKELETON_DELAY`. */
     this.opening = false;
     /** @type {Platform} Names the file manager in a row's menu. */
@@ -160,6 +171,8 @@ export class AcpFileTree extends LitElement {
     // A new root lists different files; not on the first render, when the tree lists it anyway.
     if (changed.has('rootId') && changed.get('rootId') !== undefined) this.#switchProject();
     if (changed.has('expanded')) this.#applyExpansion(this.#expanded);
+    // The tree renders its rows from the callbacks and can't tell the marks changed.
+    if (changed.has('marks')) this.#tree?.requestUpdate();
   }
 
   /**
@@ -311,22 +324,44 @@ export class AcpFileTree extends LitElement {
   }
 
   /**
-   * Ignored entries are dimmed. Rendered inside the tree's shadow root, so styled inline, the anchor
-   * and its tooltip in one template. The tooltip gets `width: max-content`: wc-material's fixed tooltip
-   * otherwise shrinks to the space right of its `left`, so near the window's edge each reposition
+   * A row's git mark, unless it is ignored (git reports no status for it).
+   * @param {TreeItem} item
+   */
+  #markOf(item) {
+    return item.ignored ? undefined : this.marks.get(item.id);
+  }
+
+  /**
+   * Ignored entries are dimmed, changed ones take their status color. Rendered inside the tree's
+   * shadow root, so styled inline, the anchor and its tooltip in one template. The tooltip gets
+   * `width: max-content`: wc-material's fixed tooltip otherwise shrinks to the space right of its `left`, so near the window's edge each reposition
    * resizes it and re-fires Floating UI's ResizeObserver ("ResizeObserver loop completed with
    * undelivered notifications").
    * @param {TreeItem} item
    */
-  #renderLabel(item) {
+  #renderLabel = (item) => {
     const id = `acp-file-tree-label:${item.id}`;
+    const mark = this.#markOf(item);
+    const style = item.ignored ? 'color: var(--acp-color-on-surface-variant); opacity: 0.6' : mark ? `color: ${git.statusOf(mark.kind).color}` : '';
+    return html`<span id=${id} style=${style}>${item.label}</span>
+      <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item, mark)}</md-tooltip>`;
+  };
+
+  /**
+   * A changed row's dot, the unread chat's in its status color; inline for the same reason as the label.
+   * @param {TreeItem} item
+   */
+  #renderTrailing = (item) => {
+    const mark = this.#markOf(item);
+    if (!mark) return nothing;
+    const { label, color } = git.statusOf(mark.kind);
     return html`<span
-        id=${id}
-        style=${item.ignored ? 'color: var(--acp-color-on-surface-variant); opacity: 0.6' : ''}
-        >${item.label}</span
-      >
-      <md-tooltip for=${id} show-delay="800" style="width: max-content; max-inline-size: none">${tooltipFor(item)}</md-tooltip>`;
-  }
+      data-file-mark
+      role="img"
+      aria-label=${mark.folder ? 'Contains changes' : label}
+      style="flex: none; inline-size: 8px; block-size: 8px; margin-inline-end: var(--acp-space-1); border-radius: var(--acp-shape-corner-full); background: ${color}"
+    ></span>`;
+  };
 
   /** @param {MouseEvent} e */
   async #onContextMenu(e) {
@@ -444,6 +479,7 @@ export class AcpFileTree extends LitElement {
         .dataSource=${this.#dataSource}
         .renderItemLeading=${this.#renderLeading}
         .renderItemLabel=${this.#renderLabel}
+        .renderItemTrailing=${this.#renderTrailing}
         @tvx-selection-change=${this.#onSelectionChange}
         @tvx-children-loaded=${this.#onChildrenLoaded}
         @tvx-expansion-change=${this.#onExpansionChange}

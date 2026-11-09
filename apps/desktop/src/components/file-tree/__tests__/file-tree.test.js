@@ -3,6 +3,7 @@ import '../file-tree.js';
 
 /** @typedef {import('../../../hooks/projects/types.js').RootEntry} RootEntry */
 /** @typedef {HTMLElementTagNameMap['acp-file-tree']} AcpFileTree */
+/** @typedef {import('../../../stores/file-tree/file-tree.js').FileMark} FileMark */
 
 /**
  * @param {string} path
@@ -173,5 +174,61 @@ describe('acp-file-tree', () => {
     el.reveal('src/x.js');
     await until(() => tree.selection.get().has('src/x.js'));
     expect(sent.at(-1)).to.deep.equal(['src']);
+  });
+
+  describe('git marks', () => {
+    /** @type {Record<string, RootEntry[]>} */
+    const MARKED = { '': [entry('src', true), entry('a.txt', false), entry('b.txt', false), { ...entry('c.log', false), ignored: true }] };
+    /** @param {string} _rootId @param {string} rel */
+    const listMarked = async (_rootId, rel) => MARKED[rel] ?? [];
+
+    /** @param {AcpFileTree} el @param {string} id */
+    const labelOf = (el, id) => /** @type {HTMLElement | null} */ (treeOf(el).shadowRoot?.getElementById(`acp-file-tree-label:${id}`) ?? null);
+
+    /**
+     * A row's dot, as assistive tech reads it: its role and name; `null` when it has none.
+     * @param {AcpFileTree} el
+     * @param {string} id
+     */
+    function dotOf(el, id) {
+      const dot = labelOf(el, id)?.closest('[part="row"]')?.querySelector('[data-file-mark]');
+      return dot ? `${dot.getAttribute('role')}: ${dot.getAttribute('aria-label')}` : null;
+    }
+
+    /** @param {Map<string, FileMark>} marks */
+    async function renderMarked(marks) {
+      const el = /** @type {AcpFileTree} */ (await fixture(html`<acp-file-tree .rootId=${'root-marks'} .root=${'/p'} .listDir=${listMarked} .marks=${marks}></acp-file-tree>`));
+      await until(() => Boolean(labelOf(el, 'c.log')));
+      return el;
+    }
+
+    it('marks a changed file with a dot and a tooltip naming its status; an unchanged or ignored file has neither', async () => {
+      // Arrange + Act
+      const el = await renderMarked(
+        new Map([
+          ['a.txt', { kind: 'modified', folder: false }],
+          ['c.log', { kind: 'untracked', folder: false }],
+        ]),
+      );
+      // Assert
+      const rows = ['a.txt', 'b.txt', 'c.log'].map((id) => [id, dotOf(el, id), tooltipOf(labelOf(el, id))]);
+      expect(rows).to.deep.equal([
+        ['a.txt', 'img: Modified', 'a.txt (Modified)'],
+        ['b.txt', null, 'b.txt'],
+        ['c.log', null, 'c.log (ignored)'],
+      ]);
+    });
+
+    it('marks a folder holding changes, redrawing rows already shown when the marks change', async () => {
+      // Arrange
+      const el = await renderMarked(new Map([['a.txt', { kind: 'untracked', folder: false }]]));
+      // Act
+      el.marks = new Map([['src', { kind: 'deleted', folder: true }]]);
+      await el.updateComplete;
+      await treeOf(el).updateComplete;
+      // Assert
+      expect([dotOf(el, 'src'), tooltipOf(labelOf(el, 'src'))]).to.deep.equal(['img: Contains changes', 'src (contains changes)']);
+      expect([dotOf(el, 'a.txt'), tooltipOf(labelOf(el, 'a.txt'))], 'no longer changed').to.deep.equal([null, 'a.txt']);
+    });
   });
 });
