@@ -21,6 +21,19 @@
   flex: none;
 }
 
+/* Fades the box's end into the button's row, as the chat fades its list above the composer: a
+   shadow in the bubble's color, raised over the box. None once unfolded and scrolled to its end. */
+.acp-collapsible-text__footer {
+  position: relative;
+  z-index: var(--acp-z-raised);
+  box-shadow: 0 calc(-1 * var(--acp-space-2)) var(--acp-space-3) var(--acp-space-1)
+    var(--acp-collapsible-text-shade-color, var(--chx-message-own-background-color, var(--acp-color-surface)));
+  transition: box-shadow 150ms;
+  :host([at-end]) & {
+    box-shadow: none;
+  }
+}
+
 .acp-collapsible-text__toggle {
   --md-button-font-size: var(--acp-font-size-sm);
   --md-button-line-height: 16px;
