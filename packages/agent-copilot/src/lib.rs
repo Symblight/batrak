@@ -45,16 +45,16 @@ impl Agent for Copilot {
         })
     }
 
-    /// Its modes are URLs ending in `#agent`, `#plan` or `#autopilot` (which goes on unasked).
     /// A shell call by its model's `description`, with its command. Its reads name their file; its
     /// edits (`apply_patch`) name theirs only in their diffs.
     fn shown_tool_call(&self, tool_call: &serde_json::Value, _plan: &[agent_api::PlanEntry]) -> agent_api::ShownToolCall {
         match tool_call["kind"] == "execute" {
             true => agent_kit::shell_call(tool_call),
-            false => agent_api::ShownToolCall::Keep { label: None, command: None },
+            false => agent_api::ShownToolCall::AS_SENT,
         }
     }
 
+    /// Its modes are URLs ending in `#agent`, `#plan` or `#autopilot` (which goes on unasked).
     fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
         match value.rsplit_once('#')?.1 {
             "autopilot" => Some(ModeRisk::Agent),

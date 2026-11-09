@@ -85,15 +85,16 @@ export class AcpReplyWork extends LitElement {
   }
 
   /**
-   * The reply runs and so does a call: the live line. Between calls the text below may be the answer
-   * (ACP doesn't say until the turn ends), so the row shows what it did so far, not a spinner.
+   * The live line while the reply runs and so does a call, else `null`. Between calls the text below
+   * may be the answer (ACP doesn't say until the turn ends), so the row shows what it did so far, not
+   * a spinner.
    */
-  get #working() {
-    return this.live && toolCalls.liveLine(this.#calls) !== null;
+  get #line() {
+    return this.live ? toolCalls.liveLine(this.#calls) : null;
   }
 
   #syncTicker() {
-    const live = this.#working && this.isConnected && this.#calls.some((c) => c.startedAt !== null);
+    const live = this.#line !== null && this.isConnected && this.#calls.some((c) => c.startedAt !== null);
     if (live && this.#ticker === undefined) {
       this.#now = Date.now();
       this.#ticker = setInterval(() => {
@@ -112,7 +113,7 @@ export class AcpReplyWork extends LitElement {
     const starts = calls.map((c) => c.startedAt);
     if (!starts.length || starts.some((t) => t === null)) return '';
     const start = Math.min(.../** @type {number[]} */ (starts));
-    if (this.#working) return chat.formatElapsed(Math.max(this.#now, start) - start);
+    if (this.#line) return chat.formatElapsed(Math.max(this.#now, start) - start);
     const ends = calls.map((c) => c.endedAt);
     if (ends.some((t) => t === null)) return '';
     return chat.formatElapsed(Math.max(.../** @type {number[]} */ (ends)) - start);
@@ -131,8 +132,8 @@ export class AcpReplyWork extends LitElement {
     this.dispatchEvent(new CustomEvent('acp-tool-location-click', { detail: location, bubbles: true, composed: true }));
   }
 
-  #liveHead() {
-    const { label = '', command = '' } = toolCalls.liveLine(this.#calls) ?? {};
+  /** @param {{ label: string, command: string }} line */
+  #liveHead({ label, command }) {
     return html`<md-progress-circular class="acp-reply-work__spinner" indeterminate></md-progress-circular>
       <span class="acp-reply-work__label"
         >${label}${command ? html` <code class="acp-reply-work__live-command">${command}</code>` : nothing}</span
@@ -195,6 +196,7 @@ export class AcpReplyWork extends LitElement {
   }
 
   render() {
+    const line = this.#line;
     const time = this.#time;
     return html`
       <div
@@ -205,7 +207,7 @@ export class AcpReplyWork extends LitElement {
         @click=${this.#toggle}
         @keydown=${onActivateKey(() => this.#toggle())}
       >
-        ${this.#working ? this.#liveHead() : this.#summaryHead()} ${time ? html`<span class="acp-reply-work__time">${time}</span>` : nothing}
+        ${line ? this.#liveHead(line) : this.#summaryHead()} ${time ? html`<span class="acp-reply-work__time">${time}</span>` : nothing}
         <md-icon class="acp-reply-work__chevron">${unsafeSVG(expandIcon)}</md-icon>
       </div>
       ${this.expanded

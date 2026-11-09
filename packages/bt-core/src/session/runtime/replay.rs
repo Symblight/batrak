@@ -68,8 +68,8 @@ impl ReplayLog {
 /// none (Codex and Copilot name an edit's file only in its diff).
 pub(super) fn keep_shown_fields(tool_call: &mut Value) {
     let failed = tool_call["status"] == "failed";
-    let diff = shown_diff(&tool_call["content"]);
-    let diff_paths = diff_locations(&tool_call["content"]);
+    let diffs: Vec<&Value> = tool_call["content"].as_array().into_iter().flatten().filter(|block| block["type"] == "diff").collect();
+    let (diff, diff_paths) = (shown_diff(&diffs), diff_locations(&diffs));
     if let Some(fields) = tool_call.as_object_mut() {
         fields.retain(|key, _| {
             matches!(key.as_str(), "sessionUpdate" | "toolCallId" | "title" | "kind" | "status" | "locations" | "shownLabel" | "shownCommand") || (failed && key == "content")
@@ -77,7 +77,7 @@ pub(super) fn keep_shown_fields(tool_call: &mut Value) {
         if let Some(diff) = diff {
             fields.insert("shownDiff".to_owned(), diff);
         }
-        if let (false, Some(paths)) = (fields.contains_key("locations"), diff_paths) {
+        if let Some(paths) = diff_paths.filter(|_| !fields.contains_key("locations")) {
             fields.insert("locations".to_owned(), paths);
         }
     }
@@ -87,27 +87,26 @@ pub(super) fn keep_shown_fields(tool_call: &mut Value) {
 }
 
 /// `[{ path }]` of the files a tool call's `diff` blocks change, each once; `None` without one.
-fn diff_locations(content: &Value) -> Option<Value> {
+fn diff_locations(diffs: &[&Value]) -> Option<Value> {
     let mut paths: Vec<&str> = Vec::new();
-    for path in content.as_array()?.iter().filter(|b| b["type"] == "diff").filter_map(|b| b["path"].as_str()) {
+    for path in diffs.iter().filter_map(|diff| diff["path"].as_str()) {
         if !paths.contains(&path) {
             paths.push(path);
         }
     }
-    (!paths.is_empty()).then(|| paths.iter().map(|path| serde_json::json!({ "path": path })).collect())
+    (!paths.is_empty()).then(|| paths.iter().map(|path| json!({ "path": path })).collect())
 }
 
 /// `{ added, removed, created }` of a tool call's `diff` blocks; `None` without one. A block is a
 /// whole file before and after (a Write) or one hunk of it with context lines around the change
 /// (Claude's Edit); either way the lines are counted by their edit distance (`changed_lines`).
 /// `oldText` null is a new file.
-fn shown_diff(content: &Value) -> Option<Value> {
-    let diffs: Vec<_> = content.as_array()?.iter().filter(|block| block["type"] == "diff").collect();
+fn shown_diff(diffs: &[&Value]) -> Option<Value> {
     if diffs.is_empty() {
         return None;
     }
     let (mut added, mut removed) = (0, 0);
-    for diff in &diffs {
+    for diff in diffs {
         let old: Vec<_> = diff["oldText"].as_str().unwrap_or_default().lines().collect();
         let new: Vec<_> = diff["newText"].as_str().unwrap_or_default().lines().collect();
         let (plus, minus) = changed_lines(&old, &new);

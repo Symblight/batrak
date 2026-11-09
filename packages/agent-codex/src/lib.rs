@@ -36,16 +36,16 @@ impl Agent for Codex {
         agent_kit::runs(launch, PACKAGE)
     }
 
-    /// codex-acp's modes: `read-only`, `auto`, `full-access`.
     /// A shell call by the command it runs; its model writes it no description. Codex words its
     /// reads and edits itself ("List files", "Read file …"), and names an edit's file only in its diff.
     fn shown_tool_call(&self, tool_call: &serde_json::Value, _plan: &[agent_api::PlanEntry]) -> agent_api::ShownToolCall {
         match tool_call["kind"] == "execute" {
             true => agent_kit::shell_call(tool_call),
-            false => agent_api::ShownToolCall::Keep { label: None, command: None },
+            false => agent_api::ShownToolCall::AS_SENT,
         }
     }
 
+    /// codex-acp's modes: `read-only`, `auto`, `full-access`.
     fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
         match value {
             "read-only" => Some(ModeRisk::Plan),

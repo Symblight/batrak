@@ -207,6 +207,11 @@ pub enum ShownToolCall {
     Plan(Option<Vec<PlanEntry>>),
 }
 
+impl ShownToolCall {
+    /// Shown as the agent sent it: its title, no command.
+    pub const AS_SENT: Self = Self::Keep { label: None, command: None };
+}
+
 /// An entry of a plan, as ACP's `plan` update carries it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct PlanEntry {
@@ -271,7 +276,7 @@ pub trait Agent: Send + Sync + 'static {
     /// the plan the session shows now (`plan`). Called for every update of a call until one hides
     /// it or gives a plan; a later update may carry what the first didn't (its whole input).
     fn shown_tool_call(&self, _tool_call: &serde_json::Value, _plan: &[PlanEntry]) -> ShownToolCall {
-        ShownToolCall::Keep { label: None, command: None }
+        ShownToolCall::AS_SENT
     }
 }
 
@@ -353,7 +358,7 @@ mod tests {
     #[test]
     fn by_default_a_tool_call_is_shown_as_the_agent_sent_it() {
         let call = serde_json::json!({ "toolCallId": "t1", "title": "mcp__x__y", "rawInput": { "description": "Do it" } });
-        assert_eq!(Plain.shown_tool_call(&call, &[]), ShownToolCall::Keep { label: None, command: None });
+        assert_eq!(Plain.shown_tool_call(&call, &[]), ShownToolCall::AS_SENT);
     }
 
     #[test]

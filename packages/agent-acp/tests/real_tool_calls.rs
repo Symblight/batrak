@@ -27,12 +27,10 @@ struct Recorder {
 }
 
 impl ClientHost for Recorder {
-    fn on_update(&self, update: Value, subagent: Option<String>) {
-        let kind = update["sessionUpdate"].as_str().unwrap_or_default();
-        if kind != "tool_call" && kind != "tool_call_update" {
+    fn on_update(&self, mut update: Value, subagent: Option<String>) {
+        if !matches!(update["sessionUpdate"].as_str(), Some("tool_call" | "tool_call_update")) {
             return;
         }
-        let mut update = update;
         if let Some(subagent) = subagent {
             update["recordedSubagent"] = subagent.into();
         }

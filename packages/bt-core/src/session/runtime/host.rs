@@ -81,7 +81,7 @@ impl SessionHost {
         }
         let agent = lock(&state.agent).clone();
         let plan = lock(&state.plan).clone();
-        let shown = agent.map_or(ShownToolCall::Keep { label: None, command: None }, |agent| agent.shown_tool_call(&update, &plan));
+        let shown = agent.map_or(ShownToolCall::AS_SENT, |agent| agent.shown_tool_call(&update, &plan));
         match shown {
             // An update that doesn't name its tool, of a plan tool still waiting for its input.
             ShownToolCall::Keep { .. } if lock(&state.planning_tools).contains(&id) => None,
