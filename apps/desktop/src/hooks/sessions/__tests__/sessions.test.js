@@ -519,15 +519,20 @@ describe('sessions keeps the active session in its view', () => {
     }
   });
 
-  it('shows the agent column again when a new chat is opened while the editor is expanded', () => {
-    // Arrange
-    $hiddenColumns.set(['agent', 'side']);
+  it('shows the agent column again when a chat is opened while the editor is expanded', () => {
+    for (const [how, open] of /** @type {const} */ ([
+      ['a new chat', () => sessions.create('/p', 'main')],
+      ['a listed chat', () => sessions.select('s1')],
+    ])) {
+      // Arrange
+      $hiddenColumns.set(['agent', 'side']);
 
-    // Act
-    sessions.create('/p', 'main');
+      // Act
+      open();
 
-    // Assert
-    expect($hiddenColumns.get(), 'only the agent column comes back').to.deep.equal(['side']);
+      // Assert
+      expect($hiddenColumns.get(), `${how}: only the agent column comes back`).to.deep.equal(['side']);
+    }
     $hiddenColumns.set([]);
   });
 

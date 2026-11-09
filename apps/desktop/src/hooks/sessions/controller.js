@@ -405,6 +405,8 @@ function resume(id) {
  */
 function select(id) {
   selectSession(id);
+  // An opened chat is for reading: an expanded editor gives the agent column back.
+  showColumn('agent');
 }
 
 /**
