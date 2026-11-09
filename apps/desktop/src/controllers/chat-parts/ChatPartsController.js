@@ -18,7 +18,6 @@ import { AcpReplyWork } from '../../components/reply-work/reply-work.js';
 /** @typedef {import('@symblight/chat/agent').ChxToolCall} ChxToolCall */
 /** @typedef {NonNullable<ChxChat['partElements']>} PartElements */
 /** @typedef {import('../../hooks/chat/chat.js').FileRef} FileRef */
-/** @typedef {import('../../hooks/sessions/types.js').ToolCallView} ToolCallView */
 /** @typedef {import('../../hooks/sessions/types.js').WorkStep} WorkStep */
 
 /**
@@ -74,24 +73,6 @@ function refChip(ref, doc) {
   return chip;
 }
 
-/**
- * A tool call's location (`ChxToolCall.buildLocation`): the library's chip with the file type's icon.
- * Module-level, so the tool call never sees a new builder and rebuilds the chip.
- * @param {Parameters<ChxToolCall['buildLocation']>[0]} location
- */
-export function locationChip({ path, line }) {
-  const name = path.slice(path.lastIndexOf('/') + 1);
-  const chip = document.createElement('chx-chip');
-  chip.title = line === undefined ? path : `${path}:${line}`;
-  chip.dataset.path = path;
-  if (line !== undefined) chip.dataset.line = String(line);
-  const icon = document.createElement('md-icon');
-  icon.slot = 'icon';
-  icon.innerHTML = fileIcon.svgFor(name);
-  chip.append(icon, name);
-  return chip;
-}
-
 /** Statuses of a tool call that still runs. */
 const RUNNING = new Set(['pending', 'in_progress', 'awaiting-permission']);
 
@@ -105,29 +86,6 @@ function hiddenPart(previous) {
   element.dataset.folded = '';
   element.hidden = true;
   return element;
-}
-
-/**
- * A tool call's row: its label, kind, status, first file, error and edit stats, its command in the
- * body.
- * @param {Pick<ToolCallView, 'toolCallId' | 'label' | 'kind' | 'status' | 'locations' | 'error'> & Partial<ToolCallView>} view
- * @param {Element | null | undefined} previous
- */
-function toolCallElement(view, previous) {
-  const call = /** @type {ChxToolCall} */ (previous?.localName === 'chx-tool-call' ? previous : document.createElement('chx-tool-call'));
-  call.buildLocation = locationChip;
-  call.toolCallId = view.toolCallId;
-  call.label = view.label;
-  call.kind = view.kind;
-  call.status = view.status;
-  call.locations = view.locations;
-  call.error = view.error;
-  call.additions = view.diff?.added || undefined;
-  call.deletions = view.diff?.removed || undefined;
-  if (call.textContent !== (view.command ?? '')) {
-    call.replaceChildren(...(view.command ? [Object.assign(document.createElement('code'), { textContent: view.command })] : []));
-  }
-  return call;
 }
 
 /**
@@ -248,13 +206,11 @@ export class ChatPartsController {
   hostConnected() {
     ensureChipTemplates();
     this.#host.addEventListener('click', this.#onClick);
-    this.#host.addEventListener('chx-tool-call-location-click', this.#onLocationClick);
     this.#host.addEventListener('acp-tool-location-click', this.#onLocationClick);
   }
 
   hostDisconnected() {
     this.#host.removeEventListener('click', this.#onClick);
-    this.#host.removeEventListener('chx-tool-call-location-click', this.#onLocationClick);
     this.#host.removeEventListener('acp-tool-location-click', this.#onLocationClick);
   }
 
@@ -321,20 +277,14 @@ export class ChatPartsController {
       plan.entries = part.entries ?? NONE;
       return plan;
     },
-    // A subagent's card; the agent's own tool calls are `tool_group` parts.
+    // A subagent's card (`subagentCardData()`): a click opens its chat. The agent's own tool calls
+    // are steps of the `work` part.
     tool_call: (part, previous) => {
-      const call = toolCallElement(
-        {
-          toolCallId: String(part.data?.toolCallId ?? ''),
-          label: part.label ?? '',
-          kind: part.kind ?? 'other',
-          status: part.status ?? 'pending',
-          locations: part.locations ?? NONE,
-          error: part.error ?? '',
-        },
-        previous,
-      );
-      // A subagent's card (`subagentCardData()`): a click opens its chat.
+      const call = /** @type {ChxToolCall} */ (previous?.localName === 'chx-tool-call' ? previous : document.createElement('chx-tool-call'));
+      call.toolCallId = String(part.data?.toolCallId ?? '');
+      call.label = part.label ?? '';
+      call.kind = part.kind ?? 'other';
+      call.status = part.status ?? 'pending';
       const subagentId = part.data?.subagentId;
       if (typeof subagentId === 'string') call.dataset.subagentId = subagentId;
       else delete call.dataset.subagentId;
@@ -345,15 +295,13 @@ export class ChatPartsController {
     work: (part, previous) => {
       const cancelled = part.status === 'cancelled';
       const steps = /** @type {WorkStep[]} */ (part.data?.steps ?? NONE).map((step) =>
-        cancelled && step.kind === 'tool' && RUNNING.has(step.call.status)
+        cancelled && RUNNING.has(step.call.status)
           ? { kind: /** @type {const} */ ('tool'), call: { ...step.call, status: /** @type {const} */ ('cancelled') } }
           : step,
       );
       const work = previous instanceof AcpReplyWork ? previous : new AcpReplyWork();
       work.steps = steps;
       work.live = part.status !== 'completed' && !cancelled;
-      work.buildLocation = locationChip;
-      work.decorate = (body) => formatFileRefs(body, { links: true });
       return work;
     },
     attachment: (part, previous) => {

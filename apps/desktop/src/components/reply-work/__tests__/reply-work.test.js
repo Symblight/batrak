@@ -45,7 +45,7 @@ const shownSteps = (el) => [...(el.shadowRoot?.querySelector('.acp-reply-work__s
 const spinner = (el) => el.shadowRoot?.querySelector('md-progress-circular') ?? null;
 
 describe('acp-reply-work', () => {
-  it('while the reply runs, shows one line: the running call, else the last one, with a spinner and the time', async () => {
+  it('while a call runs, shows one line: the running call with a spinner and the time; between calls, the summary so far', async () => {
     // Arrange
     const t0 = Date.now() - 34_000;
     const steps = [tool('1', { label: 'List files', startedAt: t0, endedAt: t0 + 2000 }), tool('2', { label: 'Run the tests', status: 'in_progress', startedAt: t0 + 3000 })];
@@ -56,11 +56,11 @@ describe('acp-reply-work', () => {
     expect(spinner(el)).to.not.equal(null);
 
     // Act
-    el.steps = [steps[0], tool('2', { label: 'Run the tests', startedAt: t0 + 3000, endedAt: t0 + 4000 }), { kind: 'text', text: 'Now I write.' }];
+    el.steps = [steps[0], tool('2', { label: 'Run the tests', startedAt: t0 + 3000, endedAt: t0 + 4000 })];
     await el.updateComplete;
     // Assert
-    expect(headText(el), 'between calls').to.match(/^Run the tests \d+s$/);
-    expect(spinner(el), 'still working').to.not.equal(null);
+    expect(headText(el), 'between calls: until the last call ended').to.equal('Ran 2 commands 4s');
+    expect(spinner(el), 'nothing runs').to.equal(null);
 
     // Act
     el.steps = [steps[0], tool('2', { label: 'Edit a.txt', status: 'awaiting-permission' })];
@@ -75,7 +75,6 @@ describe('acp-reply-work', () => {
     /** @type {WorkStep[]} */
     const steps = [
       tool('1', { status: 'failed', startedAt: t0, endedAt: t0 + 2000 }),
-      { kind: 'text', text: 'Retrying.' },
       tool('2', { kind: 'edit', locations: [{ path: 'AGENTS.md' }], diff: { added: 52, removed: 0, created: true }, startedAt: t0 + 3000, endedAt: t0 + 34_000 }),
       tool('3', { startedAt: t0 + 4000, endedAt: t0 + 5000 }),
     ];
@@ -102,32 +101,31 @@ describe('acp-reply-work', () => {
     }
   });
 
-  it('lists its steps in order: each call with its error and command, the narration, the thoughts', async () => {
+  it('lists only its tool calls, each worded by what it did with its file and counts, opening to its error and command', async () => {
     // Arrange
     const el = await work(
       [
-        { kind: 'text', text: 'I will look.' },
         tool('1', { label: 'List files', command: 'ls -la', status: 'failed', error: 'boom' }),
-        { kind: 'thought', text: 'Hmm', startedAt: null, endedAt: null },
-        tool('2', { label: 'Read a.rs', command: '', kind: 'read', locations: [{ path: 'a.rs' }] }),
+        tool('2', { label: 'Write', command: '', kind: 'edit', locations: [{ path: 'src/a.rs' }], diff: { added: 59, removed: 0, created: true } }),
       ],
       false,
     );
+    const text = (/** @type {Element} */ node) => node.textContent?.replace(/\s+/g, ' ').trim();
     // Act
     head(el).click();
     await el.updateComplete;
     // Assert
-    const shown = shownSteps(el).map((node) => {
-      const any = /** @type {any} */ (node);
-      if (node.localName === 'chx-tool-call') return [node.localName, any.label, any.status, any.error, node.textContent?.trim()];
-      return [node.localName, any.text];
-    });
-    expect(shown).to.deep.equal([
-      ['acp-markdown', 'I will look.'],
-      ['chx-tool-call', 'List files', 'failed', 'boom', 'ls -la'],
-      ['acp-part-thinking', 'Hmm'],
-      ['chx-tool-call', 'Read a.rs', 'completed', '', ''],
-    ]);
+    const [failed, created] = shownSteps(el);
+    expect(shownSteps(el).map(text), 'the failed call as asked').to.deep.equal(['List files', 'Created a.rs']);
+    const counts = /** @type {import('../../diff-counts/diff-counts.js').AcpDiffCounts} */ (created.querySelector('acp-diff-counts'));
+    expect([counts.added, counts.removed]).to.deep.equal([59, 0]);
+
+    // Act
+    /** @type {HTMLElement} */ (failed.querySelector('[role="button"]')).click();
+    await el.updateComplete;
+    // Assert
+    expect(text(failed)).to.equal('List files boom ls -la');
+    expect(el.expanded, 'the work row stays open').to.equal(true);
   });
 
   it('opens the file of a summary’s chip, without expanding', async () => {

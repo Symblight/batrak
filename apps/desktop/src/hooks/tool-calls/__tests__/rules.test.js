@@ -1,5 +1,5 @@
 import { expect } from '@esm-bundle/chai';
-import { kindVerb, liveLine, progressive, summaryOf } from '../rules.js';
+import { kindVerb, liveLine, past, progressive, rowOf, summaryOf } from '../rules.js';
 
 /** @typedef {import('../../sessions/types.js').ToolCallView} ToolCallView */
 
@@ -83,6 +83,8 @@ describe('progressive', () => {
       ['Write the config', 'Writing the config'],
       ['Read manifest, HTML, spec and config files', 'Reading manifest, HTML, spec and config files'],
       ['Get status and see what changed', 'Getting status and seeing what changed'],
+      ['Grep for TODOs', 'Grepping for TODOs'],
+      ['Format the files and run the tests', 'Formatting the files and running the tests'],
       ['git status', 'git status'],
       ['Project files', 'Project files'],
       ['', ''],
@@ -94,31 +96,73 @@ describe('progressive', () => {
   });
 });
 
-describe('liveLine', () => {
-  /** @param {ToolCallView[]} calls */
-  const steps = (calls) => calls.map((c) => /** @type {const} */ ({ kind: 'tool', call: c }));
-  it('says what runs: the last started call’s label in the -ing form, its kind’s verb when unworded, the waiting one, or the last as written', () => {
-    /** @type {[string, ToolCallView[], { label: string, waiting: boolean, running: boolean }][]} */
+describe('past', () => {
+  it('puts the verbs of a label in the past tense, leaving a label that starts with no known verb alone', () => {
+    /** @type {[string, string][]} */
     const cases = [
-      ['one running', [call('execute', { label: 'Run the tests', command: 'npm test', status: 'in_progress' })], { label: 'Running the tests', waiting: false, running: true }],
+      ['Check for build inputs and try the build script', 'Checked for build inputs and tried the build script'],
+      ['List project files', 'Listed project files'],
+      ['Run the tests', 'Ran the tests'],
+      ['Write the config', 'Wrote the config'],
+      ['Read manifest, HTML, spec and config files', 'Read manifest, HTML, spec and config files'],
+      ['Get status and see what changed', 'Got status and saw what changed'],
+      ['Verify imports and create a file', 'Verified imports and created a file'],
+      ['Stop the server and commit', 'Stopped the server and committed'],
+      ['Grep for TODOs', 'Grepped for TODOs'],
+      ['Deploy the build', 'Deployed the build'],
+      ['Format the files and run the tests', 'Formatted the files and ran the tests'],
+      ['git status', 'git status'],
+      ['', ''],
+    ];
+    for (const [label, expected] of cases) {
+      // Act + Assert
+      expect(past(label), label).to.equal(expected);
+    }
+  });
+});
+
+describe('rowOf', () => {
+  it('words a call’s row: its file by its kind’s verb, its description in the past tense (-ing while it runs, as asked when it failed or was cancelled), else its label', () => {
+    /** @type {[string, ToolCallView, { text: string, path?: string }][]} */
+    const cases = [
+      ['a read file', call('read', at('src/a.rs')), { text: 'Read', path: 'src/a.rs' }],
+      ['an edit', call('edit', at('AGENTS.md')), { text: 'Edited', path: 'AGENTS.md' }],
+      ['a new file', call('edit', { ...at('AGENTS.md'), diff: { added: 59, removed: 0, created: true } }), { text: 'Created', path: 'AGENTS.md' }],
+      ['an edit running', call('edit', { ...at('AGENTS.md'), status: 'in_progress' }), { text: 'Editing', path: 'AGENTS.md' }],
+      ['a described command', call('execute', { label: 'List repo root', command: 'ls' }), { text: 'Listed repo root' }],
+      ['one running', call('execute', { label: 'List repo root', command: 'ls', status: 'in_progress' }), { text: 'Listing repo root' }],
+      ['a failed command', call('execute', { label: 'Run the tests', command: 'npm test', status: 'failed' }), { text: 'Run the tests' }],
+      ['a cancelled edit', call('edit', { ...at('a.rs'), status: 'cancelled' }), { text: 'Edit', path: 'a.rs' }],
+      ['a failed new file', call('edit', { ...at('a.rs'), status: 'failed', diff: { added: 1, removed: 0, created: true } }), { text: 'Create', path: 'a.rs' }],
+      ['an undescribed call', call('fetch', { label: 'https://example.com' }), { text: 'https://example.com' }],
+      ['a read naming no file', call('read', { label: 'Read files' }), { text: 'Read files' }],
+    ];
+    for (const [name, view, expected] of cases) {
+      // Act + Assert
+      expect(rowOf(view), name).to.deep.equal(expected);
+    }
+  });
+});
+
+describe('liveLine', () => {
+  it('says what runs: the last started call’s label in the -ing form, its kind’s verb when unworded, the waiting one, or nothing', () => {
+    /** @type {[string, ToolCallView[], string | null][]} */
+    const cases = [
+      ['one running', [call('execute', { label: 'Run the tests', command: 'npm test', status: 'in_progress' })], 'Running the tests'],
       [
         'the last started of two',
         [call('execute', { label: 'List files', command: 'ls', status: 'in_progress' }), call('execute', { label: 'Check git', command: 'git status', status: 'pending' })],
-        { label: 'Checking git', waiting: false, running: true },
+        'Checking git',
       ],
-      ['unworded', [call('read', { label: 'Read a.rs', status: 'in_progress' })], { label: 'Reading', waiting: false, running: true }],
-      ['a new file', [call('edit', { label: 'Write n.md', status: 'in_progress', diff: { added: 1, removed: 0, created: true } })], { label: 'Creating', waiting: false, running: true }],
-      [
-        'waiting',
-        [call('execute', { status: 'in_progress' }), call('edit', { label: 'Edit a.txt', status: 'awaiting-permission' })],
-        { label: 'Waiting for permission: Edit a.txt', waiting: true, running: true },
-      ],
-      ['between calls', [call('execute', { label: 'List files', command: 'ls' }), call('read', { label: 'Read a.rs' })], { label: 'Read a.rs', waiting: false, running: false }],
-      ['no calls', [], { label: '', waiting: false, running: false }],
+      ['unworded', [call('read', { label: 'Read a.rs', status: 'in_progress' })], 'Reading'],
+      ['a new file', [call('edit', { label: 'Write n.md', status: 'in_progress', diff: { added: 1, removed: 0, created: true } })], 'Creating'],
+      ['waiting', [call('execute', { status: 'in_progress' }), call('edit', { label: 'Edit a.txt', status: 'awaiting-permission' })], 'Waiting for permission: Edit a.txt'],
+      ['between calls', [call('execute', { label: 'List files', command: 'ls' }), call('read', { label: 'Read a.rs' })], null],
+      ['no calls', [], null],
     ];
     for (const [why, calls, expected] of cases) {
       // Act + Assert
-      expect(liveLine([{ kind: 'text', text: 'narration' }, ...steps(calls)]), why).to.deep.equal(expected);
+      expect(liveLine(calls), why).to.equal(expected);
     }
   });
 });

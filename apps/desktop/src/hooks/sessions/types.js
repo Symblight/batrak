@@ -304,9 +304,7 @@ export {};
  */
 
 /**
- * One step of a reply's work part (`MessageBuilder`, `<acp-reply-work>`): a tool call, the text a
- * tool call followed (narration), or a thought that ended after the part started.
- * @typedef {{ kind: 'tool', call: ToolCallView }
- *   | { kind: 'text', text: string }
- *   | { kind: 'thought', text: string, startedAt: number | null, endedAt: number | null }} WorkStep
+ * One step of a reply's work part (`MessageBuilder`, `<acp-reply-work>`): a tool call. The text and
+ * thoughts between calls are folded parts, not steps.
+ * @typedef {{ kind: 'tool', call: ToolCallView }} WorkStep
  */

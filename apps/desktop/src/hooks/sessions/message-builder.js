@@ -22,9 +22,9 @@ const RUNNING = new Set(['pending', 'in_progress', 'awaiting-permission']);
  *
  * A reply that calls a tool has one `work` part (spec: `docs/specs/reply-work-row.md`), created by
  * its first tool call: its steps (`data.steps`, `WorkStep[]`) are the tool calls (`ToolCallView`,
- * keyed by ACP's `toolCallId`), the text a tool call followed (narration) and the thoughts that
- * ended after it started. Such text and thoughts stay parts, as they streamed, marked
- * `data.folded` so they're drawn as nothing; the text after the last tool call is the answer. Its
+ * keyed by ACP's `toolCallId`). The text a tool call followed (narration) and the thoughts that
+ * ended after it started stay parts, as they streamed, marked `data.folded` so they're drawn as
+ * nothing; the text after the last tool call is the answer. Its
  * `status` runs until `finish()`, so a reply that is stopped settles it.
  *
  * ACP never says a thought is over: any other update but that ends it (`part-end`), and a live one
@@ -36,19 +36,14 @@ export class MessageBuilder {
   #lastKind = null;
   /** Parts started in this message, which numbers the next part's id. */
   #parts = 0;
-  /** @type {{ partId: string, text: string, startedAt: number | null } | null} The thought being streamed. */
+  /** @type {{ partId: string, startedAt: number | null } | null} The thought being streamed. */
   #thought = null;
   /** @type {WorkStep[] | null} The work part's steps; `null` until the first tool call. */
   #steps = null;
   /** @type {Set<string>} Tool calls among the steps: a later update changes its step in place. */
   #tools = new Set();
-  /**
-   * What came since the last tool call, in order: text parts (narration once a tool call follows,
-   * else the answer) and the thoughts that ended meanwhile (already folded; steps at the next call
-   * or the finish).
-   * @type {({ kind: 'text', partId: string, text: string } | { kind: 'thought', step: WorkStep })[]}
-   */
-  #since = [];
+  /** @type {Set<string>} Text parts since the last tool call: narration once a call follows, else the answer. */
+  #since = new Set();
 
   /**
    * @param {string} sessionId
@@ -146,18 +141,14 @@ export class MessageBuilder {
     const text = textOf(update);
     if (!text) return [];
     const partId = this.#partId('thought');
-    if (this.#thought?.partId === partId) {
-      this.#thought.text += text;
-      return [this.chunk(partId, 'thought', { text })];
-    }
+    if (this.#thought?.partId === partId) return [this.chunk(partId, 'thought', { text })];
     const startedAt = this.live ? Date.now() : null;
-    this.#thought = { partId, text, startedAt };
+    this.#thought = { partId, startedAt };
     return [this.chunk(partId, 'thought', startedAt === null ? { text } : { text, data: { startedAt } })];
   }
 
   /**
-   * Ends the thought being streamed, if any; one that ends while the work part exists is folded
-   * into it.
+   * Ends the thought being streamed, if any; one that ends while the work part exists is folded.
    * @returns {ChxChunk[]}
    */
   #endThought() {
@@ -168,10 +159,8 @@ export class MessageBuilder {
     /** @type {ChxChunk} */
     const end = { kind: 'part-end', messageId, conversationId, partId: thought.partId };
     const { startedAt } = thought;
-    const endedAt = startedAt === null ? null : Date.now();
-    const times = startedAt === null ? {} : { startedAt, endedAt };
+    const times = startedAt === null ? {} : { startedAt, endedAt: Date.now() };
     if (!this.#steps) return startedAt === null ? [end] : [this.chunk(thought.partId, 'thought', { data: times }), end];
-    this.#since.push({ kind: 'thought', step: { kind: 'thought', text: thought.text, startedAt, endedAt } });
     return [this.chunk(thought.partId, 'thought', { data: { ...times, folded: true } }), end];
   }
 
@@ -186,9 +175,7 @@ export class MessageBuilder {
         const text = textOf(update);
         if (!text) return [];
         const partId = this.#partId('text');
-        const last = this.#since.at(-1);
-        if (last?.kind === 'text' && last.partId === partId) last.text += text;
-        else this.#since.push({ kind: 'text', partId, text });
+        this.#since.add(partId);
         return [this.chunk(partId, 'text', { text })];
       }
       case 'tool_call':
@@ -203,26 +190,22 @@ export class MessageBuilder {
   }
 
   /**
-   * The chunks after `update` of `toolCallId`: a call not seen yet makes what was said since the
-   * last one narration (folded into the work part, which the first call creates) and becomes a step.
+   * The chunks after `update` of `toolCallId`: a call not seen yet folds what was said since the
+   * last one (narration) and becomes a step of the work part, which the first call creates.
    * @param {string} toolCallId
    * @param {AcpSessionUpdate} update
    * @returns {ChxChunk[]}
    */
   #toolChunks(toolCallId, update) {
     /** @type {ChxChunk[]} */
-    const folds = [];
+    let folds = [];
     if (!this.#tools.has(toolCallId)) {
       this.#tools.add(toolCallId);
       this.#lastKind = 'tool';
-      const since = this.#since.map((entry) => {
-        if (entry.kind === 'thought') return entry.step;
-        folds.push(this.chunk(entry.partId, 'text', { data: { folded: true } }));
-        return /** @type {WorkStep} */ ({ kind: 'text', text: entry.text });
-      });
-      this.#since = [];
+      folds = [...this.#since].map((partId) => this.chunk(partId, 'text', { data: { folded: true } }));
+      this.#since.clear();
       const call = newCall(toolCallId, this.live ? Date.now() : null);
-      this.#steps = [...(this.#steps ?? []), ...since, { kind: 'tool', call }];
+      this.#steps = [...(this.#steps ?? []), { kind: 'tool', call }];
     }
     this.#updateCall(toolCallId, (call) => this.#updated(call, update));
     return [...folds, this.#workChunk()];
@@ -249,7 +232,7 @@ export class MessageBuilder {
    */
   #updateCall(toolCallId, change) {
     this.#steps = (this.#steps ?? []).map((step) =>
-      step.kind === 'tool' && step.call.toolCallId === toolCallId ? { kind: 'tool', call: change(step.call) } : step,
+      step.call.toolCallId === toolCallId ? { kind: 'tool', call: change(step.call) } : step,
     );
   }
 
@@ -296,12 +279,10 @@ export class MessageBuilder {
     const { messageId, sessionId: conversationId } = this;
     const end = this.#endThought();
     if (!this.#steps) return [...end, { kind: cancelled ? 'abort' : 'finish', messageId, conversationId }];
-    // Thoughts after the last call are the row's (folded already); its text is the answer. A call
-    // the agent never ended is settled here: the library settles the part, not its calls.
-    const thoughts = this.#since.flatMap((entry) => (entry.kind === 'thought' ? [entry.step] : []));
-    this.#since = [];
-    this.#steps = [...this.#steps, ...thoughts].map((step) =>
-      step.kind === 'tool' && RUNNING.has(step.call.status) ? { kind: 'tool', call: { ...step.call, status: 'cancelled' } } : step,
+    // The text after the last call is the answer. A call the agent never ended is settled here:
+    // the library settles the part, not its calls.
+    this.#steps = this.#steps.map((step) =>
+      RUNNING.has(step.call.status) ? { kind: 'tool', call: { ...step.call, status: 'cancelled' } } : step,
     );
     // An abort settles the part (`cancelled`) itself; a finish would too, unless it's `completed`.
     const work = this.#workChunk(cancelled ? 'in_progress' : 'completed');
