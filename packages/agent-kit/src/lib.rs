@@ -1,13 +1,21 @@
 //! What several agent crates share: the mechanics of an npx agent (which package a launch runs, its
 //! pinned launch, pinning a launch to a version, downloading a version ahead of a start), an agent's
-//! home folder, and reading its logs from their end. Later: an
+//! home folder, reading its logs from their end, and how a shell call is shown. Later: an
 //! agent's archive, downloaded and unpacked. A plugin may use it; the trait (`agent-api`) never
 //! requires it.
 
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
-use agent_api::{Command, Launch, Update};
+use agent_api::{Command, Launch, ShownToolCall, Update};
+
+/// A shell call (ACP kind `execute`) as the adapters of Claude, Codex and Copilot send it: labelled
+/// by the `description` its model wrote (none from Codex), with the `command` it runs, both from
+/// `rawInput`, which a later update may carry instead of the first.
+pub fn shell_call(tool_call: &serde_json::Value) -> ShownToolCall {
+    let text = |key: &str| tool_call["rawInput"][key].as_str().map(str::trim).filter(|t| !t.is_empty()).map(str::to_owned);
+    ShownToolCall::Keep { label: text("description"), command: text("command") }
+}
 
 /// The package an `npx` launch runs: its argument's index, its name and the version it pins.
 pub fn npx_package(launch: &Launch) -> Option<(usize, &str, Option<&str>)> {

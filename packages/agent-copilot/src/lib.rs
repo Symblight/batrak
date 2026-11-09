@@ -45,6 +45,15 @@ impl Agent for Copilot {
         })
     }
 
+    /// A shell call by its model's `description`, with its command. Its reads name their file; its
+    /// edits (`apply_patch`) name theirs only in their diffs.
+    fn shown_tool_call(&self, tool_call: &serde_json::Value, _plan: &[agent_api::PlanEntry]) -> agent_api::ShownToolCall {
+        match tool_call["kind"] == "execute" {
+            true => agent_kit::shell_call(tool_call),
+            false => agent_api::ShownToolCall::AS_SENT,
+        }
+    }
+
     /// Its modes are URLs ending in `#agent`, `#plan` or `#autopilot` (which goes on unasked).
     fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
         match value.rsplit_once('#')?.1 {
@@ -98,6 +107,30 @@ pub fn activity_in(home: &Path, session_id: &str) -> Option<SessionActivity> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `tool_call`s of the recorded session (`agent-acp`'s `real_tool_calls`), by title, as shown.
+    fn recorded_calls() -> Vec<(String, agent_api::ShownToolCall)> {
+        let updates: Vec<serde_json::Value> = serde_json::from_str(include_str!("../tests/fixtures/tool-calls.json")).unwrap();
+        updates
+            .iter()
+            .filter(|u| u["sessionUpdate"] == "tool_call")
+            .map(|u| (u["title"].as_str().unwrap_or_default().to_owned(), Copilot.shown_tool_call(u, &[])))
+            .collect()
+    }
+
+    #[test]
+    fn words_its_recorded_tool_calls() {
+        let keep = |label: Option<&str>, command: Option<&str>| agent_api::ShownToolCall::Keep { label: label.map(str::to_owned), command: command.map(str::to_owned) };
+        let expected = vec![
+            ("Viewing /project/README.md".to_owned(), keep(None, None)),
+            ("Viewing /project".to_owned(), keep(None, None)),
+            ("Run echo hello".to_owned(), keep(Some("Run echo hello"), Some("echo hello"))),
+            ("Read missing.txt".to_owned(), keep(Some("Read missing.txt"), Some("cat missing.txt"))),
+            ("apply_patch".to_owned(), keep(None, None)),
+            ("apply_patch".to_owned(), keep(None, None)),
+        ];
+        assert_eq!(recorded_calls(), expected);
+    }
 
     #[test]
     fn keeps_the_agent_contract() {

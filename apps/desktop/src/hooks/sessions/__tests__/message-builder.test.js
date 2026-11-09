@@ -40,7 +40,7 @@ describe('MessageBuilder', () => {
     expect(b.chunks(textUpdate('available_commands_update')), 'an update it does not show says nothing').to.deep.equal([]);
   });
 
-  it('keeps each tool call as its row shows it: worded label, command, kind, status, files, failure and edit stats', () => {
+  it('keeps each tool call as its row shows it: worded label, command, kind, status, files, failure and edit stats; a title never overrides the wording', () => {
     // Arrange
     const b = new MessageBuilder('unknown-session', 'agent');
     const content = [
@@ -50,18 +50,20 @@ describe('MessageBuilder', () => {
     ];
     const updates = [
       { sessionUpdate: 'tool_call', toolCallId: 't1', title: 'ls -la', kind: 'execute', status: 'pending' },
-      { sessionUpdate: 'tool_call_update', toolCallId: 't1', title: 'ls -la', shownLabel: 'List files', status: 'in_progress' },
-      { sessionUpdate: 'tool_call_update', toolCallId: 't1', title: 'ls -la', status: 'failed', content },
+      { sessionUpdate: 'tool_call_update', toolCallId: 't1', title: 'ls -la', shownLabel: 'List files', shownCommand: 'ls -la', status: 'in_progress' },
+      { sessionUpdate: 'tool_call_update', toolCallId: 't1', title: 'ls -la --color', status: 'failed', content },
       { sessionUpdate: 'tool_call', toolCallId: 't2', title: 'Edit', kind: 'edit', locations: [{ path: '/p/src/a.js', line: 4 }] },
       { sessionUpdate: 'tool_call_update', toolCallId: 't2', status: 'completed', shownDiff: { added: 2, removed: 1, created: false } },
+      { sessionUpdate: 'tool_call', toolCallId: 't3', title: 'git status', kind: 'execute', shownCommand: 'git status' },
     ];
     // Act
     const last = updates.flatMap((u) => b.chunks(update(u))).at(-1);
     // Assert
     const steps = /** @type {{ call: unknown }[]} */ (shape(last).delta?.data?.steps);
     expect(steps.map((step) => step.call)).to.deep.equal([
-        { toolCallId: 't1', label: 'List files', command: 'ls -la', kind: 'execute', status: 'failed', locations: [], error: 'boom\nagain', diff: null, startedAt: null, endedAt: null },
-        { toolCallId: 't2', label: 'Edit', command: '', kind: 'edit', status: 'completed', locations: [{ path: '/p/src/a.js', line: 4 }], error: '', diff: { added: 2, removed: 1, created: false }, startedAt: null, endedAt: null },
+        { toolCallId: 't1', label: 'List files', worded: true, command: 'ls -la', kind: 'execute', status: 'failed', locations: [], error: 'boom\nagain', diff: null, startedAt: null, endedAt: null },
+        { toolCallId: 't2', label: 'Edit', worded: false, command: '', kind: 'edit', status: 'completed', locations: [{ path: '/p/src/a.js', line: 4 }], error: '', diff: { added: 2, removed: 1, created: false }, startedAt: null, endedAt: null },
+        { toolCallId: 't3', label: 'git status', worded: false, command: 'git status', kind: 'execute', status: 'pending', locations: [], error: '', diff: null, startedAt: null, endedAt: null },
     ]);
     expect(b.chunks(update({ sessionUpdate: 'tool_call' })), 'a call without an id: nothing').to.deep.equal([]);
   });

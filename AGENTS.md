@@ -57,6 +57,7 @@ cargo test -p bt-core real_claude -- --ignored --nocapture   # real Claude Code 
 cargo test -p bt-core real_registry -- --ignored             # the ACP registry and its ETag
 cargo test -p bt-core real_npm -- --ignored                  # a real `npm cache add` prefetch
 cargo test -p bt-core real_release -- --ignored              # the published batrak-cli.json parses
+cargo test -p agent-acp --test real_tool_calls codex -- --ignored --nocapture  # re-record an agent's tool calls (claude, codex, copilot; login)
 ```
 
 Gotchas that the commands above don't show:

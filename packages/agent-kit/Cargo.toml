@@ -6,3 +6,4 @@ description = "What several Batrak agent crates share: npx launches, pinning, do
 
 [dependencies]
 agent-api = { path = "../agent-api" }
+serde_json = "1"

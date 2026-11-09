@@ -15,6 +15,7 @@ const tool = (toolCallId, fields = {}) => ({
   call: {
     toolCallId,
     label: `Call ${toolCallId}`,
+    worded: true,
     command: `cmd ${toolCallId}`,
     kind: 'execute',
     status: 'completed',
@@ -67,6 +68,13 @@ describe('acp-reply-work', () => {
     await el.updateComplete;
     // Assert
     expect(headText(el)).to.match(/^Waiting for permission: Edit a.txt/);
+
+    // Act
+    el.steps = [steps[0], tool('3', { label: 'npm test', worded: false, command: 'npm test', status: 'in_progress', startedAt: t0 })];
+    await el.updateComplete;
+    // Assert
+    expect(headText(el), 'a command with no description').to.equal('Running npm test 34s');
+    expect(head(el).querySelector('code')?.textContent).to.equal('npm test');
   });
 
   it('once done, says what the reply did and how long it took', async () => {
@@ -106,7 +114,8 @@ describe('acp-reply-work', () => {
     const el = await work(
       [
         tool('1', { label: 'List files', command: 'ls -la', status: 'failed', error: 'boom' }),
-        tool('2', { label: 'Write', command: '', kind: 'edit', locations: [{ path: 'src/a.rs' }], diff: { added: 59, removed: 0, created: true } }),
+        tool('2', { label: 'Write', worded: false, command: '', kind: 'edit', locations: [{ path: 'src/a.rs' }], diff: { added: 59, removed: 0, created: true } }),
+        tool('3', { label: 'git status', worded: false, command: 'git status' }),
       ],
       false,
     );
@@ -115,8 +124,8 @@ describe('acp-reply-work', () => {
     head(el).click();
     await el.updateComplete;
     // Assert
-    const [failed, created] = shownSteps(el);
-    expect(shownSteps(el).map(text), 'the failed call as asked').to.deep.equal(['List files', 'Created a.rs']);
+    const [failed, created, plain] = shownSteps(el);
+    expect(shownSteps(el).map(text), 'the failed call as asked').to.deep.equal(['List files', 'Created a.rs', 'git status']);
     const counts = /** @type {import('../../diff-counts/diff-counts.js').AcpDiffCounts} */ (created.querySelector('acp-diff-counts'));
     expect([counts.added, counts.removed]).to.deep.equal([59, 0]);
 
@@ -125,6 +134,12 @@ describe('acp-reply-work', () => {
     await el.updateComplete;
     // Assert
     expect(text(failed)).to.equal('List files boom ls -la');
+
+    // Act
+    /** @type {HTMLElement} */ (plain.querySelector('[role="button"]')).click();
+    await el.updateComplete;
+    // Assert
+    expect(text(plain), 'a command that is its label, once').to.equal('git status');
     expect(el.expanded, 'the work row stays open').to.equal(true);
   });
 

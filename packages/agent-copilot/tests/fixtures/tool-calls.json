@@ -1,0 +1,202 @@
+[
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_PLjLRfWsBiuO7GV6LCczV76z",
+    "title": "Viewing /project/README.md",
+    "kind": "read",
+    "locations": [
+      {
+        "path": "/project/README.md"
+      }
+    ],
+    "rawInput": {
+      "path": "/project/README.md"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_PLjLRfWsBiuO7GV6LCczV76z",
+    "status": "completed",
+    "rawOutput": {
+      "content": "# Sample\n\nA project to test tools in.\n",
+      "detailedContent": "\ndiff --git a/project/README.md b/project/README.md\nindex 0000000..0000000 100644\n--- a/project/README.md\n+++ b/project/README.md\n@@ -1,4 +1,4 @@\n # Sample\n \n A project to test tools in.\n \n"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_43EyRN9CW20bd716576GknOS",
+    "title": "Viewing /project",
+    "kind": "read",
+    "locations": [
+      {
+        "path": "/project"
+      }
+    ],
+    "rawInput": {
+      "path": "/project"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_43EyRN9CW20bd716576GknOS",
+    "status": "completed",
+    "rawOutput": {
+      "content": "README.md",
+      "detailedContent": "\ndiff --git a/project b/project\ncreate file mode 100644\nindex 0000000..0000000\n--- a/dev/null\n+++ b/project\n@@ -1,0 +1,1 @@\n README.md\n"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_NvOvMNwkxX2qFY8UQhhjNW2m",
+    "title": "Run echo hello",
+    "kind": "execute",
+    "rawInput": {
+      "command": "echo hello",
+      "description": "Run echo hello"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_NvOvMNwkxX2qFY8UQhhjNW2m",
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "hello\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_NvOvMNwkxX2qFY8UQhhjNW2m",
+    "status": "completed",
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "hello\n<shellId: 0 completed with exit code 0>"
+        }
+      }
+    ],
+    "rawOutput": {
+      "content": "hello\n<shellId: 0 completed with exit code 0>",
+      "detailedContent": "hello\n<shellId: 0 completed with exit code 0>",
+      "contents": [
+        {
+          "type": "shell_exit",
+          "shellId": "0",
+          "exitCode": 0,
+          "cwd": "/project",
+          "outputPreview": "hello\n"
+        }
+      ],
+      "structuredContent": {
+        "shellId": "0"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "call_KRXQr7OmFNg11zQbDvwWk1U2",
+    "title": "Read missing.txt",
+    "kind": "execute",
+    "rawInput": {
+      "command": "cat missing.txt",
+      "description": "Read missing.txt"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_KRXQr7OmFNg11zQbDvwWk1U2",
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "cat: missing.txt: No such file or directory\n"
+        }
+      }
+    ]
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "call_KRXQr7OmFNg11zQbDvwWk1U2",
+    "status": "completed",
+    "content": [
+      {
+        "type": "content",
+        "content": {
+          "type": "text",
+          "text": "cat: missing.txt: No such file or directory\n<shellId: 1 completed with exit code 1>"
+        }
+      }
+    ],
+    "rawOutput": {
+      "content": "cat: missing.txt: No such file or directory\n<shellId: 1 completed with exit code 1>",
+      "detailedContent": "cat: missing.txt: No such file or directory\n<shellId: 1 completed with exit code 1>",
+      "contents": [
+        {
+          "type": "shell_exit",
+          "shellId": "1",
+          "exitCode": 1,
+          "cwd": "/project",
+          "outputPreview": "cat: missing.txt: No such file or directory\n"
+        }
+      ],
+      "structuredContent": {
+        "shellId": "1"
+      }
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "custom_call_V289VvlJvF5AsUV94KJHJeWa",
+    "title": "apply_patch",
+    "kind": "edit",
+    "rawInput": "*** Begin Patch\n*** Update File: /project/README.md\n@@\n A project to test tools in.\n+\n+Edited.\n*** End Patch\n"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "custom_call_V289VvlJvF5AsUV94KJHJeWa",
+    "status": "completed",
+    "content": [
+      {
+        "type": "diff",
+        "path": "/project/README.md",
+        "oldText": "\nA project to test tools in.\n",
+        "newText": "\nA project to test tools in.\n\nEdited.\n"
+      }
+    ],
+    "rawOutput": {
+      "content": "Modified 1 file(s): /project/README.md",
+      "detailedContent": "\ndiff --git a/project/README.md b/project/README.md\nindex 0000000..0000000 100644\n--- a/project/README.md\n+++ b/project/README.md\n@@ -2,3 +2,5 @@\n \n A project to test tools in.\n \n+Edited.\n+\n"
+    }
+  },
+  {
+    "sessionUpdate": "tool_call",
+    "toolCallId": "custom_call_WSTyAouhcp95HX7tmwmWB6TS",
+    "title": "apply_patch",
+    "kind": "edit",
+    "rawInput": "*** Begin Patch\n*** Add File: /project/notes.txt\n+A note.\n*** End Patch\n"
+  },
+  {
+    "sessionUpdate": "tool_call_update",
+    "toolCallId": "custom_call_WSTyAouhcp95HX7tmwmWB6TS",
+    "status": "completed",
+    "content": [
+      {
+        "type": "diff",
+        "path": "/project/notes.txt",
+        "oldText": "",
+        "newText": "A note.\n"
+      }
+    ],
+    "rawOutput": {
+      "content": "Added 1 file(s): /project/notes.txt",
+      "detailedContent": "\ndiff --git a/project/notes.txt b/project/notes.txt\ncreate file mode 100644\nindex 0000000..0000000\n--- a/dev/null\n+++ b/project/notes.txt\ncopilot:whole-file-v1\n@@ -1,0 +1,1 @@\n+A note.\n\n"
+    }
+  }
+]

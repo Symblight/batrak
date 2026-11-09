@@ -75,7 +75,7 @@ impl Agent for Claude {
         [flag("model", "--model"), flag("mode", "--permission-mode"), flag("effort", "--effort")].into_iter().flatten().flatten().collect()
     }
 
-    /// A shell call by its `description`, an MCP tool as "`<tool>` (`<server>`)", and Claude Code
+    /// A shell call by its `description` with its `command`, an MCP tool as "`<tool>` (`<server>`)", and Claude Code
     /// Desktop's own `mcp__ccd_turn__*` tools (a session it started, replayed here): its plan tool
     /// as the plan, the rest hidden, since they run only inside Desktop.
     fn shown_tool_call(&self, tool_call: &Value, plan: &[PlanEntry]) -> ShownToolCall {
@@ -88,11 +88,10 @@ impl Agent for Claude {
             return ShownToolCall::Hide;
         }
         let shell = matches!(name, "Bash" | "PowerShell") || tool_call["kind"] == "execute";
-        let label = match shell {
-            true => input["description"].as_str().map(str::trim).filter(|d| !d.is_empty()).map(str::to_owned),
-            false => mcp_label(name),
-        };
-        ShownToolCall::Keep { label }
+        match shell {
+            true => agent_kit::shell_call(tool_call),
+            false => ShownToolCall::Keep { label: mcp_label(name), command: None },
+        }
     }
 }
 
@@ -429,15 +428,15 @@ mod tests {
     #[test]
     fn words_its_tool_calls_and_turns_desktops_own_into_its_plan() {
         let plan = [entry("a", "completed"), entry("b", "in_progress"), entry("c", "pending")];
-        let keep = |label: Option<&str>| ShownToolCall::Keep { label: label.map(str::to_owned) };
+        let keep = |label: Option<&str>, command: Option<&str>| ShownToolCall::Keep { label: label.map(str::to_owned), command: command.map(str::to_owned) };
         let tool = |name: &str, kind: &str, input: Value| json!({ "sessionUpdate": "tool_call", "toolCallId": "t1", "title": name, "kind": kind, "rawInput": input, "_meta": { "claudeCode": { "toolName": name } } });
         let bash = |input: Value| json!({ "sessionUpdate": "tool_call", "toolCallId": "t1", "title": "ls -la", "kind": "execute", "rawInput": input, "_meta": { "claudeCode": { "toolName": "Bash" } } });
         let cases = [
-            (bash(json!({ "command": "ls -la", "description": "List project files" })), keep(Some("List project files"))),
-            (bash(json!({ "command": "ls -la" })), keep(None)),
-            (bash(json!({})), keep(None)),
-            (tool("mcp__github__create_issue", "other", json!({})), keep(Some("create issue (github)"))),
-            (tool("Read", "read", json!({ "file_path": "a.rs" })), keep(None)),
+            (bash(json!({ "command": "ls -la", "description": "List project files" })), keep(Some("List project files"), Some("ls -la"))),
+            (bash(json!({ "command": " ls -la\n" })), keep(None, Some("ls -la"))),
+            (bash(json!({})), keep(None, None)),
+            (tool("mcp__github__create_issue", "other", json!({})), keep(Some("create issue (github)"), None)),
+            (tool("Read", "read", json!({ "file_path": "a.rs" })), keep(None, None)),
             (tool("mcp__ccd_turn__wrap_up", "other", json!({ "recap": "Done" })), ShownToolCall::Hide),
             (tool("mcp__ccd_turn__something_else", "other", json!({})), ShownToolCall::Hide),
             (tool("mcp__ccd_turn__update_plan", "other", json!({})), ShownToolCall::Plan(None)),

@@ -64,16 +64,21 @@ impl ReplayLog {
 /// A tool call as the page and this log keep it: what its card shows, and the text of `content`
 /// only for the reason of a failure. Diffs, terminal output and raw input and output can be large,
 /// and nothing after `note_touched` reads them.
-/// Its diffs become `shownDiff`, the lines they add and remove.
+/// Its diffs become `shownDiff`, the lines they add and remove, and its `locations` when it has
+/// none (Codex and Copilot name an edit's file only in its diff).
 pub(super) fn keep_shown_fields(tool_call: &mut Value) {
     let failed = tool_call["status"] == "failed";
-    let diff = shown_diff(&tool_call["content"]);
+    let diffs: Vec<&Value> = tool_call["content"].as_array().into_iter().flatten().filter(|block| block["type"] == "diff").collect();
+    let (diff, diff_paths) = (shown_diff(&diffs), diff_locations(&diffs));
     if let Some(fields) = tool_call.as_object_mut() {
         fields.retain(|key, _| {
-            matches!(key.as_str(), "sessionUpdate" | "toolCallId" | "title" | "kind" | "status" | "locations" | "shownLabel") || (failed && key == "content")
+            matches!(key.as_str(), "sessionUpdate" | "toolCallId" | "title" | "kind" | "status" | "locations" | "shownLabel" | "shownCommand") || (failed && key == "content")
         });
         if let Some(diff) = diff {
             fields.insert("shownDiff".to_owned(), diff);
+        }
+        if let Some(paths) = diff_paths.filter(|_| !fields.contains_key("locations")) {
+            fields.insert("locations".to_owned(), paths);
         }
     }
     if let Some(blocks) = tool_call.get_mut("content").and_then(Value::as_array_mut) {
@@ -81,17 +86,27 @@ pub(super) fn keep_shown_fields(tool_call: &mut Value) {
     }
 }
 
+/// `[{ path }]` of the files a tool call's `diff` blocks change, each once; `None` without one.
+fn diff_locations(diffs: &[&Value]) -> Option<Value> {
+    let mut paths: Vec<&str> = Vec::new();
+    for path in diffs.iter().filter_map(|diff| diff["path"].as_str()) {
+        if !paths.contains(&path) {
+            paths.push(path);
+        }
+    }
+    (!paths.is_empty()).then(|| paths.iter().map(|path| json!({ "path": path })).collect())
+}
+
 /// `{ added, removed, created }` of a tool call's `diff` blocks; `None` without one. A block is a
 /// whole file before and after (a Write) or one hunk of it with context lines around the change
 /// (Claude's Edit); either way the lines are counted by their edit distance (`changed_lines`).
 /// `oldText` null is a new file.
-fn shown_diff(content: &Value) -> Option<Value> {
-    let diffs: Vec<_> = content.as_array()?.iter().filter(|block| block["type"] == "diff").collect();
+fn shown_diff(diffs: &[&Value]) -> Option<Value> {
     if diffs.is_empty() {
         return None;
     }
     let (mut added, mut removed) = (0, 0);
-    for diff in &diffs {
+    for diff in diffs {
         let old: Vec<_> = diff["oldText"].as_str().unwrap_or_default().lines().collect();
         let new: Vec<_> = diff["newText"].as_str().unwrap_or_default().lines().collect();
         let (plus, minus) = changed_lines(&old, &new);
@@ -210,6 +225,23 @@ mod tests {
             // Assert
             assert_eq!(update.get("shownDiff"), expected.as_ref(), "{content:?}");
             assert_eq!(update.get("content"), None);
+        }
+    }
+
+    #[test]
+    fn a_tool_update_without_locations_names_the_files_its_diffs_change() {
+        let diff = |path: &str| json!({ "type": "diff", "path": path, "oldText": "a", "newText": "b" });
+        let cases = [
+            (json!({ "content": [diff("/p/a.rs"), diff("/p/b.rs"), diff("/p/a.rs")] }), Some(json!([{ "path": "/p/a.rs" }, { "path": "/p/b.rs" }]))),
+            (json!({ "content": [diff("/p/a.rs")], "locations": [{ "path": "/p/c.rs", "line": 3 }] }), Some(json!([{ "path": "/p/c.rs", "line": 3 }]))),
+            (json!({ "content": [{ "type": "terminal", "terminalId": "t" }] }), None),
+        ];
+        for (mut update, expected) in cases {
+            let before = update.clone();
+            // Act
+            keep_shown_fields(&mut update);
+            // Assert
+            assert_eq!(update.get("locations"), expected.as_ref(), "{before}");
         }
     }
 

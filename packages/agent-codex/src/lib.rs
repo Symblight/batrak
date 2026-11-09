@@ -36,6 +36,15 @@ impl Agent for Codex {
         agent_kit::runs(launch, PACKAGE)
     }
 
+    /// A shell call by the command it runs; its model writes it no description. Codex words its
+    /// reads and edits itself ("List files", "Read file …"), and names an edit's file only in its diff.
+    fn shown_tool_call(&self, tool_call: &serde_json::Value, _plan: &[agent_api::PlanEntry]) -> agent_api::ShownToolCall {
+        match tool_call["kind"] == "execute" {
+            true => agent_kit::shell_call(tool_call),
+            false => agent_api::ShownToolCall::AS_SENT,
+        }
+    }
+
     /// codex-acp's modes: `read-only`, `auto`, `full-access`.
     fn mode_risk(&self, value: &str) -> Option<ModeRisk> {
         match value {
@@ -97,6 +106,30 @@ fn find_rollout(dir: &Path, suffix: &str) -> Option<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The `tool_call`s of the recorded session (`agent-acp`'s `real_tool_calls`), by title, as shown.
+    fn recorded_calls() -> Vec<(String, agent_api::ShownToolCall)> {
+        let updates: Vec<serde_json::Value> = serde_json::from_str(include_str!("../tests/fixtures/tool-calls.json")).unwrap();
+        updates
+            .iter()
+            .filter(|u| u["sessionUpdate"] == "tool_call")
+            .map(|u| (u["title"].as_str().unwrap_or_default().to_owned(), Codex.shown_tool_call(u, &[])))
+            .collect()
+    }
+
+    #[test]
+    fn words_its_recorded_tool_calls() {
+        let keep = |label: Option<&str>, command: Option<&str>| agent_api::ShownToolCall::Keep { label: label.map(str::to_owned), command: command.map(str::to_owned) };
+        let expected = vec![
+            ("sed -n '1,$p' README.md".to_owned(), keep(None, Some("sed -n '1,$p' README.md"))),
+            ("List files".to_owned(), keep(None, None)),
+            ("echo hello".to_owned(), keep(None, Some("echo hello"))),
+            ("Read file '/project/missing.txt'".to_owned(), keep(None, None)),
+            ("Editing files".to_owned(), keep(None, None)),
+            ("Editing files".to_owned(), keep(None, None)),
+        ];
+        assert_eq!(recorded_calls(), expected);
+    }
 
     #[test]
     fn keeps_the_agent_contract() {

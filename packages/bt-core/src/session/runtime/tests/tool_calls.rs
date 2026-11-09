@@ -17,7 +17,7 @@ async fn the_agents_crate_words_hides_and_turns_tool_calls_into_the_plan_for_liv
         json!({ "sessionUpdate": "plan", "entries": entries })
     };
     let expected = vec![
-        json!({ "sessionUpdate": "tool_call", "toolCallId": "c1", "title": "ls -la", "kind": "execute", "shownLabel": "List files" }),
+        json!({ "sessionUpdate": "tool_call", "toolCallId": "c1", "title": "ls -la", "kind": "execute", "shownLabel": "List files", "shownCommand": "ls -la" }),
         json!({ "sessionUpdate": "tool_call_update", "toolCallId": "c1", "status": "completed" }),
         plan(&[("a", "pending"), ("b", "pending")]),
         plan(&[("a", "completed"), ("b", "pending")]),

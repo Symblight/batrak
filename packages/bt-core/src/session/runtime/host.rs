@@ -71,7 +71,7 @@ impl SessionHost {
     }
 
     /// A tool call update as the page gets it (`keep_shown_fields`), worded by the session's agent
-    /// crate (`shownLabel`); a `plan` update when the call updates the plan; `None` when it isn't
+    /// crate (`shownLabel`, `shownCommand`); a `plan` update when the call updates the plan; `None` when it isn't
     /// shown: hidden, a plan tool whose input hasn't come, or a later update of either. A
     /// subagent's plan tool is hidden: the plan is the session's.
     fn shown_tool_update(&self, state: &SessionState, mut update: Value, subagent: bool) -> Option<Value> {
@@ -81,13 +81,16 @@ impl SessionHost {
         }
         let agent = lock(&state.agent).clone();
         let plan = lock(&state.plan).clone();
-        let shown = agent.map_or(ShownToolCall::Keep { label: None }, |agent| agent.shown_tool_call(&update, &plan));
+        let shown = agent.map_or(ShownToolCall::AS_SENT, |agent| agent.shown_tool_call(&update, &plan));
         match shown {
             // An update that doesn't name its tool, of a plan tool still waiting for its input.
             ShownToolCall::Keep { .. } if lock(&state.planning_tools).contains(&id) => None,
-            ShownToolCall::Keep { label } => {
+            ShownToolCall::Keep { label, command } => {
                 if let Some(label) = label {
                     update["shownLabel"] = Value::String(label);
+                }
+                if let Some(command) = command {
+                    update["shownCommand"] = Value::String(command);
                 }
                 replay::keep_shown_fields(&mut update);
                 Some(update)

@@ -522,7 +522,7 @@ async fn run_turn(
             let update = |id: &str, fields: ToolCallUpdateFields| SessionUpdate::ToolCallUpdate(ToolCallUpdate::new(id.to_owned(), fields));
             let done = || ToolCallUpdateFields::new().status(ToolCallStatus::Completed);
             for update in [
-                call("c1", "ls -la", serde_json::json!({ "label": "List files" })),
+                call("c1", "ls -la", serde_json::json!({ "label": "List files", "command": "ls -la" })),
                 update("c1", done()),
                 call("c2", "secret", serde_json::json!({ "hide": true })),
                 update("c2", done()),
