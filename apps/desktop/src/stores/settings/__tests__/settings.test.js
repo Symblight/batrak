@@ -1,6 +1,6 @@
 import { expect } from '@esm-bundle/chai';
 import { $project } from '../../project/project.js';
-import { $projectAccent, $settings, clearProjectAccent, setProjectAccentEnabled, $terminalOptionMeta, $themeAccent, resetSection, setAccent, setProjectAccent, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalOptionMeta, setTerminalTheme } from '../settings.js';
+import { $projectAccent, $settings, clearProjectAccent, setProjectAccentEnabled, $terminalOptionMeta, $themeAccent, resetSection, setAccent, setProjectAccent, $terminalColors, $terminalFontFamily, $terminalFontSize, parseSettings, setEditorFont, setEditorFontSize, setEditorEditable, setMarkdownScrollSync, setTerminalColors, setTerminalFont, setTerminalFontSize, setTerminalOptionMeta, setTerminalTheme } from '../settings.js';
 import { DEFAULT_SETTINGS, FONT_SIZE_MAX, TERMINAL_PALETTE } from '../rules.js';
 
 describe('settings store: markdown', () => {
@@ -91,6 +91,15 @@ describe('settings store: markdown', () => {
     expect(parseSettings({ terminalOptionMeta: 'yes' })?.terminalOptionMeta).to.equal(false);
     setTerminalOptionMeta(true);
     expect($terminalOptionMeta.get()).to.equal(true);
+  });
+
+  it('reads and sets editing files, off unless stored as on', () => {
+    expect(parseSettings({ editorEditable: true })?.editorEditable).to.equal(true);
+    expect(parseSettings({ editorEditable: 'yes' })?.editorEditable).to.equal(false);
+    setEditorEditable(true);
+    expect($settings.get().editorEditable).to.equal(true);
+    resetSection('editor');
+    expect($settings.get().editorEditable).to.equal(false);
   });
 
   it('sets the scroll sync', () => {

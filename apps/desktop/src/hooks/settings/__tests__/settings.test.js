@@ -15,6 +15,7 @@ describe('settings', () => {
         accent: '#4355B9',
         editorFont: null,
         editorFontSize: 13,
+        editorEditable: false,
         markdownDefaultView: 'raw',
         markdownScrollSync: true, terminalFont: null, terminalFontSize: null, terminalTheme: 'app', terminalColors: null, terminalOptionMeta: false });
       expect([settings.fontSizeMin, settings.fontSizeMax]).to.deep.equal([10, 24]);

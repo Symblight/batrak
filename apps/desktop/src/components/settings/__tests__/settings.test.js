@@ -215,6 +215,26 @@ describe('acp-settings', () => {
     });
   });
 
+  describe('editing files', () => {
+    it('shows whether every file can be edited, off at first, and asks to flip it', async () => {
+      // Arrange
+      const { el, root } = await render();
+      const toggle = () => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_editable'));
+      /** @type {unknown[]} */
+      const patches = [];
+      el.addEventListener('acp-settings-change', (e) => patches.push(/** @type {CustomEvent} */ (e).detail.patch));
+      expect(toggle().selected, 'off at first').to.equal(false);
+      // Act
+      toggle().selected = true;
+      toggle().dispatchEvent(new Event('change', { bubbles: true }));
+      el.settings = { ...settingsHook.defaults, editorEditable: true };
+      await el.updateComplete;
+      // Assert
+      expect(patches).to.deep.equal([{ editorEditable: true }]);
+      expect(toggle().selected).to.equal(true);
+    });
+  });
+
   describe('markdown', () => {
     /** @param {ShadowRoot} root */
     const toggle = (root) => /** @type {HTMLElementTagNameMap['md-switch']} */ (root.querySelector('.acp-settings__switch_markdown-sync'));

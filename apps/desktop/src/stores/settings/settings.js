@@ -32,13 +32,14 @@ function isFontSize(size) {
  */
 export function parseSettings(raw) {
   if (!isRecord(raw)) return null;
-  const { appearance, accent, editorFont, editorFontSize, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize, terminalTheme, terminalColors, terminalOptionMeta } = raw;
+  const { appearance, accent, editorFont, editorFontSize, editorEditable, markdownDefaultView, markdownScrollSync, terminalFont, terminalFontSize, terminalTheme, terminalColors, terminalOptionMeta } = raw;
   const colors = parseTerminalColors(terminalColors);
   return {
     appearance: APPEARANCES.find((a) => a === appearance) ?? DEFAULTS.appearance,
     accent: (typeof accent === 'string' && normalizeHex(accent)) || DEFAULTS.accent,
     editorFont: typeof editorFont === 'string' && editorFont !== '' ? editorFont : DEFAULTS.editorFont,
     editorFontSize: isFontSize(editorFontSize) ? /** @type {number} */ (editorFontSize) : DEFAULTS.editorFontSize,
+    editorEditable: typeof editorEditable === 'boolean' ? editorEditable : DEFAULTS.editorEditable,
     markdownDefaultView: isMarkdownMode(markdownDefaultView) ? markdownDefaultView : DEFAULTS.markdownDefaultView,
     markdownScrollSync: typeof markdownScrollSync === 'boolean' ? markdownScrollSync : DEFAULTS.markdownScrollSync,
     terminalFont: typeof terminalFont === 'string' && terminalFont !== '' ? terminalFont : DEFAULTS.terminalFont,
@@ -150,6 +151,11 @@ export function setTerminalColors(colors) {
 /** @param {boolean} on */
 export function setTerminalOptionMeta(on) {
   update('terminalOptionMeta', on);
+}
+
+/** @param {boolean} on Every text file can be edited, not only agents.json. */
+export function setEditorEditable(on) {
+  update('editorEditable', on);
 }
 
 /** @param {boolean} on */

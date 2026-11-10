@@ -130,6 +130,25 @@ describe('acp-code-view', () => {
       expect(await save({})).to.deep.equal([{ type: 'acp-tab-save', detail: { id: path } }]);
     });
 
+    it('saves any file while editing files is on, none while off', async () => {
+      // Arrange
+      const tab = { ...fileTab('/p/a.js'), loaded: true, content: 'a', draft: 'b' };
+      for (const editable of [true, false]) {
+        const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (
+          await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'} .editable=${editable}></acp-code-view>`)
+        );
+        /** @type {unknown[]} */
+        const saved = [];
+        el.addEventListener('acp-tab-save', (e) => saved.push(/** @type {CustomEvent} */ (e).detail));
+        // Act
+        el.shadowRoot
+          ?.querySelector('cdx-code-editor')
+          ?.dispatchEvent(new KeyboardEvent('keydown', { key: 's', code: 'KeyS', [mod]: true, bubbles: true, composed: true }));
+        // Assert
+        expect(saved, `editable: ${editable}`).to.deep.equal(editable ? [{ id: '/p/a.js' }] : []);
+      }
+    });
+
     it('saves on Mod+S by position on a non-Latin layout, not with Shift added', async () => {
       // Act + Assert
       expect(await save({}, { key: 'ы', code: 'KeyS', [mod]: true }), 'Cyrillic').to.have.length(1);
@@ -357,11 +376,14 @@ describe('acp-code-view', () => {
   });
 
   describe('trying to edit a read-only file', () => {
-    /** @param {string} [path] */
-    async function render(path = '/p/a.js') {
+    /**
+     * @param {string} [path]
+     * @param {boolean} [editable] Editing files is on.
+     */
+    async function render(path = '/p/a.js', editable = false) {
       /** @type {EditorTab} */
       const tab = { ...fileTab(path), loaded: true, content: 'one\ntwo\nthree\n' };
-      const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'}></acp-code-view>`));
+      const el = /** @type {HTMLElementTagNameMap['acp-code-view']} */ (await fixture(html`<acp-code-view .tab=${tab} .root=${'/p'} .editable=${editable}></acp-code-view>`));
       const root = /** @type {ShadowRoot} */ (el.shadowRoot);
       const editor = /** @type {HTMLElementTagNameMap['cdx-code-editor']} */ (root.querySelector('cdx-code-editor'));
       await until(() => !!editor.view);
@@ -417,14 +439,17 @@ describe('acp-code-view', () => {
       }
     });
 
-    it('says nothing in a file that can be edited', async () => {
-      // Arrange
-      const { view, isOpen } = await render('/p/.bt/agents.json');
-      // Act
-      fire(view.contentDOM, 'beforeinput');
-      await settle();
-      // Assert
-      expect(isOpen()).to.equal(false);
+    it('says nothing in a file that can be edited: agents.json, or any while editing files is on', async () => {
+      for (const [path, editable] of /** @type {[string, boolean][]} */ ([['/p/.bt/agents.json', false], ['/p/a.js', true]])) {
+        // Arrange
+        const { view, editor, isOpen } = await render(path, editable);
+        // Act
+        fire(view.contentDOM, 'beforeinput');
+        await settle();
+        // Assert
+        expect(isOpen(), path).to.equal(false);
+        expect(editor.readOnly, path).to.equal(false);
+      }
     });
 
     it('moves to the caret on another try, one hint announced once', async () => {

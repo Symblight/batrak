@@ -50,8 +50,9 @@ describe('acp-editor-view', () => {
     return { el, code };
   }
 
-  it("gives the file's editor what it needs: the project, the file's language and the file's comments", async () => {
+  it("gives the file's editor what it needs: the project, the file's language, the file's comments and editing", async () => {
     // Arrange
+    $settings.set({ ...settings, editorEditable: true });
     setFileLanguage('/p/a.js', 'python');
     $comments.set({ '/p/a.js': [{ id: 't1', line: 1, comments: [] }] });
     $commentFocus.set({ path: '/p/a.js', threadId: 't1' });
@@ -66,6 +67,7 @@ describe('acp-editor-view', () => {
     expect(code.language, 'picked').to.equal('python');
     expect(Object.keys(code.comments), 'comments').to.deep.equal(['/p/a.js']);
     expect(code.commentFocus).to.deep.equal({ path: '/p/a.js', threadId: 't1' });
+    expect(code.editable, 'editing files').to.equal(true);
   });
 
   it('follows the stores: a language picked in the footer is kept, and shows at once', async () => {
@@ -108,7 +110,7 @@ describe('acp-editor-view', () => {
     const fire = (from, type, detail) => from.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true }));
 
     it('is shown in the markdown view, with the project and the view it was left in', async () => {
-      $settings.set({ ...settings, markdownDefaultView: 'split', markdownScrollSync: false });
+      $settings.set({ ...settings, markdownDefaultView: 'split', markdownScrollSync: false, editorEditable: true });
       $markdownSplit.set(35);
 
       const { view } = await renderMarkdown();
@@ -117,6 +119,8 @@ describe('acp-editor-view', () => {
       expect([view.mode, view.scrollSync, view.ratio]).to.deep.equal(['split', false, 35]);
       expect(view.root).to.equal('/p');
       expect(typeof view.loadImage).to.equal('function');
+      await view.updateComplete;
+      expect(view.shadowRoot?.querySelector('acp-code-view')?.editable, 'its editor edits').to.equal(true);
     });
 
     it('leaves other files with the plain editor', async () => {

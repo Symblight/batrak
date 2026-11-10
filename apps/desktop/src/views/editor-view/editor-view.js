@@ -87,11 +87,12 @@ export class AcpEditorView extends ViewElement {
 
   /** @param {EditorTab} tab */
   #renderMarkdown(tab) {
-    const { markdownScrollSync } = this.#settings.value;
+    const { markdownScrollSync, editorEditable } = this.#settings.value;
     return html`<acp-markdown-view
       .tab=${tab}
       .mode=${markdownView.modeOf(tab.path)}
       .scrollSync=${markdownScrollSync}
+      .editable=${editorEditable}
       .ratio=${this.#markdownSplit.value}
       .language=${this.#languages.value[tab.path] ?? ''}
       .root=${this.#project.value?.path ?? null}
@@ -139,6 +140,7 @@ export class AcpEditorView extends ViewElement {
       .listDir=${projects.listDir}
       .comments=${this.#comments.value}
       .commentFocus=${this.#commentFocus.value}
+      .editable=${this.#settings.value.editorEditable}
       @acp-tab-language=${(/** @type {CustomEvent<{ path: string, language: string }>} */ e) => {
         e.stopPropagation();
         setFileLanguage(e.detail.path, e.detail.language);

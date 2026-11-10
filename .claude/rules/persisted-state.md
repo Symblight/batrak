@@ -58,7 +58,7 @@ paths:
   share of Split in percent, 20–80), `$settings` (`batrak:settings`,
   shared: appearance and accent, which `settings.syncTheme()` (`hooks/settings/settings.js`) turns into the MD3 palette and `data-theme` on
   `<html>`, the code editor's font, `markdownDefaultView` (`raw` / `split` / `preview`: how a markdown file never set
-  opens; no control in Settings, so `raw` unless the stored value is edited) and `markdownScrollSync`; key dark-only CSS on `:root[data-theme='dark']`, never on
+  opens; no control in Settings, so `raw` unless the stored value is edited), `markdownScrollSync` and `editorEditable` (Editor's "Edit files" switch, off by default: every text file's tab edits and saves, not only agents.json; `write_file` takes any file in an opened folder or a workspace's, never one in `.git`); key dark-only CSS on `:root[data-theme='dark']`, never on
   `prefers-color-scheme`, since Appearance can override the OS), `$projectAccents` (`batrak:settings:project-accent:<project path>`, shared, one item per project through `setKey()`: `{ color, enabled }`, a project's own accent, which `$themeAccent` puts over the global one while `enabled`; switched off it keeps its color, and Theme's Reset forgets only the shown project's). Typedefs for each are in
   `src/hooks/settings/types.js`.
 

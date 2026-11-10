@@ -497,6 +497,14 @@ export class AcpSettings extends LitElement {
       )}
       <label class="acp-settings__toggle">
         <md-switch
+          class="acp-settings__switch acp-settings__switch_editable"
+          .selected=${live(settings.editorEditable)}
+          @change=${(/** @type {Event} */ e) => this.#change({ editorEditable: /** @type {HTMLElementTagNameMap['md-switch']} */ (e.target).selected })}
+        ></md-switch>
+        <span>Edit files in the editor (Mod+S saves)</span>
+      </label>
+      <label class="acp-settings__toggle">
+        <md-switch
           class="acp-settings__switch acp-settings__switch_markdown-sync"
           .selected=${live(settings.markdownScrollSync)}
           @change=${this.#onMarkdownSyncChange}

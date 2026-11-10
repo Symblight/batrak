@@ -43,7 +43,7 @@ import styles from './code-view.css?inline';
 
 /**
  * @tag acp-code-view
- * @summary A file tab's code editor, with a right-click menu and its footer's file, folder and language menus; agents.json files are editable (Mod+S saves).
+ * @summary A file tab's code editor, with a right-click menu and its footer's file, folder and language menus; agents.json files are editable, any file while `editable` (Mod+S saves).
  * @fires acp-tab-edit `{ id, value }` An edit in an editable file.
  * @fires acp-tab-save `{ id }` Mod+S in an editable file not changed on disk.
  * @fires acp-tab-conflict `{ id }` Mod+S in an editable file changed on disk since its edits started.
@@ -64,6 +64,7 @@ export class AcpCodeView extends LitElement {
     listDir: { attribute: false },
     comments: { attribute: false },
     commentFocus: { attribute: false },
+    editable: { attribute: false },
   };
 
   static styles = styles;
@@ -75,7 +76,7 @@ export class AcpCodeView extends LitElement {
     focus: () => this.commentFocus,
   });
   #selectionActions = new SelectionActionsController(this, { pathOf: (file) => file });
-  #readOnlyHint = new ReadOnlyHintController(this, { readOnly: () => this.tab !== null && !agents.isAgentsFile(this.tab.path) });
+  #readOnlyHint = new ReadOnlyHintController(this, { readOnly: () => this.tab !== null && !this.#editableTab(this.tab) });
   /** @type {ContextMenuController<EditorTab>} */
   #codeMenu = new ContextMenuController(this, {
     menu: () => this.renderRoot.querySelector('.acp-code-view__code-menu'),
@@ -123,6 +124,13 @@ export class AcpCodeView extends LitElement {
     this.comments = {};
     /** @type {CommentFocus | null} */
     this.commentFocus = null;
+    /** @type {boolean} Every file can be edited, not only agents.json (the Editor setting). */
+    this.editable = false;
+  }
+
+  /** @param {EditorTab} tab */
+  #editableTab(tab) {
+    return this.editable || agents.isAgentsFile(tab.path);
   }
 
   /**
@@ -369,7 +377,7 @@ export class AcpCodeView extends LitElement {
   render() {
     const tab = this.tab;
     if (!tab) return nothing;
-    const editable = agents.isAgentsFile(tab.path);
+    const editable = this.#editableTab(tab);
     return html`${tab.deletedOnDisk
         ? html`<div class="acp-code-view__notice" role="status">
             Deleted on disk.${editable ? ' Save to create it again.' : ''}

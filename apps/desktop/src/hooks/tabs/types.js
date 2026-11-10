@@ -33,7 +33,7 @@
  *   after a change on disk, when they become active.
  * @property {Blob | null} image An image tab's bytes, typed by its extension; `null` until read.
  * @property {string | null} baseline The file at HEAD, for the diff gutter; `null` when it has none.
- * @property {string | null} draft Unsaved edits (only editable files, `isAgentsFile()`); `null` when
+ * @property {string | null} draft Unsaved edits (only editable files: `isAgentsFile()`, or any while `editorEditable` is on); `null` when
  *   the editor shows what's on disk. A change on disk doesn't replace it.
  * @property {boolean} changedOnDisk With a draft: the file on disk is no longer `content`, the text the
  *   draft started from. Save then asks before writing over it.

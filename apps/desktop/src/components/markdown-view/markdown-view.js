@@ -52,6 +52,7 @@ export class AcpMarkdownView extends LitElement {
     comments: { attribute: false },
     commentFocus: { attribute: false },
     loadImage: { attribute: false },
+    editable: { attribute: false },
   };
 
   static styles = styles;
@@ -103,6 +104,8 @@ export class AcpMarkdownView extends LitElement {
     this.commentFocus = null;
     /** @type {((path: string) => Promise<Blob>) | null} Reads a local image's bytes. */
     this.loadImage = null;
+    /** @type {boolean} Its editor edits any file, not only agents.json (the Editor setting). */
+    this.editable = false;
   }
 
   get #codeView() {
@@ -284,6 +287,7 @@ export class AcpMarkdownView extends LitElement {
       .listDir=${this.listDir}
       .comments=${this.comments}
       .commentFocus=${this.commentFocus}
+      .editable=${this.editable}
     ></acp-code-view>`;
   }
 

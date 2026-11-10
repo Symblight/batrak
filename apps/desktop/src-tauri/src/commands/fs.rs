@@ -115,49 +115,69 @@ fn canonical_or_missing(path: &Path) -> std::io::Result<PathBuf> {
     }
 }
 
-/// Where a save of `path` writes (canonical; a deleted file is created again) and the project
-/// whose `.bt/agents.json` it is, `None` for the user's agents.json. Nothing else is writable.
+/// What a save wrote: an agents.json is re-read after it.
+#[derive(Debug, PartialEq)]
+enum Saved {
+    /// A project's `.bt/agents.json`; the project's path.
+    ProjectAgents(PathBuf),
+    /// The user's agents.json.
+    UserAgents,
+    /// Any other file in an opened folder.
+    File,
+}
+
+/// Where a save of `path` writes (canonical; a deleted or new file is created) and what it is: an
+/// agents.json, or a file inside an opened folder (`inside`), never one in `.git`.
 fn writable(
     path: &str,
     user_file: Option<&Path>,
     contains_project: impl Fn(&Path) -> bool,
-) -> Result<(PathBuf, Option<PathBuf>), String> {
+    inside: impl Fn(&Path) -> bool,
+) -> Result<(PathBuf, Saved), String> {
     let canonical = canonical_or_missing(Path::new(path)).map_err(|e| format!("{path}: {e}"))?;
     if user_file.and_then(|f| canonical_or_missing(f).ok()).as_ref() == Some(&canonical) {
-        return Ok((canonical, None));
+        return Ok((canonical, Saved::UserAgents));
     }
-    let project = crate::config::project_of_agents_file(&canonical)
-        .filter(|_| contains_project(&canonical))
-        .map(Path::to_path_buf);
-    match project {
-        Some(project) => Ok((canonical, Some(project))),
-        None => Err(format!("{path}: only agents.json can be edited")),
+    if let Some(project) = crate::config::project_of_agents_file(&canonical).filter(|_| contains_project(&canonical)) {
+        let project = project.to_path_buf();
+        return Ok((canonical, Saved::ProjectAgents(project)));
     }
+    let in_git = canonical.components().any(|c| c.as_os_str() == ".git");
+    if inside(&canonical) && !in_git {
+        return Ok((canonical, Saved::File));
+    }
+    Err(format!("{path}: outside the opened folder"))
 }
 
-/// Saves an agents.json from the editor: a project's `.bt/agents.json` inside an opened project, or
-/// the user's, created again if it was deleted. Nothing else is writable from the page yet. The agent
-/// list is re-read right away (`agents://changed`; `projectPath: null` for the user's file, which
-/// affects every project).
+/// Saves a file from the editor: one in an opened folder or a workspace's, or the user's agents.json
+/// (created again if it was deleted). After an agents.json the agent list is re-read right away
+/// (`agents://changed`; `projectPath: null` for the user's file, which affects every project).
 #[tauri::command]
 pub async fn write_file(
     roots: State<'_, Roots>,
     configs: State<'_, AgentConfigs>,
+    sessions: State<'_, Sessions>,
     path: String,
     content: String,
 ) -> Result<(), String> {
     let roots = roots.inner().clone();
     let configs = configs.inner().clone();
+    let sessions = sessions.inner().clone();
     blocking(move || {
-        let (canonical, project) =
-            writable(&path, configs.user_file(), |p| roots.contains_project(p))?;
+        let (canonical, saved) = writable(
+            &path,
+            configs.user_file(),
+            |p| roots.contains_project(p),
+            |p| roots.contains(p) || sessions.contains(p),
+        )?;
         crate::util::write_atomic(&canonical, content.as_bytes()).map_err(|e| format!("{path}: {e}"))?;
-        let changed = match &project {
-            Some(project) => configs.reload(project),
-            None => configs.reload_user(),
+        let (changed, project) = match &saved {
+            Saved::ProjectAgents(project) => (configs.reload(project), Some(project.as_path())),
+            Saved::UserAgents => (configs.reload_user(), None),
+            Saved::File => return Ok(()),
         };
         if changed {
-            configs.announce(project.as_deref());
+            configs.announce(project);
         }
         Ok(())
     })
@@ -227,7 +247,7 @@ pub(super) fn open_in_browser(url: &str) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{checked_url, read_capped, read_text, writable};
+    use super::{checked_url, read_capped, read_text, writable, Saved};
     use std::path::{Path, PathBuf};
 
     /// A temp folder (canonical) with a project at `p/` holding `.bt/`; removed on drop.
@@ -260,35 +280,50 @@ mod tests {
     fn a_project_agents_file_is_writable_existing_or_deleted() {
         let tmp = Tmp::new("project");
         let file = tmp.project().join(".bt/agents.json");
-        let expected = Ok((file.clone(), Some(tmp.project())));
-        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project()), expected, "deleted");
+        let expected = Ok((file.clone(), Saved::ProjectAgents(tmp.project())));
+        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project(), |_| false), expected, "deleted");
         std::fs::write(&file, "{}").unwrap();
-        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project()), expected, "existing");
+        assert_eq!(writable(file.to_str().unwrap(), None, tmp.in_project(), |_| false), expected, "existing");
     }
 
     #[test]
     fn the_user_agents_file_is_writable_existing_or_deleted() {
         let tmp = Tmp::new("user");
         let file = tmp.0.join("agents.json");
-        let expected = Ok((file.clone(), None));
-        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false), expected, "deleted");
+        let expected = Ok((file.clone(), Saved::UserAgents));
+        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false, |_| false), expected, "deleted");
         std::fs::write(&file, "{}").unwrap();
-        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false), expected, "existing");
+        assert_eq!(writable(file.to_str().unwrap(), Some(&file), |_| false, |_| false), expected, "existing");
     }
 
     #[test]
-    fn nothing_else_is_writable() {
-        let tmp = Tmp::new("other");
+    fn a_file_in_an_opened_folder_is_writable_existing_or_new() {
+        let tmp = Tmp::new("file");
         let project = tmp.project();
         std::fs::write(project.join("a.txt"), "").unwrap();
+        for path in [project.join("a.txt"), project.join("new.rs"), project.join(".bt/other.json")] {
+            let expected = Ok((path.clone(), Saved::File));
+            assert_eq!(writable(path.to_str().unwrap(), None, tmp.in_project(), tmp.in_project()), expected, "{}", path.display());
+        }
+    }
+
+    #[test]
+    fn nothing_outside_an_opened_folder_or_in_git_is_writable() {
+        let tmp = Tmp::new("other");
+        let project = tmp.project();
+        std::fs::create_dir_all(project.join(".git")).unwrap();
+        std::fs::write(project.join(".git/config"), "").unwrap();
+        std::fs::write(tmp.0.join("outside.txt"), "").unwrap();
         std::fs::create_dir(tmp.0.join(".bt")).unwrap();
         for (path, why) in [
-            (project.join("a.txt"), "another file"),
-            (project.join(".bt/other.json"), "another missing file"),
-            (project.join("gone/.bt/agents.json"), "a missing folder"),
-            (tmp.0.join(".bt/agents.json"), "outside the project"),
+            (project.join(".git/config"), "git's own file"),
+            (project.join(".git/HEAD"), "a missing file in .git"),
+            (project.join("gone/a.txt"), "a missing folder"),
+            (project.join("../outside.txt"), "a way out with .."),
+            (tmp.0.join("outside.txt"), "outside the project"),
+            (tmp.0.join(".bt/agents.json"), "an agents.json outside the project"),
         ] {
-            assert!(writable(path.to_str().unwrap(), None, tmp.in_project()).is_err(), "{why}");
+            assert!(writable(path.to_str().unwrap(), None, tmp.in_project(), tmp.in_project()).is_err(), "{why}");
         }
     }
 
