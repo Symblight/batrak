@@ -1,6 +1,6 @@
 [package]
 name = "batrak"
-version = "0.2.3"
+version = "0.2.4"
 description = "Batrak's command line (verbs arrive with docs/specs/cli.md)"
 edition = "2021"
 
