@@ -29,30 +29,17 @@ jobs:
 
   build:
     needs: check-version
-    # Holds the updater's signing key.
-    environment: release
     strategy:
       fail-fast: false
       matrix:
         include:
-          - os: macos-latest
-            rust-targets: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin --bundles app,dmg
-          - os: macos-latest
-            rust-targets: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin --bundles app,dmg
-          - os: windows-latest
-          # The oldest supported runner: a binary runs only on a glibc at least as new as its build's.
-          - os: ubuntu-22.04
-    runs-on: ${{ matrix.os }}
+          - rust-targets: aarch64-apple-darwin
+          - rust-targets: x86_64-apple-darwin
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup
-
-      - name: Install WebKitGTK
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev patchelf
 
       - uses: dtolnay/rust-toolchain@stable
         with:
@@ -63,108 +50,27 @@ jobs:
         with:
           key: ${{ matrix.rust-targets }}
 
-      # One draft release that every platform uploads to; publish it by hand after a check.
+      # One draft release that both targets upload to; publish it by hand after a check.
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Ad-hoc signature until there is a Developer ID certificate (Apple Silicon refuses
           # unsigned apps); Gatekeeper still quarantines the download.
           APPLE_SIGNING_IDENTITY: '-'
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
           releaseName: Batrak v__VERSION__
           releaseBody: |
-            - **macOS:** download `Batrak_*_aarch64.dmg` for Apple Silicon (M1 and newer) or
-              `Batrak_*_x64.dmg` for Intel, open it and drag Batrak into Applications.
-              This build is not notarized yet: on first launch macOS reports it as damaged. Run
-              `xattr -dr com.apple.quarantine /Applications/Batrak.app` once, then open it.
-            - **Windows:** run the `.exe` or `.msi` installer. It is not signed yet, so SmartScreen
-              may warn about it.
-            - **Linux:** use the `.AppImage`, `.deb` or `.rpm`.
+            Download `Batrak_*_aarch64.dmg` for Apple Silicon (M1 and newer) or `Batrak_*_x64.dmg`
+            for Intel, open it and drag Batrak into Applications.
+            This build is not notarized yet: on first launch macOS reports it as damaged. Run
+            `xattr -dr com.apple.quarantine /Applications/Batrak.app` once, then open it.
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
-          # A later job writes latest.json once; parallel jobs merging it can lose a platform.
           includeUpdaterJson: false
-          args: ${{ matrix.args }}
-
-  cli:
-    needs: build
-    # Holds the updater's signing key.
-    environment: release
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - target: aarch64-apple-darwin
-            os: macos-latest
-          - target: x86_64-apple-darwin
-            os: macos-latest
-          - target: x86_64-unknown-linux-gnu
-            os: ubuntu-22.04
-          - target: aarch64-unknown-linux-gnu
-            os: ubuntu-22.04-arm
-          - target: x86_64-pc-windows-msvc
-            os: windows-latest
-            ext: .exe
-    runs-on: ${{ matrix.os }}
-    env:
-      ASSET: batrak-${{ matrix.target }}${{ matrix.ext }}
-    defaults:
-      run:
-        shell: bash
-    steps:
-      - uses: actions/checkout@v7
-
-      # The repo's Tauri CLI, for `signer sign`.
-      - uses: ./.github/actions/setup
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
-
-      # Two targets share a runner OS and a job: without a key they would share a cache.
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: ${{ matrix.target }}
-
-      - name: Build
-        run: |
-          cargo build --release --locked -p batrak --target ${{ matrix.target }}
-          cp "target/${{ matrix.target }}/release/batrak${{ matrix.ext }}" "$ASSET"
-
-      # After the copy: release::verify requires the signature's file: to equal the asset's name.
-      - name: Sign
-        working-directory: apps/desktop
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-        run: pnpm tauri signer sign --app-version "${GITHUB_REF_NAME#v}" "../../$ASSET"
-
-      - name: Upload to the draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" "$ASSET" "$ASSET.sig" --clobber
-
-  manifests:
-    needs: [build, cli]
-    runs-on: ubuntu-latest
-    env:
-      GH_TOKEN: ${{ github.token }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Write the manifests
-        run: |
-          gh release download "$GITHUB_REF_NAME" --pattern '*.sig' --dir "$RUNNER_TEMP/sigs"
-          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets.txt"
-          node .github/scripts/release-manifests.mjs "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" "$RUNNER_TEMP/sigs" "$RUNNER_TEMP/assets.txt" "$RUNNER_TEMP/manifests"
-
-      - name: Upload to the draft
-        run: |
-          gh release upload "$GITHUB_REF_NAME" --clobber \
-            "$RUNNER_TEMP/manifests/latest.json" "$RUNNER_TEMP/manifests/batrak-cli.json" \
-            scripts/install.sh scripts/install.ps1
+          # Only the .dmg goes to the release: no updater bundle (.app.tar.gz and its .sig).
+          args: >-
+            --target ${{ matrix.rust-targets }} --bundles dmg
+            --config {"bundle":{"createUpdaterArtifacts":false}}
