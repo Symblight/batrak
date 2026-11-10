@@ -29,6 +29,8 @@ jobs:
 
   build:
     needs: check-version
+    # Holds the updater's signing key.
+    environment: release
     strategy:
       fail-fast: false
       matrix:
@@ -57,6 +59,8 @@ jobs:
           # Ad-hoc signature until there is a Developer ID certificate (Apple Silicon refuses
           # unsigned apps); Gatekeeper still quarantines the download.
           APPLE_SIGNING_IDENTITY: '-'
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
@@ -69,8 +73,24 @@ jobs:
           releaseDraft: true
           prerelease: false
           generateReleaseNotes: true
+          # A later job writes latest.json once; parallel jobs merging it can lose a platform.
           includeUpdaterJson: false
-          # Only the .dmg goes to the release: no updater bundle (.app.tar.gz and its .sig).
-          args: >-
-            --target ${{ matrix.rust-targets }} --bundles dmg
-            --config {"bundle":{"createUpdaterArtifacts":false}}
+          # The .dmg to install, and the signed .app.tar.gz the updater downloads.
+          args: --target ${{ matrix.rust-targets }} --bundles app,dmg
+
+  manifests:
+    needs: build
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Write latest.json
+        run: |
+          gh release download "$GITHUB_REF_NAME" --pattern '*.sig' --dir "$RUNNER_TEMP/sigs"
+          gh release view "$GITHUB_REF_NAME" --json assets --jq '.assets[].name' > "$RUNNER_TEMP/assets.txt"
+          node .github/scripts/release-manifests.mjs "$GITHUB_REF_NAME" "$GITHUB_REPOSITORY" "$RUNNER_TEMP/sigs" "$RUNNER_TEMP/assets.txt" "$RUNNER_TEMP/manifests"
+
+      - name: Upload to the draft
+        run: gh release upload "$GITHUB_REF_NAME" --clobber "$RUNNER_TEMP/manifests/latest.json"

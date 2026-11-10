@@ -30,6 +30,12 @@ cd apps/desktop && pnpm typecheck             # tsc over the JSDoc types, no emi
 cd apps/desktop && pnpm test                  # frontend tests in Chrome (@web/test-runner); must pass
 ```
 
+Also run when you touch the release scripts (`.github/scripts/`):
+
+```bash
+node --test .github/scripts/release-manifests.test.mjs
+```
+
 Running the apps:
 
 ```bash
